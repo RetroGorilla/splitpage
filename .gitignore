@@ -8,6 +8,10 @@ _*.html
 *.splitpage.html
 data/
 
+# Session hand-off notes — per-session scratch, not project documentation.
+# The durable equivalents are README.md, DEPLOY.md and HANDOFF.md.
+.claude/handoff/
+
 # OS / editor noise
 Thumbs.db
 desktop.ini
