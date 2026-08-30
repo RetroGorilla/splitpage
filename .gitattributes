@@ -1,0 +1,13 @@
+# Normalise to LF in the repository. The Docker image copies these files
+# straight into a Linux container, so what lands there should not depend on
+# which machine committed it.
+* text=auto eol=lf
+
+# Windows-only launchers: cmd.exe wants CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary-ish assets, never line-ending mangled.
+*.png binary
+*.jpg binary
+*.ico binary
