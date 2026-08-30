@@ -1,0 +1,17 @@
+# Scratch copies made while testing — index.html spliced with a different
+# embedded document. Never meant to be committed.
+_*.html
+
+# Documents saved out of the app. A saved Splitpage project is a whole copy
+# of index.html with your script inside it, so committing one by accident
+# publishes the script as well as the app.
+*.splitpage.html
+data/
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/

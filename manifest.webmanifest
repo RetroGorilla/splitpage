@@ -1,0 +1,14 @@
+{
+  "name": "Splitpage",
+  "short_name": "Splitpage",
+  "description": "A two-column visual/audio script editor with a built-in teleprompter reader.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F6F4EC",
+  "theme_color": "#F6F4EC",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
