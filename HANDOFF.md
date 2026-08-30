@@ -59,6 +59,26 @@ sandbox) and blocked `beforeunload` panels. Don't chase these.
 so **Follow My Voice can never be verified end to end**. Verify its logic
 against simulated transcripts and say plainly that live speech is unconfirmed.
 
+### Run the tests first
+
+There is a real regression suite now — 77 assertions across 5 suites, driving
+headless Edge over CDP. **Run it before and after any change to
+`index.html`:**
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
+```
+
+`ALL PASS - 77/77` and exit 0, or it names every failing assertion and exits 1.
+`-Only 02` runs one suite, `-Headed` shows you the browser. Full command
+reference and the harness's own gotchas are in
+`.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
+test, because most "failures" are the test, not the app.
+
+The suite is verified to actually catch things: breaking the `[prop]` shortcut
+produced four precise failures. Extend it whenever you add a feature; a
+feature with no assertion is a feature nobody will notice breaking.
+
 ### Three techniques that make this app testable
 
 Worked out on 2026-08-28 and worth reusing rather than rediscovering.
