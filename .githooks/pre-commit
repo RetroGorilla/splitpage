@@ -1,0 +1,75 @@
+#!/bin/sh
+# Refuse to commit index.html if it carries a real script instead of the demo.
+#
+# Splitpage keeps the whole document inside the page — one line of JSON in the
+# <script id="state-data"> tag (see HANDOFF.md §3.1). Saving a project into
+# THIS file therefore rewrites a tracked file with your script in it, and
+# committing that would push unreleased work to GitHub and replace the clean
+# template everyone else clones.
+#
+# So: the committed index.html must always carry the demo document, byte for
+# byte. Code changes are none of this hook's business — only that one line.
+
+set -e
+
+# Nothing to check unless index.html is part of this commit.
+if ! git diff --cached --name-only | grep -qx 'index.html'; then
+  exit 0
+fi
+
+BASE=".githooks/demo-state.json"
+if [ ! -f "$BASE" ]; then
+  echo "pre-commit: $BASE is missing — cannot verify the embedded document." >&2
+  echo "            Restore it, or delete this hook if that is deliberate." >&2
+  exit 1
+fi
+
+# Read the STAGED version, not the working tree: what is being committed is
+# what matters, and the two can differ.
+#
+# Anchored to ^ deliberately. That same tag string also appears INSIDE the
+# app's JavaScript (buildPublishHtml's openTag), indented — matching it would
+# read the wrong line. The document's own tag is the only one at column 0.
+STAGED_STATE=$(git show :index.html | awk '/^<script id="state-data"/{getline; print; exit}')
+
+if [ -z "$STAGED_STATE" ]; then
+  echo "pre-commit: could not find the state-data line in the staged index.html." >&2
+  echo "            If the page structure changed deliberately, update this hook." >&2
+  exit 1
+fi
+
+if [ "$STAGED_STATE" = "$(cat "$BASE")" ]; then
+  exit 0
+fi
+
+# --- blocked ---------------------------------------------------------------
+STAGED_BYTES=$(printf '%s' "$STAGED_STATE" | wc -c | tr -d ' ')
+DEMO_BYTES=$(wc -c < "$BASE" | tr -d ' ')
+TITLE=$(printf '%s' "$STAGED_STATE" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')
+
+cat >&2 <<EOF
+
+  COMMIT BLOCKED — index.html has a document in it that isn't the demo.
+
+  Embedded document: ${STAGED_BYTES} bytes (the demo is ${DEMO_BYTES})
+  Title:             ${TITLE:-unknown}
+
+  You have almost certainly saved a script into the app's own index.html.
+  Committing it would push that script to GitHub and replace the clean
+  template. Your script is safe on disk either way — this only stops it
+  being committed.
+
+  To fix, putting the demo document back and keeping any code changes:
+
+      sh .githooks/restore-demo-state.sh && git add index.html
+
+  Then save your actual script somewhere outside this repo — /d/vibecoding/scripts
+  is there for exactly that — and open it from there in future.
+
+  If you genuinely meant to change the demo document that ships with the app:
+
+      awk '/^<script id="state-data"/{getline; print; exit}' index.html > .githooks/demo-state.json
+      git add .githooks/demo-state.json index.html
+
+EOF
+exit 1
