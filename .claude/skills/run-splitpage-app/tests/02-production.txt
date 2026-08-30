@@ -1,0 +1,75 @@
+# Production breakdown: registry, per-item status, the four groupings,
+# Ctrl+click multi-select and the bulk actions.
+
+open
+
+# --- make something to track -----------------------------------------------
+caret #rows .row .audio-cell .cell-editable
+press  Grab the [gaffer tape] in the {kitchen}.
+sleep 400
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+press  Another shot of the [boom pole] in the {kitchen}.
+sleep 500
+expect document.querySelectorAll('#rows .tag-anchor').length == 4
+
+click text*=PRODUCTION
+sleep 500
+expect !document.getElementById('production-panel').hidden
+# 3 distinct items: gaffer tape, boom pole, kitchen (kitchen appears twice)
+expect document.querySelectorAll('#production-list .tag-entity').length == 3
+expect document.getElementById('production-badge').textContent == 3
+
+# --- per-item status cycles Needed > Sourcing > Have it > Returned ----------
+expect document.querySelector('.tag-status-pill').textContent == Needed
+jsclick .tag-status-pill
+sleep 250
+expect document.querySelector('.tag-status-pill').textContent == Sourcing
+jsclick .tag-status-pill
+sleep 250
+expect document.querySelector('.tag-status-pill').textContent == Have it
+jsclick .tag-status-pill
+sleep 250
+expect document.querySelector('.tag-status-pill').textContent == Returned
+jsclick .tag-status-pill
+sleep 250
+expect document.querySelector('.tag-status-pill').textContent == Needed
+
+# clicking the pill must NOT also open the card (delegation ordering)
+expect document.querySelectorAll('#production-list .tag-entity.is-expanded').length == 0
+
+# --- the four groupings all render -----------------------------------------
+jsclick #production-modes [data-group="person"]
+sleep 300
+expect document.querySelectorAll('#production-list .tag-entity').length == 3
+jsclick #production-modes [data-group="scene"]
+sleep 300
+expect document.querySelectorAll('#production-list .tag-scene-group').length >= 2
+jsclick #production-modes [data-group="shoot"]
+sleep 300
+expect document.querySelectorAll('#production-list .shoot-group').length >= 1
+jsclick #production-modes [data-group="cat"]
+sleep 300
+expect document.querySelectorAll('#production-list .tag-group-head').length >= 2
+
+# --- Ctrl+click multi-select ------------------------------------------------
+eval (function(){var c=document.querySelectorAll('#production-list .tag-entity-name');c[0].dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true}));return true;})()
+sleep 300
+expect document.querySelectorAll('.tag-entity.is-selected').length == 1
+expect !document.getElementById('production-bulk').hidden
+eval (function(){var c=document.querySelectorAll('#production-list .tag-entity-name');c[1].dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true}));return true;})()
+sleep 300
+expect document.querySelectorAll('.tag-entity.is-selected').length == 2
+
+# --- bulk status applies to the selection only ------------------------------
+eval (function(){var s=document.getElementById('bulk-status');s.value='have';s.dispatchEvent(new Event('change',{bubbles:true}));return true;})()
+sleep 500
+expect Array.from(document.querySelectorAll('.tag-status-pill')).filter(function(p){return p.textContent==='Have it';}).length == 2
+
+# --- clearing the selection -------------------------------------------------
+jsclick [data-action="bulk-clear"]
+sleep 300
+expect document.querySelectorAll('.tag-entity.is-selected').length == 0
+expect document.getElementById('production-bulk').hidden
+
+shot 02-production
+quit

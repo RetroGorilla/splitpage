@@ -1,0 +1,50 @@
+# Core editing: boot, typing, the tag shortcuts, Tab autocomplete, Ctrl+Enter.
+# Run:  driver.ps1 -Script .claude/skills/run-splitpage-app/tests/01-core.txt
+
+open
+
+# --- boot ------------------------------------------------------------------
+expect document.title == Splitpage
+expect document.querySelectorAll('#rows .row').length >= 2
+expect !!document.getElementById('state-data')
+
+# --- tag shortcuts ---------------------------------------------------------
+# `press`, not `type`: the [ ] { } ~ shortcuts run off real key events, and
+# Input.insertText commits a whole string as one event so the closing
+# character never arrives on its own.
+caret #rows .row .audio-cell .cell-editable
+press  Grab the [gaffer tape] from the {kitchen} before the ~lens flare~ shot.
+sleep 400
+expect document.querySelectorAll('#rows .tag-anchor').length == 3
+expect !!document.querySelector('#rows .tag-anchor[data-tag-name="gaffer tape"]')
+expect document.querySelector('#rows .tag-anchor[data-tag-name="kitchen"]').getAttribute('data-tag-cat') == location
+expect document.querySelector('#rows .tag-anchor[data-tag-name="lens flare"]').getAttribute('data-tag-cat') == vfx
+
+# tags are atomic — the invariant the whole tagging design rests on
+expect document.querySelector('#rows .tag-anchor').getAttribute('contenteditable') == false
+
+# --- Tab autocomplete ------------------------------------------------------
+# An existing tag ("gaffer tape") should complete from a partial opener.
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+press  Bring the [gaf
+sleep 400
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+key Tab
+sleep 400
+expect !!document.querySelector('#rows .row:nth-child(2) .tag-anchor[data-tag-name="gaffer tape"]')
+
+# --- Ctrl+Enter starts a new scene -----------------------------------------
+eval window.__rowsBefore = document.querySelectorAll('#rows .row').length
+caret #rows .row .audio-cell .cell-editable
+key ctrl Enter
+sleep 400
+# One truthy expression, not `== <literal>`: the right-hand side here is
+# computed, and `expect a == b` only ever compares against a literal.
+expect document.querySelectorAll('#rows .row').length === window.__rowsBefore + 1
+
+# --- runtime estimate tracks the text --------------------------------------
+expect document.getElementById('runtime-total').innerText !== '0:00'
+
+shot 01-core
+logs
+quit

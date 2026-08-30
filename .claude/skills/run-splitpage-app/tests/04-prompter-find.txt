@@ -1,0 +1,67 @@
+# Teleprompter and find & replace.
+
+open
+
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] to set today.
+sleep 500
+
+# --- teleprompter -----------------------------------------------------------
+click text*=PRESENT
+sleep 800
+expect !document.getElementById('prompter').hidden
+expect document.querySelectorAll('#prompter-content .prompter-line').length >= 2
+expect document.querySelectorAll('#prompter-content .w').length > 10
+
+# play toggles to pause and back
+jsclick #pp-play
+sleep 300
+expect document.getElementById('pp-play').textContent.indexOf('Pause') !== -1
+jsclick #pp-play
+sleep 300
+expect document.getElementById('pp-play').textContent.indexOf('Play') !== -1
+
+# mirror flips the scroller
+jsclick #pp-mirror
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+jsclick #pp-mirror
+sleep 200
+
+# text size slider drives the rendered font size
+eval window.__sizeBefore = parseFloat(getComputedStyle(document.querySelector('.prompter-line')).fontSize)
+eval (function(){var s=document.getElementById('pp-size');s.value='80';s.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 300
+expect parseFloat(getComputedStyle(document.querySelector('.prompter-line')).fontSize) > window.__sizeBefore
+
+shot 04-prompter
+jsclick #pp-close
+sleep 400
+expect document.getElementById('prompter').hidden
+
+# --- find & replace ---------------------------------------------------------
+# Opened from the File menu, which is also the phone's only route to it.
+jsclick #btn-file
+jsclick #file-menu [data-file-action="find"]
+sleep 400
+expect !document.querySelector('.findbar').hidden
+
+eval (function(){var f=document.getElementById('find-input');f.value='the';f.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 600
+expect document.querySelector('.find-count').textContent.indexOf('of') !== -1
+
+# replace-all must leave tag spans untouched - the load-bearing invariant
+eval window.__tagsBefore = document.querySelectorAll('#rows .tag-anchor').length
+eval (function(){var f=document.getElementById('find-input');f.value='today';f.dispatchEvent(new Event('input',{bubbles:true}));var r=document.getElementById('replace-input');r.value='tomorrow';r.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 500
+jsclick #find-replace-all
+sleep 800
+expect document.querySelectorAll('#rows .tag-anchor').length === window.__tagsBefore
+expect document.body.innerText.indexOf('tomorrow') !== -1
+
+# the tag's own words are deliberately NOT replaceable
+eval (function(){var f=document.getElementById('find-input');f.value='gaffer';f.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 600
+expect document.querySelector('.find-count').textContent == No matches
+
+quit
