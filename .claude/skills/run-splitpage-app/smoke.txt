@@ -1,0 +1,43 @@
+# Splitpage smoke test - pipe this into driver.ps1.
+# Exercises the surfaces that actually break: tag shortcuts, the Production
+# breakdown, the teleprompter overlay, and find/replace.
+
+open
+
+# --- boot ------------------------------------------------------------------
+eval document.title
+wait document.querySelectorAll('.cell-editable').length >= 4
+shot 01-boot
+
+# --- typing + tag shortcuts ------------------------------------------------
+# Per-character key events (press, not type) - the [ ] { } ~ ~ shortcuts are
+# keydown handlers and never fire for Input.insertText.
+caret .cell-editable
+press  Hero holds a [gaffer tape] near the {kitchen} sink.
+wait document.querySelectorAll('.tag-anchor').length === 2
+count .tag-anchor
+shot 02-tagged
+
+# --- production breakdown --------------------------------------------------
+# text*= not text= : the button reads "PRODUCTION2" once tags exist.
+click text*=PRODUCTION
+wait getComputedStyle(document.querySelector('.breakdown-panel') || document.querySelector('.comments-panel')).display !== 'none'
+eval document.body.innerText.includes('gaffer tape') && document.body.innerText.includes('kitchen')
+shot 03-production
+
+# --- teleprompter ----------------------------------------------------------
+click text*=PRESENT
+wait getComputedStyle(document.querySelector('.prompter')).display === 'flex'
+text .prompter-line
+shot 04-teleprompter
+key Escape
+wait getComputedStyle(document.querySelector('.prompter')).display === 'none'
+
+# --- find and replace ------------------------------------------------------
+caret .cell-editable
+key ctrl KeyF
+wait !!document.querySelector('input[placeholder^="Find"]')
+shot 05-find
+
+logs
+quit

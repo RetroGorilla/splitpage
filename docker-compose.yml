@@ -1,0 +1,42 @@
+# Splitpage on Unraid.
+#
+# There is no authentication in this container ON PURPOSE — Cloudflare Access
+# in front of your tunnel does that job, and does it better than anything I
+# would write here. Do NOT port-forward 8791 to the internet directly.
+#
+#   docker compose up -d --build
+#
+# NOTE: stock Unraid does not ship `docker compose` — it comes with the
+# Compose Manager plugin. If you don't have it, DEPLOY.md §2 gives the
+# equivalent plain `docker build` / `docker run` commands, which always work.
+#
+# See DEPLOY.md for the Cloudflare Tunnel + Access steps.
+
+services:
+  splitpage:
+    build: .
+    image: splitpage:latest
+    container_name: splitpage
+    restart: unless-stopped
+
+    ports:
+      # Bound to the LAN so the Cloudflare tunnel (and you) can reach it.
+      # The tunnel connects outbound, so this port never needs forwarding.
+      - "8791:8791"
+
+    volumes:
+      # Every document lives here as one .json file. Back it up by copying the
+      # folder — there is no database and no index to rebuild.
+      - /mnt/user/appdata/splitpage/data:/data
+
+    # The share is usually owned by nobody:users (99:100) on Unraid. If the
+    # container logs EACCES on startup, this is the line to change.
+    user: "99:100"
+
+    environment:
+      - PORT=8791
+      # Set to 1 to publish a library nobody can edit — useful if you ever
+      # want a purely read-only copy for a wider audience.
+      - READ_ONLY=0
+      # Raise if you embed a lot of images in one script (bytes).
+      - MAX_BODY_BYTES=26214400
