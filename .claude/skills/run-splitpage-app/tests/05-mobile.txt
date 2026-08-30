@@ -1,0 +1,77 @@
+# Phone layout and the touch translations of every keyboard/mouse gesture.
+# The viewport command sets real touch emulation, which is what flips
+# (hover: none) and the app's IS_TOUCH branches.
+
+open
+viewport 375 812 mobile
+# IS_TOUCH is read once at load, so reload after emulation is on
+goto /index.html
+sleep 800
+
+expect matchMedia('(hover: none)').matches
+expect innerWidth == 375
+
+# --- nothing may overflow sideways -----------------------------------------
+# One wide element makes a phone widen the whole layout viewport and shrink
+# every line of text. Three separate bugs did exactly this.
+expect document.documentElement.scrollWidth <= innerWidth
+
+# --- the stacked layout -----------------------------------------------------
+expect getComputedStyle(document.querySelector('.gutter')).flexDirection == row
+expect getComputedStyle(document.querySelector('.col-head')).display == none
+expect getComputedStyle(document.querySelector('#rows .row')).gridTemplateColumns.split(' ').length == 1
+
+# iOS zooms the page when focusing any input under 16px
+expect parseFloat(getComputedStyle(document.querySelector('.cell-editable')).fontSize) >= 16
+
+# --- tagging still works on a phone -----------------------------------------
+caret #rows .row .audio-cell .cell-editable
+press  Grab the [gaffer tape] now.
+sleep 500
+expect document.querySelectorAll('#rows .tag-anchor').length == 1
+expect document.documentElement.scrollWidth <= innerWidth
+
+# --- the focus toolbar must not blow the grid out ---------------------------
+expect document.querySelector('#rows .row').getBoundingClientRect().width <= innerWidth
+
+# --- long-press starts a selection; a tap then toggles ----------------------
+click text*=PRODUCTION
+sleep 600
+expect document.querySelectorAll('#production-list .tag-entity').length >= 1
+
+eval (function(){var h=document.querySelector('#production-list .tag-entity-name');var r=h.getBoundingClientRect();var o={bubbles:true,cancelable:true,pointerType:'touch',clientX:r.x+5,clientY:r.y+5};h.dispatchEvent(new PointerEvent('pointerdown',o));window.__lpTarget=h;window.__lpOpts=o;return true;})()
+sleep 700
+# pointerup AND the click a real browser always sends after a touch sequence.
+# The app deliberately swallows that click (otherwise a long-press would also
+# open the card), so a test that omits it leaves the swallow armed and the
+# NEXT genuine tap gets eaten.
+#
+# The click must be dispatched on a FRESHLY QUERIED node: selecting re-renders
+# the panel, so the original element is detached by now and events on it never
+# reach the list's delegated handler. A real browser hit-tests at dispatch
+# time and finds the replacement, which is why this only bites in tests.
+eval (function(){window.__lpTarget.dispatchEvent(new PointerEvent('pointerup',window.__lpOpts));document.querySelector('#production-list .tag-entity-name').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return true;})()
+sleep 300
+expect document.querySelectorAll('.tag-entity.is-selected').length == 1
+# ... and the long-press must not ALSO have expanded the card
+expect document.querySelectorAll('.tag-entity.is-expanded').length == 0
+expect document.querySelector('.bulk-note').textContent.indexOf('Tap a card') !== -1
+
+# tapping the head toggles it back off while a selection is live
+eval (function(){document.querySelector('#production-list .tag-entity-name').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return true;})()
+sleep 300
+expect document.querySelectorAll('.tag-entity.is-selected').length == 0
+
+# with nothing selected, a plain tap opens the card again
+eval (function(){document.querySelector('#production-list .tag-entity-name').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return true;})()
+sleep 300
+expect document.querySelectorAll('.tag-entity.is-expanded').length == 1
+
+shot 05-mobile
+
+# The desktop layout is not re-checked here: clearing device emulation and
+# reloading in the same session reliably aborted the CDP socket, and suites
+# 01-04 all run at the desktop viewport anyway — if the desktop layout
+# regressed, they would be the ones to fail.
+
+quit

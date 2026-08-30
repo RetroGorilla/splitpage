@@ -1,0 +1,65 @@
+# Every export actually produces a file, and the breakdown travels in them.
+#
+# Downloads don't happen in headless, so the blob is intercepted at
+# URL.createObjectURL - the single point every export funnels through
+# (deliverFile). The <a download> click is stubbed out so nothing is written.
+
+open
+
+eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
+
+# something to export, including a tag so the breakdown is non-empty
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] to the {kitchen}.
+sleep 500
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+
+# --- Markdown ---------------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+sleep 1200
+expect window.__blobs.length >= 1
+eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+expect window.__md.indexOf('## Production breakdown') !== -1
+expect window.__md.indexOf('gaffer tape') !== -1
+expect window.__md.indexOf('| Category | Item | Status | Assigned to |') !== -1
+
+# --- breakdown CSV ----------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-breakdown"]
+sleep 1200
+eval (async function(){window.__csv = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+expect window.__csv.indexOf('Category,Item,Status,Assigned to') !== -1
+expect window.__csv.indexOf('Needed') !== -1
+
+# --- Word -------------------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+sleep 2000
+expect window.__blobs[window.__blobs.length-1].size > 5000
+expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') !== -1
+
+# the docx is a store-only zip: walk it and confirm the XML parses and the
+# breakdown table has a Status column
+eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__docxOk = {parses:!doc.querySelector("parsererror"), hasStatus: xml.indexOf("<w:t>Status</w:t>")!==-1}; return true;})()
+expect window.__docxOk.parses
+expect window.__docxOk.hasStatus
+
+# --- PDF --------------------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+sleep 2000
+expect window.__blobs[window.__blobs.length-1].type == application/pdf
+expect window.__blobs[window.__blobs.length-1].size > 3000
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdf = {hdr:t.indexOf('%PDF')===0, status:t.indexOf('STATUS')!==-1}; return true;})()
+expect window.__pdf.hdr
+expect window.__pdf.status
+
+# --- script CSV -------------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-csv"]
+sleep 1200
+eval (async function(){window.__scsv = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+expect window.__scsv.indexOf('Scene,Status,Est. time,Visual,Audio') !== -1
+
+quit

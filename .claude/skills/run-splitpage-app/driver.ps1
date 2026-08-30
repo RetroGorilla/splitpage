@@ -14,7 +14,11 @@ param(
   [int]$CdpPort = 9333,
   [string]$Root,
   [string]$ShotDir,
-  [switch]$Headed
+  [switch]$Headed,
+  # Read commands from a file instead of stdin. Prefer this: piping into
+  # [Console]::In from another PowerShell is fragile — the parent can sit on a
+  # buffered pipeline long after the driver has finished and exited.
+  [string]$Script
 )
 
 $ErrorActionPreference = 'Stop'
@@ -184,6 +188,40 @@ function Format-Val($v) {
   return ($v | ConvertTo-Json -Depth 8 -Compress)
 }
 
+# ------------------------------------------------------------------ assertions
+# Every assertion counts, so a run reports "N/M checks passed" instead of
+# leaving you to read a wall of output and decide for yourself.
+$script:Checks = 0
+$script:Failures = 0
+
+# expect <js>            — truthy, right now, no waiting
+# expect <js> == <value> — compare against a literal (string, number, bool)
+# Splitting on the LAST '==' so the expression may contain '===' freely.
+function Expect-That([string]$Rest) {
+  $script:Checks++
+  $expr = $Rest; $want = $null; $hasWant = $false
+  $i = $Rest.LastIndexOf('==')
+  # only treat it as a comparison if the '==' isn't part of '===' or '!=='
+  if ($i -gt 0 -and $Rest[$i - 1] -ne '=' -and $Rest[$i - 1] -ne '!' -and $Rest[$i - 1] -ne '<' -and $Rest[$i - 1] -ne '>') {
+    $expr = $Rest.Substring(0, $i).Trim()
+    $want = $Rest.Substring($i + 2).Trim()
+    $hasWant = $true
+  }
+  $got = Invoke-Js $expr
+  if ($hasWant) {
+    $g = Format-Val $got
+    if ($g -eq $want) { Out1 "PASS $expr == $want"; return }
+    $script:Failures++
+    Out1 "FAIL $expr"
+    Out1 "     expected: $want"
+    Out1 "     actual:   $g"
+    return
+  }
+  if ($got) { Out1 "PASS $expr"; return }
+  $script:Failures++
+  Out1 "FAIL $expr  (got $(Format-Val $got))"
+}
+
 # --------------------------------------------------------------------- actions
 function Wait-For([string]$Expr, [int]$TimeoutMs = 15000) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -303,6 +341,28 @@ function Press-Key([string]$Name, [string]$Mods = '') {
   Out1 "key $Mods $Name"
 }
 
+# viewport 375 812 mobile   — width height [mobile]
+# viewport reset
+# "mobile" also sets touch points and a mobile UA, which is what flips
+# Splitpage's (hover: none) rules and its IS_TOUCH gestures.
+function Set-Viewport([string]$Rest) {
+  if ($Rest -match '^\s*reset\s*$') {
+    $null = Send-Cdp 'Emulation.clearDeviceMetricsOverride'
+    $null = Send-Cdp 'Emulation.setTouchEmulationEnabled' @{ enabled = $false }
+    Out1 'viewport reset'
+    return
+  }
+  $p = $Rest -split '\s+'
+  if ($p.Count -lt 2) { throw 'viewport needs: <width> <height> [mobile]' }
+  $w = [int]$p[0]; $h = [int]$p[1]
+  $mobile = ($p.Count -ge 3 -and $p[2] -match 'mobile')
+  $null = Send-Cdp 'Emulation.setDeviceMetricsOverride' @{
+    width = $w; height = $h; deviceScaleFactor = 1; mobile = $mobile
+  }
+  $null = Send-Cdp 'Emulation.setTouchEmulationEnabled' @{ enabled = $mobile; maxTouchPoints = $(if ($mobile) { 5 } else { 0 }) }
+  Out1 "viewport ${w}x${h}$(if ($mobile) { ' mobile' })"
+}
+
 function Shot([string]$Name = 'shot') {
   $r = Send-Cdp 'Page.captureScreenshot' @{ format = 'png'; captureBeyondViewport = $false } 60000
   $path = Join-Path $ShotDir "$Name.png"
@@ -322,7 +382,11 @@ function Invoke-Line([string]$line) {
     'open'    { Start-Server; Start-Edge; Connect-Cdp; Go $(if ($rest) { $rest } else { '/index.html' }) }
     'goto'    { Go $rest }
     'eval'    { Out1 (Format-Val (Invoke-Js $rest)) }
-    'wait'    { Wait-For $rest 20000 | Out-Null; Out1 "ok: $rest" }
+    'expect'  { Expect-That $rest }
+    'wait'    { $script:Checks++
+                try { Wait-For $rest 20000 | Out-Null; Out1 "PASS (waited) $rest" }
+                catch { $script:Failures++; Out1 "FAIL (timeout) $rest"; }
+              }
     'waitsel' { Wait-For "document.querySelector('$rest')" 20000 | Out-Null; Out1 "ok: $rest" }
     'click'   { Click-El $rest }
     'jsclick' { $e = Resolve-Sel $rest
@@ -339,6 +403,7 @@ function Invoke-Line([string]$line) {
                 Out1 (Format-Val (Invoke-Js "(()=>{const el=$e; return el ? el.innerText : null;})()")) }
     'count'   { Out1 (Format-Val (Invoke-Js "document.querySelectorAll('$rest').length")) }
     'sel'     { Out1 (Resolve-Sel $rest) }
+    'viewport' { Set-Viewport $rest }
     'shot'    { Shot $(if ($rest) { $rest } else { 'shot' }) }
     'logs'    { if ($script:Console.Count -eq 0) { Out1 '(no console output)' } else { $script:Console | ForEach-Object { Out1 $_ } } }
     'sleep'   { Start-Sleep -Milliseconds ([int]$rest) }
@@ -350,12 +415,32 @@ function Invoke-Line([string]$line) {
 
 $exit = 0
 try {
-  while ($true) {
-    $line = [Console]::In.ReadLine()
-    if ($null -eq $line) { break }
-    try { if (-not (Invoke-Line $line)) { break } }
-    catch { Out1 "ERROR: $($_.Exception.Message)"; $exit = 1 }
+  if ($Script) {
+    if (-not (Test-Path $Script)) { throw "script not found: $Script" }
+    foreach ($line in (Get-Content -LiteralPath $Script)) {
+      try { if (-not (Invoke-Line $line)) { break } }
+      catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
+    }
+  } else {
+    while ($true) {
+      $line = [Console]::In.ReadLine()
+      if ($null -eq $line) { break }
+      try { if (-not (Invoke-Line $line)) { break } }
+      catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
+    }
   }
+  # A run that asserted nothing is a run that proved nothing.
+  if ($script:Checks -eq 0 -and $script:Failures -eq 0) {
+    Out1 'WARNING: no expect/wait assertions ran - this proved nothing.'
+  }
+  # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
+  # inside a $() subexpression inside another double-quoted string. Kept
+  # ASCII-only too, since this file is read without a BOM.
+  $passed = $script:Checks - $script:Failures
+  $summary = "RESULT: $passed/$($script:Checks) checks passed"
+  if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
+  Out1 ''
+  Out1 $summary
 } finally {
   if ($script:Ws) { try { $script:Ws.Dispose() } catch {} }
   if ($script:EdgeProc) { try { Stop-Process -Id $script:EdgeProc.Id -Force -ErrorAction SilentlyContinue } catch {} }
