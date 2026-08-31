@@ -61,7 +61,7 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 77 assertions across 5 suites, driving
+There is a real regression suite now — 142 assertions across 6 suites, driving
 headless Edge over CDP. **Run it before and after any change to
 `index.html`:**
 
@@ -69,7 +69,7 @@ headless Edge over CDP. **Run it before and after any change to
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-`ALL PASS - 77/77` and exit 0, or it names every failing assertion and exits 1.
+`ALL PASS - 142/142` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
@@ -78,6 +78,12 @@ test, because most "failures" are the test, not the app.
 The suite is verified to actually catch things: breaking the `[prop]` shortcut
 produced four precise failures. Extend it whenever you add a feature; a
 feature with no assertion is a feature nobody will notice breaking.
+
+**If a suite passes alone but fails in the full run**, and the failure is an
+aborted CDP socket on its *first* command, it is orphaned browsers, not your
+code — see the last bullet of SKILL.md's gotchas. Both the driver and the
+runner now sweep them by profile directory; that was found the hard way when
+adding the sixth suite pushed the leak past twenty processes.
 
 ### Three techniques that make this app testable
 
@@ -238,6 +244,12 @@ Two real bugs came from not doing this: typing `[boom pole]` in a *comment*
 created a tag and registered a phantom production item; Ctrl+Enter in a comment
 spliced a new scene onto the top of the document.
 
+**The writer is the other side of the same coin.** Its paragraphs *are* script
+cells — same `data-id` / `data-field`, same row behind them — so `isScriptCell`
+deliberately accepts `#writer-doc` as well as `#rows`, and the writer gets
+tagging, Tab-completion, Ctrl+B, paste-as-plain-text and the sanitiser without
+a line of its own code. That is the whole design; see §3.8.
+
 ---
 
 ### 3.6 The merge was dormant for months — now it runs
@@ -299,6 +311,72 @@ that is the entire database.
   be written from a stale read, defeating the compare-and-set.
 - **`Cache-Control: no-store` on every API response.** A cached rev would make
   a client think it is current and clobber.
+
+---
+
+### 3.8 The writer edits rows, it does not import a document
+
+The obvious way to build a word-processor view of the audio column is to join
+every row into one blob of text, let the user edit it, then split it back into
+rows on the way out. **Don't.** That is a lossy round trip — it has to guess
+where the scene boundaries went, and every tag anchor, comment anchor and
+`<strong>` in the document is riding on those boundaries.
+
+What is there instead: **one paragraph is one row's `audioText`**, rendered as
+a real `.cell-editable` carrying that row's `data-id` / `data-field`. There is
+no parse step and no second copy of the document. `syncFieldFromDom()` writes
+each keystroke straight back to the row, exactly as it does in the split view,
+which is why closing the writer needs nothing but `render()`.
+
+That leaves only the two operations that genuinely change the row *list*:
+
+- **`splitWriterRow()`** — Enter. Extracts caret-to-end of the paragraph into a
+  brand-new row spliced in after it, with an empty visual.
+- **`mergeWriterRows()`** — Backspace at the very start (Delete at the very
+  end). Joins the audio, then deletes the row. It **refuses** when both rows
+  have a visual, because one of the two shot descriptions would have to be
+  destroyed and a single keystroke must not do that silently.
+
+Things worth knowing before changing it:
+
+- **`onWriterKeydown` runs in the CAPTURE phase** on `#writer-doc`, ahead of
+  the shared `onRootKeydown` bound to the same element. Enter means "new
+  scene" here and `<br>` there; only a capture listener can get in first and
+  `stopPropagation()` so the other doesn't also act on the keystroke.
+- **`onRootClick` is deliberately NOT attached to the writer.** Its actions
+  (open the production panel on this tag, jump to that scene) all reach for
+  the split view's DOM, which is stale behind the overlay until the writer
+  closes.
+- **`renderWriter()` preserves the caret** as `(rowId, characters into that
+  row)` — the only form that survives the paragraphs being rebuilt. It has to:
+  `render()` calls it too, and `render()` can fire mid-sentence when a hosted
+  merge lands from the server.
+- **The gutter hangs in the margin** (`position: absolute; right: 100%`) rather
+  than sitting in the flow. In the flow it pushes the prose column visibly
+  off-centre, which is the one thing a page you write on cannot afford. Under
+  1000px there is no margin to hang in, so it becomes a line above each
+  paragraph instead.
+- **`data-gutter` on `#writer` is a three-state setting**, not a toggle:
+  `visuals` (number + what's on screen), `numbers`, `compact` (nothing).
+  Compact adds `margin-bottom` to each block, because with nothing marking the
+  joins a page of scenes otherwise reads as one undifferentiated block and you
+  cannot see where Enter and Backspace will act.
+- **`.writer-scroll` sets `scrollbar-gutter: stable both-edges`.** Without it
+  the centred column jogs sideways the moment the document grows past one
+  screen and the scrollbar appears — under the cursor, mid-sentence, caused by
+  the words being typed. `06-writer.txt` asserts the column's left edge is
+  identical in compact and visuals mode, which guards this *and* the gutter
+  staying out of the flow.
+
+The narration exports (`buildNarrationText`, `buildNarrationDocx`) are the same
+idea pointed outward: one paragraph per row, blank line between, which is the
+exact shape `splitImportText()` reads back in paragraph mode — so the scenes
+survive a round trip, apart from the title line, which comes back as one extra
+row. That was the trade: a narration document handed to somebody else needs a
+title far more than the round trip needs to be exact to the row.
+`packDocx()` was split out of `buildDocx()`
+so the narration document reuses the page setup, relationships, styles and zip
+rather than growing a second copy of them.
 
 ## 4. State schema
 
@@ -436,6 +514,15 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     comes from the JS table, but the colour of the tag *in the script* comes
     from CSS. `sound` was added to the table without the rule and rendered in
     the default green for weeks. Fixed 2026-08-28.
+15. **The writer never re-parses the document into rows** (§3.8). A paragraph
+    is a row's `audioText`, bound through `.cell-editable`. Anything that
+    changes the row *list* from in there goes through `splitWriterRow()` /
+    `mergeWriterRows()`, and anything that rebuilds its DOM goes through
+    `renderWriter()`, which is what puts the caret back.
+16. **Anything that opens over the whole screen must close the side panels.**
+    `openWriter()` closes Production, Comments and the find bar. The writer
+    sits at `z-index: 145` — above the panels (140), below the modals (150)
+    and the toasts (200), which still have to be able to speak over it.
 
 ---
 
@@ -461,8 +548,10 @@ CSS ends around line 1750; the app script runs from there to the end.
 | csv | 6560 |
 | pdf | 6678 |
 | local documents: open, save back | 7079 |
-| **teleprompter + voice follow** | 7519 |
-| events + `init()` | 7920 |
+| **the narration on its own** (narration .txt / .docx) | 7711 |
+| **the writer** (word-processor view of the audio column) | 9092 |
+| **teleprompter + voice follow** | 9464 |
+| events + `init()` | 9886 |
 
 Line numbers drift with every edit — grep for the section banner text instead.
 
@@ -517,6 +606,23 @@ Mobile touch-translation notes for future features:
 - Keep every text input at ≥16px inside the mobile media query, or iOS zooms
   the page on focus.
 
+The writer + narration exports (2026-08-31): the whole surface is covered by
+`tests/06-writer.txt` (58 assertions) and a phone pass at the end of
+`05-mobile.txt` — one paragraph per scene with the visual as non-editable
+gutter context; Enter splitting at the caret with the tail and the cursor both
+moving and the new scene getting an empty visual; Backspace joining with no
+invented double space; the join refused when both scenes carry a visual;
+`[boom pole]` tagging and Tab-completing an existing tag name from inside the
+writer; Ctrl+B and the bar's own buttons landing as real `<strong>`/`<em>`
+after the sanitiser; the gutter cycling visuals → numbers → compact with the
+writing column proved not to move between them; Escape; and everything
+arriving in the split view the moment it closes. Narration `.txt` verified to carry the
+audio and *only* the audio (no visual column, no breakdown, no comments) in
+the blank-line-separated shape the importer reads back, and the `.docx`
+verified by unzipping it: parses, has the narration, and is flowing paragraphs
+rather than the two-column table every other export produces. The
+empty-narration guard was checked by hand.
+
 Hosted mode (2026-08-28): server detection, Access identity auto-fill,
 publish, open-from-server, compare-and-set save, clean auto-merge of edits to
 different scenes, same-field conflict raised and preserved as a comment,
@@ -532,7 +638,10 @@ cycle — all exercised in a real browser against the API contract.
   handles that in principle, `e.data` ends-with check, but it has only been
   proven against synthetic events). First thing to do on a real phone: type
   `[a prop]`, long-press a breakdown card, and run the teleprompter for a
-  minute to see the wake lock hold.
+  minute to see the wake lock hold. Add to that list: **press Enter in the
+  writer.** Splitting a scene hangs off a real Enter keydown, and a soft
+  keyboard's Enter is exactly the kind of key that arrives differently — an
+  Android IME may commit it as text, and iOS may send it with no `key` at all.
 - **`server/server.js` has never been executed.** No Node and no Docker on the
   dev machine. It parses, and it was checked line by line against the contract
   the client actually calls, but every client-side test above ran against a

@@ -69,6 +69,24 @@ expect document.querySelectorAll('.tag-entity.is-expanded').length == 1
 
 shot 05-mobile
 
+# --- the writer on a phone --------------------------------------------------
+# jsclick, not click: the production panel is covering the topbar by now.
+jsclick #btn-write
+sleep 800
+expect !document.getElementById('writer').hidden
+# the writer is a mode: the panel that was covering the screen gets out of
+# the way rather than sitting on top of the page being written
+expect document.getElementById('production-panel').hidden
+expect document.documentElement.scrollWidth <= innerWidth
+# the gutter stops hanging in a margin the phone does not have
+expect getComputedStyle(document.querySelector('#writer-doc .wr-gutter')).position == static
+expect document.querySelector('#writer-doc .wr-para').getBoundingClientRect().width <= innerWidth
+expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) >= 16
+shot 05-mobile-writer
+jsclick #wr-close
+sleep 600
+expect document.getElementById('writer').hidden
+
 # The desktop layout is not re-checked here: clearing device emulation and
 # reloading in the same session reliably aborted the CDP socket, and suites
 # 01-04 all run at the desktop viewport anyway — if the desktop layout

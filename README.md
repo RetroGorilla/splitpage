@@ -121,6 +121,39 @@ Other things worth knowing:
 
 ## Writing and planning
 
+**The writer.** **✎ Write** in the header opens the Audio column on its own,
+as one flowing document — a plain word processor for when the job is writing
+a lot of narration rather than pairing it with picture. One paragraph is one
+scene. **Enter** starts a new one, **Shift+Enter** is a line break inside the
+one you're in, and **Backspace** at the very start of a paragraph joins it
+onto the one above (**Delete** at the end pulls the next one up).
+
+What sits in the margin beside each paragraph is a three-way setting — the
+button on the bar shows where it's at and cycles:
+
+- **Visuals** — the scene number and what's on screen for it, greyed out and
+  not editable. Click it to jump back to that scene in the split view.
+- **Numbers** — just the scene number.
+- **Compact** — nothing at all. Only the writing, with the paragraphs spaced
+  a little further apart so you can still see where the scenes divide.
+
+It isn't a copy of your script: every paragraph *is* the row it came from, so
+the tag shortcuts, <kbd>Ctrl</kbd>+<kbd>B</kbd>/<kbd>I</kbd>/<kbd>U</kbd> and
+Tab-completion all work exactly as they do in the split view, and the moment
+you close it everything is already where it should be. Word count and running
+time update as you type. Joining two scenes that *both* have a visual is the
+one thing it won't do on a keystroke — one of the two shot descriptions would
+have to be thrown away, so it sends you to the split view to pick.
+
+**Getting the narration back out.** File ▸ **Narration only** exports the
+Audio column as an ordinary document — `.docx` to hand to a voice artist or
+carry into Word, `.txt` for anything else. One paragraph per scene, no visual
+column, no breakdown, no comments. That's the same shape **Paste a script…**
+reads back in its paragraph mode, so narration written elsewhere and pasted in
+lands one paragraph per scene — and a `.txt` exported here and re-imported
+gives you your scenes back, plus one extra row holding the title line, which
+you delete. The same button is on the writer's own bar.
+
 **Runtime estimate.** The chip beside your name shows how long the Audio
 column takes to read, and each scene shows its own estimate in the gutter.
 Visual notes are directions, not spoken words, so they don't count. Click
@@ -199,6 +232,9 @@ above each scene, and panels and menus go full screen. A few things translate:
 - **New scene:** the **+** button on any scene, or **+ Add row** at the bottom.
 - In the teleprompter the screen **stays awake** while you read (on browsers
   that support it) and releases when you close it.
+- **The writer** works the same, with the scene number and its visual on a
+  thin line above each paragraph instead of out in the margin — a phone has
+  no margin to put them in.
 
 Typing shortcuts (`[prop]` `{kitchen}` `~vfx~`), comments, status, exports,
 the server features — everything else is exactly the same.

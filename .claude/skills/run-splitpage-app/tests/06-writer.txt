@@ -1,0 +1,180 @@
+# The writer (word-processor view of the audio column) and the narration
+# exports that come out of the same place.
+#
+# The thing worth guarding here is that the writer is not a second copy of
+# the document: every paragraph is a row's audioText, so an edit made here
+# has to be in the split view the moment the writer closes, with no import,
+# re-parse or merge step in between.
+
+open
+
+# --- one paragraph per scene ------------------------------------------------
+# by id, not text=: .btn is text-transform:uppercase and the driver matches
+# on innerText, which returns the rendered casing ("WRITE")
+click #btn-write
+sleep 700
+expect !document.getElementById('writer').hidden
+expect document.querySelectorAll('#writer-doc .wr-para').length == 2
+expect document.querySelectorAll('#writer-doc .wr-block').length == 2
+
+# the narration is what is editable; the visual rides in the gutter as context
+expect document.querySelector('#writer-doc .wr-para').textContent.indexOf('welcome back') !== -1
+expect document.querySelector('#writer-doc .wr-para').isContentEditable
+expect document.querySelector('#writer-doc .wr-visual').textContent.indexOf('Host on camera') !== -1
+expect document.querySelector('#writer-doc .wr-visual').isContentEditable === false
+
+# --- the counters read the narration, not the whole script ------------------
+expect document.getElementById('wr-scenes').textContent == 2
+expect parseInt(document.getElementById('wr-words').textContent, 10) > 30
+expect document.getElementById('wr-runtime').textContent.indexOf(':') !== -1
+
+# --- Enter splits the scene at the caret ------------------------------------
+# Caret placed explicitly rather than with `caret`, which only does start/end.
+eval (function(){var p=document.querySelector('#writer-doc .wr-para');var t=p.firstChild;var i=t.nodeValue.indexOf('Today');p.focus();var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return i;})()
+key Enter
+sleep 500
+expect document.querySelectorAll('#writer-doc .wr-para').length == 3
+expect document.getElementById('wr-scenes').textContent == 3
+# the tail moved down, and only the tail
+expect document.querySelectorAll('#writer-doc .wr-para')[1].textContent.indexOf('Today I want') === 0
+expect document.querySelectorAll('#writer-doc .wr-para')[0].textContent.indexOf('Today') === -1
+# a scene nobody has framed a shot for yet gets an empty visual, not a copy
+expect document.querySelectorAll('#writer-doc .wr-visual')[1].textContent.length === 0
+
+# the caret followed the text it moved, so typing continues in the new scene
+press OK.
+sleep 400
+expect document.querySelectorAll('#writer-doc .wr-para')[1].textContent.indexOf('OK.Today') === 0
+
+# --- Backspace at the start joins two scenes back together ------------------
+caret #writer-doc .wr-block:nth-child(2) .wr-para start
+key Backspace
+sleep 500
+expect document.querySelectorAll('#writer-doc .wr-para').length == 2
+# the head already ended in a space, so no second one is invented
+expect document.querySelectorAll('#writer-doc .wr-para')[0].textContent.indexOf('in public. OK.Today') !== -1
+
+# --- but never when it would silently throw a shot description away ---------
+# Both demo scenes have a visual, and only one of them can survive a merge.
+caret #writer-doc .wr-block:nth-child(2) .wr-para start
+key Backspace
+sleep 500
+expect document.querySelectorAll('#writer-doc .wr-para').length == 2
+expect document.querySelector('.toast').textContent.indexOf('Both scenes have a visual') !== -1
+
+# --- tagging still works, because these are real script cells ---------------
+caret #writer-doc .wr-para
+press  Grab the [boom pole] now.
+sleep 600
+expect document.querySelectorAll('#writer-doc .tag-anchor').length == 1
+expect document.getElementById('production-badge').textContent == 1
+
+# --- rich text, by keyboard and by the bar ----------------------------------
+# Select the last four characters of scene 1 ("now.") - the text node the tag
+# anchor left behind, hence the walk rather than firstChild.
+eval (function(){var p=document.querySelector('#writer-doc .wr-para');var w=document.createTreeWalker(p,NodeFilter.SHOW_TEXT,null);var last=null;while(w.nextNode())last=w.currentNode;var r=document.createRange();r.setStart(last,last.nodeValue.length-4);r.setEnd(last,last.nodeValue.length);var s=getSelection();s.removeAllRanges();s.addRange(r);p.focus();s.removeAllRanges();s.addRange(r);return r.toString();})()
+key ctrl KeyB
+sleep 400
+expect document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]').classList.contains('is-active')
+# the bar's buttons act on the paragraph that had focus, and jsclick keeps the
+# selection they are about to format
+jsclick .writer-bar .wr-fmt[data-cmd="italic"]
+sleep 400
+# NOT asserted here: execCommand emits <span style="font-weight:bold"> in
+# Chromium, and it is the shared sanitiser on the way out that turns that into
+# <strong>/<em>. Asserting on the live DOM would be testing the browser.
+
+shot 06-writer
+
+# --- closing hands everything straight to the split view --------------------
+jsclick #wr-close
+sleep 700
+expect document.getElementById('writer').hidden
+expect document.querySelectorAll('#rows .row').length == 2
+expect document.querySelectorAll('#rows .tag-anchor').length == 1
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('boom pole') !== -1
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('OK.Today') !== -1
+# the visual column was never touched
+expect document.querySelector('#rows .row .visual-cell .cell-editable').textContent.indexOf('Host on camera') === 0
+# and the formatting arrived as real markup, sanitised out of the style spans
+expect document.querySelector('#rows .row .audio-cell .cell-editable strong').textContent == now.
+expect document.querySelectorAll('#rows .row .audio-cell .cell-editable em').length >= 1
+
+# --- the gutter cycles: visuals -> numbers -> compact -> visuals ------------
+# by id, not text=: .btn is text-transform:uppercase and the driver matches
+# on innerText, which returns the rendered casing ("WRITE")
+click #btn-write
+sleep 600
+expect document.getElementById('writer').getAttribute('data-gutter') == visuals
+expect document.getElementById('wr-gutter-mode').textContent == Visuals
+
+# numbers: the visual goes, the number stays
+jsclick #wr-gutter-mode
+sleep 300
+expect document.getElementById('writer').getAttribute('data-gutter') == numbers
+expect document.getElementById('wr-gutter-mode').textContent == Numbers
+expect getComputedStyle(document.querySelector('#writer-doc .wr-visual')).display == none
+expect getComputedStyle(document.querySelector('#writer-doc .wr-num')).display !== 'none'
+
+# compact: nothing beside the writing at all
+jsclick #wr-gutter-mode
+sleep 300
+expect document.getElementById('writer').getAttribute('data-gutter') == compact
+expect document.getElementById('wr-gutter-mode').textContent == Compact
+expect getComputedStyle(document.querySelector('#writer-doc .wr-gutter')).display == none
+# lit while the margin shows something, dark when it shows nothing
+expect document.getElementById('wr-gutter-mode').classList.contains('is-active') === false
+# The writing must not move sideways when the margin empties. Two separate
+# things have to hold for that: the gutter is not in the flow (it hangs off
+# the block, see the CSS), AND the scrollbar gutter is stable - the taller
+# compact layout crosses the scroll threshold, and without `stable both-edges`
+# the appearing scrollbar shifted the centred column 7px under the cursor.
+eval window.__compactLeft = Math.round(document.querySelector('#writer-doc .wr-para').getBoundingClientRect().left)
+# and the paragraphs space themselves, since nothing else marks the joins now
+expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-block')).marginBottom) > 0
+
+shot 06-writer-compact
+
+# back round to the start
+jsclick #wr-gutter-mode
+sleep 300
+expect document.getElementById('writer').getAttribute('data-gutter') == visuals
+expect document.getElementById('wr-gutter-mode').classList.contains('is-active')
+expect Math.round(document.querySelector('#writer-doc .wr-para').getBoundingClientRect().left) === window.__compactLeft
+
+key Escape
+sleep 500
+expect document.getElementById('writer').hidden
+
+# --- narration exports ------------------------------------------------------
+# Same blob interception as 03-exports: nothing is written to disk.
+eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-narration-txt"]
+sleep 1400
+expect window.__blobs.length >= 1
+eval (async function(){window.__nar = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+expect window.__nar.indexOf('boom pole') !== -1
+# the narration and nothing else: no visual column, no breakdown, no comments
+expect window.__nar.indexOf('Host on camera') === -1
+expect window.__nar.indexOf('PRODUCTION BREAKDOWN') === -1
+expect window.__nar.indexOf('COMMENTS') === -1
+# title, then one paragraph per scene with a blank line between - which is
+# exactly what Paste a script... reads back in its paragraph mode (the title
+# is the one thing that does not round-trip: it comes back as an extra row)
+expect window.__nar.split(/\n\s*\n+/).filter(Boolean).length == 3
+expect window.__nar.split(/\n\s*\n+/)[0] == Untitled Script
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-narration-docx"]
+sleep 2200
+expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') !== -1
+eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__narDocx={parses:!doc.querySelector('parsererror'),hasAudio:xml.indexOf('boom pole')!==-1,flowing:xml.indexOf('<w:tbl>')===-1,noVisual:xml.indexOf('Host on camera')===-1};return true;})()
+expect window.__narDocx.parses
+expect window.__narDocx.hasAudio
+# prose, not the two-column table every other export produces
+expect window.__narDocx.flowing
+expect window.__narDocx.noVisual
+
+quit
