@@ -1506,6 +1506,215 @@
   .pp-voice-status.listening { color: #78E0C0; }
   .pp-voice-status.error { color: #FF8A7A; }
 
+  /* ---------- the writer (word-processor view of the audio column) ----------
+
+     The prompter reads the audio column; this one writes it. Same source,
+     no second copy: every paragraph here IS a row's audioText, bound
+     through the same .cell-editable contract the split view uses, so tag
+     shortcuts, Ctrl+B, pasting and sanitising all come for free and the
+     split view is already correct the moment this closes.
+
+     Deliberately a light room rather than the prompter's dark one — you are
+     writing here, not reading across a room, and it should feel like the
+     document it edits. */
+  /* Above the side panels (140) so nothing can stack over the page you are
+     writing on, but below the modals (150) and the toasts (200), which
+     still have to be able to speak over it. */
+  .writer {
+    position: fixed; inset: 0; z-index: 145;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+  }
+  .writer[hidden] { display: none; }
+
+  .writer-top {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .writer-kicker {
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--audio);
+    white-space: nowrap;
+  }
+  .writer-title {
+    flex: 1; min-width: 0;
+    font-family: var(--font-display);
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+  }
+  .writer-title:hover { border-color: var(--border); }
+  .writer-title:focus { outline: none; border-color: var(--audio); background: var(--bg); }
+  .writer-stats {
+    display: flex; align-items: center; gap: 16px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .writer-stats b { color: var(--text); font-weight: 600; }
+
+  /* The tall tail is the point: without it the paragraph you are typing
+     sits pinned to the bottom edge of the screen, which is exactly where
+     you cannot comfortably write. */
+  /* `stable both-edges` reserves the scrollbar's width on both sides at all
+     times. Without it the centred column jogs a few pixels sideways the
+     moment the document grows past one screen and the scrollbar appears —
+     under the cursor, mid-sentence, while you are typing the words that
+     caused it. Browsers that don't know the property just behave as before. */
+  .writer-scroll {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-gutter: stable both-edges;
+    padding: 44px 24px 55vh;
+  }
+
+  /* The prose column is centred on the screen and the gutter hangs in the
+     margin beside it, the way line numbers do in an editor. Putting the
+     gutter in the flow instead pushes the writing visibly off-centre —
+     the one thing a page you are meant to write on cannot afford. */
+  .writer-doc { max-width: 720px; margin: 0 auto; }
+  .wr-block { position: relative; }
+  .wr-gutter {
+    position: absolute;
+    top: 0; right: 100%;
+    width: 142px;
+    margin-right: 20px;
+    text-align: right;
+    padding-top: 15px;
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    cursor: pointer;
+    overflow: hidden;
+    user-select: none;
+  }
+  /* Three settings, not a toggle: the scene's visual beside each paragraph,
+     just its number, or nothing at all. The last one is for when the job is
+     purely writing and even a column of numbers down the side is something
+     to look at instead of the sentence. */
+  .writer[data-gutter="numbers"] .wr-gutter { width: 34px; }
+  .writer[data-gutter="compact"] .wr-gutter { display: none; }
+  /* With nothing marking the joins, the paragraphs have to space themselves
+     — otherwise a page of scenes reads as one undifferentiated block and you
+     cannot see where Enter and Backspace will act. */
+  .writer[data-gutter="compact"] .wr-block { margin-bottom: 12px; }
+  .wr-gutter:hover .wr-num, .wr-gutter:hover .wr-visual { color: var(--audio); }
+  .wr-num { display: block; }
+  .wr-visual {
+    display: block;
+    margin-top: 5px;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    letter-spacing: 0;
+    line-height: 1.4;
+    color: var(--text-faint);
+  }
+  .writer[data-gutter="numbers"] .wr-visual { display: none; }
+  .wr-visual-img { color: var(--visual); }
+
+  /* Overrides for the shared .cell-editable base: no negative margins, no
+     40px floor, no hover fill — a page of prose, not a grid of boxes. */
+  .writer .wr-para.cell-editable {
+    font-family: var(--font-body);
+    font-size: 19px;
+    line-height: 1.72;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 12px 10px;
+    background: transparent;
+    box-shadow: none;
+  }
+  .writer .wr-para.cell-editable:hover { background: var(--surface-2); }
+  .writer .wr-para.cell-editable:focus {
+    background: var(--surface);
+    box-shadow: 0 0 0 2px var(--audio) inset;
+  }
+  .writer .wr-para.cell-editable:empty:before { font-size: 17px; }
+
+  .writer-empty {
+    text-align: center;
+    color: var(--text-faint);
+    font-family: var(--font-display);
+    font-size: 12px;
+    padding: 60px 0;
+  }
+
+  .writer-bar {
+    display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .writer-bar .spacer { flex: 1; }
+  .writer-bar button {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
+    cursor: pointer;
+  }
+  .writer-bar button:hover { border-color: var(--audio); color: var(--audio); }
+  .writer-bar button.is-active { background: var(--audio); border-color: var(--audio); color: var(--accent-contrast); }
+  .writer-bar .wr-fmt { min-width: 34px; font-family: var(--font-body); font-size: 13px; text-transform: none; }
+  .writer-bar .wr-fmt[data-cmd="bold"] { font-weight: 800; }
+  .writer-bar .wr-fmt[data-cmd="italic"] { font-style: italic; }
+  .writer-bar .wr-fmt[data-cmd="underline"] { text-decoration: underline; }
+  .writer-bar .div-sep { width: 1px; height: 20px; background: var(--border); }
+  .writer-hint {
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+
+  /* Narrower than this and there is no margin left for the gutter to hang
+     in, so it stops hanging and becomes a thin line above each paragraph —
+     the same move the scene rows make on a phone, one breakpoint earlier
+     because the gutter runs out of room before the columns do. */
+  @media (max-width: 1000px) {
+    .wr-gutter {
+      position: static;
+      width: auto;
+      margin: 0;
+      padding: 12px 12px 0;
+      text-align: left;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .writer[data-gutter="numbers"] .wr-gutter { width: auto; }
+    .wr-num { flex: none; }
+    .wr-visual {
+      margin-top: 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   /* ---------- responsive ----------
 
      The phone layout is the same program, re-flowed: nothing is removed,
@@ -1623,6 +1832,18 @@
     .menu-wrap .menu { left: 0; right: auto; max-width: calc(100vw - 24px); }
 
     .add-row-btn { width: 100%; padding: 13px 0; }
+
+    /* the writer — the gutter has already stopped hanging by this width
+       (see the 1000px block); what is left is phone-sized type and chrome */
+    .writer-top { padding: 8px 12px; gap: 10px; flex-wrap: wrap; }
+    .writer-kicker { display: none; }
+    .writer-stats { gap: 10px; font-size: 10px; }
+    .writer-scroll { padding: 18px 12px 60vh; }
+    /* 16px is the floor below which iOS zooms the page on focus */
+    .writer .wr-para.cell-editable { font-size: 17px; padding: 6px 10px 10px; }
+    .writer-bar { gap: 6px 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
+    .writer-bar button { padding: 9px 10px; }
+    .writer-bar .div-sep, .writer-hint { display: none; }
   }
 
   /* Touch affordances, regardless of screen size (tablets included).
@@ -1698,12 +1919,17 @@
           <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
           <div class="menu-sep"></div>
+          <div class="menu-label">Export the narration</div>
+          <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
+          <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
+          <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
         </div>
       </div>
       <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
       <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+      <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
       <button class="btn btn-primary" id="btn-save" type="button">Save</button>
       <button class="btn btn-accent" id="btn-present" type="button">▶ Present</button>
     </div>
@@ -1854,6 +2080,33 @@
     <button id="pp-fullscreen" type="button">Fullscreen</button>
     <div class="spacer"></div>
     <button id="pp-close" class="close-btn" type="button">Close (Esc)</button>
+  </div>
+</div>
+
+<div class="writer" id="writer" hidden>
+  <div class="writer-top">
+    <span class="writer-kicker">Narration</span>
+    <input type="text" class="writer-title" id="writer-title" aria-label="Script title" spellcheck="false">
+    <span class="writer-stats">
+      <span><b id="wr-scenes">0</b> scenes</span>
+      <span><b id="wr-words">0</b> words</span>
+      <span>⏱ <b id="wr-runtime">0:00</b></span>
+    </span>
+  </div>
+  <div class="writer-scroll" id="writer-scroll">
+    <div class="writer-doc" id="writer-doc"></div>
+  </div>
+  <div class="writer-bar">
+    <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
+    <button type="button" class="wr-fmt" data-cmd="italic" title="Italic (Ctrl+I)">I</button>
+    <button type="button" class="wr-fmt" data-cmd="underline" title="Underline (Ctrl+U)">U</button>
+    <button type="button" class="wr-fmt" data-cmd="highlight" title="Highlight">▮</button>
+    <div class="div-sep"></div>
+    <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
+    <button type="button" id="wr-export">Export narration</button>
+    <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
+    <div class="spacer"></div>
+    <button type="button" id="wr-close">Close (Esc)</button>
   </div>
 </div>
 
@@ -3324,6 +3577,13 @@
     renderProduction();
     captureReplyDrafts();
     renderComments();
+    /* A full render means the document changed underneath the UI — a
+       merge landing from the server, a version restored. The writer is not
+       on the typing path (typing only ever reaches paintRowStatus and the
+       debounced counters), so rebuilding it here cannot cost anyone a
+       caret, and leaving it stale would show narration that no longer
+       matches what is being edited. */
+    if (writerOpen) renderWriter();
   }
 
   /* ================= field sync ================= */
@@ -7398,6 +7658,14 @@
       });
     }
 
+    return packDocx(body, links, media);
+  }
+
+  /* Everything below the body: page setup, relationships, styles and the
+     zip itself — identical for any .docx this file produces, so the
+     narration export builds its own body and hands it to the same packer
+     rather than growing a second copy of the boilerplate. */
+  function packDocx(body, links, media) {
     body += '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>' +
       '<w:pgMar w:top="1440" w:right="1080" w:bottom="1440" w:left="1080"/></w:sectPr>';
 
@@ -7457,6 +7725,51 @@
     });
 
     return zipWrite(entries);
+  }
+
+  /* ================= the narration on its own =================
+
+     The audio column lifted back out as an ordinary document: one paragraph
+     per scene, blank line between — which is exactly the shape "Paste a
+     script…" reads back in its paragraph mode, so a narration exported here
+     and re-imported reproduces the same rows it came from.
+
+     The visual column, the breakdown and the comments are all deliberately
+     missing. This is the file you hand to a voice artist, or carry into
+     Word to keep writing, not another copy of the whole script — every
+     other export already is that. */
+
+  function narrationRows() {
+    return state.rows.filter(function (row) { return htmlToPlainText(row.audioText); });
+  }
+
+  function buildNarrationText() {
+    var out = [state.title || "Untitled Script", ""];
+    narrationRows().forEach(function (row) {
+      out.push(htmlToPlainText(row.audioText));
+      out.push("");
+    });
+    return out.join("\n");
+  }
+
+  function buildNarrationDocx() {
+    var links = [];
+    var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
+
+    var body = '<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:after="240"/></w:pPr>' +
+      '<w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr>' +
+      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
+
+    narrationRows().forEach(function (row) {
+      /* docxRunsXml() opens its own <w:p>, so paragraph properties have to
+         be spliced in after it rather than passed down — 1.5 line spacing
+         and a gap between paragraphs, because the point of this file is
+         that somebody can read it aloud off a page. */
+      body += docxRunsXml(row.audioText, rels).replace("<w:p>",
+        '<w:p><w:pPr><w:spacing w:after="200" w:line="360" w:lineRule="auto"/></w:pPr>');
+    });
+
+    return packDocx(body, links, []);
   }
 
   /* ================= .docx reading ================= */
@@ -8371,6 +8684,8 @@
     if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
     if (kind === "pdf") return { data: buildPdf(), filename: baseName + ".pdf" };
     if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
+    if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
+    if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -8754,6 +9069,16 @@
     await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
   }
 
+  /* An empty narration would export as a file containing nothing but the
+     title, which reads as a broken export rather than an empty column. */
+  async function exportNarration(kind) {
+    if (!narrationRows().length) {
+      showToast("There is no narration to export yet — the Audio column is empty.", "warn");
+      return;
+    }
+    await exportAs(kind);
+  }
+
   function toggleFileMenu(force) {
     var menu = document.getElementById("file-menu");
     var btn = document.getElementById("btn-file");
@@ -8775,10 +9100,400 @@
     else if (action === "export-csv") exportAs("csv");
     else if (action === "export-breakdown") exportAs("breakdown");
     else if (action === "export-pdf") exportAs("pdf");
+    else if (action === "export-narration-docx") exportNarration("narration-docx");
+    else if (action === "export-narration-txt") exportNarration("narration-txt");
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
     else if (action === "tagging-help") showTaggingHelp();
+  }
+
+  /* ================= the writer =================
+
+     A word-processor view of the audio column: the whole narration as one
+     continuous document, laid out for writing rather than for scanning
+     against picture. The prompter reads this column; this writes it.
+
+     The load-bearing decision is that it edits the SAME rows the split view
+     does. Every paragraph here is a real .cell-editable carrying a row's
+     own data-id/data-field, so the shared input handlers give it the tag
+     shortcuts, the Tab completion, Ctrl+B, paste-as-plain-text and the
+     sanitising pass for nothing, and write straight back into state. There
+     is no parse step, no second copy of the document, and nothing to
+     reconcile when it closes.
+
+     One paragraph is one scene. That is what lets Enter mean something
+     here: a new paragraph is a new scene, which is the beat a writer is
+     reaching for anyway, and it keeps this view and the split view exactly
+     in step in both directions. */
+
+  var writerOpen = false;
+  var writerGutterMode = "visuals"; /* visuals | numbers | compact */
+  var writerStatsTimer = null;
+  var writerLastCell = null;
+
+  function writerBlockHtml(row, i) {
+    var visual;
+    if (row.visualImage) {
+      var caption = truncateForPreview(htmlToPlainText(row.visualText), 42);
+      visual = '<span class="wr-visual-img">▣</span> ' + escapeHtml(caption || "reference image");
+    } else {
+      visual = escapeHtml(truncateForPreview(htmlToPlainText(row.visualText), 58));
+    }
+    var id = escapeHtml(row.id);
+    return '<div class="wr-block" data-row="' + id + '">' +
+        '<div class="wr-gutter" data-action="writer-jump" data-row="' + id +
+          '" title="Open this scene in the split view">' +
+          '<span class="wr-num">' + pad2(i + 1) + '</span>' +
+          '<span class="wr-visual">' + visual + '</span>' +
+        '</div>' +
+        '<div class="wr-para cell-editable" contenteditable="true" data-id="' + id +
+          '" data-field="audioText" data-placeholder="Write what gets said…">' +
+          (row.audioText || "") +
+        '</div>' +
+      '</div>';
+  }
+
+  /* Where the caret is, as (row, characters into that row) — the one form
+     that survives the paragraphs being rebuilt underneath it. */
+  function writerCaretState() {
+    var active = document.activeElement;
+    if (!writerOpen || !active || !active.classList || !active.classList.contains("wr-para")) return null;
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    var range = sel.getRangeAt(0);
+    if (!active.contains(range.startContainer)) return null;
+    var probe = document.createRange();
+    probe.selectNodeContents(active);
+    probe.setEnd(range.startContainer, range.startOffset);
+    return { id: active.getAttribute("data-id"), offset: probe.toString().length };
+  }
+
+  function renderWriter() {
+    var doc = document.getElementById("writer-doc");
+    /* render() reaches here too — a version restored, someone else's edits
+       merging in from the server mid-sentence. Whoever called, the writing
+       position has to come back afterwards, or the rebuild costs a word. */
+    var caret = writerCaretState();
+    if (!state.rows.length) {
+      doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
+    } else {
+      var html = "";
+      for (var i = 0; i < state.rows.length; i++) html += writerBlockHtml(state.rows[i], i);
+      doc.innerHTML = html;
+    }
+    writerLastCell = null;
+    /* a no-op if that scene is gone — the callers that know better (a split,
+       a join) place the caret themselves right after this returns */
+    if (caret) focusWriterBlock(caret.id, caret.offset);
+    updateWriterStats();
+  }
+
+  function updateWriterStats() {
+    if (!writerOpen || !state) return;
+    var words = 0;
+    state.rows.forEach(function (row) { words += wordCount(row.audioText); });
+    document.getElementById("wr-scenes").textContent = String(state.rows.length);
+    document.getElementById("wr-words").textContent = words.toLocaleString();
+    document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds());
+  }
+
+  /* Same reasoning as scheduleProductionRefresh(): counting every word in
+     the document is cheap once and wasteful once per keystroke. */
+  function scheduleWriterStats() {
+    if (!writerOpen || writerStatsTimer) return;
+    writerStatsTimer = setTimeout(function () {
+      writerStatsTimer = null;
+      updateWriterStats();
+    }, 200);
+  }
+
+  /* ---- caret plumbing ---- */
+
+  /* Put the caret at a plain-text offset inside a block. Used after a merge
+     so it lands exactly where the two scenes were joined, rather than at
+     the top of the paragraph they became. */
+  function placeCaretAtTextOffset(el, offset) {
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    var node, seen = 0, target = null, targetOffset = 0;
+    while ((node = walker.nextNode())) {
+      var len = node.nodeValue.length;
+      if (seen + len >= offset) { target = node; targetOffset = offset - seen; break; }
+      seen += len;
+    }
+    var range = document.createRange();
+    /* a tag anchor is contenteditable="false" — the caret can never sit
+       inside one, so an offset that lands there goes just past it instead */
+    var atomic = target && target.parentNode.closest && target.parentNode.closest(".tag-anchor");
+    if (atomic) {
+      range.setStartAfter(atomic);
+    } else if (target) {
+      range.setStart(target, Math.min(targetOffset, target.nodeValue.length));
+    } else {
+      range.selectNodeContents(el);
+    }
+    range.collapse(true);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function focusWriterBlock(rowId, offset) {
+    var el = document.querySelector('#writer-doc .wr-para[data-id="' + cssAttr(rowId) + '"]');
+    if (!el) return;
+    el.focus();
+    if (offset === "end") {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      placeCaretAtTextOffset(el, offset || 0);
+    }
+    writerLastCell = el;
+    el.scrollIntoView({ block: "nearest" });
+  }
+
+  /* "Is the caret at the very start (or end) of this block?" — measured by
+     cloning the content on that side rather than by comparing node offsets,
+     because offset 0 of the *second* text node is not the start of the
+     paragraph, and a <br> or a tag anchor sitting at the edge has to count
+     as content. */
+  function caretAtEdge(cellEl, range, edge) {
+    var probe = document.createRange();
+    probe.selectNodeContents(cellEl);
+    if (edge === "start") probe.setEnd(range.startContainer, range.startOffset);
+    else probe.setStart(range.endContainer, range.endOffset);
+    var frag = probe.cloneContents();
+    return !frag.textContent && !frag.querySelector("*");
+  }
+
+  /* ---- splitting and joining scenes ---- */
+
+  /* Enter: everything from the caret to the end of the paragraph becomes a
+     scene of its own, directly below. Its visual is left empty, which is
+     the honest state for a beat of narration nobody has framed a shot for
+     yet, and the caret follows the text it moved. */
+  function splitWriterRow(cellEl) {
+    var idx = findRowIndex(cellEl.getAttribute("data-id"));
+    if (idx === -1) return;
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    var range = sel.getRangeAt(0);
+    if (!cellEl.contains(range.startContainer)) return;
+    if (!range.collapsed) range.deleteContents();
+
+    var tail = document.createRange();
+    tail.setStart(range.startContainer, range.startOffset);
+    tail.setEnd(cellEl, cellEl.childNodes.length);
+    var holder = document.createElement("div");
+    holder.appendChild(tail.extractContents());
+
+    state.rows[idx].audioText = sanitizeHtml(cellEl.innerHTML);
+    stampRow(state.rows[idx]);
+
+    var created = {
+      id: makeId(), visualText: "", visualImage: null,
+      audioText: sanitizeHtml(holder.innerHTML),
+      status: "todo", updatedAt: nowIso(), updatedBy: getEditorName()
+    };
+    state.rows.splice(idx + 1, 0, created);
+    markDirty();
+    renderWriter();
+    focusWriterBlock(created.id, 0);
+  }
+
+  /* Backspace at the very start of a paragraph — and Delete at the very end
+     — joins two scenes, the way they join in any word processor.
+
+     The narration merges. The visual is the awkward half: it has nowhere to
+     go when BOTH scenes have one, and silently throwing a shot description
+     away is not something a single keystroke should ever do, so that is the
+     one case this refuses and sends to the split view instead. */
+  function mergeWriterRows(intoIdx) {
+    var prev = state.rows[intoIdx];
+    var cur = state.rows[intoIdx + 1];
+    if (!prev || !cur) return;
+
+    var prevHasVisual = !!(htmlToPlainText(prev.visualText) || prev.visualImage);
+    var curHasVisual = !!(htmlToPlainText(cur.visualText) || cur.visualImage);
+    if (prevHasVisual && curHasVisual) {
+      showToast("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
+      return;
+    }
+
+    /* measured off the DOM, not off htmlToPlainText(), which trims */
+    var prevEl = document.querySelector('#writer-doc .wr-para[data-id="' + cssAttr(prev.id) + '"]');
+    var joinAt = prevEl ? prevEl.textContent.length : 0;
+
+    var a = prev.audioText || "", b = cur.audioText || "";
+    /* The caret lands *before* the joining space, so one more Backspace
+       closes the two up tight — which is what someone who did not want a
+       space there is about to press anyway. */
+    var glue = (a && b && !/(<br\s*\/?>|\s)$/i.test(a)) ? " " : "";
+    prev.audioText = a + glue + b;
+    if (curHasVisual) {
+      prev.visualText = cur.visualText;
+      prev.visualImage = cur.visualImage;
+    }
+    stampRow(prev);
+    state.rows.splice(intoIdx + 1, 1);
+    markDirty();
+    renderWriter();
+    focusWriterBlock(prev.id, joinAt);
+  }
+
+  /* Runs in the CAPTURE phase on #writer-doc, ahead of the shared
+     onRootKeydown bound to the same element — Enter means "new scene" here
+     and "<br>" there, and only the capture listener can get in first and
+     stop the other from also acting on the same keystroke. */
+  function onWriterKeydown(e) {
+    var cellEl = e.target.classList && e.target.classList.contains("wr-para") ? e.target : null;
+    if (!cellEl) return;
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      hideTagGhost();
+      splitWriterRow(cellEl);
+      return;
+    }
+    if (e.key !== "Backspace" && e.key !== "Delete") return;
+
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    var range = sel.getRangeAt(0);
+    if (!range.collapsed || !cellEl.contains(range.startContainer)) return;
+    var idx = findRowIndex(cellEl.getAttribute("data-id"));
+    if (idx === -1) return;
+
+    if (e.key === "Backspace" && idx > 0 && caretAtEdge(cellEl, range, "start")) {
+      e.preventDefault();
+      e.stopPropagation();
+      syncFieldFromDom(cellEl);
+      mergeWriterRows(idx - 1);
+    } else if (e.key === "Delete" && idx < state.rows.length - 1 && caretAtEdge(cellEl, range, "end")) {
+      e.preventDefault();
+      e.stopPropagation();
+      syncFieldFromDom(cellEl);
+      mergeWriterRows(idx);
+    }
+  }
+
+  /* ---- the bar ---- */
+
+  /* The formatting buttons act on whichever paragraph was last focused.
+     mousedown is where the default has to be prevented — by the time click
+     fires, the selection they were meant to format is already gone. */
+  function onWriterFormat(btn) {
+    var cellEl = writerLastCell;
+    if (!cellEl || !cellEl.isConnected) return;
+    var cmd = btn.getAttribute("data-cmd");
+    cellEl.focus();
+    if (cmd === "highlight") {
+      if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
+      else applyHighlight();
+    } else {
+      try { document.execCommand(cmd); } catch (err) { return; }
+    }
+    syncFieldFromDom(cellEl);
+    updateWriterFormatState();
+  }
+
+  function updateWriterFormatState() {
+    var live = writerOpen && writerLastCell && writerLastCell.isConnected;
+    ["bold", "italic", "underline"].forEach(function (cmd) {
+      var btn = document.querySelector('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
+      if (!btn) return;
+      var on = false;
+      if (live) { try { on = document.queryCommandState(cmd); } catch (e) {} }
+      btn.classList.toggle("is-active", on);
+    });
+    var hi = document.querySelector('.writer-bar .wr-fmt[data-cmd="highlight"]');
+    if (hi) hi.classList.toggle("is-active", !!(live && isSelectionInsideTag(writerLastCell, "MARK")));
+  }
+
+  /* The button shows the mode it is currently in and cycles on click — the
+     same idiom as the scene status dot, rather than three buttons' worth of
+     bar for a setting most people set once. Lit while the margin is showing
+     something, so "nothing there" reads as off at a glance and the label
+     says which of the two showing states it is. */
+  var WRITER_GUTTER_MODES = ["visuals", "numbers", "compact"];
+  var WRITER_GUTTER_LABELS = { visuals: "Visuals", numbers: "Numbers", compact: "Compact" };
+
+  function setWriterGutter(mode) {
+    if (WRITER_GUTTER_MODES.indexOf(mode) === -1) mode = "visuals";
+    writerGutterMode = mode;
+    document.getElementById("writer").setAttribute("data-gutter", mode);
+    var btn = document.getElementById("wr-gutter-mode");
+    btn.textContent = WRITER_GUTTER_LABELS[mode];
+    btn.classList.toggle("is-active", mode !== "compact");
+  }
+
+  function cycleWriterGutter() {
+    var i = WRITER_GUTTER_MODES.indexOf(writerGutterMode);
+    setWriterGutter(WRITER_GUTTER_MODES[(i + 1) % WRITER_GUTTER_MODES.length]);
+  }
+
+  /* ---- opening and closing ---- */
+
+  function openWriter() {
+    var el = document.getElementById("writer");
+    /* The writer is a mode, not a layer. A side panel left open underneath
+       it is either covered or showing through the edge, and on a phone it
+       is the whole screen — so they close, the same way they would if you
+       had navigated somewhere else. */
+    closeProductionPanel();
+    closeCommentsPanel();
+    if (findOpen) closeFindBar();
+    document.getElementById("writer-title").value = state.title || "";
+    setWriterGutter(writerGutterMode); /* whatever it was left on last time */
+    el.hidden = false;
+    writerOpen = true;
+    renderWriter();
+    document.getElementById("writer-scroll").scrollTop = 0;
+
+    /* Land in the first scene with nothing said in it yet — that is where
+       someone who opened this to write is heading. Failing that, the end of
+       the last one, to carry on from where the narration stops. */
+    var blank = null;
+    for (var i = 0; i < state.rows.length; i++) {
+      if (!htmlToPlainText(state.rows[i].audioText)) { blank = state.rows[i]; break; }
+    }
+    if (blank) focusWriterBlock(blank.id, 0);
+    else if (state.rows.length) focusWriterBlock(state.rows[state.rows.length - 1].id, "end");
+    updateWriterFormatState();
+  }
+
+  function closeWriter() {
+    var el = document.getElementById("writer");
+    if (el.hidden) return;
+    /* The paragraph still under the caret has not been through focusout, so
+       its last few keystrokes are in the DOM and not yet in state. Commit
+       them before the split view re-reads state and paints over them. */
+    var active = document.activeElement;
+    if (active && active.classList && active.classList.contains("wr-para")) {
+      var clean = sanitizeHtml(active.innerHTML);
+      if (clean !== active.innerHTML) active.innerHTML = clean;
+      syncFieldFromDom(active);
+    }
+    el.hidden = true;
+    writerOpen = false;
+    writerLastCell = null;
+    hideTagGhost();
+    render();
+  }
+
+  function jumpFromWriterToRow(rowId) {
+    closeWriter();
+    var target = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.remove("just-merged");
+    void target.offsetWidth;
+    target.classList.add("just-merged");
   }
 
   /* ================= teleprompter ================= */
@@ -9455,8 +10170,12 @@
      gated on the cell actually being a row field — otherwise typing
      "[boom pole]" into a comment silently made a tag inside that comment and
      registered a production item that could never appear in the script. */
+  /* The writer's paragraphs are row fields too — same data-id/data-field,
+     same row behind them — so they get the same treatment as the cells in
+     the split view. That is the whole reason the writer needed no editing
+     code of its own beyond splitting and joining scenes. */
   function isScriptCell(cellEl) {
-    return !!(cellEl && cellEl.closest("#rows") && cellEl.getAttribute("data-field"));
+    return !!(cellEl && cellEl.closest("#rows, #writer-doc") && cellEl.getAttribute("data-field"));
   }
 
   function onRootInput(e) {
@@ -9474,6 +10193,7 @@
        tags back means parsing every field of every row: fine once, but not
        twice per keystroke on a long script. */
     scheduleProductionRefresh();
+    scheduleWriterStats();
     updateTagGhost(cellEl);
   }
 
@@ -9732,6 +10452,10 @@
     window.addEventListener("keydown", function (e) {
       if (!(e.ctrlKey || e.metaKey) || (e.key !== "f" && e.key !== "F")) return;
       if (!state) return;
+      /* the find bar edits the split view's cells, which are behind the
+         writer — opening it there hands the keystroke to something the
+         writer cannot see */
+      if (writerOpen) return;
       /* the script lives across dozens of separate contenteditables, so the
          browser's own find is close to useless here — take the shortcut */
       e.preventDefault();
@@ -9937,7 +10661,8 @@
     document.addEventListener("selectionchange", function () {
       var active = document.activeElement;
       if (active && active.classList && active.classList.contains("cell-editable")) {
-        updateToolbarState(active);
+        if (active.classList.contains("wr-para")) updateWriterFormatState();
+        else updateToolbarState(active);
       }
     });
 
@@ -10044,6 +10769,63 @@
       else if (e.key === " ") { e.preventDefault(); setPrompterPlaying(!prompterPlaying); }
       else if (e.key === "ArrowUp") { prompterSpeed = Math.min(160, prompterSpeed + 6); document.getElementById("pp-speed").value = prompterSpeed; }
       else if (e.key === "ArrowDown") { prompterSpeed = Math.max(10, prompterSpeed - 6); document.getElementById("pp-speed").value = prompterSpeed; }
+    });
+
+    /* ---- the writer ---- */
+
+    document.getElementById("btn-write").addEventListener("click", function () {
+      if (!state) { showToast("Still loading…", "warn"); return; }
+      openWriter();
+    });
+
+    var writerDocEl = document.getElementById("writer-doc");
+    /* The paragraphs are row fields, so they run on the same handlers the
+       split view's cells do — see isScriptCell(). onRootClick is
+       deliberately NOT among them: its actions (open the production panel
+       on this tag, jump to that scene) all reach for the split view's DOM,
+       which is sitting stale behind this one until the writer closes. */
+    writerDocEl.addEventListener("input", onRootInput);
+    writerDocEl.addEventListener("focusout", onRootFocusOut);
+    writerDocEl.addEventListener("paste", onRootPaste);
+    writerDocEl.addEventListener("keydown", onRootKeydown);
+    /* capture, so Enter becomes a new scene before onRootKeydown can make
+       it a line break */
+    writerDocEl.addEventListener("keydown", onWriterKeydown, true);
+    writerDocEl.addEventListener("focusin", function (e) {
+      if (e.target.classList && e.target.classList.contains("wr-para")) {
+        writerLastCell = e.target;
+        updateWriterFormatState();
+      }
+    });
+    writerDocEl.addEventListener("click", function (e) {
+      var gutter = e.target.closest('[data-action="writer-jump"]');
+      if (gutter) jumpFromWriterToRow(gutter.getAttribute("data-row"));
+    });
+
+    document.getElementById("writer-title").addEventListener("input", function (e) {
+      if (!state) return;
+      state.title = e.target.value;
+      document.getElementById("doc-title").value = e.target.value;
+      markDirty();
+    });
+
+    document.querySelector(".writer-bar").addEventListener("mousedown", function (e) {
+      /* keep the selection the buttons are about to format */
+      if (e.target.closest(".wr-fmt")) e.preventDefault();
+    });
+    document.querySelector(".writer-bar").addEventListener("click", function (e) {
+      var fmt = e.target.closest(".wr-fmt");
+      if (fmt) { onWriterFormat(fmt); return; }
+      if (e.target.closest("#wr-gutter-mode")) { cycleWriterGutter(); return; }
+      if (e.target.closest("#wr-export")) { exportNarration("narration-docx"); return; }
+      if (e.target.closest("#wr-close")) closeWriter();
+    });
+
+    window.addEventListener("keydown", function (e) {
+      if (!writerOpen || e.key !== "Escape") return;
+      /* Escape belongs to the tag suggestion first, if one is showing */
+      if (tagGhost) { hideTagGhost(); return; }
+      closeWriter();
     });
 
     window.addEventListener("beforeunload", function (e) {

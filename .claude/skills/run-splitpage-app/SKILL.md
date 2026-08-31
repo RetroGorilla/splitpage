@@ -21,7 +21,7 @@ Do this before committing any change to `index.html`.
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 77/77 checks across 5 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 142/142 checks across 6 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -39,7 +39,8 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/02-production.txt` | breakdown registry, status cycle, all four groupings, Ctrl+click multi-select, bulk status |
 | `tests/03-exports.txt` | Markdown / CSV / breakdown CSV / DOCX / PDF actually produced, breakdown present, DOCX XML parses |
 | `tests/04-prompter-find.txt` | teleprompter open/play/mirror/size, find & replace, tags survive replace-all |
-| `tests/05-mobile.txt` | phone layout, no horizontal overflow, 16px inputs, long-press → tap-toggle selection |
+| `tests/05-mobile.txt` | phone layout, no horizontal overflow, 16px inputs, long-press → tap-toggle selection, the writer on a phone |
+| `tests/06-writer.txt` | the writer: paragraph-per-scene, Enter splits, Backspace joins, the join it refuses, tagging and rich text writing back, the visuals/numbers/compact gutter cycle, narration .txt/.docx |
 
 ## Ad-hoc driving
 
@@ -67,7 +68,7 @@ buffered pipeline long after the driver has exited, which looks like a hang.
 | `caret <sel> [start]` | focus a contenteditable **and place the caret** |
 | `press <text>` | per-character key events |
 | `type <text>` | one `insertText` for the whole string |
-| `key [mods] <Name>` | `Enter Tab Escape Backspace ArrowUp ArrowDown KeyZ KeyF`, mods `ctrl shift alt` |
+| `key [mods] <Name>` | `Enter Tab Escape Backspace Delete Home End ArrowUp ArrowDown KeyA KeyB KeyI KeyU KeyZ KeyF`, mods `ctrl shift alt` |
 | `viewport <w> <h> [mobile]` / `viewport reset` | device metrics; `mobile` also enables touch |
 | `count <sel>` / `text <sel>` / `sel <sel>` | inspect |
 | `shot <name>` | screenshot to `%TEMP%\splitpage-shots\<name>.png` |
@@ -77,6 +78,11 @@ buffered pipeline long after the driver has exited, which looks like a hang.
 Selectors are CSS, or `text=Exact Label` / `text*=Contains`. Prefer `text*=`
 for header buttons: `PRODUCTION` and `COMMENTS` grow a count badge inside them
 (`PRODUCTION2`), so exact matching breaks the moment the document has content.
+
+`text=` matches on **`innerText`**, which is the *rendered* casing — and `.btn`
+is `text-transform: uppercase`, so `text*=Write` finds nothing while
+`text*=WRITE` works. Match header buttons by id (`#btn-write`) and save
+yourself the guess.
 
 ## Gotchas that have already cost time
 
@@ -103,8 +109,25 @@ These are why tests fail when the app is fine. Check them before suspecting
   computed comparison use one truthy expression: `expect x === y + 1`.
 - **`viewport mobile` then `goto`.** `IS_TOUCH` and the `(hover: none)` rules are
   read at load, so emulation must be on *before* the page loads.
+- **Don't assert formatting on the live DOM.** Chromium's `execCommand` emits
+  `<span style="font-weight: bold">`, not `<b>`. Splitpage's sanitiser turns
+  that into `<strong>` on focusout — so a bold/italic assertion belongs *after*
+  the field has been left, otherwise you are testing the browser, not the app.
 - **Harmless console noise:** a 404 for `/favicon.ico`, and service-worker
   registration failures. Don't chase them.
+- **Orphaned browsers.** `Start-Process` hands back Edge's launcher, which
+  spawns the real browser tree and exits, so killing it alone left a browser
+  behind per suite. Twenty of them piled up over one full run until a later
+  suite's CDP socket timed out on its first command — a suite that passed
+  alone and failed in the full run. Both the driver and the runner now sweep
+  by the `splitpage-edge-*` profile directory (never by process name — that
+  would close the browser you are reading this in). If you see
+  `The WebSocket is in an invalid state ('Aborted')` on the *first* command of
+  a suite, check for leftovers before suspecting `index.html`:
+
+  ```bash
+  powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { \$_.CommandLine -like '*splitpage-edge-*' }).Count"
+  ```
 
 ## What this cannot test
 
