@@ -324,8 +324,17 @@ $KeyMap = @{
   Backspace = @{ key = 'Backspace'; code = 'Backspace'; vk = 8 }
   ArrowDown = @{ key = 'ArrowDown'; code = 'ArrowDown'; vk = 40 }
   ArrowUp   = @{ key = 'ArrowUp';   code = 'ArrowUp';   vk = 38 }
+  Delete    = @{ key = 'Delete';    code = 'Delete';    vk = 46 }
+  Home      = @{ key = 'Home';      code = 'Home';      vk = 36 }
+  End       = @{ key = 'End';       code = 'End';       vk = 35 }
   KeyZ      = @{ key = 'z';         code = 'KeyZ';      vk = 90 }
   KeyF      = @{ key = 'f';         code = 'KeyF';      vk = 70 }
+  # the rich-text shortcuts, which are otherwise only reachable by calling
+  # execCommand directly - which tests the browser, not Splitpage's handler
+  KeyA      = @{ key = 'a';         code = 'KeyA';      vk = 65 }
+  KeyB      = @{ key = 'b';         code = 'KeyB';      vk = 66 }
+  KeyI      = @{ key = 'i';         code = 'KeyI';      vk = 73 }
+  KeyU      = @{ key = 'u';         code = 'KeyU';      vk = 85 }
 }
 function Press-Key([string]$Name, [string]$Mods = '') {
   if (-not $KeyMap.ContainsKey($Name)) { throw "unknown key '$Name' (have: $($KeyMap.Keys -join ', '))" }
@@ -444,6 +453,17 @@ try {
 } finally {
   if ($script:Ws) { try { $script:Ws.Dispose() } catch {} }
   if ($script:EdgeProc) { try { Stop-Process -Id $script:EdgeProc.Id -Force -ErrorAction SilentlyContinue } catch {} }
+  # Start-Process hands back Edge's launcher, which spawns the browser tree and
+  # exits — killing it alone leaves the actual browser running. Sweep by this
+  # run's own profile directory, so nothing but our own processes can match.
+  if ($script:UserDataDir) {
+    try {
+      $dir = Split-Path -Leaf $script:UserDataDir
+      Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction Stop |
+        Where-Object { $_.CommandLine -and $_.CommandLine -like "*$dir*" } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    } catch {}
+  }
   if ($script:UserDataDir -and (Test-Path $script:UserDataDir)) {
     Start-Sleep -Milliseconds 300
     Remove-Item -Recurse -Force $script:UserDataDir -ErrorAction SilentlyContinue

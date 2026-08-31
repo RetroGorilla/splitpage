@@ -22,6 +22,27 @@ $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 
+# Start-Process returns Edge's launcher, which hands off to a process tree and
+# exits — so the driver's own Stop-Process kills a corpse and leaves the real
+# browser running. Worse, this runner kills the driver the moment it sees the
+# RESULT line, which can be before that teardown runs at all. Left alone the
+# orphans pile up (20 of them after one six-suite run) until a later suite's
+# browser is too slow to answer and its CDP socket times out on the very first
+# command — a suite that passes alone and fails in a full run.
+#
+# Matched on the profile directory, never on the process name: killing every
+# msedge.exe would take down the browser the person running the tests is
+# reading this in.
+function Clear-SplitpageEdge {
+  try {
+    Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction Stop |
+      Where-Object { $_.CommandLine -and $_.CommandLine -like '*splitpage-edge-*' } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  } catch {}
+}
+
+Clear-SplitpageEdge
+
 $files = Get-ChildItem -Path $tests -Filter '*.txt' | Sort-Object Name
 if ($Only) { $files = $files | Where-Object { $_.Name -like "$Only*" } }
 if (-not $files) { Write-Host "no test files matched"; exit 1 }
@@ -56,7 +77,14 @@ foreach ($f in $files) {
     if ((Test-Path $out) -and (Select-String -Path $out -Pattern '^RESULT:' -Quiet)) { $done = $true; break }
     if ($p.HasExited -and $sw.Elapsed.TotalSeconds -gt 3) { $done = $true; break }
   }
+  # Give the driver a moment to reach its own finally block before killing it —
+  # it prints RESULT first and tears the browser down after.
+  if ($done -and -not $p.HasExited) {
+    $grace = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $p.HasExited -and $grace.Elapsed.TotalSeconds -lt 5) { Start-Sleep -Milliseconds 200 }
+  }
   if (-not $p.HasExited) { try { $p.Kill() } catch {} }
+  Clear-SplitpageEdge
 
   if (-not $done) {
     Write-Host "    TIMED OUT after ${TimeoutSec}s" -ForegroundColor Red
