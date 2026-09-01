@@ -54,6 +54,27 @@ expect document.getElementById('tag-suggest').classList.contains('is-visible') =
 # and it did NOT fork a second breakdown item
 expect document.getElementById('production-badge').textContent == 1
 
+# --- a stale offer must never wrap the wrong words --------------------------
+# The offer holds a live Range. Typing into the MIDDLE of the phrase it covers
+# makes the range grow to include what was typed, and the rescan that would
+# notice is 220ms behind — so for a moment Tab could wrap "gaffXer tape" and
+# label it "gaffer tape". Type into the middle and take the offer immediately.
+caret #rows .row .visual-cell .cell-editable
+press  Also the gaffer tape rig.
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+eval (function(){var c=document.querySelector('#rows .row .visual-cell .cell-editable');var w=document.createTreeWalker(c,NodeFilter.SHOW_TEXT,null),n,t=null;while(w.nextNode()){if((w.currentNode.nodeValue||'').indexOf('gaffer tape')!==-1)t=w.currentNode;}var i=t.nodeValue.indexOf('gaffer tape')+3;var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(i-3,i+8);})()
+press X
+key Tab
+sleep 500
+# The character just typed must still be there. Without the guard the offer
+# is taken anyway: execCommand replaces whatever the grown range now covers
+# ("gafXfer tape") with the phrase the offer remembered ("gaffer tape"), and
+# the X the writer typed is silently swallowed.
+expect document.querySelector('#rows .row .visual-cell .cell-editable').textContent.indexOf('gafXfer') !== -1
+# and every label in the script still says what it is labelling
+expect Array.from(document.querySelectorAll('#rows .tag-anchor')).every(function (t) { return t.textContent.toLowerCase().replace(/\s+/g,' ') === (t.getAttribute('data-tag-name')||'').toLowerCase(); })
+
 # --- the breakdown now counts the mention it was missing --------------------
 click text*=PRODUCTION
 sleep 600
