@@ -368,7 +368,10 @@ function Set-Viewport([string]$Rest) {
   $null = Send-Cdp 'Emulation.setDeviceMetricsOverride' @{
     width = $w; height = $h; deviceScaleFactor = 1; mobile = $mobile
   }
-  $null = Send-Cdp 'Emulation.setTouchEmulationEnabled' @{ enabled = $mobile; maxTouchPoints = $(if ($mobile) { 5 } else { 0 }) }
+  # maxTouchPoints must be 1..16 even when disabling: CDP validates the field
+  # before it looks at `enabled`, so passing 0 threw on every non-mobile
+  # `viewport <w> <h>` and counted as a failing check.
+  $null = Send-Cdp 'Emulation.setTouchEmulationEnabled' @{ enabled = $mobile; maxTouchPoints = $(if ($mobile) { 5 } else { 1 }) }
   Out1 "viewport ${w}x${h}$(if ($mobile) { ' mobile' })"
 }
 
@@ -426,7 +429,12 @@ $exit = 0
 try {
   if ($Script) {
     if (-not (Test-Path $Script)) { throw "script not found: $Script" }
-    foreach ($line in (Get-Content -LiteralPath $Script)) {
+    # Read as UTF-8 explicitly. Get-Content on 5.1 decodes a BOM-less file with
+    # the system ANSI codepage, so a bullet or an em dash in an assertion
+    # arrives as mojibake and the comparison fails against an app that is
+    # perfectly fine. That has cost time twice.
+    $scriptText = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Script)))
+    foreach ($line in ($scriptText -split "`r?`n")) {
       try { if (-not (Invoke-Line $line)) { break } }
       catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
     }
