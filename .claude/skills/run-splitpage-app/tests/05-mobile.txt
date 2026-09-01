@@ -34,6 +34,19 @@ expect document.documentElement.scrollWidth <= innerWidth
 # --- the focus toolbar must not blow the grid out ---------------------------
 expect document.querySelector('#rows .row').getBoundingClientRect().width <= innerWidth
 
+# --- an untagged mention, and taking its offer by tapping -------------------
+# Phone keyboards have no Tab, so the pill is the only way to accept here.
+caret #rows .row .visual-cell .cell-editable
+press  Close on the gaffer tape.
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+expect getComputedStyle(document.getElementById('tag-suggest')).pointerEvents !== 'none'
+expect document.getElementById('tag-suggest').getBoundingClientRect().right <= innerWidth
+expect document.documentElement.scrollWidth <= innerWidth
+jsclick #tag-suggest
+sleep 700
+expect document.querySelectorAll('#rows .visual-cell .tag-anchor').length == 1
+
 # --- long-press starts a selection; a tap then toggles ----------------------
 click text*=PRODUCTION
 sleep 600

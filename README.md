@@ -137,6 +137,17 @@ button on the bar shows where it's at and cycles:
 - **Compact** — nothing at all. Only the writing, with the paragraphs spaced
   a little further apart so you can still see where the scenes divide.
 
+**Size** on the bar sets how big the writing is, from 16 to 34px. It's your
+setting, not the script's — it's remembered in this browser rather than saved
+into the file, so it doesn't follow the document to whoever opens it next. The
+column itself widens with the window (up to a point — a line of prose running
+the full width of a big monitor is unreadable), so a wider window and a bigger
+size together keep the line length about where you want it.
+
+**Save** is on the writer's bar too, with the same file chip beside it — it
+covers the header, and an hour of writing shouldn't have to be closed to be
+saved. It's the same button as the header's, so it always says the same thing.
+
 It isn't a copy of your script: every paragraph *is* the row it came from, so
 the tag shortcuts, <kbd>Ctrl</kbd>+<kbd>B</kbd>/<kbd>I</kbd>/<kbd>U</kbd> and
 Tab-completion all work exactly as they do in the split view, and the moment
@@ -164,6 +175,18 @@ estimate means the same thing to whoever opens it next.
 Shot**. Shot scenes are tinted, and a counter appears in the header once
 you've shot anything. In the teleprompter, **Skip shot** leaves those
 scenes out, so on day two you only read what's left.
+
+**Mentions you forgot to tag.** Once something is in the breakdown, Splitpage
+watches the Visual column for it. Write "gaffer tape" into a scene without
+labelling it and the words get a faint dotted underline, with a small **Tag
+gaffer tape** offer below them — <kbd>Tab</kbd> takes it, or tap it on a
+phone. <kbd>Esc</kbd> waves it off. Nothing about the document changes until
+you accept, and the underline is painted over the text rather than wrapped
+around it, so it can't touch what you've written.
+
+This matters more than it looks: an untagged mention is a mention nothing is
+counting, so that item's mention count and scene list are both short — and
+the **Shoot** grouping is missing a scene it should have listed.
 
 **Find and replace.** <kbd>Ctrl</kbd>+<kbd>F</kbd>. Enter and
 Shift+Enter step through matches; **Aa** toggles case-sensitivity.

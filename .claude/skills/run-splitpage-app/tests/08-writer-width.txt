@@ -1,0 +1,36 @@
+# The writing column scales with the window (60vw, floored and capped), and
+# the gutter hangs in whatever margin that leaves.
+#
+# 1150px is the tightest case in the whole range: the widest window at which
+# the margin is smallest relative to the gutter, one pixel above the 1100px
+# breakpoint where the gutter gives up hanging and goes static. If the
+# clipping is ever going to happen, it happens here.
+#
+# Its own suite because device metrics can only be set once, at the top,
+# before the session has done any real work — changing them later reliably
+# aborts the CDP socket. Same constraint 05-mobile runs under.
+
+open
+viewport 1150 900
+goto /index.html
+sleep 800
+
+jsclick #btn-write
+sleep 800
+expect !document.getElementById('writer').hidden
+
+# the column is sized off the window, not off a fixed number: 60vw of 1150
+expect getComputedStyle(document.getElementById('writer-doc')).maxWidth == 690px
+expect Math.round(document.getElementById('writer-doc').getBoundingClientRect().width) == 690
+
+# the gutter is still hanging at this width...
+expect getComputedStyle(document.querySelector('#writer-doc .wr-gutter')).position == absolute
+# ...and none of it is off the left edge, which is the whole risk of tying the
+# column's width to the window
+expect document.querySelector('#writer-doc .wr-gutter').getBoundingClientRect().left >= 0
+expect document.getElementById('writer-scroll').scrollWidth <= document.getElementById('writer-scroll').clientWidth
+expect document.documentElement.scrollWidth <= innerWidth
+
+shot 08-writer-width
+
+quit

@@ -734,6 +734,76 @@
     z-index: 60;
   }
   .tag-ghost-hint.is-visible { display: block; }
+
+  /* ---- untagged mentions ----
+
+     A breakdown item written into a visual cell as ordinary text is a mention
+     nothing is counting: the item's "N mentions" and its scene list are both
+     quietly short, which is exactly the kind of wrong you only find out about
+     on the shoot day.
+
+     Painted with the CSS Custom Highlight API rather than by wrapping the
+     text in a span. This is a remark about the document, not a change to it —
+     wrapping would dirty the file, land on the undo stack, and have to be
+     unpicked again by the sanitiser. Browsers without the API simply don't
+     get the underline; the prompt still works.
+
+     One highlight for every category rather than one per category, on
+     purpose: per-category colour would mean a second place that a new
+     TAG_CATEGORIES entry has to be registered in CSS (see invariant 14),
+     and the prompt says the category in words anyway. */
+  ::highlight(splitpage-untagged) {
+    text-decoration: underline dotted;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: var(--text-faint);
+    text-underline-offset: 3px;
+  }
+
+  /* Deliberately small and quiet, and it sits *below* the phrase so it never
+     covers the sentence being written. */
+  .tag-suggest {
+    position: fixed;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    z-index: 61;
+    max-width: min(340px, calc(100vw - 16px));
+    padding: 4px 7px 4px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    white-space: nowrap;
+    cursor: pointer;
+    text-align: left;
+  }
+  .tag-suggest.is-visible { display: flex; }
+  .tag-suggest:hover { border-color: var(--visual); color: var(--text); }
+  .tag-suggest b {
+    font-weight: 600;
+    color: var(--text);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tag-suggest .tag-suggest-cat {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+  .tag-suggest kbd {
+    font-family: var(--font-display);
+    font-size: 9px;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-faint);
+  }
   /* only shown when Tab would land the tag in a different category than the
      bracket being typed implies — see updateTagGhost() */
   .tag-ghost-cat {
@@ -1528,6 +1598,12 @@
     flex-direction: column;
   }
   .writer[hidden] { display: none; }
+  /* The writing's size lives here as a variable so the slider can set it
+     inline on this one element and have it reach every paragraph — and so
+     the phone can move the default without overriding a size the writer
+     actually chose. The floor is 16px: below that iOS zooms the page the
+     moment you focus a field. */
+  .writer { --wr-font: 19px; }
 
   .writer-top {
     display: flex; align-items: center; gap: 14px;
@@ -1586,7 +1662,12 @@
      margin beside it, the way line numbers do in an editor. Putting the
      gutter in the flow instead pushes the writing visibly off-centre —
      the one thing a page you are meant to write on cannot afford. */
-  .writer-doc { max-width: 720px; margin: 0 auto; }
+  /* Grows with the window instead of sitting at one fixed measure, but
+     capped — a line of prose running the full width of a 4K monitor is
+     unreadable, and unwritable. The cap and the text-size slider work
+     together: a wider column at a bigger size keeps the number of
+     characters per line roughly where it wants to be. */
+  .writer-doc { max-width: clamp(640px, 60vw, 1100px); margin: 0 auto; }
   .wr-block { position: relative; }
   .wr-gutter {
     position: absolute;
@@ -1631,7 +1712,7 @@
      40px floor, no hover fill — a page of prose, not a grid of boxes. */
   .writer .wr-para.cell-editable {
     font-family: var(--font-body);
-    font-size: 19px;
+    font-size: var(--wr-font);
     line-height: 1.72;
     min-height: 0;
     margin: 0;
@@ -1644,7 +1725,7 @@
     background: var(--surface);
     box-shadow: 0 0 0 2px var(--audio) inset;
   }
-  .writer .wr-para.cell-editable:empty:before { font-size: 17px; }
+  .writer .wr-para.cell-editable:empty:before { font-size: 0.92em; }
 
   .writer-empty {
     text-align: center;
@@ -1681,6 +1762,17 @@
   .writer-bar .wr-fmt[data-cmd="italic"] { font-style: italic; }
   .writer-bar .wr-fmt[data-cmd="underline"] { text-decoration: underline; }
   .writer-bar .div-sep { width: 1px; height: 20px; background: var(--border); }
+  .writer-bar .grp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .writer-bar input[type="range"] { width: 90px; accent-color: var(--audio); }
   .writer-hint {
     font-family: var(--font-display);
     font-size: 10.5px;
@@ -1692,8 +1784,12 @@
   /* Narrower than this and there is no margin left for the gutter to hang
      in, so it stops hanging and becomes a thin line above each paragraph —
      the same move the scene rows make on a phone, one breakpoint earlier
-     because the gutter runs out of room before the columns do. */
-  @media (max-width: 1000px) {
+     because the gutter runs out of room before the columns do.
+
+     1100px, not 1000: the column is 60vw now, so the margin it leaves
+     shrinks as the window does. 60vw at 1101px leaves 196px a side, which
+     clears the gutter's 162px; a hundred pixels narrower it does not. */
+  @media (max-width: 1100px) {
     .wr-gutter {
       position: static;
       width: auto;
@@ -1839,10 +1935,14 @@
     .writer-kicker { display: none; }
     .writer-stats { gap: 10px; font-size: 10px; }
     .writer-scroll { padding: 18px 12px 60vh; }
-    /* 16px is the floor below which iOS zooms the page on focus */
-    .writer .wr-para.cell-editable { font-size: 17px; padding: 6px 10px 10px; }
+    /* the default only — an explicit choice from the slider is set inline on
+       .writer and still wins */
+    .writer { --wr-font: 17px; }
+    .writer .wr-para.cell-editable { padding: 6px 10px 10px; }
     .writer-bar { gap: 6px 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
     .writer-bar button { padding: 9px 10px; }
+    .writer-bar .grp { flex: 1 1 100%; }
+    .writer-bar input[type="range"] { flex: 1; width: auto; }
     .writer-bar .div-sep, .writer-hint { display: none; }
   }
 
@@ -2029,6 +2129,11 @@
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
 
+<!-- offered when a visual cell mentions something already in the breakdown
+     without labelling it; tabindex -1 because Tab is the accept key, not a
+     way to focus this -->
+<button class="tag-suggest" id="tag-suggest" type="button" tabindex="-1"></button>
+
 <div class="modal-backdrop" id="import-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
     <div class="modal-header">
@@ -2092,6 +2197,12 @@
       <span><b id="wr-words">0</b> words</span>
       <span>⏱ <b id="wr-runtime">0:00</b></span>
     </span>
+    <span class="file-chip" id="wr-file-chip" hidden>
+      <span class="file-chip-icon">📄</span>
+      <span id="wr-file-chip-name"></span>
+      <span class="file-chip-state" id="wr-file-chip-state"></span>
+    </span>
+    <button class="btn btn-primary" id="wr-save" type="button">Save</button>
   </div>
   <div class="writer-scroll" id="writer-scroll">
     <div class="writer-doc" id="writer-doc"></div>
@@ -2101,6 +2212,11 @@
     <button type="button" class="wr-fmt" data-cmd="italic" title="Italic (Ctrl+I)">I</button>
     <button type="button" class="wr-fmt" data-cmd="underline" title="Underline (Ctrl+U)">U</button>
     <button type="button" class="wr-fmt" data-cmd="highlight" title="Highlight">▮</button>
+    <div class="div-sep"></div>
+    <div class="grp">
+      <label for="wr-size">Size</label>
+      <input id="wr-size" type="range" min="16" max="34" value="19" aria-label="Text size">
+    </div>
     <div class="div-sep"></div>
     <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
     <button type="button" id="wr-export">Export narration</button>
@@ -3584,6 +3700,11 @@
        caret, and leaving it stale would show narration that no longer
        matches what is being edited. */
     if (writerOpen) renderWriter();
+    /* The ranges this holds point at DOM that has just been thrown away.
+       Debounced rather than immediate: render() is already the expensive
+       frame, and nothing is wrong in the meantime beyond a missing
+       underline. */
+    scheduleUntaggedScan();
   }
 
   /* ================= field sync ================= */
@@ -4575,6 +4696,210 @@
     syncFieldFromDom(g.cellEl);
     updateProductionCount();
     renderProduction();
+    return true;
+  }
+
+  /* ---- untagged mentions ----
+
+     The tag ghost above catches what you are typing *now*. This catches what
+     you already wrote: a breakdown item mentioned in a visual cell as plain
+     text, never labelled. Nothing counts those, so the item's "N mentions"
+     and its scene list are both quietly short — and the Shoot view, which is
+     built from exactly that, is missing a scene it should have listed.
+
+     The visual column only, deliberately: that column is what is physically
+     in front of the camera, which is what the breakdown is a list of. */
+
+  var UNTAGGED_HL = "splitpage-untagged";
+  var untaggedList = [];          /* [{ cellEl, range, entry, text }] in document order */
+  var untaggedSuggestion = null;  /* the one the prompt is currently offering */
+  var untaggedScanTimer = null;
+  var untaggedMutedFor = null;    /* a cell Escape dismissed the prompt in */
+
+  function highlightApiOk() {
+    return !!(window.CSS && CSS.highlights && window.Highlight);
+  }
+
+  /* One alternation regex for the whole registry, longest name first so
+     "gaffer tape" wins over a "tape" entry sitting inside it. Rebuilt per
+     scan, which is cheap; scanning each cell once per registry entry
+     instead would be fifty passes over the document on a fifty-item
+     breakdown. */
+  function buildUntaggedIndex(entries) {
+    var names = [], byName = {};
+    entries.forEach(function (e) {
+      var n = (e.name || "").trim();
+      if (!n || byName[n.toLowerCase()]) return;
+      names.push(n);
+      byName[n.toLowerCase()] = e;
+    });
+    if (!names.length) return null;
+    var alt = names.sort(function (a, b) { return b.length - a.length; })
+      .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); })
+      .join("|");
+    return { re: new RegExp("(" + alt + ")", "gi"), byName: byName };
+  }
+
+  /* Text a mention is allowed to be found in — the same exclusion the search
+     and the tagger use, so a phrase already inside a tag or a link is never
+     offered as if it were loose. */
+  function eachPlainTextNode(root, fn) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        return isInsideTagOrLink(node.parentNode)
+          ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var node;
+    while ((node = walker.nextNode())) fn(node);
+  }
+
+  function collectUntaggedInCell(cellEl, index, out) {
+    eachPlainTextNode(cellEl, function (node) {
+      var text = node.nodeValue || "";
+      if (!text) return;
+      index.re.lastIndex = 0;
+      var m;
+      while ((m = index.re.exec(text))) {
+        var start = m.index, len = m[0].length;
+        /* whole words only — the same boundary test tagFieldOccurrences uses,
+           so "tape" never matches inside "tapered" */
+        var before = start === 0 ? "" : text.charAt(start - 1);
+        var after = text.charAt(start + len);
+        if (/[A-Za-z0-9]/.test(before) || /[A-Za-z0-9]/.test(after)) continue;
+        var entry = index.byName[m[0].toLowerCase()];
+        if (!entry) continue;
+        var range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + len);
+        out.push({ cellEl: cellEl, range: range, entry: entry, text: m[0] });
+      }
+    });
+  }
+
+  function paintUntagged() {
+    if (!highlightApiOk()) return;
+    try {
+      if (!untaggedList.length) { CSS.highlights.delete(UNTAGGED_HL); return; }
+      var hl = new Highlight();
+      untaggedList.forEach(function (item) { hl.add(item.range); });
+      CSS.highlights.set(UNTAGGED_HL, hl);
+    } catch (e) { /* a partial implementation — go without the underline */ }
+  }
+
+  function scanUntaggedMentions(entries) {
+    if (!state) return;
+    untaggedList = [];
+    /* the writer covers the split view, and #rows behind it is stale until it
+       closes — scanning it would paint ranges nobody can see */
+    var index = writerOpen ? null : buildUntaggedIndex(entries || productionEntries());
+    if (index) {
+      var cells = document.querySelectorAll('#rows .visual-cell .cell-editable');
+      Array.prototype.forEach.call(cells, function (cellEl) {
+        collectUntaggedInCell(cellEl, index, untaggedList);
+      });
+    }
+    paintUntagged();
+    updateUntaggedPrompt();
+  }
+
+  /* Same reasoning as scheduleProductionRefresh(): re-reading every visual
+     cell is fine once and wasteful once per keystroke. */
+  function scheduleUntaggedScan() {
+    if (untaggedScanTimer) return;
+    untaggedScanTimer = setTimeout(function () {
+      untaggedScanTimer = null;
+      scanUntaggedMentions();
+    }, 220);
+  }
+
+  function hideUntaggedPrompt() {
+    untaggedSuggestion = null;
+    var el = document.getElementById("tag-suggest");
+    if (el) el.classList.remove("is-visible");
+  }
+
+  function updateUntaggedPrompt() {
+    var el = document.getElementById("tag-suggest");
+    if (!el) return;
+    var active = document.activeElement;
+    var cellEl = (active && active.classList && active.classList.contains("cell-editable") &&
+      active.getAttribute("data-field") === "visualText" && active.closest("#rows")) ? active : null;
+    if (!cellEl || untaggedMutedFor === cellEl) { hideUntaggedPrompt(); return; }
+
+    var here = untaggedList.filter(function (i) { return i.cellEl === cellEl; });
+    if (!here.length) { hideUntaggedPrompt(); return; }
+
+    /* Offer the last one starting at or before the caret — that is the one
+       just typed. Only when the caret is past all of them does it fall back
+       to the first, so arriving in an old cell still shows something. */
+    var pick = here[0];
+    var sel = window.getSelection();
+    if (sel.rangeCount && sel.isCollapsed) {
+      var caret = sel.getRangeAt(0);
+      for (var i = 0; i < here.length; i++) {
+        try {
+          if (here[i].range.compareBoundaryPoints(Range.START_TO_START, caret) <= 0) pick = here[i];
+        } catch (e) { /* ranges in different trees — leave the default */ }
+      }
+    }
+
+    var rect = pick.range.getClientRects()[0] || pick.range.getBoundingClientRect();
+    if (!rect || (!rect.width && !rect.height)) { hideUntaggedPrompt(); return; }
+
+    el.innerHTML = 'Tag <b>' + escapeHtml(pick.text) + '</b>' +
+      '<span class="tag-suggest-cat">' + escapeHtml(pick.entry.cat.label) + '</span>' +
+      '<kbd>Tab</kbd>';
+    el.classList.add("is-visible");
+    /* measured only once it is displayed, or the width is zero */
+    var w = el.offsetWidth, h = el.offsetHeight;
+    var top = rect.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 6);
+    el.style.left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)) + "px";
+    el.style.top = top + "px";
+    untaggedSuggestion = pick;
+  }
+
+  /* Returns true if a suggestion was live and got taken, so the caller can
+     preventDefault the Tab that triggered it. */
+  function acceptUntaggedMention() {
+    var s = untaggedSuggestion;
+    if (!s || !s.cellEl.isConnected) { hideUntaggedPrompt(); return false; }
+    var sel = window.getSelection();
+    try {
+      sel.removeAllRanges();
+      sel.addRange(s.range);
+    } catch (e) { hideUntaggedPrompt(); return false; }
+
+    /* The text keeps the casing it was written in; the registry keeps its
+       own. Same split tagFieldOccurrences makes, and it is what stops
+       labelling "Gaffer Tape" from forking a second breakdown item.
+       execCommand, like every other route to a tag in this file, so one
+       Ctrl+Z puts the plain words back. */
+    var html = '<span class="tag-anchor" data-tag-cat="' + escapeHtml(s.entry.cat.id) +
+      '" data-tag-name="' + escapeHtml(s.entry.name) + '" contenteditable="false">' +
+      escapeHtml(s.text) + '</span>';
+    document.execCommand("insertHTML", false, html);
+
+    var after = window.getSelection();
+    if (after.rangeCount) {
+      var landed = after.getRangeAt(0).startContainer;
+      var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
+      if (tagEl) {
+        var out = document.createRange();
+        out.setStartAfter(tagEl);
+        out.collapse(true);
+        after.removeAllRanges();
+        after.addRange(out);
+      }
+    }
+
+    hideUntaggedPrompt();
+    registerProductionTag(s.entry.cat.id, s.entry.name);
+    syncFieldFromDom(s.cellEl);
+    updateProductionCount();
+    renderProduction();
+    scanUntaggedMentions();
     return true;
   }
 
@@ -6648,20 +6973,31 @@
 
   /* ================= dirty / toast ================= */
 
+  /* There are two Save buttons — the header's, and the writer's, because the
+     writer covers the header and an hour of writing should not have to be
+     closed to be saved. They are one control with two faces: nothing
+     addresses either of them directly, so they cannot come to disagree about
+     whether there is anything to save. */
+  function setSaveButtons(text, disabled) {
+    ["btn-save", "wr-save"].forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      btn.textContent = text;
+      if (disabled !== undefined) btn.disabled = disabled;
+      btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
+    });
+  }
+
   function markDirty() {
     dirty = true;
     editSeq++;
-    var btn = document.getElementById("btn-save");
-    btn.classList.add("is-dirty");
-    btn.textContent = "Save •";
+    setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
   }
 
   function clearDirty() {
     dirty = false;
-    var btn = document.getElementById("btn-save");
-    btn.classList.remove("is-dirty");
-    btn.textContent = "Save";
+    setSaveButtons("Save");
   }
 
   /* `sticky` is for the handful of messages that must not scroll past while
@@ -7070,9 +7406,7 @@
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
-    var btn = document.getElementById("btn-save");
-    btn.disabled = true;
-    btn.textContent = "Saving…";
+    setSaveButtons("Saving…", true);
 
     /* A hosted document saves to the server, not to disk. "Save As" still
        means "give me a local copy of this", so it deliberately falls through
@@ -7082,8 +7416,7 @@
       try {
         await saveToServer();
       } finally {
-        btn.disabled = false;
-        btn.textContent = dirty ? "Save •" : "Save";
+        setSaveButtons(dirty ? "Save •" : "Save", false);
       }
       return;
     }
@@ -7102,8 +7435,7 @@
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
       state.rev = Math.max(0, (state.rev || 1) - 1);
-      btn.disabled = false;
-      btn.textContent = dirty ? "Save •" : "Save";
+      setSaveButtons(dirty ? "Save •" : "Save", false);
       return;
     }
     var filename = slugify(published.title) + ".html";
@@ -7149,8 +7481,7 @@
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
-      btn.disabled = false;
-      btn.textContent = dirty ? "Save •" : "Save";
+      setSaveButtons(dirty ? "Save •" : "Save", false);
     }
   }
 
@@ -8645,6 +8976,29 @@
   }
 
   function updateFileChip() {
+    updateHeaderFileChip();
+    mirrorFileChipToWriter();
+  }
+
+  /* The writer's bar carries the same chip, because it covers the header and
+     "where is this going when I hit Save" is not a question anyone should
+     have to close a view to answer. Copied from the header chip's rendered
+     state rather than re-deriving it — two copies of that branching would
+     drift apart, and a copy cannot. */
+  function mirrorFileChipToWriter() {
+    var src = document.getElementById("file-chip");
+    var dst = document.getElementById("wr-file-chip");
+    if (!src || !dst) return;
+    dst.hidden = src.hidden;
+    document.getElementById("wr-file-chip-name").textContent =
+      document.getElementById("file-chip-name").textContent;
+    var srcState = document.getElementById("file-chip-state");
+    var dstState = document.getElementById("wr-file-chip-state");
+    dstState.textContent = srcState.textContent;
+    dstState.classList.toggle("unsaved", srcState.classList.contains("unsaved"));
+  }
+
+  function updateHeaderFileChip() {
     var chip = document.getElementById("file-chip");
     var saveBack = document.getElementById("menu-save-back");
     /* A hosted document takes the chip over: where your work is going is the
@@ -9423,6 +9777,40 @@
   var WRITER_GUTTER_MODES = ["visuals", "numbers", "compact"];
   var WRITER_GUTTER_LABELS = { visuals: "Visuals", numbers: "Numbers", compact: "Compact" };
 
+  /* How big you like your text is about you, not about the script — so it
+     lives beside the author name and the dismissed tagging help, not in the
+     document, where it would follow the file to whoever opened it next. */
+  var WRITER_SIZE_KEY = "splitpage-writer-size";
+  var WRITER_SIZE_MIN = 16, WRITER_SIZE_MAX = 34;
+
+  function readWriterSize() {
+    var n;
+    try { n = parseInt(localStorage.getItem(WRITER_SIZE_KEY), 10); } catch (e) { n = NaN; }
+    if (!isFinite(n)) return null;
+    return Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, n));
+  }
+
+  function applyWriterSize(px, remember) {
+    var el = document.getElementById("writer");
+    /* No stored size means no inline value at all, so the stylesheet's own
+       --wr-font stands — which is how the phone gets a smaller default
+       without overriding a size somebody actually chose. */
+    if (px == null) {
+      el.style.removeProperty("--wr-font");
+      /* leave the slider showing what is actually rendering rather than its
+         markup default, which is a different number on a phone */
+      var actual = parseFloat(getComputedStyle(el).getPropertyValue("--wr-font"));
+      if (isFinite(actual)) document.getElementById("wr-size").value = String(Math.round(actual));
+      return;
+    }
+    var n = Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, Math.round(px)));
+    el.style.setProperty("--wr-font", n + "px");
+    document.getElementById("wr-size").value = String(n);
+    if (remember) {
+      try { localStorage.setItem(WRITER_SIZE_KEY, String(n)); } catch (e) {}
+    }
+  }
+
   function setWriterGutter(mode) {
     if (WRITER_GUTTER_MODES.indexOf(mode) === -1) mode = "visuals";
     writerGutterMode = mode;
@@ -9449,6 +9837,8 @@
     closeCommentsPanel();
     if (findOpen) closeFindBar();
     document.getElementById("writer-title").value = state.title || "";
+    mirrorFileChipToWriter();
+    applyWriterSize(readWriterSize(), false);
     setWriterGutter(writerGutterMode); /* whatever it was left on last time */
     el.hidden = false;
     writerOpen = true;
@@ -10194,11 +10584,19 @@
        twice per keystroke on a long script. */
     scheduleProductionRefresh();
     scheduleWriterStats();
+    /* Any script edit can change this, not just an edit to a visual cell:
+       typing "[boom pole]" into the audio column puts a new item in the
+       registry, and every plain-text "boom pole" already sitting in the
+       visual column becomes an untagged mention of it. */
+    untaggedMutedFor = null;
+    scheduleUntaggedScan();
     updateTagGhost(cellEl);
   }
 
   function onRootFocusOut(e) {
     hideTagGhost();
+    hideUntaggedPrompt();
+    untaggedMutedFor = null;
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
     var wrap = cellEl.closest(".field-wrap");
@@ -10230,12 +10628,25 @@
     }
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
+    /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
+       The untagged-mention prompt only ever gets the key when nothing more
+       explicit is in flight. */
     if (e.key === "Tab" && tagGhost && tagGhost.cellEl === cellEl) {
       if (acceptTagGhost()) { e.preventDefault(); return; }
+    }
+    if (e.key === "Tab" && !tagGhost && untaggedSuggestion && untaggedSuggestion.cellEl === cellEl) {
+      if (acceptUntaggedMention()) { e.preventDefault(); return; }
     }
     if (e.key === "Escape" || e.key === "ArrowLeft" || e.key === "ArrowRight" ||
         e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Home" || e.key === "End") {
       hideTagGhost();
+    }
+    /* Escape puts the prompt away for this cell until you type again or go
+       somewhere else — an arrow key is just moving about, and having it
+       reappear as you pass each mention is the point. */
+    if (e.key === "Escape" && untaggedSuggestion) {
+      untaggedMutedFor = cellEl;
+      hideUntaggedPrompt();
     }
     var mod = e.ctrlKey || e.metaKey;
     /* Only the script has scenes to add one to. In a comment or reply box
@@ -10412,6 +10823,17 @@
     document.querySelector(".add-row-bar").addEventListener("click", onRootClick);
     window.addEventListener("scroll", hideTagGhost, true);
     window.addEventListener("resize", hideTagGhost);
+    /* Both are positioned against a client rect, so both go away rather than
+       hang in the wrong place. The prompt comes straight back when the caret
+       next moves or a key is pressed. */
+    window.addEventListener("scroll", hideUntaggedPrompt, true);
+    window.addEventListener("resize", hideUntaggedPrompt);
+
+    var suggestEl = document.getElementById("tag-suggest");
+    /* mousedown, not click, is where the default has to go: by the time click
+       fires the cell has lost the caret this needs */
+    suggestEl.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    suggestEl.addEventListener("click", function () { acceptUntaggedMention(); });
 
     document.getElementById("identity-chip").addEventListener("click", promptForName);
 
@@ -10664,6 +11086,9 @@
         if (active.classList.contains("wr-para")) updateWriterFormatState();
         else updateToolbarState(active);
       }
+      /* Follows the caret without re-scanning: the ranges are already in
+         hand, this only picks which one to offer and where to put it. */
+      updateUntaggedPrompt();
     });
 
     document.getElementById("file-input").addEventListener("change", function (e) {
@@ -10800,6 +11225,12 @@
     writerDocEl.addEventListener("click", function (e) {
       var gutter = e.target.closest('[data-action="writer-jump"]');
       if (gutter) jumpFromWriterToRow(gutter.getAttribute("data-row"));
+    });
+
+    document.getElementById("wr-save").addEventListener("click", function () { saveDoc(); });
+
+    document.getElementById("wr-size").addEventListener("input", function (e) {
+      applyWriterSize(parseInt(e.target.value, 10), true);
     });
 
     document.getElementById("writer-title").addEventListener("input", function (e) {

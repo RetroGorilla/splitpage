@@ -1,0 +1,63 @@
+# Untagged mentions: a breakdown item written into a visual cell as ordinary
+# text, which nothing is counting.
+#
+# The load-bearing property is that noticing one changes NOTHING about the
+# document - no wrapped span, no dirty flag - until the offer is taken.
+
+open
+
+# --- something in the registry to be mentioned ------------------------------
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] to set.
+sleep 600
+expect document.querySelectorAll('#rows .tag-anchor').length == 1
+expect document.getElementById('production-badge').textContent == 1
+
+# --- write it into a visual cell as plain text ------------------------------
+caret #rows .row .visual-cell .cell-editable
+press  Close on the gaffer tape.
+sleep 900
+
+# it is found, and it is found WITHOUT being wrapped in anything
+expect document.querySelectorAll('#rows .visual-cell .tag-anchor').length == 0
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+expect document.getElementById('tag-suggest').textContent.indexOf('gaffer tape') !== -1
+# the prompt names the category it would land in, so taking it is no surprise
+expect document.getElementById('tag-suggest').textContent.indexOf('Prop') !== -1
+
+# painted by the Custom Highlight API - a remark about the document, not a
+# change to it. (Skipped rather than failed where the API is missing.)
+expect !window.CSS.highlights || window.CSS.highlights.get('splitpage-untagged').size >= 1
+
+shot 07-untagged
+
+# --- Escape puts it away for this cell --------------------------------------
+key Escape
+sleep 300
+expect document.getElementById('tag-suggest').classList.contains('is-visible') === false
+
+# ...and typing brings it back
+press  Wide.
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+
+# --- taking the offer -------------------------------------------------------
+key Tab
+sleep 700
+expect document.querySelectorAll('#rows .visual-cell .tag-anchor').length == 1
+expect document.querySelector('#rows .visual-cell .tag-anchor').getAttribute('data-tag-name') == gaffer tape
+expect document.querySelector('#rows .visual-cell .tag-anchor').getAttribute('data-tag-cat') == prop
+# an atomic unit, like every other tag in the file
+expect document.querySelector('#rows .visual-cell .tag-anchor').getAttribute('contenteditable') == false
+# the prompt is done, and nothing is left highlighted in that cell
+expect document.getElementById('tag-suggest').classList.contains('is-visible') === false
+# and it did NOT fork a second breakdown item
+expect document.getElementById('production-badge').textContent == 1
+
+# --- the breakdown now counts the mention it was missing --------------------
+click text*=PRODUCTION
+sleep 600
+expect document.querySelectorAll('#production-list .tag-entity').length == 1
+expect document.querySelector('#production-list .tag-entity').textContent.indexOf('2 mentions') !== -1
+
+quit

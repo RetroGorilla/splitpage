@@ -21,7 +21,7 @@ Do this before committing any change to `index.html`.
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 142/142 checks across 6 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 183/183 checks across 8 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -40,7 +40,9 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/03-exports.txt` | Markdown / CSV / breakdown CSV / DOCX / PDF actually produced, breakdown present, DOCX XML parses |
 | `tests/04-prompter-find.txt` | teleprompter open/play/mirror/size, find & replace, tags survive replace-all |
 | `tests/05-mobile.txt` | phone layout, no horizontal overflow, 16px inputs, long-press → tap-toggle selection, the writer on a phone |
-| `tests/06-writer.txt` | the writer: paragraph-per-scene, Enter splits, Backspace joins, the join it refuses, tagging and rich text writing back, the visuals/numbers/compact gutter cycle, narration .txt/.docx |
+| `tests/06-writer.txt` | the writer: paragraph-per-scene, Enter splits, Backspace joins, the join it refuses, tagging and rich text writing back, the visuals/numbers/compact gutter cycle, Save mirroring the header's, narration .txt/.docx |
+| `tests/07-untagged.txt` | untagged mentions: found without wrapping anything, the prompt names its category, Esc mutes and typing revives it, Tab labels it, the breakdown's mention count catches up |
+| `tests/08-writer-width.txt` | the writer's column at 1150px — the tightest window the hanging gutter still has to fit beside |
 
 ## Ad-hoc driving
 
@@ -109,10 +111,22 @@ These are why tests fail when the app is fine. Check them before suspecting
   computed comparison use one truthy expression: `expect x === y + 1`.
 - **`viewport mobile` then `goto`.** `IS_TOUCH` and the `(hover: none)` rules are
   read at load, so emulation must be on *before* the page loads.
+- **Set device metrics once, at the top of a suite, before any real work.**
+  Changing them partway through a session that has already navigated and run
+  scripts reliably aborts the CDP socket — every command after it fails with
+  `WebSocket is in an invalid state ('Aborted')`. A second viewport needs a
+  second suite; that is why 05-mobile and 08-writer-width are separate files
+  rather than sections of the suites they belong to.
 - **Don't assert formatting on the live DOM.** Chromium's `execCommand` emits
   `<span style="font-weight: bold">`, not `<b>`. Splitpage's sanitiser turns
   that into `<strong>` on focusout — so a bold/italic assertion belongs *after*
   the field has been left, otherwise you are testing the browser, not the app.
+- **Test scripts are read as UTF-8** — they didn't used to be. `Get-Content`
+  on PS 5.1 decodes a BOM-less file with the system ANSI codepage, so a `•`
+  or an em dash inside an assertion arrived as mojibake and failed against an
+  app that was perfectly fine. Fixed in the driver; if you write another
+  harness, read files with
+  `[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(...))`.
 - **Harmless console noise:** a 404 for `/favicon.ico`, and service-worker
   registration failures. Don't chase them.
 - **Orphaned browsers.** `Start-Process` hands back Edge's launcher, which
