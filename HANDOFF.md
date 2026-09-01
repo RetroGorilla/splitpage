@@ -61,7 +61,7 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 142 assertions across 6 suites, driving
+There is a real regression suite now — 183 assertions across 8 suites, driving
 headless Edge over CDP. **Run it before and after any change to
 `index.html`:**
 
@@ -69,7 +69,7 @@ headless Edge over CDP. **Run it before and after any change to
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-`ALL PASS - 142/142` and exit 0, or it names every failing assertion and exits 1.
+`ALL PASS - 183/183` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
@@ -248,7 +248,7 @@ spliced a new scene onto the top of the document.
 cells — same `data-id` / `data-field`, same row behind them — so `isScriptCell`
 deliberately accepts `#writer-doc` as well as `#rows`, and the writer gets
 tagging, Tab-completion, Ctrl+B, paste-as-plain-text and the sanitiser without
-a line of its own code. That is the whole design; see §3.8.
+a line of its own code. That is the whole design; see §3.9.
 
 ---
 
@@ -314,7 +314,47 @@ that is the entire database.
 
 ---
 
-### 3.8 The writer edits rows, it does not import a document
+### 3.8 Untagged mentions are painted, never wrapped
+
+A breakdown item written into a visual cell as plain text is a mention nothing
+counts — the item's `mentions` and its scene list are both short, and the
+Shoot view is missing a scene. `scanUntaggedMentions()` finds them and offers
+to label them.
+
+**The paint is a CSS Custom Highlight, not a span.** `CSS.highlights.set()`
+over live `Range`s. This is a remark *about* the document, not a change *to*
+it, so wrapping it in markup would be wrong three times over: it would dirty
+the file, land on the undo stack, and then have to be unpicked by the
+sanitiser on the way out. Browsers without the API just don't get an
+underline — feature-detected in `highlightApiOk()`, and the prompt still
+works without it.
+
+Things to know:
+
+- **One highlight for all categories, not one per category.** Per-category
+  colour would mean a *second* place a new `TAG_CATEGORIES` entry has to be
+  registered in CSS (invariant 14 exists because that was already missed
+  once). The prompt names the category in words instead.
+- **One alternation regex for the whole registry**, longest name first so
+  "gaffer tape" beats a "tape" entry inside it. Scanning each cell once per
+  entry instead is fifty passes over the document on a fifty-item breakdown.
+  Word boundaries use the same test as `tagFieldOccurrences()`, so "tape"
+  never matches inside "tapered".
+- **`render()` invalidates every stored Range**, so it schedules a re-scan.
+  Debounced — nothing is wrong in the meantime beyond a missing underline.
+- **Accepting goes through `execCommand("insertHTML")`**, like every other
+  route to a tag in this file, so one Ctrl+Z puts the plain words back. The
+  span keeps the casing that was *written*; `data-tag-name` keeps the
+  registry's. That split is what stops labelling "Gaffer Tape" from forking a
+  second breakdown item.
+- **Tab is shared.** The ghost wins outright — you typed a bracket, so you
+  asked for it. The untagged prompt only gets Tab when no ghost is in flight.
+- **Visual column only**, deliberately: that column is what is physically in
+  front of the camera, which is what the breakdown is a list of.
+
+---
+
+### 3.9 The writer edits rows, it does not import a document
 
 The obvious way to build a word-processor view of the audio column is to join
 every row into one blob of text, let the user edit it, then split it back into
@@ -361,6 +401,20 @@ Things worth knowing before changing it:
   Compact adds `margin-bottom` to each block, because with nothing marking the
   joins a page of scenes otherwise reads as one undifferentiated block and you
   cannot see where Enter and Backspace will act.
+- **The column is `clamp(640px, 60vw, 1100px)`, and the gutter's margin is
+  what that leaves.** Tying the width to the window means the margin beside it
+  shrinks as the window does, so the 162px the hanging gutter needs is not
+  guaranteed by construction — it is why the stacking breakpoint is 1100px
+  and not 1000px, and why `08-writer-width.txt` exists to check the tightest
+  case (1150px) rather than trusting the arithmetic. Change one of those three
+  numbers and you have to re-check the other two.
+- **Text size is `--wr-font` on `#writer`**, set inline by the slider so it
+  reaches every paragraph and outranks the stylesheet. The phone's smaller
+  default is a *different value of the variable*, not a `font-size` override —
+  otherwise it would win over a size the writer had actually chosen. The
+  floor is 16px because iOS zooms the page on focusing anything smaller. It
+  lives in `localStorage`, not the document: it is about the reader, and
+  saving it into the file would push it onto whoever opened it next.
 - **`.writer-scroll` sets `scrollbar-gutter: stable both-edges`.** Without it
   the centred column jogs sideways the moment the document grows past one
   screen and the scrollbar appears — under the cursor, mid-sentence, caused by
@@ -514,7 +568,7 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     comes from the JS table, but the colour of the tag *in the script* comes
     from CSS. `sound` was added to the table without the rule and rendered in
     the default green for weeks. Fixed 2026-08-28.
-15. **The writer never re-parses the document into rows** (§3.8). A paragraph
+15. **The writer never re-parses the document into rows** (§3.9). A paragraph
     is a row's `audioText`, bound through `.cell-editable`. Anything that
     changes the row *list* from in there goes through `splitWriterRow()` /
     `mergeWriterRows()`, and anything that rebuilds its DOM goes through
@@ -523,6 +577,16 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     `openWriter()` closes Production, Comments and the find bar. The writer
     sits at `z-index: 145` — above the panels (140), below the modals (150)
     and the toasts (200), which still have to be able to speak over it.
+17. **A hint about the document must never edit the document** (§3.8).
+    Untagged mentions are painted with the CSS Custom Highlight API over live
+    Ranges. Anything that wraps text in a span to draw attention to it dirties
+    the file, lands on the undo stack, and has to be unpicked by the
+    sanitiser.
+18. **There are two Save buttons and one save state.** The header's and the
+    writer's go through `setSaveButtons()`; the writer's file chip is copied
+    from the header's rendered state by `mirrorFileChipToWriter()`. Nothing
+    addresses either one directly, so they cannot drift into disagreeing
+    about whether there is anything to save.
 
 ---
 
@@ -607,7 +671,7 @@ Mobile touch-translation notes for future features:
   the page on focus.
 
 The writer + narration exports (2026-08-31): the whole surface is covered by
-`tests/06-writer.txt` (58 assertions) and a phone pass at the end of
+`tests/06-writer.txt` (70 assertions) and a phone pass at the end of
 `05-mobile.txt` — one paragraph per scene with the visual as non-editable
 gutter context; Enter splitting at the caret with the tail and the cursor both
 moving and the new scene getting an empty visual; Backspace joining with no
@@ -615,13 +679,28 @@ invented double space; the join refused when both scenes carry a visual;
 `[boom pole]` tagging and Tab-completing an existing tag name from inside the
 writer; Ctrl+B and the bar's own buttons landing as real `<strong>`/`<em>`
 after the sanitiser; the gutter cycling visuals → numbers → compact with the
-writing column proved not to move between them; Escape; and everything
-arriving in the split view the moment it closes. Narration `.txt` verified to carry the
+writing column proved not to move between them; the text-size slider driving
+the writing and not the chrome, and storing the choice per reader rather than
+per document; Save and the file chip agreeing with the header's; Escape; and
+everything arriving in the split view the moment it closes. The column's
+window-scaled width is checked separately, at 1150px, in
+`08-writer-width.txt` — the tightest window the hanging gutter still has to
+fit beside. Narration `.txt` verified to carry the
 audio and *only* the audio (no visual column, no breakdown, no comments) in
 the blank-line-separated shape the importer reads back, and the `.docx`
 verified by unzipping it: parses, has the narration, and is flowing paragraphs
 rather than the two-column table every other export produces. The
 empty-narration guard was checked by hand.
+
+Untagged mentions (2026-08-31): `tests/07-untagged.txt` plus a phone pass in
+`05-mobile.txt`. A registry item written into a visual cell as plain text is
+found and underlined *without* the document changing — asserted directly:
+zero `.tag-anchor` in that cell while the prompt is up, and the highlight
+registered with the Custom Highlight API. The prompt names the category it
+would land in; Escape mutes it for that cell and typing brings it back; Tab
+(desktop) and a tap (phone, where there is no Tab) both label it as an atomic
+`contenteditable="false"` anchor without forking a second breakdown item; and
+the item's card then reads the mention count it was previously short of.
 
 Hosted mode (2026-08-28): server detection, Access identity auto-fill,
 publish, open-from-server, compare-and-set save, clean auto-merge of edits to

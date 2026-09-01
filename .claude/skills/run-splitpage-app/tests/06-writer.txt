@@ -28,6 +28,18 @@ expect document.getElementById('wr-scenes').textContent == 2
 expect parseInt(document.getElementById('wr-words').textContent, 10) > 30
 expect document.getElementById('wr-runtime').textContent.indexOf(':') !== -1
 
+# --- you can save from in here, without closing it --------------------------
+# The writer covers the header, so it carries the header's Save and file chip.
+# They are one control with two faces and must never disagree.
+expect document.getElementById('wr-save').textContent == Save
+expect document.getElementById('wr-file-chip').hidden === document.getElementById('file-chip').hidden
+caret #writer-doc .wr-para
+press  Something new.
+sleep 500
+expect document.getElementById('wr-save').textContent.indexOf('•') !== -1
+expect document.getElementById('wr-save').classList.contains('is-dirty')
+expect document.getElementById('wr-save').textContent === document.getElementById('btn-save').textContent
+
 # --- Enter splits the scene at the caret ------------------------------------
 # Caret placed explicitly rather than with `caret`, which only does start/end.
 eval (function(){var p=document.querySelector('#writer-doc .wr-para');var t=p.firstChild;var i=t.nodeValue.indexOf('Today');p.focus();var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return i;})()
@@ -135,6 +147,28 @@ expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-block
 
 shot 06-writer-compact
 
+# --- the column scales with the window, within a readable range -------------
+# 60vw at this viewport, not the old fixed 720
+eval window.__docW = document.getElementById('writer-doc').getBoundingClientRect().width
+expect window.__docW > 720
+expect window.__docW <= 1100
+# and it still leaves the hanging gutter its margin at this width
+expect document.getElementById('writer-scroll').scrollWidth <= document.getElementById('writer-scroll').clientWidth
+
+# --- text size -------------------------------------------------------------
+eval window.__size0 = parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize)
+eval (function(){var s=document.getElementById('wr-size');s.value='30';s.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 300
+expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) == 30
+expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-para')).fontSize) > window.__size0
+# it is the writer's own setting, not the script's - so it is remembered for
+# this reader rather than saved into the file
+expect localStorage.getItem('splitpage-writer-size') == 30
+# the chrome does not scale with it; only the writing does
+expect parseFloat(getComputedStyle(document.querySelector('#writer-doc .wr-num')).fontSize) < 16
+eval (function(){var s=document.getElementById('wr-size');s.value='19';s.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 200
+
 # back round to the start
 jsclick #wr-gutter-mode
 sleep 300
@@ -176,5 +210,9 @@ expect window.__narDocx.hasAudio
 # prose, not the two-column table every other export produces
 expect window.__narDocx.flowing
 expect window.__narDocx.noVisual
+
+# The column at other window widths is 08-writer-width.txt, not here: device
+# metrics can only be set once per session before any real work, or the CDP
+# socket aborts (the same constraint 05-mobile runs under).
 
 quit
