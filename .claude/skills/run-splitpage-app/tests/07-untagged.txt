@@ -75,10 +75,44 @@ expect document.querySelector('#rows .row .visual-cell .cell-editable').textCont
 # and every label in the script still says what it is labelling
 expect Array.from(document.querySelectorAll('#rows .tag-anchor')).every(function (t) { return t.textContent.toLowerCase().replace(/\s+/g,' ') === (t.getAttribute('data-tag-name')||'').toLowerCase(); })
 
+# --- a shorter name nested inside a longer, rejected one --------------------
+# Names go into the alternation longest-first, so "gaffer tape" wins the match
+# in "the gaffer tapes the cable" and then fails its trailing word boundary
+# against the "s". Rejecting it after the fact could not un-consume it, so the
+# "gaffer" sitting inside what was just rejected was never seen at all. The
+# boundaries live in the pattern now, so the engine backtracks to the shorter
+# alternative at the same position instead.
+caret #rows .row .audio-cell .cell-editable
+press  Also a [gaffer] on the crew.
+sleep 800
+expect document.getElementById('production-badge').textContent == 2
+
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+press  Watch the gaffer tapes the cable down.
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+key Tab
+sleep 700
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell .tag-anchor').getAttribute('data-tag-name') == gaffer
+
+# --- an accented letter is a letter -----------------------------------------
+# The boundary test used to be [A-Za-z0-9], so anything outside ASCII read as
+# a word break: a cast member "Ana" matched inside "Anais" spelled with a
+# diaeresis, and Tab wrapped half of somebody's name in an atomic tag.
+caret #rows .row .audio-cell .cell-editable
+press  And [Ana] is on set.
+sleep 800
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+press  Anaïs opens the door.
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible') === false
+expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .tag-anchor').length == 1
+
 # --- the breakdown now counts the mention it was missing --------------------
 click text*=PRODUCTION
 sleep 600
-expect document.querySelectorAll('#production-list .tag-entity').length == 1
-expect document.querySelector('#production-list .tag-entity').textContent.indexOf('2 mentions') !== -1
+# scoped to the item under test - the sections above deliberately add others
+expect document.querySelectorAll('#production-list .tag-entity').length >= 1
+expect Array.from(document.querySelectorAll('#production-list .tag-entity')).some(function (c) { return c.textContent.indexOf('gaffer tape') !== -1 && c.textContent.indexOf('2 mentions') !== -1; })
 
 quit

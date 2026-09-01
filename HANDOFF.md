@@ -61,7 +61,7 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 188 assertions across 8 suites, driving
+There is a real regression suite now — 202 assertions across 8 suites, driving
 headless Edge over CDP. **Run it before and after any change to
 `index.html`:**
 
@@ -69,7 +69,7 @@ headless Edge over CDP. **Run it before and after any change to
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-`ALL PASS - 188/188` and exit 0, or it names every failing assertion and exits 1.
+`ALL PASS - 202/202` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
@@ -346,8 +346,19 @@ Things to know:
 - **One alternation regex for the whole registry**, longest name first so
   "gaffer tape" beats a "tape" entry inside it. Scanning each cell once per
   entry instead is fifty passes over the document on a fifty-item breakdown.
-  Word boundaries use the same test as `tagFieldOccurrences()`, so "tape"
-  never matches inside "tapered".
+- **The word boundaries live INSIDE the pattern**, as
+  `(?<![\p{L}\p{N}])(…)(?![\p{L}\p{N}])`, and that is not a detail. Two bugs
+  came from testing the neighbours *after* the match: rejecting a match
+  cannot un-consume it, so with names sorted longest-first the "gaffer" entry
+  hiding inside a rejected "gaffer tape" was never seen at all; and the ASCII
+  class `[A-Za-z0-9]` treats an accented letter as a word break, so a cast
+  member "Ana" matched inside "Anaïs" and Tab wrapped half of somebody's name
+  in an atomic tag. Lookarounds make the engine backtrack to the shorter
+  alternative at the same position, and `\p{L}` knows what a letter is. The
+  construction is wrapped in try/catch with the old pattern as a fallback
+  (`boundedInPattern` says which one you got) — an engine without lookbehind
+  or `\p{…}` throws at `new RegExp`, which would otherwise take the whole
+  feature down.
 - **`render()` invalidates every stored Range**, so it schedules a re-scan.
   Debounced — nothing is wrong in the meantime beyond a missing underline.
 - **The offer re-checks its own Range before taking it.** A `Range` is live:
@@ -391,7 +402,19 @@ That leaves only the two operations that genuinely change the row *list*:
 - **`mergeWriterRows()`** — Backspace at the very start (Delete at the very
   end). Joins the audio, then deletes the row. It **refuses** when both rows
   have a visual, because one of the two shot descriptions would have to be
-  destroyed and a single keystroke must not do that silently.
+  destroyed and a single keystroke must not do that silently. **Status
+  accumulates** rather than being picked between — the same rank rule
+  `mergeStates()` uses, for the same reason: a join must never un-shoot
+  footage somebody filmed. It used to carry the visual up and leave the green
+  dot behind with the row it deleted.
+- **`caretAtEdge()` must not count empty inline wrappers.**
+  `Range.cloneContents()` emits a shallow, empty clone of every
+  partially-contained ancestor, so `querySelector("*")` saw `<strong></strong>`
+  and read "there is content before me" for a caret at the start of a bold
+  word. Backspace then refused to join — and because each paragraph is its own
+  editing host, the browser's own Backspace cannot cross it either, so the key
+  did *nothing at all* on any scene beginning with formatting. The test proves
+  it by reverting the fix.
 
 Things worth knowing before changing it:
 
@@ -612,7 +635,17 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     splits, joins or moves text across rows. Guarded by
     `06-writer.txt`, which compares the panel's label against the row the
     anchor is actually in.
-19. **There are two Save buttons and one save state.** The header's and the
+19. **A full-screen overlay has to own the focus and the stacking, not just
+    the pixels.** Two separate bugs from the same root: the Tab-completion
+    ghost sat at `z-index: 60` under the writer's opaque 145, so it was laid
+    out, positioned and marked visible *behind* the overlay and Tab silently
+    committed a tag nobody had been shown; and Tab from the last control on
+    the writer's bar walked focus into the header and the script cells hidden
+    behind it, where you could type into a document you could not see. Fixed
+    by raising `.tag-ghost-hint` to 146 and by a `focusin` trap on `#writer`
+    that lets modals and toasts through. Anything else added over the top of
+    the app needs both.
+20. **There are two Save buttons and one save state.** The header's and the
     writer's go through `setSaveButtons()`; the writer's file chip is copied
     from the header's rendered state by `mirrorFileChipToWriter()`. Nothing
     addresses either one directly, so they cannot drift into disagreeing
@@ -701,7 +734,7 @@ Mobile touch-translation notes for future features:
   the page on focus.
 
 The writer + narration exports (2026-08-31): the whole surface is covered by
-`tests/06-writer.txt` (72 assertions) and a phone pass at the end of
+`tests/06-writer.txt` (81 assertions) and a phone pass at the end of
 `05-mobile.txt` — one paragraph per scene with the visual as non-editable
 gutter context; Enter splitting at the caret with the tail and the cursor both
 moving and the new scene getting an empty visual; Backspace joining with no

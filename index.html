@@ -731,7 +731,12 @@
     pointer-events: none;
     white-space: pre;
     color: var(--text-faint);
-    z-index: 60;
+    /* Above the writer (145), because the writer's paragraphs are script
+       cells and get this completion too — at z-index 60 it was laid out,
+       positioned and marked visible underneath an opaque full-screen
+       overlay, so Tab silently committed a tag nobody had been shown.
+       Still below the modals (150) and the toasts (200). */
+    z-index: 146;
   }
   .tag-ghost-hint.is-visible { display: block; }
 
@@ -1642,6 +1647,9 @@
     white-space: nowrap;
   }
   .writer-stats b { color: var(--text); font-weight: 600; }
+  /* .file-chip carries a margin-top for its place under the title in the
+     header; in this centred flex row it just knocks the chip out of line */
+  .writer-top .file-chip { margin-top: 0; }
 
   /* The tall tail is the point: without it the paragraph you are typing
      sits pinned to the bottom edge of the screen, which is exactly where
@@ -1682,6 +1690,9 @@
     color: var(--text-faint);
     cursor: pointer;
     overflow: hidden;
+    /* bounded by the scene it belongs to, so a tall gutter beside a short
+       paragraph cannot run down into the next scene's */
+    max-height: 100%;
     user-select: none;
   }
   /* Three settings, not a toggle: the scene's visual beside each paragraph,
@@ -1696,8 +1707,17 @@
   .writer[data-gutter="compact"] .wr-block { margin-bottom: 12px; }
   .wr-gutter:hover .wr-num, .wr-gutter:hover .wr-visual { color: var(--audio); }
   .wr-num { display: block; }
+  /* The gutter is absolutely positioned with no height of its own, so a
+     visual long enough to wrap three or four lines beside a one-line
+     paragraph used to run down into the next scene's gutter. Clamped two
+     ways: the preview stops at three lines, and the whole gutter is bounded
+     by the block it belongs to. This is context, not content — the full
+     visual is a click away in the split view. */
   .wr-visual {
-    display: block;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     margin-top: 5px;
     font-family: var(--font-body);
     font-size: 11.5px;
@@ -1803,6 +1823,9 @@
     .writer[data-gutter="numbers"] .wr-gutter { width: auto; }
     .wr-num { flex: none; }
     .wr-visual {
+      /* back to a plain block: the line-clamp above is for the hanging
+         gutter, and here it is one line with an ellipsis instead */
+      display: block;
       margin-top: 0;
       min-width: 0;
       overflow: hidden;
@@ -4726,7 +4749,11 @@
      instead would be fifty passes over the document on a fifty-item
      breakdown. */
   function buildUntaggedIndex(entries) {
-    var names = [], byName = {};
+    /* Object.create(null), not {}: these keys are tag names straight out of
+       the document, and an item called "constructor" or "__proto__" would
+       otherwise come back as an inherited function and be handed to
+       tagCompletionBeats as if it were an entry. */
+    var names = [], byName = Object.create(null);
     entries.forEach(function (e) {
       var n = (e.name || "").trim();
       if (!n) return;
@@ -4749,7 +4776,34 @@
     var alt = names.sort(function (a, b) { return b.length - a.length; })
       .map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); })
       .join("|");
-    return { re: new RegExp("(" + alt + ")", "gi"), byName: byName };
+
+    /* Word boundaries belong INSIDE the pattern, not in a test afterwards.
+       Two bugs came from having them outside:
+
+       Rejecting a match after the fact cannot un-consume it. With the names
+       sorted longest-first, "gaffer tape" wins the alternation in "the
+       gaffer tapes the cable", fails the trailing-boundary test, and the
+       scan resumes past it — so the "gaffer" entry sitting inside what was
+       just rejected is never seen at all. Lookarounds make the engine
+       backtrack to the shorter alternative at the same position instead.
+
+       And \p{L}\p{N} rather than A-Za-z0-9: with the ASCII class, a cast
+       entry "Ana" matched inside "Anaïs", because the accented character
+       does not look like a letter to [A-Za-z0-9]. Tab then wrapped half of
+       somebody's name in an atomic tag.
+
+       Lookbehind and \p{...} need a modern engine. If this throws, fall
+       back to the plain pattern and let collectUntaggedInCell() do the old
+       after-the-fact test — fewer matches found, none of them wrong. */
+    try {
+      return {
+        re: new RegExp("(?<![\\p{L}\\p{N}])(" + alt + ")(?![\\p{L}\\p{N}])", "giu"),
+        byName: byName,
+        boundedInPattern: true
+      };
+    } catch (e) {
+      return { re: new RegExp("(" + alt + ")", "gi"), byName: byName, boundedInPattern: false };
+    }
   }
 
   /* Text a mention is allowed to be found in — the same exclusion the search
@@ -4774,11 +4828,15 @@
       var m;
       while ((m = index.re.exec(text))) {
         var start = m.index, len = m[0].length;
-        /* whole words only — the same boundary test tagFieldOccurrences uses,
-           so "tape" never matches inside "tapered" */
-        var before = start === 0 ? "" : text.charAt(start - 1);
-        var after = text.charAt(start + len);
-        if (/[A-Za-z0-9]/.test(before) || /[A-Za-z0-9]/.test(after)) continue;
+        /* Only when the pattern could not carry its own boundaries (see
+           buildUntaggedIndex): whole words, so "tape" never matches inside
+           "tapered". Skipped otherwise, or the ASCII class here would undo
+           the unicode boundaries the pattern just applied. */
+        if (!index.boundedInPattern) {
+          var before = start === 0 ? "" : text.charAt(start - 1);
+          var after = text.charAt(start + len);
+          if (/[A-Za-z0-9]/.test(before) || /[A-Za-z0-9]/.test(after)) continue;
+        }
         var entry = index.byName[m[0].toLowerCase()];
         if (!entry) continue;
         var range = document.createRange();
@@ -4865,8 +4923,15 @@
     el.classList.add("is-visible");
     /* measured only once it is displayed, or the width is zero */
     var w = el.offsetWidth, h = el.offsetHeight;
-    var top = rect.bottom + 6;
-    if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 6);
+    /* Below the whole CELL, not below the matched line. It is an opaque,
+       clickable button: six pixels under a phrase in the middle of a
+       paragraph put it squarely on top of the next line of the very text it
+       is annotating, hiding the words and swallowing clicks meant for them.
+       Horizontally it still lines up with the phrase, so it is obvious what
+       it is pointing at. */
+    var cellRect = cellEl.getBoundingClientRect();
+    var top = cellRect.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
     el.style.left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)) + "px";
     el.style.top = top + "px";
     untaggedSuggestion = pick;
@@ -8099,7 +8164,12 @@
   function buildNarrationText() {
     var out = [state.title || "Untitled Script", ""];
     narrationRows().forEach(function (row) {
-      out.push(htmlToPlainText(row.audioText));
+      /* A blank line is the separator between scenes in this format, so one
+         *inside* a scene would split it in two on the way back in — the
+         round trip this format exists for, quietly broken by a scene whose
+         narration happened to contain two line breaks in a row. Runs of
+         blank lines collapse to a single break; the scene stays one scene. */
+      out.push(htmlToPlainText(row.audioText).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
       out.push("");
     });
     return out.join("\n");
@@ -9551,6 +9621,13 @@
        merging in from the server mid-sentence. Whoever called, the writing
        position has to come back afterwards, or the rebuild costs a word. */
     var caret = writerCaretState();
+    /* The title can change underneath this too — a version restored, a
+       rename merging in from the server. Same guard render() uses for
+       #doc-title: never overwrite what someone is in the middle of typing.
+       Without it the stale value sat there and the next keystroke in the
+       field committed it back over the change that had just arrived. */
+    var titleEl = document.getElementById("writer-title");
+    if (document.activeElement !== titleEl) titleEl.value = state.title || "";
     if (!state.rows.length) {
       doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
     } else {
@@ -9602,7 +9679,16 @@
        inside one, so an offset that lands there goes just past it instead */
     var atomic = target && target.parentNode.closest && target.parentNode.closest(".tag-anchor");
     if (atomic) {
-      range.setStartAfter(atomic);
+      /* Which side matters. An offset landing *inside* the tag has to come
+         out after it, but offset 0 of a scene that begins with a tag means
+         the very start of the scene — putting the caret after the tag there
+         sent the first thing typed into a freshly split scene to the wrong
+         side of its own label. */
+      if (targetOffset <= 0 && target === atomic.firstChild) {
+        range.setStartBefore(atomic);
+      } else {
+        range.setStartAfter(atomic);
+      }
     } else if (target) {
       range.setStart(target, Math.min(targetOffset, target.nodeValue.length));
     } else {
@@ -9643,7 +9729,15 @@
     if (edge === "start") probe.setEnd(range.startContainer, range.startOffset);
     else probe.setStart(range.endContainer, range.endOffset);
     var frag = probe.cloneContents();
-    return !frag.textContent && !frag.querySelector("*");
+    /* NOT querySelector("*"): cloneContents() also emits a shallow, empty
+       clone of every partially-contained ancestor, so a caret at the start
+       of a bold word produced <strong></strong> and read as "there is
+       content before me". Backspace then refused to join, and because each
+       paragraph is its own editing host the browser's own Backspace cannot
+       cross it either — the key did nothing at all, forever, on any scene
+       whose narration begins with formatting. Only things that occupy space
+       without text count. */
+    return !frag.textContent && !frag.querySelector("br, img");
   }
 
   /* ---- splitting and joining scenes ---- */
@@ -9751,6 +9845,13 @@
       prev.visualText = cur.visualText;
       prev.visualImage = cur.visualImage;
     }
+    /* Same rule mergeStates() uses for two people editing at once: status is
+       not a value to pick between, it is progress to accumulate. Joining a
+       To-do scene onto a Shot one — or the other way round — must never
+       un-shoot footage somebody has already filmed. Without this the shot
+       description was carried up and the green dot quietly left behind. */
+    var rank = { todo: 0, ready: 1, shot: 2 };
+    if ((rank[cur.status] || 0) > (rank[prev.status] || 0)) prev.status = cur.status;
     stampRow(prev);
     state.rows.splice(intoIdx + 1, 1);
     /* the row the anchors used to live in is gone; they are all in prev now */
@@ -9768,7 +9869,13 @@
     var cellEl = e.target.classList && e.target.classList.contains("wr-para") ? e.target : null;
     if (!cellEl) return;
 
-    if (e.key === "Enter" && !e.shiftKey) {
+    /* Every Enter is decided here. Plain Shift+Enter is the one that falls
+       through, to onRootKeydown's line break. Anything else splits —
+       including Ctrl+Enter, which means "next scene" everywhere else in the
+       app and would otherwise reach onRootKeydown's addRowAndFocus(), which
+       looks up #rows and drops focus into a cell behind this overlay. */
+    if (e.key === "Enter") {
+      if (e.shiftKey && !(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       e.stopPropagation();
       hideTagGhost();
@@ -11311,6 +11418,22 @@
       if (e.target.closest("#wr-gutter-mode")) { cycleWriterGutter(); return; }
       if (e.target.closest("#wr-export")) { exportNarration("narration-docx"); return; }
       if (e.target.closest("#wr-close")) closeWriter();
+    });
+
+    /* The writer covers the whole screen, but Tab does not know that: from
+       the last control on its bar, focus walks on into the header and the
+       script cells sitting behind the overlay, where you can type into a
+       document you cannot see. Pull it back. Modals and the toasts are
+       allowed to take focus — they are drawn on top of the writer and are
+       meant to. */
+    document.addEventListener("focusin", function (e) {
+      if (!writerOpen) return;
+      var el = e.target;
+      if (!el || !el.closest) return;
+      if (el.closest("#writer")) return;
+      if (el.closest(".modal-backdrop:not([hidden]), .toast")) return;
+      var back = document.querySelector("#writer-doc .wr-para") || document.getElementById("wr-close");
+      if (back) back.focus();
     });
 
     window.addEventListener("keydown", function (e) {

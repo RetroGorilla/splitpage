@@ -23,6 +23,18 @@ self.addEventListener("fetch", function (event) {
   var url = new URL(event.request.url);
   if (url.origin !== location.origin) return;
 
+  /* Never the API. These are documents and revisions, not app shell. The
+     server marks every API response no-store for exactly this reason, but a
+     service worker writes to the Cache Storage API regardless of HTTP cache
+     semantics — so stale-while-revalidate here would hand a hosted document
+     back at the revision it had on the previous page load. The client would
+     then believe it was current, show "everyone sees this" about a version
+     nobody else is on, and save against a stale rev: the precise situation
+     the compare-and-set exists to prevent. Paths are relative to the app's
+     own directory (apiFetch calls "api/docs/..."), so match on the segment
+     rather than on a leading slash. */
+  if (/(^|\/)api\//.test(url.pathname)) return;
+
   event.respondWith(
     caches.match(event.request).then(function (cached) {
       var network = fetch(event.request).then(function (res) {

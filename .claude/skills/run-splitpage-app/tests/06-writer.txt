@@ -176,6 +176,46 @@ expect document.getElementById('writer').getAttribute('data-gutter') == visuals
 expect document.getElementById('wr-gutter-mode').classList.contains('is-active')
 expect Math.round(document.querySelector('#writer-doc .wr-para').getBoundingClientRect().left) === window.__compactLeft
 
+# --- joining must work at a formatted edge ----------------------------------
+# cloneContents() also emits an empty clone of every partially-contained
+# ancestor, so a caret at the start of a BOLD word used to read as "there is
+# content before me" and Backspace refused to join. Each paragraph is its own
+# editing host, so the browser's own Backspace cannot cross it either: the key
+# did nothing at all, forever, on any scene beginning with formatting.
+# Bold a run that is NOT already bold - this paragraph already ends in one
+# from the rich-text section above, and Ctrl+B there would just remove it.
+eval (function(){var p=document.querySelectorAll('#writer-doc .wr-para')[0];var t=p.firstChild;var r=document.createRange();r.setStart(t,10);r.setEnd(t,14);var s=getSelection();p.focus();s.removeAllRanges();s.addRange(r);return r.toString();})()
+key ctrl KeyB
+sleep 300
+# split so the NEW scene begins with that bold run
+eval (function(){var p=document.querySelectorAll('#writer-doc .wr-para')[0];var b=p.querySelector('span[style], strong, b');var r=document.createRange();r.setStartBefore(b);r.collapse(true);var s=getSelection();p.focus();s.removeAllRanges();s.addRange(r);return b.textContent;})()
+key Enter
+sleep 600
+eval window.__beforeJoin = document.querySelectorAll('#writer-doc .wr-para').length
+# the caret is now at offset 0 of a text node inside the bold wrapper
+key Backspace
+sleep 600
+expect document.querySelectorAll('#writer-doc .wr-para').length === window.__beforeJoin - 1
+
+# --- the Tab-completion ghost has to be VISIBLE in here ---------------------
+# The class saying is-visible proves nothing: at z-index 60 the ghost was laid
+# out, positioned and marked visible underneath the writer's opaque z-index
+# 145 background, so Tab silently committed a tag nobody had been shown.
+caret #writer-doc .wr-para
+press  Get the [boom
+sleep 700
+expect document.getElementById('tag-ghost').classList.contains('is-visible')
+# elementFromPoint cannot answer this - the ghost is pointer-events:none, so
+# it is never the hit target whether it is on top or not. Both elements are
+# position:fixed children of body with no ancestor making a stacking context,
+# so paint order IS z-index order, and that is the thing to assert.
+expect parseInt(getComputedStyle(document.getElementById('tag-ghost')).zIndex, 10) > parseInt(getComputedStyle(document.getElementById('writer')).zIndex, 10)
+# and it is actually on screen, not positioned off in the margin
+expect document.getElementById('tag-ghost').getBoundingClientRect().width > 0
+expect document.getElementById('tag-ghost').getBoundingClientRect().left < window.innerWidth
+key Escape
+sleep 200
+
 # --- a comment's row pointer follows its anchored text ----------------------
 # A comment is anchored twice over: by rowId, and by a .cmt-anchor span inside
 # that row's text. The demo comment is anchored on "word for word" in scene 2.
@@ -233,6 +273,34 @@ expect window.__narDocx.hasAudio
 # prose, not the two-column table every other export produces
 expect window.__narDocx.flowing
 expect window.__narDocx.noVisual
+
+# --- joining must never un-shoot a filmed scene -----------------------------
+# Status is progress to accumulate, not a value to pick between - the rule
+# mergeStates() already applies when two people edit at once. Joining a To-do
+# scene onto a Shot one used to carry the shot description up and quietly
+# leave the green dot behind with the row it deleted.
+jsclick .add-row-bar [data-action="add-row"]
+sleep 500
+# the new last scene has no visual, so the join will be allowed
+eval (function(){var r=document.querySelectorAll('#rows .row');window.__lastId=r[r.length-1].getAttribute('data-id');return window.__lastId;})()
+# To do -> Ready -> Shot
+jsclick #rows .row:last-child [data-action="cycle-status"]
+sleep 250
+jsclick #rows .row:last-child [data-action="cycle-status"]
+sleep 400
+expect !document.getElementById('progress-chip').hidden
+expect document.getElementById('progress-text').textContent.indexOf('1/') === 0
+
+jsclick #btn-write
+sleep 700
+caret #writer-doc .wr-block:last-child .wr-para start
+key Backspace
+sleep 600
+jsclick #wr-close
+sleep 700
+# the scene it was joined into is now the one that has been shot
+expect !document.getElementById('progress-chip').hidden
+expect document.getElementById('progress-text').textContent.indexOf('1/') === 0
 
 # The column at other window widths is 08-writer-width.txt, not here: device
 # metrics can only be set once per session before any real work, or the CDP
