@@ -4729,9 +4729,21 @@
     var names = [], byName = {};
     entries.forEach(function (e) {
       var n = (e.name || "").trim();
-      if (!n || byName[n.toLowerCase()]) return;
+      if (!n) return;
+      var k = n.toLowerCase();
+      /* The same words can be tracked in two categories at once — a
+         "kitchen" prop and a "kitchen" location are different things, and
+         registryKey() keeps them apart on purpose. Plain text cannot say
+         which one it meant, so fall back to the tiebreak the Tab-completion
+         ghost already uses for the same ambiguity: whichever is mentioned
+         most in the script so far. The prompt names the category either way,
+         so accepting it is never a surprise. */
+      if (byName[k]) {
+        if (tagCompletionBeats(e, byName[k])) byName[k] = e;
+        return;
+      }
       names.push(n);
-      byName[n.toLowerCase()] = e;
+      byName[k] = e;
     });
     if (!names.length) return null;
     var alt = names.sort(function (a, b) { return b.length - a.length; })
@@ -4865,6 +4877,16 @@
   function acceptUntaggedMention() {
     var s = untaggedSuggestion;
     if (!s || !s.cellEl.isConnected) { hideUntaggedPrompt(); return false; }
+    /* A Range is live: type a character into the middle of the phrase it
+       covers and it quietly grows to include it. The rescan that would
+       notice is 220ms behind, so between those two moments Tab would wrap
+       "gaffX er tape" and label it "gaffer tape". Cheaper to ask the range
+       what it is holding now than to try to invalidate it from every edit. */
+    if (String(s.range) !== s.text) {
+      hideUntaggedPrompt();
+      scheduleUntaggedScan();
+      return false;
+    }
     var sel = window.getSelection();
     try {
       sel.removeAllRanges();
@@ -9654,9 +9676,46 @@
       status: "todo", updatedAt: nowIso(), updatedBy: getEditorName()
     };
     state.rows.splice(idx + 1, 0, created);
+    /* half the text just moved to a new row — any comment anchored in that
+       half has to move with it */
+    repointCommentsForRows([state.rows[idx], created]);
     markDirty();
     renderWriter();
     focusWriterBlock(created.id, 0);
+  }
+
+  /* A comment is anchored twice over: by rowId, and by the .cmt-anchor span
+     living inside that row's text. Splitting a scene can carry the span into
+     the new row while rowId still names the old one; joining deletes the row
+     the span came from altogether.
+
+     The comment is not lost either way — every lookup that matters
+     (anchorExistsInDom, jumpToAnchor, syncAnchorResolvedClasses) searches the
+     whole document. But the panel labels it with the scene rowId names, which
+     is now the wrong one, and deleteComment() calls unwrapAnchorInState()
+     with that rowId, looks for the span in a row that no longer holds it,
+     finds nothing, and leaves a highlighted orphan in the script that nothing
+     can remove. So the pointer follows the text.
+
+     Scoped to the rows the operation actually touched: sweeping the document
+     here would be a full parse of every field of every row on every Enter. */
+  function repointCommentsForRows(rows) {
+    if (!state.comments || !state.comments.length) return;
+    rows.forEach(function (row) {
+      if (!row) return;
+      ["visualText", "audioText"].forEach(function (field) {
+        var body = inertBody(row[field] || "");
+        Array.prototype.forEach.call(body.querySelectorAll(".cmt-anchor"), function (el) {
+          var anchorId = el.getAttribute("data-cmt");
+          if (!anchorId) return;
+          state.comments.forEach(function (c) {
+            if ((c.anchorId || c.id) !== anchorId) return;
+            c.rowId = row.id;
+            c.field = field;
+          });
+        });
+      });
+    });
   }
 
   /* Backspace at the very start of a paragraph — and Delete at the very end
@@ -9694,6 +9753,8 @@
     }
     stampRow(prev);
     state.rows.splice(intoIdx + 1, 1);
+    /* the row the anchors used to live in is gone; they are all in prev now */
+    repointCommentsForRows([prev]);
     markDirty();
     renderWriter();
     focusWriterBlock(prev.id, joinAt);

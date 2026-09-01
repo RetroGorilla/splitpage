@@ -61,7 +61,7 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 183 assertions across 8 suites, driving
+There is a real regression suite now — 188 assertions across 8 suites, driving
 headless Edge over CDP. **Run it before and after any change to
 `index.html`:**
 
@@ -69,7 +69,7 @@ headless Edge over CDP. **Run it before and after any change to
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-`ALL PASS - 183/183` and exit 0, or it names every failing assertion and exits 1.
+`ALL PASS - 188/188` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
@@ -331,6 +331,14 @@ works without it.
 
 Things to know:
 
+- **The same words can be tracked in two categories at once.** `registryKey()`
+  keeps a "kitchen" prop and a "kitchen" location apart on purpose, but the
+  untagged index is keyed on the name alone — plain text cannot say which was
+  meant. `buildUntaggedIndex()` breaks the tie with `tagCompletionBeats()`,
+  the same rule the Tab-completion ghost already uses (most mentions, then
+  shortest, then alphabetical), and the prompt names the category so
+  accepting it is never a surprise. It used to just keep whichever came
+  first out of `productionEntries()`.
 - **One highlight for all categories, not one per category.** Per-category
   colour would mean a *second* place a new `TAG_CATEGORIES` entry has to be
   registered in CSS (invariant 14 exists because that was already missed
@@ -342,6 +350,14 @@ Things to know:
   never matches inside "tapered".
 - **`render()` invalidates every stored Range**, so it schedules a re-scan.
   Debounced — nothing is wrong in the meantime beyond a missing underline.
+- **The offer re-checks its own Range before taking it.** A `Range` is live:
+  type a character into the middle of the phrase it covers and it silently
+  grows to include it, while the rescan that would notice is 220ms behind.
+  In that window `execCommand` would replace what the range covers *now*
+  ("gafXfer tape") with the phrase the offer remembered ("gaffer tape") — and
+  eat the character the writer just typed. `String(s.range) !== s.text` is
+  the guard; `07-untagged.txt` types into the middle of a phrase and takes
+  the offer immediately, then asserts the character survived.
 - **Accepting goes through `execCommand("insertHTML")`**, like every other
   route to a tag in this file, so one Ctrl+Z puts the plain words back. The
   span keeps the casing that was *written*; `data-tag-name` keeps the
@@ -582,7 +598,21 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     Ranges. Anything that wraps text in a span to draw attention to it dirties
     the file, lands on the undo stack, and has to be unpicked by the
     sanitiser.
-18. **There are two Save buttons and one save state.** The header's and the
+18. **A comment is anchored twice — by `rowId` and by its `.cmt-anchor`
+    span — and anything that moves text between rows has to move both.**
+    Found the hard way: the writer's Enter carried an anchored phrase into a
+    new row while `rowId` still named the old one. Nothing looked broken,
+    because `anchorExistsInDom`, `jumpToAnchor` and
+    `syncAnchorResolvedClasses` all search the *whole* document — but the
+    panel labelled the comment with the wrong scene, and `deleteComment()`
+    passes that stale `rowId` to `unwrapAnchorInState()`, which looked for
+    the span in a row that no longer held it, found nothing, and left a
+    highlighted orphan in the script that nothing could remove.
+    `repointCommentsForRows()` is the fix; call it from anything new that
+    splits, joins or moves text across rows. Guarded by
+    `06-writer.txt`, which compares the panel's label against the row the
+    anchor is actually in.
+19. **There are two Save buttons and one save state.** The header's and the
     writer's go through `setSaveButtons()`; the writer's file chip is copied
     from the header's rendered state by `mirrorFileChipToWriter()`. Nothing
     addresses either one directly, so they cannot drift into disagreeing
@@ -671,7 +701,7 @@ Mobile touch-translation notes for future features:
   the page on focus.
 
 The writer + narration exports (2026-08-31): the whole surface is covered by
-`tests/06-writer.txt` (70 assertions) and a phone pass at the end of
+`tests/06-writer.txt` (72 assertions) and a phone pass at the end of
 `05-mobile.txt` — one paragraph per scene with the visual as non-editable
 gutter context; Enter splitting at the caret with the tail and the cursor both
 moving and the new scene getting an empty visual; Backspace joining with no

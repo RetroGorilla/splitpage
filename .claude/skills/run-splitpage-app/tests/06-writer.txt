@@ -176,9 +176,30 @@ expect document.getElementById('writer').getAttribute('data-gutter') == visuals
 expect document.getElementById('wr-gutter-mode').classList.contains('is-active')
 expect Math.round(document.querySelector('#writer-doc .wr-para').getBoundingClientRect().left) === window.__compactLeft
 
+# --- a comment's row pointer follows its anchored text ----------------------
+# A comment is anchored twice over: by rowId, and by a .cmt-anchor span inside
+# that row's text. The demo comment is anchored on "word for word" in scene 2.
+# Splitting that scene BEFORE the anchor carries the span into a new row — and
+# if rowId does not go with it, the panel names the wrong scene and deleting
+# the comment looks for its span in a row that no longer holds it, leaving a
+# highlighted orphan in the script that nothing can remove.
+eval (function(){var p=Array.from(document.querySelectorAll('#writer-doc .wr-para')).find(function(x){return x.querySelector('.cmt-anchor');});var a=p.querySelector('.cmt-anchor');var r=document.createRange();r.setStartBefore(a);r.collapse(true);var s=getSelection();p.focus();s.removeAllRanges();s.addRange(r);return a.textContent;})()
+key Enter
+sleep 700
+
 key Escape
 sleep 500
 expect document.getElementById('writer').hidden
+
+# where the anchored text actually ended up...
+eval (function(){var a=document.querySelector('#rows .cmt-anchor[data-cmt="c1"]');var rows=Array.from(document.querySelectorAll('#rows .row'));window.__anchorRow = rows.indexOf(a.closest('.row')) + 1;return window.__anchorRow;})()
+expect window.__anchorRow >= 2
+# ...and what the comments panel says about it. These must agree.
+jsclick #btn-comments
+sleep 600
+expect document.querySelector('.comment-loc').textContent.indexOf(String(window.__anchorRow).padStart(2, '0')) !== -1
+jsclick #comments-panel-close
+sleep 300
 
 # --- narration exports ------------------------------------------------------
 # Same blob interception as 03-exports: nothing is written to disk.
@@ -196,8 +217,10 @@ expect window.__nar.indexOf('PRODUCTION BREAKDOWN') === -1
 expect window.__nar.indexOf('COMMENTS') === -1
 # title, then one paragraph per scene with a blank line between - which is
 # exactly what Paste a script... reads back in its paragraph mode (the title
-# is the one thing that does not round-trip: it comes back as an extra row)
-expect window.__nar.split(/\n\s*\n+/).filter(Boolean).length == 3
+# is the one thing that does not round-trip: it comes back as an extra row).
+# Counted off the document rather than hard-coded, so a test above adding or
+# joining a scene does not turn this into a puzzle.
+expect window.__nar.split(/\n\s*\n+/).filter(Boolean).length === Array.from(document.querySelectorAll('#rows .audio-cell .cell-editable')).filter(function (c) { return c.textContent.trim(); }).length + 1
 expect window.__nar.split(/\n\s*\n+/)[0] == Untitled Script
 
 jsclick #btn-file
