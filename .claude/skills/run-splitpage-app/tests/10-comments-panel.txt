@@ -1,0 +1,89 @@
+# Clicking a comment card jumps to its anchored text without closing the
+# panel, and the comments list can be sorted by script position (the
+# default) or by most recent activity, replies included.
+
+open
+
+click text*=COMMENTS
+sleep 500
+expect !document.getElementById('comments-panel').hidden
+expect document.querySelectorAll('.comment-card').length == 1
+# no dedicated button any more - the card itself is the control
+expect document.querySelector('[data-action="jump-to-anchor"]') === null
+expect document.querySelector('.comment-card').classList.contains('is-jumpable')
+
+# --- clicking the card jumps, and the panel stays open -----------------------
+click .comment-card
+sleep 700
+expect !document.getElementById('comments-panel').hidden
+expect document.querySelector('.cmt-anchor').classList.contains('flash')
+
+# --- finishing a text selection inside the card must NOT also fire a jump ---
+# A real drag-select is awkward to simulate faithfully over CDP (mousedown on
+# top of already-selected text behaves differently across browsers/OSes), so
+# this sets a genuine non-collapsed Selection via the API - exactly what
+# onRootClick's guard checks - then dispatches a plain click, which (unlike a
+# real click sequence) does not itself touch the selection. Proven by scroll
+# position, not the .flash class: jumpToAnchor's retrigger (remove, reflow,
+# re-add) leaves the class present either way, so it can't tell a skipped
+# jump from one that already fired.
+eval (function(){window.scrollTo(0,0);return window.scrollY;})()
+sleep 300
+eval (function(){var body=document.querySelector('.comment-body');var r=document.createRange();r.selectNodeContents(body);var s=getSelection();s.removeAllRanges();s.addRange(r);body.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return getSelection().isCollapsed;})()
+sleep 500
+expect getSelection().isCollapsed === false
+expect window.scrollY === 0
+
+# --- leave a second comment, earlier in the script than the first ----------
+# so script-position order and posting order disagree, which is the only way
+# to tell the two sort modes apart.
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
+sleep 300
+jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 500
+eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'First row note.');return b.textContent;})()
+jsclick #comment-post
+sleep 600
+expect document.querySelectorAll('.comment-card').length == 2
+
+# --- default is script position, regardless of posting order ----------------
+expect document.getElementById('comments-sort').value == position
+expect document.querySelectorAll('.comment-loc')[0].textContent.indexOf('01') !== -1
+expect document.querySelectorAll('.comment-loc')[1].textContent.indexOf('02') !== -1
+
+# --- switching to "most recent" ----------------------------------------------
+eval (function(){var s=document.getElementById('comments-sort');s.value='recent';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+# the row-1 comment was posted after row-2's, so it still leads here too -
+# this alone would not distinguish the two modes
+expect document.querySelectorAll('.comment-loc')[0].textContent.indexOf('01') !== -1
+
+# --- a reply counts as activity: replying to the OLDER row-2 comment must
+#     bring it back to the top of "most recent" ------------------------------
+eval (function(){var card=Array.from(document.querySelectorAll('.comment-card')).find(function(c){return c.querySelector('.comment-loc').textContent.indexOf('02')!==-1;});card.querySelector('[data-action="toggle-reply"]').click();return true;})()
+sleep 400
+eval (function(){var box=document.querySelector('.reply-composer .cell-editable');box.focus();document.execCommand('insertText',false,'Agreed.');return box.textContent;})()
+jsclick [data-action="reply-post"]
+sleep 600
+expect document.querySelectorAll('.comment-loc')[0].textContent.indexOf('02') !== -1
+
+# --- back to position order: the reply does not move anything there ---------
+eval (function(){var s=document.getElementById('comments-sort');s.value='position';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+expect document.querySelectorAll('.comment-loc')[0].textContent.indexOf('01') !== -1
+
+# --- exports always read script order, independent of the panel's sort ------
+eval (function(){var s=document.getElementById('comments-sort');s.value='recent';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+sleep 1400
+eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+# scoped to the Comments section specifically - "Row 01"/"Row 02" as bare
+# strings would also match inside the script table itself
+eval (function(){window.__mdComments = window.__md.slice(window.__md.indexOf('## Comments')); return window.__mdComments.length;})()
+expect window.__mdComments.indexOf('Row 01') < window.__mdComments.indexOf('Row 02')
+
+quit

@@ -1,0 +1,83 @@
+# Alt+Enter in the split view (splitCellField/splitRowFieldCore), and the
+# caret-follow that keeps the actively-edited scene in view through a large
+# paste or a large deletion.
+
+open
+
+# --- Alt+Enter splits the FOCUSED column only --------------------------------
+caret #rows .row .audio-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row .audio-cell .cell-editable');var t=c.firstChild;var i=t.nodeValue.indexOf('Today');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return i;})()
+key alt Enter
+sleep 500
+expect document.querySelectorAll('#rows .row').length == 3
+# the audio tail moved to the new row's audio field, and only the tail
+expect document.querySelectorAll('#rows .row')[1].querySelector('.audio-cell .cell-editable').textContent.indexOf('Today I want') === 0
+expect document.querySelectorAll('#rows .row')[0].querySelector('.audio-cell .cell-editable').textContent.indexOf('Today') === -1
+# the VISUAL column - not the one in focus - is untouched: still whole on the
+# original row, nothing duplicated onto the new one
+expect document.querySelectorAll('#rows .row')[0].querySelector('.visual-cell .cell-editable').textContent.indexOf('Host on camera') === 0
+expect document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable').textContent.length === 0
+# the caret follows the text it moved, into the new row's same field
+expect document.activeElement.getAttribute('data-field') == audioText
+expect document.activeElement.closest('.row') === document.querySelectorAll('#rows .row')[1]
+
+# --- Alt+Enter on the VISUAL column: the audio column stays put -------------
+eval (function(){var c=document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable');c.focus();var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+press  A wide shot too.
+sleep 300
+eval (function(){var c=document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,6);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue;})()
+key alt Enter
+sleep 500
+expect document.querySelectorAll('#rows .row').length == 4
+expect document.activeElement.getAttribute('data-field') == visualText
+expect document.querySelectorAll('#rows .row')[1].querySelector('.audio-cell .cell-editable').textContent.indexOf('Today I want') === 0
+expect document.querySelectorAll('#rows .row')[2].querySelector('.audio-cell .cell-editable').textContent.length === 0
+
+# --- a comment's row pointer follows an Alt+Enter split too -----------------
+# The writer's plain Enter already has to move a comment anchor with the text
+# it's attached to when a split carries it into a new row (see 06-writer.txt);
+# splitRowFieldCore() is the shared core behind both, but that sharing is
+# exactly the kind of thing a refactor can silently break, so it gets its own
+# check here rather than being trusted. The demo's comment is anchored on
+# "word for word" - find it wherever it has ended up after the splits above,
+# and split its row right before the anchor.
+eval (function(){var a=document.querySelector('#rows .cmt-anchor[data-cmt="c1"]');var cell=a.closest('.cell-editable');var r=document.createRange();r.setStartBefore(a);r.collapse(true);var s=getSelection();cell.focus();s.removeAllRanges();s.addRange(r);return a.textContent;})()
+key alt Enter
+sleep 500
+# where the anchored text actually ended up...
+eval (function(){var a=document.querySelector('#rows .cmt-anchor[data-cmt="c1"]');var rows=Array.from(document.querySelectorAll('#rows .row'));window.__anchorRow = rows.indexOf(a.closest('.row'));return window.__anchorRow;})()
+# ...and what the comments panel says about it. These must agree.
+jsclick #btn-comments
+sleep 600
+eval (function(){var card=Array.from(document.querySelectorAll('.comment-card')).find(function(c){return c.querySelector('.comment-quote').textContent.indexOf('word for word')!==-1;});var loc=card.querySelector('.comment-loc').textContent;var num=parseInt(loc.match(/\d+/)[0],10)-1;window.__locMatch=(num===window.__anchorRow);return {loc:loc,anchorRow:window.__anchorRow,match:window.__locMatch};})()
+expect window.__locMatch === true
+jsclick #comments-panel-close
+sleep 300
+
+# --- normal typing must never trigger the scroll-follow (no jank) -----------
+eval (function(){window.__scrollByCalls=0;var orig=Element.prototype.scrollBy;Element.prototype.scrollBy=function(){window.__scrollByCalls++;return orig.apply(this,arguments);};return true;})()
+caret #rows .row .audio-cell .cell-editable
+press  hi
+sleep 300
+expect window.__scrollByCalls == 0
+
+# --- a large paste that pushes the caret far down the page brings it back ---
+# Insert ~60 lines BEFORE the caret in one shot, the way a real paste does
+# (onRootPaste routes through the same execCommand("insertText", ...) call).
+# A tall cell like this is exactly the case scrollIntoView on the CELL gets
+# wrong: centering the element does not put the CARET (sitting well inside
+# it) anywhere near the middle of the screen.
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');c.focus();var r=document.createRange();r.setStart(c.firstChild,0);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+eval (function(){document.execCommand('insertText',false, Array(70).join('Filler line to make this cell very tall indeed. '));return true;})()
+sleep 1200
+expect getSelection().getRangeAt(0).getBoundingClientRect().top >= 0
+expect getSelection().getRangeAt(0).getBoundingClientRect().bottom <= innerHeight
+
+# --- and removing a large chunk of that same cell brings it back too --------
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,t.nodeValue.length-20);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.length;})()
+key Backspace
+sleep 1200
+expect getSelection().getRangeAt(0).getBoundingClientRect().top >= 0
+expect getSelection().getRangeAt(0).getBoundingClientRect().bottom <= innerHeight
+
+quit

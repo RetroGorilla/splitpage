@@ -21,7 +21,7 @@ Do this before committing any change to `index.html`.
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 202/202 checks across 8 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 237/237 checks across 11 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -43,6 +43,9 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/06-writer.txt` | the writer: paragraph-per-scene, Enter splits, Backspace joins, the join it refuses, tagging and rich text writing back, the visuals/numbers/compact gutter cycle, Save mirroring the header's, narration .txt/.docx |
 | `tests/07-untagged.txt` | untagged mentions: found without wrapping anything, the prompt names its category, Esc mutes and typing revives it, Tab labels it, the breakdown's mention count catches up |
 | `tests/08-writer-width.txt` | the writer's column at 1150px — the tightest window the hanging gutter still has to fit beside |
+| `tests/09-alt-enter-and-scroll.txt` | Alt+Enter splitting only the focused column (both directions), a comment anchor repointed the same as the writer's, no scroll on ordinary typing, the scene follows through a large paste and a large delete |
+| `tests/10-comments-panel.txt` | clicking a comment card jumps without closing the panel, a live selection suppresses the jump, script-order vs. most-recent sorting (replies count as activity), exports stay in script order regardless |
+| `tests/11-comments-sort-persist.txt` | the comments sort preference survives a reload |
 
 ## Ad-hoc driving
 
@@ -117,6 +120,13 @@ These are why tests fail when the app is fine. Check them before suspecting
   `WebSocket is in an invalid state ('Aborted')`. A second viewport needs a
   second suite; that is why 05-mobile and 08-writer-width are separate files
   rather than sections of the suites they belong to.
+- **`goto` after a lot of prior DOM churn can abort the socket the same way** —
+  not just a device-metrics change. A script that posted a comment, replied
+  to it, and flipped a sort toggle a few times aborted reliably on the `goto`
+  that followed; the identical `goto` in isolation, with nothing before it,
+  was solid every time (`tests/11-comments-sort-persist.txt`). If a reload
+  check needs to run after a script has already done real work, give it its
+  own suite rather than trusting it to survive at the end of a busy one.
 - **Don't assert formatting on the live DOM.** Chromium's `execCommand` emits
   `<span style="font-weight: bold">`, not `<b>`. Splitpage's sanitiser turns
   that into `<strong>` on focusout — so a bold/italic assertion belongs *after*

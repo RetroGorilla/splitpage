@@ -1,0 +1,24 @@
+# The comments sort preference is about the reader, not the document, so it
+# lives in localStorage and survives a reload - same reasoning as the
+# writer's text size (see 06-writer.txt).
+#
+# Its own suite, kept minimal: chaining this reload onto 10-comments-panel.txt
+# (after several comment posts, replies, and sort switches) reliably aborted
+# the CDP socket there. Isolated and by itself it is solid — the same
+# instability 05-mobile/08-writer-width exist to route around, just triggered
+# by DOM churn depth this time rather than a device-metrics change.
+
+open
+click text*=COMMENTS
+sleep 500
+expect document.getElementById('comments-sort').value == position
+
+eval (function(){var s=document.getElementById('comments-sort');s.value='recent';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 400
+goto /index.html
+sleep 900
+click text*=COMMENTS
+sleep 500
+expect document.getElementById('comments-sort').value == recent
+
+quit

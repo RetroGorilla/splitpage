@@ -1344,13 +1344,20 @@
   }
   .comments-panel-head h2 { font-family: var(--font-body); font-size: 17px; font-weight: 800; margin: 0; color: var(--text); }
   .comments-panel-toggle {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
     padding: 10px 18px;
     border-bottom: 1px solid var(--border);
     font-size: 12.5px; color: var(--text-dim);
     flex: none;
   }
   .comments-panel-toggle label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .comments-sort-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .comments-sort-wrap select {
+    font-family: var(--font-display); font-size: 11px;
+    padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); color: var(--text); cursor: pointer;
+  }
+  .comments-sort-wrap select:focus { outline: none; border-color: var(--visual); }
   .comments-list { flex: 1; overflow-y: auto; padding: 12px; }
   .comments-empty { text-align: center; color: var(--text-faint); font-size: 13px; padding: 30px 12px; line-height: 1.5; }
 
@@ -1362,6 +1369,13 @@
     margin-bottom: 10px;
   }
   .comment-card.is-resolved { opacity: 0.6; }
+  /* The card itself is the "jump to text" control now — there is no button
+     for it. A click anywhere on it jumps, EXCEPT the buttons, a link, or the
+     reply composer (each already claim the click first — see onRootClick),
+     and except finishing a text selection, so copying the quote or the body
+     is never fighting the click target. */
+  .comment-card.is-jumpable { cursor: pointer; }
+  .comment-card.is-jumpable:hover { border-color: var(--visual); }
   .comment-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .comment-author { font-family: var(--font-display); font-size: 12.5px; font-weight: 800; color: var(--text); }
   .comment-time { font-size: 10.5px; color: var(--text-faint); white-space: nowrap; }
@@ -2398,6 +2412,13 @@
   </div>
   <div class="comments-panel-toggle">
     <label><input type="checkbox" id="comments-hide-resolved"> Hide resolved</label>
+    <span class="comments-sort-wrap">
+      <label for="comments-sort">Sort</label>
+      <select id="comments-sort" aria-label="Sort comments">
+        <option value="position">Script order</option>
+        <option value="recent">Most recent</option>
+      </select>
+    </span>
   </div>
   <div class="comments-list" id="comments-list"></div>
 </div>
@@ -4020,6 +4041,67 @@
     sel.removeAllRanges();
     sel.addRange(range);
     cell.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  /* Splits ONE field's content at the caret into a new row directly below —
+     the shared core behind both the writer's plain Enter (splitWriterRow)
+     and the split view's Alt+Enter (splitCellField). Everything from the
+     caret to the end of the field moves to the new row's same field; the
+     row's OTHER field — the column that was not being written in — is left
+     completely alone, still whole, still on the original row. Returns
+     {idx, created, field}, or null if the caret was not actually in a field
+     of a live row (the caller does nothing in that case). */
+  function splitRowFieldCore(cellEl) {
+    var idx = findRowIndex(cellEl.getAttribute("data-id"));
+    var field = cellEl.getAttribute("data-field");
+    if (idx === -1 || !field) return null;
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    var range = sel.getRangeAt(0);
+    if (!cellEl.contains(range.startContainer)) return null;
+    if (!range.collapsed) range.deleteContents();
+
+    var tail = document.createRange();
+    tail.setStart(range.startContainer, range.startOffset);
+    tail.setEnd(cellEl, cellEl.childNodes.length);
+    var holder = document.createElement("div");
+    holder.appendChild(tail.extractContents());
+
+    state.rows[idx][field] = sanitizeHtml(cellEl.innerHTML);
+    stampRow(state.rows[idx]);
+
+    var created = { id: makeId(), visualText: "", visualImage: null, audioText: "",
+                     status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
+    created[field] = sanitizeHtml(holder.innerHTML);
+    state.rows.splice(idx + 1, 0, created);
+    /* half the field's text just moved to a new row — any comment anchored
+       in that half has to move with it */
+    repointCommentsForRows([state.rows[idx], created]);
+    return { idx: idx, created: created, field: field };
+  }
+
+  /* Land the caret at a plain-text offset inside a specific field of a
+     specific row — addRowAndFocus's caret placement, generalised to any
+     offset rather than always the start. */
+  function focusRowField(rowId, field, offset) {
+    var cell = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") +
+      '"] .cell-editable[data-field="' + (field === "visualText" ? "visualText" : "audioText") + '"]');
+    if (!cell) return;
+    cell.focus();
+    placeCaretAtTextOffset(cell, offset || 0);
+    cell.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  /* Alt+Enter: the split view's version of the writer's plain Enter — see
+     splitRowFieldCore. Its own shortcut rather than folding into Ctrl+Enter,
+     which already means something else here (a new, empty scene) and is
+     tested and muscle-memorised as that. */
+  function splitCellField(cellEl) {
+    var res = splitRowFieldCore(cellEl);
+    if (!res) return;
+    markDirty();
+    render();
+    focusRowField(res.created.id, res.field, 0);
   }
 
   /* ---- drag to reorder ----
@@ -6370,6 +6452,24 @@
     try { localStorage.setItem(COMMENT_NAME_KEY, name); } catch (e) {}
   }
 
+  /* How you like the comments list ordered — about the reader, not the
+     document, so it lives in this browser rather than in the file (same
+     reasoning as the writer's text size). "position" (script order) is the
+     default: it's where new-here readers expect a comment to be, right next
+     to the row it's about. "recent" is for coming back after a while and
+     wanting to see what actually moved, wherever in the script it was. */
+  var COMMENTS_SORT_KEY = "splitpage-comments-sort";
+  function readCommentSortMode() {
+    try { return localStorage.getItem(COMMENTS_SORT_KEY) === "recent" ? "recent" : "position"; }
+    catch (e) { return "position"; }
+  }
+  var commentSortMode = readCommentSortMode();
+  function setCommentSortMode(mode) {
+    commentSortMode = mode === "recent" ? "recent" : "position";
+    try { localStorage.setItem(COMMENTS_SORT_KEY, commentSortMode); } catch (e) {}
+    renderComments();
+  }
+
   function formatTimestamp(iso) {
     try {
       var d = new Date(iso);
@@ -6401,21 +6501,41 @@
     } catch (e) { return ""; }
   }
 
+  /* Script order: by row, then Visual before Audio, then post time as a
+     tiebreak within the same field. Shared by the export appendix (which has
+     always used this) and the panel's default sort (which now does too),
+     so "where a comment sits in the list" means the same thing in both. */
+  function commentPositionCompare(a, b) {
+    var ai = findRowIndex(a.rowId); if (ai === -1) ai = Infinity;
+    var bi = findRowIndex(b.rowId); if (bi === -1) bi = Infinity;
+    if (ai !== bi) return ai - bi;
+    var af = a.field === "audioText" ? 1 : 0, bf = b.field === "audioText" ? 1 : 0;
+    if (af !== bf) return af - bf;
+    return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+  }
+
+  /* The most recent thing said about a comment — its own post time, or a
+     later reply's, whichever is newer. Replies count on purpose: a thread
+     someone just answered is exactly as "active" as a brand new comment,
+     and sorting by the comment's own createdAt alone would leave a
+     just-replied-to thread buried whereever it started out. */
+  function commentLastActivity(c) {
+    var t = c.createdAt || "";
+    (c.replies || []).forEach(function (r) {
+      if ((r.createdAt || "") > t) t = r.createdAt;
+    });
+    return t;
+  }
+
   /* Every comment and reply, flattened and ordered to match the document —
-     by row, then Visual before Audio, then post time — for exports to
-     append as a plain-text appendix. None of these formats can reproduce
-     inline comment bubbles, so this keeps every export honest about what a
-     comment thread actually said rather than silently dropping it. */
+     for exports to append as a plain-text appendix. None of these formats
+     can reproduce inline comment bubbles, so this keeps every export honest
+     about what a comment thread actually said rather than silently
+     dropping it. Always script order, regardless of how the panel itself is
+     currently sorted — a file's own appendix should read the same way twice. */
   function commentEntries() {
     var list = (state.comments || []).slice();
-    list.sort(function (a, b) {
-      var ai = findRowIndex(a.rowId); if (ai === -1) ai = Infinity;
-      var bi = findRowIndex(b.rowId); if (bi === -1) bi = Infinity;
-      if (ai !== bi) return ai - bi;
-      var af = a.field === "audioText" ? 1 : 0, bf = b.field === "audioText" ? 1 : 0;
-      if (af !== bf) return af - bf;
-      return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
-    });
+    list.sort(commentPositionCompare);
     return list.map(function (c) {
       return {
         location: findAnchorLocationLabel(c.rowId, c.field),
@@ -6646,7 +6766,11 @@
       showToast("That text is no longer in the script.", "warn");
       return;
     }
-    closeCommentsPanel();
+    /* Deliberately does NOT close the panel. The point of jumping is to see
+       the comment next to the text it is about — closing the one to look at
+       the other defeats that, and on anything wider than 1100px the panel
+       already leaves the script uncovered (see the padding-right rule on
+       body.panel-open #root), so there is nothing to close it FOR. */
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     el.classList.remove("flash");
     void el.offsetWidth;
@@ -6710,7 +6834,8 @@
       }).join("") + '</div>';
     }
     return (
-      '<div class="comment-card' + (c.resolved ? ' is-resolved' : '') + '" data-id="' + c.id + '">' +
+      '<div class="comment-card' + (c.resolved ? ' is-resolved' : '') + (orphaned ? '' : ' is-jumpable') +
+        '" data-id="' + c.id + '"' + (orphaned ? '' : ' title="Click to jump to this text in the script"') + '>' +
         '<div class="comment-card-head">' +
           '<span class="comment-author">' + escapeHtml(c.author) + '</span>' +
           '<span class="comment-time">' + formatTimestamp(c.createdAt) + '</span>' +
@@ -6723,7 +6848,6 @@
         repliesHtml +
         (expandedReplyIds[c.id] ? replyComposerHtml(c.id) : "") +
         '<div class="comment-actions">' +
-          (orphaned ? "" : '<button type="button" data-action="jump-to-anchor" data-id="' + c.id + '">Jump to text</button>') +
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Resolve") + '</button>' +
           (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
           '<button type="button" class="danger" data-action="delete-comment" data-id="' + c.id + '">Delete</button>' +
@@ -6795,8 +6919,9 @@
     if (!listEl) return;
     var hideResolved = document.getElementById("comments-hide-resolved").checked;
     var items = state.comments.filter(function (c) { return !hideResolved || !c.resolved; });
-    /* newest first */
-    items = items.slice().sort(function (a, b) { return (b.createdAt || "").localeCompare(a.createdAt || ""); });
+    items = items.slice().sort(commentSortMode === "recent"
+      ? function (a, b) { return commentLastActivity(b).localeCompare(commentLastActivity(a)); }
+      : commentPositionCompare);
     if (!items.length) {
       listEl.innerHTML = '<div class="comments-empty">' + (state.comments.length ? "No comments to show." : "No comments yet. Select text in a row and click 💬 Comment to leave one.") + '</div>';
       return;
@@ -9745,37 +9870,14 @@
   /* Enter: everything from the caret to the end of the paragraph becomes a
      scene of its own, directly below. Its visual is left empty, which is
      the honest state for a beat of narration nobody has framed a shot for
-     yet, and the caret follows the text it moved. */
+     yet, and the caret follows the text it moved. The mechanics are shared
+     with the split view's Alt+Enter — see splitRowFieldCore(). */
   function splitWriterRow(cellEl) {
-    var idx = findRowIndex(cellEl.getAttribute("data-id"));
-    if (idx === -1) return;
-    var sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    var range = sel.getRangeAt(0);
-    if (!cellEl.contains(range.startContainer)) return;
-    if (!range.collapsed) range.deleteContents();
-
-    var tail = document.createRange();
-    tail.setStart(range.startContainer, range.startOffset);
-    tail.setEnd(cellEl, cellEl.childNodes.length);
-    var holder = document.createElement("div");
-    holder.appendChild(tail.extractContents());
-
-    state.rows[idx].audioText = sanitizeHtml(cellEl.innerHTML);
-    stampRow(state.rows[idx]);
-
-    var created = {
-      id: makeId(), visualText: "", visualImage: null,
-      audioText: sanitizeHtml(holder.innerHTML),
-      status: "todo", updatedAt: nowIso(), updatedBy: getEditorName()
-    };
-    state.rows.splice(idx + 1, 0, created);
-    /* half the text just moved to a new row — any comment anchored in that
-       half has to move with it */
-    repointCommentsForRows([state.rows[idx], created]);
+    var res = splitRowFieldCore(cellEl);
+    if (!res) return;
     markDirty();
     renderWriter();
-    focusWriterBlock(created.id, 0);
+    focusWriterBlock(res.created.id, 0);
   }
 
   /* A comment is anchored twice over: by rowId, and by the .cmt-anchor span
@@ -10497,9 +10599,6 @@
     var videoCancel = e.target.closest('[data-action="video-cancel"]');
     if (videoCancel) { cancelVideo(videoCancel.closest(".field-wrap")); return; }
 
-    var jumpAnchor = e.target.closest('[data-action="jump-to-anchor"]');
-    if (jumpAnchor) { jumpToAnchor(jumpAnchor.getAttribute("data-id")); return; }
-
     var toggleResolveBtn = e.target.closest('[data-action="toggle-resolve"]');
     if (toggleResolveBtn) { toggleResolve(toggleResolveBtn.getAttribute("data-id")); return; }
 
@@ -10521,6 +10620,22 @@
     var jumpTagBtn = e.target.closest('[data-action="jump-tag"]');
     if (jumpTagBtn) {
       jumpToTag(jumpTagBtn.getAttribute("data-row"), jumpTagBtn.getAttribute("data-key"));
+      return;
+    }
+
+    /* The comment card itself is the "jump to text" control — see
+       .is-jumpable. Excluded: the reply composer (its own contenteditable,
+       name input and link popover all need a plain click to focus, not a
+       jump) and any <a> in the comment body (should follow the link, not
+       jump away from it — everything else on the card already returned
+       above, buttons included, so by this point a click on .comment-actions
+       itself is just padding, not a hit). And a click that ends a text
+       selection — finishing a drag to copy the quote or the body must never
+       also fire a jump. */
+    var jumpCard = e.target.closest(".comment-card.is-jumpable");
+    if (jumpCard && !e.target.closest(".reply-composer") && !e.target.closest("a") &&
+        window.getSelection().isCollapsed) {
+      jumpToAnchor(jumpCard.getAttribute("data-id"));
       return;
     }
 
@@ -10736,12 +10851,60 @@
     return !!(cellEl && cellEl.closest("#rows, #writer-doc") && cellEl.getAttribute("data-field"));
   }
 
+  /* The nearest ancestor that actually scrolls — document for a cell in
+     #rows, the .writer-scroll pane for a paragraph in #writer-doc. Walked
+     rather than hard-coded, so this keeps working wherever a script cell
+     ends up living next. */
+  function nearestScrollAncestor(el) {
+    var node = el.parentElement;
+    while (node && node !== document.body) {
+      var cs = getComputedStyle(node);
+      if (/(auto|scroll)/.test(cs.overflowY) && node.scrollHeight > node.clientHeight) return node;
+      node = node.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+
+  /* Typing near the edge of the viewport, the browser scrolls the caret
+     into view on its own — this is only for what it doesn't reliably
+     handle: pasting a large block, or backspacing/selecting-and-deleting a
+     big chunk at once, either of which can leave the caret sitting off
+     screen with no native scroll to follow it. Losing sight of the scene
+     you were just in, right as you cut a paragraph down, is exactly the
+     moment it's easiest to lose your place in the script.
+
+     Checked on every input event but a no-op almost all of the time — it
+     only acts once the caret has actually drifted out of a comfortable
+     margin, so normal typing near the middle of the screen never triggers
+     it and never fights the browser's own scroll-follow. */
+  function keepCaretInView(cellEl) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    var rect = sel.getRangeAt(0).getBoundingClientRect();
+    /* a collapsed range at the tail of the text (or right after an atomic
+       tag) can report a zero-sized rect — the cell's own edge is still
+       close enough to answer "is this on screen right now" */
+    if (!rect || (!rect.width && !rect.height)) rect = cellEl.getBoundingClientRect();
+    var margin = 32;
+    if (rect.top >= margin && rect.bottom <= window.innerHeight - margin) return;
+    /* Scrolls to the CARET's own position, not the cell's. A cell that just
+       grew to several times the viewport's height — a big paste, or a
+       typing shortcut inserting a large block — is exactly the case this
+       exists for, and scrollIntoView() on the cell centres the ELEMENT, not
+       whatever point inside it the caret happens to be at. On a cell far
+       taller than the viewport that can land the caret exactly as far out
+       of view as it started. */
+    var delta = (rect.top + rect.bottom) / 2 - window.innerHeight / 2;
+    nearestScrollAncestor(cellEl).scrollBy({ top: delta, behavior: "smooth" });
+  }
+
   function onRootInput(e) {
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
     if (!isScriptCell(cellEl)) return;
     maybeAutoTagShortcut(e, cellEl);
     syncFieldFromDom(cellEl);
+    keepCaretInView(cellEl);
     /* Keeps the production count/panel in sync with edits that change which
        tags exist in the script WITHOUT going through the tag composer or the
        typing shortcuts — most notably backspacing an atomic tag away
@@ -10817,6 +10980,23 @@
       hideUntaggedPrompt();
     }
     var mod = e.ctrlKey || e.metaKey;
+    /* Alt+Enter: split the field being written in — the split view's version
+       of the writer's plain Enter (splitCellField/splitRowFieldCore). Its
+       own gesture rather than folding into Ctrl+Enter just below, which
+       already means something else here — a fresh, empty scene — and stays
+       exactly that. Only the focused column moves; the row's other column
+       is untouched, still whole, still on the original row.
+
+       (In the writer this key never reaches here: its own capture-phase
+       handler treats every Enter, Alt included, as a split and stops the
+       event before it bubbles this far — see onWriterKeydown.) */
+    if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {
+      e.preventDefault();
+      hideTagGhost();
+      syncFieldFromDom(cellEl);
+      splitCellField(cellEl);
+      return;
+    }
     /* Only the script has scenes to add one to. In a comment or reply box
        this cell has no row behind it, and adding one anyway used to splice a
        new scene onto the top of the document and jump focus into it. */
@@ -11211,6 +11391,12 @@
     });
     document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
     document.getElementById("comments-hide-resolved").addEventListener("change", function () { captureReplyDrafts(); renderComments(); });
+    var commentsSortSelect = document.getElementById("comments-sort");
+    commentsSortSelect.value = commentSortMode;
+    commentsSortSelect.addEventListener("change", function (e) {
+      captureReplyDrafts();
+      setCommentSortMode(e.target.value);
+    });
 
     document.getElementById("comment-close").addEventListener("click", function () { closeCommentComposer(true); });
     document.getElementById("comment-cancel").addEventListener("click", function () { closeCommentComposer(true); });
