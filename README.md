@@ -76,6 +76,7 @@ the tag and leaves the plain text:
 | `[gaffer tape]` | Prop |
 | `{kitchen}` | Location |
 | `~lens flare~` | VFX |
+| `<wireless lav>` | Gear |
 
 **Cast** and **Music/SFX** have no shortcut (nothing else is safe to type
 in normal prose) — select the words and press **Tag**. Once a tag of any
@@ -124,6 +125,34 @@ Other things worth knowing:
   stays, flagged **Not in script**, until you delete it deliberately.
 - **File ▸ Tagging reference** brings back the reference strip at the top
   once you've dismissed it.
+
+### Gear
+
+Camera, mics, lighting, stands — equipment, not set dressing. It's its own
+category (Prop is still there for what's actually in front of the camera),
+with its own shortcut, and its own screen: click **Gear** in the header.
+
+The one thing gear needs that the others don't is that most of it never gets
+*written* anywhere — nobody says "wireless lav" out loud, and it's not always
+worth describing in the visual notes either. So the Gear screen opens with a
+plain box: **one item per line**, and whatever you type there is tracked,
+whether or not it's ever mentioned in the script. Add three lines, hit
+**Update list**, and all three show up as cards — same status pill, same
+owner assignment, same notes field as everywhere else in the breakdown. Take
+a line back out and it stops being tracked, *unless* it's also tagged
+somewhere in the script — an item that's actually written in stays, because
+the box only remembers what it alone was responsible for adding.
+
+Everything else about the breakdown still applies: gear shows up in the main
+**Production** panel too (group by Category to see it alongside everything
+else), and it merges the same way — a status can't be walked backwards, an
+item can't be silently dropped. The Gear screen itself has a lighter version
+of the same grouping: **List**, or **Scene** to see what's needed where.
+
+**Packing list** (on the Gear screen, and Props too from File ▸ Packing
+lists) exports a plain checklist — a box, the name, who's got it — meant to
+be printed and ticked off before you leave, not the six-column breakdown
+sheet trying to double as one.
 
 ## Writing and planning
 
@@ -284,8 +313,9 @@ above each scene, and panels and menus go full screen. A few things translate:
   thin line above each paragraph instead of out in the margin — a phone has
   no margin to put them in.
 
-Typing shortcuts (`[prop]` `{kitchen}` `~vfx~`), comments, status, exports,
-the server features — everything else is exactly the same.
+Typing shortcuts (`[prop]` `{kitchen}` `~vfx~` `<gear>`), comments, status,
+exports, the **Gear** screen and its packing lists, the server features —
+everything else is exactly the same.
 
 ## Reopening a saved project
 
