@@ -1,0 +1,200 @@
+# The Gear category: the <gear> typing shortcut, its own panel with a
+# quick-add box that tracks items whether or not they're ever mentioned in
+# the script, and the packing-list PDF export (shared with Props).
+
+open
+
+eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
+
+# --- an untagged category is refused with a toast, not a near-blank PDF ----
+# The demo document starts with nothing tagged Cast.
+expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="cast"]').length == 0
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-packing-prop"]
+sleep 400
+expect window.__blobs.length == 0
+expect document.querySelector('.toast').textContent.indexOf('nothing to pack') !== -1
+
+# --- <gear> is its own typing shortcut --------------------------------------
+caret #rows .row .visual-cell .cell-editable
+press  Bring the <wireless lav mic> too.
+sleep 600
+# Blur explicitly. jsclick (used below to work the panels) fires a synthetic
+# click without moving document.activeElement the way a real click does, so
+# without this the cell stays "focused" through everything that follows. That
+# is not just cosmetic: renaming this same item from the panel later leaves
+# state correctly updated, but render() rebuilding #rows then DETACHES this
+# still-focused, now-stale node, and the browser's own blur/focusout on a
+# detached element fires with the OLD pre-rename content — which
+# onRootFocusOut duly syncs straight back over the rename. A real click
+# blurs the cell as part of the click itself, well before any of that, so
+# this exact corruption is a harness artifact, not a real bug - but it cost
+# real time to prove that, so: always blur what `press` focused before using
+# jsclick on anything that might re-render #rows.
+eval document.activeElement.blur()
+expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="gear"]').length == 1
+expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]').getAttribute('data-tag-name') == wireless lav mic
+# a colour of its own - the CSS rule invariant (#14 in HANDOFF) this is
+# guarding against forgetting
+expect getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]')).boxShadow.indexOf('166, 124, 31') !== -1
+
+# --- the header badge, and opening the panel --------------------------------
+expect !document.getElementById('gear-badge').hidden
+expect document.getElementById('gear-badge').textContent == 1
+jsclick #btn-gear
+sleep 600
+expect !document.getElementById('gear-panel').hidden
+expect document.querySelectorAll('#gear-list .tag-entity').length == 1
+expect document.querySelector('#gear-list .tag-entity-name').textContent == wireless lav mic
+
+# --- quick-add tracks items whether or not they're in the script -----------
+eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='wireless lav mic\n24-70mm lens\nC-stand';return box.value;})()
+jsclick #gear-quickadd-save
+sleep 600
+expect document.querySelectorAll('#gear-list .tag-entity').length == 3
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === '24-70mm lens'; })
+# never in the script, so flagged the same way any other orphaned item is
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'C-stand'; }).classList.contains('is-orphaned')
+# re-fills alphabetised - confirms what was actually saved
+expect document.getElementById('gear-quickadd-input').value.split('\n')[0] == 24-70mm lens
+
+# --- removing a line un-tracks it, UNLESS it's still tagged live -----------
+eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='wireless lav mic\n24-70mm lens';return box.value;})()
+jsclick #gear-quickadd-save
+sleep 600
+expect document.querySelectorAll('#gear-list .tag-entity').length == 2
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).every(function (e) { return e.textContent !== 'C-stand'; })
+
+eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='24-70mm lens';return box.value;})()
+jsclick #gear-quickadd-save
+sleep 600
+expect document.querySelectorAll('#gear-list .tag-entity').length == 2
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === 'wireless lav mic'; })
+expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]') !== null
+
+shot 12-gear-panel
+
+# --- grouping by scene --------------------------------------------------
+jsclick #gear-modes [data-group="scene"]
+sleep 400
+expect document.getElementById('gear-modes').querySelector('[data-group="scene"]').classList.contains('is-active')
+expect document.querySelector('#gear-list .tag-scene-group-head') !== null
+expect document.querySelector('#gear-list .tag-orphan-note') !== null
+jsclick #gear-modes [data-group="flat"]
+sleep 300
+
+# --- card interactions: status cycle, expand, rename ------------------------
+# tagEntityHtml() cards are reused wholesale from the production panel - see
+# wireTagEntityContainer() - so this is really confirming the shared wiring
+# reaches #gear-panel, not re-testing the card itself.
+eval (function(){var card=Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav mic'; });card.querySelector('[data-action="tag-status-cycle"]').click();return true;})()
+sleep 300
+expect Array.from(document.querySelectorAll('#gear-list .tag-status-pill')).some(function (p) { return p.textContent === 'Sourcing'; })
+
+eval (function(){function q(){return Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav mic'; });}var c=q();if(!c.classList.contains('is-expanded'))c.querySelector('[data-action="tag-expand"]').click();return q().classList.contains('is-expanded');})()
+sleep 300
+expect document.querySelector('#gear-list .tag-entity.is-expanded') !== null
+eval (function(){document.querySelector('#gear-list [data-action="tag-rename"]').click();return true;})()
+sleep 300
+eval (function(){var input=document.querySelector('#gear-list .tag-rename-input');input.value='wireless lav';return true;})()
+jsclick #gear-list [data-action="tag-rename-save"]
+sleep 500
+# two entities from here on ("wireless lav" and "24-70mm lens", untouched
+# throughout) - so every lookup below is by name, never the first DOM match
+expect document.querySelectorAll('#gear-list .tag-entity').length == 2
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === 'wireless lav'; })
+# the script's own words are deliberately left as typed - only data-tag-name
+# (what the registry match is keyed on) changes, same rule accepting an
+# untagged mention follows
+expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]').getAttribute('data-tag-name') == wireless lav
+expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]').textContent == wireless lav mic
+
+# --- Remove label (keeps it tracked) and Delete from list (doesn't) --------
+# By name, not document order - "24-70mm lens" is already orphaned and so has
+# no Remove label button at all; a DOM-order guess that landed there instead
+# would either silently act on the wrong card or find nothing to click.
+# ensureExpanded checks the CURRENT dom rather than assuming a prior action
+# left it open — a rename changes the item's key, which collapses the card
+# (tagExpanded is stored by key), but other actions don't, so a blind second
+# click risks toggling an already-open card shut.
+eval (function(){function q(){return Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; });}var c=q();if(!c.classList.contains('is-expanded'))c.querySelector('[data-action="tag-expand"]').click();return q().classList.contains('is-expanded');})()
+sleep 300
+jsclick #gear-list [data-action="tag-remove"]
+sleep 300
+jsclick #gear-list [data-action="tag-remove"]
+sleep 500
+expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]') === null
+expect document.querySelectorAll('#gear-list .tag-entity').length == 2
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; }).classList.contains('is-orphaned')
+
+eval (function(){function q(){return Array.from(document.querySelectorAll('#gear-list .tag-entity')).find(function (c) { return c.querySelector('.tag-entity-name').textContent === 'wireless lav'; });}var c=q();if(!c.classList.contains('is-expanded'))c.querySelector('[data-action="tag-expand"]').click();return q().classList.contains('is-expanded');})()
+sleep 300
+jsclick #gear-list [data-action="tag-delete"]
+sleep 300
+jsclick #gear-list [data-action="tag-delete"]
+sleep 500
+# "wireless lav" is gone for good; "24-70mm lens" is untouched
+expect document.querySelectorAll('#gear-list .tag-entity').length == 1
+expect document.querySelector('#gear-list .tag-entity-name').textContent == 24-70mm lens
+expect document.getElementById('gear-badge').textContent == 1
+
+# --- mutual exclusivity with the other side panels, and with the writer -----
+caret #rows .row .visual-cell .cell-editable
+press  <a lens> for the close-up.
+sleep 500
+eval document.activeElement.blur()
+jsclick #btn-production
+sleep 500
+expect !document.getElementById('production-panel').hidden
+jsclick #btn-gear
+sleep 500
+expect document.getElementById('production-panel').hidden
+expect !document.getElementById('gear-panel').hidden
+jsclick #btn-comments
+sleep 500
+expect document.getElementById('gear-panel').hidden
+
+jsclick #btn-gear
+sleep 500
+expect !document.getElementById('gear-panel').hidden
+click #btn-write
+sleep 700
+expect document.getElementById('gear-panel').hidden
+expect !document.getElementById('writer').hidden
+key Escape
+sleep 500
+
+# --- gear shows up in the general Production panel too ----------------------
+jsclick #btn-production
+sleep 600
+expect Array.from(document.querySelectorAll('#production-list .tag-entity-name')).some(function (e) { return e.textContent === 'a lens'; })
+jsclick #production-close
+sleep 300
+
+# --- packing lists: the panel's own button, and the File menu for Props -----
+caret #rows .row .audio-cell .cell-editable
+press  We also need [gaffer tape] for this.
+sleep 500
+eval document.activeElement.blur()
+
+jsclick #btn-gear
+sleep 600
+jsclick #gear-panel [data-action="export-packing-gear"]
+sleep 1500
+expect window.__blobs.length >= 1
+expect window.__blobs[window.__blobs.length-1].type == application/pdf
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdfGear={hdr:t.indexOf('%PDF')===0,hasName:t.indexOf('a lens')!==-1,hasStatus:t.indexOf('Needed')!==-1};return true;})()
+expect window.__pdfGear.hdr
+expect window.__pdfGear.hasName
+expect window.__pdfGear.hasStatus
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-packing-prop"]
+sleep 1500
+expect window.__blobs.length >= 2
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdfProp={hdr:t.indexOf('%PDF')===0,hasName:t.indexOf('gaffer tape')!==-1,noGear:t.indexOf('a lens')===-1};return true;})()
+expect window.__pdfProp.hdr
+expect window.__pdfProp.hasName
+expect window.__pdfProp.noGear
+
+quit

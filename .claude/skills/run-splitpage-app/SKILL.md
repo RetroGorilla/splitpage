@@ -21,7 +21,7 @@ Do this before committing any change to `index.html`.
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 237/237 checks across 11 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 289/289 checks across 12 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -46,6 +46,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/09-alt-enter-and-scroll.txt` | Alt+Enter splitting only the focused column (both directions), a comment anchor repointed the same as the writer's, no scroll on ordinary typing, the scene follows through a large paste and a large delete |
 | `tests/10-comments-panel.txt` | clicking a comment card jumps without closing the panel, a live selection suppresses the jump, script-order vs. most-recent sorting (replies count as activity), exports stay in script order regardless |
 | `tests/11-comments-sort-persist.txt` | the comments sort preference survives a reload |
+| `tests/12-gear.txt` | the `<gear>` shortcut and its colour, the header badge, quick-add reconciliation (orphaned items un-track, live-tagged ones don't), scene grouping, status/rename/remove/delete through the shared card wiring, mutual exclusivity, and both packing-list PDF exports |
 
 ## Ad-hoc driving
 
@@ -100,6 +101,22 @@ These are why tests fail when the app is fine. Check them before suspecting
 - **`caret`, not `focus`, before typing.** Plain `.focus()` leaves the selection
   collapsed at offset 0 or nowhere, so text lands at the top of the cell or is
   swallowed.
+- **`jsclick` doesn't blur what `caret`/`press` focused — a real click does.**
+  `jsclick` calls `.click()` synthetically, which never touches
+  `document.activeElement`; a script cell you just typed into stays "focused"
+  through everything that follows. That produced a very convincing false
+  positive: rename a *live* tag from a panel opened with `jsclick` right
+  after typing into it, and the panel shows the OLD name still live plus a
+  phantom orphaned entry under the NEW one — looks exactly like `renameTag()`
+  corrupting the registry. It isn't. `render()` rebuilding `#rows` detaches
+  the still-focused, now-stale cell node, and the browser's own blur/focusout
+  firing on that detached node carries its *stale* pre-rename content, which
+  `onRootFocusOut` dutifully syncs back over the correct rename. A real click
+  blurs the cell as part of the click itself, well before any of that — this
+  reproduces with `jsclick` and does not with `click`. **After `press`-typing
+  into a cell, `eval document.activeElement.blur()` before using `jsclick` on
+  anything that might re-render `#rows`** — cheapest fix, and it's what a real
+  user's next click would have done anyway.
 - **Assert on `textContent`, not `innerText`.** Splitpage uppercases a lot of UI
   through CSS `text-transform`, and `innerText` returns the *rendered* casing —
   `"HAVE IT"`, `"▶ PLAY"`. `textContent` returns the source. This produced two

@@ -61,7 +61,7 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 237 assertions across 11 suites, driving
+There is a real regression suite now — 289 assertions across 12 suites, driving
 headless Edge over CDP. **Run it before and after any change to
 `index.html`:**
 
@@ -69,7 +69,7 @@ headless Edge over CDP. **Run it before and after any change to
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-`ALL PASS - 237/237` and exit 0, or it names every failing assertion and exits 1.
+`ALL PASS - 289/289` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
@@ -552,6 +552,83 @@ thread buried wherever it started. The mode itself is a reader preference
 (`splitpage-comments-sort` in `localStorage`), not part of the document — same
 reasoning as the writer's text size.
 
+---
+
+### 3.12 Gear is a category, and its panel is not a second copy of anything
+
+`{ id: "gear", label: "Gear", plural: "Gear", color: "#A67C1F" }` in
+`TAG_CATEGORIES`, `{ open: "<", close: ">", cat: "gear" }` in `TAG_SHORTCUTS`,
+a matching `.tag-anchor[data-tag-cat="gear"]` CSS rule (invariant 14 — this is
+the entry that would have silently rendered green without it). That is the
+*whole* addition on the tagging side — `renderTagCategories()`,
+`tagsByCategory()`, every export, the Tab-completion ghost, all already
+iterate `TAG_CATEGORIES` generically and picked Gear up for nothing.
+
+**`#gear-panel` is a fourth `SIDE_PANEL_IDS` entry, not a fourth code path.**
+Its cards are `tagEntityHtml()` — the exact same template `#production-list`
+renders — filtered to `cat.id === "gear"` by `gearEntries()`. Status cycle,
+expand, rename, remove/delete, owner assignment, notes: none of it is
+reimplemented. What makes that possible:
+
+- **`wireTagEntityContainer(id)`** is `#production-panel`'s event wiring
+  (click → `onRootClick`, the rename/person-input Enter/Escape, the owner
+  `<select>`, the notes textarea) pulled out so `#gear-panel` gets the exact
+  same wiring by calling it a second time. Bulk selection and its bar stay
+  production-panel-only, layered on as extra listeners on the same element
+  rather than folded into the shared function — the gear panel has nothing to
+  select in bulk.
+- **`renderProduction()` is now a two-line dispatcher**: `renderProductionPanel()`
+  (the old body, renamed) then `renderGearList()`. Every one of the ~35
+  existing call sites — a status change, a rename, typing a tag — refreshes
+  both panels for free, the same way `updateFileChip()` covers the header's
+  chip and the writer's from one call. The alternative (finding and pairing
+  every call site by hand) was rejected on sight: that is exactly the kind of
+  edit some future call site is going to be added without, and the two panels
+  would start silently drifting.
+- **`updateTagBadges()`** is the same pattern one level down, for the
+  DEBOUNCED path (`scheduleProductionRefresh`) and the handful of one-shot tag
+  creations (`maybeAutoTagShortcut`, `acceptTagGhost`,
+  `acceptUntaggedMention` ×2) that want the header badge to move *instantly*
+  rather than wait out the 180ms debounce.
+
+**Quick-add reconciles, it does not just append.** `applyGearQuickAdd()`
+diffs the textarea (one name per line) against `gearEntries()`: a new line
+calls `registerProductionTag("gear", name)` — the exact same call
+`acceptUntaggedMention()` makes, so an item typed here with zero script
+mentions is simply an *orphaned* registry entry from the moment it's created,
+nothing new in the data model. A line taken back out calls
+`deleteProductionTagEntry()`, **but only if the item is currently orphaned.**
+An item that's still tagged live in the script is left alone even if its line
+is removed from the box — deleting it would be pointless anyway, since
+`productionEntries()`'s self-heal path (§3.4) would just re-add it from the
+live scan on the very next render. The box only ever forgets what it alone
+was responsible for remembering.
+
+**Packing lists (`buildPackingListPdf(catId)`) are a second, smaller PDF
+writer, not a call into `buildPdf()` with different content.** One font pair,
+no images, one column — a checklist, not the six-column breakdown trying to
+be one. Sharing `buildPdf()`'s page-building closures would need extracting
+them into something both can drive, which is real surgery on a working,
+tested export for a feature that's supposed to be simple; duplicating the
+~30 lines of PDF object/xref plumbing was the cheaper, safer trade. Wired to
+two categories today (`export-packing-gear`, `export-packing-prop`, both
+just `"packing-" + catId` through `buildFileData`) but the function itself
+takes any category id — extending it to a third is one File-menu button, not
+new plumbing.
+
+**A harness gotcha, not an app bug, cost real time here:** renaming a *live*
+tag through a panel that was opened with `jsclick` right after typing looked
+exactly like `renameTag()` corrupting the registry — the old name stayed
+live, a phantom orphaned entry appeared under the new one. It reproduces with
+`jsclick` and not with a real `click`. `jsclick` never moves
+`document.activeElement`, so the script cell stays "focused" through
+everything that follows; `render()` rebuilding `#rows` then detaches that
+still-focused, now-stale node, and the browser's own blur/focusout on a
+*detached* element fires with its stale content, which `onRootFocusOut`
+dutifully syncs back over the correct rename. Full writeup and the fix (blur
+before `jsclick`) are in SKILL.md's gotchas — read that before trusting a
+"the registry is corrupted" symptom again.
+
 ## 4. State schema
 
 ```jsonc
@@ -758,6 +835,28 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     `commentPositionCompare()` regardless of `commentSortMode` — a file's own
     appendix should read the same way twice, independent of whatever the
     person exporting it happened to have the panel sorted to at the time.
+25. **A new panel showing `tagEntityHtml()` cards is a fourth call to
+    `wireTagEntityContainer()`, not a new event-handling path** (§3.12). Its
+    render function is a new branch inside `renderProduction()`'s dispatch,
+    not a render call some existing action forgets to also make. Both exist
+    so the ~35 places that already call `renderProduction()` to refresh
+    "whatever's showing" keep meaning that, for every panel, without being
+    found and edited one at a time.
+26. **A quick-add-style box that tracks things whether or not they're in the
+    script must only ever forget what it alone added** (§3.12). Reconciling
+    against the textarea can delete an *orphaned* registry entry a removed
+    line no longer names, but never a *live* one — `productionEntries()`'s
+    self-heal (§3.4) would just re-add a live one on the next render anyway,
+    so refusing to delete it isn't even a compromise, just the accurate
+    reflection of what the script itself still says.
+27. **A "the registry looks corrupted" symptom from a `jsclick`-driven test
+    is not proof the registry is corrupted** — check `document.activeElement`
+    first. `jsclick` never blurs what `caret`/`press` last focused; a `render()`
+    that follows can detach that still-focused, stale node, and the browser's
+    own blur/focusout on it can sync stale content back over a change that
+    already landed correctly in `state`. Full mechanism in SKILL.md's
+    gotchas. Real user clicks blur the cell as part of the click itself and
+    do not hit this.
 
 ---
 
@@ -897,6 +996,28 @@ copy. Both sort modes are checked against a case where they disagree
 for "most recent", the export appendix is confirmed to stay in script order
 regardless of which the panel is currently showing, and the sort preference
 is confirmed to survive a reload.
+
+Gear (2026-09-03): `tests/12-gear.txt`, plus a mobile pass by hand. The
+`<gear>` shortcut, its own colour (checked against a decoded RGB, not just
+"a colour got applied" — the exact invariant-14 mistake this guards
+against), and the header badge. Quick-add reconciliation checked in both
+directions on the same document: a line with zero script mentions becomes a
+correctly-flagged orphaned entry, and removing an item's line while it is
+*still* tagged live in the script leaves it tracked — the self-heal path
+(§3.4) doing its job, not a gap in the reconciliation. Status cycle, expand,
+rename, Remove label vs. Delete from list all verified to work from
+`#gear-panel` through the shared `tagEntityHtml()`/`wireTagEntityContainer()`
+wiring — not re-tested as new code, confirmed as the SAME code reached from
+a second container. A renamed live tag is checked two ways: the panel's
+name and the anchor's `data-tag-name` both update, the anchor's own visible
+text does not (deliberate — see §3.4's "the words on the page stay what was
+written"). Mutual exclusivity with Production/Comments and the writer is
+checked in both directions. Gear items are confirmed to appear in the
+general Production panel unfiltered. Both packing lists — Gear from its own
+panel button, Props from the File menu — are checked as well-formed PDFs
+carrying the right item and excluding the other category's, and an
+untagged category is confirmed to refuse the export with a toast rather
+than produce a near-blank file.
 
 Hosted mode (2026-08-28): server detection, Access identity auto-fill,
 publish, open-from-server, compare-and-set save, clean auto-merge of edits to

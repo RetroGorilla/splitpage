@@ -638,6 +638,7 @@
   /* added when Music/SFX was split out of VFX — without it a sound tag fell
      back to --visual and read as the wrong category in the script itself */
   .tag-anchor[data-tag-cat="sound"]    { --tag-color: #3D6DA8; }
+  .tag-anchor[data-tag-cat="gear"]     { --tag-color: #A67C1F; }
   .tag-anchor.flash { animation: cmt-flash 1.1s ease; }
   .tag-badge { background: var(--visual); }
 
@@ -1358,6 +1359,43 @@
     background: var(--surface); color: var(--text); cursor: pointer;
   }
   .comments-sort-wrap select:focus { outline: none; border-color: var(--visual); }
+
+  /* ---- gear quick-add ---- */
+  .gear-quickadd {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .gear-quickadd label {
+    display: block;
+    font-family: var(--font-display); font-size: 10.5px;
+    letter-spacing: 0.03em; text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+  .gear-quickadd textarea {
+    width: 100%;
+    font-family: var(--font-body); font-size: 13px; line-height: 1.5;
+    padding: 8px 9px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text);
+    resize: vertical;
+  }
+  .gear-quickadd textarea:focus { outline: none; border-color: var(--visual); }
+  .gear-quickadd-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 8px;
+  }
+  .gear-quickadd-hint { font-size: 11px; color: var(--text-faint); line-height: 1.4; }
+  #gear-quickadd-save {
+    flex: none;
+    font-family: var(--font-display); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: 1px solid var(--visual); background: var(--visual-soft); color: var(--visual);
+    border-radius: 5px; padding: 7px 12px; cursor: pointer;
+  }
+  #gear-quickadd-save:hover { background: var(--visual); color: var(--accent-contrast); }
+
   .comments-list { flex: 1; overflow-y: auto; padding: 12px; }
   .comments-empty { text-align: center; color: var(--text-faint); font-size: 13px; padding: 30px 12px; line-height: 1.5; }
 
@@ -2060,11 +2098,16 @@
           <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
           <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
           <div class="menu-sep"></div>
+          <div class="menu-label">Packing lists</div>
+          <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
+          <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
+          <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
         </div>
       </div>
       <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
+      <button class="btn" id="btn-gear" type="button" title="Gear: an equipment list, tagged with <gear> or its own quick-add box">Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
       <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
       <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
       <button class="btn btn-primary" id="btn-save" type="button">Save</button>
@@ -2349,6 +2392,32 @@
        so it stays pinned while the list scrolls under it. -->
   <div class="bulk-bar" id="production-bulk" hidden></div>
   <div class="comments-list" id="production-list"></div>
+</div>
+
+<div class="comments-panel" id="gear-panel" hidden>
+  <div class="comments-panel-head">
+    <h2>Gear</h2>
+    <button type="button" class="modal-close" id="gear-close" aria-label="Close">×</button>
+  </div>
+  <div class="comments-panel-toggle production-controls">
+    <div class="group-seg" id="gear-modes" role="radiogroup" aria-label="Group gear by">
+      <button type="button" data-group="flat" role="radio" aria-checked="true">List</button>
+      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
+    </div>
+    <button type="button" class="group-export" data-action="export-packing-gear" title="Export a printable packing list">Packing list</button>
+  </div>
+  <!-- Bulk-adds or edits the gear list directly, whether or not any of it is
+       actually typed into the script — see applyGearQuickAdd(). Pre-filled
+       with the current list every time the panel opens. -->
+  <div class="gear-quickadd">
+    <label for="gear-quickadd-input">Add gear — one item per line</label>
+    <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand"></textarea>
+    <div class="gear-quickadd-row">
+      <span class="gear-quickadd-hint">Remove a line to un-track it — unless it's still tagged in the script.</span>
+      <button type="button" id="gear-quickadd-save">Update list</button>
+    </div>
+  </div>
+  <div class="comments-list" id="gear-list"></div>
 </div>
 
 <div class="modal-backdrop" id="server-modal" hidden>
@@ -3264,9 +3333,9 @@
 
   /* ---- version history panel ---- */
 
-  var SIDE_PANEL_IDS = ["comments-panel", "production-panel", "history-panel"];
+  var SIDE_PANEL_IDS = ["comments-panel", "production-panel", "history-panel", "gear-panel"];
 
-  /* All three side panels are fixed over the same right-hand strip, so only
+  /* All the side panels are fixed over the same right-hand strip, so only
      one can be open at a time — opening one always closes the others first,
      otherwise they silently stack on top of each other (whichever is later
      in the DOM wins the pixels) and closing the top one leaves the one
@@ -3733,7 +3802,7 @@
     syncAnchorResolvedClasses();
     updateScriptStats();
     updateCommentsCount();
-    updateProductionCount();
+    updateTagBadges();
     renderProduction();
     captureReplyDrafts();
     renderComments();
@@ -4241,7 +4310,13 @@
        so a file saved before the split keeps every tag it had — nothing is
        silently re-filed; anything already tagged stays under VFX until
        someone moves it deliberately. */
-    { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "#3D6DA8" }
+    { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "#3D6DA8" },
+    /* Equipment, not set dressing: the camera, the lav mic, the C-stand.
+       Kept apart from Prop on purpose — different list, different person
+       usually packing it — with its own typing shortcut for the same
+       reason [prop]/{location}/~vfx~ have theirs: named enough, common
+       enough while writing, to be worth a character. */
+    { id: "gear",     label: "Gear",      plural: "Gear",                 color: "#A67C1F" }
   ];
 
   /* ---- how far along each tracked item is ----
@@ -4293,7 +4368,8 @@
   var TAG_SHORTCUTS = [
     { open: "[", close: "]", cat: "prop" },
     { open: "{", close: "}", cat: "location" },
-    { open: "~", close: "~", cat: "vfx" }
+    { open: "~", close: "~", cat: "vfx" },
+    { open: "<", close: ">", cat: "gear" }
   ];
 
   var TAG_SHORTCUT_CHARS = (function () {
@@ -4552,12 +4628,15 @@
     productionRefreshTimer = setTimeout(function () {
       productionRefreshTimer = null;
       if (!state) return;
-      /* renderProduction() updates the badge from the scan it already did;
-         only pay for a separate one when the panel is closed and there is
-         no render to piggyback on */
+      /* renderProduction() updates both badges from the scan it already
+         does; only pay for a separate count when neither panel showing
+         those items is open and there is no render to piggyback on. The
+         two can never both be open at once (see openSidePanel), but which
+         one is is not worth branching on separately. */
       var panel = document.getElementById("production-panel");
-      if (panel && !panel.hidden) renderProduction();
-      else updateProductionCount();
+      var gearPanel = document.getElementById("gear-panel");
+      if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();
+      else updateTagBadges();
       updateScriptStats(); /* the runtime estimate moves with every word typed */
     }, 180);
   }
@@ -4572,6 +4651,16 @@
   /* For the callers that only want the badge and have no entries in hand. */
   function updateProductionCount() {
     updateProductionBadge(state ? productionEntries().length : 0);
+  }
+
+  /* Both header badges move together whenever a tag is created outside the
+     debounced typing path — a shortcut closing, a ghost or an untagged
+     mention accepted — where the point is instant feedback, not waiting out
+     scheduleProductionRefresh's 180ms. updateGearCount() is defined further
+     down, with the rest of the gear panel; hoisting makes the order fine. */
+  function updateTagBadges() {
+    updateProductionCount();
+    updateGearCount();
   }
 
   /* ---- applying and editing tags ---- */
@@ -4667,7 +4756,7 @@
 
     registerProductionTag(rule.cat, trimmed);
     syncFieldFromDom(cellEl);
-    updateProductionCount();
+    updateTagBadges();
     renderProduction();
   }
 
@@ -4799,7 +4888,7 @@
     hideTagGhost();
     registerProductionTag(g.entry.cat.id, g.entry.name);
     syncFieldFromDom(g.cellEl);
-    updateProductionCount();
+    updateTagBadges();
     renderProduction();
     return true;
   }
@@ -5066,7 +5155,7 @@
     hideUntaggedPrompt();
     registerProductionTag(s.entry.cat.id, s.entry.name);
     syncFieldFromDom(s.cellEl);
-    updateProductionCount();
+    updateTagBadges();
     renderProduction();
     scanUntaggedMentions();
     return true;
@@ -5380,6 +5469,133 @@
     syncPanelClass();
   }
 
+  /* ---- the gear panel ----
+
+     A thinner, single-category sibling of the production panel rather than
+     a second copy of it: cards, status, owner, notes, rename, remove/delete
+     are all tagEntityHtml() and the same handlers the production panel
+     already uses (wired onto #gear-panel by wireTagEntityContainer() in
+     init() — see the note there). The only things genuinely new here are
+     the quick-add box and the packing-list export. */
+
+  var gearGroupBy = "flat";   /* "flat" | "scene" */
+
+  function gearEntries() {
+    return productionEntries().filter(function (e) { return e.cat.id === "gear"; });
+  }
+
+  function openGearPanel() {
+    if (!state) return;
+    openSidePanel("gear-panel");
+    fillGearQuickAdd();
+    renderProduction();
+  }
+
+  function closeGearPanel() {
+    document.getElementById("gear-panel").hidden = true;
+    syncPanelClass();
+  }
+
+  function updateGearBadge(n) {
+    var badge = document.getElementById("gear-badge");
+    if (!badge) return;
+    if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
+    else badge.hidden = true;
+  }
+
+  function updateGearCount() {
+    updateGearBadge(state ? gearEntries().length : 0);
+  }
+
+  function renderGearList() {
+    var panel = document.getElementById("gear-panel");
+    if (!panel || panel.hidden || !state) return;
+    var listEl = document.getElementById("gear-list");
+    var entries = gearEntries();
+    updateGearBadge(entries.length);
+
+    document.querySelectorAll("#gear-modes [data-group]").forEach(function (b) {
+      var on = b.getAttribute("data-group") === gearGroupBy;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+
+    if (!entries.length) {
+      listEl.innerHTML = '<div class="comments-empty">No gear tracked yet.<br><br>' +
+        'Type <code>&lt;a lens&gt;</code> straight into the script, select words and ' +
+        'press <strong>Tag</strong>, or just list it above — gear doesn’t have to be ' +
+        'written into a scene to be tracked.</div>';
+      return;
+    }
+
+    if (gearGroupBy === "scene") {
+      var untracked = entries.filter(function (e) { return e.orphaned; }).length;
+      listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
+        (untracked ? '<div class="tag-orphan-note">' + untracked +
+          (untracked === 1 ? " item isn't" : " items aren't") +
+          ' mentioned in any scene — switch to List to see ' +
+          (untracked === 1 ? "it" : "them") + '.</div>' : '');
+      return;
+    }
+
+    listEl.innerHTML = entries.map(tagEntityHtml).join("");
+  }
+
+  /* The textarea always opens showing what's actually tracked, sorted the
+     way a packed list reads best — alphabetically, not script order, since
+     half of what's in here may have no place in the script at all. */
+  function fillGearQuickAdd() {
+    var box = document.getElementById("gear-quickadd-input");
+    if (!box || document.activeElement === box) return;
+    var names = gearEntries().map(function (e) { return e.name; })
+      .sort(function (a, b) { return a.localeCompare(b); });
+    box.value = names.join("\n");
+  }
+
+  /* One line, one item. Reconciles rather than only adding: a name typed in
+     becomes tracked whether or not it's ever mentioned in the script (see
+     registerProductionTag), and a name taken back OUT is untracked again —
+     but only if nothing in the script still tags it. An item that's live in
+     the script can't actually be lost this way: it comes straight back the
+     next render via productionEntries()'s own self-heal, so this never
+     silently drops anything the script itself is still pointing at — it
+     only ever forgets the entries that lived here and nowhere else. */
+  function applyGearQuickAdd() {
+    var raw = document.getElementById("gear-quickadd-input").value || "";
+    var wanted = {}, order = [];
+    raw.split(/\r\n|\r|\n/).forEach(function (line) {
+      var name = plainText(line).trim().slice(0, 80);
+      if (!name) return;
+      var key = normalizeTagName(name);
+      if (wanted[key]) return;
+      wanted[key] = name;
+      order.push(key);
+    });
+
+    var removed = 0;
+    gearEntries().forEach(function (item) {
+      if (wanted[normalizeTagName(item.name)] !== undefined) return;
+      if (!item.orphaned) return; /* still tagged live — never silently dropped */
+      if (deleteProductionTagEntry("gear", item.name)) removed++;
+    });
+
+    var added = 0;
+    order.forEach(function (key) {
+      if (!registryEntry("gear", wanted[key])) added++;
+      registerProductionTag("gear", wanted[key]);
+    });
+
+    if (!added && !removed) { fillGearQuickAdd(); return; }
+    markDirty();
+    renderProduction();
+    fillGearQuickAdd();
+    queueAutoSave();
+    var parts = [];
+    if (added) parts.push("added " + added);
+    if (removed) parts.push("removed " + removed);
+    showToast("Gear list updated — " + parts.join(", ") + ".", "ok");
+  }
+
   /* one chip per scene AND column, so "twice in scene 1" is distinguishable
      from "once in the visual and once in the audio" */
   function sceneChipsHtml(item) {
@@ -5635,12 +5851,22 @@
     }).join("");
   }
 
+  /* Every caller that changes tagged data — a status cycle, a rename, an
+     edit to the script itself — refreshes by calling renderProduction().
+     There are now two panels that can show that data: split so BOTH refresh
+     from one call, the same way updateFileChip() covers the header's chip
+     and the writer's. Neither caller has to know the other panel exists. */
+  function renderProduction() {
+    renderProductionPanel();
+    renderGearList();
+  }
+
   /* One scan, threaded through everything that needs it. Pruning, the list,
      the badge and the bulk bar all used to call productionEntries()
      separately — four reads of the same document in one synchronous pass.
      Threading rather than caching on a version counter keeps it obviously
      correct: it is the same array, so it cannot disagree with itself. */
-  function renderProduction() {
+  function renderProductionPanel() {
     var panel = document.getElementById("production-panel");
     if (!panel || panel.hidden || !state) return;
     var entries = productionEntries();
@@ -9178,6 +9404,125 @@
     return concatBytes(chunks);
   }
 
+  /* ================= packing list (gear, props — any category) =================
+
+     One line per item: a box to tick, the name, and who's got it. Meant to
+     be printed and physically checked off before a shoot day — the general
+     breakdown (above) is a six-column spreadsheet trying to be a checklist,
+     and that is not what "did we pack it" needs.
+
+     Deliberately its own small PDF writer rather than a call into buildPdf()
+     with different content: this needs one font pair and no images, where
+     the script export needs four fonts, embedded JPEGs and two-column line
+     wrapping. Sharing that machinery would mean either dragging the unused
+     parts along for a page nobody asked for, or extracting a page-builder
+     both could share — real refactor, real risk to a working, tested export,
+     for a feature that is supposed to be simple. The ~30 lines of PDF
+     object/xref plumbing below are the price of not touching buildPdf() to
+     get it. */
+  function buildPackingListPdf(catId) {
+    var cat = tagCategory(catId);
+    var PW = 612, PH = 792, M = 54, SIZE = 11, LEAD = 22;
+    var items = productionEntries()
+      .filter(function (e) { return e.cat.id === catId; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+    var pages = [], ops = [], y = 0;
+    function newPage() {
+      if (ops.length) pages.push(ops);
+      ops = [];
+      y = PH - M;
+    }
+    function text(str, x, yy, font, size) {
+      ops.push("BT /" + font + " " + size + " Tf 1 0 0 1 " +
+        x.toFixed(2) + " " + yy.toFixed(2) + " Tm (" + pdfEscapeText(str) + ") Tj ET");
+    }
+    function box(x, yy, size) {
+      ops.push("q 0.4 0.4 0.4 RG 0.9 w " + x.toFixed(2) + " " + yy.toFixed(2) + " " +
+        size.toFixed(2) + " " + size.toFixed(2) + " re S Q");
+    }
+    function rule(x, yy, w) {
+      ops.push("q 0.85 0.84 0.81 RG 0.6 w " + x.toFixed(2) + " " + yy.toFixed(2) + " m " +
+        (x + w).toFixed(2) + " " + yy.toFixed(2) + " l S Q");
+    }
+    function header() {
+      text((state.title || "Untitled Script") + "  —  " + (cat ? cat.plural : catId) + " packing list",
+        M, y - 20, "F2", 15);
+      y -= 40;
+    }
+
+    newPage();
+    header();
+
+    if (!items.length) {
+      text("Nothing tagged " + (cat ? cat.label : catId) + " yet.", M, y - SIZE, "F1", SIZE);
+      y -= LEAD;
+    }
+
+    items.forEach(function (item) {
+      if (y - LEAD < M) { newPage(); header(); }
+      var owner = personById(item.owner);
+      var st = tagStatus(item.status) || TAG_STATUSES[0];
+      box(M, y - SIZE + 1, 10);
+      text(item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : ""),
+        M + 18, y - SIZE, "F1", SIZE);
+      y -= LEAD;
+      rule(M, y + 8, PW - M * 2);
+    });
+
+    pages.push(ops);
+
+    /* ---- assemble: one font pair, no images — see the note above ---- */
+    var chunks = [], offsets = [], length = 0;
+    function put(data) {
+      var bytes = typeof data === "string" ? latin1Bytes(data) : data;
+      chunks.push(bytes);
+      length += bytes.length;
+    }
+    function startObj(num) { offsets[num] = length; put(num + " 0 obj\n"); }
+
+    var numPages = pages.length;
+    var OBJ_CATALOG = 1, OBJ_PAGES = 2, OBJ_F1 = 3, OBJ_F2 = 4;
+    var firstPageObj = 5;
+    var contentObjBase = firstPageObj + numPages;
+    var totalObjs = contentObjBase + numPages - 1;
+
+    put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+    startObj(OBJ_CATALOG);
+    put("<< /Type /Catalog /Pages " + OBJ_PAGES + " 0 R >>\nendobj\n");
+    startObj(OBJ_PAGES);
+    var kids = [];
+    for (var i = 0; i < numPages; i++) kids.push((firstPageObj + i) + " 0 R");
+    put("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + numPages + " >>\nendobj\n");
+    [[OBJ_F1, "Helvetica"], [OBJ_F2, "Helvetica-Bold"]].forEach(function (f) {
+      startObj(f[0]);
+      put("<< /Type /Font /Subtype /Type1 /BaseFont /" + f[1] + " /Encoding /WinAnsiEncoding >>\nendobj\n");
+    });
+    pages.forEach(function (pg, idx) {
+      startObj(firstPageObj + idx);
+      put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + PW + " " + PH + "]" +
+        " /Resources << /Font << /F1 " + OBJ_F1 + " 0 R /F2 " + OBJ_F2 + " 0 R >> >>" +
+        " /Contents " + (contentObjBase + idx) + " 0 R >>\nendobj\n");
+    });
+    pages.forEach(function (pg, idx) {
+      var stream = pg.join("\n");
+      startObj(contentObjBase + idx);
+      put("<< /Length " + latin1Bytes(stream).length + " >>\nstream\n");
+      put(stream);
+      put("\nendstream\nendobj\n");
+    });
+    var xrefAt = length;
+    var xref = "xref\n0 " + (totalObjs + 1) + "\n0000000000 65535 f \n";
+    for (var o = 1; o <= totalObjs; o++) {
+      var off = offsets[o] || 0;
+      xref += ("0000000000" + off).slice(-10) + " 00000 n \n";
+    }
+    put(xref);
+    put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
+
+    return concatBytes(chunks);
+  }
+
   /* ================= local documents: open, save back, export ================= */
 
   var openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
@@ -9257,6 +9602,11 @@
     if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
     if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
     if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };
+    if (kind.indexOf("packing-") === 0) {
+      var packCatId = kind.slice("packing-".length);
+      var packCat = tagCategory(packCatId);
+      return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
+    }
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -9650,6 +10000,18 @@
     await exportAs(kind);
   }
 
+  /* An empty packing list would export as a page with nothing on it but a
+     title, same reasoning as exportNarration(). */
+  async function exportPackingList(catId) {
+    var cat = tagCategory(catId);
+    var has = productionEntries().some(function (e) { return e.cat.id === catId; });
+    if (!has) {
+      showToast("Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack.", "warn");
+      return;
+    }
+    await exportAs("packing-" + catId);
+  }
+
   function toggleFileMenu(force) {
     var menu = document.getElementById("file-menu");
     var btn = document.getElementById("btn-file");
@@ -9673,6 +10035,8 @@
     else if (action === "export-pdf") exportAs("pdf");
     else if (action === "export-narration-docx") exportNarration("narration-docx");
     else if (action === "export-narration-txt") exportNarration("narration-txt");
+    else if (action === "export-packing-gear") exportPackingList("gear");
+    else if (action === "export-packing-prop") exportPackingList("prop");
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
@@ -10104,6 +10468,7 @@
        is the whole screen — so they close, the same way they would if you
        had navigated somewhere else. */
     closeProductionPanel();
+    closeGearPanel();
     closeCommentsPanel();
     if (findOpen) closeFindBar();
     document.getElementById("writer-title").value = state.title || "";
@@ -10578,6 +10943,45 @@
     if (wasActive) setVoiceStatus("", "");
   }
 
+  /* Shared by every panel that renders tagEntityHtml() cards. The card's own
+     buttons (status pill, expand, rename, remove/delete) are all data-action
+     and already work from any container through onRootClick — this wires
+     the handful of non-click events the card also needs: Enter/Escape in
+     the rename and add-person inputs, the owner <select>, and the notes
+     textarea. Bulk selection and its bar are production-panel-only extras,
+     layered on separately where each panel is wired in init(). */
+  function wireTagEntityContainer(id) {
+    var el = document.getElementById(id);
+    el.addEventListener("click", onRootClick);
+    el.addEventListener("keydown", function (e) {
+      if (!e.target.classList) return;
+      if (e.target.classList.contains("tag-rename-input")) {
+        if (e.key === "Enter") { e.preventDefault(); saveTagRename(e.target.getAttribute("data-key")); }
+        else if (e.key === "Escape") { e.preventDefault(); tagRenaming = null; renderProduction(); }
+        return;
+      }
+      if (e.target.classList.contains("tag-person-input")) {
+        if (e.key === "Enter") { e.preventDefault(); addPersonForTag(e.target.getAttribute("data-key")); }
+        else if (e.key === "Escape") { e.preventDefault(); tagAddingPersonFor = null; renderProduction(); }
+      }
+    });
+    el.addEventListener("change", function (e) {
+      if (e.target.classList && e.target.classList.contains("tag-owner-select")) {
+        setTagOwner(e.target.getAttribute("data-key"), e.target.value);
+      }
+    });
+    el.addEventListener("input", function (e) {
+      if (e.target.classList && e.target.classList.contains("tag-notes-input")) {
+        setTagNotes(e.target.getAttribute("data-key"), e.target.value);
+      }
+    });
+    /* notes save continuously as you type (see setTagNotes); the autosave is
+       held until you leave the box so it isn't queued on every keystroke */
+    el.addEventListener("focusout", function (e) {
+      if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
+    });
+  }
+
   /* ================= events ================= */
 
   function onRootClick(e) {
@@ -10739,6 +11143,9 @@
 
     var breakdownBtn = e.target.closest('[data-action="export-breakdown"]');
     if (breakdownBtn) { exportAs("breakdown"); return; }
+
+    var packingGearBtn = e.target.closest('[data-action="export-packing-gear"]');
+    if (packingGearBtn) { exportPackingList("gear"); return; }
 
     var tagRenameBtn = e.target.closest('[data-action="tag-rename"]');
     if (tagRenameBtn) { tagRenaming = tagRenameBtn.getAttribute("data-key"); renderProduction(); return; }
@@ -11245,7 +11652,10 @@
       if (panel.hidden) openProductionPanel(); else closeProductionPanel();
     });
     document.getElementById("production-close").addEventListener("click", closeProductionPanel);
-    document.getElementById("production-panel").addEventListener("click", onRootClick);
+    wireTagEntityContainer("production-panel");
+    /* production-only: bulk selection and its bar, layered on top of the
+       shared wiring above rather than folded into it — the gear panel has
+       no selection state and nothing here to select. */
     document.getElementById("production-panel").addEventListener("keydown", function (e) {
       if (!e.target.classList) return;
       if (e.target.id === "bulk-person-input") {
@@ -11259,23 +11669,9 @@
         e.preventDefault();
         clearProductionSelection();
         renderProduction();
-        return;
-      }
-      if (e.target.classList.contains("tag-rename-input")) {
-        if (e.key === "Enter") { e.preventDefault(); saveTagRename(e.target.getAttribute("data-key")); }
-        else if (e.key === "Escape") { e.preventDefault(); tagRenaming = null; renderProduction(); }
-        return;
-      }
-      if (e.target.classList.contains("tag-person-input")) {
-        if (e.key === "Enter") { e.preventDefault(); addPersonForTag(e.target.getAttribute("data-key")); }
-        else if (e.key === "Escape") { e.preventDefault(); tagAddingPersonFor = null; renderProduction(); }
       }
     });
     document.getElementById("production-panel").addEventListener("change", function (e) {
-      if (e.target.classList && e.target.classList.contains("tag-owner-select")) {
-        setTagOwner(e.target.getAttribute("data-key"), e.target.value);
-        return;
-      }
       /* the bulk dropdowns are commands, not fields: "__none__" is the label
          sitting in the closed select ("Assign to…"), never a value to apply */
       if (e.target.id === "bulk-owner") {
@@ -11286,16 +11682,21 @@
         if (e.target.value !== "__none__") bulkSetStatus(e.target.value);
       }
     });
-    document.getElementById("production-panel").addEventListener("input", function (e) {
-      if (e.target.classList && e.target.classList.contains("tag-notes-input")) {
-        setTagNotes(e.target.getAttribute("data-key"), e.target.value);
-      }
+
+    document.getElementById("btn-gear").addEventListener("click", function () {
+      if (!state) { showToast("Still loading...", "warn"); return; }
+      var panel = document.getElementById("gear-panel");
+      if (panel.hidden) openGearPanel(); else closeGearPanel();
     });
-    /* notes save continuously as you type (see setTagNotes); the autosave is
-       held until you leave the box so it isn't queued on every keystroke */
-    document.getElementById("production-panel").addEventListener("focusout", function (e) {
-      if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
+    document.getElementById("gear-close").addEventListener("click", closeGearPanel);
+    wireTagEntityContainer("gear-panel");
+    document.getElementById("gear-modes").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-group]");
+      if (!btn) return;
+      gearGroupBy = btn.getAttribute("data-group");
+      renderGearList();
     });
+    document.getElementById("gear-quickadd-save").addEventListener("click", applyGearQuickAdd);
 
     document.getElementById("server-modal").addEventListener("click", function (e) {
       if (e.target.id === "server-modal") { closeServerPicker(); return; }
