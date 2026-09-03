@@ -86,6 +86,12 @@ category, so you never end up with the same thing filed twice.
 Other things worth knowing:
 
 - **Ctrl+Enter** while writing starts the next scene and jumps into it.
+- **Alt+Enter** splits the scene you're in at the caret — everything after
+  it becomes a new scene right below, in the same column. The *other*
+  column isn't touched: splitting the Audio doesn't disturb the Visual next
+  to it, and it doesn't disturb the Visual next to the new scene either —
+  that one starts blank, the way a beat nobody's framed a shot for yet
+  should.
 - Click a tag in the script — or any card in the panel — to open it and
   **assign who's responsible** and keep **notes, links or file paths**
   against it. The crew list is just names you type; nothing is verified.
@@ -188,6 +194,22 @@ This matters more than it looks: an untagged mention is a mention nothing is
 counting, so that item's mention count and scene list are both short — and
 the **Shoot** grouping is missing a scene it should have listed.
 
+**Staying with the scene.** Delete or paste a large amount of text and the
+page follows you — it doesn't just sit where it was and let the scene you
+were editing scroll off somewhere else. That's the moment it's easiest to
+lose your place in the script, so Splitpage keeps the scene you're actually
+in front of you rather than leaving the page static.
+
+**Comments.** Select some text and click **💬 Comment** to leave one; it
+stays anchored to that exact phrase. The card in the **Comments** panel
+*is* the "jump to this text" control — click anywhere on it (not a link, not
+while you're selecting its text to copy) and the script scrolls to the
+phrase, without closing the panel, so you can read the two side by side.
+**Sort** at the top of the panel defaults to **Script order** — a comment
+sits where the thing it's about sits — with **Most recent** alongside it for
+coming back after a while and wanting to see what actually moved, replies
+included, wherever in the script they landed.
+
 **Find and replace.** <kbd>Ctrl</kbd>+<kbd>F</kbd>. Enter and
 Shift+Enter step through matches; **Aa** toggles case-sensitivity.
 Formatting, links and comment anchors survive a replace untouched. Text
@@ -253,6 +275,9 @@ above each scene, and panels and menus go full screen. A few things translate:
   tap cards to add or drop them. The **×** in the bar clears the selection.
 - **Reordering scenes:** the ↑ / ↓ buttons (drag needs a mouse).
 - **New scene:** the **+** button on any scene, or **+ Add row** at the bottom.
+- **Splitting a scene at the caret (Alt+Enter)** is a keyboard shortcut with
+  no phone keyboard to trigger it from — add the scene with **+** and move
+  the text over by hand.
 - In the teleprompter the screen **stays awake** while you read (on browsers
   that support it) and releases when you close it.
 - **The writer** works the same, with the scene number and its visual on a

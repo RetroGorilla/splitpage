@@ -61,7 +61,7 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 202 assertions across 8 suites, driving
+There is a real regression suite now — 237 assertions across 11 suites, driving
 headless Edge over CDP. **Run it before and after any change to
 `index.html`:**
 
@@ -69,7 +69,7 @@ headless Edge over CDP. **Run it before and after any change to
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-`ALL PASS - 202/202` and exit 0, or it names every failing assertion and exits 1.
+`ALL PASS - 237/237` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
@@ -398,7 +398,9 @@ which is why closing the writer needs nothing but `render()`.
 That leaves only the two operations that genuinely change the row *list*:
 
 - **`splitWriterRow()`** — Enter. Extracts caret-to-end of the paragraph into a
-  brand-new row spliced in after it, with an empty visual.
+  brand-new row spliced in after it, with an empty visual. The extraction
+  itself now lives in `splitRowFieldCore()` (§3.10) — `splitWriterRow()` is a
+  thin wrapper that adds the writer's own render/refocus.
 - **`mergeWriterRows()`** — Backspace at the very start (Delete at the very
   end). Joins the audio, then deletes the row. It **refuses** when both rows
   have a visual, because one of the two shot descriptions would have to be
@@ -470,6 +472,85 @@ title far more than the round trip needs to be exact to the row.
 `packDocx()` was split out of `buildDocx()`
 so the narration document reuses the page setup, relationships, styles and zip
 rather than growing a second copy of them.
+
+---
+
+### 3.10 Splitting a field is shared between the writer and the split view
+
+Alt+Enter in `#rows` does what the writer's plain Enter always did: split the
+field being edited, at the caret, into a new row directly below. **Only the
+field you were in moves.** The row's other column — whichever one you weren't
+writing in — is left completely alone, still whole, still on the original
+row; the new row gets an empty value for it, not a copy. That's what makes
+"Alt+Enter on Audio leaves Visual untouched, and Alt+Enter on Visual leaves
+Audio untouched" true in both directions, and it falls straight out of
+`splitRowFieldCore()` only ever writing to `state.rows[idx][field]` — never to
+the other field, on either row.
+
+- **`splitRowFieldCore(cellEl)`** is the shared core, reading `field` off
+  `cellEl`'s own `data-field` rather than assuming `audioText`. Returns
+  `{idx, created, field}` or `null`. Two thin callers each add their own
+  render/refocus: `splitWriterRow()` (writer — `renderWriter()` +
+  `focusWriterBlock()`) and `splitCellField()` (split view — `render()` +
+  `focusRowField()`, which reuses the writer's `placeCaretAtTextOffset()`).
+  Change the splitting logic once here, not in two places that can drift.
+- **Alt+Enter never reaches `onRootKeydown` inside the writer.** The writer's
+  own capture-phase handler (`onWriterKeydown`) treats *every* Enter —
+  Shift excepted — as a split and calls `stopPropagation()` before the
+  bubble-phase `onRootKeydown` (where the split-view branch lives) ever sees
+  the event. The two branches never compete; each only ever runs in its own
+  view.
+
+**Keeping the caret in view through a large edit.** The browser follows the
+caret on its own for ordinary typing; it does not reliably follow a big
+paste or a big delete, and losing the scene you were just in is exactly how
+that gets confusing. `keepCaretInView(cellEl)`, called from `onRootInput`
+gated on `isScriptCell()`, is a near-always-no-op check: if the caret's own
+`Range.getBoundingClientRect()` is already within a 32px margin of the
+viewport, it does nothing, so ordinary typing never fights the browser's own
+scroll-follow.
+
+The one real trap in it: **scroll to the CARET, not to the CELL.**
+`cellEl.scrollIntoView({block: "center"})` was the first attempt, and it is
+wrong the moment the cell is taller than the viewport — which is exactly the
+"large paste" case this exists for. `scrollIntoView` on an element centres
+*the element*, not wherever inside it the caret happens to be; on a cell
+several viewport-heights tall, that can leave the caret exactly as far out of
+view as it started (verified by reproducing it: a caret near one end of a
+70-line cell stayed off-screen after the "fix"). The actual fix computes the
+caret's own midpoint from its rect and scrolls the nearest scrolling
+ancestor — walked via `nearestScrollAncestor()` rather than hard-coded to
+`window`, since a cell in `#rows` scrolls the document but a paragraph in
+`#writer-doc` scrolls `.writer-scroll` instead.
+
+### 3.11 A comment card is its own "jump to text" control
+
+`.comment-card.is-jumpable` — the whole card, not a button on it. `onRootClick`
+resolves the click to `jumpToAnchor()` unless it landed on `.reply-composer`,
+an `<a>`, or (checked first, since every specific action branch above it
+already returns) one of the card's own buttons. **`window.getSelection()
+.isCollapsed` gates it too** — finishing a drag-select of the quote or the
+body to copy it must never also fire a jump, and a `click` event fires
+whether or not the mousedown/mouseup that produced it also dragged out a
+selection.
+
+`jumpToAnchor()` no longer calls `closeCommentsPanel()`. It never needed to on
+anything wider than 1100px — `body.panel-open #root { padding-right: 420px }`
+already keeps the panel from covering the script there — and closing the one
+thing you're trying to look at *next to* the other defeats the point of
+jumping in the first place.
+
+**Sort mode.** `commentPositionCompare()` (row index, then Visual-before-Audio,
+then post time) is the shared comparator: `commentEntries()` — the export
+appendix — always uses it, regardless of how the panel is currently sorted, so
+a file's own appendix reads the same way twice. The panel itself defaults to
+the same order but can switch to `commentLastActivity()` — a comment's own
+`createdAt`, or a reply's if later — descending. **Replies count on purpose**:
+a thread someone just answered is exactly as "active" as a brand-new comment,
+and sorting by the comment's own post time alone would leave a just-replied
+thread buried wherever it started. The mode itself is a reader preference
+(`splitpage-comments-sort` in `localStorage`), not part of the document — same
+reasoning as the writer's text size.
 
 ## 4. State schema
 
@@ -632,9 +713,13 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     the span in a row that no longer held it, found nothing, and left a
     highlighted orphan in the script that nothing could remove.
     `repointCommentsForRows()` is the fix; call it from anything new that
-    splits, joins or moves text across rows. Guarded by
-    `06-writer.txt`, which compares the panel's label against the row the
-    anchor is actually in.
+    splits, joins or moves text across rows. `splitRowFieldCore()` (§3.10)
+    calls it too, so the split view's Alt+Enter inherits this for free — but
+    that inheritance is exactly the kind of thing a refactor can silently
+    break, so it's checked on its own rather than trusted: `06-writer.txt`
+    compares the panel's label against the row the anchor is actually in
+    after a writer split, and `09-alt-enter-and-scroll.txt` does the same
+    after an Alt+Enter split.
 19. **A full-screen overlay has to own the focus and the stacking, not just
     the pixels.** Two separate bugs from the same root: the Tab-completion
     ghost sat at `z-index: 60` under the writer's opaque 145, so it was laid
@@ -650,6 +735,29 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     from the header's rendered state by `mirrorFileChipToWriter()`. Nothing
     addresses either one directly, so they cannot drift into disagreeing
     about whether there is anything to save.
+21. **There is one place a field gets split, not two** (§3.10). Change
+    `splitRowFieldCore()` and both the writer's Enter and the split view's
+    Alt+Enter change with it. Writing the split logic again inside
+    `splitCellField()` — even to "just handle the visual column" — is exactly
+    how the two silently drift apart from each other.
+22. **Scroll to the caret's own rect, never to the cell's, when the cell might
+    be taller than the viewport** (§3.10). `cellEl.scrollIntoView()` centres
+    the *element*; on a cell several viewport-heights tall (a big paste is
+    exactly this), that can leave the caret exactly as far out of view as it
+    started. `keepCaretInView()` computes the caret's own midpoint and scrolls
+    the nearest scrolling ancestor instead — walked, not assumed to be
+    `window`, because `#writer-doc` scrolls `.writer-scroll`.
+23. **A click that ends a text selection must never also fire a click-target
+    action.** The comment card is `window.getSelection().isCollapsed`-gated
+    for exactly this reason (§3.11) — a `click` event fires whether or not
+    the mousedown/mouseup that produced it also dragged out a selection, and
+    without the guard, finishing a drag to copy a comment's quote would also
+    jump the script out from under you.
+24. **The export appendix and the panel's own display can be sorted
+    differently, on purpose** (§3.11). `commentEntries()` always uses
+    `commentPositionCompare()` regardless of `commentSortMode` — a file's own
+    appendix should read the same way twice, independent of whatever the
+    person exporting it happened to have the panel sorted to at the time.
 
 ---
 
@@ -764,6 +872,31 @@ would land in; Escape mutes it for that cell and typing brings it back; Tab
 (desktop) and a tap (phone, where there is no Tab) both label it as an atomic
 `contenteditable="false"` anchor without forking a second breakdown item; and
 the item's card then reads the mention count it was previously short of.
+
+Alt+Enter, caret-follow, and the comments panel (2026-09-02):
+`tests/09-alt-enter-and-scroll.txt`, `tests/10-comments-panel.txt`,
+`tests/11-comments-sort-persist.txt`. Alt+Enter splits only the focused
+column in both directions (Audio split leaves Visual whole on the original
+row and blank on the new one, and the same the other way round), lands the
+caret in the new row's same field, and — proven by disabling the call and
+watching the assertion fail — correctly repoints a comment anchor caught in
+the split, the same as the writer's own Enter. `keepCaretInView()` verified
+both directions: a ~3,000-character paste inserted before the caret, and a
+Backspace removing most of it, each checked by reading the caret's own
+`getBoundingClientRect()` afterwards, not by trusting that a scroll call was
+merely made — the first implementation (`cellEl.scrollIntoView()`) passed
+that shallower check while leaving the caret genuinely off-screen; only
+measuring the caret's own position afterward caught it. A plain small edit
+is confirmed to make zero `scrollBy` calls, so normal typing is unaffected.
+The comment card's click-to-jump is verified to leave the panel open, and a
+genuine non-collapsed selection (set via the Selection API, then a plain
+`click` dispatched — a real drag-select is unreliable to fake faithfully
+over CDP) is verified to suppress the jump rather than fire it alongside a
+copy. Both sort modes are checked against a case where they disagree
+(script order vs. posting order), a reply is confirmed to count as activity
+for "most recent", the export appendix is confirmed to stay in script order
+regardless of which the panel is currently showing, and the sort preference
+is confirmed to survive a reload.
 
 Hosted mode (2026-08-28): server detection, Access identity auto-fill,
 publish, open-from-server, compare-and-set save, clean auto-merge of edits to
