@@ -317,6 +317,19 @@ Typing shortcuts (`[prop]` `{kitchen}` `~vfx~` `<gear>`), comments, status,
 exports, the **Gear** screen and its packing lists, the server features —
 everything else is exactly the same.
 
+## Importing a Google Doc
+
+**File ▸ Import from Google Doc link…** takes a Google Docs share link (or
+just the document's ID) instead of a file. Splitpage has no server and no
+Google sign-in of its own, so it can't read the Doc directly — instead it
+opens Google's own Word (.docx) export of it in a new tab, which downloads
+straight to your computer using whatever Google account you're signed in to
+in that tab. Once the download lands, bring it in the same way as any other
+Word file: **File ▸ Open a document…**. If the doc isn't shared "Anyone with
+the link," make sure the browser tab that opens is signed in to an account
+that can see it, or the download will be a Google sign-in page instead of a
+document.
+
 ## Reopening a saved project
 
 A file Splitpage saved is a complete project, not just text — reopen it and
