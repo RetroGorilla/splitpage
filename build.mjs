@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /* Splitpage build.
  *
- * Source lives in src/ as separate files so it can be edited like normal code.
+ * Source lives in src/ as separate files so it can be edited like normal code:
+ * page.html (shell), app.css, seed-state.json (the demo document) and the
+ * numbered fragments in src/js/.
  * The SHIPPED app is a single index.html, and that is not a packaging
  * preference — it is load-bearing. A save writes
  *   "<!doctype html>" + document.documentElement.outerHTML
@@ -15,7 +17,7 @@
  *   node build.mjs --check   verify index.html matches src/ (exit 1 if not)
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -27,19 +29,32 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
    newline becomes the inserted block's last one. */
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
+/* src/js/*.js are FRAGMENTS of one IIFE, not modules: they share a single
+   closure and are concatenated in filename order, which is why every name is
+   numbered. A fragment is not valid JS on its own — 00-prelude.js opens the
+   function and 21-events.js closes it. That is deliberate: it keeps the
+   scoping identical to the single file this was split out of, with no bundler
+   and no dependency. Renaming one renumbers its position, so don't. */
+function appJs() {
+  const dir = join(ROOT, "src", "js");
+  const names = readdirSync(dir).filter((n) => n.endsWith(".js")).sort();
+  if (!names.length) throw new Error("no fragments in src/js");
+  return names.map((n) => chomp(readFileSync(join(dir, n), "utf8"))).join("\n");
+}
+
 const PARTS = [
-  ["/*{{APP_CSS}}*/", "app.css"],
-  ["{{SEED_STATE}}", "seed-state.json"],
-  ["//{{APP_JS}}", "app.js"]
+  ["/*{{APP_CSS}}*/", () => src("app.css")],
+  ["{{SEED_STATE}}", () => src("seed-state.json")],
+  ["//{{APP_JS}}", appJs]
 ];
 
 function build() {
   let html = src("page.html");
-  for (const [marker, file] of PARTS) {
+  for (const [marker, load] of PARTS) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
-    /* split/join rather than replace(): the file content is data and may well
+    /* split/join rather than replace(): the content is data and may well
        contain "$&" or "$1", which replace() would expand. */
-    html = html.split(marker).join(chomp(src(file)));
+    html = html.split(marker).join(chomp(load()));
   }
   return html;
 }
