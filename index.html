@@ -663,6 +663,17 @@
     color: var(--text);
   }
   #import-textarea:focus { outline: none; border-color: var(--visual); }
+  #gdoc-url-input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+  }
+  #gdoc-url-input:focus { outline: none; border-color: var(--visual); }
   .modal-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
   .import-split-group { display: flex; gap: 14px; font-family: var(--font-display); font-size: 12px; color: var(--text-dim); }
   .import-split-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
@@ -2134,6 +2145,7 @@
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
           <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
+          <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
           <!-- shown only when the page was served by a Splitpage document
@@ -2300,6 +2312,27 @@
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="import-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="import-confirm">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="gdoc-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="gdoc-title">
+    <div class="modal-header">
+      <h2 id="gdoc-title">Import from Google Doc</h2>
+      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Paste the link to a Google Doc (or just its ID). Splitpage can't read it directly — it
+      opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
+      it lands, bring it in the same way as any other Word file: File ▸ Open a document…. If the doc isn't
+      shared "Anyone with the link", make sure you're signed in to the right Google account in that tab first.</p>
+    <input type="text" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="gdoc-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="gdoc-confirm">Download &amp; open</button>
       </div>
     </div>
   </div>
@@ -7540,6 +7573,53 @@
     showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + ".", "ok");
   }
 
+  /* ================= Google Doc import =================
+
+     Splitpage has no server and no Google sign-in of its own, so it can't
+     fetch a Doc's contents directly — a plain in-page fetch() to
+     docs.google.com is blocked by CORS regardless of sharing settings. The
+     one thing that does work with no account plumbing at all is a real
+     browser navigation: Google's own /export endpoint sends the doc back as
+     a .docx with Content-Disposition: attachment, so opening it (carrying
+     whatever Google session cookies the browser already has) downloads it
+     like any other link — no fetch, no CORS. From there it's just a Word
+     file, and the existing .docx importer takes it from there. */
+
+  function extractGoogleDocId(input) {
+    var s = (input || "").trim();
+    var m = /\/document\/d\/([a-zA-Z0-9_-]+)/.exec(s);
+    if (m) return m[1];
+    if (/^[a-zA-Z0-9_-]{15,}$/.test(s)) return s; /* the bare ID, pasted directly */
+    return null;
+  }
+
+  function openGdocModal() {
+    document.getElementById("gdoc-url-input").value = "";
+    document.getElementById("gdoc-modal").hidden = false;
+    document.getElementById("gdoc-url-input").focus();
+  }
+
+  function closeGdocModal() {
+    document.getElementById("gdoc-modal").hidden = true;
+  }
+
+  function confirmGdocImport() {
+    var id = extractGoogleDocId(document.getElementById("gdoc-url-input").value);
+    if (!id) { showToast("That doesn't look like a Google Doc link.", "warn"); return; }
+    var url = "https://docs.google.com/document/d/" + id + "/export?format=docx";
+    /* target=_blank rather than a same-tab anchor: a private/unshared doc
+       sends back a Google sign-in page instead of a file, which would
+       otherwise navigate this tab away from the script mid-edit. Sever
+       .opener by hand rather than passing "noopener" to window.open — that
+       feature makes window.open always return null, even on success, which
+       is also the only way to detect a blocked popup. */
+    var win = window.open(url, "_blank");
+    if (!win) { showToast("Your browser blocked the download — allow popups for this page and try again.", "warn"); return; }
+    win.opener = null;
+    closeGdocModal();
+    showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open a document… to bring it in.", "ok", true);
+  }
+
   /* ================= dirty / toast ================= */
 
   /* There are two Save buttons — the header's, and the writer's, because the
@@ -10662,6 +10742,7 @@
     if (action === "save-as") saveDoc({ saveAs: true });
     else if (action === "open") openLocalFile();
     else if (action === "paste") openImportModal();
+    else if (action === "gdoc-import") openGdocModal();
     else if (action === "save-back") saveBackToFile();
     else if (action === "history") openHistoryPanel();
     else if (action === "export-docx") exportAs("docx");
@@ -12595,6 +12676,19 @@
     });
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !document.getElementById("import-modal").hidden) closeImportModal();
+    });
+
+    document.getElementById("gdoc-close").addEventListener("click", closeGdocModal);
+    document.getElementById("gdoc-cancel").addEventListener("click", closeGdocModal);
+    document.getElementById("gdoc-confirm").addEventListener("click", confirmGdocImport);
+    document.getElementById("gdoc-url-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") confirmGdocImport();
+    });
+    document.getElementById("gdoc-modal").addEventListener("click", function (e) {
+      if (e.target.id === "gdoc-modal") closeGdocModal();
+    });
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !document.getElementById("gdoc-modal").hidden) closeGdocModal();
     });
 
     document.getElementById("pp-close").addEventListener("click", closePrompter);
