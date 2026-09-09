@@ -15,12 +15,24 @@ Splitpage is Adam's personal tool for scripting videos: a two-column
 visual/audio editor with a teleprompter, review comments, and a production
 breakdown for props/locations/cast/VFX/sound.
 
-- **The entire app is one file**: `index.html`, ~8,600 lines, HTML + CSS + JS.
+- **Edit `src/`, never `index.html`.** The source is split into
+  `src/page.html` (the HTML shell), `src/app.css` (~2,000 lines),
+  `src/app.js` (~9,500 lines) and `src/seed-state.json` (the demo document).
+  `node build.mjs` inlines all four back into `index.html`.
+- **`index.html` is a build output.** Editing it directly looks like it works
+  and is destroyed by the next build. The pre-commit hook refuses a commit
+  where `index.html` and `src/` disagree; `node build.mjs --check` is the same
+  test on demand.
+- **The shipped app has to stay one self-contained file** — this is not a
+  packaging preference. A save writes
+  `"<!doctype html>" + document.documentElement.outerHTML` with the new
+  document spliced into `#state-data` (`buildPublishHtml`, and `PAGE_SHELL` in
+  `src/app.js`). If the page linked out to `app.css`/`app.js`, every saved
+  `.splitpage.html` would be a shell that only works beside those files. That
+  is why there is an inlining build step rather than plain `<script src>`.
 - Supporting files: `README.md`, `start.bat` / `start.ps1` (local server),
-  `manifest.webmanifest`, `icon.svg`, `sw.js` (PWA bits).
-- **There is no git here.** `D:\vibecoding` is not a repository. There is no
-  history, no branches, no undo. Treat every edit to `index.html` as
-  irreversible and edit surgically — see §5.
+  `manifest.webmanifest`, `icon.svg`, `sw.js` (PWA bits), `server/server.js`
+  + `Dockerfile` (hosted mode).
 - It began life as a Claude artifact and was converted to run standalone. A few
   artifact-era assumptions may still lurk; stale user-facing wording about "the
   artifact" is a bug, not a quirk.

@@ -12,6 +12,57 @@
 
 set -e
 
+# --- index.html is generated from src/ -------------------------------------
+#
+# Since the refactor, src/page.html + src/app.css + src/app.js + src/seed-state.json
+# are the source and index.html is the build output (build.mjs inlines them
+# back into one self-contained page, which the save format requires — see
+# HANDOFF.md). Hand-editing index.html therefore looks like it works and is
+# thrown away by the next build, so a commit where the two disagree is always
+# a mistake. Checked against STAGED content, which is what is being committed.
+if git diff --cached --name-only | grep -qE '^(index\.html|src/|build\.mjs)'; then
+  if [ "$SPLITPAGE_SKIP_BUILD_CHECK" = "1" ]; then
+    echo "pre-commit: build check skipped (SPLITPAGE_SKIP_BUILD_CHECK=1)." >&2
+  elif ! command -v node >/dev/null 2>&1; then
+    cat >&2 <<'NONODE'
+
+  COMMIT BLOCKED — Node is not installed, so index.html cannot be verified.
+
+  index.html is built from src/ by `node build.mjs`. Without Node this commit
+  could ship an index.html that no longer matches the source it claims to be
+  built from. Install Node 18+ (nodejs.org), then commit again.
+
+  To commit anyway, knowing index.html may be stale:
+
+      SPLITPAGE_SKIP_BUILD_CHECK=1 git commit ...
+
+NONODE
+    exit 1
+  else
+    # Export exactly what is staged and build that, so an unbuilt working tree
+    # neither masks a stale commit nor causes a false alarm.
+    STAGE_DIR=$(mktemp -d)
+    trap 'rm -rf "$STAGE_DIR"' EXIT
+    git checkout-index -a --prefix="$STAGE_DIR/"
+    if ! (cd "$STAGE_DIR" && node build.mjs --check >/dev/null 2>&1); then
+      cat >&2 <<'STALE'
+
+  COMMIT BLOCKED — index.html does not match src/.
+
+  index.html is generated. Either you edited it directly (those edits belong
+  in src/ and will be lost), or you changed src/ and did not rebuild.
+
+  To fix:
+
+      node build.mjs && git add index.html
+
+STALE
+      exit 1
+    fi
+    rm -rf "$STAGE_DIR"; trap - EXIT
+  fi
+fi
+
 # Nothing to check unless index.html is part of this commit.
 if ! git diff --cached --name-only | grep -qx 'index.html'; then
   exit 0
@@ -68,8 +119,8 @@ cat >&2 <<EOF
 
   If you genuinely meant to change the demo document that ships with the app:
 
-      awk '/^<script id="state-data"/{getline; print; exit}' index.html > .githooks/demo-state.json
-      git add .githooks/demo-state.json index.html
+      cp src/seed-state.json .githooks/demo-state.json
+      git add .githooks/demo-state.json src/seed-state.json index.html
 
 EOF
 exit 1
