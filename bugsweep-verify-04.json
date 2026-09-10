@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/10-comments.js",
+    "line": 416,
+    "severity": "medium",
+    "summary": "A comment's cached quotedText can go stale because .cmt-anchor text is editable and not skipped by Find & Replace, while the anchor is never marked orphaned.",
+    "refuted": false,
+    "reasoning": "Confirmed: 05-render.js's wrapRangeInComment/walkSanitize never set contenteditable=\"false\" on .cmt-anchor (unlike .tag-anchor, which explicitly does, per 04-richtext.js:117), so text inside it is normal editable prose; and 09-find-replace.js's editableTextNodes() only excludes .closest('.tag-anchor'), never .cmt-anchor, so Find&Replace can rewrite anchored text. anchorExistsInDom() only checks the span's presence, not content, so the stale quote is never flagged orphaned."
+  },
+  {
+    "file": "src/js/02-state.js",
+    "line": 63,
+    "severity": "medium",
+    "summary": "migrateRows() defaults a missing comment.anchorId to null instead of falling back to the comment's own id, so deleteComment() can never find/unwrap the anchor span for such comments.",
+    "refuted": false,
+    "reasoning": "Confirmed by tracing the code: deleteComment() calls unwrapAnchorInState(c.rowId, c.field, c.anchorId) directly with no fallback, whereas 19-writer.js:227 uses the safer `(c.anchorId || c.id)` pattern for the same lookup elsewhere -- an inconsistency that shows this is a real gap. In the app's own creation flow (05-render.js) id and anchorId are always identical, so this only bites a loaded document (hand-edited or from another schema) whose comment lacks anchorId, but the failure genuinely reproduces for such input: the anchor span becomes permanently unremovable."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 160,
+    "severity": "critical",
+    "summary": "Pasted-import rows skip sanitizeHtml entirely, so raw HTML/script content in pasted text is stored and rendered as live markup.",
+    "refuted": false,
+    "reasoning": "Confirmed: normalizeImportedRows() only calls legacyMdToHtml (which returns text UNCHANGED, unescaped, whenever it contains '<') and never calls sanitizeHtml, unlike migrateRows(), replaceInHtml()-based Find&Replace, and restoreConflictValue() which all sanitize on write. render()/rowHtml() in 05-render.js inserts row.visualText/audioText directly into innerHTML with no sanitization at render time, relying entirely on the write path -- so an import containing a raw '<img onerror=...>' or '<script>' is stored and executed unsanitized."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 51,
+    "severity": "high",
+    "summary": "columnIndicesFromHeader can misdetect an ordinary first content row as a header whenever a cell contains a common shot-description word, causing that row to be silently dropped.",
+    "refuted": false,
+    "reasoning": "Confirmed: columnIndicesFromHeader is always applied to rows[0] regardless of whether it is really a header, using a bare regex.test against VISUAL_WORD_RE/AUDIO_WORD_RE (e.g. /shot|screen|scene/i) on the whole cell text; if idxs.visualIdx or audioIdx is found, parseMarkdownTable/parseTabDelimited set startIdx=1 and skip rows[0] entirely, discarding a legitimate first data row like one containing the word \"shot\" or \"screen\"."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 38,
+    "severity": "high",
+    "summary": "detectTwoColumnFormat classifies a paste as a pipe-delimited table from just two lines starting with '|', after which parseMarkdownTable drops every other line in the whole paste.",
+    "refuted": false,
+    "reasoning": "Confirmed: detectTwoColumnFormat returns \"table\" once pipeLines.length >= 2 with no further corroboration, and parseMarkdownTable's forEach does `if (line.indexOf(\"|\") === -1) return;`, silently discarding any line lacking a pipe -- so two incidental pipe-prefixed lines in an otherwise plain-text paste cause wholesale loss of the rest of the content."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 44,
+    "severity": "high",
+    "summary": "detectTwoColumnFormat's label heuristic fires on any one visual-word-plus-colon line and any one unrelated audio-word-plus-colon line anywhere in the text, and parseLabeledLines then drops everything before the first match.",
+    "refuted": false,
+    "reasoning": "Confirmed: hasVisualLabel and hasAudioLabel are independent .some() checks with no requirement that the matches relate to each other or be adjacent, and parseLabeledLines's forEach does `if (line.trim()===\"\" || !current || !currentField) return;`, which skips every line before the first VISUAL_LABEL_RE/AUDIO_LABEL_RE match since `current` starts null -- content preceding the first coincidental label-like line is dropped."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 62,
+    "severity": "medium",
+    "summary": "parseMarkdownTable splits each row on every literal '|' with no escape support, so a literal pipe inside cell text shifts content past the tracked visual/audio column indices and it is never read.",
+    "refuted": false,
+    "reasoning": "Confirmed: `line.split(\"|\")` has no handling for an escaped or literal pipe within a cell, and only `rows[i][visualIdx]`/`rows[i][audioIdx]` are ever read back out, so a cell containing its own literal '|' silently shifts later content into an unread column index."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 135,
+    "severity": "medium",
+    "summary": "parseAlternatingLines, the fallback for manually-selected 'Two columns' mode with no detected structure, pairs arbitrary consecutive lines into visual/audio with no structural basis.",
+    "refuted": true,
+    "reasoning": "The pairing behavior is accurately described, but it is not silent/undiscoverable: updateImportPreview() re-renders a live 'first row: Visual .../ Audio ...' preview on every keystroke before the user clicks Confirm, so a nonsensical alternating split is visible and reversible (switch mode or edit text) rather than a silent data-loss bug; it's a reasonable best-effort fallback for an explicit manual override, not a defect."
+  },
+  {
+    "file": "src/js/11-import.js",
+    "line": 186,
+    "severity": "low",
+    "summary": "Every keystroke in the import textarea re-runs full-document two-column detection and parsing multiple times with no debouncing.",
+    "refuted": false,
+    "reasoning": "Confirmed in 21-events.js: the textarea's \"input\" listener calls both maybeAutoDetectTwoColumn(text) and updateImportPreview() on every keystroke; until the user manually touches the mode radio, maybeAutoDetectTwoColumn also calls detectTwoColumnFormat, and updateImportPreview's parseImportRows->parseTwoColumnText calls detectTwoColumnFormat again plus a full parse -- there is no debounce or incremental handling anywhere in this path, so a large pasted script is fully re-scanned on each edit."
+  }
+]
