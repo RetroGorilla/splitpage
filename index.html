@@ -11732,15 +11732,28 @@
      teleprompter. Best-effort: unsupported browsers just don't get it, and
      the OS revokes it on tab switch, so it is re-acquired on return. */
   var prompterWakeLock = null;
+  /* Bumped on every acquire/release so a request's resolution can tell
+     whether it is still the one that matters. request() is fire-and-forget
+     with no cancellation token: the prompter can close (or visibilitychange
+     can fire another acquire, which it does every time the tab regains
+     focus while open) before it resolves, and releaseWakeLock() can only
+     ever act on whatever is CURRENTLY in prompterWakeLock — a lock that
+     lands after the fact, or a lock superseded by a newer request, used to
+     just get silently stored over top with nothing left to release it,
+     keeping the screen awake indefinitely. */
+  var wakeLockGen = 0;
 
   function acquireWakeLock() {
     if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+    var gen = ++wakeLockGen;
     navigator.wakeLock.request("screen").then(function (lock) {
+      if (gen !== wakeLockGen || !prompterOpen) { lock.release().catch(function () {}); return; }
       prompterWakeLock = lock;
     }).catch(function () { /* denied (low battery etc.) — nothing to do */ });
   }
 
   function releaseWakeLock() {
+    wakeLockGen++;
     if (prompterWakeLock) {
       prompterWakeLock.release().catch(function () {});
       prompterWakeLock = null;
@@ -12034,7 +12047,19 @@
       setTimeout(function () {
         if (mySession !== voiceSession || !voiceFollowActive || !recognition) return;
         try { recognition.start(); }
-        catch (e) { voiceFollowActive = false; updateVoiceButtonUI(); }
+        catch (e) {
+          /* start() throwing synchronously (Chrome's "recognition has
+             already started" when it hasn't fully torn down the previous
+             session yet) means no further "end" event will ever fire for
+             this attempt — this is a dead end, not just a stopped follow.
+             Release the mic now, or it stays open (and the leaked
+             `recognition` reference blocks a later manual restart from
+             ever cleaning it up) with the UI showing "stopped". */
+          voiceFollowActive = false;
+          recognition = null;
+          releaseVoiceStream();
+          updateVoiceButtonUI();
+        }
       }, Math.min(2000, 150 * voiceRestarts));
     };
     try {
