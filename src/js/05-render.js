@@ -270,10 +270,28 @@
         showToast("Select the words you want to label first.", "warn");
         return;
       }
+      var tagQuoted = tsel.toString().trim();
+      /* Which occurrence of this phrase, among any others in the cell, the
+         user actually selected — captured now, while the real Range still
+         exists, since applyTag() runs after the modal has closed and can
+         only re-find the phrase as plain text. Counted the same way
+         tagFieldOccurrences() itself counts matches (word-boundary rule and
+         document order), by re-running it in countOnly mode over just the
+         text before the selection start, so the index lines up exactly. */
+      var tagRange = tsel.getRangeAt(0);
+      var beforeRange = document.createRange();
+      beforeRange.selectNodeContents(cellEl);
+      beforeRange.setEnd(tagRange.startContainer, tagRange.startOffset);
+      var beforeDiv = document.createElement("div");
+      beforeDiv.appendChild(beforeRange.cloneContents());
+      var tagOccurrenceIndex = tagQuoted
+        ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
+        : 0;
       openTagComposer({
         rowId: cellEl.getAttribute("data-id"),
         field: cellEl.getAttribute("data-field"),
-        quotedText: tsel.toString().trim()
+        quotedText: tagQuoted,
+        occurrenceIndex: tagOccurrenceIndex
       });
       return;
     }

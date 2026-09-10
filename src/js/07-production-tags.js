@@ -869,11 +869,23 @@
 
   /* Walk the text nodes of one field, wrapping every whole-word occurrence of
      `phrase`. Text already inside a tag or a link is left alone. */
-  function tagFieldOccurrences(html, phrase, cat, name, countOnly) {
+  /* onlyOccurrence, when given (0-based), wraps ONLY that one match — every
+     other occurrence of the phrase is left as plain text, untouched. This is
+     what applyTag()'s single-mention path needs: wrapping every match and
+     then guessing which one to keep afterward (the previous approach) can't
+     tell "the phrase repeats" apart from "an unrelated existing tag with the
+     same name sits elsewhere in this cell", and always kept DOM order —
+     i.e. always the first occurrence — regardless of which one the user had
+     actually selected. Matches are numbered in the same document-order walk
+     this function always used, so an index captured earlier (by counting
+     matches with countOnly, over the text before the selection — see the
+     "tag" command in 05-render.js) lines up exactly with the index used here. */
+  function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccurrence) {
     var body = inertBody(html);
     var doc = body.ownerDocument;
     var needle = phrase.toLowerCase();
     var hits = 0;
+    var matchIndex = 0;
 
     function walk(node) {
       var kids = Array.prototype.slice.call(node.childNodes);
@@ -895,9 +907,10 @@
           var before = at === 0 ? "" : text.charAt(at - 1);
           var after = text.charAt(at + phrase.length);
           if (!/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after)) {
-            hits++;
-            matched = true;
-            if (!countOnly) {
+            var wrapThisOne = !countOnly && (onlyOccurrence === undefined || onlyOccurrence === matchIndex);
+            if (wrapThisOne) {
+              hits++;
+              matched = true;
               if (at > cursor) frag.appendChild(doc.createTextNode(text.slice(cursor, at)));
               var span = doc.createElement("span");
               span.className = "tag-anchor";
@@ -905,13 +918,16 @@
               span.setAttribute("data-tag-name", name);
               span.appendChild(doc.createTextNode(text.substr(at, phrase.length)));
               frag.appendChild(span);
+              cursor = at + phrase.length;
+            } else if (countOnly) {
+              hits++;
             }
-            cursor = at + phrase.length;
+            matchIndex++;
           }
           at = hay.indexOf(needle, at + phrase.length);
         }
 
-        if (matched && !countOnly) {
+        if (matched) {
           if (cursor < text.length) frag.appendChild(doc.createTextNode(text.slice(cursor)));
           child.parentNode.replaceChild(frag, child);
         }
@@ -976,6 +992,28 @@
   function renameTag(cat, oldName, newName) {
     var clean = plainText(newName).trim().slice(0, 80);
     if (!clean) return false;
+    /* Renaming onto a name that already tracks a DIFFERENT registry entry in
+       this category would otherwise leave two state.productionTags records
+       sharing one effective key — productionEntries()'s first-wins de-dup
+       then permanently hides whichever entry it saw second, silently
+       discarding that entry's status/owner/notes with no warning. Fold the
+       one being renamed away INTO the collision instead: status keeps
+       whichever is furthest along (the same forward-progress rule used
+       everywhere else in this file), and an empty owner/notes never
+       overwrites a filled one. */
+    if (registryKey(cat, clean) !== registryKey(cat, oldName)) {
+      var collision = registryEntry(cat, clean);
+      var oldEntry = registryEntry(cat, oldName);
+      if (collision && oldEntry && collision !== oldEntry) {
+        if (!collision.owner && oldEntry.owner) collision.owner = oldEntry.owner;
+        if (!collision.notes && oldEntry.notes) collision.notes = oldEntry.notes;
+        if (tagStatusRank(oldEntry.status) > tagStatusRank(collision.status)) {
+          collision.status = oldEntry.status;
+        }
+        var oi = state.productionTags.indexOf(oldEntry);
+        if (oi !== -1) state.productionTags.splice(oi, 1);
+      }
+    }
     /* an orphaned item has no live spans to rename, but its registry entry
        still needs the new name so it doesn't fall right back to the old
        one the next time productionEntries() reads it */
@@ -1139,21 +1177,17 @@
       '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
     if (!cellEl) { showToast("That row is no longer here.", "warn"); return; }
 
-    var res = tagFieldOccurrences(cellEl.innerHTML, phrase, cat, name, false);
+    /* Wrap exactly the occurrence the user selected (captured when the
+       composer opened — see the "tag" command in 05-render.js), not
+       whichever match happens to come first in the cell. Also the fix for
+       the same bug's other half: because only that one match is ever
+       wrapped, an unrelated pre-existing tag elsewhere in the cell that
+       happens to share this name is never touched or confused with it. */
+    var res = tagFieldOccurrences(cellEl.innerHTML, phrase, cat, name, false, ctx.occurrenceIndex || 0);
     if (!res.hits) { showToast("Could not find that text any more.", "warn"); return; }
-    /* only the first occurrence in this cell was intended */
-    var body = inertBody(res.html);
-    var spans = body.querySelectorAll('.tag-anchor[data-tag-name="' + cssAttr(name) + '"]');
-    if (spans.length > 1) {
-      for (var i = 1; i < spans.length; i++) {
-        var el = spans[i];
-        while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
-        el.parentNode.removeChild(el);
-      }
-    }
     var idx = findRowIndex(ctx.rowId);
     if (idx === -1) return;
-    state.rows[idx][ctx.field] = sanitizeHtml(body.innerHTML);
+    state.rows[idx][ctx.field] = sanitizeHtml(res.html);
     stampRow(state.rows[idx]);
     registerProductionTag(cat, name);
     markDirty();
