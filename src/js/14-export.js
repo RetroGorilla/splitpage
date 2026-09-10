@@ -20,6 +20,16 @@
       return;
     }
 
+    /* A project opened from a legacy .html file is never written back as
+       HTML — the page stopped being a document format when .md and
+       .splitpage arrived (HANDOFF §3.1). The first Save after opening one
+       behaves as Save As, defaulting to <slug>.md, and says why. */
+    var converting = !saveAs && docFileHandle.kind === "html";
+    if (converting) {
+      saveAs = true;
+      showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
+    }
+
     /* Freeze exactly what we save. `state` keeps mutating while the write is
        in flight, so re-cloning here means edits typed during the save aren't
        silently included as if they'd already been saved. */
@@ -28,44 +38,55 @@
     state.lastEditedAt = nowIso();
     var published = cloneState(state);
     var seqAtSave = editSeq;
-    var fullHtml;
-    try {
-      fullHtml = buildPublishHtml(JSON.stringify(published));
-    } catch (e) {
-      showToast("Could not prepare the file to save.", "error");
-      state.rev = Math.max(0, (state.rev || 1) - 1);
-      saveInFlight = false;
-      setSaveButtons(dirty ? "Save •" : "Save", false);
-      return;
-    }
-    var filename = slugify(published.title) + ".html";
+    var slug = slugify(published.title);
     /* Save As always asks where to write, ignoring any file we already have.
        Plain Save reuses that file once one exists, and only asks the first
        time it has none. Either way, a fresh pick becomes the file future
        plain Saves write to. */
-    var targetHandle = saveAs ? null : htmlFileHandle;
+    var targetHandle = saveAs ? null : docFileHandle.handle;
+    /* Which serializer runs is decided by the file, not by a preference —
+       and for a fresh pick that cannot be known until the picker has come
+       back with the name the user typed. */
+    var kind = saveAs ? "md" : (docFileHandle.kind || "md");
 
     try {
       if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: "Splitpage script", accept: { "text/html": [".html"] } }]
+          suggestedName: slug + ".md",
+          types: [
+            { description: "Markdown script", accept: { "text/markdown": [".md"] } },
+            { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
+          ]
         });
-        htmlFileHandle = targetHandle;
+        kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
+        docFileHandle = { handle: targetHandle, kind: kind };
         rememberLastFileHandle(targetHandle);
+      }
+
+      var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
+      var body;
+      try {
+        body = kind === "splitpage" ? buildSplitpageFile(published) : buildMarkdownProject(published);
+      } catch (e) {
+        showToast("Could not prepare the file to save.", "error");
+        state.rev = Math.max(0, (state.rev || 1) - 1);
+        saveInFlight = false;
+        setSaveButtons(dirty ? "Save •" : "Save", false);
+        return;
       }
 
       if (targetHandle) {
         var writable = await targetHandle.createWritable();
-        await writable.write(fullHtml);
+        await writable.write(body);
         await writable.close();
         baseState = published;
         if (editSeq === seqAtSave) clearDirty();
         showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       } else {
         /* no File System Access API (e.g. Firefox) — a plain download is the
-           best this browser can do; the user re-opens the newest copy next time */
-        var ok = await deliverFile(filename, fullHtml, { savedMsg: "Downloaded " + filename });
+           best this browser can do; the user re-opens the newest copy next
+           time. Same bytes, same extension as the in-place write above. */
+        var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
         if (ok) {
           baseState = published;
           if (editSeq === seqAtSave) clearDirty();
@@ -133,7 +154,10 @@
        from the first edit — there is no file dialog to ambush anyone with.
        A lapsed sign-in stops it, or every queued save would refire the same
        failure until the tab is reloaded. */
-    if (!htmlFileHandle && !onServerDoc()) return;
+    if (!docFileHandle.handle && !onServerDoc()) return;
+    /* A legacy .html project's next save opens a picker (see saveDoc) —
+       exactly the ambush the gate above exists to prevent. */
+    if (docFileHandle.kind === "html") return;
     if (serverSessionExpired) return;
     if (saveInFlight) { saveQueued = true; return; }
     saveInFlight = true;
@@ -248,26 +272,47 @@
     return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
   }
 
+  /* What a scene's two table cells say, as one description used twice: to
+     write the table below, and — on the way back in — to decide whether a
+     cell was edited outside Splitpage (`reconcileMarkdownRows`,
+     20d-formats.js). Two copies of this composition would drift, and the
+     drift would read as "every cell was edited" on the next open.
+
+     Newlines are folded to <br> here because that is part of what the cell
+     *says*; the pipe-escaping mdRichTableCell adds is a property of the
+     table *row* and is undone again by parseMarkdownTable, so it is
+     deliberately not part of this comparison basis. */
+  function mdSceneCellSource(row, i) {
+    var visual = htmlToMarkdown(row.visualText);
+    if (row.visualImage) {
+      visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
+    }
+    return {
+      visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
+      audio: String(htmlToMarkdown(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
+    };
+  }
+
   /* The same script as toMarkdownDoc, laid out as a Visual/Audio table
      instead of a stacked Scene-by-scene list — this is also exactly the
      table shape Import ▸ Two columns already knows how to read back in, so
-     round-tripping through this export doesn't lose the split. */
-  function toMarkdownTableDoc() {
+     round-tripping through this export doesn't lose the split, and it is the
+     human-readable half of a saved .splitpage-in-Markdown project
+     (buildMarkdownProject, 20d-formats.js). */
+  function toMarkdownTableDoc(s) {
+    s = s || state;
     var lines = [];
-    lines.push("# " + (state.title || "Untitled Script"));
+    lines.push("# " + (s.title || "Untitled Script"));
     lines.push("");
-    if (!state.rows.length) {
+    if (!s.rows.length) {
       lines.push("_No rows yet._");
     } else {
-      lines.push("| # | Visual | Audio |");
-      lines.push("| --- | --- | --- |");
-      state.rows.forEach(function (row, i) {
-        var visual = htmlToMarkdown(row.visualText);
-        if (row.visualImage) {
-          visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
-        }
-        var audio = htmlToMarkdown(row.audioText);
-        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(visual) + " | " + mdRichTableCell(audio) + " |");
+      lines.push("| # | Visual | Audio | Status |");
+      lines.push("| --- | --- | --- | --- |");
+      s.rows.forEach(function (row, i) {
+        var cell = mdSceneCellSource(row, i);
+        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(cell.visual) + " | " +
+                   mdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
       });
     }
     lines.push("");

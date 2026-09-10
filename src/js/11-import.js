@@ -100,7 +100,14 @@
     return cells;
   }
 
-  function parseMarkdownTable(text) {
+  /* opts.keepEmpty keeps a data row whose Visual and Audio cells are both
+     empty. Off by default, because a foreign table's blank line carries no
+     information; on when reading one of our OWN Markdown projects
+     (20d-formats.js), where a scene with nothing typed in it yet is still a
+     scene and dropping it would shift every row after it out of line with
+     the file's own record. */
+  function parseMarkdownTable(text, opts) {
+    opts = opts || {};
     var lines = text.replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
     var rows = [];
     lines.forEach(function (line) {
@@ -110,18 +117,24 @@
       rows.push(cells);
     });
     if (!rows.length) return [];
-    var visualIdx = 0, audioIdx = 1, startIdx = 0;
+    var visualIdx = 0, audioIdx = 1, startIdx = 0, statusIdx = -1;
     var header = rows[0].map(function (c) { return c.toLowerCase(); });
     var idxs = columnIndicesFromHeader(header);
     if (idxs.visualIdx !== -1 || idxs.audioIdx !== -1) {
       startIdx = 1;
       if (idxs.visualIdx !== -1) visualIdx = idxs.visualIdx;
       if (idxs.audioIdx !== -1) audioIdx = idxs.audioIdx;
+      statusIdx = header.findIndex(function (c) { return c.trim() === "status"; });
     }
     var out = [];
     for (var i = startIdx; i < rows.length; i++) {
       var v = rows[i][visualIdx] || "", a = rows[i][audioIdx] || "";
-      if (v || a) out.push({ visualText: v, audioText: a });
+      if (!v && !a && !opts.keepEmpty) continue;
+      out.push({
+        visualText: v,
+        audioText: a,
+        statusText: statusIdx === -1 ? "" : (rows[i][statusIdx] || "")
+      });
     }
     return out;
   }
@@ -212,10 +225,25 @@
        '<' (a page whose markup was preserved as text, or a deliberately
        crafted paste) went straight into the document as live HTML. */
     return rows.map(function (r) {
+      /* An inline image at the head of the Visual cell is how this app's own
+         Markdown writes a storyboard frame (toMarkdownTableDoc). This used
+         to be hardcoded to null, so a two-column export re-imported lost
+         every picture in it — and left the data: URI sitting in the text as
+         several thousand characters of visible gibberish, because
+         legacyMdToHtml's link rule rejects a data: href. Only a data: image
+         this app would itself accept is taken; an ordinary ![](http…) in a
+         foreign document still imports exactly as it did before. */
+      var visual = String(r.visualText || "");
+      var image = null;
+      var m = MD_IMAGE_PREFIX_RE.exec(visual);
+      if (m) {
+        image = safeImageSrc(m[1]);
+        if (image) visual = visual.slice(m[0].length);
+      }
       return {
         id: makeId(),
-        visualText: sanitizeHtml(legacyMdToHtml(r.visualText || "")),
-        visualImage: null,
+        visualText: sanitizeHtml(legacyMdToHtml(visual)),
+        visualImage: image,
         audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
       };
     });

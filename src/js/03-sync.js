@@ -102,7 +102,7 @@
     if (!entry) return;
     pushSnapshot("Before restoring an earlier version");
     state = migrateRows(cloneState(entry.state));
-    resetProductionPanelState(); /* same reason as openSplitpageFile — different document underneath */
+    resetProductionPanelState(); /* same reason as adoptProjectState — different document underneath */
     markDirty();
     render();
     closeHistoryPanel();

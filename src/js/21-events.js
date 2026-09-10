@@ -1008,7 +1008,22 @@
     document.getElementById("open-file-input").addEventListener("change", function (e) {
       var file = e.target.files && e.target.files[0];
       e.target.value = "";
-      if (file) openAnyLocalFile(file, null);
+      if (file) openProjectFile(file, null);
+    });
+
+    document.getElementById("md-rows-keep").addEventListener("click", function () {
+      finishMarkdownRowChoice("keep");
+    });
+    document.getElementById("md-rows-table").addEventListener("click", function () {
+      finishMarkdownRowChoice("table");
+    });
+    window.addEventListener("keydown", function (e) {
+      /* Esc means "keep Splitpage's record" — the choice that changes
+         nothing. Dismissing a question must never silently rebuild the
+         script out of a table. */
+      if (e.key === "Escape" && !document.getElementById("md-rows-modal").hidden) {
+        finishMarkdownRowChoice("keep");
+      }
     });
 
     document.getElementById("import-close").addEventListener("click", closeImportModal);
