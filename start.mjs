@@ -5,6 +5,7 @@
  *   node start.mjs --library    also run the document server (see below)
  *   node start.mjs --port 9000  use a different port
  *   node start.mjs --no-open    don't launch a browser
+ *   node start.mjs --data DIR   where --library keeps documents
  *
  * WHY SERVE IT AT ALL, rather than just opening index.html?
  * Browsers only give a page installed-app status, a service worker (offline
@@ -45,11 +46,16 @@ Splitpage launcher
   node start.mjs --library      keep documents on the server, in ./data
   node start.mjs --port 9000    use a different port (default 8791)
   node start.mjs --no-open      don't launch a browser
+  node start.mjs --data DIR     where --library keeps documents
+                                (default: ./data beside this script)
 `);
   process.exit(0);
 }
 
 const LIBRARY = has("--library");
+/* An installed copy lives somewhere the user does not browse, so documents
+   should be able to live somewhere they do. */
+const DATA_DIR = valueOf("--data", join(ROOT, "data"));
 const WANTED_PORT = Number(valueOf("--port", 8791));
 if (!Number.isInteger(WANTED_PORT) || WANTED_PORT < 1 || WANTED_PORT > 65535) {
   console.error("--port must be a number between 1 and 65535");
@@ -109,7 +115,7 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
        Docker image plus Cloudflare Access in DEPLOY.md is for. */
     HOST: "127.0.0.1",
     STATIC_DIR: ROOT,
-    DATA_DIR: join(ROOT, "data"),
+    DATA_DIR,
     NO_API: LIBRARY ? "0" : "1"
   }
 });
@@ -139,7 +145,7 @@ if (!(await waitForServer())) {
 
 console.log(`
   Splitpage is running at ${url}
-  ${LIBRARY ? "Documents are kept on the server, in ./data" : "Documents are files you save to disk (--library keeps them on the server)"}
+  ${LIBRARY ? `Documents are kept on the server, in ${DATA_DIR}` : "Documents are files you save to disk (--library keeps them on the server)"}
 
   In Chrome or Edge, use the install icon in the address bar to add it as
   its own app window. Leave this window open while you work; Ctrl+C stops it.

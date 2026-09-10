@@ -38,6 +38,34 @@ a browser; and `--library`, which keeps documents on the server in `./data`
 instead of as files you save to disk. Without `--library` the launcher
 serves files and nothing else, so the app behaves exactly as it always has.
 
+## Installing it
+
+Two ways, both from the repo root:
+
+```
+node package.mjs              # dist/splitpage-<version>.zip — the portable app
+node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe
+```
+
+**The zip is the whole app.** Unzip it anywhere and run `start.bat` or
+`./start.sh`. Nothing is compiled, nothing is registered, and deleting the
+folder uninstalls it.
+
+**The setup.exe** is a normal Windows installer — Start Menu entry, optional
+desktop shortcut, and an Add/Remove Programs entry. It installs per-user, so
+there is no administrator prompt. Building it needs
+[Inno Setup 6](https://jrsoftware.org/isdl.php) installed once; `--installer`
+then calls its compiler for you.
+
+Neither one installs Node, and neither needs to: `start.bat` falls back to a
+PowerShell server when Node is absent, which is enough to serve the app so
+the browser will offer **Install app** and give the teleprompter a microphone.
+With Node you also get `--library` and a rebuild on launch.
+
+Uninstalling never touches your scripts. In the default mode they are files
+you saved wherever you chose; in library mode they are left where they are on
+purpose.
+
 ## Working on the code
 
 `index.html` is **generated**. The source is in `src/` — `page.html` (the
