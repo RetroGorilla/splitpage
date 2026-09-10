@@ -33,7 +33,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 442/442 checks across 17 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 464/464 checks across 18 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -75,6 +75,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/15-tutorial.txt` | the 5-step coach-mark tour: opens from the File menu, Next/Back/Finish, Skip at several steps, a "Read more" link into Help, `#rows` byte-identical before and after, `splitpage-tour-done` set, and the card stays inside the viewport at a 375px phone width |
 | `tests/17-formats.txt` | the two project formats: `.splitpage` and `.md` round-trip the state exactly (tags, comment anchors, images, statuses, wpm, people), a hand-edited table cell wins for that cell and its tags re-attach, an added scene asks rather than guessing, a legacy `.html` still opens, the data fence never collides with content |
 | `tests/18-connect.txt` | the Servers dialog from the File menu, bookmarks persisting (and holding nothing credential-shaped), the SSH command, the join-PIN dialog's validation, `#launch=` stripped from the URL on load |
+| `tests/20-comment-drift.txt` | a `.cmt-anchor`'s live text drifting from `quotedText`: still jumpable with a "text changed" note and the original quote kept visible, orphaned once the span is edited down to nothing |
 
 ## The server's own tests
 

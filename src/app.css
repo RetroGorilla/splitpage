@@ -1509,7 +1509,9 @@
     line-height: 1.4;
   }
   .comment-quote.orphaned { border-left-color: var(--text-faint); }
+  .comment-quote.changed { border-left-color: var(--visual); }
   .comment-orphan-note { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; }
+  .comment-orphan-note s { color: var(--text-faint); }
   .comment-body { font-size: 13.5px; line-height: 1.5; color: var(--text); word-wrap: break-word; }
   .comment-body img.comment-img { max-width: 100%; border-radius: 6px; margin: 4px 0; display: block; }
   .video-embed-card {

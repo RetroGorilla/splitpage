@@ -1,0 +1,67 @@
+# A `.cmt-anchor` span is editable on purpose (a comment must never lock the
+# writer out of their own sentence), so the words inside it can drift away
+# from the comment's `quotedText` without the anchor itself disappearing.
+# This checks the card notices: still jumpable while the span has text, with
+# a "text changed" note and the original quote kept visible; orphaned once
+# the span is edited down to nothing.
+
+open
+
+click text*=COMMENTS
+sleep 500
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card').classList.contains('is-jumpable')
+expect document.querySelector('.comment-quote').classList.contains('changed') === false
+expect document.querySelector('.comment-quote').classList.contains('orphaned') === false
+expect document.querySelector('.comment-quote').textContent.indexOf('word for word') !== -1
+
+# --- edit the anchored words: drift the live span text away from quotedText -
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+eval (function(){var mark=document.querySelector('.cmt-anchor mark');var t=mark.firstChild;var r=document.createRange();r.setStart(t,t.nodeValue.length);r.setEnd(t,t.nodeValue.length);var s=getSelection();s.removeAllRanges();s.addRange(r);return t.nodeValue;})()
+type -ish
+sleep 300
+eval document.activeElement.blur()
+sleep 300
+expect document.querySelector('.cmt-anchor').textContent.indexOf('word for word-ish') !== -1
+
+# --- reopen the panel to pick up the render --------------------------------
+click text*=COMMENTS
+sleep 300
+click text*=COMMENTS
+sleep 500
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card').classList.contains('is-jumpable')
+expect document.querySelector('.comment-quote').classList.contains('changed')
+expect document.querySelector('.comment-quote').classList.contains('orphaned') === false
+# the current (live) text is shown as the quote now, not the stale original
+expect document.querySelector('.comment-quote').textContent.indexOf('word for word-ish') !== -1
+# the original is kept visible rather than silently dropped
+expect document.querySelector('.comment-quote').textContent.indexOf('word for word') !== -1
+expect document.querySelector('.comment-quote').getAttribute('title').indexOf('word for word') !== -1
+expect document.querySelector('.comment-orphan-note') !== null
+expect document.querySelector('.comment-orphan-note').textContent.indexOf('changed') !== -1
+
+# --- jump still works: the anchor still exists, just with different words --
+click .comment-card
+sleep 700
+expect !document.getElementById('comments-panel').hidden
+expect document.querySelector('.cmt-anchor').classList.contains('flash')
+
+# --- now empty the anchor entirely: select all of it and delete -----------
+eval (function(){var el=document.querySelector('.cmt-anchor');var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return el.textContent;})()
+sleep 300
+eval document.activeElement.blur()
+sleep 300
+
+click text*=COMMENTS
+sleep 300
+click text*=COMMENTS
+sleep 500
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card').classList.contains('is-jumpable') === false
+expect document.querySelector('.comment-quote').classList.contains('orphaned')
+expect document.querySelector('.comment-orphan-note').textContent.indexOf('no longer found') !== -1
+# the historical quote is still shown even though the anchor is gone
+expect document.querySelector('.comment-quote').textContent.indexOf('word for word') !== -1
+
+quit

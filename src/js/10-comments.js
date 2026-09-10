@@ -133,6 +133,17 @@
     return !!document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   }
 
+  /* The `.cmt-anchor` span is editable on purpose — a comment must never
+     lock the writer out of their own sentence — so the words inside it can
+     drift away from `c.quotedText` without the anchor itself disappearing.
+     This reads the span's current plain text so the card can show *that*
+     is stale, rather than silently claiming the quote is still accurate.
+     Returns null when the span itself is gone (the orphaned case). */
+  function anchorLiveText(cmtId) {
+    var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
+    return el ? el.textContent : null;
+  }
+
   function unwrapAnchorInState(rowId, field, cmtId) {
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
@@ -408,7 +419,17 @@
 
   function commentCardHtml(c) {
     if (c.kind === "conflict") return conflictCardHtml(c);
-    var orphaned = !anchorExistsInDom(c.id);
+    /* Orphaned: the span is gone, or emptied out by editing until nothing is
+       left to anchor to — either way there is no text left to jump to, so it
+       falls back to the existing not-in-script path. Changed: the span still
+       exists and still has text, but the writer edited the words inside it,
+       so `c.quotedText` (never rewritten — the quote is historical) no
+       longer matches what is actually there. Still jumpable (the anchor is
+       real), but the card has to say so rather than silently showing a
+       stale quote as if it were current. */
+    var liveText = anchorLiveText(c.id);
+    var orphaned = liveText === null || liveText.length === 0;
+    var changed = !orphaned && liveText !== c.quotedText;
     var repliesHtml = "";
     if (c.replies.length) {
       repliesHtml = '<div class="comment-replies">' + c.replies.map(function (r) {
@@ -428,9 +449,17 @@
           '<span class="comment-time">' + formatTimestamp(c.createdAt) + '</span>' +
         '</div>' +
         '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
-        '<div class="comment-quote' + (orphaned ? ' orphaned' : '') + '">“' + escapeHtml(c.quotedText) + '”' +
-          (orphaned ? '<div class="comment-orphan-note">Text no longer found in the script</div>' : '') +
-        '</div>' +
+        (orphaned ?
+          '<div class="comment-quote orphaned">“' + escapeHtml(c.quotedText) + '”' +
+            '<div class="comment-orphan-note">Text no longer found in the script</div>' +
+          '</div>' :
+        changed ?
+          '<div class="comment-quote changed" title="Originally: “' + escapeHtml(c.quotedText) + '”">' +
+            '“' + escapeHtml(liveText) + '”' +
+            '<div class="comment-orphan-note">Text changed — was <s>' + escapeHtml(c.quotedText) + '</s></div>' +
+          '</div>' :
+          '<div class="comment-quote">“' + escapeHtml(c.quotedText) + '”</div>'
+        ) +
         '<div class="comment-body">' + c.body + '</div>' +
         repliesHtml +
         (expandedReplyIds[c.id] ? replyComposerHtml(c.id) : "") +
