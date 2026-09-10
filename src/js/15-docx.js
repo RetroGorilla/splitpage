@@ -421,10 +421,26 @@
   var VISUAL_HEAD = /^(video|visual|picture|image|shot|shots|action|camera|b-?roll|screen|graphics?)\b/;
   var AUDIO_HEAD = /^(audio|voice|vo|narration|narrator|dialogue|dialog|script|line|lines|copy|speech)\b/;
 
+  /* buildDocx()'s own "Production breakdown" table, verbatim — none of its
+     header words match VISUAL_HEAD/AUDIO_HEAD, so without this check
+     mapTableColumns() fell into its no-header fallback and grabbed the
+     first two columns ("Category"/"Item") as if they were Visual/Audio,
+     turning every breakdown row (and the header row itself) into a
+     fabricated scene on reimport. */
+  var BREAKDOWN_HEADER = ["category", "item", "status", "assigned to", "mentions", "scenes", "notes"];
+  function isBreakdownHeader(head) {
+    if (head.length !== BREAKDOWN_HEADER.length) return false;
+    for (var i = 0; i < BREAKDOWN_HEADER.length; i++) {
+      if (head[i] !== BREAKDOWN_HEADER[i]) return false;
+    }
+    return true;
+  }
+
   /* Work out which columns hold the visual and the audio. Tables in the wild
      have an extra scene-number column, and put the columns in either order. */
   function mapTableColumns(rowsText) {
     var head = (rowsText[0] || []).map(function (t) { return t.toLowerCase().trim(); });
+    if (isBreakdownHeader(head)) return null;
     var vi = head.findIndex(function (t) { return VISUAL_HEAD.test(t); });
     var ai = head.findIndex(function (t) { return AUDIO_HEAD.test(t); });
     if (vi !== -1 && ai !== -1 && vi !== ai) return { vi: vi, ai: ai, skipHeader: true };
@@ -475,9 +491,6 @@
     var withText = loose.filter(function (n) { return htmlToPlainText(docxParaToHtml(n, linkMap)); });
     var boldCount = withText.filter(isAllBoldPara).length;
     var boldMeansVisual = boldCount > 0 && boldCount < withText.length * 0.7;
-
-    var headings = blocks.filter(isHeadingBlock).length;
-    function isHeadingBlock(n) { return n.localName === "p" && isHeadingPara(n); }
 
     var rows = [], title = null, pending = null;
 
@@ -539,9 +552,18 @@
       if (!plain && !target) return;
 
       if (isHeadingPara(node)) {
-        /* a lone heading at the very top is the document's title; otherwise
-           headings are section markers worth keeping as their own row */
-        if (title === null && !rows.length && !pending && headings <= 1) { title = plain; return; }
+        /* a heading at the very top, before anything else has been kept, is
+           the document's title; otherwise headings are section markers
+           worth keeping as their own row. This used to also require there
+           be no MORE than one heading anywhere in the whole document — but
+           buildDocx() always adds a second Heading1 ("Comments" /
+           "Production breakdown") once there's a saved comment or tracked
+           item, which defeated that count on every one of its own exports:
+           the title paragraph became a bogus row, and the whole appended
+           section got walked as narration. Position (nothing kept yet) is
+           the actual invariant the comment above describes — count of
+           headings elsewhere in the document has nothing to do with it. */
+        if (title === null && !rows.length && !pending) { title = plain; return; }
         flush();
         rows.push(newRow({ visualText: "<strong>" + html + "</strong>" }));
         return;
