@@ -30,9 +30,13 @@ if (-not $Silent) {
 }
 
 # A running server holds node.exe open, so stop anything launched from here
-# before trying to delete it.
+# before trying to delete it. A trailing separator on the prefix matters: a
+# bare StartsWith($target) also matches a sibling folder whose name merely
+# begins with the same characters (e.g. "Splitpage" install path also
+# matching a "SplitpageLegacy" one), force-killing an unrelated process.
+$targetPrefix = $target.TrimEnd('\') + "\"
 Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, "OrdinalIgnoreCase") } |
+  Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($targetPrefix, "OrdinalIgnoreCase") } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 foreach ($root in @($env:APPDATA, $env:ProgramData)) {
@@ -50,19 +54,36 @@ foreach ($desk in @($shell.SpecialFolders("Desktop"), $shell.SpecialFolders("All
   }
 }
 
+$registryLeftBehind = @()
 foreach ($root in @("HKCU:", "HKLM:")) {
   $key = "$root\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName"
-  if (Test-Path $key) { Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue }
+  if (Test-Path $key) {
+    Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
+    # A non-elevated run against an all-users (HKLM) install fails here
+    # with access-denied, silently, leaving an orphaned Add/Remove
+    # Programs entry with no self-uninstall recourse — surfaced below
+    # instead of just swallowing it.
+    if (Test-Path $key) { $registryLeftBehind += $root }
+  }
 }
 
 # This script is inside the folder it is deleting, so hand the last step to a
-# detached cmd that waits for PowerShell to exit first.
+# detached cmd that waits for PowerShell to exit first. Because that rmdir
+# runs after this process has already exited, its own success can't be
+# checked from here — "Removed" below describes what this script did
+# (shortcuts, registry), not a confirmed guarantee about the folder itself.
 $cmd = "ping 127.0.0.1 -n 1 > nul & timeout /t 2 /nobreak > nul & rmdir /s /q `"$target`""
 Start-Process cmd.exe -ArgumentList "/c", $cmd -WindowStyle Hidden
 
 if (-not $Silent) {
   Write-Host ""
   Write-Host "  Removed." -ForegroundColor Green
+  Write-Host "  The app folder is being deleted in the background and may take a" -ForegroundColor Gray
+  Write-Host "  moment to finish after this window closes." -ForegroundColor Gray
+  if ($registryLeftBehind.Count) {
+    Write-Host "  Could not remove the $($registryLeftBehind -join ', ') registry entry" -ForegroundColor Yellow
+    Write-Host "  (needs an admin prompt) — Add/Remove Programs may still list Splitpage." -ForegroundColor Yellow
+  }
   if (Test-Path $dataDir) { Write-Host "  Your scripts are still in $dataDir" -ForegroundColor Gray }
   Write-Host ""
   Start-Sleep -Seconds 2

@@ -85,8 +85,8 @@
 
     var bulkDel = e.target.closest('[data-action="bulk-delete"]');
     if (bulkDel) {
-      if (bulkDeleteArmed) bulkDeleteSelected();
-      else { bulkDeleteArmed = true; renderProduction(); }
+      if (bulkDeleteArmed) { disarmBulkDelete(); bulkDeleteSelected(); }
+      else { armBulkDelete(); renderProduction(); }
       return;
     }
 
@@ -484,18 +484,31 @@
       drop.closest(".visual-cell").classList.add("drag-over");
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row || row.getAttribute("data-id") === dragRowId) return;
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
-    var box = row.getBoundingClientRect();
-    var after = (e.clientY - box.top) > box.height / 2;
-    document.querySelectorAll("#rows .row").forEach(function (r) {
-      if (r !== row) r.classList.remove("drop-before", "drop-after");
-    });
-    row.classList.toggle("drop-before", !after);
-    row.classList.toggle("drop-after", after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row || row.getAttribute("data-id") === dragRowId) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
+      var box = row.getBoundingClientRect();
+      var after = (e.clientY - box.top) > box.height / 2;
+      document.querySelectorAll("#rows .row").forEach(function (r) {
+        if (r !== row) r.classList.remove("drop-before", "drop-after");
+      });
+      row.classList.toggle("drop-before", !after);
+      row.classList.toggle("drop-after", after);
+      return;
+    }
+    /* Foreign content being dragged in from outside the page (another tab,
+       another app) onto a script cell. preventDefault here so 'drop' is
+       guaranteed to fire and land in onRootDrop's plain-text-only path below
+       instead of some engine's own native "accept the drop" default —
+       Chromium's own default for a contenteditable region is to accept it
+       and insert raw HTML regardless of what this handler does, which is
+       exactly the paste bypass onRootPaste already exists to block. */
+    if (e.target.closest && e.target.closest(".cell-editable")) {
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
+    }
   }
 
   function onRootDragLeave(e) {
@@ -515,16 +528,44 @@
       if (file) handleImageFile(drop.getAttribute("data-id"), file);
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row) return;
-    e.preventDefault();
-    var after = row.classList.contains("drop-after");
-    var targetId = row.getAttribute("data-id");
-    var movingId = dragRowId;
-    dragRowId = null;
-    clearDropMarkers();
-    moveRowTo(movingId, targetId, after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row) return;
+      e.preventDefault();
+      var after = row.classList.contains("drop-after");
+      var targetId = row.getAttribute("data-id");
+      var movingId = dragRowId;
+      dragRowId = null;
+      clearDropMarkers();
+      moveRowTo(movingId, targetId, after);
+      return;
+    }
+    /* Any other drop onto a script cell is foreign content — a page or app
+       outside Splitpage dragging in its own text/HTML. onRootPaste already
+       forces plain text for exactly this reason (Ctrl+V bypassing
+       sanitizeHtml would be as bad as this); mirror it here rather than
+       letting the browser perform its own native HTML insertion, which
+       never passes through sanitizeHtml/walkSanitize at all. */
+    var cellEl = e.target.closest && e.target.closest(".cell-editable");
+    if (cellEl) {
+      e.preventDefault();
+      var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+      if (text) {
+        /* Unlike paste, nothing has focused this cell or put a caret in it —
+           the user was dragging, never clicked in. insertText writes at the
+           current selection, so without one first it has nowhere to land. */
+        cellEl.focus();
+        try {
+          var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+          if (range && cellEl.contains(range.startContainer)) {
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        } catch (err) {}
+        document.execCommand("insertText", false, text);
+      }
+    }
   }
 
   function init() {
@@ -654,6 +695,14 @@
          writer — opening it there hands the keystroke to something the
          writer cannot see */
       if (writerOpen) return;
+      /* Every modal dialog (.modal-backdrop — Import, Google Doc, Comment,
+         file-conflict, Server, Drive, Tag) sits fixed above the find bar,
+         which is a plain static-flow element with no z-index of its own.
+         Without this check, Ctrl+F while typing inside any of them still
+         focused the (now invisible, covered) find-input — every further
+         keystroke meant for that modal's own field silently vanished into
+         a search box the user couldn't even see. */
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
       /* the script lives across dozens of separate contenteditables, so the
          browser's own find is close to useless here — take the shortcut */
       e.preventDefault();
@@ -684,6 +733,15 @@
         else if (e.key === "Escape") { e.preventDefault(); tagAddingPersonFor = null; renderProduction(); }
         return;
       }
+      /* wireTagEntityContainer's own keydown listener (registered on this
+         SAME element) already handles Escape for these two inputs —
+         cancelling a per-card rename or add-person popup. Both listeners
+         fire for one keydown since neither calls stopPropagation, so
+         without this check, Escape here ALSO ran the "clear the bulk
+         selection" branch below — silently wiping out an unrelated
+         multi-select the user was still building, as a side effect of
+         cancelling an unrelated popup. */
+      if (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input")) return;
       /* Escape drops the selection — the counterpart to the bar's ×, and the
          reason a plain click is allowed to leave a selection standing */
       if (e.key === "Escape" && selectedKeys().length) {
@@ -956,9 +1014,21 @@
     document.getElementById("import-close").addEventListener("click", closeImportModal);
     document.getElementById("import-cancel").addEventListener("click", closeImportModal);
     document.getElementById("import-confirm").addEventListener("click", confirmImport);
+    /* maybeAutoDetectTwoColumn + updateImportPreview together re-scan and
+       re-parse the WHOLE textarea (detectTwoColumnFormat runs twice, once
+       in each) with no memoization — on a large pasted script, that ran
+       in full on every subsequent keystroke, not just the paste itself.
+       Debounced so a run of edits (typing, or the flurry of "input"
+       events a paste itself can fire) coalesces into one pass after
+       things settle, rather than one per keystroke. */
+    var importPreviewDebounce = null;
     document.getElementById("import-textarea").addEventListener("input", function (e) {
-      maybeAutoDetectTwoColumn(e.target.value);
-      updateImportPreview();
+      var value = e.target.value;
+      clearTimeout(importPreviewDebounce);
+      importPreviewDebounce = setTimeout(function () {
+        maybeAutoDetectTwoColumn(value);
+        updateImportPreview();
+      }, 150);
     });
     document.querySelectorAll('input[name="import-split"]').forEach(function (r) {
       r.addEventListener("change", function () {

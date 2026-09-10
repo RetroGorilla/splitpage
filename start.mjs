@@ -116,12 +116,18 @@ if (!existsSync(join(ROOT, "index.html"))) {
 
 /* ---------- find a port ---------- */
 
+/* Probes whatever address the real server will actually bind — always
+   127.0.0.1 before, regardless of --host, while server.js binds 0.0.0.0
+   whenever HOSTING is set. A wildcard bind can conflict with something
+   already listening on a specific interface (or vice versa) in ways a
+   loopback-only probe can never see, so a "free" port here could still
+   fail in the real server. */
 function isFree(port) {
   return new Promise((resolve) => {
     const probe = createServer();
     probe.once("error", () => resolve(false));
     probe.once("listening", () => probe.close(() => resolve(true)));
-    probe.listen(port, "127.0.0.1");
+    probe.listen(port, HOSTING ? "0.0.0.0" : "127.0.0.1");
   });
 }
 
@@ -166,6 +172,14 @@ function writeStatus(extra) {
      than carried, so it goes false by itself once the update is installed. */
   const latest = extra.latest !== undefined ? extra.latest : (previous.latest ?? null);
   const status = {
+    /* Carry the whole previous status forward, not just `latest` — a
+       field like justUpdated (set right after applying a staged update,
+       for the frontend to show a "you're now on vX" banner) used to be
+       silently dropped the moment ANY later writeStatus() call didn't
+       itself re-supply it, which the background update-check does
+       moments later. Fields below override this as intended; `extra`
+       (the caller's actual update) always wins last. */
+    ...previous,
     version,
     checkedAt: new Date().toISOString(),
     latest,

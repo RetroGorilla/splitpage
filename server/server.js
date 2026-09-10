@@ -114,7 +114,17 @@ function withDocLock(id, fn) {
   const next = prev.then(fn, fn);
   /* keep the chain from growing without bound, and never let a rejection
      poison the next writer */
-  writeChains.set(id, next.then(() => {}, () => {}));
+  const settled = next.then(() => {}, () => {});
+  writeChains.set(id, settled);
+  /* Nothing ever pruned an id out of this map — not even on DELETE — so
+     it grew by one permanent entry for every distinct document id ever
+     written, for the life of the process. Once this write settles, drop
+     the entry entirely if nothing queued a newer write for the same id
+     in the meantime (identity check: writeChains.get(id) is still the
+     exact promise we just stored here). */
+  settled.then(() => {
+    if (writeChains.get(id) === settled) writeChains.delete(id);
+  });
   return next;
 }
 
@@ -261,15 +271,32 @@ async function handleApi(req, res, url) {
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
     }
-    const newId = slugify(body.state.title || body.title);
-    const doc = {
-      id: newId,
-      rev: 1,
-      state: body.state,
-      updatedAt: new Date().toISOString(),
-      updatedBy: who.name || body.by || null
-    };
-    await withDocLock(newId, () => writeDoc(doc));
+    /* slugify()'s uniqueness rests on 24 bits of random suffix — unlikely
+       per call, but not impossible over a long-running/shared library's
+       lifetime (birthday-bound collision). Unlike PUT's careful rev-based
+       compare-and-set, a straight write here with no existence check
+       would silently destroy whatever unrelated document already used
+       that id. Retry with a fresh id (still inside the per-id lock, so
+       two concurrent creates can't race each other onto the same check)
+       rather than ever overwriting. */
+    let newId, doc;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = slugify(body.state.title || body.title);
+      const wrote = await withDocLock(candidate, async () => {
+        if (await readDoc(candidate)) return null; /* taken — try another id */
+        const d = {
+          id: candidate,
+          rev: 1,
+          state: body.state,
+          updatedAt: new Date().toISOString(),
+          updatedBy: who.name || body.by || null
+        };
+        await writeDoc(d);
+        return d;
+      });
+      if (wrote) { newId = candidate; doc = wrote; break; }
+    }
+    if (!doc) return sendJson(res, 500, { error: "id-collision" });
     return sendJson(res, 201, { id: newId, rev: doc.rev, updatedAt: doc.updatedAt });
   }
 
@@ -347,7 +374,17 @@ async function handleStatic(req, res, url) {
     res.writeHead(405).end();
     return;
   }
-  let rel = decodeURIComponent(url.pathname);
+  let rel;
+  try {
+    rel = decodeURIComponent(url.pathname);
+  } catch (e) {
+    /* malformed percent-encoding (e.g. a truncated "%zz" or a cut-off
+       multi-byte escape) throws a URIError here — that's an ordinary bad
+       request, not a server fault, and left unguarded it was only caught
+       by the generic top-level handler, which logs it and answers 500. */
+    res.writeHead(400).end();
+    return;
+  }
   if (rel === "/") rel = "/index.html";
 
   /* resolve, then confirm the result is still inside STATIC_DIR — the check
@@ -383,7 +420,17 @@ async function handleStatic(req, res, url) {
     "Cache-Control": cache
   });
   if (req.method === "HEAD") { res.end(); return; }
-  fs.createReadStream(full).pipe(res);
+  /* Headers are already written above, so an error here can't be turned into
+     a clean 4xx/5xx — the best this can do is stop that one response instead
+     of taking the whole process down. With no listener, Node's default
+     behavior for an unhandled stream "error" is to throw, which crashes
+     every other request and every document being edited, not just this one. */
+  const stream = fs.createReadStream(full);
+  stream.on("error", (err) => {
+    console.error("[splitpage] static read error for " + full + ": " + (err && err.message));
+    res.destroy();
+  });
+  stream.pipe(res);
 }
 
 /* ---------- server ---------- */
@@ -401,6 +448,18 @@ const server = http.createServer((req, res) => {
     console.error("[splitpage]", req.method, url.pathname, err && err.stack ? err.stack : err);
     sendJson(res, 500, { error: "server-error" });
   });
+});
+
+/* start.mjs's pre-flight port check has an inherent TOCTOU gap (probes,
+   closes, then spawns this process, which binds later) — a losing race
+   (two launches at once, or a listener already on the target address)
+   means listen() below fails. With no 'error' listener registered, that
+   failure is an unhandled 'error' event: Node throws it as an uncaught
+   exception, crashing with a raw stack trace instead of a clean message. */
+server.on("error", (err) => {
+  console.error("[splitpage] could not start on " + HOST + ":" + PORT + " — " +
+    (err && err.message ? err.message : err));
+  process.exit(1);
 });
 
 async function start() {

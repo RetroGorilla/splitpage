@@ -170,24 +170,44 @@
 
   /* ================= images ================= */
 
+  /* Formats that commonly carry a real alpha channel — a screenshot/cutout/
+     logo attached in one of these keeps its transparency by staying PNG;
+     anything else (photos: JPEG, HEIC-via-browser-decode, etc.) still goes
+     through the smaller lossy JPEG path, since those never have alpha to
+     begin with. */
+  var ALPHA_CAPABLE_TYPE = /^image\/(png|gif|webp)$/;
+
   function compressImageFile(file, maxDim, quality) {
     return new Promise(function (resolve, reject) {
       if (!file || file.type.indexOf("image/") !== 0) { reject(new Error("not an image")); return; }
+      var keepAlpha = ALPHA_CAPABLE_TYPE.test(file.type);
       var reader = new FileReader();
       reader.onerror = function () { reject(new Error("read failed")); };
       reader.onload = function () {
         var img = new Image();
         img.onerror = function () { reject(new Error("decode failed")); };
         img.onload = function () {
-          var w = img.width, h = img.height;
-          var scale = Math.min(1, maxDim / Math.max(w, h));
-          var cw = Math.max(1, Math.round(w * scale));
-          var ch = Math.max(1, Math.round(h * scale));
-          var canvas = document.createElement("canvas");
-          canvas.width = cw; canvas.height = ch;
-          var ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, cw, ch);
-          resolve(canvas.toDataURL("image/jpeg", quality));
+          /* A canvas format without alpha support (JPEG) composites every
+             transparent pixel onto solid black before encoding, per the
+             canvas spec — permanently destroying a PNG/GIF/WebP's
+             transparency with no error or warning. Runs inside a try/catch
+             too: this callback fires asynchronously, after the Promise
+             executor has already returned, so a synchronous throw in here
+             (e.g. a SecurityError from a tainted canvas — a cross-origin
+             reference inside an SVG, say) would otherwise never resolve OR
+             reject the promise, leaving the upload hanging forever with no
+             toast and nothing but a console error to show for it. */
+          try {
+            var w = img.width, h = img.height;
+            var scale = Math.min(1, maxDim / Math.max(w, h));
+            var cw = Math.max(1, Math.round(w * scale));
+            var ch = Math.max(1, Math.round(h * scale));
+            var canvas = document.createElement("canvas");
+            canvas.width = cw; canvas.height = ch;
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, cw, ch);
+            resolve(keepAlpha ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality));
+          } catch (e) { reject(e); }
         };
         img.src = reader.result;
       };

@@ -119,6 +119,23 @@ try {
   $inner = Get-ChildItem $stage -Directory | Select-Object -First 1
   $from = if ($inner) { $inner.FullName } else { $stage }
   Copy-Item (Join-Path $from "*") $target -Recurse -Force
+
+  # Copy-Item above only adds/overwrites — it never removes a file an
+  # upgrade left behind. Mirror instead: anything in $target that isn't
+  # in this release's payload gets removed, so reinstalling over an older
+  # version doesn't accumulate stale files (e.g. a renamed/deleted script)
+  # indefinitely. Scoped entirely to $target, which never contains the
+  # user's documents (those live in $dataDir, outside the app folder).
+  $fromFull = (Resolve-Path $from).Path
+  $newRel = @{}
+  Get-ChildItem -Path $from -Recurse -File | ForEach-Object {
+    $newRel[$_.FullName.Substring($fromFull.Length).TrimStart('\')] = $true
+  }
+  $targetFull = (Resolve-Path $target).Path
+  Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $rel = $_.FullName.Substring($targetFull.Length).TrimStart('\')
+    if (-not $newRel.ContainsKey($rel)) { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+  }
 } finally {
   if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
 }

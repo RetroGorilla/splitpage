@@ -171,7 +171,25 @@
           var dim = safeAspect(jpegSize(bytes));
           var name = "Im" + (images.length + 1);
           images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
-          imgRef = { name: name, w: COLW, h: COLW * dim.ratio };
+          var natW = COLW, natH = COLW * dim.ratio;
+          /* A tall/portrait image (a phone-screenshot crop, say) can have a
+             natural height that alone exceeds a WHOLE page's usable height
+             — safeAspect() only guards against a zero/negative width, not
+             an extreme ratio. The draw guard further down only checks
+             whether it fits from the current y, with no fallback if it
+             can't fit ANYWHERE — even a fresh page — so it was silently
+             skipped: never drawn, no warning. Cap it to the full usable
+             page height here (PH - 2*M), shrinking width to match, so
+             there's always at least one page it fits on. */
+          /* The most vertical room an image can ever get is right after a
+             forced page break: newPage() lands at PH - M, then the row
+             loop's own "y -= 6" plus drawColumnHeaders()'s 8pt + 16pt of
+             header/rule/gap eat 30pt of that before the image is drawn —
+             capping to the whole page's height (PH - 2*M) still left it
+             30pt short of fitting even there. */
+          var maxH = PH - 2 * M - 30;
+          if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
+          imgRef = { name: name, w: natW, h: natH };
           imgH = imgRef.h + 8;
         } catch (e) { /* skip an unreadable image */ }
       }
@@ -195,8 +213,15 @@
       var vCursor = vy, aCursor = y;
       var guard = 0;
       while ((vRest.length || aRest.length) && guard++ < 400) {
-        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD));
-        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD));
+        /* A block of n lines starting at startY = cursor - SIZE has its
+           last baseline at cursor - SIZE - (n-1)*LEAD, so the largest n
+           whose baseline still clears the bottom margin M is
+           floor((cursor - SIZE - M) / LEAD) + 1, not the bare floor() —
+           the missing +1 undercounted by exactly one line on every
+           multi-page row, forcing an unnecessary early page break and an
+           ~LEAD-tall blank gap at the bottom of the column. */
+        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
+        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
         var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
         var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
         var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;
@@ -309,20 +334,34 @@
           };
         });
 
-        var need = columnHeight(headerLines) + columnHeight(quoteLines) + columnHeight(bodyLines) + 14;
-        replyBlocks.forEach(function (rb) { need += columnHeight(rb.headerLines) + columnHeight(rb.bodyLines); });
-        if (y - need < M) {
-          newPage(); y -= 6;
-          text("Comments (continued)", M, y - 12, "F2", 12);
-          y -= 34;
+        /* Flattened into one ordered (line, indent) list and drawn one line
+           at a time, each checked against the bottom margin as it goes —
+           a single up-front `need` check (the old approach) only proved
+           the START of the thread fit on the page; a long body or several
+           replies still ran straight past the margin with no further
+           check, silently losing whatever text landed below it. This
+           mirrors how the scene-row loop above already paginates. */
+        var threadLines = [];
+        headerLines.forEach(function (l) { threadLines.push({ line: l, x: M }); });
+        quoteLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+        bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+        replyBlocks.forEach(function (rb) {
+          rb.headerLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+          rb.bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+        });
+
+        function ensureCommentRoom() {
+          if (y - LEAD < M) {
+            newPage(); y -= 6;
+            text("Comments (continued)", M, y - 12, "F2", 12);
+            y -= 34;
+          }
         }
 
-        y = drawLines(headerLines, M, y - SIZE);
-        if (quoteLines.length) y = drawLines(quoteLines, M + 12, y - SIZE);
-        y = drawLines(bodyLines, M + 12, y - SIZE);
-        replyBlocks.forEach(function (rb) {
-          y = drawLines(rb.headerLines, M + 24, y - SIZE);
-          y = drawLines(rb.bodyLines, M + 24, y - SIZE);
+        ensureCommentRoom();
+        threadLines.forEach(function (b) {
+          ensureCommentRoom();
+          y = drawLines([b.line], b.x, y - SIZE);
         });
         y -= 6;
         ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 4).toFixed(2) + " m " +
@@ -463,13 +502,24 @@
       y -= LEAD;
     }
 
+    /* Unlike buildPdf()'s two columns, this line was never run through
+       pdfWrapRuns — a long item name/status/owner combination just ran
+       straight off the page's right edge (unwrapped, untruncated, simply
+       invisible past x=612) instead of wrapping to a second line. */
+    var ITEM_TEXT_W = PW - M * 2 - 18;
     items.forEach(function (item) {
-      if (y - LEAD < M) { newPage(); header(); }
       var owner = personById(item.owner);
       var st = tagStatus(item.status) || TAG_STATUSES[0];
+      var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "");
+      var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
+      var need = wrapped.length * LEAD;
+      if (y - need < M) { newPage(); header(); }
       box(M, y - SIZE + 1, 10);
-      text(item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : ""),
-        M + 18, y - SIZE, "F1", SIZE);
+      wrapped.forEach(function (lineSegs, li) {
+        var lineStr = lineSegs.map(function (s) { return s.text; }).join("");
+        text(lineStr, M + 18, y - SIZE, "F1", SIZE);
+        if (li < wrapped.length - 1) y -= LEAD;
+      });
       y -= LEAD;
       rule(M, y + 8, PW - M * 2);
     });

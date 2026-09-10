@@ -75,7 +75,15 @@
       var tag = node.tagName;
 
       if (tag === "DIV" || tag === "P") {
-        walkSanitize(node, destParent);
+        /* A div/p whose only content is a single <br> is contenteditable's
+           way of marking "this paragraph is empty" (so the empty line
+           stays visible/selectable) — it is not an extra line break ON TOP
+           OF the paragraph separator appended below. Walking into it first
+           re-emitted that same <br>, so a single blank paragraph between
+           two others doubled into two blank lines instead of one. */
+        var isBlankPara = node.childNodes.length === 1 &&
+          node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
+        if (!isBlankPara) walkSanitize(node, destParent);
         destParent.appendChild(document.createElement("br"));
         return;
       }
@@ -181,7 +189,11 @@
       else if (tag === "U") out += "<u>" + inner + "</u>";
       else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
       else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
-      else if (tag === "A") out += "[" + inner + "](" + child.getAttribute("href") + ")";
+      /* A link's visible text becomes markdown's [text](href) — but a
+         literal "]" in that text closes the link early for any standard
+         parser, and "(" / ")" break the destination parse the same way;
+         escaping them is what CommonMark itself expects inside link text. */
+      else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
       else if (tag === "BR") out += "\n";
       else out += inner;
     });
