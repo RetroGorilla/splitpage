@@ -291,6 +291,36 @@ None of this affects working locally. Opened from disk, the app behaves exactly
 as it always has, and **Save As** still gives you a local copy of a hosted
 script whenever you want one.
 
+## Google Drive files
+
+**File ▸ Google Drive files…** opens a small file manager for any publicly
+shared Google Drive folder — browse it, download files, upload new ones,
+rename, delete, and create subfolders, right from Splitpage. It's separate
+from opening and saving your script; think of it as a way to move files in
+and out of a shared folder without leaving the app.
+
+Google splits this into two permissions, so Splitpage needs two credentials
+of your own (the app has no server to hold them for you — they're kept only
+in your browser's local storage):
+
+- An **API key**, to list and download files from a public folder — no
+  sign-in needed, since Google treats "anyone with the link" as exactly that.
+- An **OAuth Client ID**, to make changes — uploading, renaming, deleting, or
+  creating a folder always needs a real signed-in Google account, even on a
+  folder anyone with the link can edit.
+
+The panel walks you through creating both in the [Google Cloud
+Console](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+the first time you open it (enable the Drive API, create an API key, create
+a Web-application OAuth client with this page's address as an authorized
+JavaScript origin). Paste a folder's share link or its ID to connect, and
+sign in with Google when you want to change something — browsing and
+downloading work without signing in at all.
+
+Note: sign-in needs the page served over `http://`/`https://` — see
+**Running it** above for `start.bat`; it doesn't work opened straight off
+disk (`file://`).
+
 ## On a phone
 
 The whole app works on a phone — same file, same features, re-flowed. Scenes
