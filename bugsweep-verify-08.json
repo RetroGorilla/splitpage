@@ -1,0 +1,74 @@
+[
+  {
+    "file": "uninstall.mjs",
+    "line": 112,
+    "severity": "high",
+    "summary": "Every path uninstall.mjs deletes comes straight from Object.keys(manifest.files) with no check that it resolves inside ROOT, so a crafted or corrupted .splitpage-release.json can make it delete arbitrary files outside the install directory.",
+    "refuted": false,
+    "reasoning": "Confirmed in the file: `owned = Object.keys(manifest.files || {})` at line 41 feeds directly into `join(ROOT, rel)` at line 112 (rmSync) with no path-traversal check anywhere in between, so a manifest entry like \"../../foo\" resolves and deletes outside ROOT."
+  },
+  {
+    "file": "update.mjs",
+    "line": 224,
+    "severity": "high",
+    "summary": "apply()'s backup directory is wiped and rebuilt from whatever is currently on disk on every call, so if a first apply() is hard-killed mid-loop (some files already replaced) and a retry then fails partway for a different reason, rollback restores already-migrated files from a backup that itself only contains the new version -- leaving a permanently mixed-version app with pending.json deleted so nothing retries it.",
+    "refuted": false,
+    "reasoning": "Traced the code: apply() unconditionally does rmSync(backup)+mkdirSync(backup) at lines 225-226 before looping, and for each file only backs up whatever is currently on disk (`if (existsSync(to))`), so a retry after a hard kill re-backs-up the already-migrated files as if they were originals; a later real failure in the retry then rolls those back to their (already-new) state while leaving pending.json deleted, matching the described mixed-version outcome exactly."
+  },
+  {
+    "file": "update.mjs",
+    "line": 249,
+    "severity": "medium",
+    "summary": "The rollback loop in apply()'s catch block only restores files that had a pre-existing backup; files newly introduced by the release (which never existed before, so were never backed up) are left in place instead of being removed, so a 'rolled back' install still contains extra files that don't belong to the restored old version.",
+    "refuted": false,
+    "reasoning": "Confirmed: for a `rel` with no prior file on disk, the `if (existsSync(to))` guard at line 233 skips creating a backup, but the file is still copied in unconditionally afterward and added to `done`; the rollback loop at lines 249-252 only acts `if (existsSync(keep))`, so that new file is never removed on rollback."
+  },
+  {
+    "file": "server/server.js",
+    "line": 411,
+    "severity": "medium",
+    "summary": "The http.Server created in server.js has no 'error' listener registered before server.listen() is called, so a bind failure (e.g. losing the TOCTOU race in start.mjs's port check, EADDRINUSE) crashes the process via an unhandled 'error' event instead of being handled or reported cleanly.",
+    "refuted": false,
+    "reasoning": "Grep of the whole file shows no `.on(\"error\", ...)` registered on the `server` object anywhere; `server.listen(PORT, HOST, callback)` is called with only a success callback, so an EADDRINUSE/EACCES error on listen would be an unhandled 'error' event and crash the process."
+  },
+  {
+    "file": "start.mjs",
+    "line": 159,
+    "severity": "low",
+    "summary": "writeStatus() only carries forward the previous status file's 'latest' field across calls; every other field (notably justUpdated) is dropped whenever a later writeStatus call doesn't itself supply it, so the 'just updated to vX' flag set right after an update is silently erased the moment the background version check finishes and rewrites the file moments later.",
+    "refuted": false,
+    "reasoning": "Confirmed by tracing writeStatus: the first call includes `justUpdated: applied`, but the background update-check's later writeStatus({latest, updateAvailable, pending}) call (line ~201) omits it; since the function only special-cases carrying forward `previous.latest` and otherwise rebuilds the object from `extra`, the resulting file loses `justUpdated` entirely."
+  },
+  {
+    "file": "start.mjs",
+    "line": 124,
+    "severity": "medium",
+    "summary": "isFree() always probes 127.0.0.1 regardless of mode, but when --host is passed the real server binds 0.0.0.0 -- so the pre-flight port check tests a different address than the one that will actually be bound, and can report a port free that isn't actually available on the address server.js uses.",
+    "refuted": false,
+    "reasoning": "Confirmed: isFree() hardcodes `probe.listen(port, \"127.0.0.1\")` while HOST is set to \"0.0.0.0\" whenever HOSTING is true (line 225), so the pre-flight check and the actual bind in the spawned server.js process target different addresses on the same port."
+  },
+  {
+    "file": "installer/install.ps1",
+    "line": 67,
+    "severity": "high",
+    "summary": "Falling back from an elevation-requiring choice only resets $target, never $AllUsers, so the two can end up describing different install modes -- downstream code (Start Menu path, registry hive) keys off $AllUsers not $target, so it can try admin-only operations from a non-elevated process and throw mid-install after files were already copied.",
+    "refuted": true,
+    "reasoning": "In the only real invocation path (IExpress launches `powershell.exe -File install.ps1` with no parameters, per package.mjs line 293), $AllUsers is false by default and is never set true before the interactive choice-\"2\"-without-admin fallback runs, so $target and $AllUsers stay consistent (both 'per-user'); the described mismatch only occurs if a caller manually invokes the script with `-AllUsers` but without `-Silent`, a combination not used or documented anywhere in the repo."
+  },
+  {
+    "file": "installer/uninstall.ps1",
+    "line": 60,
+    "severity": "high",
+    "summary": "The detached self-delete command nests double-quotes inside a cmd.exe /c string that also uses '&' chaining, which breaks cmd's own quote parsing whenever the install path contains a space -- including the officially offered 'Everyone on this PC' default path 'C:\\Program Files\\Splitpage'.",
+    "refuted": true,
+    "reasoning": "Start-Process -ArgumentList in Windows PowerShell 5.1 (the interpreter this script targets) simply space-joins the array elements into the raw process command line rather than re-quoting/escaping each element, so the final line cmd.exe sees is `/c ping ... & timeout ... & rmdir /s /q \"C:\\Program Files\\Splitpage\"` -- a single, unambiguous pair of quotes around the path with no extra nesting layer, which is standard valid cmd.exe syntax."
+  },
+  {
+    "file": "installer/uninstall.ps1",
+    "line": 35,
+    "severity": "high",
+    "summary": "The node.exe process filter uses a raw string-prefix match on the install path with no path-separator boundary check, so it can force-kill an unrelated running Node process whose folder name merely starts with the same characters (e.g. a sibling folder 'SplitpageLegacy' when installed to 'Splitpage').",
+    "refuted": false,
+    "reasoning": "Confirmed: `$_.ExecutablePath.StartsWith($target, \"OrdinalIgnoreCase\")` at line 35 is a plain prefix match with no trailing-separator check, so an ExecutablePath like \"...\\SplitpageLegacy\\node.exe\" would satisfy StartsWith(\"...\\Splitpage\") and get force-killed."
+  }
+]
