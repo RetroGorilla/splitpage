@@ -119,6 +119,18 @@
     return ROW_FIELDS.every(function (f) { return (a[f] || null) === (b[f] || null); });
   }
 
+  /* The comment-level equivalent of rowContentEqual, used the same way: to
+     tell "the other side left this untouched since base" (safe to honor a
+     delete) apart from "the other side genuinely changed it" (a reply or a
+     resolve must survive even if I deleted my copy). */
+  function commentContentEqual(a, b) {
+    if (!a || !b) return false;
+    if ((a.body || "") !== (b.body || "")) return false;
+    if (!!a.resolved !== !!b.resolved) return false;
+    if (JSON.stringify(a.replies || []) !== JSON.stringify(b.replies || [])) return false;
+    return true;
+  }
+
   /* Merge `mine` and `theirs`, both descended from `base`.
      Anything that cannot be reconciled is preserved, never dropped.
 
@@ -224,9 +236,22 @@
       seen[id] = true;
       var m = mineC[id], t = theirC[id], b = baseC[id];
       var pick;
-      if (m && t) pick = JSON.parse(JSON.stringify(newer(m, t)));
-      else if (t && !m) { if (b) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
-      else { if (b) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
+      if (m && t) {
+        pick = JSON.parse(JSON.stringify(newer(m, t)));
+        /* `resolved` is forward progress, the same rule this file already
+           applies to row/tag status ("a merge can never un-shoot/un-buy
+           something") — so it is merged independently rather than riding
+           along with whichever whole side "newer" happened to pick. Without
+           this, an unrelated action that bumps updatedAt on one side (e.g. a
+           reply) can silently revert a resolve/unresolve that happened
+           earlier in wall-clock time on the other side. */
+        pick.resolved = !!(m.resolved || t.resolved);
+      }
+      /* An edit outranks a delete for comments the same way it already does
+         for rows a few lines up: only a comment BOTH honor as unchanged
+         since base is safe to drop when the other side deleted it. */
+      else if (t && !m) { if (b && commentContentEqual(b, t)) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
+      else { if (b && commentContentEqual(b, m)) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
       if (m && t) {
         var replies = byId(m.replies);
         (t.replies || []).forEach(function (r) { replies[r.id] = r; });

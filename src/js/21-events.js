@@ -484,18 +484,31 @@
       drop.closest(".visual-cell").classList.add("drag-over");
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row || row.getAttribute("data-id") === dragRowId) return;
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
-    var box = row.getBoundingClientRect();
-    var after = (e.clientY - box.top) > box.height / 2;
-    document.querySelectorAll("#rows .row").forEach(function (r) {
-      if (r !== row) r.classList.remove("drop-before", "drop-after");
-    });
-    row.classList.toggle("drop-before", !after);
-    row.classList.toggle("drop-after", after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row || row.getAttribute("data-id") === dragRowId) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
+      var box = row.getBoundingClientRect();
+      var after = (e.clientY - box.top) > box.height / 2;
+      document.querySelectorAll("#rows .row").forEach(function (r) {
+        if (r !== row) r.classList.remove("drop-before", "drop-after");
+      });
+      row.classList.toggle("drop-before", !after);
+      row.classList.toggle("drop-after", after);
+      return;
+    }
+    /* Foreign content being dragged in from outside the page (another tab,
+       another app) onto a script cell. preventDefault here so 'drop' is
+       guaranteed to fire and land in onRootDrop's plain-text-only path below
+       instead of some engine's own native "accept the drop" default —
+       Chromium's own default for a contenteditable region is to accept it
+       and insert raw HTML regardless of what this handler does, which is
+       exactly the paste bypass onRootPaste already exists to block. */
+    if (e.target.closest && e.target.closest(".cell-editable")) {
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
+    }
   }
 
   function onRootDragLeave(e) {
@@ -515,16 +528,44 @@
       if (file) handleImageFile(drop.getAttribute("data-id"), file);
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row) return;
-    e.preventDefault();
-    var after = row.classList.contains("drop-after");
-    var targetId = row.getAttribute("data-id");
-    var movingId = dragRowId;
-    dragRowId = null;
-    clearDropMarkers();
-    moveRowTo(movingId, targetId, after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row) return;
+      e.preventDefault();
+      var after = row.classList.contains("drop-after");
+      var targetId = row.getAttribute("data-id");
+      var movingId = dragRowId;
+      dragRowId = null;
+      clearDropMarkers();
+      moveRowTo(movingId, targetId, after);
+      return;
+    }
+    /* Any other drop onto a script cell is foreign content — a page or app
+       outside Splitpage dragging in its own text/HTML. onRootPaste already
+       forces plain text for exactly this reason (Ctrl+V bypassing
+       sanitizeHtml would be as bad as this); mirror it here rather than
+       letting the browser perform its own native HTML insertion, which
+       never passes through sanitizeHtml/walkSanitize at all. */
+    var cellEl = e.target.closest && e.target.closest(".cell-editable");
+    if (cellEl) {
+      e.preventDefault();
+      var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+      if (text) {
+        /* Unlike paste, nothing has focused this cell or put a caret in it —
+           the user was dragging, never clicked in. insertText writes at the
+           current selection, so without one first it has nowhere to land. */
+        cellEl.focus();
+        try {
+          var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+          if (range && cellEl.contains(range.startContainer)) {
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        } catch (err) {}
+        document.execCommand("insertText", false, text);
+      }
+    }
   }
 
   function init() {

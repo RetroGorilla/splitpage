@@ -3251,6 +3251,18 @@
     return ROW_FIELDS.every(function (f) { return (a[f] || null) === (b[f] || null); });
   }
 
+  /* The comment-level equivalent of rowContentEqual, used the same way: to
+     tell "the other side left this untouched since base" (safe to honor a
+     delete) apart from "the other side genuinely changed it" (a reply or a
+     resolve must survive even if I deleted my copy). */
+  function commentContentEqual(a, b) {
+    if (!a || !b) return false;
+    if ((a.body || "") !== (b.body || "")) return false;
+    if (!!a.resolved !== !!b.resolved) return false;
+    if (JSON.stringify(a.replies || []) !== JSON.stringify(b.replies || [])) return false;
+    return true;
+  }
+
   /* Merge `mine` and `theirs`, both descended from `base`.
      Anything that cannot be reconciled is preserved, never dropped.
 
@@ -3356,9 +3368,22 @@
       seen[id] = true;
       var m = mineC[id], t = theirC[id], b = baseC[id];
       var pick;
-      if (m && t) pick = JSON.parse(JSON.stringify(newer(m, t)));
-      else if (t && !m) { if (b) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
-      else { if (b) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
+      if (m && t) {
+        pick = JSON.parse(JSON.stringify(newer(m, t)));
+        /* `resolved` is forward progress, the same rule this file already
+           applies to row/tag status ("a merge can never un-shoot/un-buy
+           something") — so it is merged independently rather than riding
+           along with whichever whole side "newer" happened to pick. Without
+           this, an unrelated action that bumps updatedAt on one side (e.g. a
+           reply) can silently revert a resolve/unresolve that happened
+           earlier in wall-clock time on the other side. */
+        pick.resolved = !!(m.resolved || t.resolved);
+      }
+      /* An edit outranks a delete for comments the same way it already does
+         for rows a few lines up: only a comment BOTH honor as unchanged
+         since base is safe to drop when the other side deleted it. */
+      else if (t && !m) { if (b && commentContentEqual(b, t)) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
+      else { if (b && commentContentEqual(b, m)) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
       if (m && t) {
         var replies = byId(m.replies);
         (t.replies || []).forEach(function (r) { replies[r.id] = r; });
@@ -12404,18 +12429,31 @@
       drop.closest(".visual-cell").classList.add("drag-over");
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row || row.getAttribute("data-id") === dragRowId) return;
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
-    var box = row.getBoundingClientRect();
-    var after = (e.clientY - box.top) > box.height / 2;
-    document.querySelectorAll("#rows .row").forEach(function (r) {
-      if (r !== row) r.classList.remove("drop-before", "drop-after");
-    });
-    row.classList.toggle("drop-before", !after);
-    row.classList.toggle("drop-after", after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row || row.getAttribute("data-id") === dragRowId) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
+      var box = row.getBoundingClientRect();
+      var after = (e.clientY - box.top) > box.height / 2;
+      document.querySelectorAll("#rows .row").forEach(function (r) {
+        if (r !== row) r.classList.remove("drop-before", "drop-after");
+      });
+      row.classList.toggle("drop-before", !after);
+      row.classList.toggle("drop-after", after);
+      return;
+    }
+    /* Foreign content being dragged in from outside the page (another tab,
+       another app) onto a script cell. preventDefault here so 'drop' is
+       guaranteed to fire and land in onRootDrop's plain-text-only path below
+       instead of some engine's own native "accept the drop" default —
+       Chromium's own default for a contenteditable region is to accept it
+       and insert raw HTML regardless of what this handler does, which is
+       exactly the paste bypass onRootPaste already exists to block. */
+    if (e.target.closest && e.target.closest(".cell-editable")) {
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
+    }
   }
 
   function onRootDragLeave(e) {
@@ -12435,16 +12473,44 @@
       if (file) handleImageFile(drop.getAttribute("data-id"), file);
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row) return;
-    e.preventDefault();
-    var after = row.classList.contains("drop-after");
-    var targetId = row.getAttribute("data-id");
-    var movingId = dragRowId;
-    dragRowId = null;
-    clearDropMarkers();
-    moveRowTo(movingId, targetId, after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row) return;
+      e.preventDefault();
+      var after = row.classList.contains("drop-after");
+      var targetId = row.getAttribute("data-id");
+      var movingId = dragRowId;
+      dragRowId = null;
+      clearDropMarkers();
+      moveRowTo(movingId, targetId, after);
+      return;
+    }
+    /* Any other drop onto a script cell is foreign content — a page or app
+       outside Splitpage dragging in its own text/HTML. onRootPaste already
+       forces plain text for exactly this reason (Ctrl+V bypassing
+       sanitizeHtml would be as bad as this); mirror it here rather than
+       letting the browser perform its own native HTML insertion, which
+       never passes through sanitizeHtml/walkSanitize at all. */
+    var cellEl = e.target.closest && e.target.closest(".cell-editable");
+    if (cellEl) {
+      e.preventDefault();
+      var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+      if (text) {
+        /* Unlike paste, nothing has focused this cell or put a caret in it —
+           the user was dragging, never clicked in. insertText writes at the
+           current selection, so without one first it has nowhere to land. */
+        cellEl.focus();
+        try {
+          var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+          if (range && cellEl.contains(range.startContainer)) {
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        } catch (err) {}
+        document.execCommand("insertText", false, text);
+      }
+    }
   }
 
   function init() {
