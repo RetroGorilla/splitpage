@@ -15,6 +15,20 @@
   function updateFileChip() {
     updateHeaderFileChip();
     mirrorFileChipToWriter();
+    updateReadonlyBanner();
+  }
+
+  /* The banner's own markup (page.html) has always been there, fully
+     written, but nothing ever referenced #readonly-banner by id anywhere
+     in src/js — serverMode.readOnly only disabled the "publish new doc"
+     menu item and showed a one-off toast on a blocked save. A reader
+     opening a script they cannot edit got no persistent explanation of
+     that. Piggybacks on updateFileChip() so it stays in sync with every
+     place document/server state actually changes. */
+  function updateReadonlyBanner() {
+    var banner = document.getElementById("readonly-banner");
+    if (!banner) return;
+    banner.hidden = !(serverMode.readOnly && onServerDoc());
   }
 
   /* The writer's bar carries the same chip, because it covers the header and

@@ -600,7 +600,14 @@
 
     document.getElementById("merge-summary").textContent = " " + summary;
     document.getElementById("merge-review").hidden = !result.conflicts.length;
-    document.getElementById("merge-banner").hidden = false;
+    var banner = document.getElementById("merge-banner");
+    /* .notice-merge.notice-warn (app.css) flags a merge as urgent — red
+       border/background instead of the plain green — but nothing ever
+       added the class, so a merge that actually lost data on one side
+       (real conflicts, saved as comments below) looked exactly like an
+       ordinary clean merge. */
+    banner.classList.toggle("notice-warn", !!result.conflicts.length);
+    banner.hidden = false;
 
     /* flash the rows that came from the merge */
     result.conflicts.forEach(function (c) {
