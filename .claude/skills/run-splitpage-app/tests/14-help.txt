@@ -1,0 +1,48 @@
+# The in-app Help page — README.md rendered to HTML at build time by
+# mdToHtml() (build.mjs) and shown in #help-modal by src/js/20c-help.js.
+
+open
+
+expect document.getElementById('help-modal').hidden == true
+
+# --- opens from the File menu -----------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="help"]
+sleep 300
+expect document.getElementById('help-modal').hidden == false
+expect document.getElementById('file-menu').hidden == true
+
+# --- the TOC has more than 10 links, and every href resolves inside #help-body
+expect document.querySelectorAll('#help-toc a').length > 10
+expect (function(){var a=[].slice.call(document.querySelectorAll('#help-toc a'));return a.every(function(l){return !!document.getElementById(l.getAttribute('href').slice(1));});})()
+
+# --- Esc closes --------------------------------------------------------------
+key Escape
+sleep 300
+expect document.getElementById('help-modal').hidden == true
+
+# --- opening Help closes the comments panel if it was open ------------------
+click text*=COMMENTS
+sleep 300
+expect document.getElementById('comments-panel').hidden == false
+jsclick #btn-file
+jsclick #file-menu [data-file-action="help"]
+sleep 300
+expect document.getElementById('help-modal').hidden == false
+expect document.getElementById('comments-panel').hidden == true
+key Escape
+sleep 300
+expect document.getElementById('help-modal').hidden == true
+
+# --- "Tagging reference" links into the full guide, at the tagging section --
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tagging-help"]
+sleep 300
+expect document.getElementById('tagging-help').hidden == false
+jsclick #tagging-help-fullguide a
+sleep 300
+expect document.getElementById('help-modal').hidden == false
+wait document.getElementById('help-body').scrollTop > 0
+expect document.getElementById('help-tagging-and-the-production-breakdown').getBoundingClientRect().top < window.innerHeight
+
+quit

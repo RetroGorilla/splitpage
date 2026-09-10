@@ -1,0 +1,112 @@
+# The 5-step coach-mark tour (src/js/20c-help.js, startTour()). Never edits
+# the document (invariant #17) — #rows' innerHTML is compared byte-for-byte
+# before and after the whole run, and again after a Skip.
+
+open
+
+eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
+
+# --- starts from the File menu, 5 steps, Next advances ----------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 400
+expect document.getElementById('tour-overlay').hidden == false
+expect document.getElementById('tour-step').textContent.indexOf('1 of 5') !== -1
+expect document.getElementById('tour-back').disabled == true
+
+jsclick #tour-next
+sleep 300
+expect document.getElementById('tour-step').textContent.indexOf('2 of 5') !== -1
+expect document.getElementById('tagging-help').hidden == false
+
+# --- Back returns -------------------------------------------------------
+jsclick #tour-back
+sleep 300
+expect document.getElementById('tour-step').textContent.indexOf('1 of 5') !== -1
+expect document.getElementById('tour-back').disabled == true
+
+jsclick #tour-next
+sleep 200
+jsclick #tour-next
+sleep 200
+expect document.getElementById('tour-step').textContent.indexOf('3 of 5') !== -1
+jsclick #tour-next
+sleep 200
+expect document.getElementById('tour-step').textContent.indexOf('4 of 5') !== -1
+jsclick #tour-next
+sleep 300
+expect document.getElementById('tour-step').textContent.indexOf('5 of 5') !== -1
+expect document.getElementById('tour-next').textContent == Finish
+
+# --- Finish (Next on the last step) closes it and marks it done ------------
+jsclick #tour-next
+sleep 300
+expect document.getElementById('tour-overlay').hidden == true
+expect localStorage.getItem('splitpage-tour-done') == 1
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- Skip exits at every step, and never touches the document --------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 300
+expect document.getElementById('tour-overlay').hidden == false
+jsclick #tour-skip
+sleep 300
+expect document.getElementById('tour-overlay').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 300
+jsclick #tour-next
+sleep 200
+jsclick #tour-next
+sleep 200
+expect document.getElementById('tour-step').textContent.indexOf('3 of 5') !== -1
+jsclick #tour-skip
+sleep 300
+expect document.getElementById('tour-overlay').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 300
+jsclick #tour-next
+sleep 200
+jsclick #tour-next
+sleep 200
+jsclick #tour-next
+sleep 200
+jsclick #tour-next
+sleep 200
+expect document.getElementById('tour-step').textContent.indexOf('5 of 5') !== -1
+jsclick #tour-skip
+sleep 300
+expect document.getElementById('tour-overlay').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- a "Read more" link opens Help at the step's own section ----------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 300
+jsclick #tour-readmore
+sleep 300
+expect document.getElementById('help-modal').hidden == false
+expect document.getElementById('tour-overlay').hidden == true
+key Escape
+sleep 300
+
+# --- fits at the phone layout: the card stays inside the viewport ----------
+viewport 375 812 mobile
+sleep 300
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 400
+expect document.getElementById('tour-overlay').hidden == false
+eval (function(){var r=document.getElementById('tour-card').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};})()
+expect document.getElementById('tour-card').getBoundingClientRect().left >= 0
+expect document.getElementById('tour-card').getBoundingClientRect().right <= innerWidth
+jsclick #tour-skip
+sleep 300
+
+quit
