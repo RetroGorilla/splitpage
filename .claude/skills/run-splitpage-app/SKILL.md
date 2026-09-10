@@ -198,6 +198,16 @@ the app.
   `[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(...))`.
 - **Harmless console noise:** a 404 for `/favicon.ico`, and service-worker
   registration failures. Don't chase them.
+- **Two suites running at once (two worktrees, two agents) will break each
+  other.** The sweep below matches the `splitpage-edge-*` profile *glob*, not
+  one run's own profile, so a second run starting up kills the first run's
+  live browser and that suite dies mid-command with
+  `The WebSocket is in an invalid state ('Aborted')` — sometimes on the first
+  command, sometimes twenty commands in. It looks exactly like a real failure
+  and is not one: 02-production and 07-untagged both "failed" this way during
+  Phase 3 and both passed 20/20 and 25/25 when re-run alone. Separate ports
+  are not enough. Before believing an aborted suite, re-run it with `-Only`.
+
 - **Orphaned browsers.** `Start-Process` hands back Edge's launcher, which
   spawns the real browser tree and exits, so killing it alone left a browser
   behind per suite. Twenty of them piled up over one full run until a later
