@@ -45,7 +45,17 @@ function Clear-SplitpageEdge {
   } catch {}
 }
 
-Clear-SplitpageEdge
+# Only sweep when no other suite is running on this machine. The sweep is for
+# browsers a killed run left behind; a second run-tests.ps1 (another worktree)
+# has live browsers that look identical, and killing those aborted its suites
+# with "WebSocket ... Aborted" until this guard existed.
+$otherDrivers = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*driver.ps1*' })
+if ($otherDrivers.Count -gt 0) {
+  Write-Host "another suite is running (pid $($otherDrivers[0].ProcessId)); not sweeping its browsers" -ForegroundColor DarkGray
+} else {
+  Clear-SplitpageEdge
+}
 
 $files = Get-ChildItem -Path $tests -Filter '*.txt' | Sort-Object Name
 if ($Only) { $files = $files | Where-Object { $_.Name -like "$Only*" } }
@@ -136,7 +146,17 @@ foreach ($f in $files) {
     while (-not $p.HasExited -and $grace.Elapsed.TotalSeconds -lt 5) { Start-Sleep -Milliseconds 200 }
   }
   if (-not $p.HasExited) { try { $p.Kill() } catch {} }
+  # Only sweep when no other suite is running on this machine. The sweep is for
+# browsers a killed run left behind; a second run-tests.ps1 (another worktree)
+# has live browsers that look identical, and killing those aborted its suites
+# with "WebSocket ... Aborted" until this guard existed.
+$otherDrivers = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*driver.ps1*' })
+if ($otherDrivers.Count -gt 0) {
+  Write-Host "another suite is running (pid $($otherDrivers[0].ProcessId)); not sweeping its browsers" -ForegroundColor DarkGray
+} else {
   Clear-SplitpageEdge
+}
 
   if (-not $done) {
     Write-Host "    TIMED OUT after ${TimeoutSec}s" -ForegroundColor Red
