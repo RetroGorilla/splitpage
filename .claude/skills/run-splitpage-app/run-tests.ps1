@@ -3,15 +3,19 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 #   ... -Only 02            run just the suite whose filename starts with 02
 #   ... -Headed             watch it happen in a real Edge window
+#   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
 #
 # Each suite gets its own driver process, its own server port and its own
-# browser, so one wedged suite cannot take the others down with it.
+# browser, so one wedged suite cannot take the others down with it. When
+# -Port/-CdpPort are omitted the bases are auto-picked (see below) so two
+# runs on the same machine — two worktrees, two agents — don't fight over
+# the same fixed ports.
 
 [CmdletBinding()]
 param(
   [string]$Only,
-  [int]$Port = 8801,
-  [int]$CdpPort = 9401,
+  [int]$Port = 0,
+  [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
   [switch]$Headed
 )
@@ -46,6 +50,54 @@ Clear-SplitpageEdge
 $files = Get-ChildItem -Path $tests -Filter '*.txt' | Sort-Object Name
 if ($Only) { $files = $files | Where-Object { $_.Name -like "$Only*" } }
 if (-not $files) { Write-Host "no test files matched"; exit 1 }
+
+# Auto-pick free port bases when the caller didn't pin one. Each suite i gets
+# ports ($Port + $i) / ($CdpPort + $i), so the block each run actually needs
+# is base+1 .. base+files.Count on both ranges. Two suites on one machine
+# (different worktrees, two agents) used to collide on the old fixed
+# defaults (9601/10201) and fail with "static server did not come up" —
+# instead, derive a starting base from a stable hash of this worktree's own
+# path (so two worktrees rarely even try the same block), probe every port
+# the run needs with a real TcpListener bind, and step the base forward by
+# 100 until the whole block is free on both ranges at once. An explicit
+# -Port/-CdpPort bypasses this entirely and is used as-is, as before.
+function Test-PortFree([int]$p) {
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), $p)
+    $listener.Start()
+    $listener.Stop()
+    return $true
+  } catch { return $false }
+}
+
+function Get-StableSeed([string]$s) {
+  $md5 = [System.Security.Cryptography.MD5]::Create()
+  try {
+    $bytes = $md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($s))
+    return [BitConverter]::ToUInt32($bytes, 0)
+  } finally { $md5.Dispose() }
+}
+
+$autoPort = -not $PSBoundParameters.ContainsKey('Port')
+$autoCdp  = -not $PSBoundParameters.ContainsKey('CdpPort')
+if ($autoPort -or $autoCdp) {
+  $seed     = Get-StableSeed $here
+  $portBase = 20000 + ([int]($seed % 100)) * 100         # 20000..29900
+  $cdpBase  = 30000 + ([int](($seed / 100) % 100)) * 100 # 30000..39900
+  while ($true) {
+    $free = $true
+    for ($k = 1; $k -le $files.Count; $k++) {
+      if ($autoPort -and -not (Test-PortFree ($portBase + $k))) { $free = $false }
+      if ($autoCdp  -and -not (Test-PortFree ($cdpBase  + $k))) { $free = $false }
+    }
+    if ($free) { break }
+    if ($autoPort) { $portBase += 100 }
+    if ($autoCdp)  { $cdpBase  += 100 }
+  }
+  if ($autoPort) { $Port = $portBase }
+  if ($autoCdp)  { $CdpPort = $cdpBase }
+  Write-Host "auto-picked port bases: Port=$Port CdpPort=$CdpPort"
+}
 
 $totalChecks = 0; $totalFail = 0; $suiteFail = 0
 $i = 0

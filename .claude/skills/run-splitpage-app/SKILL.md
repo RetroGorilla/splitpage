@@ -39,6 +39,18 @@ every failing assertion and exits 1. Options:
 - `-Only 02` — run just the suite whose filename starts with `02`
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
+- `-Port` / `-CdpPort` — pin the port bases instead of auto-picking (below)
+
+With neither `-Port` nor `-CdpPort` given, the runner picks its own free port
+bases: it derives a starting base from a hash of the worktree's own path, then
+probes every port the run needs with a real socket bind and steps the base by
+100 until the whole block is free on both ranges. That means two runs on one
+machine (two worktrees, two agents) no longer collide on a fixed default port
+and fail with "static server did not come up" — pass `-Port`/`-CdpPort`
+explicitly only if you need a specific, repeatable block. This is unrelated to
+the Edge-profile sweep below — that's a separate mechanism, and two concurrent
+runs can still kill each other's live browser via the profile glob, so keep
+re-running an aborted suite with `-Only` before believing it.
 
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
