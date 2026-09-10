@@ -25,8 +25,12 @@
      saves write in place instead of prompting again; the kind decides which
      serializer runs (14-export.js). `handle` stays null (and Save falls back
      to a plain download) in browsers without the API, e.g. Firefox.
-     "html" only ever arrives by OPENING a legacy file — nothing writes it. */
-  var docFileHandle = { handle: null, kind: null };
+     "html" only ever arrives by OPENING a legacy file — nothing writes it.
+     `lastModified` is the file's own timestamp as of the last time we read
+     or wrote it — the same on-disk-conflict guard the import re-save path
+     has always had (openedFile.lastModified, 18-local-files.js), applied
+     here to project saves too (checkFileConflict). */
+  var docFileHandle = { handle: null, kind: null, lastModified: null };
   var deleteArmId = null;
   var deleteArmTimer = null;
 
