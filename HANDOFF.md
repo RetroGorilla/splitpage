@@ -352,15 +352,40 @@ Two traps found while building it:
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, ~400 lines, deliberately
+`server/server.js` — plain Node, no dependencies, ~600 lines, deliberately
 small enough to audit by reading. One JSON file per document in `DATA_DIR`;
 that is the entire database.
 
-- **No authentication, on purpose.** Cloudflare Access sits in front. The
-  server only ever *reads* `Cf-Access-Authenticated-User-Email`, for display
-  and attribution — never as a permission check, because by the time a request
-  arrives Access has already made that decision. Do not add auth here without
-  deciding it belongs here.
+- **No *identity*, on purpose.** Cloudflare Access sits in front and decides
+  who anybody is. The server only ever *reads*
+  `Cf-Access-Authenticated-User-Email`, for display and attribution — never as
+  a permission check, because by the time a request arrives Access has already
+  made that decision. Do not add real auth here without deciding it belongs
+  here.
+- **`JOIN_PIN` is a door lock, not identity, and knows it.** Empty (the
+  default) and the server behaves exactly as it always did. Set, and every
+  `/api/*` route except `/api/health` and `POST /api/join` needs the header
+  `x-splitpage-token` carrying the token this process minted at startup. The
+  PIN is compared as sha256 digests through `timingSafeEqual` — equal lengths
+  by construction, so it can neither throw nor leak how much matched — and
+  wrong guesses are capped at ten a minute per address. It exists for the
+  launcher's case: a laptop hosting for the people in the room, no TLS, no
+  Access. One shared string, the same for everyone, revoked only by restarting.
+  **The refusal is JSON `401 {error: "pin-required"}`**, because `apiFetch()`
+  reads a non-JSON answer as a lapsed Access session and would stash and
+  reload — exactly the wrong move for a code that is one dialog away.
+- **CORS is opt-in per origin and never carries credentials.** `ALLOW_ORIGINS`
+  is an exact-match allowlist (the literal `null` covers a page opened from
+  `file://`). The headers are stamped onto the response object by the request
+  handler, so a route added later cannot forget them, and `handleStatic()`
+  never gets them. `OPTIONS /api/*` is answered 204 before any route runs: a
+  preflight carries no token and must never meet the gate.
+- **`/api/launcher/*` is the one route that runs another program**, hedged
+  three ways: a launch token minted per launch by `start.mjs` and delivered in
+  the URL fragment, `HOST === "127.0.0.1"` (so never under `--host`), and a
+  fixed script path with nothing from the request anywhere near a command line.
+  Any of those failing is a **404**, not a 401 — under those conditions the
+  route genuinely does not exist. Invariant #28.
 - **Document ids are whitelisted** (`^[a-z0-9][a-z0-9-]{0,63}$`), not
   sanitised — an id becomes a filename, and a whitelist can't be out-thought
   the way a blacklist can.
@@ -965,6 +990,36 @@ has.
     already landed correctly in `state`. Full mechanism in SKILL.md's
     gotchas. Real user clicks blur the cell as part of the click itself and
     do not hit this.
+28. **No HTTP endpoint spawns a process or installs files — except
+    `/api/launcher/*`, which is loopback-only and launch-token-gated** (§3.7).
+    This was the standing rule that kept `update-status.json` a *file the page
+    reads* rather than an endpoint that installs updates: the local server has
+    no real authentication, so any route that could run something would be
+    reachable from every other tab in the browser. The launcher's two routes
+    are the one agreed exception and stay inside three locks — the per-launch
+    token from the URL fragment, `HOST === "127.0.0.1"`, and a fixed script
+    path with no request data near a command line. A missing lock answers 404,
+    not 401. Anything else that wants to run a program from a request is a
+    redesign, not a patch.
+29. **The join PIN, the session token and the launch token never enter
+    `update-status.json`, the document, or any file the static handler
+    serves.** `update-status.json` is handed to anyone who can reach the port,
+    which is exactly the audience the PIN exists to exclude; the document is
+    something people mail each other. The PIN is printed to the launcher's own
+    console and passed to the server as an environment variable; the tokens
+    live in the server's memory and the browser's session storage. Nothing
+    writes any of the three to disk, and no code path may start.
+
+    The same rule read from the client's side: **everything about connecting
+    to a server is browser state, not document state.**
+    `splitpage-server-base`, `-token`, `-bookmarks` and
+    `splitpage-launch-token` (`13-hosted.js`, `20e-connect.js`) are
+    localStorage and sessionStorage, per person and per browser. Invariant #4
+    is deliberately not in play here — and what keeps it that way is that none
+    of them ever moves into `state`. A bookmark carries a name, a URL and
+    optionally an SSH host with two port numbers: never a password, a key or a
+    passphrase, because Splitpage is not a credential store and has nowhere
+    safe to be one.
 
 *(#28–#30 are reserved by the first-time-experience plan for the join PIN,
 the launcher endpoint and the pristine-seed gate, and are not written yet.
@@ -1026,6 +1081,7 @@ line-number table this replaced, they do not drift as you edit.
 | `20a-update.js` | 87 | the update notice and About box |
 | `20c-help.js` | — | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
 | `20d-formats.js` | 266 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
+| `20e-connect.js` | 430 | the join-PIN dialog, server bookmarks, the SSH helper |
 | `21-events.js` | 1214 | all event wiring, `init()`, closes the IIFE |
 
 Phase 5 added the in-app Help page and the tutorial without touching
@@ -1062,6 +1118,16 @@ same way:
   gets `node build.mjs --check`'d before it can be committed. Developer-only
   sections are wrapped in `<!-- help:skip-start -->`/`<!-- help:skip-end -->`
   and never reach the shipped page.
+
+**`20e-connect.js` wires its own File-menu entry.** The dispatch in
+`18-local-files.js` knows nothing about `data-file-action="servers"`; instead
+`20e` listens on `#file-menu` in the **capture** phase, which runs before that
+file's bubbling handler, and calls `stopPropagation()` when the action is one
+of its own. That was the least invasive of the options (the alternative was
+editing `handleFileMenuAction()` to reach forwards into a later fragment), and
+it keeps everything about connecting to a server in one file. A second feature
+wanting the same trick should think twice — two capture listeners racing for
+the same element is how this gets confusing.
 
 `src/page.html` is the shell — topbar, File menu, modals, and the three build
 markers. `src/app.css` is everything visual. `src/seed-state.json` is the one
@@ -1254,6 +1320,22 @@ cycle — all exercised in a real browser against the API contract.
   container), and no browser has driven the hosted client against this file —
   the client-side hosted tests still ran against the PowerShell double. §2 of
   DEPLOY.md remains the smoke test.
+- **Phase 3's server half is tested; its edges are not.** `node
+  tools/test-server.mjs` drives real `server.js` processes on free ports and
+  covers the join PIN, the rate limit, CORS (allowed origin, other origin, the
+  literal `null`, static files), the unchanged 409, and the launcher routes
+  refusing without the token and under `--host` with it — 39/39. What has
+  **not** happened: two browsers on two machines joining one PIN-protected
+  session (**one** browser against a real `--library --pin` server has: dialog
+  on load, wrong code refused in place, right code joining, publish and list
+  working with the token — the recipe is in SKILL.md); a real cross-origin
+  client (a `file://` copy with
+  `--allow-origin null`) opening and saving a hosted document; `--tunnel`
+  against a real SSH host; and `POST /api/launcher/register` actually running
+  `install.ps1 -InPlace` (that writes shortcuts and a registry key, so it needs
+  Adam's say-so first). The client-side dialogs are covered by
+  `tests/18-connect.txt`, but only against a static harness — no dialog in that
+  suite has ever received a real 401 from a real server.
 - **Cloudflare Access has never been in the loop.** The identity header and the
   lapsed-session path were tested by simulating what Access sends (an email
   header, and an HTML sign-in page where JSON was expected). The real thing may

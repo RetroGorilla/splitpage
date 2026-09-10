@@ -6,6 +6,8 @@
  *   node start.mjs --port 9000  use a different port
  *   node start.mjs --no-open    don't launch a browser
  *   node start.mjs --data DIR   where --library keeps documents
+ *   node start.mjs --pin        require a join PIN (generated and printed)
+ *   node start.mjs --tunnel me@host   reach someone else's server over SSH
  *   node start.mjs --no-update-check   skip the background update check
  *
  * WHY SERVE IT AT ALL, rather than just opening index.html?
@@ -23,7 +25,8 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { createServer } from "node:net";
+import { createServer, connect } from "node:net";
+import { randomBytes, randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platform } from "node:process";
@@ -56,6 +59,24 @@ Splitpage launcher
   node start.mjs --no-update-check
                                 don't look for a new version in the background
 
+Sharing:
+
+  --pin [1234]                  ask everyone who joins for this code. With no
+                                value, one is generated and printed. The code
+                                travels in the clear over plain HTTP: fine on
+                                your own network, not on a public one.
+  --allow-origin <origin>       let a copy of Splitpage served from somewhere
+                                else talk to this server (repeatable; use
+                                "null" for a copy opened straight off disk)
+
+Joining someone else's server over SSH:
+
+  node start.mjs --tunnel me@host [--remote-port 8791] [--local-port 8791]
+
+  Runs ssh -N -L <local>:localhost:<remote> me@host, waits for the tunnel,
+  and opens the browser at http://localhost:<local>/. Nothing of yours is
+  served; closing this window closes the tunnel.
+
 Updates install at launch and never while the app is open (see update.mjs):
   node update.mjs   downloads one, and the next start puts it in place.
 `);
@@ -73,6 +94,116 @@ const WANTED_PORT = Number(valueOf("--port", 8791));
 if (!Number.isInteger(WANTED_PORT) || WANTED_PORT < 1 || WANTED_PORT > 65535) {
   console.error("--port must be a number between 1 and 65535");
   process.exit(1);
+}
+
+function isPort(n) { return Number.isInteger(n) && n > 0 && n < 65536; }
+
+/* ---------- the join PIN ----------
+ *
+ * `--pin` on its own generates one; `--pin 4821` uses what you chose. Either
+ * way it goes to the server as an environment variable and is printed once,
+ * here, for you to read out to whoever is joining. It is never written to
+ * update-status.json or anywhere else on disk (invariant #29) — that file is
+ * served to anyone who can reach the port, which is exactly the audience the
+ * PIN exists to keep out.
+ */
+function generatePin() {
+  return String(randomInt(0, 1000000)).padStart(6, "0");
+}
+
+let joinPin = "";
+if (has("--pin")) {
+  const given = valueOf("--pin", "");
+  joinPin = (given && !given.startsWith("--")) ? given.trim() : generatePin();
+}
+
+/* Repeatable, unlike everything else here: a portable copy on disk and a
+   colleague's hosted copy are two different origins and both may need to
+   reach one server. */
+function valuesOf(flag) {
+  const out = [];
+  for (let i = 0; i < argv.length - 1; i++) {
+    if (argv[i] === flag && argv[i + 1] && !argv[i + 1].startsWith("--")) out.push(argv[i + 1].trim());
+  }
+  return out;
+}
+const ALLOW_ORIGINS = valuesOf("--allow-origin").filter(Boolean);
+
+/* ---------- --tunnel: join someone else's server over SSH ----------
+ *
+ * A mode of its own, handled before anything else: it serves nothing, builds
+ * nothing and installs nothing. All it does is forward a local port to the
+ * remote machine's Splitpage and open a browser at it, so the connection is
+ * encrypted and authenticated by SSH and the remote port never has to face
+ * the internet. Splitpage stores no credentials for this and never will —
+ * ssh's own keys and agent do that job.
+ */
+if (has("--tunnel")) {
+  const target = valueOf("--tunnel", "");
+  if (!target || target.startsWith("--")) {
+    console.error("--tunnel needs a destination, e.g. --tunnel me@studio.example.com");
+    process.exit(1);
+  }
+  const remotePort = Number(valueOf("--remote-port", 8791));
+  const localPort = Number(valueOf("--local-port", String(remotePort)));
+  if (!isPort(remotePort) || !isPort(localPort)) {
+    console.error("--remote-port and --local-port must be numbers between 1 and 65535");
+    process.exit(1);
+  }
+
+  const forward = `${localPort}:localhost:${remotePort}`;
+  console.log(`
+  Opening an SSH tunnel to ${target}
+      ssh -N -L ${forward} ${target}
+
+  If it asks for a password or a key passphrase, answer it here.
+  Close this window to close the tunnel.
+`);
+
+  /* An argument array, never a shell: a destination with a space or a
+     semicolon in it is then just a destination ssh will reject, not
+     something a shell would run. -N means "no remote command" — this
+     forwards a port and does nothing else. */
+  const ssh = spawn("ssh", ["-N", "-L", forward, target], { stdio: ["inherit", "inherit", "inherit"] });
+
+  ssh.on("error", (err) => {
+    if (err && err.code === "ENOENT") {
+      console.error(`
+  Could not find ssh on this computer.
+
+  On Windows 10/11: Settings > System > Optional features > Add a feature,
+  then install "OpenSSH Client". On macOS and Linux it is already there.
+`);
+    } else {
+      console.error("  The tunnel could not start: " + (err && err.message));
+    }
+    process.exit(1);
+  });
+  ssh.on("exit", (code) => {
+    console.log("\n  The tunnel closed.");
+    process.exit(code == null ? 0 : code);
+  });
+
+  for (const sig of ["SIGINT", "SIGTERM"]) {
+    process.on(sig, () => { ssh.kill(); process.exit(0); });
+  }
+
+  const tunnelUrl = `http://localhost:${localPort}/`;
+  const ready = await waitForPort(localPort);
+  if (!ready) {
+    console.error(`
+  The tunnel did not come up on port ${localPort}. Look for an ssh message above —
+  a wrong host, a refused key, or something already listening on that port
+  are the usual reasons. Try --local-port with a different number.
+`);
+    ssh.kill();
+    process.exit(1);
+  }
+
+  console.log(`  Connected. Splitpage is at ${tunnelUrl}\n`);
+  if (!has("--no-open")) openBrowser(tunnelUrl);
+  /* ssh keeps this process alive; there is nothing else to do here. */
+  await new Promise(() => {});
 }
 
 /* ---------- install anything update.mjs staged ----------
@@ -225,6 +356,15 @@ if (!has("--no-update-check") && updater) {
 
 /* ---------- run the server ---------- */
 
+/* One secret per launch, for the wizard's "add this copy to the Start Menu"
+   step and nothing else. It goes to the server as an environment variable and
+   to the page in the URL fragment (which browsers never send to a server and
+   no proxy log records), and the page moves it straight into sessionStorage
+   and strips it out of the address bar. Never under --host: server.js refuses
+   those routes off loopback anyway, and not minting a key you cannot use is
+   one less thing to get wrong. */
+const launchToken = HOSTING ? "" : randomBytes(16).toString("hex");
+
 const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
   cwd: ROOT,
   stdio: ["ignore", "inherit", "inherit"],
@@ -239,7 +379,13 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
     HOST: HOSTING ? "0.0.0.0" : "127.0.0.1",
     STATIC_DIR: ROOT,
     DATA_DIR,
-    NO_API: LIBRARY ? "0" : "1"
+    NO_API: LIBRARY ? "0" : "1",
+    /* Empty means "no PIN" and "same-origin only" respectively, which is what
+       server.js has always done — passing them unconditionally keeps the two
+       processes' idea of the rules in one place. */
+    JOIN_PIN: joinPin,
+    ALLOW_ORIGINS: ALLOW_ORIGINS.join(","),
+    LAUNCH_TOKEN: launchToken
   }
 });
 
@@ -248,6 +394,8 @@ server.on("exit", (code) => process.exit(code == null ? 0 : code));
 /* ---------- wait for it, then open a browser ---------- */
 
 const url = `http://localhost:${port}/`;
+/* The fragment is the launch token's whole delivery mechanism — see above. */
+const openUrl = launchToken ? `${url}#launch=${launchToken}` : url;
 
 async function waitForServer() {
   for (let i = 0; i < 60; i++) {
@@ -291,13 +439,39 @@ if (HOSTING) {
     console.log("      (no network address found — are you connected?)");
   }
   /* Said plainly, every time, because it cannot be inferred from the URL:
-     there is no password on this. On a home or office network that is the
-     point; on a cafe's wifi it is a mistake, and nobody should have to read
-     the source to find that out. */
-  console.log(`
+     what does and does not stand between a stranger and these scripts. On a
+     home or office network an open session is the point; on a cafe's wifi it
+     is a mistake, and nobody should have to read the source to find that out. */
+  if (joinPin) {
+    /* ASCII, deliberately: this window is cmd.exe on most machines and a box
+       drawn in anything else comes out as mojibake around the one number the
+       user has to read out loud. */
+    const line = "  " + "+" + "-".repeat(30) + "+";
+    console.log(`
+  They will be asked for this code:
+
+${line}
+  |        JOIN PIN   ${joinPin}${" ".repeat(Math.max(1, 11 - joinPin.length))}|
+${line}
+
+  Read it out to them; don't post it anywhere the address is posted. The
+  code is checked by this computer but travels in the clear over plain
+  HTTP, so anyone able to watch the network can read it as it goes past —
+  fine on your own network, not on a public one or over the internet. For
+  the internet, put Splitpage behind Cloudflare Access (see DEPLOY.md).
+  Close this window to stop sharing.`);
+  } else {
+    console.log(`
   Anyone who can reach that address can read and edit these scripts —
   there is no password. Fine on your own network, not on a public one.
+  Add --pin to ask everyone who joins for a code instead.
   Close this window to stop sharing.`);
+  }
+}
+
+if (joinPin && !HOSTING) {
+  console.log(`  This copy asks for a join PIN: ${joinPin}
+`);
 }
 
 console.log(`
@@ -305,16 +479,37 @@ console.log(`
   its own app window. Leave this window open while you work; Ctrl+C stops it.
 `);
 
-if (!has("--no-open")) {
-  /* Handed to the OS opener as a single argument and never through a shell,
-     so the URL cannot be reinterpreted as anything else. */
+if (!has("--no-open")) openBrowser(openUrl);
+
+/* Handed to the OS opener as a single argument and never through a shell, so
+   the URL cannot be reinterpreted as anything else. */
+function openBrowser(target) {
   const opener =
-    platform === "win32" ? { cmd: "cmd", args: ["/c", "start", "", url] }
-    : platform === "darwin" ? { cmd: "open", args: [url] }
-    : { cmd: "xdg-open", args: [url] };
+    platform === "win32" ? { cmd: "cmd", args: ["/c", "start", "", target] }
+    : platform === "darwin" ? { cmd: "open", args: [target] }
+    : { cmd: "xdg-open", args: [target] };
   const child = spawn(opener.cmd, opener.args, { stdio: "ignore", detached: true });
-  child.on("error", () => console.log(`  (Could not open a browser — go to ${url} yourself.)`));
+  child.on("error", () => console.log(`  (Could not open a browser — go to ${target} yourself.)`));
   child.unref();
+}
+
+/* Something is listening and accepting connections on this local port. Used
+   by --tunnel, where "up" is ssh having bound the forward — there is no HTTP
+   to probe until it has, and the far end may want a passphrase first, so the
+   wait is generous. */
+async function waitForPort(port, tries = 120) {
+  for (let i = 0; i < tries; i++) {
+    const ok = await new Promise((resolve) => {
+      const socket = connect({ port, host: "127.0.0.1" });
+      const done = (value) => { socket.destroy(); resolve(value); };
+      socket.once("connect", () => done(true));
+      socket.once("error", () => done(false));
+      socket.setTimeout(1000, () => done(false));
+    });
+    if (ok) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
 }
 
 /* Ctrl+C should stop the server too, not orphan it. */

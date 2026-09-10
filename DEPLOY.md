@@ -237,6 +237,33 @@ from the server. Your backup of the data folder is the undo.
 **Large scripts.** Embedded images make documents big; the cap is 25 MB per
 document (`MAX_BODY_BYTES`). Raise it if you hit it.
 
+**`JOIN_PIN` is not a substitute for Access.** Setting `JOIN_PIN` in the
+container's environment makes every `/api/*` route except `/api/health` and
+`/api/join` require a token, which a client gets by posting the right PIN. It
+exists for the *launcher's* case — someone hosting a session on a laptop for
+the people in the room — where there is no Access and no TLS. On the internet
+it buys nothing Access does not already do, and it is weaker in every way: one
+shared string, the same for everyone, valid until the process restarts, tied
+to no person, with nothing to revoke and nothing to audit. Use Access. Setting
+both is allowed and changes nothing about who reaches the container; the PIN is
+then just one more thing to type.
+
+If you do set it: the token is minted per process and held only in memory, so a
+redeploy signs everyone out; wrong PINs are limited to ten a minute per address;
+and neither the PIN nor the token is ever written to disk, logged, or served by
+the static handler.
+
+**`ALLOW_ORIGINS`** is a comma-separated allowlist of origins permitted to call
+the API cross-origin. Empty (the default) means same-origin only, which is what
+a deployment behind Access should stay. Entries match exactly and are echoed
+back one at a time; `*` is never sent, and neither is
+`Access-Control-Allow-Credentials` — so a cross-origin caller has to carry a
+join token and cannot ride on somebody's Access cookie. The literal entry
+`null` allows pages opened from `file://`, which is useful for a portable copy
+on a laptop and broad enough that it does not belong on anything facing the
+internet, since every local HTML file in every browser shares that one origin.
+Static files never carry CORS headers either way.
+
 **Updating.** Pull the new files and `docker compose up -d --build`. Documents
 live in the mounted volume, so they are unaffected.
 

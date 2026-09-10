@@ -14,13 +14,20 @@
   Silent install (for scripting):  SplitpageSetup.exe /Q     (this user)
                                    SplitpageSetup.exe /Q:A   (everyone; needs admin)
   Custom folder: SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"
+
+  -InPlace registers a copy that is ALREADY on disk -- a portable unzip that
+  wants to be in the Start Menu. It copies nothing and needs no payload: it
+  makes the shortcuts and writes the Add/Remove entry, both pointing at the
+  folder given by -Dir. This is what the app's own setup step runs, through
+  the launcher's loopback-only endpoint.
 #>
 
 [CmdletBinding()]
 param(
   [switch]$Silent,
   [string]$Dir,
-  [switch]$AllUsers
+  [switch]$AllUsers,
+  [switch]$InPlace
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,7 +58,16 @@ function Test-Admin {
 $defaultUser = Join-Path $env:LOCALAPPDATA "Programs\$AppName"
 $defaultAll  = Join-Path ${env:ProgramFiles} $AppName
 
-if ($Dir) {
+if ($InPlace) {
+  # Registering a copy that is already where it wants to be. -Dir is not a
+  # choice here, it is a statement of fact, so there is nothing to ask.
+  if (-not $Dir) { throw "-InPlace needs -Dir pointing at the folder to register." }
+  if (-not (Test-Path (Join-Path $Dir "start.bat"))) {
+    throw "-InPlace was given $Dir, which does not look like a Splitpage folder (no start.bat)."
+  }
+  $target = (Resolve-Path $Dir).Path
+  $Silent = $true
+} elseif ($Dir) {
   $target = $Dir
 } elseif ($Silent) {
   $target = if ($AllUsers) { $defaultAll } else { $defaultUser }
@@ -105,7 +121,13 @@ if (-not $Silent) {
 # --- copy -------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "  Installing to $target" -ForegroundColor Gray
+if ($InPlace) {
+  Write-Host "  Registering the copy already in $target" -ForegroundColor Gray
+} else {
+  Write-Host "  Installing to $target" -ForegroundColor Gray
+}
+
+if (-not $InPlace) {
 
 if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
 
@@ -200,6 +222,8 @@ try {
   if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+}  # -not $InPlace
+
 # Documents for a shared session live outside the app folder, so that an
 # install into Program Files (read-only for normal users) still works and an
 # uninstall never has the chance to take someone's scripts with it.
@@ -260,10 +284,27 @@ Set-ItemProperty $key "DisplayIcon" $icon
 Set-ItemProperty $key "NoModify" 1 -Type DWord
 Set-ItemProperty $key "NoRepair" 1 -Type DWord
 Set-ItemProperty $key "EstimatedSize" ([int]($size / 1024)) -Type DWord
-Set-ItemProperty $key "UninstallString" `
-  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$target\uninstall.ps1`""
+# A portable copy registering itself in place may not carry uninstall.ps1
+# (it is part of the installer's payload, not the zip). Point Add/Remove at
+# whichever remover is actually there, so the entry is never a dead end.
+if (Test-Path (Join-Path $target "uninstall.ps1")) {
+  Set-ItemProperty $key "UninstallString" `
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$target\uninstall.ps1`""
+} else {
+  Set-ItemProperty $key "UninstallString" "`"$target\uninstall.bat`""
+}
 
 # --- done -------------------------------------------------------------------
+
+if ($InPlace) {
+  # The app that asked for this is already open and reading the exit code;
+  # do not start a second copy.
+  Write-Host ""
+  Write-Host "  Added to the Start Menu and to Add/Remove Programs." -ForegroundColor Green
+  Write-Host "  It runs from $target"
+  Write-Host ""
+  exit 0
+}
 
 if (-not $Silent) {
   Write-Host ""
