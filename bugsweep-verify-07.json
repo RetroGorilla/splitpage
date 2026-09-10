@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/21-events.js",
+    "line": 680,
+    "severity": "medium",
+    "summary": "#production-panel carries two independently-registered keydown listeners; Escape to cancel a per-card rename/add-person popup also runs the bulk-selection-clearing branch.",
+    "refuted": false,
+    "reasoning": "Confirmed: wireTagEntityContainer(\"production-panel\") (src/js/20-teleprompter.js:433) registers a keydown listener that handles Escape for .tag-rename-input/.tag-person-input without stopPropagation, and a second independent keydown listener is added on the same element at 21-events.js:680 that clears the bulk selection on any Escape with selectedKeys().length; both fire for the same event since neither calls stopPropagation."
+  },
+  {
+    "file": "src/js/21-events.js",
+    "line": 1025,
+    "severity": "low",
+    "summary": "The teleprompter's global Space keydown handler is claimed to block a focused prompter button's native space-activated click via preventDefault().",
+    "refuted": true,
+    "reasoning": "Per the HTML spec, a button's native space-bar activation click fires as the default action of the keyup event, not keydown; this handler only listens to \"keydown\" and calls preventDefault() there, which cancels the keydown's own default (e.g. page scroll) but does not cancel the separate keyup click, so a focused button (pp-mirror, pp-skip-shot, pp-fullscreen) would still activate in addition to the play/pause toggle -- the claimed 'never activates' scenario doesn't hold."
+  },
+  {
+    "file": "server/server.js",
+    "line": 386,
+    "severity": "critical",
+    "summary": "fs.createReadStream(full).pipe(res) in handleStatic has no 'error' listener, so a stream read error crashes the whole process.",
+    "refuted": false,
+    "reasoning": "Confirmed at server.js:386 -- the stream is piped with no .on('error', ...) handler and no process-level uncaughtException/unhandledRejection handler exists in the file, so an async 'error' emitted on the readable stream (e.g. file deleted or EACCES after stat() succeeded) throws unhandled and crashes the whole Node process rather than just failing the one request."
+  },
+  {
+    "file": "server/server.js",
+    "line": 110,
+    "severity": "medium",
+    "summary": "writeChains (per-document write-lock map) is never pruned for any id, including on DELETE, growing unbounded over the process lifetime.",
+    "refuted": false,
+    "reasoning": "Confirmed by grepping all writeChains/withDocLock usages: the map is only ever .get()/.set() in withDocLock (server.js:110-119) and called from create/PUT/DELETE handlers, but no code path ever calls writeChains.delete(id); the DELETE handler (line 327-338) removes the file but leaves its map entry, so every distinct id ever written accumulates a permanent Map entry."
+  },
+  {
+    "file": "server/server.js",
+    "line": 264,
+    "severity": "medium",
+    "summary": "POST /api/docs (create) writes the new document unconditionally with no existence check on the generated id, unlike PUT's rev-based compare-and-set.",
+    "refuted": false,
+    "reasoning": "Confirmed at server.js:264-273: slugify() generates the id and writeDoc(doc) is called directly inside withDocLock with no readDoc(newId) existence check first, in contrast to the PUT handler at line 298-313 which explicitly re-reads the current doc and compares rev before overwriting; a collision on the 24-bit random suffix would silently overwrite an existing document."
+  },
+  {
+    "file": "server/server.js",
+    "line": 350,
+    "severity": "low",
+    "summary": "decodeURIComponent(url.pathname) in handleStatic is unguarded, so a malformed percent-encoding throws a URIError caught only by the generic top-level handler as a 500.",
+    "refuted": false,
+    "reasoning": "Confirmed at server.js:350, no try/catch wraps the decodeURIComponent call inside handleStatic; the only catch is the top-level server.js:397-403 Promise .catch which logs via console.error and always responds sendJson(res, 500, {error: 'server-error'}) for any error not tagged TOO_LARGE/BAD_JSON, so a bad percent-encoding surfaces as a logged 500 instead of a 400."
+  },
+  {
+    "file": "update.mjs",
+    "line": 198,
+    "severity": "critical",
+    "summary": "Zip entry names in the release download are never validated to stay inside the staging directory before being written to disk in stage(), enabling path traversal via '..' segments.",
+    "refuted": false,
+    "reasoning": "Confirmed at update.mjs:198-202: the write loop iterates the full `files` Map (all zip entries, sourced directly from unsanitized central-directory names in readZip) and does `join(UPDATE_DIR, \"staged\", rel)` with no check that the resolved path stays under staged/; path.join collapses '..' segments, so an entry named e.g. '../../../etc/x' would write outside UPDATE_DIR entirely, and this happens for every entry, not just manifest-listed ones."
+  },
+  {
+    "file": "update.mjs",
+    "line": 245,
+    "severity": "low",
+    "summary": "apply()'s failure-path rollback only restores files that had a pre-existing backup, so a newly-introduced file already copied before a later failure is left in place.",
+    "refuted": false,
+    "reasoning": "Confirmed at update.mjs:228-254: the catch block iterates `done` and only cpSync-restores a file `if (existsSync(keep))`, i.e. only when a backup was taken (which only happens when `existsSync(to)` was true before copying, per lines 233-237); a rel that didn't previously exist in ROOT gets no backup, so on a later failure the already-copied new file for that rel is never removed, despite the log message claiming 'rolling back'."
+  },
+  {
+    "file": "update.mjs",
+    "line": 198,
+    "severity": "critical",
+    "summary": "Duplicate framing: the checksum-verification loop in stage() only validates manifest-listed entries, while the write loop right after writes every entry in the zip regardless of manifest membership or verification.",
+    "refuted": false,
+    "reasoning": "Confirmed: the verification loop at update.mjs:167-171 iterates only `Object.entries(manifest.files || {})`, while the write loop at lines 198-202 iterates `for (const [rel, content] of files)` over the entire zip contents Map; an entry present in the zip but absent from manifest.files skips checksum verification entirely yet is still written to disk, consistent with finding 7's traversal path being reachable through an unlisted entry as well."
+  }
+]
