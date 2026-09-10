@@ -398,15 +398,25 @@
     if (openedFile.handle && openedFile.handle.createWritable) {
       /* has the file changed on disk since we opened it? */
       if (!opts || !opts.force) {
+        var current, readFailed = false;
         try {
-          var current = await openedFile.handle.getFile();
-          var changed = (openedFile.lastModified && current.lastModified &&
-                         current.lastModified !== openedFile.lastModified);
-          if (changed) {
-            showFileConflict(current);
-            return;
-          }
-        } catch (e) { /* cannot re-read it — fall through and let the write decide */ }
+          current = await openedFile.handle.getFile();
+        } catch (e) {
+          /* Used to fall through here and let the write proceed — but that
+             defeats the one thing this guard exists to catch ("Never
+             overwrite silently"). A failed re-read is not proof the file is
+             still safely there and unchanged; treat it the same as a
+             detected conflict; force: true (the "Overwrite it" button)
+             still gets past this uncondtionally. */
+          readFailed = true;
+        }
+        if (readFailed) { showFileConflict(null); return; }
+        var changed = (openedFile.lastModified && current.lastModified &&
+                       current.lastModified !== openedFile.lastModified);
+        if (changed) {
+          showFileConflict(current);
+          return;
+        }
       }
       try {
         var writable = await openedFile.handle.createWritable();
@@ -438,7 +448,20 @@
   /* The file on disk moved under us. Never overwrite silently — the whole
      point of this guard is that the other version might be someone's work. */
   function showFileConflict(currentFile) {
-    var when = currentFile && currentFile.lastModified
+    if (!currentFile) {
+      /* The file couldn't be re-read at all (moved, deleted, or the drive
+         it's on isn't connected right now) — not the same as "changed",
+         but the same "don't overwrite without asking" principle applies:
+         proceeding straight to a write here (what used to happen — the
+         read failure was silently swallowed) defeats the one thing this
+         guard exists to catch. Reuses the same modal/force-save path. */
+      document.getElementById("file-conflict-detail").textContent =
+        "Could not check whether " + openedFile.name + " is still there — it may have been moved, " +
+        "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
+      document.getElementById("file-conflict-modal").hidden = false;
+      return;
+    }
+    var when = currentFile.lastModified
       ? formatTimestamp(new Date(currentFile.lastModified).toISOString())
       : "recently";
     document.getElementById("file-conflict-detail").textContent =

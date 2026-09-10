@@ -10213,6 +10213,14 @@
     } else if (table[0].length >= 3 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
       /* our own export shape: Scene, Visual, Audio */
       vi = 1; ai = 2;
+    } else if (table[0].length === 2 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
+      /* A plain two-column sheet whose first column is just a scene/shot
+         index (e.g. "Scene,Description") has no separate audio column at
+         all — falling to the vi=0/ai=1 default below put the bare scene
+         NUMBER into Visual and the real content into Audio, backwards on
+         both counts. The one real content column reads as Visual (a
+         shot/scene description), with Audio left blank. */
+      vi = 1; ai = -1;
     } else {
       vi = 0; ai = 1;
     }
@@ -10405,7 +10413,25 @@
           var dim = safeAspect(jpegSize(bytes));
           var name = "Im" + (images.length + 1);
           images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
-          imgRef = { name: name, w: COLW, h: COLW * dim.ratio };
+          var natW = COLW, natH = COLW * dim.ratio;
+          /* A tall/portrait image (a phone-screenshot crop, say) can have a
+             natural height that alone exceeds a WHOLE page's usable height
+             — safeAspect() only guards against a zero/negative width, not
+             an extreme ratio. The draw guard further down only checks
+             whether it fits from the current y, with no fallback if it
+             can't fit ANYWHERE — even a fresh page — so it was silently
+             skipped: never drawn, no warning. Cap it to the full usable
+             page height here (PH - 2*M), shrinking width to match, so
+             there's always at least one page it fits on. */
+          /* The most vertical room an image can ever get is right after a
+             forced page break: newPage() lands at PH - M, then the row
+             loop's own "y -= 6" plus drawColumnHeaders()'s 8pt + 16pt of
+             header/rule/gap eat 30pt of that before the image is drawn —
+             capping to the whole page's height (PH - 2*M) still left it
+             30pt short of fitting even there. */
+          var maxH = PH - 2 * M - 30;
+          if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
+          imgRef = { name: name, w: natW, h: natH };
           imgH = imgRef.h + 8;
         } catch (e) { /* skip an unreadable image */ }
       }
@@ -10711,13 +10737,24 @@
       y -= LEAD;
     }
 
+    /* Unlike buildPdf()'s two columns, this line was never run through
+       pdfWrapRuns — a long item name/status/owner combination just ran
+       straight off the page's right edge (unwrapped, untruncated, simply
+       invisible past x=612) instead of wrapping to a second line. */
+    var ITEM_TEXT_W = PW - M * 2 - 18;
     items.forEach(function (item) {
-      if (y - LEAD < M) { newPage(); header(); }
       var owner = personById(item.owner);
       var st = tagStatus(item.status) || TAG_STATUSES[0];
+      var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "");
+      var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
+      var need = wrapped.length * LEAD;
+      if (y - need < M) { newPage(); header(); }
       box(M, y - SIZE + 1, 10);
-      text(item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : ""),
-        M + 18, y - SIZE, "F1", SIZE);
+      wrapped.forEach(function (lineSegs, li) {
+        var lineStr = lineSegs.map(function (s) { return s.text; }).join("");
+        text(lineStr, M + 18, y - SIZE, "F1", SIZE);
+        if (li < wrapped.length - 1) y -= LEAD;
+      });
       y -= LEAD;
       rule(M, y + 8, PW - M * 2);
     });
@@ -11174,15 +11211,25 @@
     if (openedFile.handle && openedFile.handle.createWritable) {
       /* has the file changed on disk since we opened it? */
       if (!opts || !opts.force) {
+        var current, readFailed = false;
         try {
-          var current = await openedFile.handle.getFile();
-          var changed = (openedFile.lastModified && current.lastModified &&
-                         current.lastModified !== openedFile.lastModified);
-          if (changed) {
-            showFileConflict(current);
-            return;
-          }
-        } catch (e) { /* cannot re-read it — fall through and let the write decide */ }
+          current = await openedFile.handle.getFile();
+        } catch (e) {
+          /* Used to fall through here and let the write proceed — but that
+             defeats the one thing this guard exists to catch ("Never
+             overwrite silently"). A failed re-read is not proof the file is
+             still safely there and unchanged; treat it the same as a
+             detected conflict; force: true (the "Overwrite it" button)
+             still gets past this uncondtionally. */
+          readFailed = true;
+        }
+        if (readFailed) { showFileConflict(null); return; }
+        var changed = (openedFile.lastModified && current.lastModified &&
+                       current.lastModified !== openedFile.lastModified);
+        if (changed) {
+          showFileConflict(current);
+          return;
+        }
       }
       try {
         var writable = await openedFile.handle.createWritable();
@@ -11214,7 +11261,20 @@
   /* The file on disk moved under us. Never overwrite silently — the whole
      point of this guard is that the other version might be someone's work. */
   function showFileConflict(currentFile) {
-    var when = currentFile && currentFile.lastModified
+    if (!currentFile) {
+      /* The file couldn't be re-read at all (moved, deleted, or the drive
+         it's on isn't connected right now) — not the same as "changed",
+         but the same "don't overwrite without asking" principle applies:
+         proceeding straight to a write here (what used to happen — the
+         read failure was silently swallowed) defeats the one thing this
+         guard exists to catch. Reuses the same modal/force-save path. */
+      document.getElementById("file-conflict-detail").textContent =
+        "Could not check whether " + openedFile.name + " is still there — it may have been moved, " +
+        "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
+      document.getElementById("file-conflict-modal").hidden = false;
+      return;
+    }
+    var when = currentFile.lastModified
       ? formatTimestamp(new Date(currentFile.lastModified).toISOString())
       : "recently";
     document.getElementById("file-conflict-detail").textContent =
@@ -13055,6 +13115,14 @@
          writer — opening it there hands the keystroke to something the
          writer cannot see */
       if (writerOpen) return;
+      /* Every modal dialog (.modal-backdrop — Import, Google Doc, Comment,
+         file-conflict, Server, Drive, Tag) sits fixed above the find bar,
+         which is a plain static-flow element with no z-index of its own.
+         Without this check, Ctrl+F while typing inside any of them still
+         focused the (now invisible, covered) find-input — every further
+         keystroke meant for that modal's own field silently vanished into
+         a search box the user couldn't even see. */
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
       /* the script lives across dozens of separate contenteditables, so the
          browser's own find is close to useless here — take the shortcut */
       e.preventDefault();
@@ -13085,6 +13153,15 @@
         else if (e.key === "Escape") { e.preventDefault(); tagAddingPersonFor = null; renderProduction(); }
         return;
       }
+      /* wireTagEntityContainer's own keydown listener (registered on this
+         SAME element) already handles Escape for these two inputs —
+         cancelling a per-card rename or add-person popup. Both listeners
+         fire for one keydown since neither calls stopPropagation, so
+         without this check, Escape here ALSO ran the "clear the bulk
+         selection" branch below — silently wiping out an unrelated
+         multi-select the user was still building, as a side effect of
+         cancelling an unrelated popup. */
+      if (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input")) return;
       /* Escape drops the selection — the counterpart to the bar's ×, and the
          reason a plain click is allowed to leave a selection standing */
       if (e.key === "Escape" && selectedKeys().length) {

@@ -695,6 +695,14 @@
          writer — opening it there hands the keystroke to something the
          writer cannot see */
       if (writerOpen) return;
+      /* Every modal dialog (.modal-backdrop — Import, Google Doc, Comment,
+         file-conflict, Server, Drive, Tag) sits fixed above the find bar,
+         which is a plain static-flow element with no z-index of its own.
+         Without this check, Ctrl+F while typing inside any of them still
+         focused the (now invisible, covered) find-input — every further
+         keystroke meant for that modal's own field silently vanished into
+         a search box the user couldn't even see. */
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
       /* the script lives across dozens of separate contenteditables, so the
          browser's own find is close to useless here — take the shortcut */
       e.preventDefault();
@@ -725,6 +733,15 @@
         else if (e.key === "Escape") { e.preventDefault(); tagAddingPersonFor = null; renderProduction(); }
         return;
       }
+      /* wireTagEntityContainer's own keydown listener (registered on this
+         SAME element) already handles Escape for these two inputs —
+         cancelling a per-card rename or add-person popup. Both listeners
+         fire for one keydown since neither calls stopPropagation, so
+         without this check, Escape here ALSO ran the "clear the bulk
+         selection" branch below — silently wiping out an unrelated
+         multi-select the user was still building, as a side effect of
+         cancelling an unrelated popup. */
+      if (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input")) return;
       /* Escape drops the selection — the counterpart to the bar's ×, and the
          reason a plain click is allowed to leave a selection standing */
       if (e.key === "Escape" && selectedKeys().length) {
