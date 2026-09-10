@@ -33,8 +33,9 @@ breakdown for props/locations/cast/VFX/sound.
 - Supporting files: `README.md`, `start.mjs` + `start.bat` / `start.sh` /
   `start.ps1` (local launcher), `manifest.webmanifest`, `icon.svg`, `sw.js`
   (PWA bits), `server/server.js` + `Dockerfile` (hosted mode), and
-  `package.mjs` + `installer/splitpage.iss` (portable zip and Windows
-  setup.exe — the .iss has never been compiled, see §7).
+  `package.mjs` + `installer/` + `tools/fetch-runtime.mjs` (portable zip and
+  the Windows setup.exe — neither the IExpress step nor the PowerShell
+  installer has ever been run, see §7).
 - It began life as a Claude artifact and was converted to run standalone. A few
   artifact-era assumptions may still lurk; stale user-facing wording about "the
   artifact" is a bug, not a quirk.
@@ -1079,9 +1080,18 @@ cycle — all exercised in a real browser against the API contract.
   but a live read has never been done. **Ask Adam to confirm via `start.bat`.**
 - Firefox/Safari fallback paths (no File System Access API) are coded but
   untested; only Chromium was available.
-- **`installer/splitpage.iss` has never been compiled.** No Inno Setup and no
-  Windows in the container it was written in. The payload it wraps (the
-  staged release) is verified; the script that wraps it is not.
+- **Nothing Windows-side of the installer has ever run.** `iexpress.exe` and
+  PowerShell are both Windows-only, so `installer/install.ps1`,
+  `installer/uninstall.ps1` and the IExpress step are all unproven. What IS
+  verified is everything they consume: the payload zip passes `unzip -t`, its
+  manifest covers all 18 files, and the bundled `node.exe` comes out of it
+  byte-identical to what nodejs.org served (PE32+, checksum matched twice).
+  First run should be `node package.mjs --installer` on Windows, then the
+  resulting setup.exe end to end: install, launch, host a session, uninstall.
+- **The bundled runtime is pinned** in `tools/fetch-runtime.mjs`
+  (`NODE_VERSION`). Bumping it is a deliberate act, so a release is
+  reproducible; the download is verified against nodejs.org's SHASUMS256.txt,
+  which guards a corrupt download rather than a compromised nodejs.org.
 - **The update path has never talked to GitHub.** `api.github.com` is blocked
   from that container, so check/download/apply were driven end to end against
   a local stand-in for the releases API (`SPLITPAGE_UPDATE_API`). The shapes

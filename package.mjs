@@ -2,7 +2,13 @@
 /* Splitpage release packager.
  *
  *   node package.mjs              build dist/splitpage-<version>/ and the .zip
- *   node package.mjs --installer  ...and compile the Windows setup.exe
+ *   node package.mjs --installer  ...and build SplitpageSetup-<version>.exe
+ *
+ * The installer needs NOTHING installed to build. It is a self-extracting
+ * archive made by iexpress.exe, which ships with Windows, wrapping a zip
+ * payload and installer/install.ps1. That payload carries its own node.exe,
+ * so the person who runs it downloads one file and is finished — no second
+ * trip for a runtime before they can host a shared session.
  *
  * The zip IS the portable app: unzip it anywhere and run start.bat (Windows)
  * or ./start.sh (macOS/Linux). Nothing is compiled and nothing is installed,
@@ -125,14 +131,15 @@ function crc32(buf) {
 const DOS_TIME = 0;
 const DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
 
+function makeZip(prefix, entries, read) {
 const locals = [];
 const central = [];
 let offset = 0;
 
-for (const [rel, mode] of ENTRIES) {
+for (const [rel, mode] of entries) {
   /* Zip paths are always forward-slashed, whatever the host OS. */
-  const nameBuf = Buffer.from(`${NAME}/${rel.split(/[\\/]/).join("/")}`, "utf8");
-  const raw = readFileSync(join(STAGE, rel));
+  const nameBuf = Buffer.from(`${prefix}/${rel.split(/[\\/]/).join("/")}`, "utf8");
+  const raw = read(rel);
   const deflated = deflateRawSync(raw, { level: 9 });
   /* Only claim compression if it actually helped. */
   const useDeflate = deflated.length < raw.length;
@@ -183,14 +190,17 @@ const eocd = Buffer.alloc(22);
 eocd.writeUInt32LE(0x06054b50, 0);
 eocd.writeUInt16LE(0, 4);
 eocd.writeUInt16LE(0, 6);
-eocd.writeUInt16LE(ENTRIES.length, 8);
-eocd.writeUInt16LE(ENTRIES.length, 10);
+eocd.writeUInt16LE(entries.length, 8);
+eocd.writeUInt16LE(entries.length, 10);
 eocd.writeUInt32LE(centralBuf.length, 12);
 eocd.writeUInt32LE(offset, 16);
 eocd.writeUInt16LE(0, 20);
 
+return Buffer.concat([...locals, centralBuf, eocd]);
+}
+
 const zipPath = join(DIST, `${NAME}.zip`);
-writeFileSync(zipPath, Buffer.concat([...locals, centralBuf, eocd]));
+writeFileSync(zipPath, makeZip(NAME, ENTRIES, (rel) => readFileSync(join(STAGE, rel))));
 
 const kb = (n) => (n / 1024).toFixed(0) + " KB";
 console.log(`\n  ${STAGE}`);
@@ -199,27 +209,121 @@ console.log(`  ${zipPath}  (${kb(statSync(zipPath).size)})`);
 /* ---------- optional: the Windows installer ---------- */
 
 if (process.argv.includes("--installer")) {
-  /* Inno Setup's compiler. Present only on Windows, and only once someone has
-     installed it — so this is opt-in rather than part of every package run. */
-  const iss = join(ROOT, "installer", "splitpage.iss");
-  const res = spawnSync("iscc", [iss], { cwd: ROOT, stdio: "inherit" });
+  const { fetchRuntime } = await import("./tools/fetch-runtime.mjs");
+  const nodeExe = await fetchRuntime({ arch: "x64", log: (m) => console.log(m) });
+
+  /* The payload is the portable release plus the things only an installed
+     copy needs: the runtime, the icon the shortcuts point at, and the
+     uninstaller that Add/Remove Programs will call. */
+  const payloadEntries = [
+    ...ENTRIES,
+    ["runtime/node.exe", 0o755],
+    ["icon.ico", 0o644],
+    ["uninstall.ps1", 0o644]
+  ];
+  const extra = {
+    "runtime/node.exe": nodeExe,
+    "icon.ico": join(ROOT, "installer", "icon.ico"),
+    "uninstall.ps1": join(ROOT, "installer", "uninstall.ps1")
+  };
+  const payloadFile = (rel) => readFileSync(extra[rel] || join(STAGE, rel));
+
+  /* The manifest has to describe THIS release, not the portable one. Ship the
+     portable list and an installed copy's uninstaller would walk past
+     runtime/node.exe and leave 87 MB behind. */
+  const payloadManifest = Buffer.from(JSON.stringify({
+    name: "Splitpage",
+    version: VERSION,
+    files: Object.fromEntries(
+      payloadEntries
+        .filter(([rel]) => rel !== MANIFEST_NAME)
+        .map(([rel, mode]) => [rel, { sha256: sha256(payloadFile(rel)), mode }])
+    )
+  }, null, 2) + "\n");
+
+  const payload = makeZip(NAME, payloadEntries, (rel) =>
+    rel === MANIFEST_NAME ? payloadManifest : payloadFile(rel));
+  const payloadPath = join(DIST, "splitpage-payload.zip");
+  writeFileSync(payloadPath, payload);
+  console.log(`  payload: ${(payload.length / 1024 / 1024).toFixed(0)} MB (app + Node runtime)`);
+
+  /* install.ps1 with the version stamped in, so the wizard can name itself
+     before it has extracted anything. */
+  const installPs1 = join(DIST, "install.ps1");
+  writeFileSync(installPs1,
+    readFileSync(join(ROOT, "installer", "install.ps1"), "utf8").split("@VERSION@").join(VERSION));
+
+  const setupPath = join(DIST, `SplitpageSetup-${VERSION}.exe`);
+
+  /* IExpress reads a "directive file". Paths must be absolute and Windows
+     -shaped; it flattens directories, which is exactly why the payload is a
+     single zip that install.ps1 expands rather than loose files. */
+  const win = (p) => p.split("/").join("\\");
+  const sed = [
+    "[Version]",
+    "Class=IEXPRESS",
+    "SEDVersion=3",
+    "[Options]",
+    "PackagePurpose=InstallApp",
+    /* 0 = don't show IExpress's own progress window: the only thing the user
+       should see is our installer. */
+    "ShowInstallProgramWindow=0",
+    "HideExtractAnimation=1",
+    "UseLongFileName=1",
+    "InsideCompressed=0",
+    "CAB_FixedSize=0",
+    "CAB_ResvCodeSigning=0",
+    "RebootMode=N",
+    "InstallPrompt=%InstallPrompt%",
+    "DisplayLicense=%DisplayLicense%",
+    "FinishMessage=%FinishMessage%",
+    "TargetName=%TargetName%",
+    "FriendlyName=%FriendlyName%",
+    "AppLaunched=%AppLaunched%",
+    "PostInstallCmd=%PostInstallCmd%",
+    "AdminQuietInstCmd=",
+    "UserQuietInstCmd=",
+    "SourceFiles=SourceFiles",
+    "[Strings]",
+    "InstallPrompt=",
+    "DisplayLicense=",
+    "FinishMessage=",
+    `TargetName=${win(setupPath)}`,
+    "FriendlyName=Splitpage Setup",
+    "AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1",
+    "PostInstallCmd=<None>",
+    "FILE0=\"install.ps1\"",
+    "FILE1=\"splitpage-payload.zip\"",
+    "[SourceFiles]",
+    "SourceFiles0=" + win(DIST),
+    "[SourceFiles0]",
+    "%FILE0%=",
+    "%FILE1%="
+  ].join("\r\n") + "\r\n";
+
+  const sedPath = join(DIST, "splitpage.SED");
+  writeFileSync(sedPath, sed);
+
+  const res = spawnSync("iexpress", ["/N", win(sedPath)], { cwd: DIST, stdio: "inherit" });
   if (res.error && res.error.code === "ENOENT") {
     console.error(`
-  iscc was not found, so no setup.exe was built.
+  iexpress was not found, so no setup.exe was built.
 
-  The Inno Setup compiler is Windows-only and needs installing once:
-      https://jrsoftware.org/isdl.php
-  Then either re-run this with --installer, or open installer/splitpage.iss
-  in the Inno Setup IDE and press F9.
+  It ships with Windows — this is not something to install, it just means the
+  build is not running on Windows. Everything it needs is already in dist/:
 
-  The zip above is a complete portable copy either way.`);
+      dist/install.ps1
+      dist/splitpage-payload.zip
+      dist/splitpage.SED
+
+  On a Windows machine, run:  iexpress /N dist\\splitpage.SED`);
     process.exit(1);
   }
   if (res.status !== 0) {
-    console.error("\n  Inno Setup failed — see the output above.");
+    console.error("\n  IExpress failed — see the output above.");
     process.exit(1);
   }
-  console.log(`  ${join(DIST, `SplitpageSetup-${VERSION}.exe`)}`);
+  console.log(`  ${setupPath}`);
 }
 
 console.log(`\n  Unzip and run start.bat (Windows) or ./start.sh (macOS/Linux).\n`);
