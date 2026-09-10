@@ -20,6 +20,15 @@
     editSeq++;
     setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
+    /* A hosted document has no openedFile.name (openServerDoc() sets it to
+       null on purpose — one Save button, one home for it), so the branch
+       above never ran for it. updateHeaderFileChip() derives its hosted
+       text from the live `dirty` flag, but nothing else called it at edit
+       time — the chip kept showing its last "v5, everyone sees this" text
+       after an edit, until an unrelated autosave or a manual Save
+       eventually refreshed it, misleading a glance at the chip into
+       thinking the edit was already synced. */
+    else if (onServerDoc()) { updateFileChip(); }
   }
 
   function clearDirty() {
