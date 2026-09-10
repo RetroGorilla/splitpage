@@ -346,6 +346,47 @@ that is the entire database.
   be written from a stale read, defeating the compare-and-set.
 - **`Cache-Control: no-store` on every API response.** A cached rev would make
   a client think it is current and clobber.
+- **`X-Splitpage` and `X-Splitpage-Bind` on every response.** The launcher's
+  only way to tell "port 8791 is busy" from "our own server is already there,
+  bound to loopback". Do not drop them: without the first, a second launch
+  starts a rival server on the next port and splits the library in two;
+  without the second, `--host` cannot tell that the copy holding the port is
+  the private one it should take over.
+
+---
+
+### 3.7a First-run setup, autostart, and one instance
+
+`start.mjs` does more than serve now, and the order in it is deliberate:
+settings → setup → *is one already running?* → apply a staged update → build →
+serve.
+
+- **Settings are per user, outside the app folder**
+  (`%LOCALAPPDATA%\Splitpage\config.json` and the platform equivalents).
+  An all-users install lands in `Program Files`, which is not writable by the
+  person using it; settings that only work for a "just for me" install would
+  be worse than none. `config.appDir` records which copy wrote them, and a
+  mismatch counts as a first run — that is what makes a reinstall to a new
+  folder, or a portable copy that was moved, set itself up again.
+- **`--host` is never remembered.** Every other answer persists; that one puts
+  the library on the network with no password in front of it, and a preference
+  that quietly survives to the next boot is exactly how someone ends up
+  sharing a laptop's documents on café wifi. `LIBRARY_PREF` is what gets
+  written; `LIBRARY` (which `--host` forces on) is what this run does.
+- **Autostart is only ever touched on a first run or an explicit
+  `--autostart` / `--no-autostart`.** Re-asserting it every launch would put
+  the entry back each time somebody removed it by hand, which is not a
+  setting, it is an argument.
+- **`instance.json` is what makes `--stop` and the `--host` takeover
+  possible**, and it records both pids: killing the server makes the launcher
+  above it exit, and killing only the launcher would orphan the server. It is
+  removed on exit, but only by the process that wrote it (`record.pid ===
+  process.pid`) — a stale file from a crash must never let one run kill
+  another's server.
+- **A staged update is not applied on the "already running" path.** Those
+  files are open in the running server; the swap happens at the next start,
+  which with autostart on means the next boot. The launcher says so rather
+  than silently doing nothing.
 
 ---
 

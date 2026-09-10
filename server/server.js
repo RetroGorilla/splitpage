@@ -32,12 +32,11 @@ const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public"
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
 /* Set READ_ONLY=1 to publish a library nobody can write to. */
 const READ_ONLY = process.env.READ_ONLY === "1";
-/* Set NO_API=1 to serve the app and nothing else. The local launcher uses this
-   for its default mode: with no /api to find, the client's health probe fails
-   and it stays in local mode, where a document is a file you save to disk.
-   That is the workflow start.bat has always given, and turning it into a
-   server-side library because a launcher happened to run Node would be a
-   surprise, not an upgrade. `start --library` is the opt-in. */
+/* Set NO_API=1 to serve the app and nothing else: with no /api to find, the
+   client's health probe fails and it stays in local mode, where a document is
+   a file you save to disk. The launcher sets this when the user has asked for
+   that with `start --no-library`; otherwise first-run setup turns the library
+   on and documents live in the data folder. */
 const NO_API = process.env.NO_API === "1";
 
 const MIME = {
@@ -435,7 +434,21 @@ async function handleStatic(req, res, url) {
 
 /* ---------- server ---------- */
 
+/* Stamped on every response so a second launcher can tell "the port is taken"
+   from "Splitpage is already running here" — the difference between starting
+   beside it on the next port and simply opening a browser at it. Read once,
+   at startup: it can only change when this process is replaced. */
+const IDENTITY = (() => {
+  try { return fs.readFileSync(path.join(STATIC_DIR, "VERSION"), "utf8").trim() || "1"; }
+  catch { return "1"; }
+})();
+
 const server = http.createServer((req, res) => {
+  res.setHeader("X-Splitpage", IDENTITY);
+  /* Loopback or the whole network — the one thing a launcher cannot work out
+     for itself by connecting over loopback, and the difference between "this
+     is already shared" and "this is mine alone". */
+  res.setHeader("X-Splitpage-Bind", HOST);
   const url = new URL(req.url, "http://localhost");
   const done = (!NO_API && url.pathname.startsWith("/api/"))
     ? handleApi(req, res, url)

@@ -2,8 +2,9 @@
 
 This is your Splitpage script editor, converted out of the Claude artifact
 runtime into a plain, self-contained web app. Nothing here talks to Claude
-or to any server — everything (script text, comments, tags, version
-snapshots) lives in the page itself and in files you save to your own disk.
+or to anything on the internet — everything (script text, comments, tags,
+version snapshots) lives in the page itself, in files you save to your own
+disk, and in the document server that runs on your own machine.
 
 ## Running it
 
@@ -31,12 +32,47 @@ path. To get that:
 3. Leave that window open while you work; closing it (or Ctrl+C) stops the
    server. Re-run it any time — your saved `.html` file doesn't depend on
    the server, so you can always fall back to just double-clicking it.
+   (After the first run it also starts with your machine, so most of the
+   time it is already up and there is no window to leave open — see
+   [First run sets itself up](#first-run-sets-itself-up).)
 
 **Options** (`node start.mjs --help`): `--port 9000` if 8791 is taken —
-though it finds the next free port by itself; `--no-open` to skip launching
-a browser; and `--library`, which keeps documents on the server in `./data`
-instead of as files you save to disk. Without `--library` the launcher
-serves files and nothing else, so the app behaves exactly as it always has.
+though it finds the next free port by itself; `--no-open` to skip launching a
+browser; `--stop` to stop the copy running in the background; and
+`--no-library`, which turns the document server off so a document goes back to
+being an `.html` file you save to disk.
+
+## First run sets itself up
+
+The first launch — whether that is the installer, `start.bat`, or
+`node start.mjs` — does the setup once and never asks again:
+
+- **The document server is turned on**, with a folder for documents beside the
+  app (or in `%LOCALAPPDATA%\Splitpage\data` when the app folder is somewhere
+  you cannot write to, like `Program Files`).
+- **Splitpage is registered to start with the machine**, so the server is
+  already up when you open the app. It listens on `127.0.0.1` — this machine
+  only, nobody else — and starts with no window: on Windows a `Run` entry
+  pointing at `autostart.vbs`, on macOS a LaunchAgent, on Linux an XDG
+  autostart entry.
+- **What it decided is written down**, per user, in
+  `%LOCALAPPDATA%\Splitpage\config.json` (macOS:
+  `~/Library/Application Support/Splitpage/config.json`, Linux:
+  `~/.config/splitpage/config.json`), and read back on every launch.
+
+Every answer is one flag away, and the new one is remembered:
+
+```
+node start.mjs --no-autostart --setup   # stop starting with the machine
+node start.mjs --autostart --setup      # start with it again
+node start.mjs --no-library --setup     # documents back to files on disk
+node start.mjs --stop                   # stop the copy running right now
+```
+
+Because the server is already running, **a second launch does not start a
+second one.** The shortcut you click finds the running copy and opens a browser
+at it, rather than putting a rival server on the next port up with your
+documents split between the two.
 
 ## Installing it
 
@@ -45,15 +81,22 @@ installer, and you are working — open a local script, or host a session other
 people on your network join. It carries its own Node runtime, so there is no
 second thing to go and install first.
 
+It is **not a file in this repository** — a setup is built from a tagged
+release, not committed. Build one with the two commands below, or take one from
+the project's [Releases](https://github.com/RetroGorilla/splitpage/releases)
+page when a release has been cut.
+
 The installer asks where to put it:
 
 - **Just for me** — `%LOCALAPPDATA%\Programs\Splitpage`, no administrator.
 - **Everyone on this PC** — `C:\Program Files\Splitpage`, needs administrator.
 - **Somewhere else** — type any path.
 
-and whether you want a desktop shortcut and a *shared session* shortcut. It
-registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /S`
-installs silently, with `/D=C:\path` to choose where.
+and whether you want a desktop shortcut, a *shared session* shortcut, and
+whether Splitpage should start with Windows (yes by default — see above). It
+does the first-run setup for you, so the document server exists before you
+click anything, and registers with Add/Remove Programs like anything else.
+`SplitpageSetup.exe /S` installs silently, with `/D=C:\path` to choose where.
 
 ### Building a release
 
@@ -84,7 +127,10 @@ Pick **Splitpage (shared session)** in the Start Menu, or run:
 node start.mjs --host
 ```
 
-It prints the addresses other people type into their browsers. Everyone edits
+It prints the addresses other people type into their browsers. If the
+background copy is holding the port, this takes it over and says so — one
+server, the same documents, now reachable from the network. Hosting is never
+remembered: close the window and the next start is private again. Everyone edits
 the same scripts; two people editing different scenes merge silently, and two
 people editing the same field keep both versions — one live, one as a review
 comment.
@@ -98,12 +144,14 @@ comment.
 ## Uninstalling
 
 The installed copy registers itself, so remove it from **Add/Remove Programs**
-— that clears the shortcuts too, and leaves any shared-session scripts in
-`%LOCALAPPDATA%\Splitpage\data` where they are.
+— that clears the shortcuts, stops it starting with Windows, removes the
+settings file, and leaves your scripts in `%LOCALAPPDATA%\Splitpage\data`
+where they are.
 
 For the portable copy, run **`uninstall.bat`** (Windows) or **`./uninstall.sh`**,
-which removes exactly the files the release shipped and lists anything else it
-found so you can see what it is leaving behind. Your scripts are never touched:
+which removes exactly the files the release shipped, undoes the boot-time start
+and the settings if they point at this copy, and lists anything else it found
+so you can see what it is leaving behind. Your scripts are never touched:
 saved `.html` files and the `data/` folder both survive, and it tells you they
 did. `--dry-run` shows what would go without doing it.
 
@@ -550,16 +598,25 @@ always works regardless.
 
 **Running it**
 
-- `start.mjs` — the launcher: serves the app, opens your browser, installs a
-  staged update, and with `--host` shares the session with your network.
+- `start.mjs` — the launcher: does the one-time setup, serves the app, opens
+  your browser, installs a staged update, steps aside when a copy is already
+  running, and with `--host` shares the session with your network.
+- `autostart.mjs` — registers (and unregisters) "start Splitpage with this
+  machine": a `Run` entry on Windows, a LaunchAgent on macOS, an XDG autostart
+  entry on Linux. Always per-user; never needs an administrator.
+- `autostart.vbs` — what that `Run` entry points at on Windows, so signing in
+  starts the server with no console window flashing up.
 - `start.bat` / `start.sh` — the double-click and terminal ways in. `start.bat`
   prefers the bundled runtime, then a Node on PATH, then `start.ps1`.
 - `start.ps1` — the zero-install fallback: a static server built on .NET's
-  `HttpListener`, for a machine with no Node. Serves the app; cannot host.
+  `HttpListener`, for a machine with no Node. Serves the app so "Install app"
+  and the microphone work; it cannot run the document server, host a session,
+  or set anything up, so nothing starts at boot on that path either.
 - `update.mjs` — checks for a new version, verifies it, stages it. The
   install happens at the next launch, never while the app is open.
 - `uninstall.mjs` / `uninstall.bat` / `uninstall.sh` — removes a portable
-  copy, and only the files the release shipped.
+  copy: the files the release shipped, plus the boot-time start and the
+  settings file when they point at that copy. Never the documents.
 
 **Packaging**
 

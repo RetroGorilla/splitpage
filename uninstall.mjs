@@ -9,18 +9,43 @@
  * that uninstaller also clears the Start Menu entry, which this cannot see.
  *
  * It removes exactly the files listed in .splitpage-release.json, which the
- * packager wrote when this copy was built. Anything else in the folder is
- * yours and is left alone — the one thing an uninstaller must never get wrong
- * is deleting work it did not create.
+ * packager wrote when this copy was built, plus the two things first-run setup
+ * put outside the folder: the boot-time start, and the settings file that
+ * remembers your answers. Anything else in the folder is yours and is left
+ * alone — the one thing an uninstaller must never get wrong is deleting work
+ * it did not create.
  */
 
 import { createInterface } from "node:readline/promises";
 import { existsSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, relative, sep, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { platform } from "node:process";
+import * as autostart from "./autostart.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(ROOT, ".splitpage-release.json");
+
+/* Kept in step with start.mjs's configHome(), because this has to find the
+   same file that setup wrote. */
+function configHome() {
+  if (platform === "win32") {
+    return join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "Splitpage");
+  }
+  if (platform === "darwin") return join(homedir(), "Library", "Application Support", "Splitpage");
+  return join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "splitpage");
+}
+
+const SETTINGS = process.env.SPLITPAGE_CONFIG || join(configHome(), "config.json");
+const INSTANCE = join(dirname(SETTINGS), "instance.json");
+
+/* Only settings that describe THIS copy. Two Splitpages on one machine share
+   the file; the one being removed does not get to delete the other's answers
+   — and neither of them ever touches the documents, which are elsewhere. */
+function settingsAreOurs() {
+  try { return JSON.parse(readFileSync(SETTINGS, "utf8")).appDir === ROOT; } catch { return false; }
+}
 
 /* Every path this script touches comes from a key in .splitpage-release.json
    — written by this project's own packager, but a crafted or corrupted copy
@@ -81,6 +106,14 @@ console.log(`  Will remove ${ours.length} file${ours.length === 1 ? "" : "s"}:`)
 for (const rel of ours) console.log(`    ${rel}`);
 console.log(`    ${".splitpage-release.json"}`);
 
+const ownsSettings = existsSync(SETTINGS) && settingsAreOurs();
+const startsAtBoot = autostart.status();
+const bootIsOurs = startsAtBoot.enabled && startsAtBoot.command
+  && startsAtBoot.command.toLowerCase().includes(ROOT.toLowerCase());
+
+if (bootIsOurs) console.log(`\n  Will stop it starting with this machine:\n    ${startsAtBoot.where}`);
+if (ownsSettings) console.log(`\n  Will remove your settings:\n    ${SETTINGS}`);
+
 if (theirs.length) {
   /* Documents are the whole reason this script is careful. In library mode
      they are in data/; a saved script can be anywhere. Either way they are
@@ -134,6 +167,18 @@ for (const rel of order) {
   }
 }
 try { rmSync(MANIFEST); } catch { /* already gone */ }
+
+/* The two things that live outside the folder. Both are guarded above on
+   pointing at this copy, so a second Splitpage on the machine keeps its own. */
+if (bootIsOurs) {
+  const off = autostart.disable({ onlyIfPointsAt: ROOT });
+  console.log(off.removed
+    ? `  It no longer starts with this machine.`
+    : `  Could not remove the boot-time start (${off.error || "already gone"}): ${off.where}`);
+}
+if (ownsSettings) {
+  try { rmSync(SETTINGS, { force: true }); rmSync(INSTANCE, { force: true }); } catch { /* fine */ }
+}
 
 /* Directories we emptied (server/), but never one with anything left in it. */
 for (const dir of new Set(ours.map((rel) => dirname(rel)).filter((d) => d !== "."))) {

@@ -12,13 +12,17 @@
   box instead of sending the user off to install Node.
 
   Silent install (for scripting):  SplitpageSetup.exe /S [/D=C:\path]
+
+  A silent install sets Splitpage to start with Windows, the same as the
+  wizard's default. Pass -NoAutostart to this script to leave startup alone.
 #>
 
 [CmdletBinding()]
 param(
   [switch]$Silent,
   [string]$Dir,
-  [switch]$AllUsers
+  [switch]$AllUsers,
+  [switch]$NoAutostart
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,11 +92,18 @@ if ($Dir) {
 
 $desktopIcon = $true
 $hostIcon = $false
+$autostart = -not $NoAutostart
 
 if (-not $Silent) {
   Write-Host ""
   $d = Read-Host "  Add a desktop shortcut? [Y/n]"
   $desktopIcon = -not ($d -match '^[Nn]')
+  Write-Host ""
+  Write-Host "  Splitpage can start with Windows and keep its document server"
+  Write-Host "  running in the background, so the app is there the moment you open" -ForegroundColor Gray
+  Write-Host "  it. Nothing is shared with anyone: it listens on this PC only." -ForegroundColor Gray
+  $a = Read-Host "  Start Splitpage when Windows starts? [Y/n]"
+  $autostart = -not ($a -match '^[Nn]')
   Write-Host ""
   Write-Host "  Splitpage can also host a shared session, so other people on your"
   Write-Host "  network open a link and edit the same scripts as you." -ForegroundColor Gray
@@ -140,10 +151,35 @@ try {
   if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-# Documents for a shared session live outside the app folder, so that an
-# install into Program Files (read-only for normal users) still works and an
-# uninstall never has the chance to take someone's scripts with it.
+# Documents live outside the app folder, so that an install into Program Files
+# (read-only for normal users) still works and an uninstall never has the
+# chance to take someone's scripts with it.
 $dataDir = Join-Path $env:LOCALAPPDATA "$AppName\data"
+
+# --- first-run setup --------------------------------------------------------
+#
+# Done here rather than left to the first launch, so the document server exists
+# and Splitpage is registered to start with Windows before anyone has clicked
+# anything. It is the app's own setup (start.mjs --setup) rather than a second
+# implementation in PowerShell: one place decides what "set up" means, and a
+# portable copy that was never installed goes through exactly the same code.
+#
+# Both of these are per-user by design -- the Run entry and the settings file
+# live in the profile of whoever runs this. Installing for all users from an
+# admin account therefore sets it up for that account; everyone else's first
+# launch sets up their own, which is the behaviour you want anyway.
+
+$node = Join-Path $target "runtime\node.exe"
+if (Test-Path $node) {
+  $setupArgs = @((Join-Path $target "start.mjs"), "--setup", "--data", $dataDir)
+  $setupArgs += $(if ($autostart) { "--autostart" } else { "--no-autostart" })
+  & $node @setupArgs
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "  Setup did not finish cleanly - Splitpage will set itself up on first launch." -ForegroundColor Yellow
+  }
+} else {
+  Write-Host "  No bundled runtime found - Splitpage will set itself up on first launch." -ForegroundColor Yellow
+}
 
 # --- shortcuts --------------------------------------------------------------
 
@@ -211,6 +247,12 @@ if (-not $Silent) {
   Write-Host ""
   Write-Host "  Splitpage is in your Start Menu. Opening it now - in Chrome or Edge,"
   Write-Host "  click the install icon in the address bar to give it its own window."
+  if ($autostart) {
+    Write-Host ""
+    Write-Host "  It will start with Windows from now on and keep running in the" -ForegroundColor Gray
+    Write-Host "  background, so opening it later is instant. Turn that off with:" -ForegroundColor Gray
+    Write-Host "    `"$target\start.bat`" --no-autostart --setup" -ForegroundColor Gray
+  }
   Write-Host ""
   Start-Process -FilePath $launcher -WorkingDirectory $target -WindowStyle Minimized
   Start-Sleep -Seconds 2

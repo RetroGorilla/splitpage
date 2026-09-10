@@ -58,6 +58,11 @@ const FILES = [
   ["start.bat", 0o644],
   ["start.ps1", 0o644],
   ["start.sh", 0o755],
+  ["autostart.mjs", 0o644],
+  /* Windows-only, and shipped in the portable zip too: an unzipped copy that
+     is told to start with the machine needs the same silent launcher an
+     installed one gets. */
+  ["autostart.vbs", 0o644],
   ["uninstall.mjs", 0o644],
   ["uninstall.bat", 0o644],
   ["uninstall.sh", 0o755],

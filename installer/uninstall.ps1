@@ -1,10 +1,11 @@
 <#
   Splitpage uninstaller, registered with Add/Remove Programs by install.ps1.
 
-  It removes the app, its shortcuts and its registry entry. It does NOT remove
-  documents: a shared session keeps them in %LOCALAPPDATA%\Splitpage\data, and
-  uninstalling an editor must never delete the writing. It says where they are
-  and leaves them.
+  It removes the app, its shortcuts, its registry entries -- including the one
+  that starts it with Windows -- and the settings file that first-run setup
+  wrote. It does NOT remove documents: they are in %LOCALAPPDATA%\Splitpage\data,
+  and uninstalling an editor must never delete the writing. It says where they
+  are and leaves them.
 #>
 
 [CmdletBinding()]
@@ -38,6 +39,28 @@ $targetPrefix = $target.TrimEnd('\') + "\"
 Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
   Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($targetPrefix, "OrdinalIgnoreCase") } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+# Stop starting with Windows. Only if it points back here: a second Splitpage
+# somewhere else on this machine is entitled to keep its own boot-time start.
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$runValue = (Get-ItemProperty -Path $runKey -Name $AppName -ErrorAction SilentlyContinue).$AppName
+if ($runValue -and $runValue.ToLower().Contains($target.ToLower())) {
+  Remove-ItemProperty -Path $runKey -Name $AppName -Force -ErrorAction SilentlyContinue
+}
+
+# The settings first-run setup wrote, in the same case: only when they describe
+# this copy. Documents are somewhere else entirely and are never touched.
+$settingsDir = Join-Path $env:LOCALAPPDATA $AppName
+foreach ($name in @("config.json", "instance.json")) {
+  $file = Join-Path $settingsDir $name
+  if (Test-Path $file) {
+    $json = $null
+    try { $json = Get-Content $file -Raw | ConvertFrom-Json } catch { }
+    if (-not $json -or -not $json.appDir -or $json.appDir.ToLower() -eq $target.ToLower()) {
+      Remove-Item $file -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
 
 foreach ($root in @($env:APPDATA, $env:ProgramData)) {
   $menu = Join-Path $root "Microsoft\Windows\Start Menu\Programs"
