@@ -8054,16 +8054,31 @@
       pending = raw ? JSON.parse(raw) : null;
     } catch (e) { pending = null; }
     if (!pending || !pending.id) return false;
-    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+
+    /* init() fires detectServer() (which leads here) and loadInitialState()
+       concurrently with no coordination between them — loadInitialState()
+       resolves almost immediately and renders a blank, fully editable
+       document, while this is still doing network round trips. Remember
+       what was on screen and the edit counter before awaiting anything, so
+       keystrokes typed into that transitional document during the wait can
+       be recovered rather than silently overwritten below. */
+    var seqAtStart = editSeq;
+    var stateAtStart = state ? cloneState(state) : null;
 
     var body;
     try {
       body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
     } catch (err) {
-      /* still signed out, or the document is gone — leave the stash alone so
-         a later reload can still recover it */
+      /* still signed out, or the document is gone — leave SERVER_RESUME_KEY
+         (and the stash it points at) alone so a later reload can still
+         recover it. Removing it here, before success is known, is what
+         applyStashedWork() (14-export.js) uses to decide a stash belongs to
+         a fresh/local document rather than this hosted one — clear it too
+         early and a later reload would splice this doc's stashed edits into
+         an unrelated blank document instead. */
       return false;
     }
+    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
 
     var stash = readStash();
     var theirs = migrateRows(cloneState(body.state));
@@ -8071,7 +8086,20 @@
     htmlFileHandle = null;
     resetProductionPanelState();
 
+    var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
+
     if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) {
+      if (typedDuringResume) {
+        var freshResult = mergeStates(stateAtStart, migrateRows(cloneState(state)), theirs, false);
+        state = freshResult.merged;
+        baseState = cloneState(theirs);
+        render();
+        updateIdentityChip();
+        updateFileChip();
+        showToast("Signed back in — merged what you typed while " + (state.title || body.id) + " was reopening", "warn", true);
+        reportMerge(freshResult);
+        return true;
+      }
       state = theirs;
       baseState = cloneState(state);
       clearDirty();
@@ -8083,9 +8111,16 @@
     }
 
     clearStash();
+    var mine = migrateRows(cloneState(stash.mine));
+    if (typedDuringResume) {
+      /* fold the keystrokes typed on top of the blank interim document into
+         what the stash already remembers as "mine", so both survive the
+         three-way merge below rather than one silently replacing the other. */
+      mine = mergeStates(stateAtStart, migrateRows(cloneState(state)), mine, false).merged;
+    }
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
-      migrateRows(cloneState(stash.mine)),
+      mine,
       theirs,
       !!stash.imagesStripped
     );
@@ -8270,22 +8305,31 @@
      here forever — three rounds is far more contention than a script gets. */
   async function saveToServer() {
     if (serverSessionExpired) return false;
+    /* The server picker is never disabled while a save is in flight, so
+       openServerDoc() can reassign serverDoc/state/baseState to a different
+       hosted document mid-save. Remember which document THIS call is for,
+       and refuse to write a result — success or conflict — into whatever
+       serverDoc/state/baseState point at now if it has moved on. */
+    var docId = serverDoc.id;
     var attempts = 0;
     var mergeResult = null;
 
     while (attempts < 3) {
       attempts++;
+      if (serverDoc.id !== docId) return false;
       state.rev = (state.rev || 0) + 1;
       state.lastEditedBy = getEditorName();
       state.lastEditedAt = nowIso();
       var published = cloneState(state);
       var seqAtSave = editSeq;
+      var baseRevAtSave = serverDoc.rev;
 
       try {
-        var body = await apiFetch("api/docs/" + encodeURIComponent(serverDoc.id), {
+        var body = await apiFetch("api/docs/" + encodeURIComponent(docId), {
           method: "PUT",
-          body: { baseRev: serverDoc.rev, state: published, by: getEditorName() }
+          body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
         });
+        if (serverDoc.id !== docId) return true; /* saved, but the open document has since changed */
         serverDoc.rev = body.rev;
         baseState = published;
         if (editSeq === seqAtSave) clearDirty();
@@ -8295,6 +8339,7 @@
         if (mergeResult) reportMerge(mergeResult, { alreadySaved: true });
         return true;
       } catch (err) {
+        if (serverDoc.id !== docId) return false;
         state.rev = Math.max(0, (state.rev || 1) - 1);
 
         if (err && err.code === "conflict" && err.payload && err.payload.state) {
