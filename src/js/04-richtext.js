@@ -189,7 +189,11 @@
       else if (tag === "U") out += "<u>" + inner + "</u>";
       else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
       else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
-      else if (tag === "A") out += "[" + inner + "](" + child.getAttribute("href") + ")";
+      /* A link's visible text becomes markdown's [text](href) — but a
+         literal "]" in that text closes the link early for any standard
+         parser, and "(" / ")" break the destination parse the same way;
+         escaping them is what CommonMark itself expects inside link text. */
+      else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
       else if (tag === "BR") out += "\n";
       else out += inner;
     });

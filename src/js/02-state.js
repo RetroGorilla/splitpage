@@ -145,7 +145,12 @@
       p.name = plainText(p.name).trim().slice(0, 60);
     });
     s.people = s.people.filter(function (p) { return p.name; });
-    var knownPeople = {};
+    /* Object.create(null) — a plain {} inherits Object.prototype, so an
+       owner id that happens to collide with an inherited member name
+       (e.g. "constructor", "hasOwnProperty") would resolve truthy below
+       even with no matching person, leaving a dangling owner id instead
+       of clearing it to "" as intended. */
+    var knownPeople = Object.create(null);
     s.people.forEach(function (p) { knownPeople[p.id] = true; });
 
     if (!Array.isArray(s.productionTags)) {

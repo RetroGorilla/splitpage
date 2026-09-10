@@ -546,7 +546,11 @@
   }
 
   /* ---------- Google Drive file manager ---------- */
-  .drive-panel { max-width: 640px; }
+  /* .modal-panel (below) also sets max-width, at equal specificity and
+     later in the file — a bare .drive-panel always lost that tie despite
+     being more specific here. .modal-panel.drive-panel outranks it
+     regardless of source order. */
+  .modal-panel.drive-panel { max-width: 640px; }
   .drive-setup-steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
   .drive-setup-steps li { margin-bottom: 4px; }
   .drive-field { margin-bottom: 10px; }
@@ -1227,6 +1231,12 @@
   }
   .identity-chip:hover { border-color: var(--visual); color: var(--text); }
   .identity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+  /* Toggled in JS (03-sync.js) whenever no author name is set, but nothing
+     styled it — a named and unnamed chip looked identical apart from the
+     text itself. Dims the dot to invite setting a name, the same signal
+     --ok/--danger already give elsewhere for "set" vs "needs attention". */
+  .identity-chip.unnamed { border-style: dashed; }
+  .identity-chip.unnamed .identity-dot { background: var(--text-faint); }
 
   .row-meta {
     font-family: var(--font-display);

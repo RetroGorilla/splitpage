@@ -213,8 +213,15 @@
       var vCursor = vy, aCursor = y;
       var guard = 0;
       while ((vRest.length || aRest.length) && guard++ < 400) {
-        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD));
-        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD));
+        /* A block of n lines starting at startY = cursor - SIZE has its
+           last baseline at cursor - SIZE - (n-1)*LEAD, so the largest n
+           whose baseline still clears the bottom margin M is
+           floor((cursor - SIZE - M) / LEAD) + 1, not the bare floor() —
+           the missing +1 undercounted by exactly one line on every
+           multi-page row, forcing an unnecessary early page break and an
+           ~LEAD-tall blank gap at the bottom of the column. */
+        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
+        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
         var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
         var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
         var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;

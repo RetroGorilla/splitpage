@@ -5,6 +5,14 @@
      closed to be saved. They are one control with two faces: nothing
      addresses either of them directly, so they cannot come to disagree about
      whether there is anything to save. */
+  /* Set by saveDoc() (14-export.js) around the actual write/save-to-server
+     call. While a save is genuinely in flight, markDirty() must not
+     overwrite the button's "Saving…" text with "Save •" just because a
+     keystroke landed in the meantime — the button stays visibly disabled
+     either way, so the mismatch is purely cosmetic, but it reads as "the
+     save already finished (or never started)" to anyone watching it. */
+  var saveInFlight = false;
+
   function setSaveButtons(text, disabled) {
     ["btn-save", "wr-save"].forEach(function (id) {
       var btn = document.getElementById(id);
@@ -18,7 +26,7 @@
   function markDirty() {
     dirty = true;
     editSeq++;
-    setSaveButtons("Save •");
+    if (!saveInFlight) setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
     /* A hosted document has no openedFile.name (openServerDoc() sets it to
        null on purpose — one Save button, one home for it), so the branch

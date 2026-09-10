@@ -198,6 +198,26 @@
     return false;
   }
 
+  /* execCommand("hiliteColor"/"backColor") produces a styled <span
+     style="background-color:...">, never a <mark>, in every modern
+     browser — removeHighlight() below already knows to look for both, but
+     the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
+     state indicator only ever checked for MARK, so clicking Highlight a
+     second time re-applied it instead of removing it (the field only
+     turned into a real <mark> — and so became toggle-able — once it had
+     been blurred and sanitizeHtml() ran). */
+  function isSelectionHighlighted(root) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return false;
+    var node = sel.getRangeAt(0).commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    while (node && node !== root) {
+      if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   function unwrapElement(el) {
     var parent = el.parentNode;
     if (!parent) return;
@@ -238,7 +258,7 @@
       btn.classList.toggle("is-active", on);
     });
     var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
-    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionInsideTag(cellEl, "MARK"));
+    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
   }
 
   function handleToolbarCmd(btn) {
@@ -247,7 +267,7 @@
     var cmd = btn.getAttribute("data-cmd");
     cellEl.focus();
     if (cmd === "highlight") {
-      if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
+      if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
       else applyHighlight();
       syncFieldFromDom(cellEl);
       updateToolbarState(cellEl);
