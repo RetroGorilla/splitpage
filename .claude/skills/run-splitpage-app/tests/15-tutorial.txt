@@ -14,6 +14,10 @@ expect document.getElementById('tour-overlay').hidden == false
 expect document.getElementById('tour-step').textContent.indexOf('1 of 5') !== -1
 expect document.getElementById('tour-back').disabled == true
 
+# --- actually laid out, not just an unhidden card in a hidden overlay -------
+expect document.getElementById('tour-card').getBoundingClientRect().width > 0
+expect document.getElementById('tour-card').offsetParent !== null
+
 jsclick #tour-next
 sleep 300
 expect document.getElementById('tour-step').textContent.indexOf('2 of 5') !== -1
