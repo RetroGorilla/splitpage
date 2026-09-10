@@ -487,6 +487,12 @@ script…** already reads back in "Two columns" mode, so a two-column
 Markdown export round-trips back into Splitpage with the split intact.
 Both carry the production breakdown and comments the same way.
 
+Neither is the same thing as **Save**. These are copies for reading and
+sharing: they carry the words, not the tagging, the comment anchors, the
+images or the scene statuses. Saving as `.md` writes the same two-column
+table *plus* Splitpage's own record of the script underneath it, so nothing
+is lost — see [Saving your script](#saving-your-script).
+
 ## Importing a Google Doc
 
 **File ▸ Import from Google Doc link…** takes a Google Docs share link (or
