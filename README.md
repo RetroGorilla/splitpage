@@ -15,15 +15,46 @@ page as an app (and only let its service worker cache it for offline use)
 when the page is served from `http://`/`https://`, not from a `file://`
 path. To get that:
 
-1. Double-click **[start.bat](start.bat)**. It opens a small window running
-   a local server (pure PowerShell, nothing to install) and launches your
-   browser to `http://localhost:8791/`.
+1. Start the local server:
+   - **Windows** — double-click **[start.bat](start.bat)**.
+   - **macOS / Linux** — run **`./start.sh`** in a terminal.
+   - **Anywhere, if you have Node** — `node start.mjs`.
+
+   Either way it serves the app at `http://localhost:8791/` and opens your
+   browser there. `start.bat` uses Node if you have it and falls back to a
+   pure-PowerShell server that needs nothing installed at all.
 2. In Chrome or Edge, click the **install icon** in the address bar (or
    Menu ▸ "Install Splitpage…") to add it as its own app window with a
-   taskbar/Start Menu entry.
-3. Leave the `start.bat` window open while you work; closing it stops the
+   taskbar/Start Menu entry. That *is* the desktop app — a real window and
+   a taskbar entry, running in the browser engine that all of Splitpage's
+   features (in-place saving, Follow My Voice) are built on.
+3. Leave that window open while you work; closing it (or Ctrl+C) stops the
    server. Re-run it any time — your saved `.html` file doesn't depend on
    the server, so you can always fall back to just double-clicking it.
+
+**Options** (`node start.mjs --help`): `--port 9000` if 8791 is taken —
+though it finds the next free port by itself; `--no-open` to skip launching
+a browser; and `--library`, which keeps documents on the server in `./data`
+instead of as files you save to disk. Without `--library` the launcher
+serves files and nothing else, so the app behaves exactly as it always has.
+
+## Working on the code
+
+`index.html` is **generated**. The source is in `src/` — `page.html` (the
+shell), `app.css`, `seed-state.json` (the demo document) and the numbered
+fragments in `src/js/`. Rebuild with:
+
+```
+node build.mjs           # write index.html
+node build.mjs --check    # is index.html in step with src/?
+```
+
+The build inlines everything into one self-contained page, and that is a
+requirement rather than a preference: saving writes this page's own HTML
+back out with your document inside it, so a page that linked out to
+`app.css`/`app.js` would produce saved files that only worked next to those
+files. Editing `index.html` by hand therefore gets overwritten by the next
+build — the pre-commit hook refuses a commit where the two disagree.
 
 ## What changed from the Claude artifact
 

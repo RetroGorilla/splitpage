@@ -32,6 +32,13 @@ const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public"
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
 /* Set READ_ONLY=1 to publish a library nobody can write to. */
 const READ_ONLY = process.env.READ_ONLY === "1";
+/* Set NO_API=1 to serve the app and nothing else. The local launcher uses this
+   for its default mode: with no /api to find, the client's health probe fails
+   and it stays in local mode, where a document is a file you save to disk.
+   That is the workflow start.bat has always given, and turning it into a
+   server-side library because a launcher happened to run Node would be a
+   surprise, not an upgrade. `start --library` is the opt-in. */
+const NO_API = process.env.NO_API === "1";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -383,7 +390,7 @@ async function handleStatic(req, res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
-  const done = url.pathname.startsWith("/api/")
+  const done = (!NO_API && url.pathname.startsWith("/api/"))
     ? handleApi(req, res, url)
     : handleStatic(req, res, url);
 
@@ -403,6 +410,7 @@ async function start() {
     console.log("[splitpage] documents in " + DATA_DIR);
     console.log("[splitpage] static files from " + STATIC_DIR);
     if (READ_ONLY) console.log("[splitpage] READ-ONLY mode");
+    if (NO_API) console.log("[splitpage] static only — no document API");
     console.log("[splitpage] no authentication in this process — put it behind Cloudflare Access or a VPN");
   });
 }
