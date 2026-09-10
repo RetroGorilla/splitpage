@@ -233,7 +233,15 @@
   async function resumeFromHandle(handle) {
     try {
       var file = await handle.getFile();
-      await openSplitpageFile(file, handle, { skipSnapshot: true, resumed: true });
+      /* The resume banner needs a real click to grant permission, and that
+         can happen well after launch — the user may have typed straight
+         into the interim blank document, or opened something else first
+         via File > Open, while it sat there. skipSnapshot used to be
+         hardcoded true on the assumption nothing worth keeping could exist
+         yet; once something does (dirty), this needs the same undo safety
+         net a normal file-open gets, or replacing state below silently
+         discards it with no way back. */
+      await openSplitpageFile(file, handle, { skipSnapshot: !dirty, resumed: true });
     } catch (e) {
       /* moved, renamed, deleted, or on a drive that isn't connected right
          now — not worth interrupting startup over; Version history and the
