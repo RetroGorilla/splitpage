@@ -179,27 +179,52 @@ serialisation *and* migration.
 
 ## 3. Architecture: five things that will bite you
 
-### 3.1 The page *is* the database
+### 3.1 The page is the database *at boot*
 
-`<script id="state-data" type="application/json">` holds the entire document.
-On load, `defaultState()` parses it. On save, `buildPublishHtml()` splices the
-current state back into **`PAGE_SHELL`** — a copy of the pristine served page
-captured on the very first line of the app script, before the DOM goes live.
+`<script id="state-data" type="application/json">` holds the **seed**
+document — the demo script the app opens on when nothing else has been
+loaded. On load, `defaultState()` parses it. `build.mjs` writes it from
+`src/seed-state.json`, `tests/01-core.txt` asserts it exists, and
+`.githooks/pre-commit` guards it. That is now its whole job.
 
-Consequence: a saved `.html` file is a complete, self-contained project. That's
-why File ▸ Open accepts `.html` and reads the state straight back out.
+**Documents live in files, not in copies of the app.** Save writes one of two
+formats (§4), both plain text, neither carrying the app with it:
+
+- `.md` — a readable two-column table plus Splitpage's own record of the
+  script in a fenced `splitpage` data block. The default.
+- `.splitpage` — that record on its own: exactly `migrateRows(state)`,
+  pretty-printed, no envelope.
+
+`20d-formats.js` builds and parses both. `openProjectFile()`
+(`18-local-files.js`) dispatches on the extension and lands every format in
+`adoptProjectState()` — the one place a parsed project becomes *the*
+document. `docFileHandle = { handle, kind }` remembers which file and which
+format, and `saveDoc()` picks the serializer from `kind`, so Save never has to
+guess. A `.md` with no data block is somebody else's Markdown and still goes
+through the old lossy import, unchanged.
+
+**`PAGE_SHELL` and `buildPublishHtml()` still exist, for the HTML export
+only.** `PAGE_SHELL` is a copy of the pristine served page captured on the
+very first line of the app script, before the DOM goes live;
+`buildPublishHtml()` splices a document into its `#state-data`. That is what
+**Export a copy ▸ Standalone HTML** produces, and it is the only thing that
+produces it — Save does not write HTML any more. A legacy `.html` project
+still *opens*, and its first Save converts it to `.md` with a toast saying so
+(`docFileHandle.kind === "html"` is the flag; nothing sets that kind except
+opening such a file).
 
 Never serialise the live DOM to save. `PAGE_SHELL` exists precisely to avoid it.
 
 **Since 2026-08-28 there is a second home for a document: a server.** When the
-page is served by `server/server.js`, the state can live in a JSON file on the
-server instead of inside the page, and Save does an HTTP compare-and-set rather
-than a file write. This is strictly additive — `file://`, plain static hosting
-and local `.html` files all behave exactly as before, because `detectServer()`
-probes `/api/health` and everything hosted stays hidden when that fails. The
-two homes are mutually exclusive by construction: opening a server document
-clears `htmlFileHandle`, and opening a local file clears `serverDoc`, so Save
-is never ambiguous about where it writes. See §3.6 and DEPLOY.md.
+page is served by `server/server.js`, the state lives in a JSON file on the
+server — the same object a `.splitpage` file holds — and Save does an HTTP
+compare-and-set rather than a file write. This is strictly additive:
+`file://`, plain static hosting and local files all behave exactly as before,
+because `detectServer()` probes `/api/health` and everything hosted stays
+hidden when that fails. The two homes are mutually exclusive by construction:
+opening a server document clears `docFileHandle`, and `adoptProjectState()`
+clears `serverDoc`, so Save is never ambiguous about where it writes. See §3.6
+and DEPLOY.md.
 
 ### 3.2 `migrateRows()` is the only door
 
@@ -715,6 +740,54 @@ Note `ROW_FIELDS = ["visualText","visualImage","audioText"]` — that's the list
 the merge reconciles *as content*. `status` is merged separately, by rank
 (`todo < ready < shot`), so a merge can never un-shoot a scene someone filmed.
 
+### The two file formats
+
+Both are written by `20d-formats.js` and read back by it; both enter `state`
+through `migrateRows()` and nothing else (invariant #2).
+
+**`.splitpage`** is `JSON.stringify(migrateRows(cloneState(state)), null, 2)`
+and nothing else. No envelope, no wrapper field, no renaming: the object above
+*is* the file, which is why it is also byte-for-byte what the server stores in
+`{id, rev, state, …}.state` and what `#state-data` holds at boot. Detection is
+the extension; validation is `typeof parsed === "object" && Array.isArray(
+parsed.rows)`. See invariant #31.
+
+**`.md`** is `toMarkdownTableDoc()` — the `# ` title, the scene table
+(`| # | Visual | Audio | Status |`), the production breakdown and the comments
+appendix — followed by:
+
+```
+<!-- splitpage: everything below is Splitpage's own record of this script. … -->
+~~~~splitpage
+<exactly the .splitpage bytes>
+~~~~
+```
+
+The fence length is computed per file (`splitpageDataFence`): four tildes
+minimum, and always longer than the longest run of tildes anywhere in the
+JSON, because CommonMark closes a fence on the first line of at least as many
+tildes as opened it. The *last* opening fence in the file wins, so a script
+that quotes this block as an example cannot shadow the real one; an opener can
+never occur inside the block, since `JSON.stringify` escapes every newline and
+every line of the pretty-printed JSON therefore starts with its indent.
+
+Reading a `.md` reconciles hand edits (invariant #32): the scene table —
+everything before the first `## ` heading, parsed by `parseMarkdownTable()`
+with `keepEmpty` — is compared cell by cell against `mdSceneCellSource()` of
+the block's row. Equal ⇒ the block's HTML is kept, tags and comment anchors
+intact. Different ⇒ that field is rebuilt from the table text through
+`legacyMdToHtml()` + `sanitizeHtml()`, and every registry name is re-wrapped
+by `tagFieldOccurrences()` so a tag survives a wording tweak. Comment anchors
+in a rebuilt field are gone; the comment keeps `quotedText` and renders as
+not-in-script. A `![…](data:image/…)` prefix on the Visual cell becomes
+`visualImage` via `safeImageSrc()`. A differing **row count** is never
+reconciled silently — `#md-rows-modal` asks (Keep Splitpage's record / Use the
+table's text; Esc means keep).
+
+No data block at all ⇒ `parseMarkdownProject()` returns `null` and the file
+goes through the ordinary lossy import, exactly as any foreign Markdown always
+has.
+
 **Browser storage** (not in the document — follows the reader, not the file):
 
 | Key | Purpose |
@@ -893,6 +966,33 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     gotchas. Real user clicks blur the cell as part of the click itself and
     do not hit this.
 
+*(#28–#30 are reserved by the first-time-experience plan for the join PIN,
+the launcher endpoint and the pristine-seed gate, and are not written yet.
+The two below keep their planned numbers so references to them stay true.)*
+
+31. **A `.splitpage` file is exactly `migrateRows(state)` — nothing wraps,
+    renames or adds fields on the way to disk** (§3.1, §4). The moment a
+    file carries `{version: 3, doc: {…}}` instead of the state object,
+    three things stop being the same object:
+    what the server stores, what `#state-data` holds, and what a file
+    holds — and every one of them then needs a translation layer that can
+    drift. A new top-level field is added the way invariant #4 says
+    (`migrateRows` *and* `mergeStates`) and it travels for free. If a
+    format version is ever genuinely needed, it is `schema`, which is
+    already in there.
+32. **The Markdown data block is authoritative for everything the table
+    cannot show; the table is authoritative for scene text only, and only
+    where it differs from the block.** Tags, comment anchors, ids, images,
+    statuses, people, `wordsPerMinute` and
+    `rev` come from the block, always. A cell whose text matches the block
+    keeps the block's HTML untouched — rebuilding a cell that did not
+    change would silently dissolve its tags and anchors for nothing, which
+    is precisely the lossy round trip these formats exist to end. Do not
+    "improve" the reconcile by making the table authoritative for a column
+    it renders but does not own (`Status` is written for a human reader and
+    deliberately not read back), and do not let a row-count difference pick
+    a side on its own.
+
 ---
 
 ## 6. Map of the source
@@ -902,9 +1002,9 @@ line-number table this replaced, they do not drift as you edit.
 
 | Fragment | Lines | What is in it |
 | --- | --- | --- |
-| `00-prelude.js` | 113 | opens the IIFE, `PAGE_SHELL`, module-wide vars, last-project memory |
+| `00-prelude.js` | 116 | opens the IIFE, `PAGE_SHELL`, module-wide vars (incl. `docFileHandle`), last-project memory |
 | `01-scene-status.js` | 120 | scene status and runtime estimates |
-| `02-state.js` | 157 | `defaultState`, `migrateRows`, schema |
+| `02-state.js` | 227 | `defaultState`, **`migrateRows`**, `legacyMdToHtml`, schema, `buildPublishHtml` |
 | `03-sync.js` | 573 | identity, snapshots, **`mergeStates`**, version history |
 | `04-richtext.js` | 218 | `walkSanitize`, html→markdown, video link cards |
 | `05-render.js` | 391 | `rowHtml`, `render`, field sync, rich-text commands |
@@ -913,18 +1013,19 @@ line-number table this replaced, they do not drift as you edit.
 | `08-production-panels.js` | 951 | the production and gear panels, multi-select, the breakdown |
 | `09-find-replace.js` | 243 | find & replace |
 | `10-comments.js` | 502 | comments: composer, panel, cards |
-| `11-import.js` | 300 | paste-a-script import, two-column detection, **Google Doc import** |
+| `11-import.js` | 381 | paste-a-script import, two-column detection, `parseMarkdownTable`, **Google Doc import** |
 | `12-dirty-toast.js` | 50 | the dirty flag and toasts |
 | `13-hosted.js` | 881 | server detection, the picker, compare-and-set save, **Google Drive files** |
-| `14-export.js` | 438 | save/export, binary helpers, the zip writer |
+| `14-export.js` | 488 | **`saveDoc`**, the Markdown writers, binary helpers, the zip writer |
 | `15-docx.js` | 638 | .docx writing and reading, narration-only export |
 | `16-csv.js` | 117 | csv |
 | `17-pdf.js` | 528 | pdf, packing lists |
-| `18-local-files.js` | 527 | open/save-back, resume-on-launch, the **File menu dispatch** |
+| `18-local-files.js` | 632 | **`openProjectFile`/`adoptProjectState`**, save-back, resume-on-launch, the **File menu dispatch** |
 | `19-writer.js` | 477 | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | 460 | teleprompter and voice follow |
 | `20a-update.js` | 87 | the update notice and About box |
-| `21-events.js` | 1129 | all event wiring, `init()`, closes the IIFE |
+| `20d-formats.js` | 266 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
+| `21-events.js` | 1214 | all event wiring, `init()`, closes the IIFE |
 
 `src/page.html` is the shell — topbar, File menu, modals, and the three build
 markers. `src/app.css` is everything visual. `src/seed-state.json` is the one
