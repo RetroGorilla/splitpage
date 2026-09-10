@@ -479,6 +479,10 @@ console.log(`
 `);
 
 if (!has("--no-open")) openBrowser(openUrl);
+else if (launchToken) console.log(`  Open it yourself at ${openUrl}
+  (the #launch part is what lets this page offer to add itself to the Start
+  Menu; it is valid for this run only)
+`);
 
 /* Handed to the OS opener as a single argument and never through a shell, so
    the URL cannot be reinterpreted as anything else. */

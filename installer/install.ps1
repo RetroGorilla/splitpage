@@ -27,7 +27,8 @@ param(
   [switch]$Silent,
   [string]$Dir,
   [switch]$AllUsers,
-  [switch]$InPlace
+  [switch]$InPlace,
+  [switch]$Unregister
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +36,41 @@ $Source = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AppName = "Splitpage"
 # Stamped in by package.mjs when the setup is built.
 $script:SetupVersion = "@VERSION@"
+
+# --- -Unregister: the inverse of -InPlace -----------------------------------
+#
+# A copy registered in place was never copied anywhere, so "uninstall" must
+# not delete anything the user unzipped (their documents may sit in data\
+# right beside it). It only takes back what -InPlace added: the shortcuts,
+# the Add/Remove Programs entry and the marker file.
+if ($Unregister) {
+  if (-not $Dir) { throw "-Unregister needs -Dir pointing at the registered folder." }
+  $target = (Resolve-Path $Dir).Path
+  foreach ($menuRoot in @($env:APPDATA, $env:ProgramData)) {
+    $menu = Join-Path $menuRoot "MicrosoftWindowsStart MenuPrograms"
+    foreach ($name in @("$AppName.lnk", "$AppName (shared session).lnk")) {
+      $lnk = Join-Path $menu $name
+      if (Test-Path $lnk) { Remove-Item $lnk -Force -ErrorAction SilentlyContinue }
+    }
+  }
+  $wsh = New-Object -ComObject WScript.Shell
+  foreach ($desk in @($wsh.SpecialFolders("Desktop"), $wsh.SpecialFolders("AllUsersDesktop"))) {
+    if ($desk) {
+      $lnk = Join-Path $desk "$AppName.lnk"
+      if (Test-Path $lnk) { Remove-Item $lnk -Force -ErrorAction SilentlyContinue }
+    }
+  }
+  foreach ($hive in @("HKCU:", "HKLM:")) {
+    $k = "$hiveSoftwareMicrosoftWindowsCurrentVersionUninstall$AppName"
+    if (Test-Path $k) { Remove-Item $k -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+  Remove-Item (Join-Path $target ".splitpage-registered") -Force -ErrorAction SilentlyContinue
+  Write-Host ""
+  Write-Host "  Removed the Start Menu entry and the Add/Remove Programs entry." -ForegroundColor Green
+  Write-Host "  Nothing in $target was touched; delete the folder yourself if you no longer want it."
+  Write-Host ""
+  exit 0
+}
 
 function Write-Head {
   Write-Host ""
@@ -284,10 +320,15 @@ Set-ItemProperty $key "DisplayIcon" $icon
 Set-ItemProperty $key "NoModify" 1 -Type DWord
 Set-ItemProperty $key "NoRepair" 1 -Type DWord
 Set-ItemProperty $key "EstimatedSize" ([int]($size / 1024)) -Type DWord
-# A portable copy registering itself in place may not carry uninstall.ps1
-# (it is part of the installer's payload, not the zip). Point Add/Remove at
-# whichever remover is actually there, so the entry is never a dead end.
-if (Test-Path (Join-Path $target "uninstall.ps1")) {
+# A copy registered in place was never copied, so its Add/Remove entry must
+# only unregister it (shortcuts, key, marker) and never delete the folder -
+# the user's documents may live in data beside it. The installed copy keeps
+# its real uninstaller.
+if ($InPlace) {
+  Set-Content -Path (Join-Path $target ".splitpage-registered") -Value (Get-Date -Format o) -Encoding ASCII
+  Set-ItemProperty $key "UninstallString" `
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$targetinstallerinstall.ps1`" -Unregister -Dir `"$target`""
+} elseif (Test-Path (Join-Path $target "uninstall.ps1")) {
   Set-ItemProperty $key "UninstallString" `
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$target\uninstall.ps1`""
 } else {
