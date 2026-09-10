@@ -2172,6 +2172,159 @@
   opacity: .55;
 }
 .update-bar-dismiss:hover { opacity: 1; }
+
+/* ---- Help page (README.md rendered at build time — see mdToHtml in
+   build.mjs and 20c-help.js) ---- */
+.help-panel {
+  max-width: 900px;
+  width: 100%;
+  height: 86vh;
+  max-height: 86vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.help-panel .modal-header { padding: 18px 22px 12px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.help-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+#help-toc {
+  flex: 0 0 220px;
+  overflow-y: auto;
+  padding: 16px 10px 16px 20px;
+  border-right: 1px solid var(--border);
+  font-size: 13px;
+}
+#help-toc ul { list-style: none; margin: 0; padding: 0; }
+#help-toc > ul > li { margin: 2px 0; }
+#help-toc ul ul { padding-left: 14px; }
+#help-toc a {
+  display: block;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  text-decoration: none;
+  line-height: 1.35;
+}
+#help-toc a:hover { background: var(--surface-2); color: var(--text); }
+#help-body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 28px 32px;
+  max-width: 720px;
+  line-height: 1.6;
+  font-size: 14.5px;
+}
+#help-body h1, #help-body h2, #help-body h3, #help-body h4 {
+  font-family: var(--font-body);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.3;
+  scroll-margin-top: 12px;
+}
+#help-body h1 { font-size: 22px; margin: 0 0 10px; }
+#help-body h2 { font-size: 19px; margin: 30px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+#help-body h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+#help-body h3 { font-size: 16px; margin: 20px 0 8px; }
+#help-body h4 { font-size: 14px; margin: 16px 0 6px; }
+#help-body p { margin: 0 0 12px; color: var(--text); }
+#help-body ul, #help-body ol { margin: 0 0 12px; padding-left: 22px; }
+#help-body li { margin: 3px 0; }
+#help-body li ul { margin: 3px 0; }
+#help-body a { color: var(--visual); }
+#help-body code {
+  font-family: var(--font-display);
+  font-size: 0.9em;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+#help-body pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+#help-body pre code { background: none; padding: 0; }
+#help-body blockquote {
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  color: var(--text-dim);
+}
+#help-body blockquote p:last-child { margin-bottom: 0; }
+#help-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+#help-body table { border-collapse: collapse; width: 100%; margin: 0 0 14px; font-size: 13.5px; }
+#help-body th, #help-body td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+#help-body th { background: var(--surface-2); font-family: var(--font-display); font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; }
+#help-body kbd {
+  font-family: var(--font-display);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+@media (max-width: 720px) {
+  .help-layout { flex-direction: column; }
+  #help-toc { flex: 0 0 auto; max-height: 160px; border-right: none; border-bottom: 1px solid var(--border); }
+  #help-body { max-width: none; padding: 16px 16px 24px; }
+}
+
+/* ---- Tagging reference: "Open the full guide" ---- */
+.tagging-help-fullguide { font-size: 12.5px; }
+.tagging-help-fullguide a { color: var(--visual); }
+
+/* ---- coach-mark tour (20c-help.js) ----
+   One fixed overlay reused for every step, following the hideTagGhost
+   pattern (21-events.js): recompute the cut-out and card position on
+   scroll/resize rather than leaving a stale rect behind. z-index above the
+   modals (150) since it can appear layered over Help's "Read more" close,
+   but in practice runs alone. */
+.tour-overlay { position: fixed; inset: 0; z-index: 160; }
+.tour-overlay[hidden] { display: none; }
+.tour-cutout {
+  position: absolute;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(20, 18, 14, 0.55);
+  transition: top .18s ease, left .18s ease, width .18s ease, height .18s ease;
+  pointer-events: none;
+}
+.tour-card {
+  position: absolute;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+.tour-step {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+.tour-card h3 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
+.tour-card p { margin: 0 0 8px; font-size: 13.5px; color: var(--text-dim); line-height: 1.5; }
+.tour-readmore { display: inline-block; margin-bottom: 12px; font-size: 12.5px; color: var(--visual); }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-actions-nav { display: flex; gap: 8px; }
+@media (max-width: 480px) {
+  .tour-card { position: fixed; left: 16px; right: 16px; width: auto; bottom: 16px; top: auto !important; }
+}
 </style>
 </head>
 <body>
@@ -2244,6 +2397,8 @@
           <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+          <button type="button" role="menuitem" data-file-action="help">User guide…</button>
+          <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
           <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
         </div>
       </div>
@@ -2727,6 +2882,139 @@
     </span>
   </div>
   <div class="comments-list" id="comments-list"></div>
+</div>
+
+<!-- Rendered from README.md at build time by mdToHtml() in build.mjs — see
+     20c-help.js for openHelp()/startTour(). A modal, not a side panel: it
+     covers the whole screen and owns focus (invariant #19), and opening it
+     closes the side panels (invariant #16) the same way the writer does. -->
+<div class="modal-backdrop" id="help-modal" hidden>
+  <div class="modal-panel help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="modal-header">
+      <h2 id="help-title">Help</h2>
+      <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
+    </div>
+    <div class="help-layout">
+      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-running-it">Running it</a></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
+      <div id="help-body"><h1 id="help-splitpage-standalone">Splitpage — standalone</h1>
+<p>This is your Splitpage script editor, converted out of the Claude artifact runtime into a plain, self-contained web app. Nothing here talks to Claude or to any server — everything (script text, comments, tags, version snapshots) lives in the page itself and in files you save to your own disk.</p>
+<h2 id="help-running-it">Running it</h2>
+<p><strong>Quickest — just open it.</strong> Double-click <a href="index.html" target="_blank" rel="noopener">index.html</a>. Editing, comments, the teleprompter, and Export all work straight away.</p>
+<p><strong>For "Install app" / offline support.</strong> Browsers only offer to install a page as an app (and only let its service worker cache it for offline use) when the page is served from <code>http://</code>/<code>https://</code>, not from a <code>file://</code> path. To get that:</p>
+<ol><li>Start the local server:<ul><li><strong>Windows</strong> — double-click <strong><a href="start.bat" target="_blank" rel="noopener">start.bat</a></strong>.</li><li><strong>macOS / Linux</strong> — run <strong><code>./start.sh</code></strong> in a terminal.</li><li><strong>Anywhere, if you have Node</strong> — <code>node start.mjs</code>.</li></ul></li></ol>
+<p>   Either way it serves the app at <code>http://localhost:8791/</code> and opens your    browser there. <code>start.bat</code> uses Node if you have it and falls back to a    pure-PowerShell server that needs nothing installed at all.</p>
+<ol><li>In Chrome or Edge, click the <strong>install icon</strong> in the address bar (or Menu ▸ "Install Splitpage…") to add it as its own app window with a taskbar/Start Menu entry. That <em>is</em> the desktop app — a real window and a taskbar entry, running in the browser engine that all of Splitpage's features (in-place saving, Follow My Voice) are built on.</li><li>Leave that window open while you work; closing it (or Ctrl+C) stops the server. Re-run it any time — your saved <code>.html</code> file doesn't depend on the server, so you can always fall back to just double-clicking it.</li></ol>
+<p><strong>Options</strong> (<code>node start.mjs --help</code>): <code>--port 9000</code> if 8791 is taken — though it finds the next free port by itself; <code>--no-open</code> to skip launching a browser; and <code>--library</code>, which keeps documents on the server in <code>./data</code> instead of as files you save to disk. Without <code>--library</code> the launcher serves files and nothing else, so the app behaves exactly as it always has.</p>
+<h2 id="help-installing-it">Installing it</h2>
+<p><strong><code>SplitpageSetup-&lt;version&gt;.exe</code> is the whole product.</strong> One download, one installer, and you are working — open a local script, or host a session other people on your network join. It carries its own Node runtime, so there is no second thing to go and install first.</p>
+<p>The installer asks where to put it:</p>
+<ul><li><strong>Just for me</strong> — <code>%LOCALAPPDATA%\Programs\Splitpage</code>, no administrator.</li><li><strong>Everyone on this PC</strong> — <code>C:\Program Files\Splitpage</code>, needs administrator.</li><li><strong>Somewhere else</strong> — type any path.</li></ul>
+<p>and whether you want a desktop shortcut and a <em>shared session</em> shortcut. It registers with Add/Remove Programs like anything else. <code>SplitpageSetup.exe /Q</code> installs silently for the current user and <code>/Q:A</code> for everyone (needs an administrator prompt). To choose the folder as well, override the command: <code>SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"</code>.</p>
+<h2 id="help-hosting-a-shared-session">Hosting a shared session</h2>
+<p>Pick <strong>Splitpage (shared session)</strong> in the Start Menu, or run:</p>
+<pre><code>node start.mjs --host</code></pre>
+<p>It prints the addresses other people type into their browsers. Everyone edits the same scripts; two people editing different scenes merge silently, and two people editing the same field keep both versions — one live, one as a review comment.</p>
+<blockquote><p><strong>There is no password on it.</strong> Anyone who can reach that address can read and edit. That is the point on your own network and a mistake on a public one, so the launcher says so every time it starts. Putting Splitpage on the <em>internet</em> is a different job with a different answer — see <a href="DEPLOY.md" target="_blank" rel="noopener">DEPLOY.md</a>, which puts Cloudflare Access in front.</p></blockquote>
+<h2 id="help-uninstalling">Uninstalling</h2>
+<p>The installed copy registers itself, so remove it from <strong>Add/Remove Programs</strong> — that clears the shortcuts too, and leaves any shared-session scripts in <code>%LOCALAPPDATA%\Splitpage\data</code> where they are.</p>
+<p>For the portable copy, run <strong><code>uninstall.bat</code></strong> (Windows) or <strong><code>./uninstall.sh</code></strong>, which removes exactly the files the release shipped and lists anything else it found so you can see what it is leaving behind. Your scripts are never touched: saved <code>.html</code> files and the <code>data/</code> folder both survive, and it tells you they did. <code>--dry-run</code> shows what would go without doing it.</p>
+<h2 id="help-keeping-it-up-to-date">Keeping it up to date</h2>
+<pre><code>node update.mjs check     # is there a newer version?
+node update.mjs           # download and verify it</code></pre>
+<p>The launcher also checks in the background, and the app shows a bar when there is something waiting.</p>
+<p><strong>Updates install on restart, never while the app is open.</strong> Downloading is safe at any time; swapping out <code>index.html</code> under a browser that has it open is not. So <code>update.mjs</code> only downloads, checks every file against the new release's own checksums, and stages it — and <code>start.bat</code> puts it in place the next time you launch, before it serves anything. If an update fails halfway it rolls back to the copy it made, and if you have hand-edited any of the app's files it refuses to overwrite them until you say <code>--force</code>.</p>
+<h2 id="help-tagging-and-the-production-breakdown">Tagging and the production breakdown</h2>
+<p>Anything you label in the script shows up in the <strong>Production</strong> panel, with every scene it appears in. There are three typing shortcuts — the tag is made the moment you type the closing character, and one Ctrl+Z undoes just the tag and leaves the plain text:</p>
+<table><thead><tr><th>Type</th><th>Becomes</th></tr></thead><tbody><tr><td><code>[gaffer tape]</code></td><td>Prop</td></tr><tr><td><code>{kitchen}</code></td><td>Location</td></tr><tr><td><code>~lens flare~</code></td><td>VFX</td></tr><tr><td><code>&lt;wireless lav&gt;</code></td><td>Gear</td></tr></tbody></table>
+<p><strong>Cast</strong> and <strong>Music/SFX</strong> have no shortcut (nothing else is safe to type in normal prose) — select the words and press <strong>Tag</strong>. Once a tag of any category exists, typing a bracket and the first few letters offers to complete it: press <strong>Tab</strong> to accept. The completion keeps that tag's own category, so you never end up with the same thing filed twice.</p>
+<p>Other things worth knowing:</p>
+<ul><li><strong>Ctrl+Enter</strong> while writing starts the next scene and jumps into it.</li><li><strong>Alt+Enter</strong> splits the scene you're in at the caret — everything after it becomes a new scene right below, in the same column. The <em>other</em> column isn't touched: splitting the Audio doesn't disturb the Visual next to it, and it doesn't disturb the Visual next to the new scene either — that one starts blank, the way a beat nobody's framed a shot for yet should.</li><li>Click a tag in the script — or any card in the panel — to open it and <strong>assign who's responsible</strong> and keep <strong>notes, links or file paths</strong> against it. The crew list is just names you type; nothing is verified.</li><li><strong>Track how far along each item is.</strong> Every card carries a state — <strong>Needed → Sourcing → Have it → Returned</strong>. Click the pill in the card's top corner to step it on by one, or open the card and pick a state outright. The same four words are used whatever the category: "Returned" means a hired prop went back, and for a location or a VFX shot it just means finished with. The state travels in every export, and shows against each item in the <strong>Shoot</strong> view so on the day you can see what still isn't here. If two people edit the same file, a merge keeps whichever state got further — it can never un-buy something somebody already bought.</li><li><strong>Work on several items at once.</strong> <kbd>Ctrl</kbd>+click cards in the breakdown to select them (<kbd>Shift</kbd>+click takes the whole run between two), and a bar appears at the top of the panel: assign them all to one person, add a new person and assign them in the same step, set them all to one status, or delete them. A plain click still just opens a card and leaves the selection alone — <kbd>Esc</kbd> or the <strong>×</strong> clears it. Works in the Category and Person groupings, which are the two that show cards. <strong>Delete</strong> here removes the items from the breakdown <em>and</em> takes their labels out of the script — the words stay, only the labels go. It asks once first and tells you how many labels are about to go with them.</li><li>Group the breakdown by <strong>category, person or scene</strong>, and export the whole thing as CSV (the <strong>CSV</strong> button in the panel, or File ▸ Export ▸ Breakdown only). One sheet with a Category column, so it filters down to a props list, a graphics list, or one person's pull list. The Word, PDF, Markdown and plain-text exports carry the breakdown too, including who each item is assigned to and what state it's in.</li><li>Deleting a tag from the script doesn't delete it from the breakdown — it stays, flagged <strong>Not in script</strong>, until you delete it deliberately.</li><li><strong>File ▸ Tagging reference</strong> brings back the reference strip at the top once you've dismissed it.</li></ul>
+<h3 id="help-gear">Gear</h3>
+<p>Camera, mics, lighting, stands — equipment, not set dressing. It's its own category (Prop is still there for what's actually in front of the camera), with its own shortcut, and its own screen: click <strong>Gear</strong> in the header.</p>
+<p>The one thing gear needs that the others don't is that most of it never gets <em>written</em> anywhere — nobody says "wireless lav" out loud, and it's not always worth describing in the visual notes either. So the Gear screen opens with a plain box: <strong>one item per line</strong>, and whatever you type there is tracked, whether or not it's ever mentioned in the script. Add three lines, hit <strong>Update list</strong>, and all three show up as cards — same status pill, same owner assignment, same notes field as everywhere else in the breakdown. Take a line back out and it stops being tracked, <em>unless</em> it's also tagged somewhere in the script — an item that's actually written in stays, because the box only remembers what it alone was responsible for adding.</p>
+<p>Everything else about the breakdown still applies: gear shows up in the main <strong>Production</strong> panel too (group by Category to see it alongside everything else), and it merges the same way — a status can't be walked backwards, an item can't be silently dropped. The Gear screen itself has a lighter version of the same grouping: <strong>List</strong>, or <strong>Scene</strong> to see what's needed where.</p>
+<p><strong>Packing list</strong> (on the Gear screen, and Props too from File ▸ Packing lists) exports a plain checklist — a box, the name, who's got it — meant to be printed and ticked off before you leave, not the six-column breakdown sheet trying to double as one.</p>
+<h2 id="help-writing-and-planning">Writing and planning</h2>
+<p><strong>The writer.</strong> <strong>✎ Write</strong> in the header opens the Audio column on its own, as one flowing document — a plain word processor for when the job is writing a lot of narration rather than pairing it with picture. One paragraph is one scene. <strong>Enter</strong> starts a new one, <strong>Shift+Enter</strong> is a line break inside the one you're in, and <strong>Backspace</strong> at the very start of a paragraph joins it onto the one above (<strong>Delete</strong> at the end pulls the next one up).</p>
+<p>What sits in the margin beside each paragraph is a three-way setting — the button on the bar shows where it's at and cycles:</p>
+<ul><li><strong>Visuals</strong> — the scene number and what's on screen for it, greyed out and not editable. Click it to jump back to that scene in the split view.</li><li><strong>Numbers</strong> — just the scene number.</li><li><strong>Compact</strong> — nothing at all. Only the writing, with the paragraphs spaced a little further apart so you can still see where the scenes divide.</li></ul>
+<p><strong>Size</strong> on the bar sets how big the writing is, from 16 to 34px. It's your setting, not the script's — it's remembered in this browser rather than saved into the file, so it doesn't follow the document to whoever opens it next. The column itself widens with the window (up to a point — a line of prose running the full width of a big monitor is unreadable), so a wider window and a bigger size together keep the line length about where you want it.</p>
+<p><strong>Save</strong> is on the writer's bar too, with the same file chip beside it — it covers the header, and an hour of writing shouldn't have to be closed to be saved. It's the same button as the header's, so it always says the same thing.</p>
+<p>It isn't a copy of your script: every paragraph <em>is</em> the row it came from, so the tag shortcuts, <kbd>Ctrl</kbd>+<kbd>B</kbd>/<kbd>I</kbd>/<kbd>U</kbd> and Tab-completion all work exactly as they do in the split view, and the moment you close it everything is already where it should be. Word count and running time update as you type. Joining two scenes that <em>both</em> have a visual is the one thing it won't do on a keystroke — one of the two shot descriptions would have to be thrown away, so it sends you to the split view to pick.</p>
+<p><strong>Getting the narration back out.</strong> File ▸ <strong>Narration only</strong> exports the Audio column as an ordinary document — <code>.docx</code> to hand to a voice artist or carry into Word, <code>.txt</code> for anything else. One paragraph per scene, no visual column, no breakdown, no comments. That's the same shape <strong>Paste a script…</strong> reads back in its paragraph mode, so narration written elsewhere and pasted in lands one paragraph per scene — and a <code>.txt</code> exported here and re-imported gives you your scenes back, plus one extra row holding the title line, which you delete. The same button is on the writer's own bar.</p>
+<p><strong>Runtime estimate.</strong> The chip beside your name shows how long the Audio column takes to read, and each scene shows its own estimate in the gutter. Visual notes are directions, not spoken words, so they don't count. Click the chip to set your reading speed — it's saved with the file, so the estimate means the same thing to whoever opens it next.</p>
+<p><strong>Scene status.</strong> The dot in each scene's gutter cycles <strong>To do → Ready → Shot</strong>. Shot scenes are tinted, and a counter appears in the header once you've shot anything. In the teleprompter, <strong>Skip shot</strong> leaves those scenes out, so on day two you only read what's left.</p>
+<p><strong>Mentions you forgot to tag.</strong> Once something is in the breakdown, Splitpage watches the Visual column for it. Write "gaffer tape" into a scene without labelling it and the words get a faint dotted underline, with a small <strong>Tag gaffer tape</strong> offer below them — <kbd>Tab</kbd> takes it, or tap it on a phone. <kbd>Esc</kbd> waves it off. Nothing about the document changes until you accept, and the underline is painted over the text rather than wrapped around it, so it can't touch what you've written.</p>
+<p>This matters more than it looks: an untagged mention is a mention nothing is counting, so that item's mention count and scene list are both short — and the <strong>Shoot</strong> grouping is missing a scene it should have listed.</p>
+<p><strong>Staying with the scene.</strong> Delete or paste a large amount of text and the page follows you — it doesn't just sit where it was and let the scene you were editing scroll off somewhere else. That's the moment it's easiest to lose your place in the script, so Splitpage keeps the scene you're actually in front of you rather than leaving the page static.</p>
+<p><strong>Comments.</strong> Select some text and click <strong>💬 Comment</strong> to leave one; it stays anchored to that exact phrase. The card in the <strong>Comments</strong> panel <em>is</em> the "jump to this text" control — click anywhere on it (not a link, not while you're selecting its text to copy) and the script scrolls to the phrase, without closing the panel, so you can read the two side by side. <strong>Sort</strong> at the top of the panel defaults to <strong>Script order</strong> — a comment sits where the thing it's about sits — with <strong>Most recent</strong> alongside it for coming back after a while and wanting to see what actually moved, replies included, wherever in the script they landed.</p>
+<p><strong>Find and replace.</strong> <kbd>Ctrl</kbd>+<kbd>F</kbd>. Enter and Shift+Enter step through matches; <strong>Aa</strong> toggles case-sensitivity. Formatting, links and comment anchors survive a replace untouched. Text inside a tag is deliberately left alone — rename those in Production, which changes the label and the tracked item together.</p>
+<p><strong>Reference images.</strong> The small <strong>📎 Image</strong> link at the top of a scene's visual column attaches a still — or just drag an image file from your desktop anywhere onto that column and drop it. Once a scene has one, hover it for <strong>Replace</strong> and <strong>Remove</strong>.</p>
+<p><strong>Reordering.</strong> Drag a scene by the grip beside its number (the dots to the left — they brighten as you move over the row). The ↑ / ↓ buttons still work for nudging one step, and are the way to do it on a touchscreen.</p>
+<p><strong>Shooting order.</strong> The <strong>Shoot</strong> grouping in Production reorganises the script the way a shoot day runs: scenes grouped by the location tagged in them, so everything at one place can be shot in one block, each with what has to be there, who's responsible for it and whether it's actually in hand yet. Scenes with no location tagged get their own group at the end rather than being dropped.</p>
+<h2 id="help-working-with-other-people-hosted">Working with other people (hosted)</h2>
+<p>When Splitpage runs as a server, a script lives on the server rather than in a file on one person's disk, and several people edit the same one. There are two ways to get there, and they are the same app underneath:</p>
+<ul><li><strong>For an afternoon</strong> — <a href="#help-hosting-a-shared-session">host a shared session</a> from your own machine. Nothing to set up, nothing to sign in to, and it stops when you close the window.</li><li><strong>For good</strong> — put it on your own domain, behind a Cloudflare tunnel and Access, so collaborators sign in and the scripts outlive your laptop being shut. That is <strong><a href="DEPLOY.md" target="_blank" rel="noopener">DEPLOY.md</a></strong>.</li></ul>
+<p>Everything in this section applies to both. When the app is served, three things appear:</p>
+<ul><li><strong>File ▸ Put this script on the server</strong> publishes what you have open. The chip beside the title changes to <em>On the server</em>, and Save publishes there from then on.</li><li><strong>File ▸ Open from the server…</strong> lists every published script.</li><li>Your name fills in automatically from whoever you signed in as, so review comments are attributed without anyone typing it.</li></ul>
+<p><strong>Two of you can edit at once.</strong> Every save carries the version it started from. If someone saved while you were typing, Splitpage takes their version and merges yours into it — edits to different scenes merge silently, and if you both changed the <em>same</em> line, theirs stays in the script and yours is kept as a comment flagged <strong>Unmerged edit</strong>. Nothing is ever silently dropped.</p>
+<p>If your sign-in expires while you are working, Splitpage notices, keeps your unsaved edits, and asks you to reload; signing back in reopens the document and merges them in, along with anything that changed while you were away.</p>
+<p>None of this affects working locally. Opened from disk, the app behaves exactly as it always has, and <strong>Save As</strong> still gives you a local copy of a hosted script whenever you want one.</p>
+<h2 id="help-google-drive-files">Google Drive files</h2>
+<p><strong>File ▸ Google Drive files…</strong> opens a small file manager for any publicly shared Google Drive folder — browse it, download files, upload new ones, rename, delete, and create subfolders, right from Splitpage. It's separate from opening and saving your script; think of it as a way to move files in and out of a shared folder without leaving the app.</p>
+<p>Google splits this into two permissions, so Splitpage needs two credentials of your own (the app has no server to hold them for you — they're kept only in your browser's local storage):</p>
+<ul><li>An <strong>API key</strong>, to list and download files from a public folder — no sign-in needed, since Google treats "anyone with the link" as exactly that.</li><li>An <strong>OAuth Client ID</strong>, to make changes — uploading, renaming, deleting, or creating a folder always needs a real signed-in Google account, even on a folder anyone with the link can edit.</li></ul>
+<p>The panel walks you through creating both in the <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a> the first time you open it (enable the Drive API, create an API key, create a Web-application OAuth client with this page's address as an authorized JavaScript origin). Paste a folder's share link or its ID to connect, and sign in with Google when you want to change something — browsing and downloading work without signing in at all.</p>
+<p>Note: sign-in needs the page served over <code>http://</code>/<code>https://</code> — see <strong>Running it</strong> above for <code>start.bat</code>; it doesn't work opened straight off disk (<code>file://</code>).</p>
+<h2 id="help-on-a-phone">On a phone</h2>
+<p>The whole app works on a phone — same file, same features, re-flowed. Scenes stack (visual above audio, each labelled), the scene controls sit in a strip above each scene, and panels and menus go full screen. A few things translate:</p>
+<ul><li><strong>Completing a tag:</strong> phone keyboards have no <kbd>Tab</kbd>, so while the dim completion is showing, <strong>tap it</strong> to accept.</li><li><strong>Find &amp; replace</strong> is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).</li><li><strong>Selecting several breakdown items:</strong> <strong>long-press</strong> a card to start, then tap cards to add or drop them. The <strong>×</strong> in the bar clears the selection.</li><li><strong>Reordering scenes:</strong> the ↑ / ↓ buttons (drag needs a mouse).</li><li><strong>New scene:</strong> the <strong>+</strong> button on any scene, or <strong>+ Add row</strong> at the bottom.</li><li><strong>Splitting a scene at the caret (Alt+Enter)</strong> is a keyboard shortcut with no phone keyboard to trigger it from — add the scene with <strong>+</strong> and move the text over by hand.</li><li>In the teleprompter the screen <strong>stays awake</strong> while you read (on browsers that support it) and releases when you close it.</li><li><strong>The writer</strong> works the same, with the scene number and its visual on a thin line above each paragraph instead of out in the margin — a phone has no margin to put them in.</li></ul>
+<p>Typing shortcuts (<code>[prop]</code> <code>{kitchen}</code> <code>~vfx~</code> <code>&lt;gear&gt;</code>), comments, status, exports, the <strong>Gear</strong> screen and its packing lists, the server features — everything else is exactly the same.</p>
+<h2 id="help-two-shapes-of-markdown-export">Two shapes of Markdown export</h2>
+<p><strong>File ▸ Export a copy</strong> has two Markdown options. <strong>Markdown (.md)</strong> lists the script scene by scene — a <code>## Scene 01</code> heading, then the Visual notes, then the Audio, stacked. <strong>Markdown, two columns (.md)</strong> lays the same script out as a table instead, one row per scene with a Visual column next to an Audio column — the way the split view itself looks, and the way a GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side by side rather than stacked. It's also exactly the shape <strong>Paste a script…</strong> already reads back in "Two columns" mode, so a two-column Markdown export round-trips back into Splitpage with the split intact. Both carry the production breakdown and comments the same way.</p>
+<h2 id="help-importing-a-google-doc">Importing a Google Doc</h2>
+<p><strong>File ▸ Import from Google Doc link…</strong> takes a Google Docs share link (or just the document's ID) instead of a file. Splitpage has no server and no Google sign-in of its own, so it can't read the Doc directly — instead it opens Google's own Word (.docx) export of it in a new tab, which downloads straight to your computer using whatever Google account you're signed in to in that tab. Once the download lands, bring it in the same way as any other Word file: <strong>File ▸ Open a document…</strong>. If the doc isn't shared "Anyone with the link," make sure the browser tab that opens is signed in to an account that can see it, or the download will be a Google sign-in page instead of a document.</p>
+<h2 id="help-reopening-a-saved-project">Reopening a saved project</h2>
+<p>A file Splitpage saved is a complete project, not just text — reopen it and you get everything back: rows, comments, tags, title. Two ways to do that:</p>
+<ul><li><strong>Double-click the saved <code>.html</code> file directly.</strong> It opens straight into that project — this is how the file is self-contained in the first place.</li><li><strong>File ▸ Open a document…</strong>, then pick that <code>.html</code> file. Same result, useful when you're already in the app and want to switch projects. (This same menu still also imports <code>.docx</code>/<code>.md</code>/<code>.txt</code>/<code>.csv</code> as plain script text, same as before — Splitpage tells the two apart by file extension.)</li></ul>
+<h2 id="help-resuming-your-last-project-on-launch">Resuming your last project on launch</h2>
+<p>In Chrome/Edge, Splitpage remembers the file you last saved or opened and tries to reopen it automatically the next time you start the app — but only when you're looking at a fresh, never-saved copy of the page (so opening one specific saved project never gets silently swapped for a different one). Two ways this can go:</p>
+<ul><li><strong>Silent.</strong> Most of the time it just reopens with no prompt at all.</li><li><strong>One click.</strong> Browsers require an actual click before quietly reusing file access across separate launches in some cases — when that hasn't happened yet, you'll see a small <strong>"Continue where you left off?"</strong> banner at the top instead of a picker. One click on <strong>Continue</strong> reopens it.</li></ul>
+<p>This relies on IndexedDB, which needs a real page origin to behave reliably — it works over <code>http://</code>/<code>https://</code> (i.e. via <strong>start.bat</strong>), and may not persist across launches when the page is opened as a raw <code>file://</code> path. Either way, opening files by hand (double-click, or File ▸ Open) always works regardless.</p>
+<h2 id="help-files">Files</h2>
+<p><strong>The app</strong></p>
+<ul><li><code>index.html</code> — the whole app, and <strong>a build output</strong>: generated from <code>src/</code> by <code>node build.mjs</code>, so edit the source, not this. It is self-contained on purpose (a saved script is a copy of this page with your document inside it); the only thing it fetches is the Google Fonts stylesheet, loaded so that a slow or unreachable font server cannot stop the app starting.</li><li><code>src/</code> — the source. <code>page.html</code> (the shell), <code>app.css</code>, <code>seed-state.json</code> (the demo document), and <code>js/</code> — numbered fragments of one script, concatenated in filename order.</li><li><code>build.mjs</code> — inlines all of it back into <code>index.html</code>. <code>--check</code> says whether the two are in step.</li><li><code>manifest.webmanifest</code>, <code>icon.svg</code> — makes "Install app" possible.</li><li><code>sw.js</code> — a small service worker so the app shell still opens offline once you've loaded it at least once while served over <code>http://</code>.</li></ul>
+<p><strong>Running it</strong></p>
+<ul><li><code>start.mjs</code> — the launcher: serves the app, opens your browser, installs a staged update, and with <code>--host</code> shares the session with your network.</li><li><code>start.bat</code> / <code>start.sh</code> — the double-click and terminal ways in. <code>start.bat</code> prefers the bundled runtime, then a Node on PATH, then <code>start.ps1</code>.</li><li><code>start.ps1</code> — the zero-install fallback: a static server built on .NET's <code>HttpListener</code>, for a machine with no Node. Serves the app; cannot host.</li><li><code>update.mjs</code> — checks for a new version, verifies it, stages it. The install happens at the next launch, never while the app is open.</li><li><code>uninstall.mjs</code> / <code>uninstall.bat</code> / <code>uninstall.sh</code> — removes a portable copy, and only the files the release shipped.</li></ul>
+<p><strong>Packaging</strong></p>
+<ul><li><code>package.mjs</code> — builds the portable zip, and with <code>--installer</code> the Windows setup.exe. <code>VERSION</code> is the single source of the version number.</li><li><code>installer/</code> — <code>install.ps1</code> and <code>uninstall.ps1</code> (the installer proper) and <code>icon.ico</code> for the shortcuts.</li><li><code>tools/fetch-runtime.mjs</code> — downloads and verifies the Node runtime that ships inside the setup.exe.</li></ul>
+<p><strong>Hosting for other people</strong></p>
+<ul><li><code>server/server.js</code>, <code>Dockerfile</code>, <code>docker-compose.yml</code> — the hosted mode: a dependency-free Node server that serves the app and stores documents as one JSON file each. See <a href="DEPLOY.md" target="_blank" rel="noopener">DEPLOY.md</a>.</li></ul>
+<p><strong>Notes</strong></p>
+<ul><li><code>HANDOFF.md</code> — developer notes: architecture, the invariants that keep the document from corrupting, how to test, and what is still unverified. Read it before changing anything in <code>src/</code>.</li></ul></div>
+    </div>
+  </div>
+</div>
+
+<!-- The 5-step coach-mark tour (20c-help.js). One fixed overlay reused for
+     every step: a cut-out div sits over the current target's own rect, and
+     the card is repositioned beside it. Never edits the document
+     (invariant #17). -->
+<div class="tour-overlay" id="tour-overlay" hidden>
+  <div class="tour-cutout" id="tour-cutout"></div>
+  <div class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+    <div class="tour-step" id="tour-step"></div>
+    <h3 id="tour-title"></h3>
+    <p id="tour-body"></p>
+    <a href="#" id="tour-readmore" class="tour-readmore">Read more</a>
+    <div class="tour-actions">
+      <button type="button" class="btn" id="tour-skip">Skip tour</button>
+      <div class="tour-actions-nav">
+        <button type="button" class="btn" id="tour-back">Back</button>
+        <button type="button" class="btn btn-accent" id="tour-next">Next</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script id="state-data" type="application/json">
@@ -12522,6 +12810,334 @@
     var meta = document.querySelector('meta[name="splitpage-version"]');
     return meta ? meta.getAttribute("content") : null;
   }
+  /* ================= Help page (README.md) & the coach-mark tour =================
+
+     #help-modal's body and TOC are rendered from README.md at BUILD time by
+     mdToHtml() in build.mjs — nothing here parses Markdown. This fragment
+     only wires the modal chrome, the coach-mark tour, and the two new
+     File-menu items ("User guide…" / "Take the tour").
+
+     Unlike every other fragment, this one's top-level wiring runs directly
+     rather than through init() (21-events.js) — 21-events.js is off limits
+     for this change, and it doesn't need to know about these two features:
+     #help-modal, #tour-overlay and #file-menu already exist in the DOM by
+     the time this classic <script> runs (it sits after them, and a classic
+     script pauses the parser in place — see PAGE_SHELL's own comment in
+     00-prelude.js for the same reasoning), so binding listeners here
+     immediately is exactly as safe as doing it from init(). */
+
+  var HELP_SIDE_PANEL_IDS = ["comments-panel", "production-panel", "gear-panel", "history-panel"];
+
+  /* Anything that opens over the whole screen has to close the side panels
+     first (invariant #16) — the same thing openWriter()/openPrompter() do. */
+  function closeSidePanelsForHelp() {
+    HELP_SIDE_PANEL_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.hidden = true;
+    });
+    if (typeof syncPanelClass === "function") syncPanelClass();
+  }
+
+  /* Scrolls #help-body itself, never the page — the modal is the whole
+     viewport already, but the TOC and deep links must not rely on native
+     anchor-jump behaviour picking the right scrolling ancestor. */
+  function scrollHelpTo(id) {
+    var body = document.getElementById("help-body");
+    var target = id && document.getElementById(id);
+    if (!body || !target) return;
+    var bodyRect = body.getBoundingClientRect();
+    var targetRect = target.getBoundingClientRect();
+    body.scrollTop += (targetRect.top - bodyRect.top) - 12;
+  }
+
+  var helpReturnFocus = null;
+
+  function openHelp(anchor) {
+    var modal = document.getElementById("help-modal");
+    if (!modal) return;
+    closeSidePanelsForHelp();
+    helpReturnFocus = document.activeElement;
+    modal.hidden = false;
+    if (anchor) scrollHelpTo(anchor);
+    else {
+      var body = document.getElementById("help-body");
+      if (body) body.scrollTop = 0;
+    }
+    var closeBtn = document.getElementById("help-close");
+    if (closeBtn) closeBtn.focus();
+  }
+
+  function closeHelp() {
+    var modal = document.getElementById("help-modal");
+    if (!modal || modal.hidden) return;
+    modal.hidden = true;
+    if (helpReturnFocus && typeof helpReturnFocus.focus === "function") {
+      try { helpReturnFocus.focus(); } catch (e) {}
+    }
+    helpReturnFocus = null;
+  }
+
+  /* The static "Tagging quick reference" strip (page.html, wired by
+     10-comments.js — off limits here) gets one more line pointing at the
+     full guide. Added from script rather than in the markup, since this
+     fragment may only APPEND new blocks to page.html, not edit existing
+     ones. Idempotent so a rebuild/re-render never double-inserts it. */
+  function injectTaggingHelpGuideLink() {
+    var body = document.querySelector("#tagging-help .tagging-help-body");
+    if (!body || document.getElementById("tagging-help-fullguide")) return;
+    var wrap = document.createElement("div");
+    wrap.className = "tagging-help-fullguide";
+    wrap.id = "tagging-help-fullguide";
+    var a = document.createElement("a");
+    a.href = "#";
+    a.textContent = "Open the full guide";
+    a.addEventListener("click", function (e) {
+      e.preventDefault();
+      openHelp("help-tagging-and-the-production-breakdown");
+    });
+    wrap.appendChild(a);
+    body.appendChild(wrap);
+  }
+  injectTaggingHelpGuideLink();
+
+  (function wireHelpModal() {
+    var modal = document.getElementById("help-modal");
+    var toc = document.getElementById("help-toc");
+    if (!modal) return;
+
+    var closeBtn = document.getElementById("help-close");
+    if (closeBtn) closeBtn.addEventListener("click", closeHelp);
+
+    modal.addEventListener("click", function (e) {
+      if (e.target.id === "help-modal") closeHelp();
+    });
+
+    if (toc) {
+      toc.addEventListener("click", function (e) {
+        var a = e.target.closest('a[href^="#"]');
+        if (!a) return;
+        e.preventDefault();
+        scrollHelpTo(a.getAttribute("href").slice(1));
+      });
+    }
+
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); closeHelp(); }
+    });
+
+    /* A modal owns focus, not just the pixels (invariant #19): anything
+       that lands focus outside it while it's open gets pulled straight
+       back in, the same shape as the writer's #writer focusin trap. */
+    document.addEventListener("focusin", function (e) {
+      if (modal.hidden || modal.contains(e.target)) return;
+      e.stopPropagation();
+      var target = document.getElementById("help-close");
+      if (target) target.focus();
+    });
+  })();
+
+  /* ---- File menu: "User guide…" / "Take the tour" ----
+
+     handleFileMenuAction() (18-local-files.js) has no branches for these
+     two actions and must not need any — a capture-phase listener on the
+     SAME #file-menu element sees the click first and, when it's ours,
+     calls stopPropagation(). Both listeners sit on this one element, so
+     that halts the dispatch entirely: the event never reaches AT_TARGET or
+     bubbles back up to 18-local-files.js's own (bubble-phase) listener.
+     toggleFileMenu() is 21-events.js's own menu-close function, reused so
+     File ▾'s aria-expanded state never disagrees with whether it's open. */
+  (function wireHelpFileMenuItems() {
+    var menu = document.getElementById("file-menu");
+    if (!menu) return;
+    menu.addEventListener("click", function (e) {
+      var item = e.target.closest('[data-file-action="help"], [data-file-action="tour"]');
+      if (!item) return;
+      e.stopPropagation();
+      if (typeof toggleFileMenu === "function") toggleFileMenu(false);
+      if (item.getAttribute("data-file-action") === "help") openHelp();
+      else startTour();
+    }, true);
+  })();
+
+  /* ================= coach-mark tour ================= */
+
+  var TOUR_DONE_KEY = "splitpage-tour-done";
+
+  /* Document-agnostic on purpose (invariant #17: a hint about the document
+     must never edit it, and this copy must never assume WHAT the seed
+     document says either) — every sentence describes the feature, never
+     the demo script's content. Slugs are real README headings, verified
+     against build.mjs's slugify() rather than guessed. */
+  var TOUR_STEPS = [
+    {
+      selector: "#rows .row:first-child",
+      title: "Two columns",
+      body: "The left column is what the viewer sees. The right is what gets said out loud.",
+      slug: "help-tagging-and-the-production-breakdown"
+    },
+    {
+      selector: ".visual-cell .cell-editable",
+      title: "Tag shortcuts",
+      body: "Type [prop], {location}, ~vfx~ or <gear> in a visual note and the closing character makes the tag.",
+      slug: "help-tagging-and-the-production-breakdown",
+      showTaggingHelp: true
+    },
+    {
+      selector: "#btn-comments",
+      title: "Leave a comment",
+      body: "Select some text in the script, then Comment — it stays anchored to that exact phrase.",
+      slug: "help-writing-and-planning"
+    },
+    {
+      selector: "#btn-save",
+      title: "Save",
+      body: "Save writes a Markdown file by default — readable anywhere a document opens.",
+      slug: "help-reopening-a-saved-project"
+    },
+    {
+      selector: "#btn-present",
+      title: "Present",
+      body: "Present opens the teleprompter, with Follow My Voice to scroll it as you read aloud.",
+      slug: "help-writing-and-planning"
+    }
+  ];
+
+  var tourStepIndex = -1;
+  var tourResizeHandler = null;
+  var tourTaggingHelpWasHidden = true;
+
+  function markTourDone() {
+    try { localStorage.setItem(TOUR_DONE_KEY, "1"); } catch (e) {}
+  }
+
+  /* Recomputes the cut-out and card position from the target's own live
+     rect — following the hideTagGhost recompute-on-scroll/resize pattern
+     (21-events.js) rather than caching a rect that a layout change (or a
+     panel closing) would make stale. */
+  function positionTourStep() {
+    if (tourStepIndex < 0) return;
+    var step = TOUR_STEPS[tourStepIndex];
+    var target = document.querySelector(step.selector);
+    var cutout = document.getElementById("tour-cutout");
+    var card = document.getElementById("tour-card");
+    if (!target || !cutout || !card) { endTour(false); return; }
+
+    var r = target.getBoundingClientRect();
+    var pad = 6;
+    cutout.style.left = (r.left - pad) + "px";
+    cutout.style.top = (r.top - pad) + "px";
+    cutout.style.width = (r.width + pad * 2) + "px";
+    cutout.style.height = (r.height + pad * 2) + "px";
+
+    var vw = window.innerWidth, vh = window.innerHeight;
+    if (vw <= 480) {
+      /* Phone layout: the card goes full-width under the cut-out — handled
+         entirely by CSS (.tour-card at max-width:480px is position:fixed
+         to the bottom), so there is nothing to compute here. */
+      card.style.left = "";
+      card.style.top = "";
+      return;
+    }
+
+    var cardW = card.offsetWidth || 300;
+    var cardH = card.offsetHeight || 180;
+    var left, top;
+    if (r.right + 16 + cardW <= vw) {
+      left = r.right + 16;
+      top = Math.max(16, Math.min(r.top, vh - cardH - 16));
+    } else if (r.left - 16 - cardW >= 0) {
+      left = r.left - 16 - cardW;
+      top = Math.max(16, Math.min(r.top, vh - cardH - 16));
+    } else if (r.bottom + 16 + cardH <= vh) {
+      left = Math.max(16, Math.min(r.left, vw - cardW - 16));
+      top = r.bottom + 16;
+    } else {
+      left = Math.max(16, Math.min(r.left, vw - cardW - 16));
+      top = Math.max(16, r.top - cardH - 16);
+    }
+    card.style.left = left + "px";
+    card.style.top = top + "px";
+  }
+
+  function renderTourStep() {
+    var step = TOUR_STEPS[tourStepIndex];
+    document.getElementById("tour-step").textContent = "Step " + (tourStepIndex + 1) + " of " + TOUR_STEPS.length;
+    document.getElementById("tour-title").textContent = step.title;
+    document.getElementById("tour-body").textContent = step.body;
+
+    /* Reading more ends the tour first — Help is a full-screen modal of its
+       own and stacking two full-screen overlays at once serves nobody. */
+    var link = document.getElementById("tour-readmore");
+    link.onclick = function (e) {
+      e.preventDefault();
+      var slug = step.slug;
+      endTour();
+      openHelp(slug);
+    };
+
+    document.getElementById("tour-back").disabled = tourStepIndex === 0;
+    document.getElementById("tour-next").textContent =
+      tourStepIndex === TOUR_STEPS.length - 1 ? "Finish" : "Next";
+
+    var taggingHelp = document.getElementById("tagging-help");
+    if (taggingHelp) taggingHelp.hidden = !step.showTaggingHelp;
+
+    var target = document.querySelector(step.selector);
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: "center" });
+    positionTourStep();
+  }
+
+  function startTour() {
+    if (!state) {
+      if (typeof showToast === "function") showToast("Still loading…", "warn");
+      return;
+    }
+    var overlay = document.getElementById("tour-overlay");
+    if (!overlay) return;
+    closeSidePanelsForHelp();
+    closeHelp();
+    var taggingHelp = document.getElementById("tagging-help");
+    tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
+
+    tourStepIndex = 0;
+    overlay.hidden = false;
+    renderTourStep();
+
+    if (!tourResizeHandler) {
+      tourResizeHandler = function () { positionTourStep(); };
+      window.addEventListener("resize", tourResizeHandler);
+      window.addEventListener("scroll", tourResizeHandler, true);
+    }
+  }
+
+  function endTour() {
+    var overlay = document.getElementById("tour-overlay");
+    if (overlay) overlay.hidden = true;
+    var taggingHelp = document.getElementById("tagging-help");
+    if (taggingHelp) taggingHelp.hidden = tourTaggingHelpWasHidden;
+    tourStepIndex = -1;
+    markTourDone();
+  }
+
+  function tourNext() {
+    if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; renderTourStep(); }
+    else endTour();
+  }
+
+  function tourBack() {
+    if (tourStepIndex > 0) { tourStepIndex--; renderTourStep(); }
+  }
+
+  (function wireTour() {
+    var overlay = document.getElementById("tour-overlay");
+    if (!overlay) return;
+    document.getElementById("tour-next").addEventListener("click", tourNext);
+    document.getElementById("tour-back").addEventListener("click", tourBack);
+    document.getElementById("tour-skip").addEventListener("click", function () { endTour(); });
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !overlay.hidden) { e.preventDefault(); endTour(); }
+    });
+  })();
   /* ================= events ================= */
 
   function onRootClick(e) {

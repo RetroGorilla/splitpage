@@ -23,8 +23,9 @@ set -e
 # VERSION is a build input too (build.mjs splices it into index.html's
 # {{VERSION}} marker) — a commit that bumps only VERSION, staging no other
 # file, used to skip this whole check, letting a stale-version index.html
-# through undetected.
-if git diff --cached --name-only | grep -qE '^(index\.html|src/|build\.mjs|VERSION)'; then
+# through undetected. README.md became a build input in Phase 5 (the in-app
+# Help page is rendered from it at build time), so it needs the same check.
+if git diff --cached --name-only | grep -qE '^(index\.html|src/|build\.mjs|VERSION|README\.md)'; then
   if [ "$SPLITPAGE_SKIP_BUILD_CHECK" = "1" ]; then
     echo "pre-commit: build check skipped (SPLITPAGE_SKIP_BUILD_CHECK=1)." >&2
   elif ! command -v node >/dev/null 2>&1; then
