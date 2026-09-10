@@ -57,6 +57,7 @@
   }
 
   function findAnchorLocationLabel(rowId, field) {
+    if (field === "title") return "Document title";
     var idx = findRowIndex(rowId);
     var rowLabel = idx === -1 ? "Deleted row" : ("Row " + pad2(idx + 1));
     var fieldLabel = field === "audioText" ? "Audio" : "Visual";
@@ -473,6 +474,16 @@
     var ci = findCommentIndex(commentId);
     if (ci === -1) return;
     var c = state.comments[ci];
+    if (c.field === "title") {
+      pushSnapshot("Before using your version of the title");
+      state.title = c.emptyValue ? "" : (c.titleValue || "");
+      state.comments.splice(ci, 1);
+      markDirty();
+      render();
+      queueAutoSave();
+      showToast("Restored your version of the title", "ok");
+      return;
+    }
     var ri = findRowIndex(c.rowId);
     if (ri === -1) { showToast("That row no longer exists.", "warn"); return; }
 

@@ -61,8 +61,14 @@
       }
       working.shift();
     }
-    try { localStorage.removeItem(SNAPSHOT_KEY); } catch (e) {}
+    /* Not even the single newest entry fits under the budget on its own —
+       refuse to touch what's already on disk rather than wiping every
+       OLDER snapshot that WAS small enough to keep (this used to call
+       localStorage.removeItem() here, erasing the entire local version
+       history over one oversized push). Leave storage as it was and hand
+       the caller back exactly what's still there. */
     list.length = 0;
+    Array.prototype.push.apply(list, readSnapshots());
     return false;
   }
 
@@ -261,12 +267,30 @@
       mergedComments.push(pick);
     });
 
+    /* Row fields raise a conflict comment the instant both sides touch the
+       same field — the title never did: it just kept theirs, silently,
+       whenever both sides had changed it (or base wasn't available at
+       all, e.g. resumeServerDoc() with no stash.base). Route it through
+       the same conflicts array instead (pushed before the forEach below
+       builds comments from it), with rowId: null marking it as a title
+       conflict rather than a row one (findAnchorLocationLabel,
+       restoreConflictValue and the label just below all special-case
+       field === "title" to handle that). */
+    var mergedTitle = theirs.title;
+    if (base && mine.title !== base.title && theirs.title === base.title) {
+      mergedTitle = mine.title;
+    } else if (mine.title !== theirs.title && (!base || (mine.title !== base.title && theirs.title !== base.title))) {
+      if (mine.title) conflicts.push({ rowId: null, field: "title", mine: mine.title, theirs: theirs.title });
+    }
+
     /* every unreconcilable field becomes a comment holding my version */
     conflicts.forEach(function (c) {
-      var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" : "Visual image";
+      var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
+        c.field === "title" ? "Title" : "Visual image";
       var isEmpty = !c.mine;
       var bodyHtml = c.field === "visualImage"
         ? (safeImageSrc(c.mine) ? '<img class="comment-img" src="' + escapeHtml(c.mine) + '">' : "")
+        : c.field === "title" ? escapeHtml(c.mine || "")
         : (c.mine || "");
       mergedComments.push({
         id: makeId("c"),
@@ -282,12 +306,12 @@
         kind: "conflict",
         conflictField: label,
         emptyValue: isEmpty,
+        /* plain text, kept alongside the escaped display body so restoring
+           it doesn't need to round-trip back out of HTML */
+        titleValue: c.field === "title" ? (c.mine || "") : undefined,
         replies: []
       });
     });
-
-    var mergedTitle = theirs.title;
-    if (base && mine.title !== base.title && theirs.title === base.title) mergedTitle = mine.title;
 
     return {
       merged: migrateRows({
