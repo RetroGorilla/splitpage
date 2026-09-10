@@ -47,7 +47,7 @@ if ($Unregister) {
   if (-not $Dir) { throw "-Unregister needs -Dir pointing at the registered folder." }
   $target = (Resolve-Path $Dir).Path
   foreach ($menuRoot in @($env:APPDATA, $env:ProgramData)) {
-    $menu = Join-Path $menuRoot "MicrosoftWindowsStart MenuPrograms"
+    $menu = Join-Path $menuRoot "Microsoft\Windows\Start Menu\Programs"
     foreach ($name in @("$AppName.lnk", "$AppName (shared session).lnk")) {
       $lnk = Join-Path $menu $name
       if (Test-Path $lnk) { Remove-Item $lnk -Force -ErrorAction SilentlyContinue }
@@ -61,7 +61,7 @@ if ($Unregister) {
     }
   }
   foreach ($hive in @("HKCU:", "HKLM:")) {
-    $k = "$hiveSoftwareMicrosoftWindowsCurrentVersionUninstall$AppName"
+    $k = "$hive\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName"
     if (Test-Path $k) { Remove-Item $k -Recurse -Force -ErrorAction SilentlyContinue }
   }
   Remove-Item (Join-Path $target ".splitpage-registered") -Force -ErrorAction SilentlyContinue
@@ -327,7 +327,7 @@ Set-ItemProperty $key "EstimatedSize" ([int]($size / 1024)) -Type DWord
 if ($InPlace) {
   Set-Content -Path (Join-Path $target ".splitpage-registered") -Value (Get-Date -Format o) -Encoding ASCII
   Set-ItemProperty $key "UninstallString" `
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$targetinstallerinstall.ps1`" -Unregister -Dir `"$target`""
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$target\installer\install.ps1`" -Unregister -Dir `"$target`""
 } elseif (Test-Path (Join-Path $target "uninstall.ps1")) {
   Set-ItemProperty $key "UninstallString" `
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$target\uninstall.ps1`""
