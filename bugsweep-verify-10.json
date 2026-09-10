@@ -1,0 +1,18 @@
+[
+  {
+    "file": "src/js/03-sync.js",
+    "line": 360,
+    "severity": "low",
+    "summary": "'#identity-chip' gets an 'unnamed' class toggled whenever no author name is set, but app.css has no rule anywhere for '.unnamed' (or '.identity-chip.unnamed'), so the chip looks identical with or without a name -- the only visible difference is the text itself.",
+    "refuted": false,
+    "reasoning": "Confirmed: src/js/03-sync.js:360 exactly matches the quoted `classList.toggle(\"unnamed\", !name)` call, and grepping the whole repo for \"unnamed\" turns up only that one occurrence -- no CSS rule targets `.unnamed` or `.identity-chip.unnamed` anywhere in src/app.css."
+  },
+  {
+    "file": "src/app.css",
+    "line": 2099,
+    "severity": "medium",
+    "summary": "'.update-bar' hardcodes a white background (background:#ffffff) and sets no text color of its own, so in dark mode it inherits the page's near-white --text color (#F3EFE5) from body, producing near-invisible (contrast ratio roughly 1:1) text on a white box, unlike every other component which sources colors from theme custom properties.",
+    "refuted": false,
+    "reasoning": "Confirmed: `.update-bar` (app.css:2099-2110) sets `background: #ffffff` with no `color` property, `.update-bar-text` has no CSS rule at all, and `body` sets `color: var(--text)` which resolves to `#F3EFE5` under `prefers-color-scheme: dark` (app.css:32) -- there is no dark-mode override for `.update-bar` anywhere in the file, so the bar's text does inherit near-white on a hardcoded white background."
+  }
+]
