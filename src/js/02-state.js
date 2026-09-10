@@ -79,7 +79,11 @@
       r.visualText = sanitizeHtml(legacy ? legacyMdToHtml(r.visualText || "") : (r.visualText || ""));
       r.audioText = sanitizeHtml(legacy ? legacyMdToHtml(r.audioText || "") : (r.audioText || ""));
       r.visualImage = safeImageSrc(r.visualImage) || null;
-      if (!r.updatedAt) r.updatedAt = null;
+      /* "" rather than null: formatTimestamp(iso) blanks out on an Invalid
+         Date, and new Date(null) is a VALID date (the Unix epoch) while
+         new Date("") is not — null here used to render as a fabricated
+         "Jan 1, 12:00 AM" for any row that was never actually stamped. */
+      if (!r.updatedAt) r.updatedAt = "";
       r.updatedBy = r.updatedBy ? plainName(r.updatedBy) : null;
     });
 
@@ -87,9 +91,29 @@
     s.comments = s.comments.filter(function (c) { return c && typeof c === "object"; });
     s.comments.forEach(function (c) {
       c.id = safeId(c.id, "c");
-      c.rowId = safeId(c.rowId, "r");
-      c.anchorId = c.anchorId ? safeId(c.anchorId, "c") : null;
-      c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
+      if (c.field === "title") {
+        /* A document-level conflict card (mergeStates' title-merge
+           fallback) — not anchored to any row, unlike every other comment.
+           Forcing rowId through safeId() would fabricate a fake row id out
+           of null (safeId's fallback is makeId(), not passthrough), and
+           folding field into visualText/audioText below would silently
+           turn it into an ordinary row comment pointing at that fake row. */
+        c.rowId = null;
+        c.anchorId = null;
+      } else {
+        c.rowId = safeId(c.rowId, "r");
+        /* Falls back to the comment's own id, not null — deleteComment()
+           looks up the anchor span by anchorId (unwrapAnchorInState), and
+           every comment this app creates already sets anchorId === id
+           (05-render.js). A loaded document whose comments lack the field
+           (an older save, a hand-edited/foreign JSON) used to get
+           anchorId: null, which never matches any real span's data-cmt —
+           deleting such a comment would silently fail to unwrap its
+           anchor, leaving a dangling .cmt-anchor wrapper in the row with
+           no comment behind it forever. */
+        c.anchorId = safeId(c.anchorId || c.id, "c");
+        c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
+      }
       if (!Array.isArray(c.replies)) c.replies = [];
       c.replies = c.replies.filter(function (rep) { return rep && typeof rep === "object"; });
       c.replies.forEach(function (rep) {

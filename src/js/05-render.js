@@ -101,6 +101,23 @@
     if (!state) return;
     resetTransientUiState();
     var rowsEl = document.getElementById("rows");
+    /* render() isn't only reachable from user clicks (which naturally blur
+       a field first) — a 409-conflict merge or resumeServerDoc() can call
+       it from an async network completion while the user is mid-typing in
+       a totally different row. innerHTML replacement below unconditionally
+       moves focus to <body>, silently discarding the caret and whatever
+       was open (a link/video popover, an IME composition). The title input
+       already gets this protection; give the same to whichever cell was
+       focused, so typing has somewhere to keep landing after a render it
+       had nothing to do with. Exact caret position isn't preserved (the
+       old DOM node is gone regardless) — landing at the end of the cell's
+       new content is the safest default. */
+    var focusedCell = document.activeElement && document.activeElement.classList &&
+      document.activeElement.classList.contains("cell-editable") ? document.activeElement : null;
+    var refocus = focusedCell
+      ? { id: focusedCell.getAttribute("data-id"), field: focusedCell.getAttribute("data-field") }
+      : null;
+
     if (!state.rows.length) {
       rowsEl.innerHTML =
         '<div class="empty-state">' +
@@ -112,6 +129,23 @@
       for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
       rowsEl.innerHTML = html;
     }
+
+    if (refocus) {
+      var cellEl = rowsEl.querySelector(
+        '.cell-editable[data-id="' + cssAttr(refocus.id) + '"][data-field="' + cssAttr(refocus.field) + '"]');
+      if (cellEl) {
+        cellEl.focus();
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(cellEl);
+          range.collapse(false);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (e) {}
+      }
+    }
+
     var titleInput = document.getElementById("doc-title");
     if (document.activeElement !== titleInput) titleInput.value = state.title || "";
     syncAnchorResolvedClasses();

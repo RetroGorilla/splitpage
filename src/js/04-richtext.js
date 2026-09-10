@@ -75,7 +75,15 @@
       var tag = node.tagName;
 
       if (tag === "DIV" || tag === "P") {
-        walkSanitize(node, destParent);
+        /* A div/p whose only content is a single <br> is contenteditable's
+           way of marking "this paragraph is empty" (so the empty line
+           stays visible/selectable) — it is not an extra line break ON TOP
+           OF the paragraph separator appended below. Walking into it first
+           re-emitted that same <br>, so a single blank paragraph between
+           two others doubled into two blank lines instead of one. */
+        var isBlankPara = node.childNodes.length === 1 &&
+          node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
+        if (!isBlankPara) walkSanitize(node, destParent);
         destParent.appendChild(document.createElement("br"));
         return;
       }
