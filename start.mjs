@@ -116,12 +116,18 @@ if (!existsSync(join(ROOT, "index.html"))) {
 
 /* ---------- find a port ---------- */
 
+/* Probes whatever address the real server will actually bind — always
+   127.0.0.1 before, regardless of --host, while server.js binds 0.0.0.0
+   whenever HOSTING is set. A wildcard bind can conflict with something
+   already listening on a specific interface (or vice versa) in ways a
+   loopback-only probe can never see, so a "free" port here could still
+   fail in the real server. */
 function isFree(port) {
   return new Promise((resolve) => {
     const probe = createServer();
     probe.once("error", () => resolve(false));
     probe.once("listening", () => probe.close(() => resolve(true)));
-    probe.listen(port, "127.0.0.1");
+    probe.listen(port, HOSTING ? "0.0.0.0" : "127.0.0.1");
   });
 }
 

@@ -266,11 +266,17 @@ export function apply({ log = console.log } = {}) {
     }
   } catch (err) {
     /* Put back everything already replaced, so a half-applied update never
-       leaves an app that will not start. */
+       leaves an app that will not start. A file this release introduced
+       (nothing existed at that path before, so nothing was backed up for
+       it) needs the OPPOSITE treatment: removed, not restored — otherwise
+       it survives the rollback as an untracked leftover the old version's
+       manifest knows nothing about. */
     log(`  update failed (${err.message}) — rolling back`);
     for (const rel of done) {
       const keep = safeJoin(backup, rel);
-      if (existsSync(keep)) cpSync(keep, safeJoin(ROOT, rel));
+      const to = safeJoin(ROOT, rel);
+      if (existsSync(keep)) cpSync(keep, to);
+      else rmSync(to, { force: true });
     }
     rmSync(join(UPDATE_DIR, "pending.json"), { force: true });
     throw err;
