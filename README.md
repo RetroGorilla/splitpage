@@ -15,15 +15,133 @@ page as an app (and only let its service worker cache it for offline use)
 when the page is served from `http://`/`https://`, not from a `file://`
 path. To get that:
 
-1. Double-click **[start.bat](start.bat)**. It opens a small window running
-   a local server (pure PowerShell, nothing to install) and launches your
-   browser to `http://localhost:8791/`.
+1. Start the local server:
+   - **Windows** — double-click **[start.bat](start.bat)**.
+   - **macOS / Linux** — run **`./start.sh`** in a terminal.
+   - **Anywhere, if you have Node** — `node start.mjs`.
+
+   Either way it serves the app at `http://localhost:8791/` and opens your
+   browser there. `start.bat` uses Node if you have it and falls back to a
+   pure-PowerShell server that needs nothing installed at all.
 2. In Chrome or Edge, click the **install icon** in the address bar (or
    Menu ▸ "Install Splitpage…") to add it as its own app window with a
-   taskbar/Start Menu entry.
-3. Leave the `start.bat` window open while you work; closing it stops the
+   taskbar/Start Menu entry. That *is* the desktop app — a real window and
+   a taskbar entry, running in the browser engine that all of Splitpage's
+   features (in-place saving, Follow My Voice) are built on.
+3. Leave that window open while you work; closing it (or Ctrl+C) stops the
    server. Re-run it any time — your saved `.html` file doesn't depend on
    the server, so you can always fall back to just double-clicking it.
+
+**Options** (`node start.mjs --help`): `--port 9000` if 8791 is taken —
+though it finds the next free port by itself; `--no-open` to skip launching
+a browser; and `--library`, which keeps documents on the server in `./data`
+instead of as files you save to disk. Without `--library` the launcher
+serves files and nothing else, so the app behaves exactly as it always has.
+
+## Installing it
+
+**`SplitpageSetup-<version>.exe` is the whole product.** One download, one
+installer, and you are working — open a local script, or host a session other
+people on your network join. It carries its own Node runtime, so there is no
+second thing to go and install first.
+
+The installer asks where to put it:
+
+- **Just for me** — `%LOCALAPPDATA%\Programs\Splitpage`, no administrator.
+- **Everyone on this PC** — `C:\Program Files\Splitpage`, needs administrator.
+- **Somewhere else** — type any path.
+
+and whether you want a desktop shortcut and a *shared session* shortcut. It
+registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /S`
+installs silently, with `/D=C:\path` to choose where.
+
+### Building a release
+
+```
+node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 KB
+node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB
+```
+
+**Nothing needs installing to build this.** The setup is a self-extracting
+archive made by `iexpress.exe`, which is part of Windows. `--installer` also
+downloads the official Node build for Windows and checks it against
+nodejs.org's published SHA-256 before packing it — that happens once and is
+cached in `.cache/`.
+
+Run `--installer` on a non-Windows machine and it prepares everything and
+tells you the one command to finish on Windows.
+
+**The portable zip** is still there and still tiny. Unzip it anywhere and run
+`start.bat` or `./start.sh`; it uses a Node you already have, and without one
+it falls back to a PowerShell file server that serves the app but cannot host
+a session.
+
+## Hosting a shared session
+
+Pick **Splitpage (shared session)** in the Start Menu, or run:
+
+```
+node start.mjs --host
+```
+
+It prints the addresses other people type into their browsers. Everyone edits
+the same scripts; two people editing different scenes merge silently, and two
+people editing the same field keep both versions — one live, one as a review
+comment.
+
+> **There is no password on it.** Anyone who can reach that address can read
+> and edit. That is the point on your own network and a mistake on a public
+> one, so the launcher says so every time it starts. Putting Splitpage on the
+> *internet* is a different job with a different answer — see
+> [DEPLOY.md](DEPLOY.md), which puts Cloudflare Access in front.
+
+## Uninstalling
+
+The installed copy registers itself, so remove it from **Add/Remove Programs**
+— that clears the shortcuts too, and leaves any shared-session scripts in
+`%LOCALAPPDATA%\Splitpage\data` where they are.
+
+For the portable copy, run **`uninstall.bat`** (Windows) or **`./uninstall.sh`**,
+which removes exactly the files the release shipped and lists anything else it
+found so you can see what it is leaving behind. Your scripts are never touched:
+saved `.html` files and the `data/` folder both survive, and it tells you they
+did. `--dry-run` shows what would go without doing it.
+
+## Keeping it up to date
+
+```
+node update.mjs check     # is there a newer version?
+node update.mjs           # download and verify it
+```
+
+The launcher also checks in the background, and the app shows a bar when
+there is something waiting.
+
+**Updates install on restart, never while the app is open.** Downloading is
+safe at any time; swapping out `index.html` under a browser that has it open
+is not. So `update.mjs` only downloads, checks every file against the new
+release's own checksums, and stages it — and `start.bat` puts it in place the
+next time you launch, before it serves anything. If an update fails halfway it
+rolls back to the copy it made, and if you have hand-edited any of the app's
+files it refuses to overwrite them until you say `--force`.
+
+## Working on the code
+
+`index.html` is **generated**. The source is in `src/` — `page.html` (the
+shell), `app.css`, `seed-state.json` (the demo document) and the numbered
+fragments in `src/js/`. Rebuild with:
+
+```
+node build.mjs           # write index.html
+node build.mjs --check    # is index.html in step with src/?
+```
+
+The build inlines everything into one self-contained page, and that is a
+requirement rather than a preference: saving writes this page's own HTML
+back out with your document inside it, so a page that linked out to
+`app.css`/`app.js` would produce saved files that only worked next to those
+files. Editing `index.html` by hand therefore gets overwritten by the next
+build — the pre-commit hook refuses a commit where the two disagree.
 
 ## What changed from the Claude artifact
 
@@ -263,12 +381,19 @@ than being dropped.
 
 ## Working with other people (hosted)
 
-Splitpage can also run as a small server, so a script lives on the server
-rather than in a file on one person's disk. Collaborators open a link, sign in,
-and work on the same document you do. See **[DEPLOY.md](DEPLOY.md)** for how to
-set that up on Unraid behind a Cloudflare tunnel.
+When Splitpage runs as a server, a script lives on the server rather than in a
+file on one person's disk, and several people edit the same one. There are two
+ways to get there, and they are the same app underneath:
 
-When the app is served that way, three things appear:
+- **For an afternoon** — [host a shared session](#hosting-a-shared-session)
+  from your own machine. Nothing to set up, nothing to sign in to, and it stops
+  when you close the window.
+- **For good** — put it on your own domain, behind a Cloudflare tunnel and
+  Access, so collaborators sign in and the scripts outlive your laptop being
+  shut. That is **[DEPLOY.md](DEPLOY.md)**.
+
+Everything in this section applies to both. When the app is served, three
+things appear:
 
 - **File ▸ Put this script on the server** publishes what you have open. The
   chip beside the title changes to *On the server*, and Save publishes there
@@ -407,17 +532,52 @@ always works regardless.
 
 ## Files
 
-- `index.html` — the app. Fully self-contained; the only thing it fetches
-  is the Google Fonts stylesheet (falls back to system fonts if offline).
+**The app**
+
+- `index.html` — the whole app, and **a build output**: generated from `src/`
+  by `node build.mjs`, so edit the source, not this. It is self-contained on
+  purpose (a saved script is a copy of this page with your document inside
+  it); the only thing it fetches is the Google Fonts stylesheet, loaded so
+  that a slow or unreachable font server cannot stop the app starting.
+- `src/` — the source. `page.html` (the shell), `app.css`,
+  `seed-state.json` (the demo document), and `js/` — numbered fragments of
+  one script, concatenated in filename order.
+- `build.mjs` — inlines all of it back into `index.html`. `--check` says
+  whether the two are in step.
 - `manifest.webmanifest`, `icon.svg` — makes "Install app" possible.
 - `sw.js` — a small service worker so the app shell still opens offline
   once you've loaded it at least once while served over `http://`.
-- `start.ps1` / `start.bat` — a zero-install local static server (built on
-  .NET's `HttpListener` via PowerShell) so the page has a real origin.
-- `server/server.js`, `Dockerfile`, `docker-compose.yml` — the optional hosted
-  mode: a dependency-free Node server that serves the app and stores documents
-  as one JSON file each. Only needed if you want collaborators; see
-  [DEPLOY.md](DEPLOY.md).
+
+**Running it**
+
+- `start.mjs` — the launcher: serves the app, opens your browser, installs a
+  staged update, and with `--host` shares the session with your network.
+- `start.bat` / `start.sh` — the double-click and terminal ways in. `start.bat`
+  prefers the bundled runtime, then a Node on PATH, then `start.ps1`.
+- `start.ps1` — the zero-install fallback: a static server built on .NET's
+  `HttpListener`, for a machine with no Node. Serves the app; cannot host.
+- `update.mjs` — checks for a new version, verifies it, stages it. The
+  install happens at the next launch, never while the app is open.
+- `uninstall.mjs` / `uninstall.bat` / `uninstall.sh` — removes a portable
+  copy, and only the files the release shipped.
+
+**Packaging**
+
+- `package.mjs` — builds the portable zip, and with `--installer` the Windows
+  setup.exe. `VERSION` is the single source of the version number.
+- `installer/` — `install.ps1` and `uninstall.ps1` (the installer proper) and
+  `icon.ico` for the shortcuts.
+- `tools/fetch-runtime.mjs` — downloads and verifies the Node runtime that
+  ships inside the setup.exe.
+
+**Hosting for other people**
+
+- `server/server.js`, `Dockerfile`, `docker-compose.yml` — the hosted mode: a
+  dependency-free Node server that serves the app and stores documents as one
+  JSON file each. See [DEPLOY.md](DEPLOY.md).
+
+**Notes**
+
 - `HANDOFF.md` — developer notes: architecture, the invariants that keep the
   document from corrupting, how to test, and what is still unverified. Read it
-  before changing `index.html`.
+  before changing anything in `src/`.

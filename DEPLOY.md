@@ -36,6 +36,15 @@ Follow §3 before you share the link with anyone.
 
 ### 2.1 Get the files onto the server
 
+> **Build first if you are copying from the repository.** `index.html` is
+> generated from the repo's own `src/` folder — run `node build.mjs` and copy
+> the *result*. A checkout that has never been built either has no
+> `index.html` or has a stale one, and the container will happily serve it.
+> `node build.mjs --check` tells you which you have.
+>
+> The folder you make on the server below is also called `src`, which is an
+> unrelated coincidence: it holds the *built* app, not the repo's source.
+
 In Windows Explorer, open `\\TOWER\appdata` (replace `TOWER` with your
 server's name — the same one you use for other shares). Create a folder
 `splitpage`, and inside it a folder `src`, then copy the whole contents of

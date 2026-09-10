@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splitpage</title>
+<meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
+<meta name="splitpage-version" content="{{VERSION}}">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#F6F4EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16130F" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Loaded without blocking. A stylesheet still pending stops the browser
+     running ANY classic script after it, so an unreachable or slow
+     fonts.googleapis.com does not merely leave the page unstyled — it stops
+     the whole app from starting, which for something that advertises working
+     offline is the wrong failure. media="print" makes it non-render-blocking;
+     onload promotes it to the real stylesheet once it has actually arrived.
+     The <noscript> copy keeps the fonts for a scripting-disabled reader, who
+     has no app to block anyway. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+<style>
+/*{{APP_CSS}}*/
+</style>
+</head>
+<body>
+<div id="root">
+  <header class="topbar">
+    <div>
+      <div class="brand-row">
+        <span class="brand">Splitpage</span>
+      </div>
+      <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
+      <div class="subtitle">Visual / Audio script — press Present to read it aloud</div>
+      <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
+        <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
+      </button>
+      <div class="file-chip" id="file-chip" hidden>
+        <span class="file-chip-icon">📄</span>
+        <span id="file-chip-name"></span>
+        <span class="file-chip-state" id="file-chip-state"></span>
+      </div>
+      <span class="stat-chips">
+        <button type="button" class="stat-chip" id="runtime-chip"
+                title="Estimated read time for the Audio column — click to set your reading speed">
+          <span>⏱</span><span id="runtime-total">0:00</span>
+        </button>
+        <span class="stat-chip" id="progress-chip" hidden>
+          <span class="stat-dot"></span><span id="progress-text"></span>
+        </span>
+      </span>
+    </div>
+    <div class="toolbar">
+      <div class="menu-wrap">
+        <button class="btn" id="btn-file" type="button" aria-haspopup="true" aria-expanded="false">File ▾</button>
+        <div class="menu" id="file-menu" hidden role="menu">
+          <button type="button" role="menuitem" data-file-action="save-as">Save As…</button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
+          <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
+          <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
+          <!-- shown only when the page was served by a Splitpage document
+               server; hidden on file:// and on plain static hosting -->
+          <div class="menu-sep" id="menu-server-sep" hidden></div>
+          <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
+          <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-file-action="history">Version history…</button>
+          <div class="menu-sep"></div>
+          <!-- Ctrl+F everywhere else; this entry exists because phone
+               keyboards have no Ctrl -->
+          <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Export a copy</div>
+          <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
+          <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
+          <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
+          <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
+          <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
+          <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Export the narration</div>
+          <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
+          <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Packing lists</div>
+          <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
+          <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
+          <div class="menu-sep"></div>
+          <div class="menu-label">Help</div>
+          <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+          <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
+        </div>
+      </div>
+      <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
+      <button class="btn" id="btn-gear" type="button" title="Gear: an equipment list, tagged with <gear> or its own quick-add box">Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
+      <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+      <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
+      <button class="btn btn-primary" id="btn-save" type="button">Save</button>
+      <button class="btn btn-accent" id="btn-present" type="button">▶ Present</button>
+    </div>
+  </header>
+
+  <div class="findbar" id="findbar" hidden>
+    <input type="text" id="find-input" placeholder="Find in the script…" autocomplete="off" spellcheck="false" aria-label="Find">
+    <input type="text" id="replace-input" placeholder="Replace with…" autocomplete="off" spellcheck="false" aria-label="Replace with">
+    <button type="button" id="find-case" title="Match case" aria-pressed="false">Aa</button>
+    <span class="find-count" id="find-count"></span>
+    <button type="button" id="find-prev" title="Previous match (Shift+Enter)">↑</button>
+    <button type="button" id="find-next" title="Next match (Enter)">↓</button>
+    <button type="button" id="find-replace">Replace</button>
+    <button type="button" id="find-replace-all">Replace all</button>
+    <button type="button" class="notice-close" id="find-close" aria-label="Close find">×</button>
+  </div>
+
+  <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
+  <div class="update-bar" id="update-bar" hidden>
+    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <span id="update-bar-text"></span>
+    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
+  </div>
+
+  <div class="tagging-help" id="tagging-help" hidden>
+    <div class="tagging-help-head">
+      <span class="tagging-help-title">Tagging quick reference</span>
+      <span class="tagging-help-sub">File ▸ Tagging reference brings this back</span>
+      <button type="button" class="notice-close" id="tagging-help-dismiss" aria-label="Dismiss the tagging reference">×</button>
+    </div>
+    <div class="tagging-help-body">
+      <div class="tagging-help-col">
+        <div class="tagging-help-row"><code>[gaffer tape]</code><span>→ <strong>Prop</strong></span></div>
+        <div class="tagging-help-row"><code>{kitchen}</code><span>→ <strong>Location</strong></span></div>
+        <div class="tagging-help-row"><code>~lens flare~</code><span>→ <strong>VFX</strong></span></div>
+        <div class="tagging-help-note">Tagged the moment you type the closing character. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text. For <strong>Cast</strong> and <strong>Music/SFX</strong>, select the words and press <strong>Tag</strong>.</div>
+      </div>
+      <div class="tagging-help-col">
+        <div class="tagging-help-row"><kbd>Tab</kbd><span>completes a tag you've already used, keeping its own category.</span></div>
+        <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>starts the next scene and jumps into it.</span></div>
+        <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>F</kbd><span>find and replace across the whole script.</span></div>
+        <div class="tagging-help-note">Click a tag in the script — or any card in <strong>Production</strong> — to assign who's responsible and keep notes, links or file paths against it. Group the breakdown by category, person, scene or <strong>Shoot</strong> (everything at one location together), and export the lot as CSV. Drag a scene by its number to reorder; click the dot beside it to mark it To&nbsp;do / Ready / Shot.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notice" id="resume-banner" hidden>
+    <div class="notice-body">
+      <strong>Continue where you left off?</strong>
+      <span id="resume-banner-text"></span>
+    </div>
+    <div class="notice-actions">
+      <button type="button" class="btn btn-accent" id="resume-continue">Continue</button>
+      <button type="button" class="notice-close" id="resume-dismiss" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
+  <div class="notice notice-readonly" id="readonly-banner" hidden>
+    <strong>Read-only view.</strong> You can read and export this script, but changes won't be saved. Ask the owner for edit access.
+  </div>
+
+  <div class="notice notice-save-error" id="save-error-banner" hidden>
+    <div class="notice-body">
+      <strong>Not saved.</strong>
+      <span id="save-error-text"></span>
+      <span class="save-error-code" id="save-error-code"></span>
+    </div>
+    <div class="notice-actions">
+      <button type="button" class="btn" id="save-error-retry">Try again</button>
+      <button type="button" class="btn btn-accent" id="save-error-export">Export a copy</button>
+      <button type="button" class="notice-close" id="save-error-dismiss" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
+  <div class="notice notice-merge" id="merge-banner" hidden>
+    <div class="notice-body">
+      <strong>Your changes were merged.</strong>
+      <span id="merge-summary"></span>
+    </div>
+    <div class="notice-actions">
+      <button type="button" class="btn" id="merge-review" hidden>Review conflicts</button>
+      <button type="button" class="btn" id="merge-undo" title="Go back to the version that was live before your changes were merged in. Recoverable from Version history.">Undo merge</button>
+      <button type="button" class="notice-close" id="merge-dismiss" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
+  <div class="col-head">
+    <div class="col-head-cell"></div>
+    <div class="col-head-cell visual">Visual</div>
+    <div class="col-head-cell audio">Audio</div>
+  </div>
+
+  <div id="rows"></div>
+
+  <div class="add-row-bar">
+    <button class="add-row-btn" type="button" data-action="add-row">+ Add row</button>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept="image/*" hidden>
+<input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
+<input type="file" id="open-file-input" accept=".html,.htm,.docx,.md,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
+
+<div id="toast-host"></div>
+<div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
+
+<!-- offered when a visual cell mentions something already in the breakdown
+     without labelling it; tabindex -1 because Tab is the accept key, not a
+     way to focus this -->
+<button class="tag-suggest" id="tag-suggest" type="button" tabindex="-1"></button>
+
+<div class="modal-backdrop" id="import-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
+    <div class="modal-header">
+      <h2 id="import-title">Import a script</h2>
+      <button type="button" class="modal-close" id="import-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Paste a script below, or choose a .txt or .md file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns.</p>
+    <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
+    <div class="modal-row">
+      <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
+      <div class="import-split-group" role="radiogroup" aria-label="Split by">
+        <label><input type="radio" name="import-split" value="paragraph" checked> Paragraphs</label>
+        <label><input type="radio" name="import-split" value="line"> Lines</label>
+        <label><input type="radio" name="import-split" value="sentence"> Sentences</label>
+        <label><input type="radio" name="import-split" value="twocolumn"> Two columns</label>
+      </div>
+    </div>
+    <div class="modal-preview" id="import-preview">Paste some text to see a preview.</div>
+    <div class="modal-footer">
+      <label class="import-replace-toggle"><input type="checkbox" id="import-replace"> Replace existing rows</label>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="import-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="import-confirm">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="gdoc-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="gdoc-title">
+    <div class="modal-header">
+      <h2 id="gdoc-title">Import from Google Doc</h2>
+      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Paste the link to a Google Doc (or just its ID). Splitpage can't read it directly — it
+      opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
+      it lands, bring it in the same way as any other Word file: File ▸ Open a document…. If the doc isn't
+      shared "Anyone with the link", make sure you're signed in to the right Google account in that tab first.</p>
+    <input type="text" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="gdoc-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="gdoc-confirm">Download &amp; open</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="prompter" id="prompter" hidden>
+  <div class="prompter-scroll" id="prompter-scroll">
+    <div class="prompter-guide"></div>
+    <div id="prompter-content"></div>
+  </div>
+  <div class="prompter-bar">
+    <button id="pp-voice" type="button">Follow My Voice</button>
+    <span id="pp-voice-status" class="pp-voice-status"></span>
+    <div class="div-sep"></div>
+    <button id="pp-play" type="button">▶ Play</button>
+    <div class="grp">
+      <label for="pp-speed">Speed</label>
+      <input id="pp-speed" type="range" min="10" max="160" value="42">
+    </div>
+    <div class="grp">
+      <label for="pp-size">Text size</label>
+      <input id="pp-size" type="range" min="24" max="84" value="42">
+    </div>
+    <button id="pp-skip-shot" type="button" title="Leave out the scenes already marked Shot">Skip shot</button>
+    <button id="pp-mirror" type="button">Mirror</button>
+    <button id="pp-fullscreen" type="button">Fullscreen</button>
+    <div class="spacer"></div>
+    <button id="pp-close" class="close-btn" type="button">Close (Esc)</button>
+  </div>
+</div>
+
+<div class="writer" id="writer" hidden>
+  <div class="writer-top">
+    <span class="writer-kicker">Narration</span>
+    <input type="text" class="writer-title" id="writer-title" aria-label="Script title" spellcheck="false">
+    <span class="writer-stats">
+      <span><b id="wr-scenes">0</b> scenes</span>
+      <span><b id="wr-words">0</b> words</span>
+      <span>⏱ <b id="wr-runtime">0:00</b></span>
+    </span>
+    <span class="file-chip" id="wr-file-chip" hidden>
+      <span class="file-chip-icon">📄</span>
+      <span id="wr-file-chip-name"></span>
+      <span class="file-chip-state" id="wr-file-chip-state"></span>
+    </span>
+    <button class="btn btn-primary" id="wr-save" type="button">Save</button>
+  </div>
+  <div class="writer-scroll" id="writer-scroll">
+    <div class="writer-doc" id="writer-doc"></div>
+  </div>
+  <div class="writer-bar">
+    <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
+    <button type="button" class="wr-fmt" data-cmd="italic" title="Italic (Ctrl+I)">I</button>
+    <button type="button" class="wr-fmt" data-cmd="underline" title="Underline (Ctrl+U)">U</button>
+    <button type="button" class="wr-fmt" data-cmd="highlight" title="Highlight">▮</button>
+    <div class="div-sep"></div>
+    <div class="grp">
+      <label for="wr-size">Size</label>
+      <input id="wr-size" type="range" min="16" max="34" value="19" aria-label="Text size">
+    </div>
+    <div class="div-sep"></div>
+    <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
+    <button type="button" id="wr-export">Export narration</button>
+    <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
+    <div class="spacer"></div>
+    <button type="button" id="wr-close">Close (Esc)</button>
+  </div>
+</div>
+
+<input type="file" id="comment-image-input" accept="image/*" hidden>
+
+<div class="modal-backdrop" id="comment-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="comment-title">
+    <div class="modal-header">
+      <h2 id="comment-title">Add a comment</h2>
+      <button type="button" class="modal-close" id="comment-close" aria-label="Close">×</button>
+    </div>
+    <div class="comment-modal-quote" id="comment-modal-quote"></div>
+    <div class="comment-field-label">Your name</div>
+    <div class="comment-name-row">
+      <input type="text" id="comment-name" placeholder="e.g. Jordan" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="comment-field-label">Comment</div>
+    <div class="field-wrap">
+      <div class="mini-toolbar" role="toolbar" aria-label="Comment formatting">
+        <button type="button" data-cmd="bold" title="Bold">B</button>
+        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+        <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+        <span class="tb-sep"></span>
+        <button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>
+        <button type="button" data-cmd="link" title="Add link">Link</button>
+        <span class="tb-sep"></span>
+        <button type="button" data-cmd="image" title="Add image">🖼 Image</button>
+        <button type="button" data-cmd="video" title="Add video link">▶ Video</button>
+      </div>
+      <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…"></div>
+      <div class="link-popover" hidden>
+        <input type="url" placeholder="https://example.com" data-role="link-input">
+        <button type="button" data-action="link-confirm">Add</button>
+        <button type="button" data-action="link-cancel">Cancel</button>
+      </div>
+      <div class="video-popover" hidden>
+        <input type="url" placeholder="https://youtube.com/watch?v=…" data-role="video-input">
+        <button type="button" data-action="video-confirm">Add</button>
+        <button type="button" data-action="video-cancel">Cancel</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="comment-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="comment-post">Post comment</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="file-conflict-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
+    <div class="modal-header">
+      <h2 id="file-conflict-title">That file changed on disk</h2>
+      <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint" id="file-conflict-detail"></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="file-conflict-cancel">Cancel</button>
+        <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
+        <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
+        <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="comments-panel" id="production-panel" hidden>
+  <div class="comments-panel-head">
+    <h2>Production breakdown</h2>
+    <button type="button" class="modal-close" id="production-close" aria-label="Close">×</button>
+  </div>
+  <div class="comments-panel-toggle production-controls">
+    <div class="group-seg" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
+      <button type="button" data-group="cat" role="radio" aria-checked="true">Category</button>
+      <button type="button" data-group="person" role="radio" aria-checked="false">Person</button>
+      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
+      <button type="button" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
+    </div>
+    <button type="button" class="group-export" data-action="export-breakdown" title="Export this breakdown as a spreadsheet">CSV</button>
+  </div>
+  <!-- Only rendered while something is selected. Sits outside #production-list
+       so it stays pinned while the list scrolls under it. -->
+  <div class="bulk-bar" id="production-bulk" hidden></div>
+  <div class="comments-list" id="production-list"></div>
+</div>
+
+<div class="comments-panel" id="gear-panel" hidden>
+  <div class="comments-panel-head">
+    <h2>Gear</h2>
+    <button type="button" class="modal-close" id="gear-close" aria-label="Close">×</button>
+  </div>
+  <div class="comments-panel-toggle production-controls">
+    <div class="group-seg" id="gear-modes" role="radiogroup" aria-label="Group gear by">
+      <button type="button" data-group="flat" role="radio" aria-checked="true">List</button>
+      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
+    </div>
+    <button type="button" class="group-export" data-action="export-packing-gear" title="Export a printable packing list">Packing list</button>
+  </div>
+  <!-- Bulk-adds or edits the gear list directly, whether or not any of it is
+       actually typed into the script — see applyGearQuickAdd(). Pre-filled
+       with the current list every time the panel opens. -->
+  <div class="gear-quickadd">
+    <label for="gear-quickadd-input">Add gear — one item per line</label>
+    <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand"></textarea>
+    <div class="gear-quickadd-row">
+      <span class="gear-quickadd-hint">Remove a line to un-track it — unless it's still tagged in the script.</span>
+      <button type="button" id="gear-quickadd-save">Update list</button>
+    </div>
+  </div>
+  <div class="comments-list" id="gear-list"></div>
+</div>
+
+<div class="modal-backdrop" id="server-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="server-title">
+    <div class="modal-header">
+      <h2 id="server-title">Documents on the server</h2>
+      <button type="button" class="modal-close" id="server-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Everyone who can reach this page sees the same documents. Saving publishes
+      straight back, and if two of you edit at once the versions are merged rather than one
+      overwriting the other.</p>
+    <div class="server-doc-list" id="server-doc-list"></div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="server-cancel">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="drive-modal" hidden>
+  <div class="modal-panel drive-panel" role="dialog" aria-modal="true" aria-labelledby="drive-title">
+    <div class="modal-header">
+      <h2 id="drive-title">Google Drive files</h2>
+      <button type="button" class="modal-close" id="drive-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Browse, upload, rename, and delete files in any publicly shared Google
+      Drive folder, straight from here — separate from opening and saving your script.</p>
+
+    <div id="drive-setup">
+      <p class="modal-hint">Google requires a project of your own for this: an <strong>API key</strong>
+        to read a public folder, and an <strong>OAuth Client ID</strong> to make changes to it. Both are
+        free, and only ever leave this browser to talk to Google's own APIs.</p>
+      <ol class="drive-setup-steps">
+        <li>Open <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a> and enable the <strong>Google Drive API</strong> for a project (create one if needed).</li>
+        <li>Under <strong>APIs &amp; Services ▸ Credentials</strong>, create an <strong>API key</strong> and paste it below.</li>
+        <li>Also create an <strong>OAuth client ID</strong> (type: Web application), add this page's address as an <strong>Authorized JavaScript origin</strong>, and paste that Client ID below too.</li>
+      </ol>
+      <div class="drive-field">
+        <label for="drive-api-key">API key</label>
+        <input type="text" id="drive-api-key" placeholder="AIza…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="drive-field">
+        <label for="drive-client-id">OAuth Client ID</label>
+        <input type="text" id="drive-client-id" placeholder="123456…apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-row">
+        <span></span>
+        <button type="button" class="btn btn-accent" data-action="drive-save-creds">Save</button>
+      </div>
+    </div>
+
+    <div id="drive-main" hidden>
+      <div class="modal-row drive-account" id="drive-account"></div>
+      <div class="drive-connect-row">
+        <input type="text" id="drive-folder-input" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn btn-accent" id="drive-connect-btn" data-action="drive-connect">Open folder</button>
+      </div>
+      <button type="button" class="drive-edit-creds" data-action="drive-edit-creds">Change API key / Client ID…</button>
+
+      <div id="drive-browser" hidden>
+        <div class="drive-toolbar">
+          <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
+          <div class="drive-toolbar-actions">
+            <button type="button" class="btn" data-action="drive-refresh" title="Refresh">⟳</button>
+            <button type="button" class="btn" data-action="drive-newfolder-toggle" id="drive-newfolder-toggle">New folder</button>
+            <button type="button" class="btn" data-action="drive-upload">Upload…</button>
+          </div>
+        </div>
+        <div class="drive-newfolder-row" id="drive-newfolder-row" hidden>
+          <input type="text" id="drive-newfolder-input" placeholder="Folder name…">
+          <button type="button" class="btn btn-accent" data-action="drive-newfolder-create">Create</button>
+          <button type="button" class="btn" data-action="drive-newfolder-cancel">Cancel</button>
+        </div>
+        <div class="drive-list" id="drive-list"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="drive-done">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="drive-upload-input" hidden multiple>
+
+<div class="modal-backdrop" id="tag-modal" hidden>
+  <div class="modal-panel tag-panel" role="dialog" aria-modal="true" aria-labelledby="tag-title">
+    <div class="modal-header">
+      <h2 id="tag-title">Label this</h2>
+      <button type="button" class="modal-close" id="tag-close" aria-label="Close">×</button>
+    </div>
+    <div class="comment-modal-quote" id="tag-quote"></div>
+
+    <div class="comment-field-label">Category</div>
+    <div class="tag-cats" id="tag-cats" role="radiogroup" aria-label="Category"></div>
+
+    <div class="comment-field-label">Name</div>
+    <input type="text" id="tag-name" list="tag-name-list" autocomplete="off" placeholder="e.g. Halo Mount">
+    <datalist id="tag-name-list"></datalist>
+    <div class="tag-hint" id="tag-hint"></div>
+
+    <div class="modal-footer">
+      <label class="import-replace-toggle"><input type="checkbox" id="tag-all"> Label every matching mention</label>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="tag-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="tag-apply">Add label</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="comments-panel" id="history-panel" hidden>
+  <div class="comments-panel-head">
+    <h2>Version history</h2>
+    <button type="button" class="modal-close" id="history-close" aria-label="Close">×</button>
+  </div>
+  <div class="comments-panel-toggle">Local safety net — snapshots kept in this browser before anything destructive.</div>
+  <div class="comments-list" id="history-list"></div>
+</div>
+
+<div class="comments-panel" id="comments-panel" hidden>
+  <div class="comments-panel-head">
+    <h2>Comments</h2>
+    <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close">×</button>
+  </div>
+  <div class="comments-panel-toggle">
+    <label><input type="checkbox" id="comments-hide-resolved"> Hide resolved</label>
+    <span class="comments-sort-wrap">
+      <label for="comments-sort">Sort</label>
+      <select id="comments-sort" aria-label="Sort comments">
+        <option value="position">Script order</option>
+        <option value="recent">Most recent</option>
+      </select>
+    </span>
+  </div>
+  <div class="comments-list" id="comments-list"></div>
+</div>
+
+<script id="state-data" type="application/json">
+{{SEED_STATE}}
+</script>
+
+<script id="app-logic">
+//{{APP_JS}}
+</script>
+</body>
+</html>

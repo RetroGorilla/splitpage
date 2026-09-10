@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
+<meta name="splitpage-version" content="1.0.0">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#F6F4EC" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16130F" media="(prefers-color-scheme: dark)">
@@ -12,7 +13,17 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Loaded without blocking. A stylesheet still pending stops the browser
+     running ANY classic script after it, so an unreachable or slow
+     fonts.googleapis.com does not merely leave the page unstyled — it stops
+     the whole app from starting, which for something that advertises working
+     offline is the wrong failure. media="print" makes it non-render-blocking;
+     onload promotes it to the real stylesheet once it has actually arrived.
+     The <noscript> copy keeps the fonts for a scripting-disabled reader, who
+     has no app to block anyway. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
   :root {
     --bg: #F6F4EC;
@@ -2108,6 +2119,35 @@
   @media (prefers-reduced-motion: reduce) {
     .toast { animation: none; }
   }
+
+/* ---- update notice ----
+   Sits above the columns rather than floating: it is information, not an
+   interruption, and there is nothing to act on until the next restart. */
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule, #d8d2c4);
+  border-left: 3px solid #1B7A68;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+}
+.update-bar-icon { color: #1B7A68; font-size: 14px; }
+.update-bar-dismiss {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  color: inherit;
+  opacity: .55;
+}
+.update-bar-dismiss:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -2180,6 +2220,7 @@
           <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+          <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
         </div>
       </div>
       <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
@@ -2201,6 +2242,13 @@
     <button type="button" id="find-replace">Replace</button>
     <button type="button" id="find-replace-all">Replace all</button>
     <button type="button" class="notice-close" id="find-close" aria-label="Close find">×</button>
+  </div>
+
+  <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
+  <div class="update-bar" id="update-bar" hidden>
+    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <span id="update-bar-text"></span>
+    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
   </div>
 
   <div class="tagging-help" id="tagging-help" hidden>
@@ -2775,7 +2823,6 @@
   var voiceStream = null;
   var finalTranscript = "";
   var interimTranscript = "";
-
   /* ================= scene status and runtime ================= */
 
   /* Three states, not five: a scene is either still being written, ready to
@@ -2896,7 +2943,6 @@
     scheduleProductionRefresh();  /* the Shoot view counts shot scenes */
     queueAutoSave();
   }
-
   /* ================= state ================= */
 
   function defaultState() {
@@ -3054,7 +3100,6 @@
     var safeJson = String(stateJson).replace(/<\//g, "<\\/");
     return PAGE_SHELL.slice(0, openEnd) + "\n" + safeJson + "\n" + PAGE_SHELL.slice(close);
   }
-
   /* ================= sync: identity, snapshots, merge =================
 
      There is no shared realtime channel available to this page, so
@@ -3628,7 +3673,6 @@
     }
     return -1;
   }
-
   /* ================= sanitizing rich text ================= */
 
   /* Parse untrusted HTML INERTLY. A detached <div> is still live: assigning
@@ -3847,7 +3891,6 @@
     a.appendChild(hostSpan);
     return a;
   }
-
   /* ================= rendering ================= */
 
   function pad2(n) { return n < 10 ? "0" + n : "" + n; }
@@ -4239,7 +4282,6 @@
     if (!wrap) return;
     wrap.querySelector(".video-popover").hidden = true;
   }
-
   /* ================= row actions ================= */
 
   function addRow(afterId) {
@@ -4456,7 +4498,6 @@
     markDirty();
     render();
   }
-
   /* ================= production tags =================
 
      A tag is not a separate record - it is a span wrapping the words in the
@@ -5620,7 +5661,6 @@
     queueAutoSave();
     showToast("Labelled as " + name, "ok");
   }
-
   /* ---- the production panel ---- */
 
   function openProductionPanel() {
@@ -6572,7 +6612,6 @@
     if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
     return "﻿" + lines.join("\r\n");
   }
-
   /* ================= find & replace =================
 
      Matching and replacing both happen in TEXT NODES ONLY, never on the HTML
@@ -6816,7 +6855,6 @@
     findMatches = [];
     findIndex = -1;
   }
-
   /* ================= comments ================= */
 
   var TAGGING_HELP_KEY = "splitpage-tagging-help-dismissed";
@@ -7319,7 +7357,6 @@
     }
     listEl.innerHTML = items.map(commentCardHtml).join("");
   }
-
   /* ================= import ================= */
 
   var importModeTouched = false;
@@ -7620,7 +7657,6 @@
     closeGdocModal();
     showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open a document… to bring it in.", "ok", true);
   }
-
   /* ================= dirty / toast ================= */
 
   /* There are two Save buttons — the header's, and the writer's, because the
@@ -7671,7 +7707,6 @@
     }
     host.appendChild(el);
   }
-
   /* ================= hosted documents =================
 
      Everything here is additive and inert unless the page was actually served
@@ -8553,7 +8588,6 @@
     renderDriveAccount();
     renderDriveList();
   }
-
   /* ================= save / export ================= */
 
   async function saveDoc(opts) {
@@ -8992,7 +9026,6 @@
     })(container, { b: false, i: false, u: false, s: false, mark: false, href: null });
     return runs;
   }
-
   /* ================= .docx writing ================= */
 
   function dataUrlToBytes(dataUrl) {
@@ -9631,7 +9664,6 @@
     }
     return "data:" + mime + ";base64," + btoa(bin);
   }
-
   /* ================= csv ================= */
 
   function csvEscape(v) {
@@ -9749,7 +9781,6 @@
     }
     return out;
   }
-
   /* ================= pdf ================= */
 
   /* Adobe's Helvetica metrics (units per 1000) for codes 32..126 — enough to
@@ -10278,7 +10309,6 @@
 
     return concatBytes(chunks);
   }
-
   /* ================= local documents: open, save back, export ================= */
 
   var openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
@@ -10779,7 +10809,8 @@
 
   function handleFileMenuAction(action) {
     toggleFileMenu(false);
-    if (!state && action !== "history" && action !== "tagging-help" && action !== "drive-open") {
+    if (!state && action !== "history" && action !== "tagging-help"
+        && action !== "drive-open" && action !== "about") {
       showToast("Still loading…", "warn"); return;
     }
     if (action === "save-as") saveDoc({ saveAs: true });
@@ -10803,8 +10834,8 @@
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
     else if (action === "tagging-help") showTaggingHelp();
+    else if (action === "about") showAbout();
   }
-
   /* ================= the writer =================
 
      A word-processor view of the audio column: the whole narration as one
@@ -11282,7 +11313,6 @@
     void target.offsetWidth;
     target.classList.add("just-merged");
   }
-
   /* ================= teleprompter ================= */
 
   function normalizeWord(w) {
@@ -11743,7 +11773,93 @@
       if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
     });
   }
+  /* ================= updates =================
 
+     The launcher (start.mjs) writes update-status.json next to the app before
+     it serves anything, and rewrites it after a background check. This reads
+     that file — it never talks to the network itself and it can never install
+     anything. Installing is start.mjs's job at launch, deliberately: this page
+     is served by a localhost server with no authentication, so an endpoint
+     that replaced app files on request could be driven by any other page the
+     browser has open.
+
+     Absent file, file:// open, or a hosted deployment: the fetch fails or
+     404s, nothing is shown, and the app behaves exactly as it did before. */
+
+  var updateStatus = null;
+
+  function loadUpdateStatus() {
+    /* no-store: the whole point is to see what the launcher wrote THIS run */
+    fetch("update-status.json", { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (!body || typeof body !== "object") return;
+        updateStatus = body;
+        renderUpdateNotice();
+      })
+      .catch(function () { /* not launched by start.mjs — nothing to say */ });
+  }
+
+  function renderUpdateNotice() {
+    var bar = document.getElementById("update-bar");
+    if (!bar || !updateStatus) return;
+
+    /* Staged and waiting beats merely available: it is one restart away and
+       needs nothing from the user but closing the window. */
+    if (updateStatus.pending) {
+      document.getElementById("update-bar-text").textContent =
+        "Splitpage " + updateStatus.pending.to + " is ready — restart to finish installing it.";
+      bar.hidden = false;
+      return;
+    }
+    if (updateStatus.updateAvailable && updateStatus.latest) {
+      document.getElementById("update-bar-text").textContent =
+        "Splitpage " + updateStatus.latest + " is available. You have " + (updateStatus.version || "?") + ".";
+      bar.hidden = false;
+      return;
+    }
+    bar.hidden = true;
+  }
+
+  function dismissUpdateNotice() {
+    var bar = document.getElementById("update-bar");
+    if (bar) bar.hidden = true;
+  }
+
+  function showAbout() {
+    var lines = [];
+    var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
+    lines.push("Splitpage " + (version || "(version unknown)"));
+
+    if (!updateStatus) {
+      lines.push("");
+      lines.push("Opened without the launcher, so updates cannot be checked from here.");
+      lines.push("Start it with start.bat (Windows) or ./start.sh, or run:");
+      lines.push("    node update.mjs check");
+    } else if (updateStatus.pending) {
+      lines.push("");
+      lines.push("Version " + updateStatus.pending.to + " is downloaded and verified.");
+      lines.push("Close this window and start Splitpage again to install it.");
+    } else if (updateStatus.updateAvailable) {
+      lines.push("");
+      lines.push("Version " + updateStatus.latest + " is available.");
+      lines.push("Run  node update.mjs  to download it, then restart.");
+    } else if (updateStatus.error) {
+      lines.push("");
+      lines.push("Last update check failed: " + updateStatus.error);
+    } else if (updateStatus.latest) {
+      lines.push("");
+      lines.push("Up to date.");
+    }
+    window.alert(lines.join("\n"));
+  }
+
+  /* The version the page itself was built as, for the file:// case where
+     there is no launcher to ask. */
+  function readEmbeddedVersion() {
+    var meta = document.querySelector('meta[name="splitpage-version"]');
+    return meta ? meta.getAttribute("content") : null;
+  }
   /* ================= events ================= */
 
   function onRootClick(e) {
@@ -12280,6 +12396,11 @@
        and everything below works identically either way. Deliberately not
        awaited — a slow or absent server must never delay the editor opening. */
     detectServer();
+    /* Same reasoning as detectServer: fire and forget, and silent when there
+       is no launcher to have written the file. */
+    loadUpdateStatus();
+    var updateDismiss = document.getElementById("update-bar-dismiss");
+    if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
     wireTouchSelection();
 
     /* On touch the ghost suggestion is a tap target (the Tab key it stands

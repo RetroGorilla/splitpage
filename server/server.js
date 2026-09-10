@@ -32,6 +32,13 @@ const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public"
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
 /* Set READ_ONLY=1 to publish a library nobody can write to. */
 const READ_ONLY = process.env.READ_ONLY === "1";
+/* Set NO_API=1 to serve the app and nothing else. The local launcher uses this
+   for its default mode: with no /api to find, the client's health probe fails
+   and it stays in local mode, where a document is a file you save to disk.
+   That is the workflow start.bat has always given, and turning it into a
+   server-side library because a launcher happened to run Node would be a
+   surprise, not an upgrade. `start --library` is the opt-in. */
+const NO_API = process.env.NO_API === "1";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -140,15 +147,21 @@ async function writeDoc(doc) {
 
 /* ---------- http helpers ---------- */
 
-function sendJson(res, status, body) {
+function sendJson(res, status, body, opts) {
   const payload = JSON.stringify(body);
-  res.writeHead(status, {
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(payload),
     /* documents must never be cached by the browser or by Cloudflare — a
        stale rev would make the client think it is up to date and clobber */
     "Cache-Control": "no-store"
-  });
+  };
+  /* Set when we are answering without having read the rest of the request
+     body (an over-length upload). The client is still sending; keeping the
+     connection alive would leave its unread bytes in front of the next
+     request on it, so this response ends the connection. */
+  if (opts && opts.close) headers["Connection"] = "close";
+  res.writeHead(status, headers);
   res.end(payload);
 }
 
@@ -156,16 +169,27 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
+    let aborted = false;
     req.on("data", (chunk) => {
+      if (aborted) return;
       size += chunk.length;
       if (size > MAX_BODY) {
+        /* Pause rather than destroy. req.destroy() tears the socket down
+           immediately, so the 413 below never reaches the client and it sees
+           a connection reset instead of a message telling it the document is
+           too big — which, for a script carrying too many embedded images, is
+           the one thing the user needs to be told. The socket is closed for
+           real once that response has been written (Connection: close). */
+        aborted = true;
+        chunks.length = 0;
+        req.pause();
         reject(Object.assign(new Error("too-large"), { code: "TOO_LARGE" }));
-        req.destroy();
         return;
       }
       chunks.push(chunk);
     });
     req.on("end", () => {
+      if (aborted) return;
       try {
         const text = Buffer.concat(chunks).toString("utf8");
         resolve(text ? JSON.parse(text) : {});
@@ -366,13 +390,13 @@ async function handleStatic(req, res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
-  const done = url.pathname.startsWith("/api/")
+  const done = (!NO_API && url.pathname.startsWith("/api/"))
     ? handleApi(req, res, url)
     : handleStatic(req, res, url);
 
   Promise.resolve(done).catch((err) => {
     if (res.headersSent) { res.destroy(); return; }
-    if (err && err.code === "TOO_LARGE") return sendJson(res, 413, { error: "too-large" });
+    if (err && err.code === "TOO_LARGE") return sendJson(res, 413, { error: "too-large" }, { close: true });
     if (err && err.code === "BAD_JSON") return sendJson(res, 400, { error: "bad-json" });
     console.error("[splitpage]", req.method, url.pathname, err && err.stack ? err.stack : err);
     sendJson(res, 500, { error: "server-error" });
@@ -380,12 +404,16 @@ const server = http.createServer((req, res) => {
 });
 
 async function start() {
-  await fsp.mkdir(DATA_DIR, { recursive: true });
+  /* Only when there is an API to store anything. In NO_API mode (the local
+     launcher's default) this process is a static file server and has no
+     business creating a data directory next to someone's app. */
+  if (!NO_API) await fsp.mkdir(DATA_DIR, { recursive: true });
   server.listen(PORT, HOST, () => {
     console.log("[splitpage] listening on " + HOST + ":" + PORT);
     console.log("[splitpage] documents in " + DATA_DIR);
     console.log("[splitpage] static files from " + STATIC_DIR);
     if (READ_ONLY) console.log("[splitpage] READ-ONLY mode");
+    if (NO_API) console.log("[splitpage] static only — no document API");
     console.log("[splitpage] no authentication in this process — put it behind Cloudflare Access or a VPN");
   });
 }

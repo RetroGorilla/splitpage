@@ -19,3 +19,15 @@ desktop.ini
 *.swp
 .vscode/
 .idea/
+
+# Built releases. `node package.mjs` regenerates the lot.
+dist/
+
+# Written by the launcher at runtime so the app can show an update notice.
+update-status.json
+
+# Staged updates, and the backup an apply rolls back to.
+.update/
+
+# Build-time downloads (the bundled Node runtime). Fetched on demand.
+.cache/
