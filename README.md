@@ -5,6 +5,23 @@ runtime into a plain, self-contained web app. Nothing here talks to Claude
 or to any server — everything (script text, comments, tags, version
 snapshots) lives in the page itself and in files you save to your own disk.
 
+## Setting up
+
+The first time you open a fresh copy of Splitpage, a short setup wizard walks
+you through it: what Splitpage is and how saving works, whether to add this
+copy to your Start Menu (if it was started by the launcher — see
+[Installing it](#installing-it)), how you'll be working (on your own, hosting
+others, or joining someone else's session — see
+[Hosting a shared session](#hosting-a-shared-session) and
+[Connecting to a server](#connecting-to-a-server)), and an offer to take the
+5-step tour. Skip it or finish it and it won't show up again on its own.
+
+Changed your mind, or want to run through it again? **File ▸ Set up
+Splitpage…** reopens it any time, on any document — it never touches
+anything you've written. It only ever appears by itself over the demo
+script Splitpage ships with, never over something you've opened or are
+hosting, so it won't get in the way once you're actually working.
+
 ## Running it
 
 **Quickest — just open it.** Double-click [index.html](index.html). Editing,

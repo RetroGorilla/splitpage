@@ -1,0 +1,90 @@
+# The first-run setup wizard (src/js/20b-onboarding.js): the pristine-seed
+# gate (invariant #30), Skip/Finish writing splitpage-onboarding exactly once
+# and never showing the wizard again either way, File > Set up Splitpage...
+# reopening it on demand without touching that key, and never editing the
+# document (invariant #17) along the way.
+
+open
+
+# --- a fresh profile has no key yet: the wizard shows on its own -----------
+wait document.getElementById('onboarding-modal').hidden == false
+expect document.querySelector('.onboard-step[data-onboard-step="1"]').hidden == false
+
+eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
+
+# --- hidden once the key is set ---------------------------------------------
+eval localStorage.setItem('splitpage-onboarding', JSON.stringify({v:1,done:true,skipped:false,at:new Date().toISOString()}))
+goto /index.html
+wait document.getElementById('onboarding-modal').hidden == true
+
+# --- removing the key and reloading shows it again --------------------------
+eval localStorage.removeItem('splitpage-onboarding')
+goto /index.html
+wait document.getElementById('onboarding-modal').hidden == false
+# a reload is a fresh window - window.__rowsBefore from before goto is gone
+eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
+
+# --- Next walks 1 -> 4, Back returns ----------------------------------------
+expect document.querySelector('#onboarding-modal [data-onboard-action="back"]').disabled == true
+
+jsclick #onboarding-modal [data-onboard-action="next"]
+sleep 300
+expect document.querySelector('.onboard-step[data-onboard-step="2"]').hidden == false
+# the harness is not the launcher (no LAUNCH_TOKEN, no #launch= fragment),
+# so api/launcher/info answers 404 and step 2 falls back to plain instructions
+wait document.getElementById('onboard-install-body').textContent.indexOf('cannot register') !== -1
+
+jsclick #onboarding-modal [data-onboard-action="back"]
+sleep 200
+expect document.querySelector('.onboard-step[data-onboard-step="1"]').hidden == false
+expect document.querySelector('#onboarding-modal [data-onboard-action="back"]').disabled == true
+
+jsclick #onboarding-modal [data-onboard-action="next"]
+sleep 200
+jsclick #onboarding-modal [data-onboard-action="next"]
+sleep 200
+expect document.querySelector('.onboard-step[data-onboard-step="3"]').hidden == false
+
+jsclick #onboarding-modal [data-onboard-action="next"]
+sleep 200
+expect document.querySelector('.onboard-step[data-onboard-step="4"]').hidden == false
+expect document.querySelector('#onboarding-modal [data-onboard-action="next"]').textContent == Finish
+
+# --- the document is still untouched after walking every step --------------
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- Skip (here, at step 4) writes the key with skipped:true and closes ----
+jsclick #onboarding-modal [data-onboard-action="skip"]
+sleep 300
+expect document.getElementById('onboarding-modal').hidden == true
+expect JSON.parse(localStorage.getItem('splitpage-onboarding')).skipped == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- reload: stays hidden -----------------------------------------------------
+goto /index.html
+wait document.getElementById('onboarding-modal').hidden == true
+eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
+
+# --- File > Set up Splitpage... reopens it without clearing the key --------
+eval window.__keyBefore = localStorage.getItem('splitpage-onboarding')
+jsclick #btn-file
+jsclick #file-menu [data-file-action="setup"]
+sleep 300
+expect document.getElementById('onboarding-modal').hidden == false
+expect document.querySelector('.onboard-step[data-onboard-step="1"]').hidden == false
+expect localStorage.getItem('splitpage-onboarding') === window.__keyBefore
+
+# --- Esc skips, and still never edits the document --------------------------
+key Escape
+sleep 300
+expect document.getElementById('onboarding-modal').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- the pristine-seed gate: a #state-data that doesn't match the shipped
+#     checksum fails, which is the one thing standing between a served demo
+#     and someone's real script -------------------------------------------
+expect window.__onboarding.seedCheckPasses() == true
+eval document.getElementById('state-data').textContent = document.getElementById('state-data').textContent + ' '
+expect window.__onboarding.seedCheckPasses() == false
+
+quit
