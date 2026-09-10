@@ -11,11 +11,46 @@
      meantime and hands back their version, and mergeStates() reconciles the
      two instead of either side losing work.
 
-     Authentication is deliberately absent, here and in the server: it belongs
-     to Cloudflare Access (or a VPN) sitting in front. This code only ever
-     *reads* who Access says you are, to fill in a name. */
+     WHO YOU ARE is still not this app's business. Real authentication belongs
+     to Cloudflare Access (or a VPN) sitting in front of the server, and this
+     code only ever *reads* who Access says you are, to fill in a name.
 
-  var serverMode = { available: false, readOnly: false, checked: false };
+     What this file does now carry is a join PIN — a shared code a LAN host
+     can set so a stranger on the same wifi cannot simply open the address and
+     read everything. Post the PIN once, get a token, send that token with
+     every request. It is a door lock, not an identity: it says you were told
+     the code, nothing more, and it travels in the clear over plain HTTP. A
+     server on the internet still needs Access in front of it.
+
+     A page can also be pointed at a server that did not serve it —
+     `serverBase` — so a copy on disk, or one served by a different machine,
+     can open documents from someone's shared session. That needs the server
+     to allow this origin (ALLOW_ORIGINS) and, if it has one, the PIN.
+
+     ALL OF THIS IS BROWSER STATE — localStorage and sessionStorage, per
+     browser, per person. None of it is ever written into the document, so
+     invariant #4 (nothing may be added to the state object without going
+     through migrateRows) is deliberately not in play here, and no key below
+     may ever be moved into `state`. Nor into update-status.json or anything
+     else the static handler serves (invariant #29). */
+
+  /* "" means same-origin — the server that served this page, which is the
+     normal case and the only one before this existed. */
+  var SERVER_BASE_KEY = "splitpage-server-base";
+  /* sessionStorage by default: closing the tab forgets the code, which is the
+     right default for a code someone read out to you once. "Remember on this
+     device" moves it to localStorage. */
+  var SERVER_TOKEN_KEY = "splitpage-server-token";
+  /* Minted per launch by start.mjs, arrives in the URL fragment, lives only
+     as long as this tab. */
+  var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
+
+  var serverBase = "";
+  var serverToken = "";
+  var launchToken = "";
+
+  var serverMode = { available: false, readOnly: false, checked: false,
+                     authRequired: false, version: null };
   var serverDoc = { id: null, rev: 0 };   /* the hosted document we are editing */
   var serverIdentity = null;              /* { email, name } from Cloudflare Access */
   var serverSessionExpired = false;
@@ -33,17 +68,81 @@
     return e;
   }
 
+  /* ---- where the API is, and what we send with it ---- */
+
+  /* Always ends in a single slash so apiUrl() can just concatenate, and
+     always carries a scheme so a typed "192.168.1.20:8791" is not resolved
+     as a relative path. */
+  function normalizeServerBase(input) {
+    var url = String(input || "").trim();
+    if (!url) return "";
+    if (!/^https?:\/\//i.test(url)) url = "http://" + url;
+    return url.replace(/\/+$/, "") + "/";
+  }
+
+  function loadServerBase() {
+    try { serverBase = localStorage.getItem(SERVER_BASE_KEY) || ""; }
+    catch (e) { serverBase = ""; }   /* private browsing: same-origin only */
+  }
+
+  function setServerBase(input) {
+    serverBase = normalizeServerBase(input);
+    try {
+      if (serverBase) localStorage.setItem(SERVER_BASE_KEY, serverBase);
+      else localStorage.removeItem(SERVER_BASE_KEY);
+    } catch (e) { /* it just won't survive a reload */ }
+  }
+
+  function apiUrl(path) {
+    var rel = String(path || "").replace(/^\/+/, "");
+    return serverBase ? serverBase + rel : rel;
+  }
+
+  function loadServerToken() {
+    serverToken = "";
+    try { serverToken = sessionStorage.getItem(SERVER_TOKEN_KEY) || ""; } catch (e) {}
+    if (!serverToken) {
+      try { serverToken = localStorage.getItem(SERVER_TOKEN_KEY) || ""; } catch (e) {}
+    }
+  }
+
+  function setServerToken(token, remember) {
+    serverToken = String(token || "");
+    try {
+      sessionStorage.setItem(SERVER_TOKEN_KEY, serverToken);
+      if (remember) localStorage.setItem(SERVER_TOKEN_KEY, serverToken);
+      else localStorage.removeItem(SERVER_TOKEN_KEY);
+    } catch (e) { /* the token still works for this page's lifetime */ }
+  }
+
+  function clearServerToken() {
+    serverToken = "";
+    try { sessionStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
+    try { localStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
+  }
+
+  loadServerBase();
+  loadServerToken();
+
   async function apiFetch(path, opts) {
     opts = opts || {};
+    var headers = opts.body
+      ? { "Content-Type": "application/json", "Accept": "application/json" }
+      : { "Accept": "application/json" };
+    if (serverToken) headers["x-splitpage-token"] = serverToken;
     var res;
     try {
-      res = await fetch(path, {
+      res = await fetch(apiUrl(path), {
         method: opts.method || "GET",
-        headers: opts.body
-          ? { "Content-Type": "application/json", "Accept": "application/json" }
-          : { "Accept": "application/json" },
+        headers: headers,
         body: opts.body ? JSON.stringify(opts.body) : undefined,
-        credentials: "same-origin",
+        /* Same-origin keeps the Cloudflare Access cookie flowing, which is
+           the whole point of serving app and API together. Cross-origin it
+           is switched off deliberately: the token in the header is what
+           proves us there, and the server never answers with
+           Allow-Credentials, so asking for cookies would only turn a working
+           request into a CORS failure. */
+        credentials: serverBase ? "omit" : "same-origin",
         cache: "no-store"
       });
     } catch (e) {
@@ -59,7 +158,20 @@
          separate the two rather than calling everything an auth failure */
       var body403 = await res.json().catch(function () { return null; });
       if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
+      /* A missing or stale join PIN is nothing like a lapsed Access session:
+         it is answered right here by asking for the code, with no reload and
+         no stash. Kept as its own code so handleApiError() cannot confuse
+         the two. */
+      if (body403 && (body403.error === "pin-required" || body403.error === "bad-pin")) {
+        throw ApiError("pin", "this server asks for a join PIN");
+      }
       throw ApiError("auth", "signed out");
+    }
+    if (res.status === 429) {
+      var body429 = await res.json().catch(function () { return null; });
+      if (body429 && body429.error === "too-many-attempts") {
+        throw ApiError("pin-blocked", "too many wrong codes — wait a minute and try again");
+      }
     }
 
     var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
@@ -189,6 +301,18 @@
 
   function handleApiError(err, whatFailed) {
     if (err && err.code === "auth") { flagServerSessionExpired(); return; }
+    /* Never latches serverSessionExpired: the code is one dialog away, the
+       page does not have to reload to ask for it, and nothing needs stashing
+       because nothing was signed out. */
+    if (err && err.code === "pin") {
+      clearServerToken();
+      openPinDialog({ reason: "This server asks for a join PIN." });
+      return;
+    }
+    if (err && err.code === "pin-blocked") {
+      showToast("Too many wrong codes were tried — wait a minute, then try again.", "warn");
+      return;
+    }
     if (err && err.code === "read-only") {
       showToast("This server is published read-only — save a copy to your own disk instead.", "warn");
       return;
@@ -197,17 +321,46 @@
   }
 
   async function detectServer() {
-    if (location.protocol === "file:") { serverMode.checked = true; return; }
+    /* A saved base is tried first and is the reason a file:// page can have
+       a server at all: the old skip was "no http, no server", and that is
+       only still true when nobody has pointed this copy anywhere. */
+    if (!serverBase && location.protocol === "file:") { serverMode.checked = true; return; }
     try {
       var health = await apiFetch("api/health");
       serverMode.available = !!(health && health.ok);
       serverMode.readOnly = !!(health && health.readOnly);
+      serverMode.authRequired = !!(health && health.authRequired);
+      serverMode.version = (health && health.version) || null;
     } catch (e) {
       serverMode.available = false;
     }
     serverMode.checked = true;
-    if (!serverMode.available) return;
+    updateConnectMenu();
+    if (!serverMode.available) {
+      if (serverBase) {
+        showToast("Could not reach " + serverBase + " — use File ▸ Servers… to pick another, " +
+          "or go back to this copy.", "warn");
+      }
+      return;
+    }
 
+    /* The server wants a code and this browser has not been given one (or
+       the one it has is stale): ask before listing anything. Every route
+       past here would answer 401 anyway, and a picker full of "could not
+       reach the server" is a worse way to say "type the PIN". */
+    if (serverMode.authRequired && !serverToken) {
+      updateServerMenu();
+      openPinDialog({ reason: "This server asks for a join PIN before it will show you anything." });
+      return;
+    }
+
+    finishServerDetect();
+  }
+
+  /* Everything that only makes sense once we are actually allowed in. Split
+     out of detectServer() so the PIN dialog can call it on success without
+     re-probing health. */
+  async function finishServerDetect() {
     /* Access hands us a verified email; use it for attribution so reviewers
        don't have to introduce themselves, but never overwrite a name someone
        has deliberately set for themselves. */
@@ -421,6 +574,63 @@
     }
     showToast("Someone else kept saving while we merged — try Save again in a moment.", "warn");
     return false;
+  }
+
+  /* ---- the launcher's key ----
+
+     start.mjs mints one per launch and hands it over in the URL fragment,
+     which the browser never sends to a server and no proxy logs. Read it
+     once, keep it for this tab only, and take it out of the address bar so
+     it is not in a screenshot, a bookmark or a shared link.
+
+     It buys exactly one thing: the loopback-only /api/launcher/* routes,
+     which let the first-run wizard register this copy with Windows. Phase 4
+     calls launcherFetch(); this file's job is only to hold the key. */
+
+  function readLaunchToken() {
+    try { launchToken = sessionStorage.getItem(LAUNCH_TOKEN_KEY) || ""; } catch (e) { launchToken = ""; }
+    var hash = location.hash || "";
+    var m = /(?:^#|&)launch=([A-Za-z0-9]+)/.exec(hash);
+    if (!m) return;
+    launchToken = m[1];
+    try { sessionStorage.setItem(LAUNCH_TOKEN_KEY, launchToken); } catch (e) {}
+    /* Strip it, keeping any other fragment the URL carried. replaceState
+       leaves no history entry holding the old URL either. */
+    var rest = hash.replace(/(^#|&)launch=[A-Za-z0-9]+/, "$1").replace(/^#&/, "#");
+    if (rest === "#") rest = "";
+    try {
+      history.replaceState(null, "", location.pathname + location.search + rest);
+    } catch (e) { /* file:// in some browsers — the token is already stored */ }
+  }
+
+  readLaunchToken();
+
+  function hasLauncher() { return !!launchToken; }
+
+  /* Deliberately not apiFetch(): these routes are never on another origin
+     (the server refuses them off loopback), they carry a different header,
+     and a 404 from them means "not available here", not "signed out". */
+  async function launcherFetch(path, opts) {
+    opts = opts || {};
+    if (!launchToken) throw ApiError("no-launcher", "this copy was not started by the launcher");
+    var headers = { "Accept": "application/json", "x-splitpage-launch": launchToken };
+    if (opts.body) headers["Content-Type"] = "application/json";
+    var res;
+    try {
+      res = await fetch(String(path || "").replace(/^\/+/, ""), {
+        method: opts.method || "GET",
+        headers: headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+    } catch (e) {
+      throw ApiError("offline", "no answer from the launcher");
+    }
+    var body = await res.json().catch(function () { return null; });
+    if (res.status === 404) throw ApiError("no-launcher", "not available in this copy");
+    if (!res.ok) throw ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
+    return body;
   }
 
   /* ================= Google Drive file manager =================

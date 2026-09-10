@@ -62,6 +62,44 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/14-help.txt` | the in-app Help page: opens from the File menu, the TOC has more than 10 links and every href resolves inside `#help-body`, opening it closes the comments panel, Esc closes, and "Tagging reference" deep-links into the full guide |
 | `tests/15-tutorial.txt` | the 5-step coach-mark tour: opens from the File menu, Next/Back/Finish, Skip at several steps, a "Read more" link into Help, `#rows` byte-identical before and after, `splitpage-tour-done` set, and the card stays inside the viewport at a 375px phone width |
 | `tests/17-formats.txt` | the two project formats: `.splitpage` and `.md` round-trip the state exactly (tags, comment anchors, images, statuses, wpm, people), a hand-edited table cell wins for that cell and its tags re-attach, an added scene asks rather than guessing, a legacy `.html` still opens, the data fence never collides with content |
+| `tests/18-connect.txt` | the Servers dialog from the File menu, bookmarks persisting (and holding nothing credential-shaped), the SSH command, the join-PIN dialog's validation, `#launch=` stripped from the URL on load |
+
+## The server's own tests
+
+The harness serves static files from its own `HttpListener` and cannot start
+`server/server.js` with an environment, so everything that depends on
+`JOIN_PIN`, `ALLOW_ORIGINS` or `LAUNCH_TOKEN` is tested by a plain Node script
+instead. No dependencies, a few seconds, real servers on free ports:
+
+```bash
+node tools/test-server.mjs
+```
+
+Ends with `ALL PASS - 39/39 server checks` and exit 0. It covers the join PIN
+(open health, gated routes, wrong PIN, the rate limit, the right PIN), the CORS
+allowlist (including the literal `null` origin and static files never getting
+the headers), the 409 compare-and-set, and the launcher routes answering 404
+without the launch token and under `--host` **with** it. Run it after any
+change to `server/server.js`.
+
+### The join PIN end to end (a real server, by hand)
+
+The two automated halves never meet: `tools/test-server.mjs` has no browser and
+`18-connect.txt` has no server. To drive the whole thing, start a real one and
+point the driver at it with an absolute URL (`goto` accepts one):
+
+```bash
+node start.mjs --library --pin 4821 --no-open --port 8890 --data %TEMP%\pindata
+powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/driver.ps1 -Script check.txt -Port 8894 -CdpPort 9394
+```
+
+with `check.txt` doing `goto http://localhost:8890/index.html`, then: the PIN
+dialog appears on its own; `0000` is refused **in the dialog** with no reload
+and no token stored; `4821` closes it and puts a 64-character token in
+`sessionStorage` and nothing in `localStorage`; Put this script on the server
+and Open from the server… both then work. Run 2026-09-10: 12/13, the one
+failure being a wrong expectation in the check itself (the server menu entries
+appear as soon as health answers, before the PIN is accepted — deliberate).
 
 ## Ad-hoc driving
 
@@ -182,6 +220,16 @@ the app.
   `[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(...))`.
 - **Harmless console noise:** a 404 for `/favicon.ico`, and service-worker
   registration failures. Don't chase them.
+- **Two suites running at once (two worktrees, two agents) will break each
+  other.** The sweep below matches the `splitpage-edge-*` profile *glob*, not
+  one run's own profile, so a second run starting up kills the first run's
+  live browser and that suite dies mid-command with
+  `The WebSocket is in an invalid state ('Aborted')` — sometimes on the first
+  command, sometimes twenty commands in. It looks exactly like a real failure
+  and is not one: 02-production and 07-untagged both "failed" this way during
+  Phase 3 and both passed 20/20 and 25/25 when re-run alone. Separate ports
+  are not enough. Before believing an aborted suite, re-run it with `-Only`.
+
 - **Orphaned browsers.** `Start-Process` hands back Edge's launcher, which
   spawns the real browser tree and exits, so killing it alone left a browser
   behind per suite. Twenty of them piled up over one full run until a later
