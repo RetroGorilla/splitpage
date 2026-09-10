@@ -381,12 +381,19 @@ than being dropped.
 
 ## Working with other people (hosted)
 
-Splitpage can also run as a small server, so a script lives on the server
-rather than in a file on one person's disk. Collaborators open a link, sign in,
-and work on the same document you do. See **[DEPLOY.md](DEPLOY.md)** for how to
-set that up on Unraid behind a Cloudflare tunnel.
+When Splitpage runs as a server, a script lives on the server rather than in a
+file on one person's disk, and several people edit the same one. There are two
+ways to get there, and they are the same app underneath:
 
-When the app is served that way, three things appear:
+- **For an afternoon** — [host a shared session](#hosting-a-shared-session)
+  from your own machine. Nothing to set up, nothing to sign in to, and it stops
+  when you close the window.
+- **For good** — put it on your own domain, behind a Cloudflare tunnel and
+  Access, so collaborators sign in and the scripts outlive your laptop being
+  shut. That is **[DEPLOY.md](DEPLOY.md)**.
+
+Everything in this section applies to both. When the app is served, three
+things appear:
 
 - **File ▸ Put this script on the server** publishes what you have open. The
   chip beside the title changes to *On the server*, and Save publishes there
@@ -525,17 +532,52 @@ always works regardless.
 
 ## Files
 
-- `index.html` — the app. Fully self-contained; the only thing it fetches
-  is the Google Fonts stylesheet (falls back to system fonts if offline).
+**The app**
+
+- `index.html` — the whole app, and **a build output**: generated from `src/`
+  by `node build.mjs`, so edit the source, not this. It is self-contained on
+  purpose (a saved script is a copy of this page with your document inside
+  it); the only thing it fetches is the Google Fonts stylesheet, loaded so
+  that a slow or unreachable font server cannot stop the app starting.
+- `src/` — the source. `page.html` (the shell), `app.css`,
+  `seed-state.json` (the demo document), and `js/` — numbered fragments of
+  one script, concatenated in filename order.
+- `build.mjs` — inlines all of it back into `index.html`. `--check` says
+  whether the two are in step.
 - `manifest.webmanifest`, `icon.svg` — makes "Install app" possible.
 - `sw.js` — a small service worker so the app shell still opens offline
   once you've loaded it at least once while served over `http://`.
-- `start.ps1` / `start.bat` — a zero-install local static server (built on
-  .NET's `HttpListener` via PowerShell) so the page has a real origin.
-- `server/server.js`, `Dockerfile`, `docker-compose.yml` — the optional hosted
-  mode: a dependency-free Node server that serves the app and stores documents
-  as one JSON file each. Only needed if you want collaborators; see
-  [DEPLOY.md](DEPLOY.md).
+
+**Running it**
+
+- `start.mjs` — the launcher: serves the app, opens your browser, installs a
+  staged update, and with `--host` shares the session with your network.
+- `start.bat` / `start.sh` — the double-click and terminal ways in. `start.bat`
+  prefers the bundled runtime, then a Node on PATH, then `start.ps1`.
+- `start.ps1` — the zero-install fallback: a static server built on .NET's
+  `HttpListener`, for a machine with no Node. Serves the app; cannot host.
+- `update.mjs` — checks for a new version, verifies it, stages it. The
+  install happens at the next launch, never while the app is open.
+- `uninstall.mjs` / `uninstall.bat` / `uninstall.sh` — removes a portable
+  copy, and only the files the release shipped.
+
+**Packaging**
+
+- `package.mjs` — builds the portable zip, and with `--installer` the Windows
+  setup.exe. `VERSION` is the single source of the version number.
+- `installer/` — `install.ps1` and `uninstall.ps1` (the installer proper) and
+  `icon.ico` for the shortcuts.
+- `tools/fetch-runtime.mjs` — downloads and verifies the Node runtime that
+  ships inside the setup.exe.
+
+**Hosting for other people**
+
+- `server/server.js`, `Dockerfile`, `docker-compose.yml` — the hosted mode: a
+  dependency-free Node server that serves the app and stores documents as one
+  JSON file each. See [DEPLOY.md](DEPLOY.md).
+
+**Notes**
+
 - `HANDOFF.md` — developer notes: architecture, the invariants that keep the
   document from corrupting, how to test, and what is still unverified. Read it
-  before changing `index.html`.
+  before changing anything in `src/`.
