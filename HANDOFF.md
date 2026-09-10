@@ -30,9 +30,11 @@ breakdown for props/locations/cast/VFX/sound.
   `src/app.js`). If the page linked out to `app.css`/`app.js`, every saved
   `.splitpage.html` would be a shell that only works beside those files. That
   is why there is an inlining build step rather than plain `<script src>`.
-- Supporting files: `README.md`, `start.bat` / `start.ps1` (local server),
-  `manifest.webmanifest`, `icon.svg`, `sw.js` (PWA bits), `server/server.js`
-  + `Dockerfile` (hosted mode).
+- Supporting files: `README.md`, `start.mjs` + `start.bat` / `start.sh` /
+  `start.ps1` (local launcher), `manifest.webmanifest`, `icon.svg`, `sw.js`
+  (PWA bits), `server/server.js` + `Dockerfile` (hosted mode), and
+  `package.mjs` + `installer/splitpage.iss` (portable zip and Windows
+  setup.exe — the .iss has never been compiled, see §7).
 - It began life as a Claude artifact and was converted to run standalone. A few
   artifact-era assumptions may still lurk; stale user-facing wording about "the
   artifact" is a bug, not a quirk.
