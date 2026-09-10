@@ -1361,12 +1361,15 @@ cycle — all exercised in a real browser against the API contract.
   (`NODE_VERSION`). Bumping it is a deliberate act, so a release is
   reproducible; the download is verified against nodejs.org's SHASUMS256.txt,
   which guards a corrupt download rather than a compromised nodejs.org.
-- **The update path has never talked to GitHub.** `api.github.com` is blocked
-  from that container, so check/download/apply were driven end to end against
-  a local stand-in for the releases API (`SPLITPAGE_UPDATE_API`). The shapes
-  it relies on are `tag_name` and an `assets[].browser_download_url` ending
-  `.zip`. First real run should be `node update.mjs check` against a real
-  release.
+- **The update path fetches from a public mirror.** The main repository is
+  private, so release assets are published to `RetroGorilla/splitpage-releases`
+  and the shipped `.splitpage-release.json` manifest points there via
+  `release.json`. The API URL is resolved by `updateApiUrl()` in `update.mjs`
+  in priority order: `SPLITPAGE_UPDATE_API` env (for testing), `updateApi` from
+  the local manifest (if valid https URL), or the hard-coded default. Testing
+  with `node tools/test-update.mjs` covers the resolution precedence and backup
+  recovery logic (detecting a sentinel file that marks an interrupted apply,
+  restoring from backup first before proceeding fresh).
 - Touch devices. HTML5 drag-and-drop doesn't work on touch; the ↑/↓ buttons are
   the deliberate fallback.
 
@@ -1389,10 +1392,11 @@ from a Linux container:**
 3. **Confirm voice follow** over a real 2-minute read — still the oldest open
    loop, and still unverifiable in any sandbox because the microphone is
    blocked.
-4. **Point the updater at a real release.** `node update.mjs check` once a
-   GitHub release with a `splitpage-*.zip` asset exists. It has only ever
-   spoken to a local stand-in, since `api.github.com` was blocked where it was
-   written. It needs `tag_name` and an `assets[].browser_download_url`.
+4. **Point the updater at the mirror.** Create a release on
+   `RetroGorilla/splitpage-releases` with the assets from `node package.mjs
+   --installer --arch both`, tag it `v<version>`, then `node update.mjs check`
+   against the mirror. The update path is verifiable end-to-end once a mirror
+   release exists.
 
 **Pitched and accepted, already built:** runtime estimates, scene status, shoot
 order, find & replace, drag reorder.

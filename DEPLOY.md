@@ -269,7 +269,28 @@ live in the mounted volume, so they are unaffected.
 
 ---
 
-## 6. Troubleshooting
+## 6. Publishing a release to the mirror
+
+When it's time to cut a new release for users to update to:
+
+```bash
+node package.mjs --installer --arch both
+```
+
+On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
+
+1. **Create a new release** with tag `v<version>` (where `<version>` matches `VERSION` in the repo).
+2. **Upload the assets:**
+   - `dist/splitpage-<version>.zip` (the portable app)
+   - `dist/SplitpageSetup-<version>-x64.exe` (installer for x64)
+   - `dist/SplitpageSetup-<version>-arm64.exe` (installer for ARM64)
+3. **Publish the release.**
+
+Existing installations will check the mirror on startup and offer the update. The `release.json` file in the repo controls the mirror URL, so if you need to change where releases come from, update that file and the next build will point there.
+
+---
+
+## 7. Troubleshooting
 
 | Symptom | Cause |
 | --- | --- |

@@ -197,7 +197,9 @@ node update.mjs           # download and verify it
 ```
 
 The launcher also checks in the background, and the app shows a bar when
-there is something waiting.
+there is something waiting. Updates are fetched from a public releases mirror
+so the shipped copy can stay up to date even though the main repository is
+private.
 
 **Updates install on restart, never while the app is open.** Downloading is
 safe at any time; swapping out `index.html` under a browser that has it open
