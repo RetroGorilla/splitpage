@@ -210,125 +210,137 @@ console.log(`  ${zipPath}  (${kb(statSync(zipPath).size)})`);
 
 if (process.argv.includes("--installer")) {
   const { fetchRuntime } = await import("./tools/fetch-runtime.mjs");
-  const nodeExe = await fetchRuntime({ arch: "x64", log: (m) => console.log(m) });
 
-  /* The payload is the portable release plus the things only an installed
-     copy needs: the runtime, the icon the shortcuts point at, and the
-     uninstaller that Add/Remove Programs will call. */
-  const payloadEntries = [
-    ...ENTRIES,
-    ["runtime/node.exe", 0o755],
-    ["icon.ico", 0o644],
-    ["uninstall.ps1", 0o644]
-  ];
-  const extra = {
-    "runtime/node.exe": nodeExe,
-    "icon.ico": join(ROOT, "installer", "icon.ico"),
-    "uninstall.ps1": join(ROOT, "installer", "uninstall.ps1")
-  };
-  const payloadFile = (rel) => readFileSync(extra[rel] || join(STAGE, rel));
+  /* Parse --arch flag: x64 (default), arm64, or both */
+  const archArg = process.argv[process.argv.indexOf("--installer") + 1] === "--arch"
+    ? process.argv[process.argv.indexOf("--arch") + 1]
+    : "x64";
+  const archs = archArg === "both" ? ["x64", "arm64"] : [archArg];
 
-  /* The manifest has to describe THIS release, not the portable one. Ship the
-     portable list and an installed copy's uninstaller would walk past
-     runtime/node.exe and leave 87 MB behind. */
-  const payloadManifest = Buffer.from(JSON.stringify({
-    name: "Splitpage",
-    version: VERSION,
-    files: Object.fromEntries(
-      payloadEntries
-        .filter(([rel]) => rel !== MANIFEST_NAME)
-        .map(([rel, mode]) => [rel, { sha256: sha256(payloadFile(rel)), mode }])
-    )
-  }, null, 2) + "\n");
+  async function buildSetup(arch) {
+    /* The payload is the portable release plus the things only an installed
+       copy needs: the runtime(s), the icon the shortcuts point at, and the
+       uninstaller that Add/Remove Programs will call. */
+    const payloadEntries = [
+      ...ENTRIES,
+      ...archs.map((a) => [`runtime/node-${a}.exe`, 0o755]),
+      ["icon.ico", 0o644],
+      ["uninstall.ps1", 0o644]
+    ];
+    const extra = {};
+    for (const a of archs) {
+      extra[`runtime/node-${a}.exe`] = await fetchRuntime({ arch: a, log: () => {} });
+    }
+    extra["icon.ico"] = join(ROOT, "installer", "icon.ico");
+    extra["uninstall.ps1"] = join(ROOT, "installer", "uninstall.ps1");
 
-  const payload = makeZip(NAME, payloadEntries, (rel) =>
-    rel === MANIFEST_NAME ? payloadManifest : payloadFile(rel));
-  const payloadPath = join(DIST, "splitpage-payload.zip");
-  writeFileSync(payloadPath, payload);
-  console.log(`  payload: ${(payload.length / 1024 / 1024).toFixed(0)} MB (app + Node runtime)`);
+    const payloadFile = (rel) => readFileSync(extra[rel] || join(STAGE, rel));
 
-  /* install.ps1 with the version stamped in, so the wizard can name itself
-     before it has extracted anything. */
-  const installPs1 = join(DIST, "install.ps1");
-  writeFileSync(installPs1,
-    readFileSync(join(ROOT, "installer", "install.ps1"), "utf8").split("@VERSION@").join(VERSION));
+    /* The manifest has to describe THIS release, not the portable one. */
+    const payloadManifest = Buffer.from(JSON.stringify({
+      name: "Splitpage",
+      version: VERSION,
+      files: Object.fromEntries(
+        payloadEntries
+          .filter(([rel]) => rel !== MANIFEST_NAME)
+          .map(([rel, mode]) => [rel, { sha256: sha256(payloadFile(rel)), mode }])
+      )
+    }, null, 2) + "\n");
 
-  const setupPath = join(DIST, `SplitpageSetup-${VERSION}.exe`);
+    const payload = makeZip(NAME, payloadEntries, (rel) =>
+      rel === MANIFEST_NAME ? payloadManifest : payloadFile(rel));
+    const payloadPath = join(DIST, `splitpage-payload-${arch}.zip`);
+    writeFileSync(payloadPath, payload);
+    console.log(`  payload (${arch}): ${(payload.length / 1024 / 1024).toFixed(0)} MB`);
 
-  /* IExpress reads a "directive file". Paths must be absolute and Windows
-     -shaped; it flattens directories, which is exactly why the payload is a
-     single zip that install.ps1 expands rather than loose files. */
-  const win = (p) => p.split("/").join("\\");
-  const sed = [
-    "[Version]",
-    "Class=IEXPRESS",
-    "SEDVersion=3",
-    "[Options]",
-    "PackagePurpose=InstallApp",
-    /* 1 = show the window install.ps1 runs in. It is a console script that
-       asks where to install; with 0 IExpress ran it hidden and the prompt
-       could never be answered (found the first time the setup was run). */
-    "ShowInstallProgramWindow=1",
-    "HideExtractAnimation=1",
-    "UseLongFileName=1",
-    "InsideCompressed=0",
-    "CAB_FixedSize=0",
-    "CAB_ResvCodeSigning=0",
-    "RebootMode=N",
-    "InstallPrompt=%InstallPrompt%",
-    "DisplayLicense=%DisplayLicense%",
-    "FinishMessage=%FinishMessage%",
-    "TargetName=%TargetName%",
-    "FriendlyName=%FriendlyName%",
-    "AppLaunched=%AppLaunched%",
-    "PostInstallCmd=%PostInstallCmd%",
-    /* What runs for a silent install. IExpress has no /S: its quiet switches
-       are /Q (or /Q:U, per-user) and /Q:A (all users), and each runs one of
-       these instead of AppLaunched. A custom folder is /C: overriding the
-       command, e.g. /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\Splitpage". */
-    "AdminQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -AllUsers",
-    "UserQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent",
-    "SourceFiles=SourceFiles",
-    "[Strings]",
-    "InstallPrompt=",
-    "DisplayLicense=",
-    "FinishMessage=",
-    `TargetName=${win(setupPath)}`,
-    "FriendlyName=Splitpage Setup",
-    "AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1",
-    "PostInstallCmd=<None>",
-    "FILE0=\"install.ps1\"",
-    "FILE1=\"splitpage-payload.zip\"",
-    "[SourceFiles]",
-    "SourceFiles0=" + win(DIST),
-    "[SourceFiles0]",
-    "%FILE0%=",
-    "%FILE1%="
-  ].join("\r\n") + "\r\n";
+    /* install.ps1 with the version stamped in */
+    const installPs1 = join(DIST, `install-${arch}.ps1`);
+    writeFileSync(installPs1,
+      readFileSync(join(ROOT, "installer", "install.ps1"), "utf8").split("@VERSION@").join(VERSION));
 
-  const sedPath = join(DIST, "splitpage.SED");
-  writeFileSync(sedPath, sed);
+    const setupPath = join(DIST, `SplitpageSetup-${VERSION}-${arch}.exe`);
 
-  const res = spawnSync("iexpress", ["/N", win(sedPath)], { cwd: DIST, stdio: "inherit" });
-  if (res.error && res.error.code === "ENOENT") {
-    console.error(`
+    /* Build the SED for this architecture */
+    const win = (p) => p.split("/").join("\\");
+    const sed = [
+      "[Version]",
+      "Class=IEXPRESS",
+      "SEDVersion=3",
+      "[Options]",
+      "PackagePurpose=InstallApp",
+      "ShowInstallProgramWindow=1",
+      "HideExtractAnimation=1",
+      "UseLongFileName=1",
+      "InsideCompressed=0",
+      "CAB_FixedSize=0",
+      "CAB_ResvCodeSigning=0",
+      "RebootMode=N",
+      "InstallPrompt=%InstallPrompt%",
+      "DisplayLicense=%DisplayLicense%",
+      "FinishMessage=%FinishMessage%",
+      "TargetName=%TargetName%",
+      "FriendlyName=%FriendlyName%",
+      "AppLaunched=%AppLaunched%",
+      "PostInstallCmd=%PostInstallCmd%",
+      "AdminQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -AllUsers",
+      "UserQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent",
+      "SourceFiles=SourceFiles",
+      "[Strings]",
+      "InstallPrompt=",
+      "DisplayLicense=",
+      "FinishMessage=",
+      `TargetName=${win(setupPath)}`,
+      "FriendlyName=Splitpage Setup",
+      "AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1",
+      "PostInstallCmd=<None>",
+      `FILE0=\"install-${arch}.ps1\"`,
+      `FILE1=\"splitpage-payload-${arch}.zip\"`,
+      "[SourceFiles]",
+      "SourceFiles0=" + win(DIST),
+      "[SourceFiles0]",
+      "%FILE0%=",
+      "%FILE1%="
+    ].join("\r\n") + "\r\n";
+
+    const sedPath = join(DIST, `splitpage-${arch}.SED`);
+    writeFileSync(sedPath, sed);
+
+    const res = spawnSync("iexpress", ["/N", win(sedPath)], { cwd: DIST, stdio: "inherit" });
+    if (res.error && res.error.code === "ENOENT") {
+      console.error(`
   iexpress was not found, so no setup.exe was built.
 
   It ships with Windows — this is not something to install, it just means the
   build is not running on Windows. Everything it needs is already in dist/:
 
-      dist/install.ps1
-      dist/splitpage-payload.zip
-      dist/splitpage.SED
+      dist/install-${arch}.ps1
+      dist/splitpage-payload-${arch}.zip
+      dist/splitpage-${arch}.SED
 
-  On a Windows machine, run:  iexpress /N dist\\splitpage.SED`);
-    process.exit(1);
+  On a Windows machine, run:  iexpress /N dist\\splitpage-${arch}.SED`);
+      process.exit(1);
+    }
+    if (res.status !== 0) {
+      console.error("\n  IExpress failed — see the output above.");
+      process.exit(1);
+    }
+    console.log(`  ${setupPath}`);
+    return setupPath;
   }
-  if (res.status !== 0) {
-    console.error("\n  IExpress failed — see the output above.");
-    process.exit(1);
+
+  /* Build setup for each architecture */
+  const setupPaths = [];
+  for (const arch of archs) {
+    setupPaths.push(await buildSetup(arch));
   }
-  console.log(`  ${setupPath}`);
+
+  /* For x64, also create a copy without the arch suffix for backward compatibility */
+  if (archs.includes("x64")) {
+    const x64Path = setupPaths.find((p) => p.includes("-x64.exe"));
+    const noSuffixPath = join(DIST, `SplitpageSetup-${VERSION}.exe`);
+    cpSync(x64Path, noSuffixPath);
+    console.log(`  ${noSuffixPath} (copy of x64 for compatibility)`);
+  }
 }
 
 console.log(`\n  Unzip and run start.bat (Windows) or ./start.sh (macOS/Linux).\n`);

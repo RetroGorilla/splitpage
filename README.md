@@ -78,6 +78,10 @@ tells you the one command to finish on Windows.
 it falls back to a PowerShell file server that serves the app but cannot host
 a session.
 
+### Windows on ARM
+
+On Windows machines with ARM64 processors, build with `node package.mjs --installer --arch arm64` for an ARM64-only setup, or `--arch both` to bundle both architectures. The installer detects your machine's architecture and uses the matching runtime; for portable copies with both runtimes, `start.bat` picks the right one automatically.
+
 ## Hosting a shared session
 
 Pick **Splitpage (shared session)** in the Start Menu, or run:

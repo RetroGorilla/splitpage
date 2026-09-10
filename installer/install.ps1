@@ -122,6 +122,55 @@ try {
   $from = if ($inner) { $inner.FullName } else { $stage }
   Copy-Item (Join-Path $from "*") $target -Recurse -Force
 
+  # --- select the appropriate Node runtime --------------------------------
+  #
+  # After extraction, we have one or more runtime/node-<arch>.exe files.
+  # Pick the one for this machine's architecture, rename it to runtime/node.exe,
+  # and delete the others. Check both PROCESSOR_ARCHITECTURE (native) and
+  # PROCESSOR_ARCHITEW6432 (for 32-bit processes on 64-bit Windows).
+
+  $runtimeDir = Join-Path $target "runtime"
+  $procArch = $env:PROCESSOR_ARCHITECTURE
+  if ($env:PROCESSOR_ARCHITEW6432) { $procArch = $env:PROCESSOR_ARCHITEW6432 }
+
+  # Prefer ARM64 on ARM64 machines, else x64, else legacy node.exe
+  $selected = $null
+  if ($procArch -eq "ARM64" -and (Test-Path (Join-Path $runtimeDir "node-arm64.exe"))) {
+    $selected = "node-arm64.exe"
+  } elseif (Test-Path (Join-Path $runtimeDir "node-x64.exe")) {
+    $selected = "node-x64.exe"
+  } elseif (Test-Path (Join-Path $runtimeDir "node.exe")) {
+    $selected = "node.exe"
+  }
+
+  if ($selected -and $selected -ne "node.exe") {
+    # Rename the selected runtime to node.exe
+    $selectedPath = Join-Path $runtimeDir $selected
+    $targetPath = Join-Path $runtimeDir "node.exe"
+    Move-Item $selectedPath $targetPath -Force
+
+    # Delete all other architecture-specific runtimes
+    Get-Item (Join-Path $runtimeDir "node-*.exe") -ErrorAction SilentlyContinue | ForEach-Object {
+      Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+    # Update the manifest to reflect the selected runtime
+    $manifestPath = Join-Path $target ".splitpage-release.json"
+    if (Test-Path $manifestPath) {
+      $manifest = Get-Content $manifestPath | ConvertFrom-Json
+      $filesToRemove = @()
+      foreach ($file in ($manifest.files | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name)) {
+        if ($file -match "runtime/node-\w+\.exe" -and $file -ne "runtime/node.exe") {
+          $filesToRemove += $file
+        }
+      }
+      foreach ($file in $filesToRemove) {
+        $manifest.files.PSObject.Properties.Remove($file)
+      }
+      $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath
+    }
+  }
+
   # Copy-Item above only adds/overwrites - it never removes a file an
   # upgrade left behind. Mirror instead: anything in $target that isn't
   # in this release's payload gets removed, so reinstalling over an older
