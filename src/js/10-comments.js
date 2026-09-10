@@ -39,6 +39,7 @@
   function setCommentSortMode(mode) {
     commentSortMode = mode === "recent" ? "recent" : "position";
     try { localStorage.setItem(COMMENTS_SORT_KEY, commentSortMode); } catch (e) {}
+    captureReplyDrafts();
     renderComments();
   }
 
@@ -244,6 +245,11 @@
   function openCommentsPanel() {
     if (!state) return;
     openSidePanel("comments-panel");
+    /* closeCommentsPanel only hides the panel — an open reply composer with
+       unsaved typed text is still sitting there in the DOM. Capture it
+       before rebuilding comments-list's innerHTML, or reopening the panel
+       silently throws away whatever was mid-typing. */
+    captureReplyDrafts();
     renderComments();
   }
   function closeCommentsPanel() {
@@ -274,6 +280,16 @@
     queueAutoSave();
   }
 
+  /* deleteCommentArmId is the single source of truth for which delete
+     button is armed — commentCardHtml/conflictCardHtml render "Confirm?"
+     off it directly, rather than this function poking classList/textContent
+     on a DOM node it happens to have a reference to. That imperative poke
+     used to be the only place the armed look ever got applied, so any
+     unrelated re-render (a reply posted elsewhere, a resolve toggled on a
+     different card, even just reopening the panel) rebuilt the button back
+     to plain "Delete" while deleteCommentArmId stayed set — leaving the
+     very next click, which looked like the first, actually fire the
+     delete with no visible confirm step. */
   function armDeleteComment(btn, id) {
     if (deleteCommentArmId === id) {
       clearTimeout(deleteCommentArmTimer);
@@ -281,16 +297,14 @@
       deleteComment(id);
       return;
     }
-    document.querySelectorAll(".comment-actions .danger.armed").forEach(function (b) { b.classList.remove("armed"); b.textContent = "Delete"; });
     deleteCommentArmId = id;
-    btn.classList.add("armed");
-    btn.textContent = "Confirm?";
     clearTimeout(deleteCommentArmTimer);
     deleteCommentArmTimer = setTimeout(function () {
       deleteCommentArmId = null;
-      btn.classList.remove("armed");
-      btn.textContent = "Delete";
+      renderComments();
     }, 2800);
+    captureReplyDrafts();
+    renderComments();
   }
 
   function toggleReplyComposer(id) {
@@ -351,7 +365,7 @@
 
   function jumpToComment(cmtId) {
     var hideResolvedBox = document.getElementById("comments-hide-resolved");
-    if (hideResolvedBox.checked) { hideResolvedBox.checked = false; renderComments(); }
+    if (hideResolvedBox.checked) { hideResolvedBox.checked = false; captureReplyDrafts(); renderComments(); }
     openCommentsPanel();
     setTimeout(function () {
       var card = document.querySelector('.comment-card[data-id="' + safeId(cmtId, "c") + '"]');
@@ -422,7 +436,9 @@
         '<div class="comment-actions">' +
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Resolve") + '</button>' +
           (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
-          '<button type="button" class="danger" data-action="delete-comment" data-id="' + c.id + '">Delete</button>' +
+          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+            '" data-action="delete-comment" data-id="' + c.id + '">' +
+            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
         '</div>' +
       '</div>'
     );
@@ -444,7 +460,9 @@
         '<div class="comment-actions">' +
           '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
-          '<button type="button" class="danger" data-action="delete-comment" data-id="' + c.id + '">Delete</button>' +
+          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+            '" data-action="delete-comment" data-id="' + c.id + '">' +
+            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
         '</div>' +
       '</div>'
     );
