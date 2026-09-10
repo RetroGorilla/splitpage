@@ -383,7 +383,17 @@ async function handleStatic(req, res, url) {
     "Cache-Control": cache
   });
   if (req.method === "HEAD") { res.end(); return; }
-  fs.createReadStream(full).pipe(res);
+  /* Headers are already written above, so an error here can't be turned into
+     a clean 4xx/5xx — the best this can do is stop that one response instead
+     of taking the whole process down. With no listener, Node's default
+     behavior for an unhandled stream "error" is to throw, which crashes
+     every other request and every document being edited, not just this one. */
+  const stream = fs.createReadStream(full);
+  stream.on("error", (err) => {
+    console.error("[splitpage] static read error for " + full + ": " + (err && err.message));
+    res.destroy();
+  });
+  stream.pipe(res);
 }
 
 /* ---------- server ---------- */

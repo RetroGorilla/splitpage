@@ -120,8 +120,16 @@
   }
 
   /* Merge `mine` and `theirs`, both descended from `base`.
-     Anything that cannot be reconciled is preserved, never dropped. */
-  function mergeStates(base, mine, theirs) {
+     Anything that cannot be reconciled is preserved, never dropped.
+
+     imagesStripped: true when `mine`/`base` came from stashLocalWork()'s
+     oversized-document fallback, which replaces every visualImage with a
+     sentinel that migrateRows() (correctly — safeImageSrc only ever allows a
+     real data: URI through) turns back into null. That null is indistinguishable
+     from "no image", so the normal equality-based fast paths below would
+     silently conclude "unchanged" for a row that may well have had a real
+     image swapped in locally right before the stash — see mergeRow(). */
+  function mergeStates(base, mine, theirs, imagesStripped) {
     var conflicts = [];
     var stats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
@@ -135,6 +143,17 @@
       var tookMine = false;
       ROW_FIELDS.forEach(function (f) {
         var mv = m[f] || null, tv = t[f] || null, bv = b ? (b[f] || null) : null;
+        /* A stripped-and-restored visualImage is null whether or not it
+           really had an image — mv/bv equality here would be comparing two
+           unknowns, not two agreements. Skip straight to "can't reconcile"
+           whenever there's something on their side worth not silently
+           losing; if theirs is empty too, there is nothing to protect
+           either way, so let it fall through as an ordinary non-conflict. */
+        if (f === "visualImage" && imagesStripped && tv) {
+          out[f] = tv;
+          conflicts.push({ rowId: t.id, field: f, mine: null, theirs: tv });
+          return;
+        }
         if (mv === tv) return;
         if (b && mv === bv) { out[f] = tv; return; }          /* only they changed it */
         if (b && tv === bv) { out[f] = mv; tookMine = true; return; }  /* only I changed it */
