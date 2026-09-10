@@ -43,6 +43,10 @@ function appJs() {
 }
 
 const PARTS = [
+  /* Inline, not a line of its own: stamps the release into a <meta> so the
+     About box can name a version even on a file:// open, where there is no
+     launcher to ask. */
+  ["{{VERSION}}", () => readFileSync(join(ROOT, "VERSION"), "utf8")],
   ["/*{{APP_CSS}}*/", () => src("app.css")],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
   ["//{{APP_JS}}", appJs]

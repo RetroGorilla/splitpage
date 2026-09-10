@@ -19,6 +19,7 @@
  */
 
 import { deflateRawSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import {
   cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync
 } from "node:fs";
@@ -51,6 +52,10 @@ const FILES = [
   ["start.bat", 0o644],
   ["start.ps1", 0o644],
   ["start.sh", 0o755],
+  ["uninstall.mjs", 0o644],
+  ["uninstall.bat", 0o644],
+  ["uninstall.sh", 0o755],
+  ["update.mjs", 0o644],
   ["README.md", 0o644],
   ["VERSION", 0o644]
 ];
@@ -72,6 +77,29 @@ for (const [rel] of FILES) {
   mkdirSync(dirname(to), { recursive: true });
   cpSync(from, to);
 }
+
+/* ---------- release manifest ----------
+ *
+ * A record of exactly what this release consists of, shipped inside it. The
+ * uninstaller removes the files listed here and nothing else, so it can never
+ * take something the user put in the folder themselves; the updater compares
+ * these hashes to spot files you have hand-edited before it overwrites them.
+ */
+
+const MANIFEST_NAME = ".splitpage-release.json";
+const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+
+const manifest = {
+  name: "Splitpage",
+  version: VERSION,
+  files: Object.fromEntries(
+    FILES.map(([rel, mode]) => [rel, { sha256: sha256(readFileSync(join(STAGE, rel))), mode }])
+  )
+};
+writeFileSync(join(STAGE, MANIFEST_NAME), JSON.stringify(manifest, null, 2) + "\n");
+
+/* Everything that goes in the zip: the payload plus the manifest describing it. */
+const ENTRIES = [...FILES, [MANIFEST_NAME, 0o644]];
 
 /* ---------- zip ---------- */
 
@@ -101,7 +129,7 @@ const locals = [];
 const central = [];
 let offset = 0;
 
-for (const [rel, mode] of FILES) {
+for (const [rel, mode] of ENTRIES) {
   /* Zip paths are always forward-slashed, whatever the host OS. */
   const nameBuf = Buffer.from(`${NAME}/${rel.split(/[\\/]/).join("/")}`, "utf8");
   const raw = readFileSync(join(STAGE, rel));
@@ -155,8 +183,8 @@ const eocd = Buffer.alloc(22);
 eocd.writeUInt32LE(0x06054b50, 0);
 eocd.writeUInt16LE(0, 4);
 eocd.writeUInt16LE(0, 6);
-eocd.writeUInt16LE(FILES.length, 8);
-eocd.writeUInt16LE(FILES.length, 10);
+eocd.writeUInt16LE(ENTRIES.length, 8);
+eocd.writeUInt16LE(ENTRIES.length, 10);
 eocd.writeUInt32LE(centralBuf.length, 12);
 eocd.writeUInt32LE(offset, 16);
 eocd.writeUInt16LE(0, 20);

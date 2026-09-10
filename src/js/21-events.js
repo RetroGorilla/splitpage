@@ -534,6 +534,11 @@
        and everything below works identically either way. Deliberately not
        awaited — a slow or absent server must never delay the editor opening. */
     detectServer();
+    /* Same reasoning as detectServer: fire and forget, and silent when there
+       is no launcher to have written the file. */
+    loadUpdateStatus();
+    var updateDismiss = document.getElementById("update-bar-dismiss");
+    if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
     wireTouchSelection();
 
     /* On touch the ghost suggestion is a tap target (the Tab key it stands

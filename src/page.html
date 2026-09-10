@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
+<meta name="splitpage-version" content="{{VERSION}}">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#F6F4EC" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16130F" media="(prefers-color-scheme: dark)">
@@ -12,7 +13,17 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Loaded without blocking. A stylesheet still pending stops the browser
+     running ANY classic script after it, so an unreachable or slow
+     fonts.googleapis.com does not merely leave the page unstyled — it stops
+     the whole app from starting, which for something that advertises working
+     offline is the wrong failure. media="print" makes it non-render-blocking;
+     onload promotes it to the real stylesheet once it has actually arrived.
+     The <noscript> copy keeps the fonts for a scripting-disabled reader, who
+     has no app to block anyway. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
 /*{{APP_CSS}}*/
 </style>
@@ -83,6 +94,7 @@
           <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+          <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
         </div>
       </div>
       <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
@@ -104,6 +116,13 @@
     <button type="button" id="find-replace">Replace</button>
     <button type="button" id="find-replace-all">Replace all</button>
     <button type="button" class="notice-close" id="find-close" aria-label="Close find">×</button>
+  </div>
+
+  <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
+  <div class="update-bar" id="update-bar" hidden>
+    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <span id="update-bar-text"></span>
+    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
   </div>
 
   <div class="tagging-help" id="tagging-help" hidden>

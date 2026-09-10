@@ -63,6 +63,7 @@ was not. **Suspect the test before the code.**
 | Enter / Ctrl+Z appear to do nothing | `computer.key` often isn't recognised by the app's listeners. Dispatch a real `KeyboardEvent`, or call `document.execCommand` directly. |
 | A click does nothing on the 2nd element | Your `NodeList` went stale — panels re-render and replace their DOM wholesale. **Re-query after every action.** |
 | A CSS hover/transition assertion fails | `getComputedStyle` immediately after a class change returns the pre-transition value. Wait past the transition duration. |
+| **The app renders nothing and throws no error** | A *pending stylesheet blocks every classic script after it*. On a network that hangs (rather than refuses) `fonts.googleapis.com`, the Google Fonts `<link>` never settles, so `<script id="app-logic">` never runs — the page shows only its static HTML and `document.readyState` sticks at `"loading"`. Seeing the topbar therefore proves NOTHING: it is markup. Assert on `#rows` having children. Fixed in the page (the font link is `media="print"` + `onload`), but the same trap applies to any blocking resource you add. |
 | Focus jumps mid-batch | Editing `index.html` fires a hook that opens a stray `file://` preview tab. Close it, re-select the localhost tab. |
 
 **Permanently present, always harmless console errors:** `"An unknown error
@@ -1078,6 +1079,15 @@ cycle — all exercised in a real browser against the API contract.
   but a live read has never been done. **Ask Adam to confirm via `start.bat`.**
 - Firefox/Safari fallback paths (no File System Access API) are coded but
   untested; only Chromium was available.
+- **`installer/splitpage.iss` has never been compiled.** No Inno Setup and no
+  Windows in the container it was written in. The payload it wraps (the
+  staged release) is verified; the script that wraps it is not.
+- **The update path has never talked to GitHub.** `api.github.com` is blocked
+  from that container, so check/download/apply were driven end to end against
+  a local stand-in for the releases API (`SPLITPAGE_UPDATE_API`). The shapes
+  it relies on are `tag_name` and an `assets[].browser_download_url` ending
+  `.zip`. First real run should be `node update.mjs check` against a real
+  release.
 - Touch devices. HTML5 drag-and-drop doesn't work on touch; the ↑/↓ buttons are
   the deliberate fallback.
 
