@@ -497,7 +497,7 @@
 
   function handleFileMenuAction(action) {
     toggleFileMenu(false);
-    if (!state && action !== "history" && action !== "tagging-help") { showToast("Still loading…", "warn"); return; }
+    if (!state && action !== "history" && action !== "tagging-help" && action !== "about") { showToast("Still loading…", "warn"); return; }
     if (action === "save-as") saveDoc({ saveAs: true });
     else if (action === "open") openLocalFile();
     else if (action === "paste") openImportModal();
@@ -516,5 +516,6 @@
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
     else if (action === "tagging-help") showTaggingHelp();
+    else if (action === "about") showAbout();
   }
 

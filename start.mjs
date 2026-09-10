@@ -6,6 +6,7 @@
  *   node start.mjs --port 9000  use a different port
  *   node start.mjs --no-open    don't launch a browser
  *   node start.mjs --data DIR   where --library keeps documents
+ *   node start.mjs --no-update-check   skip the background update check
  *
  * WHY SERVE IT AT ALL, rather than just opening index.html?
  * Browsers only give a page installed-app status, a service worker (offline
@@ -26,6 +27,7 @@ import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platform } from "node:process";
+import { writeFileSync, readFileSync } from "node:fs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +50,11 @@ Splitpage launcher
   node start.mjs --no-open      don't launch a browser
   node start.mjs --data DIR     where --library keeps documents
                                 (default: ./data beside this script)
+  node start.mjs --no-update-check
+                                don't look for a new version in the background
+
+Updates install at launch and never while the app is open (see update.mjs):
+  node update.mjs   downloads one, and the next start puts it in place.
 `);
   process.exit(0);
 }
@@ -60,6 +67,26 @@ const WANTED_PORT = Number(valueOf("--port", 8791));
 if (!Number.isInteger(WANTED_PORT) || WANTED_PORT < 1 || WANTED_PORT > 65535) {
   console.error("--port must be a number between 1 and 65535");
   process.exit(1);
+}
+
+/* ---------- install anything update.mjs staged ----------
+ *
+ * Here, before the server starts and before a browser has the app open: this
+ * is the one moment when replacing index.html is safe. update.mjs only ever
+ * downloads and verifies; the swap happens exactly here.
+ */
+
+let applied = null;
+if (existsSync(join(ROOT, "update.mjs"))) {
+  try {
+    const updater = await import("./update.mjs");
+    applied = updater.apply({ log: (m) => console.log(m) });
+  } catch (err) {
+    /* A failed update rolls itself back, so the old version is still intact
+       and the right thing to do is start it and say what happened. */
+    console.error(`  update could not be installed: ${err.message}`);
+    console.error("  starting the version you already had.");
+  }
 }
 
 /* ---------- build, if this is a source checkout ---------- */
@@ -100,6 +127,80 @@ if (!(await isFree(port))) {
 }
 if (port !== WANTED_PORT) {
   console.log(`Port ${WANTED_PORT} was busy — using ${port} instead.`);
+}
+
+/* ---------- tell the app where it stands ----------
+ *
+ * A plain file the page fetches. The app can then show "an update is ready"
+ * without this process growing an HTTP route that installs things — which,
+ * on an unauthenticated localhost server, would be reachable from any other
+ * page in the browser.
+ */
+
+const STATUS_FILE = join(ROOT, "update-status.json");
+
+let updater = null;
+try { updater = await import("./update.mjs"); } catch { /* a release without it */ }
+
+function readVersion() {
+  try { return readFileSync(join(ROOT, "VERSION"), "utf8").trim(); } catch { return null; }
+}
+
+function readStatus() {
+  try { return JSON.parse(readFileSync(STATUS_FILE, "utf8")); } catch { return {}; }
+}
+
+function writeStatus(extra) {
+  const previous = readStatus();
+  const version = readVersion();
+  /* Carry forward what the last run learned. Starting from a blank slate
+     every launch would hide a known update whenever the check is skipped
+     (--no-update-check) or fails (offline) — which is exactly when the file
+     is the only thing that still knows. updateAvailable is recomputed rather
+     than carried, so it goes false by itself once the update is installed. */
+  const latest = extra.latest !== undefined ? extra.latest : (previous.latest ?? null);
+  const status = {
+    version,
+    checkedAt: new Date().toISOString(),
+    latest,
+    updateAvailable: !!latest && !!version && updater
+      ? updater.compareVersions(latest, version) > 0
+      : false,
+    ...extra,
+    /* ...but never let a stale updateAvailable from `extra` win over the
+       recomputation above when the versions say otherwise. */
+    ...(extra.updateAvailable === undefined ? {} : { updateAvailable: extra.updateAvailable })
+  };
+  if (status.latest && version && updater && updater.compareVersions(status.latest, version) <= 0) {
+    status.updateAvailable = false;
+  }
+  try { writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2) + "\n"); } catch { /* read-only dir */ }
+}
+
+writeStatus({ pending: updater ? updater.pending() : null, justUpdated: applied });
+
+/* Deliberately not awaited: a slow or unreachable update server must never
+   delay the app opening. Whatever it finds lands in the file, and the page
+   picks it up on this load or the next one. */
+if (!has("--no-update-check") && updater) {
+  (async () => {
+    try {
+      const res = await fetch(process.env.SPLITPAGE_UPDATE_API
+        || "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest",
+        { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-launcher" } });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const body = await res.json();
+      const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
+      const current = readVersion() || "0.0.0";
+      writeStatus({
+        latest,
+        updateAvailable: !!latest && updater.compareVersions(latest, current) > 0,
+        pending: updater.pending()
+      });
+    } catch (err) {
+      writeStatus({ error: err.message, pending: updater.pending() });
+    }
+  })();
 }
 
 /* ---------- run the server ---------- */

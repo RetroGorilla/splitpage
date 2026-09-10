@@ -62,9 +62,34 @@ PowerShell server when Node is absent, which is enough to serve the app so
 the browser will offer **Install app** and give the teleprompter a microphone.
 With Node you also get `--library` and a rebuild on launch.
 
-Uninstalling never touches your scripts. In the default mode they are files
-you saved wherever you chose; in library mode they are left where they are on
-purpose.
+## Uninstalling
+
+The setup.exe registers itself, so remove it from **Add/Remove Programs** —
+that clears the Start Menu entry too.
+
+For the portable copy, run **`uninstall.bat`** (Windows) or **`./uninstall.sh`**,
+which removes exactly the files the release shipped and lists anything else it
+found so you can see what it is leaving behind. Your scripts are never touched:
+saved `.html` files and the `data/` folder both survive, and it tells you they
+did. `--dry-run` shows what would go without doing it.
+
+## Keeping it up to date
+
+```
+node update.mjs check     # is there a newer version?
+node update.mjs           # download and verify it
+```
+
+The launcher also checks in the background, and the app shows a bar when
+there is something waiting.
+
+**Updates install on restart, never while the app is open.** Downloading is
+safe at any time; swapping out `index.html` under a browser that has it open
+is not. So `update.mjs` only downloads, checks every file against the new
+release's own checksums, and stages it — and `start.bat` puts it in place the
+next time you launch, before it serves anything. If an update fails halfway it
+rolls back to the copy it made, and if you have hand-edited any of the app's
+files it refuses to overwrite them until you say `--force`.
 
 ## Working on the code
 

@@ -2020,3 +2020,32 @@
   @media (prefers-reduced-motion: reduce) {
     .toast { animation: none; }
   }
+
+/* ---- update notice ----
+   Sits above the columns rather than floating: it is information, not an
+   interruption, and there is nothing to act on until the next restart. */
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule, #d8d2c4);
+  border-left: 3px solid #1B7A68;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+}
+.update-bar-icon { color: #1B7A68; font-size: 14px; }
+.update-bar-dismiss {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  color: inherit;
+  opacity: .55;
+}
+.update-bar-dismiss:hover { opacity: 1; }
