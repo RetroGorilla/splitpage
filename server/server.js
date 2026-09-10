@@ -706,7 +706,12 @@ async function handleStatic(req, res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
-  const isApi = !NO_API && url.pathname.startsWith("/api/");
+  /* The launcher route is the one piece of API a static-only (NO_API) copy
+     still answers: it is what lets the app the launcher just opened offer to
+     add itself to the Start Menu. It is gated by the per-launch token and the
+     loopback bind, never by NO_API - see launcherAllowed(). */
+  const isLauncher = url.pathname.startsWith("/api/launcher/");
+  const isApi = (!NO_API || isLauncher) && url.pathname.startsWith("/api/");
 
   /* CORS belongs to the API and only to the API. Static files stay
      same-origin whatever ALLOW_ORIGINS says: a page on another origin has no
