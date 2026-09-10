@@ -1021,9 +1021,42 @@ has.
     passphrase, because Splitpage is not a credential store and has nowhere
     safe to be one.
 
-*(#28–#30 are reserved by the first-time-experience plan for the join PIN,
-the launcher endpoint and the pristine-seed gate, and are not written yet.
-The two below keep their planned numbers so references to them stay true.)*
+30. **The first-run setup wizard may only appear over a genuinely pristine
+    copy of the app — the demo document, never shown.** `build.mjs` stamps
+    `<meta name="splitpage-seed-check" content="<length>-<checksum>">` in
+    `<head>`, computed from `src/seed-state.json` by a cheap synchronous
+    checksum (`checksumText()` — the same mixing step as FNV-1a, but run
+    over a JS string's own UTF-16 code units rather than bytes, since the
+    two copies of it — one in `build.mjs` at build time, one in
+    `20b-onboarding.js` at runtime — only ever need to agree with each
+    other, and both are plain JS strings with no encoding to get wrong; no
+    `crypto.subtle`, because that is async and this gate has to run
+    synchronously at boot, before the first paint could flash the wizard
+    open and shut). `seedCheckPasses()` recomputes the same value against
+    the *live* `#state-data` element and compares it to the meta tag. Phase
+    2 means opening a `.md` or `.splitpage` never re-embeds the document
+    into the page at all, so on a served or installed copy the only way
+    `#state-data` can still read as the seed is that nothing has replaced
+    it — this is the same thing `.githooks/pre-commit`'s demo-state check
+    refuses to let into a commit, checked here at runtime instead. A legacy
+    `.html` someone mails around still carries a real `#state-data` of its
+    own, so the gate keeps working for that case even though Phase 2 saves
+    never produce one again.
+
+    The gate is necessary but not sufficient: the wizard also stays hidden
+    once `localStorage["splitpage-onboarding"]` has ever been written (both
+    Skip and Finish write it, so neither path shows it again), and it must
+    never appear over a document that is about to load — a hosted document
+    (`serverDoc.id`), a project already opened this load
+    (`docFileHandle.kind`, set the moment `openProjectFile()` /
+    `adoptProjectState()` runs), or a remembered file handle in IndexedDB
+    that `tryResumeLastProject()` (`21-events.js`) is either about to
+    reopen outright or about to offer to reopen via the resume banner —
+    a handle existing at all is treated as "this browser already has a
+    project", regardless of which of those two outcomes follows. File ▸
+    "Set up Splitpage…" bypasses all of this deliberately: reopening the
+    wizard on purpose should always work, on any document, and must never
+    touch the key that keeps it from auto-showing again.
 
 31. **A `.splitpage` file is exactly `migrateRows(state)` — nothing wraps,
     renames or adds fields on the way to disk** (§3.1, §4). The moment a
@@ -1079,14 +1112,30 @@ line-number table this replaced, they do not drift as you edit.
 | `19-writer.js` | 477 | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | 460 | teleprompter and voice follow |
 | `20a-update.js` | 87 | the update notice and About box |
+| `20b-onboarding.js` | — | the first-run setup **wizard** (`openOnboarding`), the pristine-seed gate (`seedCheckPasses`, invariant #30) — see below |
 | `20c-help.js` | — | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
 | `20d-formats.js` | 266 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
 | `20e-connect.js` | 430 | the join-PIN dialog, server bookmarks, the SSH helper |
 | `21-events.js` | 1214 | all event wiring, `init()`, closes the IIFE |
 
+**`20b-onboarding.js` stamps and checks the pristine-seed gate.**
+`build.mjs` computes `<meta name="splitpage-seed-check">` from
+`src/seed-state.json` via `checksumText()`/`seedCheckValue()` (next to
+`slugify()`); `20b-onboarding.js` carries its own copy of the same
+`checksumText()` and calls it `seedCheckPasses()` at runtime, against the
+live `#state-data` element. See invariant #30 for what the two are for and
+why they never need to agree on an encoding to agree with each other.
+`20e-connect.js` gained one function for this wizard's Join-a-server step,
+`addServerBookmark(name, url, opts)` — the one exception to "the wizard may
+only edit `20b-onboarding.js`", added because duplicating
+`addBookmarkFromForm()`'s join-then-save logic there would have been a
+second copy that could drift from this one; nothing else in that file
+changed.
+
 Phase 5 added the in-app Help page and the tutorial without touching
 `21-events.js`, which is worth understanding if you add a sixth thing the
-same way:
+same way — `20b-onboarding.js` follows the same two rules (wires itself,
+capture-phase File-menu listener) rather than repeating them below:
 
 - **`20c-help.js` wires itself, not through `init()`.** Every other fragment
   registers its listeners from `init()` (`21-events.js`), which runs on
@@ -1128,6 +1177,53 @@ editing `handleFileMenuAction()` to reach forwards into a later fragment), and
 it keeps everything about connecting to a server in one file. A second feature
 wanting the same trick should think twice — two capture listeners racing for
 the same element is how this gets confusing.
+
+**`20b-onboarding.js`'s capture listener on `#file-menu` matches every
+action, not just its own.** It registers before `20c-help.js`'s and
+`20e-connect.js`'s (alphabetical fragment order), and on *any*
+`[data-file-action]` click it closes the wizard first — without writing the
+key, so it shows again on the next pristine load — before falling through
+to whichever action was actually chosen. Help and the tour are the only
+other full-screen modals in the app, and both only ever open from this same
+menu, so this is the one place that can guarantee invariant #19's "never
+two full-screen modals open at once": without it, opening Help while the
+wizard is still up left two modals live together, each with its own Escape
+listener, racing over which one Escape actually closed (this is what broke
+`14-help.txt` while this fragment was being built). A real mouse click can
+never trigger the conflict on its own — the wizard's backdrop sits over the
+File button, so a genuine click cannot reach it — but a test's `jsclick`
+(`.click()`, no hit-testing) or a keyboard user tabbing to the button can,
+which is exactly the case this covers.
+
+**The wizard's own Escape and Tab handling had to learn NOT to act like
+Help's and Connect's.** Both of those add their Escape listener in the
+capture phase and stop it there — safe for them because neither ever
+auto-opens, so nothing else is competing for that Escape at the moment they
+are up. The wizard is the one modal that opens over an otherwise-idle app
+on its own, which means it can be sitting open, unnoticed, for an entire
+unrelated test suite. A first version copied that same capture-phase
+`stopPropagation()` pattern and broke `07-untagged.txt`: the wizard's
+listener on `window` ran before the event ever reached `#rows`, where the
+untagged-mention suggestion's own Escape handler lives, so pressing Escape
+to dismiss that suggestion silently closed the wizard in the background
+instead and the suggestion never got the key at all. The fix is to listen
+in the bubble phase and never call `stopPropagation()` — the wizard only
+ever acts once nothing closer to the actual target has already claimed the
+key, which in practice means focus really was inside it. The same reasoning
+ruled out a document-wide "steal focus back" trap for Tab: unlike Help's
+modal (never auto-open, nothing else legitimately wants focus while it's
+up), a reactive focusin trap here fights anything on the page that focuses
+itself while the wizard happens to be open in the background — a test's
+`caret` on a script cell included, which is the *other* way
+`07-untagged.txt` broke (typing still landed, via the Selection API, but
+real DOM focus had been dragged onto the wizard's own close button, so the
+suggestion's Escape handler on `#rows` never saw the keydown that followed
+because it never bubbles through an element it isn't a descendant of).
+Invariant #19 ("owns focus, not just the pixels") is met here instead by
+placing focus inside the wizard the moment it opens and trapping Tab so it
+cannot walk a keyboard user out the back of it — the backdrop's own CSS
+already stops a real click from reaching anything behind it, so a
+keyboard-only Tab trap is the one piece worth adding.
 
 `src/page.html` is the shell — topbar, File menu, modals, and the three build
 markers. `src/app.css` is everything visual. `src/seed-state.json` is the one
@@ -1292,6 +1388,30 @@ different scenes, same-field conflict raised and preserved as a comment,
 lapsed-session detection, and the full sign-out → reload → resume-and-merge
 cycle — all exercised in a real browser against the API contract.
 
+The first-run setup wizard (2026-09-10): `tests/13-onboarding.txt`. Shows on
+its own over a fresh profile with no key set, stays hidden once
+`splitpage-onboarding` is written, Next/Back walks all 4 steps, step 2 falls
+back to plain instructions when `api/launcher/info` 404s (the harness is not
+the launcher), Skip writes the key with `skipped:true` and the wizard stays
+hidden across a reload, File ▸ Set up Splitpage… reopens it without clearing
+that key, Esc skips, and `#rows` is checked byte-identical after every one of
+the above (invariant #17). The pristine-seed gate (`seedCheckPasses()`,
+invariant #30) is checked directly: true against the shipped `#state-data`,
+false the moment its text no longer matches. Confirmed alongside this: the
+whole regression suite still passes with the wizard auto-showing on a fresh
+profile — two real interactions it broke along the way, both caught by
+suites that have nothing to do with onboarding and both explained in §6:
+opening another File-menu modal while the wizard was still up (`14-help.txt`,
+fixed by making every File-menu click close the wizard first) and the
+wizard's own Escape/focus handling swallowing a keystroke meant for
+something else on the page while it sat open in the background
+(`07-untagged.txt`, fixed by moving Escape to the bubble phase and trapping
+Tab instead of focusin). Both are why the full suite, not just
+`13-onboarding.txt`, is the real test of a feature that auto-opens over an
+otherwise-idle app. And `.githooks/pre-commit`'s demo-state check still
+passes with the new `<meta name="splitpage-seed-check">` in `<head>`, since
+that check only ever looks at the `#state-data` line.
+
 ### NOT verified — say so, don't imply otherwise
 
 - **The ARM64 setup.** `node package.mjs --installer --arch arm64` builds `SplitpageSetup-<v>-arm64.exe` with the win-arm64 Node (verified against nodejs.org checksums), and install.ps1 picks the runtime by `PROCESSOR_ARCHITECTURE`, but there is no ARM64 Windows machine here: it has never been run. The x64 setup from the same code has.
@@ -1336,6 +1456,16 @@ cycle — all exercised in a real browser against the API contract.
   Adam's say-so first). The client-side dialogs are covered by
   `tests/18-connect.txt`, but only against a static harness — no dialog in that
   suite has ever received a real 401 from a real server.
+- **The wizard's "Add to Start Menu" button has never actually been clicked.**
+  `tests/13-onboarding.txt` proves the *other* branch of step 2 — the harness
+  is not the launcher, so `api/launcher/info` 404s and the plain-instructions
+  copy renders — but the button only appears when `launchToken` is set (a
+  real launch via `start.mjs`, on loopback), which no headless suite can be.
+  `registerLauncher()` (`20b-onboarding.js`) is a thin wrapper around
+  `launcherFetch("api/launcher/register", {method:"POST"})`, the same call
+  the "not happened" item above already flags — one real click, from a
+  launcher-served copy, is still owed, and it needs Adam's say-so the same
+  way installing the `.exe` does.
 - **Cloudflare Access has never been in the loop.** The identity header and the
   lapsed-session path were tested by simulating what Access sends (an email
   header, and an HTML sign-in page where JSON was expected). The real thing may

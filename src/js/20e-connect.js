@@ -306,6 +306,32 @@
     showToast("Saved " + bookmark.name + ".", "ok");
   }
 
+  /* The one exception to "the setup wizard may only edit 20b-onboarding.js":
+     its Join-a-server step needs exactly this bookmark-saving path — join
+     first if a PIN was given, then save — and duplicating it there would be
+     a second copy of addBookmarkFromForm() that could drift from this one.
+     Same behaviour, plain arguments instead of the Servers dialog's own
+     inputs; nothing here reads or writes DOM. `opts`: { pin, remember }. */
+  async function addServerBookmark(name, url, opts) {
+    opts = opts || {};
+    var base = normalizeServerBase(url);
+    if (!base) return { ok: false, error: "no-url" };
+    var joined = null;
+    if (opts.pin) {
+      joined = await joinServer(base, opts.pin);
+      if (!joined.ok) return joined;
+    }
+    var bookmark = { id: newBookmarkId(), name: (name || "").trim() || shortHost(base), url: base };
+    serverBookmarks.push(bookmark);
+    saveBookmarks();
+    updateConnectMenu();
+    if (joined && joined.ok) {
+      setServerToken(joined.token, !!opts.remember);
+      await useServer(bookmark);
+    }
+    return { ok: true, bookmark: bookmark, joined: !!(joined && joined.ok) };
+  }
+
   /* One token at a time, for whichever server is current: pointing the app
      somewhere else always means proving yourself there again. */
   async function useServer(bookmark) {
