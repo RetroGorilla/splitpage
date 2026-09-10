@@ -1,0 +1,74 @@
+[
+  {
+    "file": "installer/install.ps1",
+    "line": 117,
+    "severity": "medium",
+    "summary": "Extraction picks only the first top-level directory in the expanded zip with Select-Object -First 1 and never checks that exactly one directory exists, so a deviant zip layout silently ships a partial install.",
+    "refuted": true,
+    "reasoning": "package.mjs's makeZip() is the only path that builds splitpage-payload.zip, and it writes every entry under a single hardcoded '${NAME}/' prefix, so the zip is guaranteed to always contain exactly one top-level directory; the described deviation is unreachable through the actual release pipeline."
+  },
+  {
+    "file": ".githooks/pre-commit",
+    "line": 23,
+    "severity": "medium",
+    "summary": "The build-drift trigger only fires on changes to index.html, src/ or build.mjs; a commit that bumps only VERSION skips the drift check even though VERSION is a build input.",
+    "refuted": false,
+    "reasoning": "build.mjs line 49 confirms VERSION is read and spliced into '{{VERSION}}' in the built output, but the pre-commit grep pattern '^(index\\.html|src/|build\\.mjs)' does not match a change to the top-level VERSION file, so a VERSION-only commit bypasses the drift check exactly as described."
+  },
+  {
+    "file": "installer/uninstall.ps1",
+    "line": 53,
+    "severity": "low",
+    "summary": "Uninstall always attempts to delete both HKCU and HKLM uninstall-registry keys with errors suppressed, so a non-elevated run against an all-users install silently fails to remove the HKLM entry.",
+    "refuted": false,
+    "reasoning": "Lines 53-56 confirm the foreach over @(\"HKCU:\", \"HKLM:\") unconditionally calls Remove-Item -ErrorAction SilentlyContinue with no admin check or success reporting, matching the claim exactly."
+  },
+  {
+    "file": "installer/uninstall.ps1",
+    "line": 63,
+    "severity": "low",
+    "summary": "The script unconditionally prints 'Removed.' right after merely launching the detached folder-delete command, with no check that the deferred rmdir actually succeeded.",
+    "refuted": false,
+    "reasoning": "Line 61 starts a detached cmd.exe process for the delayed rmdir and returns immediately; lines 63-68 then print 'Removed.' unconditionally with no wait or exit-code check, exactly as claimed."
+  },
+  {
+    "file": "installer/install.ps1",
+    "line": 121,
+    "severity": "low",
+    "summary": "Copy-Item only overlays the new payload onto an existing target and never removes files from a previous install, so reinstalling to the same directory accumulates stale files indefinitely.",
+    "refuted": false,
+    "reasoning": "Line 121's Copy-Item (Join-Path $from \"*\") $target -Recurse -Force only copies/overwrites; there is no prior cleanup or mirroring step for $target, so files removed between versions would persist across an in-place reinstall as described."
+  },
+  {
+    "file": "src/app.css",
+    "line": 1344,
+    "severity": "medium",
+    "summary": "'.tag-badge''s teal background on the Production/Gear count badges is always overridden by the later, equal-specificity '.comments-badge' rule, so both badges render in the danger red color instead of teal.",
+    "refuted": false,
+    "reasoning": "app.css:699 sets '.tag-badge { background: var(--visual); }' and app.css:1344-1358 sets '.comments-badge { ... background: var(--danger); ... }' later in the file at equal specificity; page.html:104-105 confirms production-badge and gear-badge both carry class=\"comments-badge tag-badge\", so per CSS cascade order the danger-red background wins."
+  },
+  {
+    "file": "src/app.css",
+    "line": 549,
+    "severity": "low",
+    "summary": "'.drive-panel''s max-width: 640px is always overridden by the later, equal-specificity '.modal-panel' rule's max-width: 560px, so the Google Drive modal never gets its extra width.",
+    "refuted": false,
+    "reasoning": "app.css:549 sets '.drive-panel { max-width: 640px; }' and app.css:617-627 sets '.modal-panel { ... max-width: 560px; ... }' later in the file at equal specificity; page.html:466 confirms the dialog element has class=\"modal-panel drive-panel\", so the later rule's 560px wins over the intended 640px."
+  },
+  {
+    "file": "src/app.css",
+    "line": 1203,
+    "severity": "medium",
+    "summary": "'.notice-merge.notice-warn' is styled to flag a merge banner as urgent when a merge had real conflicts, but no JS ever adds the 'notice-warn' class, so a data-losing merge always looks like an ordinary clean merge.",
+    "refuted": false,
+    "reasoning": "Grepping all of src/js/*.js for 'notice-warn' returns zero hits, and reportMerge() in src/js/03-sync.js:512-544 (including its conflicts branch at line 528) only sets textContent and toggles the hidden attribute on #merge-summary/#merge-review/#merge-banner, never adding a severity class, confirming the CSS rule is dead."
+  },
+  {
+    "file": "src/page.html",
+    "line": 165,
+    "severity": "medium",
+    "summary": "The #readonly-banner notice is never referenced by id anywhere in src/js, so nothing ever clears its hidden attribute and it can never be shown to a user.",
+    "refuted": false,
+    "reasoning": "Grepping src/js for 'readonly-banner' returns zero hits, and the only readOnly-related logic in src/js/13-hosted.js (lines 168, 198, 244, 279) disables the New button and shows a one-off toast via showToast(), never touching the #readonly-banner element, confirming it is dead/unreachable."
+  }
+]
