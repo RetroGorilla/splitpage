@@ -1,0 +1,60 @@
+# On-disk conflict check for project saves (.md/.splitpage).
+#
+# saveBackToFile() (the import re-save path) has always refused to overwrite
+# a file that changed on disk since it was opened. This extends the same
+# guard to saveDoc() (14-export.js) for a document opened from or saved to a
+# docFileHandle. No real file picker can run headless, so this drives
+# window.__splitpageFormats' openFile()/save() hooks (20d-formats.js) with a
+# fake FileSystemFileHandle-shaped object — name, getFile(), createWritable()
+# — the same shape a real handle from showOpenFilePicker has.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;return typeof F.save === 'function';})()
+expect true
+
+# a fake handle whose reported mtime we can move at will, and a counter for
+# whether a write actually happened
+eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__written = 0;window.__fakeHandle = {name:'conflict.md',_mtime: window.__t0,createWritable: async function(){window.__written++;return {write: async function(){}, close: async function(){}};},getFile: async function(){return new File([window.__md],'conflict.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
+
+eval (function(){var f = new File([window.__md],'conflict.md',{type:'text/markdown', lastModified: window.__t0});return F.openFile(f, window.__fakeHandle);})()
+wait F.docFile().kind === 'md'
+expect F.docFile().name === 'conflict.md'
+expect F.docFile().lastModified === window.__t0
+
+# --- a plain Save with nothing changed on disk writes straight through -----
+eval (function(){F.save();return true;})()
+wait window.__written === 1
+expect document.getElementById('file-conflict-modal').hidden
+
+# --- something else touches the file between opens ------------------------
+eval (function(){window.__fakeHandle._mtime = window.__t0 + 200000;return true;})()
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+expect document.getElementById('file-conflict-detail').textContent.indexOf('conflict.md') !== -1
+expect window.__written === 1
+
+# Cancel: nothing written, nothing adopted
+click #file-conflict-cancel
+wait document.getElementById('file-conflict-modal').hidden
+expect window.__written === 1
+expect F.docFile().lastModified === window.__t0
+
+# --- "Load the newer file" reopens through openProjectFile() --------------
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+click #file-conflict-reload
+wait document.getElementById('file-conflict-modal').hidden
+wait F.docFile().kind === 'md'
+expect F.docFile().lastModified === window.__t0 + 200000
+expect window.__written === 1
+
+# --- "Overwrite it" proceeds, and records the new on-disk timestamp -------
+eval (function(){window.__fakeHandle._mtime = window.__t0 + 400000;F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+click #file-conflict-overwrite
+wait window.__written === 2
+expect document.getElementById('file-conflict-modal').hidden
+wait F.docFile().lastModified === window.__t0 + 400000
+
+quit

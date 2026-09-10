@@ -49,6 +49,14 @@
        back with the name the user typed. */
     var kind = saveAs ? "md" : (docFileHandle.kind || "md");
 
+    /* Was this the same file we already had open, with a fresh-pick not
+       needed? Then the on-disk-conflict check below applies — a brand new
+       pick from the Save As dialog has no prior baseline to compare against
+       (checkFileConflict skips it when lastModified is unset), and a picked
+       file that happens to already exist is a deliberate replace through
+       the OS's own picker, not "changed under us". */
+    var reusingHandle = !!targetHandle;
+
     try {
       if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
@@ -59,8 +67,23 @@
           ]
         });
         kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
-        docFileHandle = { handle: targetHandle, kind: kind };
+        docFileHandle = { handle: targetHandle, kind: kind, lastModified: null };
         rememberLastFileHandle(targetHandle);
+      }
+
+      /* On-disk conflict check (HANDOFF #1, same guard as the import
+         re-save path's saveBackToFile) — only when writing back into the
+         file we already had open, and not when opts.force says the user
+         just chose "Overwrite it" in that modal. */
+      if (reusingHandle && !opts.force) {
+        var check = await checkFileConflict(targetHandle, docFileHandle.lastModified);
+        if (!check.ok) {
+          showFileConflict(targetHandle.name, check.current, { kind: "project" });
+          state.rev = Math.max(0, (state.rev || 1) - 1);
+          saveInFlight = false;
+          setSaveButtons(dirty ? "Save •" : "Save", false);
+          return;
+        }
       }
 
       var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
@@ -80,6 +103,10 @@
         await writable.write(body);
         await writable.close();
         baseState = published;
+        try {
+          var afterFile = await targetHandle.getFile();
+          docFileHandle.lastModified = afterFile.lastModified;
+        } catch (e) { /* not fatal — the write already succeeded */ }
         if (editSeq === seqAtSave) clearDirty();
         showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       } else {

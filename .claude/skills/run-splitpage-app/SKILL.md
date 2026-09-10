@@ -62,6 +62,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/14-help.txt` | the in-app Help page: opens from the File menu, the TOC has more than 10 links and every href resolves inside `#help-body`, opening it closes the comments panel, Esc closes, and "Tagging reference" deep-links into the full guide |
 | `tests/15-tutorial.txt` | the 5-step coach-mark tour: opens from the File menu, Next/Back/Finish, Skip at several steps, a "Read more" link into Help, `#rows` byte-identical before and after, `splitpage-tour-done` set, and the card stays inside the viewport at a 375px phone width |
 | `tests/17-formats.txt` | the two project formats: `.splitpage` and `.md` round-trip the state exactly (tags, comment anchors, images, statuses, wpm, people), a hand-edited table cell wins for that cell and its tags re-attach, an added scene asks rather than guessing, a legacy `.html` still opens, the data fence never collides with content |
+| `tests/19-save-conflict.txt` | the on-disk conflict check for project saves (`.md`/`.splitpage`): a plain Save writes straight through when nothing changed on disk, a file that changed under us pops the conflict modal instead of overwriting, Cancel leaves it untouched, "Load the newer file" reopens through `openProjectFile()`, "Overwrite it" proceeds and records the new timestamp |
 
 ## Ad-hoc driving
 
