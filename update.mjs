@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import {
   cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -45,6 +45,20 @@ const QUIET = argv.includes("--quiet");
 const say = (...a) => { if (!QUIET) console.log(...a); };
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+
+/* A zip entry name (or a manifest key, which is release-controlled the same
+   way) is untrusted input the moment it can contain "..". join() alone does
+   not stop it — join(root, "../../etc/passwd") normalizes right out of root
+   — so every path built from one of these names is checked against the
+   resolved root before it is used for a read or a write. */
+function safeJoin(root, rel) {
+  const target = resolve(join(root, rel));
+  const base = resolve(root);
+  if (target !== base && !target.startsWith(base + sep)) {
+    throw new Error(`refusing to touch a path outside ${root}: ${rel}`);
+  }
+  return target;
+}
 
 /* ---------- versions ---------- */
 
@@ -194,9 +208,17 @@ async function stage() {
   }
 
   rmSync(UPDATE_DIR, { recursive: true, force: true });
-  mkdirSync(join(UPDATE_DIR, "staged"), { recursive: true });
-  for (const [rel, content] of files) {
-    const to = join(UPDATE_DIR, "staged", rel);
+  const stagedDir = join(UPDATE_DIR, "staged");
+  mkdirSync(stagedDir, { recursive: true });
+  /* Only entries the manifest lists (already checksum-verified above), plus
+     the manifest itself. A zip can contain more entries than that — an
+     extra, unlisted one skipped the verification loop entirely, so writing
+     it here would stage unverified, unaccountable content. */
+  const toStage = [...Object.keys(manifest.files || {}), MANIFEST_NAME];
+  for (const rel of toStage) {
+    const content = files.get(rel);
+    if (!content) continue; /* MANIFEST_NAME already required to exist, above */
+    const to = safeJoin(stagedDir, rel);
     mkdirSync(dirname(to), { recursive: true });
     writeFileSync(to, content);
   }
@@ -228,10 +250,10 @@ export function apply({ log = console.log } = {}) {
   const done = [];
   try {
     for (const [rel, meta] of entries) {
-      const from = join(stagedDir, rel);
-      const to = join(ROOT, rel);
+      const from = safeJoin(stagedDir, rel);
+      const to = safeJoin(ROOT, rel);
       if (existsSync(to)) {
-        const keep = join(backup, rel);
+        const keep = safeJoin(backup, rel);
         mkdirSync(dirname(keep), { recursive: true });
         cpSync(to, keep);
       }
@@ -244,11 +266,17 @@ export function apply({ log = console.log } = {}) {
     }
   } catch (err) {
     /* Put back everything already replaced, so a half-applied update never
-       leaves an app that will not start. */
+       leaves an app that will not start. A file this release introduced
+       (nothing existed at that path before, so nothing was backed up for
+       it) needs the OPPOSITE treatment: removed, not restored — otherwise
+       it survives the rollback as an untracked leftover the old version's
+       manifest knows nothing about. */
     log(`  update failed (${err.message}) — rolling back`);
     for (const rel of done) {
-      const keep = join(backup, rel);
-      if (existsSync(keep)) cpSync(keep, join(ROOT, rel));
+      const keep = safeJoin(backup, rel);
+      const to = safeJoin(ROOT, rel);
+      if (existsSync(keep)) cpSync(keep, to);
+      else rmSync(to, { force: true });
     }
     rmSync(join(UPDATE_DIR, "pending.json"), { force: true });
     throw err;

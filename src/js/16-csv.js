@@ -96,6 +96,14 @@
     } else if (table[0].length >= 3 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
       /* our own export shape: Scene, Visual, Audio */
       vi = 1; ai = 2;
+    } else if (table[0].length === 2 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
+      /* A plain two-column sheet whose first column is just a scene/shot
+         index (e.g. "Scene,Description") has no separate audio column at
+         all — falling to the vi=0/ai=1 default below put the bare scene
+         NUMBER into Visual and the real content into Audio, backwards on
+         both counts. The one real content column reads as Visual (a
+         shot/scene description), with Audio left blank. */
+      vi = 1; ai = -1;
     } else {
       vi = 0; ai = 1;
     }

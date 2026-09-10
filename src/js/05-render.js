@@ -101,6 +101,23 @@
     if (!state) return;
     resetTransientUiState();
     var rowsEl = document.getElementById("rows");
+    /* render() isn't only reachable from user clicks (which naturally blur
+       a field first) — a 409-conflict merge or resumeServerDoc() can call
+       it from an async network completion while the user is mid-typing in
+       a totally different row. innerHTML replacement below unconditionally
+       moves focus to <body>, silently discarding the caret and whatever
+       was open (a link/video popover, an IME composition). The title input
+       already gets this protection; give the same to whichever cell was
+       focused, so typing has somewhere to keep landing after a render it
+       had nothing to do with. Exact caret position isn't preserved (the
+       old DOM node is gone regardless) — landing at the end of the cell's
+       new content is the safest default. */
+    var focusedCell = document.activeElement && document.activeElement.classList &&
+      document.activeElement.classList.contains("cell-editable") ? document.activeElement : null;
+    var refocus = focusedCell
+      ? { id: focusedCell.getAttribute("data-id"), field: focusedCell.getAttribute("data-field") }
+      : null;
+
     if (!state.rows.length) {
       rowsEl.innerHTML =
         '<div class="empty-state">' +
@@ -112,6 +129,23 @@
       for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
       rowsEl.innerHTML = html;
     }
+
+    if (refocus) {
+      var cellEl = rowsEl.querySelector(
+        '.cell-editable[data-id="' + cssAttr(refocus.id) + '"][data-field="' + cssAttr(refocus.field) + '"]');
+      if (cellEl) {
+        cellEl.focus();
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(cellEl);
+          range.collapse(false);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (e) {}
+      }
+    }
+
     var titleInput = document.getElementById("doc-title");
     if (document.activeElement !== titleInput) titleInput.value = state.title || "";
     syncAnchorResolvedClasses();
@@ -164,6 +198,26 @@
     return false;
   }
 
+  /* execCommand("hiliteColor"/"backColor") produces a styled <span
+     style="background-color:...">, never a <mark>, in every modern
+     browser — removeHighlight() below already knows to look for both, but
+     the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
+     state indicator only ever checked for MARK, so clicking Highlight a
+     second time re-applied it instead of removing it (the field only
+     turned into a real <mark> — and so became toggle-able — once it had
+     been blurred and sanitizeHtml() ran). */
+  function isSelectionHighlighted(root) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return false;
+    var node = sel.getRangeAt(0).commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    while (node && node !== root) {
+      if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   function unwrapElement(el) {
     var parent = el.parentNode;
     if (!parent) return;
@@ -204,7 +258,7 @@
       btn.classList.toggle("is-active", on);
     });
     var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
-    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionInsideTag(cellEl, "MARK"));
+    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
   }
 
   function handleToolbarCmd(btn) {
@@ -213,7 +267,7 @@
     var cmd = btn.getAttribute("data-cmd");
     cellEl.focus();
     if (cmd === "highlight") {
-      if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
+      if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
       else applyHighlight();
       syncFieldFromDom(cellEl);
       updateToolbarState(cellEl);
@@ -270,10 +324,28 @@
         showToast("Select the words you want to label first.", "warn");
         return;
       }
+      var tagQuoted = tsel.toString().trim();
+      /* Which occurrence of this phrase, among any others in the cell, the
+         user actually selected — captured now, while the real Range still
+         exists, since applyTag() runs after the modal has closed and can
+         only re-find the phrase as plain text. Counted the same way
+         tagFieldOccurrences() itself counts matches (word-boundary rule and
+         document order), by re-running it in countOnly mode over just the
+         text before the selection start, so the index lines up exactly. */
+      var tagRange = tsel.getRangeAt(0);
+      var beforeRange = document.createRange();
+      beforeRange.selectNodeContents(cellEl);
+      beforeRange.setEnd(tagRange.startContainer, tagRange.startOffset);
+      var beforeDiv = document.createElement("div");
+      beforeDiv.appendChild(beforeRange.cloneContents());
+      var tagOccurrenceIndex = tagQuoted
+        ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
+        : 0;
       openTagComposer({
         rowId: cellEl.getAttribute("data-id"),
         field: cellEl.getAttribute("data-field"),
-        quotedText: tsel.toString().trim()
+        quotedText: tagQuoted,
+        occurrenceIndex: tagOccurrenceIndex
       });
       return;
     }

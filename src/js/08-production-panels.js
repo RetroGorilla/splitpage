@@ -80,7 +80,7 @@
       return;
     }
 
-    listEl.innerHTML = entries.map(tagEntityHtml).join("");
+    listEl.innerHTML = entries.map(function (e) { return tagEntityHtml(e, false); }).join("");
   }
 
   /* The textarea always opens showing what's actually tracked, sorted the
@@ -211,20 +211,27 @@
     '</div>';
   }
 
-  function tagEntityHtml(item) {
+  function tagEntityHtml(item, showSelection) {
     var renaming = tagRenaming === item.key;
     var expanded = tagExpanded === item.key || renaming;
     var owner = personById(item.owner);
     var st = tagStatus(item.status) || TAG_STATUSES[0];
     var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
     var k = escapeHtml(item.key);
+    /* productionSelection is Production-panel-only state (the Gear panel
+       wires no Ctrl/Shift-click, no bulk bar, nothing to clear or explain
+       a highlight with — see the multi-select comment below) but this
+       function is shared by both panels; without gating on showSelection,
+       an item selected via Production still rendered "selected" when
+       later viewed in Gear, with no way to make sense of or clear it. */
+    var selected = showSelection && productionSelection[item.key];
     var meta = (owner ? '<span class="tag-owner-chip">' + escapeHtml(owner.name) + '</span>' : '') +
       (item.notes ? '<span class="tag-note-flag" title="Has notes">Notes</span>' : '');
     return '<div class="tag-entity' + (item.orphaned ? ' is-orphaned' : '') +
         (expanded ? ' is-expanded' : '') +
-        (productionSelection[item.key] ? ' is-selected' : '') +
+        (selected ? ' is-selected' : '') +
         '" style="--dot:' + item.cat.color + '" data-key="' + k +
-        '" aria-selected="' + (productionSelection[item.key] ? 'true' : 'false') + '">' +
+        '" aria-selected="' + (selected ? 'true' : 'false') + '">' +
       '<div class="tag-entity-head" data-action="tag-expand" data-key="' + k + '">' +
         '<span class="tag-entity-name">' + escapeHtml(item.name) + '</span>' +
         '<span class="tag-entity-head-right">' +
@@ -300,7 +307,7 @@
                   'data-person="' + escapeHtml(id) + '" title="Remove from the crew list">×</button>' : '') +
         '</div>' +
         (g.items.length
-          ? g.items.map(tagEntityHtml).join("")
+          ? g.items.map(function (e) { return tagEntityHtml(e, true); }).join("")
           : '<div class="tag-orphan-note">Nothing assigned yet.</div>');
     }).join("");
   }
@@ -473,7 +480,7 @@
           escapeHtml(g.cat.plural) +
           '<span class="tag-group-count">' + g.items.length + '</span>' +
         '</div>' +
-        g.items.map(tagEntityHtml).join("");
+        g.items.map(function (e) { return tagEntityHtml(e, true); }).join("");
     }).join("");
   }
 
@@ -490,6 +497,10 @@
     var item = findTagByKey(key);
     if (!item) return;
     Array.prototype.forEach.call(row.querySelectorAll(".tag-anchor"), function (el) {
+      /* category too, not just name — eachTagSpan (07-production-tags.js)
+         already checks both; without it, a Prop and an unrelated Cast tag
+         sharing a name in the same row both flashed on one click. */
+      if (el.getAttribute("data-tag-cat") !== item.cat.id) return;
       if (normalizeTagName(el.getAttribute("data-tag-name")) !== normalizeTagName(item.name)) return;
       el.classList.remove("flash");
       void el.offsetWidth;
@@ -562,7 +573,7 @@
     if (productionSelection[key]) delete productionSelection[key];
     else productionSelection[key] = true;
     selectionAnchorKey = key;
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
     renderProduction();
   }
 
@@ -647,7 +658,7 @@
     /* a Ctrl/Shift+click leaves a stray text selection across the card */
     var sel = window.getSelection();
     if (sel && sel.removeAllRanges) sel.removeAllRanges();
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
     renderProduction();
     return true;
   }

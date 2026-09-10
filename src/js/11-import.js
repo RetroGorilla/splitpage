@@ -26,8 +26,14 @@
 
   var VISUAL_LABEL_RE = /^\s*(visual|video|scene|shot|b-?roll|image|screen)\s*:\s*(.*)$/i;
   var AUDIO_LABEL_RE = /^\s*(audio|vo|voiceover|voice-over|narration|dialogue|script)\s*:\s*(.*)$/i;
-  var VISUAL_WORD_RE = /visual|video|scene|shot|b-?roll|image|screen/i;
-  var AUDIO_WORD_RE = /audio|\bvo\b|voiceover|narration|dialogue/i;
+  /* Anchored to the WHOLE cell (only a trailing plural allowed), unlike the
+     LABEL_REs above which only need to match a line's prefix before ":".
+     These are for judging whether rows[0] of a table/tab paste is really a
+     header — a bare .test() for "shot" or "scene" anywhere in the string
+     also matches ordinary shot-list content like "Wide shot of the ocean",
+     misclassifying the first real data row as a header and discarding it. */
+  var VISUAL_HEADER_RE = /^(visual|video|scene|shot|b-?roll|image|screen)s?$/i;
+  var AUDIO_HEADER_RE = /^(audio|vo|voiceover|voice-over|narration|dialogue|script)s?$/i;
 
   function detectTwoColumnFormat(text) {
     var norm = String(text || "").replace(/\r\n/g, "\n");
@@ -35,23 +41,63 @@
     var nonBlank = lines.filter(function (l) { return l.trim() !== ""; });
     if (nonBlank.length < 2) return null;
 
-    var pipeLines = nonBlank.filter(function (l) { return /^\s*\|/.test(l); });
-    if (pipeLines.length >= 2) return "table";
+    /* Requires a majority of lines to carry a pipe, not just two — two
+       incidental pipe characters in an otherwise plain paste (a leading
+       "|" bullet, a quoted log snippet) used to be enough to classify the
+       WHOLE document as a table, and parseMarkdownTable then discards every
+       line that isn't itself pipe-delimited. Matching on "contains a pipe"
+       rather than "starts with a pipe" too, since that's what
+       parseMarkdownTable itself actually reads (line.indexOf("|") === -1). */
+    var pipeLines = nonBlank.filter(function (l) { return l.indexOf("|") !== -1; });
+    if (pipeLines.length >= 2 && pipeLines.length / nonBlank.length > 0.6) return "table";
 
     var tabLines = nonBlank.filter(function (l) { return l.indexOf("\t") !== -1; });
     if (tabLines.length / nonBlank.length > 0.6) return "tab";
 
     var hasVisualLabel = nonBlank.some(function (l) { return VISUAL_LABEL_RE.test(l); });
     var hasAudioLabel = nonBlank.some(function (l) { return AUDIO_LABEL_RE.test(l); });
-    if (hasVisualLabel && hasAudioLabel) return "labels";
+    /* parseLabeledLines silently drops every line before the first label
+       match (current stays null until then), so detecting "labels" from
+       one coincidental visual-word line and one unrelated audio-word line
+       anywhere in an otherwise plain document used to make Import quietly
+       eat everything before whichever came first. Requiring the very first
+       line to already look like a label means there is nothing ahead of it
+       for the parser to throw away. */
+    var firstIsLabel = VISUAL_LABEL_RE.test(nonBlank[0]) || AUDIO_LABEL_RE.test(nonBlank[0]);
+    if (hasVisualLabel && hasAudioLabel && firstIsLabel) return "labels";
 
     return null;
   }
 
   function columnIndicesFromHeader(header) {
-    var visualIdx = header.findIndex(function (c) { return VISUAL_WORD_RE.test(c); });
-    var audioIdx = header.findIndex(function (c) { return AUDIO_WORD_RE.test(c); });
+    var visualIdx = header.findIndex(function (c) { return VISUAL_HEADER_RE.test(c.trim()); });
+    var audioIdx = header.findIndex(function (c) { return AUDIO_HEADER_RE.test(c.trim()); });
+    /* A row can only tell us where ONE of the two columns is (say, a
+       header that only names "Audio"); the other index used to fall back
+       to its bare default (0), which can collide with the one that WAS
+       found and silently point both fields at the same column. Nudge the
+       unresolved side to whichever of the first two columns the found one
+       isn't sitting on. */
+    if (visualIdx !== -1 && audioIdx === -1) audioIdx = visualIdx === 0 ? 1 : 0;
+    else if (audioIdx !== -1 && visualIdx === -1) visualIdx = audioIdx === 0 ? 1 : 0;
     return { visualIdx: visualIdx, audioIdx: audioIdx };
+  }
+
+  /* A plain split("|") has no idea that markdown lets a cell contain a
+     literal pipe as "\|" — it would cut that cell in two and shift every
+     following column's content into the next index, silently truncating
+     whatever landed past visualIdx/audioIdx. Splits only on an
+     unescaped "|", then un-escapes "\|" back to "|" in each cell. */
+  function splitTableRowCells(line) {
+    var trimmed = line.replace(/^\|/, "").replace(/\|$/, "");
+    var cells = [], current = "";
+    for (var i = 0; i < trimmed.length; i++) {
+      if (trimmed[i] === "\\" && trimmed[i + 1] === "|") { current += "|"; i++; continue; }
+      if (trimmed[i] === "|") { cells.push(current.trim()); current = ""; continue; }
+      current += trimmed[i];
+    }
+    cells.push(current.trim());
+    return cells;
   }
 
   function parseMarkdownTable(text) {
@@ -59,7 +105,7 @@
     var rows = [];
     lines.forEach(function (line) {
       if (line.indexOf("|") === -1) return;
-      var cells = line.replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
+      var cells = splitTableRowCells(line);
       if (cells.every(function (c) { return /^:?-{2,}:?$/.test(c) || c === ""; })) return;
       rows.push(cells);
     });
@@ -158,12 +204,19 @@
 
   /* turn raw {visualText, audioText} pairs into real rows */
   function normalizeImportedRows(rows) {
+    /* Every other write path into state.rows runs its content through
+       sanitizeHtml() before it lands in the document (see migrateRows(),
+       06-rows.js, 07-production-tags.js, 09-find-replace.js, 10-comments.js,
+       19-writer.js, 21-events.js). This one didn't — legacyMdToHtml() escapes
+       plain text but is not a sanitizer, so a pasted line containing a raw
+       '<' (a page whose markup was preserved as text, or a deliberately
+       crafted paste) went straight into the document as live HTML. */
     return rows.map(function (r) {
       return {
         id: makeId(),
-        visualText: legacyMdToHtml(r.visualText || ""),
+        visualText: sanitizeHtml(legacyMdToHtml(r.visualText || "")),
         visualImage: null,
-        audioText: legacyMdToHtml(r.audioText || "")
+        audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
       };
     });
   }

@@ -61,8 +61,14 @@
       }
       working.shift();
     }
-    try { localStorage.removeItem(SNAPSHOT_KEY); } catch (e) {}
+    /* Not even the single newest entry fits under the budget on its own —
+       refuse to touch what's already on disk rather than wiping every
+       OLDER snapshot that WAS small enough to keep (this used to call
+       localStorage.removeItem() here, erasing the entire local version
+       history over one oversized push). Leave storage as it was and hand
+       the caller back exactly what's still there. */
     list.length = 0;
+    Array.prototype.push.apply(list, readSnapshots());
     return false;
   }
 
@@ -119,9 +125,29 @@
     return ROW_FIELDS.every(function (f) { return (a[f] || null) === (b[f] || null); });
   }
 
+  /* The comment-level equivalent of rowContentEqual, used the same way: to
+     tell "the other side left this untouched since base" (safe to honor a
+     delete) apart from "the other side genuinely changed it" (a reply or a
+     resolve must survive even if I deleted my copy). */
+  function commentContentEqual(a, b) {
+    if (!a || !b) return false;
+    if ((a.body || "") !== (b.body || "")) return false;
+    if (!!a.resolved !== !!b.resolved) return false;
+    if (JSON.stringify(a.replies || []) !== JSON.stringify(b.replies || [])) return false;
+    return true;
+  }
+
   /* Merge `mine` and `theirs`, both descended from `base`.
-     Anything that cannot be reconciled is preserved, never dropped. */
-  function mergeStates(base, mine, theirs) {
+     Anything that cannot be reconciled is preserved, never dropped.
+
+     imagesStripped: true when `mine`/`base` came from stashLocalWork()'s
+     oversized-document fallback, which replaces every visualImage with a
+     sentinel that migrateRows() (correctly — safeImageSrc only ever allows a
+     real data: URI through) turns back into null. That null is indistinguishable
+     from "no image", so the normal equality-based fast paths below would
+     silently conclude "unchanged" for a row that may well have had a real
+     image swapped in locally right before the stash — see mergeRow(). */
+  function mergeStates(base, mine, theirs, imagesStripped) {
     var conflicts = [];
     var stats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
@@ -135,6 +161,17 @@
       var tookMine = false;
       ROW_FIELDS.forEach(function (f) {
         var mv = m[f] || null, tv = t[f] || null, bv = b ? (b[f] || null) : null;
+        /* A stripped-and-restored visualImage is null whether or not it
+           really had an image — mv/bv equality here would be comparing two
+           unknowns, not two agreements. Skip straight to "can't reconcile"
+           whenever there's something on their side worth not silently
+           losing; if theirs is empty too, there is nothing to protect
+           either way, so let it fall through as an ordinary non-conflict. */
+        if (f === "visualImage" && imagesStripped && tv) {
+          out[f] = tv;
+          conflicts.push({ rowId: t.id, field: f, mine: null, theirs: tv });
+          return;
+        }
         if (mv === tv) return;
         if (b && mv === bv) { out[f] = tv; return; }          /* only they changed it */
         if (b && tv === bv) { out[f] = mv; tookMine = true; return; }  /* only I changed it */
@@ -205,9 +242,22 @@
       seen[id] = true;
       var m = mineC[id], t = theirC[id], b = baseC[id];
       var pick;
-      if (m && t) pick = JSON.parse(JSON.stringify(newer(m, t)));
-      else if (t && !m) { if (b) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
-      else { if (b) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
+      if (m && t) {
+        pick = JSON.parse(JSON.stringify(newer(m, t)));
+        /* `resolved` is forward progress, the same rule this file already
+           applies to row/tag status ("a merge can never un-shoot/un-buy
+           something") — so it is merged independently rather than riding
+           along with whichever whole side "newer" happened to pick. Without
+           this, an unrelated action that bumps updatedAt on one side (e.g. a
+           reply) can silently revert a resolve/unresolve that happened
+           earlier in wall-clock time on the other side. */
+        pick.resolved = !!(m.resolved || t.resolved);
+      }
+      /* An edit outranks a delete for comments the same way it already does
+         for rows a few lines up: only a comment BOTH honor as unchanged
+         since base is safe to drop when the other side deleted it. */
+      else if (t && !m) { if (b && commentContentEqual(b, t)) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
+      else { if (b && commentContentEqual(b, m)) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
       if (m && t) {
         var replies = byId(m.replies);
         (t.replies || []).forEach(function (r) { replies[r.id] = r; });
@@ -217,12 +267,30 @@
       mergedComments.push(pick);
     });
 
+    /* Row fields raise a conflict comment the instant both sides touch the
+       same field — the title never did: it just kept theirs, silently,
+       whenever both sides had changed it (or base wasn't available at
+       all, e.g. resumeServerDoc() with no stash.base). Route it through
+       the same conflicts array instead (pushed before the forEach below
+       builds comments from it), with rowId: null marking it as a title
+       conflict rather than a row one (findAnchorLocationLabel,
+       restoreConflictValue and the label just below all special-case
+       field === "title" to handle that). */
+    var mergedTitle = theirs.title;
+    if (base && mine.title !== base.title && theirs.title === base.title) {
+      mergedTitle = mine.title;
+    } else if (mine.title !== theirs.title && (!base || (mine.title !== base.title && theirs.title !== base.title))) {
+      if (mine.title) conflicts.push({ rowId: null, field: "title", mine: mine.title, theirs: theirs.title });
+    }
+
     /* every unreconcilable field becomes a comment holding my version */
     conflicts.forEach(function (c) {
-      var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" : "Visual image";
+      var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
+        c.field === "title" ? "Title" : "Visual image";
       var isEmpty = !c.mine;
       var bodyHtml = c.field === "visualImage"
         ? (safeImageSrc(c.mine) ? '<img class="comment-img" src="' + escapeHtml(c.mine) + '">' : "")
+        : c.field === "title" ? escapeHtml(c.mine || "")
         : (c.mine || "");
       mergedComments.push({
         id: makeId("c"),
@@ -238,12 +306,12 @@
         kind: "conflict",
         conflictField: label,
         emptyValue: isEmpty,
+        /* plain text, kept alongside the escaped display body so restoring
+           it doesn't need to round-trip back out of HTML */
+        titleValue: c.field === "title" ? (c.mine || "") : undefined,
         replies: []
       });
     });
-
-    var mergedTitle = theirs.title;
-    if (base && mine.title !== base.title && theirs.title === base.title) mergedTitle = mine.title;
 
     return {
       merged: migrateRows({
@@ -532,7 +600,14 @@
 
     document.getElementById("merge-summary").textContent = " " + summary;
     document.getElementById("merge-review").hidden = !result.conflicts.length;
-    document.getElementById("merge-banner").hidden = false;
+    var banner = document.getElementById("merge-banner");
+    /* .notice-merge.notice-warn (app.css) flags a merge as urgent — red
+       border/background instead of the plain green — but nothing ever
+       added the class, so a merge that actually lost data on one side
+       (real conflicts, saved as comments below) looked exactly like an
+       ordinary clean merge. */
+    banner.classList.toggle("notice-warn", !!result.conflicts.length);
+    banner.hidden = false;
 
     /* flash the rows that came from the merge */
     result.conflicts.forEach(function (c) {

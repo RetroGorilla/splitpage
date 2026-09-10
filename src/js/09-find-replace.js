@@ -16,19 +16,60 @@
     return document.getElementById("find-input").value || "";
   }
 
+  function escapeRegExpLiteral(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /* Every match-finding function below used to lowercase a copy of the
+     haystack with String#toLowerCase() and hunt through it with
+     String#indexOf(), then apply the resulting index straight to the
+     ORIGINAL string. That breaks for the handful of characters whose
+     lowercase form is a different length from the character itself — "İ"
+     (Latin capital I with dot above) becomes the two-character "i̇" under
+     toLowerCase(), so every index found in the lowercased copy from that
+     point on is off by one in the real string. On a match, that shifted
+     index landed replaceInHtml's slice points somewhere mid-run of
+     surrounding text, splicing the replacement into the wrong place and
+     corrupting the row's content.
+
+     A case-insensitive regex sidesteps the whole problem: it compares
+     characters against the untouched original string one at a time (no
+     transformed copy ever exists), so match indices are always correct
+     positions in `text`, and a literal pattern's match is always exactly
+     needle.length characters long. */
+  function findAllMatches(text, needle) {
+    if (!needle) return [];
+    var re = new RegExp(escapeRegExpLiteral(needle), findMatchCase ? "g" : "gi");
+    var out = [], m;
+    while ((m = re.exec(text))) {
+      out.push({ start: m.index, end: m.index + m[0].length });
+      if (m[0].length === 0) re.lastIndex++;
+    }
+    return out;
+  }
+
   /* Text a search is allowed to touch. Anything inside a .tag-anchor is
      skipped: those spans are atomic everywhere else in the app (you cannot
      type inside one — see the contenteditable="false" note), and rewriting
      their words here would leave the visible text saying one thing while the
      tag still tracked another. Renaming a tag is the Production panel's job,
-     which changes both halves together. */
+     which changes both halves together.
+
+     .cmt-anchor gets the same exclusion, for the same reason: it isn't
+     atomic (a comment's quoted phrase stays plain editable text, unlike a
+     tag), but a comment's cached quotedText is only ever set once, at
+     creation — there is no equivalent "rename this quote" step that keeps
+     it in sync afterward. A global replace rewriting the words inside an
+     anchor used to leave the panel showing a quote that no longer exists
+     anywhere in the script, with the comment never flagged orphaned since
+     the span itself survives untouched. */
   function editableTextNodes(root) {
     var doc = root.ownerDocument || document;
     var out = [], walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     var n;
     while ((n = walker.nextNode())) {
       var p = n.parentNode;
-      if (p && p.closest && p.closest(".tag-anchor")) continue;
+      if (p && p.closest && (p.closest(".tag-anchor") || p.closest(".cmt-anchor"))) continue;
       out.push(n);
     }
     return out;
@@ -42,13 +83,9 @@
   function countMatchesInHtml(html, needle) {
     if (!needle) return 0;
     var body = inertBody(html || "");
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var count = 0;
     editableTextNodes(body).forEach(function (node) {
-      var raw = node.nodeValue || "";
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) { count++; at = hay.indexOf(cmp, at + cmp.length); }
+      count += findAllMatches(node.nodeValue || "", needle).length;
     });
     return count;
   }
@@ -58,13 +95,9 @@
   function countMatchesInsideTags(html, needle) {
     if (!needle) return 0;
     var body = inertBody(html || "");
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var count = 0;
     Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-      var raw = el.textContent || "";
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) { count++; at = hay.indexOf(cmp, at + cmp.length); }
+      count += findAllMatches(el.textContent || "", needle).length;
     });
     return count;
   }
@@ -105,18 +138,16 @@
     var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
     if (!cell) return;
     var needle = findNeedle();
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var nodes = editableTextNodes(cell);
     var seen = 0;
     for (var i = 0; i < nodes.length; i++) {
       var raw = nodes[i].nodeValue || "";
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) {
+      var matches = findAllMatches(raw, needle);
+      for (var j = 0; j < matches.length; j++) {
         if (seen === m.nth) {
           var range = document.createRange();
-          range.setStart(nodes[i], at);
-          range.setEnd(nodes[i], at + needle.length);
+          range.setStart(nodes[i], matches[j].start);
+          range.setEnd(nodes[i], matches[j].end);
           var sel = window.getSelection();
           sel.removeAllRanges();
           sel.addRange(range);
@@ -126,7 +157,6 @@
           return;
         }
         seen++;
-        at = hay.indexOf(cmp, at + cmp.length);
       }
     }
   }
@@ -142,27 +172,27 @@
      returning the new HTML and how many were changed. */
   function replaceInHtml(html, needle, replacement, nth) {
     var body = inertBody(html || "");
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var nodes = editableTextNodes(body);
     var seen = 0, changed = 0;
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
       var raw = node.nodeValue || "";
-      var out = "", cursor = 0;
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) {
+      var matches = findAllMatches(raw, needle);
+      if (!matches.length) continue;
+      var out = "", cursor = 0, nodeChanged = false;
+      for (var j = 0; j < matches.length; j++) {
+        var mm = matches[j];
         var take = (nth === -1 || seen === nth);
         if (take) {
-          out += raw.slice(cursor, at) + replacement;
-          cursor = at + needle.length;
+          out += raw.slice(cursor, mm.start) + replacement;
+          cursor = mm.end;
           changed++;
+          nodeChanged = true;
         }
         seen++;
-        at = hay.indexOf(cmp, at + cmp.length);
         if (nth !== -1 && changed) break;
       }
-      if (changed && cursor) {
+      if (nodeChanged) {
         node.nodeValue = out + raw.slice(cursor);
         if (nth !== -1) break;
       }

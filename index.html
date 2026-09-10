@@ -573,7 +573,11 @@
   }
 
   /* ---------- Google Drive file manager ---------- */
-  .drive-panel { max-width: 640px; }
+  /* .modal-panel (below) also sets max-width, at equal specificity and
+     later in the file — a bare .drive-panel always lost that tie despite
+     being more specific here. .modal-panel.drive-panel outranks it
+     regardless of source order. */
+  .modal-panel.drive-panel { max-width: 640px; }
   .drive-setup-steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
   .drive-setup-steps li { margin-bottom: 4px; }
   .drive-field { margin-bottom: 10px; }
@@ -1254,6 +1258,12 @@
   }
   .identity-chip:hover { border-color: var(--visual); color: var(--text); }
   .identity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+  /* Toggled in JS (03-sync.js) whenever no author name is set, but nothing
+     styled it — a named and unnamed chip looked identical apart from the
+     text itself. Dims the dot to invite setting a name, the same signal
+     --ok/--danger already give elsewhere for "set" vs "needs attention". */
+  .identity-chip.unnamed { border-style: dashed; }
+  .identity-chip.unnamed .identity-dot { background: var(--text-faint); }
 
   .row-meta {
     font-family: var(--font-display);
@@ -1384,6 +1394,14 @@
     line-height: 16px;
   }
   .comments-badge[hidden] { display: none; }
+  /* .comments-badge's red is for "unresolved comments" specifically — the
+     Production/Gear count badges share its layout via .tag-badge but carry
+     both classes (class="comments-badge tag-badge"), and .tag-badge's own
+     teal (line 699 above) loses the equal-specificity tie simply for being
+     declared earlier in the file. Two classes outrank one regardless of
+     source order, so this restores the teal for anything that is also
+     .tag-badge without touching a plain .comments-badge's red. */
+  .comments-badge.tag-badge { background: var(--visual); }
 
   .cmt-anchor {
     background: color-mix(in srgb, var(--accent) 26%, transparent);
@@ -2132,7 +2150,13 @@
   border: 1px solid var(--rule, #d8d2c4);
   border-left: 3px solid #1B7A68;
   border-radius: 8px;
-  background: #ffffff;
+  /* Was a literal #ffffff with no color of its own — in dark mode it
+     inherited body's near-white --text (#F3EFE5), giving near-invisible
+     text on a hardcoded white box. --surface is the theme token every
+     other panel/card sources its background from, and already flips
+     correctly under prefers-color-scheme/data-theme. */
+  background: var(--surface);
+  color: var(--text);
   font-size: 13px;
 }
 .update-bar-icon { color: #1B7A68; font-size: 14px; }
@@ -2966,17 +2990,31 @@
   }
 
   /* one-time upgrade path for rows saved before rich text: plain markdown-ish
-     text (no tags) gets turned into the equivalent HTML; anything that
-     already looks like HTML is left alone */
+     text (no tags) gets turned into the equivalent HTML.
+     There used to be an early return here for text that "already looks like
+     HTML" (contained a '<'). A schema<SCHEMA_VERSION row predates rich text
+     by definition, so it can never legitimately contain real markup — that
+     check only ever fired on plain text that happened to contain a bracketed
+     note (e.g. "<insert B-roll here>"), and silently deleted it once
+     sanitizeHtml's DOMParser tried to parse the bracket as an unknown tag.
+     Removed: every legacy row is now always escaped-then-transformed, so a
+     stray '<' survives as visible text the way the rest of this function
+     already treats every other character. */
   function legacyMdToHtml(text) {
     if (typeof text !== "string") return "";
-    if (text.indexOf("<") !== -1) return text;
     var out = escapeHtml(text);
     out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
     out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
+      /* `url` was captured out of `out`, which escapeHtml() already ran over
+         once — it is already correctly entity-encoded for an HTML attribute
+         (e.g. a literal "&" is already "&amp;"). Escaping `safe` again here
+         used to double-encode it ("&amp;amp;"), corrupting the query string
+         of any link containing '&'. safeHref() only validates a scheme
+         prefix; it does not decode, so passing the already-escaped string
+         straight through is correct, not a bypass. */
       var safe = safeHref(url);
-      return safe ? '<a href="' + escapeHtml(safe) + '" target="_blank" rel="noopener">' + label + '</a>' : m;
+      return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : m;
     });
     out = out.replace(/\n/g, "<br>");
     return out;
@@ -2988,26 +3026,65 @@
      already been through this so plain text is never re-escaped on later loads. */
   function migrateRows(s) {
     if (!s || typeof s !== "object") s = { title: "Untitled Script", rows: [], comments: [] };
-    var legacy = s.schema !== SCHEMA_VERSION;
+    /* "!== SCHEMA_VERSION" used to fire for ANY schema that wasn't exactly
+       today's constant — including a NEWER one (e.g. saved by a future
+       build, or just hand-set to a bogus number). That re-ran the lossy
+       legacyMdToHtml conversion on ordinary, already-migrated content the
+       moment SCHEMA_VERSION is next bumped for an unrelated reason. This is
+       an "older than current" test instead: missing/non-numeric reads as
+       the oldest possible schema (legacy), anything current or newer is not. */
+    var legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;
 
     if (!Array.isArray(s.rows)) s.rows = [];
+    /* Untrusted input (see the file comment above this function) can contain
+       a non-object element — a bad merge, a hand-edited save, a truncated
+       file. Every field access below assumes an object; filter first so one
+       stray null/primitive doesn't throw and take the whole load down with
+       it, the same protection `people` already gets a few lines down. */
+    s.rows = s.rows.filter(function (r) { return r && typeof r === "object"; });
     s.rows.forEach(function (r) {
       r.id = safeId(r.id, "r");
       r.status = rowStatus(r.status) ? r.status : "todo";
       r.visualText = sanitizeHtml(legacy ? legacyMdToHtml(r.visualText || "") : (r.visualText || ""));
       r.audioText = sanitizeHtml(legacy ? legacyMdToHtml(r.audioText || "") : (r.audioText || ""));
       r.visualImage = safeImageSrc(r.visualImage) || null;
-      if (!r.updatedAt) r.updatedAt = null;
+      /* "" rather than null: formatTimestamp(iso) blanks out on an Invalid
+         Date, and new Date(null) is a VALID date (the Unix epoch) while
+         new Date("") is not — null here used to render as a fabricated
+         "Jan 1, 12:00 AM" for any row that was never actually stamped. */
+      if (!r.updatedAt) r.updatedAt = "";
       r.updatedBy = r.updatedBy ? plainName(r.updatedBy) : null;
     });
 
     if (!Array.isArray(s.comments)) s.comments = [];
+    s.comments = s.comments.filter(function (c) { return c && typeof c === "object"; });
     s.comments.forEach(function (c) {
       c.id = safeId(c.id, "c");
-      c.rowId = safeId(c.rowId, "r");
-      c.anchorId = c.anchorId ? safeId(c.anchorId, "c") : null;
-      c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
+      if (c.field === "title") {
+        /* A document-level conflict card (mergeStates' title-merge
+           fallback) — not anchored to any row, unlike every other comment.
+           Forcing rowId through safeId() would fabricate a fake row id out
+           of null (safeId's fallback is makeId(), not passthrough), and
+           folding field into visualText/audioText below would silently
+           turn it into an ordinary row comment pointing at that fake row. */
+        c.rowId = null;
+        c.anchorId = null;
+      } else {
+        c.rowId = safeId(c.rowId, "r");
+        /* Falls back to the comment's own id, not null — deleteComment()
+           looks up the anchor span by anchorId (unwrapAnchorInState), and
+           every comment this app creates already sets anchorId === id
+           (05-render.js). A loaded document whose comments lack the field
+           (an older save, a hand-edited/foreign JSON) used to get
+           anchorId: null, which never matches any real span's data-cmt —
+           deleting such a comment would silently fail to unwrap its
+           anchor, leaving a dangling .cmt-anchor wrapper in the row with
+           no comment behind it forever. */
+        c.anchorId = safeId(c.anchorId || c.id, "c");
+        c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
+      }
       if (!Array.isArray(c.replies)) c.replies = [];
+      c.replies = c.replies.filter(function (rep) { return rep && typeof rep === "object"; });
       c.replies.forEach(function (rep) {
         rep.id = safeId(rep.id, "rp");
         rep.body = sanitizeHtml(rep.body || "");
@@ -3037,7 +3114,12 @@
       p.name = plainText(p.name).trim().slice(0, 60);
     });
     s.people = s.people.filter(function (p) { return p.name; });
-    var knownPeople = {};
+    /* Object.create(null) — a plain {} inherits Object.prototype, so an
+       owner id that happens to collide with an inherited member name
+       (e.g. "constructor", "hasOwnProperty") would resolve truthy below
+       even with no matching person, leaving a dangling owner id instead
+       of clearing it to "" as intended. */
+    var knownPeople = Object.create(null);
     s.people.forEach(function (p) { knownPeople[p.id] = true; });
 
     if (!Array.isArray(s.productionTags)) {
@@ -3045,6 +3127,7 @@
         return { cat: t.cat.id, name: t.name };
       });
     }
+    s.productionTags = s.productionTags.filter(function (t) { return t && typeof t === "object"; });
     s.productionTags.forEach(function (t) {
       t.cat = (tagCategory(t.cat) || TAG_CATEGORIES[0]).id;
       t.name = plainText(t.name).trim().slice(0, 80);
@@ -3163,8 +3246,14 @@
       }
       working.shift();
     }
-    try { localStorage.removeItem(SNAPSHOT_KEY); } catch (e) {}
+    /* Not even the single newest entry fits under the budget on its own —
+       refuse to touch what's already on disk rather than wiping every
+       OLDER snapshot that WAS small enough to keep (this used to call
+       localStorage.removeItem() here, erasing the entire local version
+       history over one oversized push). Leave storage as it was and hand
+       the caller back exactly what's still there. */
     list.length = 0;
+    Array.prototype.push.apply(list, readSnapshots());
     return false;
   }
 
@@ -3221,9 +3310,29 @@
     return ROW_FIELDS.every(function (f) { return (a[f] || null) === (b[f] || null); });
   }
 
+  /* The comment-level equivalent of rowContentEqual, used the same way: to
+     tell "the other side left this untouched since base" (safe to honor a
+     delete) apart from "the other side genuinely changed it" (a reply or a
+     resolve must survive even if I deleted my copy). */
+  function commentContentEqual(a, b) {
+    if (!a || !b) return false;
+    if ((a.body || "") !== (b.body || "")) return false;
+    if (!!a.resolved !== !!b.resolved) return false;
+    if (JSON.stringify(a.replies || []) !== JSON.stringify(b.replies || [])) return false;
+    return true;
+  }
+
   /* Merge `mine` and `theirs`, both descended from `base`.
-     Anything that cannot be reconciled is preserved, never dropped. */
-  function mergeStates(base, mine, theirs) {
+     Anything that cannot be reconciled is preserved, never dropped.
+
+     imagesStripped: true when `mine`/`base` came from stashLocalWork()'s
+     oversized-document fallback, which replaces every visualImage with a
+     sentinel that migrateRows() (correctly — safeImageSrc only ever allows a
+     real data: URI through) turns back into null. That null is indistinguishable
+     from "no image", so the normal equality-based fast paths below would
+     silently conclude "unchanged" for a row that may well have had a real
+     image swapped in locally right before the stash — see mergeRow(). */
+  function mergeStates(base, mine, theirs, imagesStripped) {
     var conflicts = [];
     var stats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
@@ -3237,6 +3346,17 @@
       var tookMine = false;
       ROW_FIELDS.forEach(function (f) {
         var mv = m[f] || null, tv = t[f] || null, bv = b ? (b[f] || null) : null;
+        /* A stripped-and-restored visualImage is null whether or not it
+           really had an image — mv/bv equality here would be comparing two
+           unknowns, not two agreements. Skip straight to "can't reconcile"
+           whenever there's something on their side worth not silently
+           losing; if theirs is empty too, there is nothing to protect
+           either way, so let it fall through as an ordinary non-conflict. */
+        if (f === "visualImage" && imagesStripped && tv) {
+          out[f] = tv;
+          conflicts.push({ rowId: t.id, field: f, mine: null, theirs: tv });
+          return;
+        }
         if (mv === tv) return;
         if (b && mv === bv) { out[f] = tv; return; }          /* only they changed it */
         if (b && tv === bv) { out[f] = mv; tookMine = true; return; }  /* only I changed it */
@@ -3307,9 +3427,22 @@
       seen[id] = true;
       var m = mineC[id], t = theirC[id], b = baseC[id];
       var pick;
-      if (m && t) pick = JSON.parse(JSON.stringify(newer(m, t)));
-      else if (t && !m) { if (b) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
-      else { if (b) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
+      if (m && t) {
+        pick = JSON.parse(JSON.stringify(newer(m, t)));
+        /* `resolved` is forward progress, the same rule this file already
+           applies to row/tag status ("a merge can never un-shoot/un-buy
+           something") — so it is merged independently rather than riding
+           along with whichever whole side "newer" happened to pick. Without
+           this, an unrelated action that bumps updatedAt on one side (e.g. a
+           reply) can silently revert a resolve/unresolve that happened
+           earlier in wall-clock time on the other side. */
+        pick.resolved = !!(m.resolved || t.resolved);
+      }
+      /* An edit outranks a delete for comments the same way it already does
+         for rows a few lines up: only a comment BOTH honor as unchanged
+         since base is safe to drop when the other side deleted it. */
+      else if (t && !m) { if (b && commentContentEqual(b, t)) return; pick = JSON.parse(JSON.stringify(t)); }   /* I deleted it */
+      else { if (b && commentContentEqual(b, m)) return; pick = JSON.parse(JSON.stringify(m)); }                /* they deleted it */
       if (m && t) {
         var replies = byId(m.replies);
         (t.replies || []).forEach(function (r) { replies[r.id] = r; });
@@ -3319,12 +3452,30 @@
       mergedComments.push(pick);
     });
 
+    /* Row fields raise a conflict comment the instant both sides touch the
+       same field — the title never did: it just kept theirs, silently,
+       whenever both sides had changed it (or base wasn't available at
+       all, e.g. resumeServerDoc() with no stash.base). Route it through
+       the same conflicts array instead (pushed before the forEach below
+       builds comments from it), with rowId: null marking it as a title
+       conflict rather than a row one (findAnchorLocationLabel,
+       restoreConflictValue and the label just below all special-case
+       field === "title" to handle that). */
+    var mergedTitle = theirs.title;
+    if (base && mine.title !== base.title && theirs.title === base.title) {
+      mergedTitle = mine.title;
+    } else if (mine.title !== theirs.title && (!base || (mine.title !== base.title && theirs.title !== base.title))) {
+      if (mine.title) conflicts.push({ rowId: null, field: "title", mine: mine.title, theirs: theirs.title });
+    }
+
     /* every unreconcilable field becomes a comment holding my version */
     conflicts.forEach(function (c) {
-      var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" : "Visual image";
+      var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
+        c.field === "title" ? "Title" : "Visual image";
       var isEmpty = !c.mine;
       var bodyHtml = c.field === "visualImage"
         ? (safeImageSrc(c.mine) ? '<img class="comment-img" src="' + escapeHtml(c.mine) + '">' : "")
+        : c.field === "title" ? escapeHtml(c.mine || "")
         : (c.mine || "");
       mergedComments.push({
         id: makeId("c"),
@@ -3340,12 +3491,12 @@
         kind: "conflict",
         conflictField: label,
         emptyValue: isEmpty,
+        /* plain text, kept alongside the escaped display body so restoring
+           it doesn't need to round-trip back out of HTML */
+        titleValue: c.field === "title" ? (c.mine || "") : undefined,
         replies: []
       });
     });
-
-    var mergedTitle = theirs.title;
-    if (base && mine.title !== base.title && theirs.title === base.title) mergedTitle = mine.title;
 
     return {
       merged: migrateRows({
@@ -3634,7 +3785,14 @@
 
     document.getElementById("merge-summary").textContent = " " + summary;
     document.getElementById("merge-review").hidden = !result.conflicts.length;
-    document.getElementById("merge-banner").hidden = false;
+    var banner = document.getElementById("merge-banner");
+    /* .notice-merge.notice-warn (app.css) flags a merge as urgent — red
+       border/background instead of the plain green — but nothing ever
+       added the class, so a merge that actually lost data on one side
+       (real conflicts, saved as comments below) looked exactly like an
+       ordinary clean merge. */
+    banner.classList.toggle("notice-warn", !!result.conflicts.length);
+    banner.hidden = false;
 
     /* flash the rows that came from the merge */
     result.conflicts.forEach(function (c) {
@@ -3750,7 +3908,15 @@
       var tag = node.tagName;
 
       if (tag === "DIV" || tag === "P") {
-        walkSanitize(node, destParent);
+        /* A div/p whose only content is a single <br> is contenteditable's
+           way of marking "this paragraph is empty" (so the empty line
+           stays visible/selectable) — it is not an extra line break ON TOP
+           OF the paragraph separator appended below. Walking into it first
+           re-emitted that same <br>, so a single blank paragraph between
+           two others doubled into two blank lines instead of one. */
+        var isBlankPara = node.childNodes.length === 1 &&
+          node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
+        if (!isBlankPara) walkSanitize(node, destParent);
         destParent.appendChild(document.createElement("br"));
         return;
       }
@@ -3856,7 +4022,11 @@
       else if (tag === "U") out += "<u>" + inner + "</u>";
       else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
       else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
-      else if (tag === "A") out += "[" + inner + "](" + child.getAttribute("href") + ")";
+      /* A link's visible text becomes markdown's [text](href) — but a
+         literal "]" in that text closes the link early for any standard
+         parser, and "(" / ")" break the destination parse the same way;
+         escaping them is what CommonMark itself expects inside link text. */
+      else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
       else if (tag === "BR") out += "\n";
       else out += inner;
     });
@@ -3994,6 +4164,23 @@
     if (!state) return;
     resetTransientUiState();
     var rowsEl = document.getElementById("rows");
+    /* render() isn't only reachable from user clicks (which naturally blur
+       a field first) — a 409-conflict merge or resumeServerDoc() can call
+       it from an async network completion while the user is mid-typing in
+       a totally different row. innerHTML replacement below unconditionally
+       moves focus to <body>, silently discarding the caret and whatever
+       was open (a link/video popover, an IME composition). The title input
+       already gets this protection; give the same to whichever cell was
+       focused, so typing has somewhere to keep landing after a render it
+       had nothing to do with. Exact caret position isn't preserved (the
+       old DOM node is gone regardless) — landing at the end of the cell's
+       new content is the safest default. */
+    var focusedCell = document.activeElement && document.activeElement.classList &&
+      document.activeElement.classList.contains("cell-editable") ? document.activeElement : null;
+    var refocus = focusedCell
+      ? { id: focusedCell.getAttribute("data-id"), field: focusedCell.getAttribute("data-field") }
+      : null;
+
     if (!state.rows.length) {
       rowsEl.innerHTML =
         '<div class="empty-state">' +
@@ -4005,6 +4192,23 @@
       for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
       rowsEl.innerHTML = html;
     }
+
+    if (refocus) {
+      var cellEl = rowsEl.querySelector(
+        '.cell-editable[data-id="' + cssAttr(refocus.id) + '"][data-field="' + cssAttr(refocus.field) + '"]');
+      if (cellEl) {
+        cellEl.focus();
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(cellEl);
+          range.collapse(false);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (e) {}
+      }
+    }
+
     var titleInput = document.getElementById("doc-title");
     if (document.activeElement !== titleInput) titleInput.value = state.title || "";
     syncAnchorResolvedClasses();
@@ -4057,6 +4261,26 @@
     return false;
   }
 
+  /* execCommand("hiliteColor"/"backColor") produces a styled <span
+     style="background-color:...">, never a <mark>, in every modern
+     browser — removeHighlight() below already knows to look for both, but
+     the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
+     state indicator only ever checked for MARK, so clicking Highlight a
+     second time re-applied it instead of removing it (the field only
+     turned into a real <mark> — and so became toggle-able — once it had
+     been blurred and sanitizeHtml() ran). */
+  function isSelectionHighlighted(root) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return false;
+    var node = sel.getRangeAt(0).commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    while (node && node !== root) {
+      if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   function unwrapElement(el) {
     var parent = el.parentNode;
     if (!parent) return;
@@ -4097,7 +4321,7 @@
       btn.classList.toggle("is-active", on);
     });
     var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
-    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionInsideTag(cellEl, "MARK"));
+    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
   }
 
   function handleToolbarCmd(btn) {
@@ -4106,7 +4330,7 @@
     var cmd = btn.getAttribute("data-cmd");
     cellEl.focus();
     if (cmd === "highlight") {
-      if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
+      if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
       else applyHighlight();
       syncFieldFromDom(cellEl);
       updateToolbarState(cellEl);
@@ -4163,10 +4387,28 @@
         showToast("Select the words you want to label first.", "warn");
         return;
       }
+      var tagQuoted = tsel.toString().trim();
+      /* Which occurrence of this phrase, among any others in the cell, the
+         user actually selected — captured now, while the real Range still
+         exists, since applyTag() runs after the modal has closed and can
+         only re-find the phrase as plain text. Counted the same way
+         tagFieldOccurrences() itself counts matches (word-boundary rule and
+         document order), by re-running it in countOnly mode over just the
+         text before the selection start, so the index lines up exactly. */
+      var tagRange = tsel.getRangeAt(0);
+      var beforeRange = document.createRange();
+      beforeRange.selectNodeContents(cellEl);
+      beforeRange.setEnd(tagRange.startContainer, tagRange.startOffset);
+      var beforeDiv = document.createElement("div");
+      beforeDiv.appendChild(beforeRange.cloneContents());
+      var tagOccurrenceIndex = tagQuoted
+        ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
+        : 0;
       openTagComposer({
         rowId: cellEl.getAttribute("data-id"),
         field: cellEl.getAttribute("data-field"),
-        quotedText: tsel.toString().trim()
+        quotedText: tagQuoted,
+        occurrenceIndex: tagOccurrenceIndex
       });
       return;
     }
@@ -4454,24 +4696,44 @@
 
   /* ================= images ================= */
 
+  /* Formats that commonly carry a real alpha channel — a screenshot/cutout/
+     logo attached in one of these keeps its transparency by staying PNG;
+     anything else (photos: JPEG, HEIC-via-browser-decode, etc.) still goes
+     through the smaller lossy JPEG path, since those never have alpha to
+     begin with. */
+  var ALPHA_CAPABLE_TYPE = /^image\/(png|gif|webp)$/;
+
   function compressImageFile(file, maxDim, quality) {
     return new Promise(function (resolve, reject) {
       if (!file || file.type.indexOf("image/") !== 0) { reject(new Error("not an image")); return; }
+      var keepAlpha = ALPHA_CAPABLE_TYPE.test(file.type);
       var reader = new FileReader();
       reader.onerror = function () { reject(new Error("read failed")); };
       reader.onload = function () {
         var img = new Image();
         img.onerror = function () { reject(new Error("decode failed")); };
         img.onload = function () {
-          var w = img.width, h = img.height;
-          var scale = Math.min(1, maxDim / Math.max(w, h));
-          var cw = Math.max(1, Math.round(w * scale));
-          var ch = Math.max(1, Math.round(h * scale));
-          var canvas = document.createElement("canvas");
-          canvas.width = cw; canvas.height = ch;
-          var ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, cw, ch);
-          resolve(canvas.toDataURL("image/jpeg", quality));
+          /* A canvas format without alpha support (JPEG) composites every
+             transparent pixel onto solid black before encoding, per the
+             canvas spec — permanently destroying a PNG/GIF/WebP's
+             transparency with no error or warning. Runs inside a try/catch
+             too: this callback fires asynchronously, after the Promise
+             executor has already returned, so a synchronous throw in here
+             (e.g. a SecurityError from a tainted canvas — a cross-origin
+             reference inside an SVG, say) would otherwise never resolve OR
+             reject the promise, leaving the upload hanging forever with no
+             toast and nothing but a console error to show for it. */
+          try {
+            var w = img.width, h = img.height;
+            var scale = Math.min(1, maxDim / Math.max(w, h));
+            var cw = Math.max(1, Math.round(w * scale));
+            var ch = Math.max(1, Math.round(h * scale));
+            var canvas = document.createElement("canvas");
+            canvas.width = cw; canvas.height = ch;
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, cw, ch);
+            resolve(keepAlpha ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality));
+          } catch (e) { reject(e); }
         };
         img.src = reader.result;
       };
@@ -5369,11 +5631,23 @@
 
   /* Walk the text nodes of one field, wrapping every whole-word occurrence of
      `phrase`. Text already inside a tag or a link is left alone. */
-  function tagFieldOccurrences(html, phrase, cat, name, countOnly) {
+  /* onlyOccurrence, when given (0-based), wraps ONLY that one match — every
+     other occurrence of the phrase is left as plain text, untouched. This is
+     what applyTag()'s single-mention path needs: wrapping every match and
+     then guessing which one to keep afterward (the previous approach) can't
+     tell "the phrase repeats" apart from "an unrelated existing tag with the
+     same name sits elsewhere in this cell", and always kept DOM order —
+     i.e. always the first occurrence — regardless of which one the user had
+     actually selected. Matches are numbered in the same document-order walk
+     this function always used, so an index captured earlier (by counting
+     matches with countOnly, over the text before the selection — see the
+     "tag" command in 05-render.js) lines up exactly with the index used here. */
+  function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccurrence) {
     var body = inertBody(html);
     var doc = body.ownerDocument;
     var needle = phrase.toLowerCase();
     var hits = 0;
+    var matchIndex = 0;
 
     function walk(node) {
       var kids = Array.prototype.slice.call(node.childNodes);
@@ -5394,10 +5668,16 @@
         while (at !== -1) {
           var before = at === 0 ? "" : text.charAt(at - 1);
           var after = text.charAt(at + phrase.length);
-          if (!/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after)) {
-            hits++;
-            matched = true;
-            if (!countOnly) {
+          /* \p{L}\p{N}, not [A-Za-z0-9] — the same ASCII-only class the
+             comment on buildUntaggedIndex's matcher (below) says was found
+             and fixed there. Left as ASCII here, "Ana" inside "Anaïs"
+             passed the boundary check (the accented "ï" isn't in
+             [A-Za-z0-9]) and got wrapped mid-word. */
+          if (!/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after)) {
+            var wrapThisOne = !countOnly && (onlyOccurrence === undefined || onlyOccurrence === matchIndex);
+            if (wrapThisOne) {
+              hits++;
+              matched = true;
               if (at > cursor) frag.appendChild(doc.createTextNode(text.slice(cursor, at)));
               var span = doc.createElement("span");
               span.className = "tag-anchor";
@@ -5405,13 +5685,16 @@
               span.setAttribute("data-tag-name", name);
               span.appendChild(doc.createTextNode(text.substr(at, phrase.length)));
               frag.appendChild(span);
+              cursor = at + phrase.length;
+            } else if (countOnly) {
+              hits++;
             }
-            cursor = at + phrase.length;
+            matchIndex++;
           }
           at = hay.indexOf(needle, at + phrase.length);
         }
 
-        if (matched && !countOnly) {
+        if (matched) {
           if (cursor < text.length) frag.appendChild(doc.createTextNode(text.slice(cursor)));
           child.parentNode.replaceChild(frag, child);
         }
@@ -5476,6 +5759,28 @@
   function renameTag(cat, oldName, newName) {
     var clean = plainText(newName).trim().slice(0, 80);
     if (!clean) return false;
+    /* Renaming onto a name that already tracks a DIFFERENT registry entry in
+       this category would otherwise leave two state.productionTags records
+       sharing one effective key — productionEntries()'s first-wins de-dup
+       then permanently hides whichever entry it saw second, silently
+       discarding that entry's status/owner/notes with no warning. Fold the
+       one being renamed away INTO the collision instead: status keeps
+       whichever is furthest along (the same forward-progress rule used
+       everywhere else in this file), and an empty owner/notes never
+       overwrites a filled one. */
+    if (registryKey(cat, clean) !== registryKey(cat, oldName)) {
+      var collision = registryEntry(cat, clean);
+      var oldEntry = registryEntry(cat, oldName);
+      if (collision && oldEntry && collision !== oldEntry) {
+        if (!collision.owner && oldEntry.owner) collision.owner = oldEntry.owner;
+        if (!collision.notes && oldEntry.notes) collision.notes = oldEntry.notes;
+        if (tagStatusRank(oldEntry.status) > tagStatusRank(collision.status)) {
+          collision.status = oldEntry.status;
+        }
+        var oi = state.productionTags.indexOf(oldEntry);
+        if (oi !== -1) state.productionTags.splice(oi, 1);
+      }
+    }
     /* an orphaned item has no live spans to rename, but its registry entry
        still needs the new name so it doesn't fall right back to the old
        one the next time productionEntries() reads it */
@@ -5522,13 +5827,33 @@
   var productionSelection = {};    /* key -> true */
   var selectionAnchorKey = null;   /* where a Shift+click range starts from */
   var bulkDeleteArmed = false;
+  var bulkDeleteArmTimer = null;
 
   function selectedKeys() { return Object.keys(productionSelection); }
+
+  /* Mirrors armRemoveTag/armDeleteTag's 2800ms confirm window — without
+     this, an armed bulk-delete button that nothing else happens to touch
+     stayed armed forever, so a later click anywhere on it (after the user
+     had walked away and forgotten) deleted immediately with no fresh
+     confirm gesture. */
+  function armBulkDelete() {
+    bulkDeleteArmed = true;
+    clearTimeout(bulkDeleteArmTimer);
+    bulkDeleteArmTimer = setTimeout(function () {
+      bulkDeleteArmed = false;
+      renderProduction();
+    }, 2800);
+  }
+
+  function disarmBulkDelete() {
+    clearTimeout(bulkDeleteArmTimer);
+    bulkDeleteArmed = false;
+  }
 
   function clearProductionSelection() {
     productionSelection = {};
     selectionAnchorKey = null;
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
   }
 
   /* Keys can vanish under us — an item gets renamed, deleted, or the script
@@ -5541,7 +5866,7 @@
     selectedKeys().forEach(function (k) {
       if (!live[k]) { delete productionSelection[k]; dropped = true; }
     });
-    if (dropped) bulkDeleteArmed = false;
+    if (dropped) disarmBulkDelete();
     if (selectionAnchorKey && !live[selectionAnchorKey]) selectionAnchorKey = null;
   }
 
@@ -5639,21 +5964,17 @@
       '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
     if (!cellEl) { showToast("That row is no longer here.", "warn"); return; }
 
-    var res = tagFieldOccurrences(cellEl.innerHTML, phrase, cat, name, false);
+    /* Wrap exactly the occurrence the user selected (captured when the
+       composer opened — see the "tag" command in 05-render.js), not
+       whichever match happens to come first in the cell. Also the fix for
+       the same bug's other half: because only that one match is ever
+       wrapped, an unrelated pre-existing tag elsewhere in the cell that
+       happens to share this name is never touched or confused with it. */
+    var res = tagFieldOccurrences(cellEl.innerHTML, phrase, cat, name, false, ctx.occurrenceIndex || 0);
     if (!res.hits) { showToast("Could not find that text any more.", "warn"); return; }
-    /* only the first occurrence in this cell was intended */
-    var body = inertBody(res.html);
-    var spans = body.querySelectorAll('.tag-anchor[data-tag-name="' + cssAttr(name) + '"]');
-    if (spans.length > 1) {
-      for (var i = 1; i < spans.length; i++) {
-        var el = spans[i];
-        while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
-        el.parentNode.removeChild(el);
-      }
-    }
     var idx = findRowIndex(ctx.rowId);
     if (idx === -1) return;
-    state.rows[idx][ctx.field] = sanitizeHtml(body.innerHTML);
+    state.rows[idx][ctx.field] = sanitizeHtml(res.html);
     stampRow(state.rows[idx]);
     registerProductionTag(cat, name);
     markDirty();
@@ -5743,7 +6064,7 @@
       return;
     }
 
-    listEl.innerHTML = entries.map(tagEntityHtml).join("");
+    listEl.innerHTML = entries.map(function (e) { return tagEntityHtml(e, false); }).join("");
   }
 
   /* The textarea always opens showing what's actually tracked, sorted the
@@ -5874,20 +6195,27 @@
     '</div>';
   }
 
-  function tagEntityHtml(item) {
+  function tagEntityHtml(item, showSelection) {
     var renaming = tagRenaming === item.key;
     var expanded = tagExpanded === item.key || renaming;
     var owner = personById(item.owner);
     var st = tagStatus(item.status) || TAG_STATUSES[0];
     var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
     var k = escapeHtml(item.key);
+    /* productionSelection is Production-panel-only state (the Gear panel
+       wires no Ctrl/Shift-click, no bulk bar, nothing to clear or explain
+       a highlight with — see the multi-select comment below) but this
+       function is shared by both panels; without gating on showSelection,
+       an item selected via Production still rendered "selected" when
+       later viewed in Gear, with no way to make sense of or clear it. */
+    var selected = showSelection && productionSelection[item.key];
     var meta = (owner ? '<span class="tag-owner-chip">' + escapeHtml(owner.name) + '</span>' : '') +
       (item.notes ? '<span class="tag-note-flag" title="Has notes">Notes</span>' : '');
     return '<div class="tag-entity' + (item.orphaned ? ' is-orphaned' : '') +
         (expanded ? ' is-expanded' : '') +
-        (productionSelection[item.key] ? ' is-selected' : '') +
+        (selected ? ' is-selected' : '') +
         '" style="--dot:' + item.cat.color + '" data-key="' + k +
-        '" aria-selected="' + (productionSelection[item.key] ? 'true' : 'false') + '">' +
+        '" aria-selected="' + (selected ? 'true' : 'false') + '">' +
       '<div class="tag-entity-head" data-action="tag-expand" data-key="' + k + '">' +
         '<span class="tag-entity-name">' + escapeHtml(item.name) + '</span>' +
         '<span class="tag-entity-head-right">' +
@@ -5963,7 +6291,7 @@
                   'data-person="' + escapeHtml(id) + '" title="Remove from the crew list">×</button>' : '') +
         '</div>' +
         (g.items.length
-          ? g.items.map(tagEntityHtml).join("")
+          ? g.items.map(function (e) { return tagEntityHtml(e, true); }).join("")
           : '<div class="tag-orphan-note">Nothing assigned yet.</div>');
     }).join("");
   }
@@ -6136,7 +6464,7 @@
           escapeHtml(g.cat.plural) +
           '<span class="tag-group-count">' + g.items.length + '</span>' +
         '</div>' +
-        g.items.map(tagEntityHtml).join("");
+        g.items.map(function (e) { return tagEntityHtml(e, true); }).join("");
     }).join("");
   }
 
@@ -6153,6 +6481,10 @@
     var item = findTagByKey(key);
     if (!item) return;
     Array.prototype.forEach.call(row.querySelectorAll(".tag-anchor"), function (el) {
+      /* category too, not just name — eachTagSpan (07-production-tags.js)
+         already checks both; without it, a Prop and an unrelated Cast tag
+         sharing a name in the same row both flashed on one click. */
+      if (el.getAttribute("data-tag-cat") !== item.cat.id) return;
       if (normalizeTagName(el.getAttribute("data-tag-name")) !== normalizeTagName(item.name)) return;
       el.classList.remove("flash");
       void el.offsetWidth;
@@ -6225,7 +6557,7 @@
     if (productionSelection[key]) delete productionSelection[key];
     else productionSelection[key] = true;
     selectionAnchorKey = key;
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
     renderProduction();
   }
 
@@ -6310,7 +6642,7 @@
     /* a Ctrl/Shift+click leaves a stray text selection across the card */
     var sel = window.getSelection();
     if (sel && sel.removeAllRanges) sel.removeAllRanges();
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
     renderProduction();
     return true;
   }
@@ -6630,19 +6962,60 @@
     return document.getElementById("find-input").value || "";
   }
 
+  function escapeRegExpLiteral(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /* Every match-finding function below used to lowercase a copy of the
+     haystack with String#toLowerCase() and hunt through it with
+     String#indexOf(), then apply the resulting index straight to the
+     ORIGINAL string. That breaks for the handful of characters whose
+     lowercase form is a different length from the character itself — "İ"
+     (Latin capital I with dot above) becomes the two-character "i̇" under
+     toLowerCase(), so every index found in the lowercased copy from that
+     point on is off by one in the real string. On a match, that shifted
+     index landed replaceInHtml's slice points somewhere mid-run of
+     surrounding text, splicing the replacement into the wrong place and
+     corrupting the row's content.
+
+     A case-insensitive regex sidesteps the whole problem: it compares
+     characters against the untouched original string one at a time (no
+     transformed copy ever exists), so match indices are always correct
+     positions in `text`, and a literal pattern's match is always exactly
+     needle.length characters long. */
+  function findAllMatches(text, needle) {
+    if (!needle) return [];
+    var re = new RegExp(escapeRegExpLiteral(needle), findMatchCase ? "g" : "gi");
+    var out = [], m;
+    while ((m = re.exec(text))) {
+      out.push({ start: m.index, end: m.index + m[0].length });
+      if (m[0].length === 0) re.lastIndex++;
+    }
+    return out;
+  }
+
   /* Text a search is allowed to touch. Anything inside a .tag-anchor is
      skipped: those spans are atomic everywhere else in the app (you cannot
      type inside one — see the contenteditable="false" note), and rewriting
      their words here would leave the visible text saying one thing while the
      tag still tracked another. Renaming a tag is the Production panel's job,
-     which changes both halves together. */
+     which changes both halves together.
+
+     .cmt-anchor gets the same exclusion, for the same reason: it isn't
+     atomic (a comment's quoted phrase stays plain editable text, unlike a
+     tag), but a comment's cached quotedText is only ever set once, at
+     creation — there is no equivalent "rename this quote" step that keeps
+     it in sync afterward. A global replace rewriting the words inside an
+     anchor used to leave the panel showing a quote that no longer exists
+     anywhere in the script, with the comment never flagged orphaned since
+     the span itself survives untouched. */
   function editableTextNodes(root) {
     var doc = root.ownerDocument || document;
     var out = [], walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     var n;
     while ((n = walker.nextNode())) {
       var p = n.parentNode;
-      if (p && p.closest && p.closest(".tag-anchor")) continue;
+      if (p && p.closest && (p.closest(".tag-anchor") || p.closest(".cmt-anchor"))) continue;
       out.push(n);
     }
     return out;
@@ -6656,13 +7029,9 @@
   function countMatchesInHtml(html, needle) {
     if (!needle) return 0;
     var body = inertBody(html || "");
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var count = 0;
     editableTextNodes(body).forEach(function (node) {
-      var raw = node.nodeValue || "";
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) { count++; at = hay.indexOf(cmp, at + cmp.length); }
+      count += findAllMatches(node.nodeValue || "", needle).length;
     });
     return count;
   }
@@ -6672,13 +7041,9 @@
   function countMatchesInsideTags(html, needle) {
     if (!needle) return 0;
     var body = inertBody(html || "");
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var count = 0;
     Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-      var raw = el.textContent || "";
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) { count++; at = hay.indexOf(cmp, at + cmp.length); }
+      count += findAllMatches(el.textContent || "", needle).length;
     });
     return count;
   }
@@ -6719,18 +7084,16 @@
     var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
     if (!cell) return;
     var needle = findNeedle();
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var nodes = editableTextNodes(cell);
     var seen = 0;
     for (var i = 0; i < nodes.length; i++) {
       var raw = nodes[i].nodeValue || "";
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) {
+      var matches = findAllMatches(raw, needle);
+      for (var j = 0; j < matches.length; j++) {
         if (seen === m.nth) {
           var range = document.createRange();
-          range.setStart(nodes[i], at);
-          range.setEnd(nodes[i], at + needle.length);
+          range.setStart(nodes[i], matches[j].start);
+          range.setEnd(nodes[i], matches[j].end);
           var sel = window.getSelection();
           sel.removeAllRanges();
           sel.addRange(range);
@@ -6740,7 +7103,6 @@
           return;
         }
         seen++;
-        at = hay.indexOf(cmp, at + cmp.length);
       }
     }
   }
@@ -6756,27 +7118,27 @@
      returning the new HTML and how many were changed. */
   function replaceInHtml(html, needle, replacement, nth) {
     var body = inertBody(html || "");
-    var cmp = findMatchCase ? needle : needle.toLowerCase();
     var nodes = editableTextNodes(body);
     var seen = 0, changed = 0;
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
       var raw = node.nodeValue || "";
-      var out = "", cursor = 0;
-      var hay = findMatchCase ? raw : raw.toLowerCase();
-      var at = hay.indexOf(cmp);
-      while (at !== -1) {
+      var matches = findAllMatches(raw, needle);
+      if (!matches.length) continue;
+      var out = "", cursor = 0, nodeChanged = false;
+      for (var j = 0; j < matches.length; j++) {
+        var mm = matches[j];
         var take = (nth === -1 || seen === nth);
         if (take) {
-          out += raw.slice(cursor, at) + replacement;
-          cursor = at + needle.length;
+          out += raw.slice(cursor, mm.start) + replacement;
+          cursor = mm.end;
           changed++;
+          nodeChanged = true;
         }
         seen++;
-        at = hay.indexOf(cmp, at + cmp.length);
         if (nth !== -1 && changed) break;
       }
-      if (changed && cursor) {
+      if (nodeChanged) {
         node.nodeValue = out + raw.slice(cursor);
         if (nth !== -1) break;
       }
@@ -6896,6 +7258,7 @@
   function setCommentSortMode(mode) {
     commentSortMode = mode === "recent" ? "recent" : "position";
     try { localStorage.setItem(COMMENTS_SORT_KEY, commentSortMode); } catch (e) {}
+    captureReplyDrafts();
     renderComments();
   }
 
@@ -6913,6 +7276,7 @@
   }
 
   function findAnchorLocationLabel(rowId, field) {
+    if (field === "title") return "Document title";
     var idx = findRowIndex(rowId);
     var rowLabel = idx === -1 ? "Deleted row" : ("Row " + pad2(idx + 1));
     var fieldLabel = field === "audioText" ? "Audio" : "Visual";
@@ -7101,6 +7465,11 @@
   function openCommentsPanel() {
     if (!state) return;
     openSidePanel("comments-panel");
+    /* closeCommentsPanel only hides the panel — an open reply composer with
+       unsaved typed text is still sitting there in the DOM. Capture it
+       before rebuilding comments-list's innerHTML, or reopening the panel
+       silently throws away whatever was mid-typing. */
+    captureReplyDrafts();
     renderComments();
   }
   function closeCommentsPanel() {
@@ -7131,6 +7500,16 @@
     queueAutoSave();
   }
 
+  /* deleteCommentArmId is the single source of truth for which delete
+     button is armed — commentCardHtml/conflictCardHtml render "Confirm?"
+     off it directly, rather than this function poking classList/textContent
+     on a DOM node it happens to have a reference to. That imperative poke
+     used to be the only place the armed look ever got applied, so any
+     unrelated re-render (a reply posted elsewhere, a resolve toggled on a
+     different card, even just reopening the panel) rebuilt the button back
+     to plain "Delete" while deleteCommentArmId stayed set — leaving the
+     very next click, which looked like the first, actually fire the
+     delete with no visible confirm step. */
   function armDeleteComment(btn, id) {
     if (deleteCommentArmId === id) {
       clearTimeout(deleteCommentArmTimer);
@@ -7138,16 +7517,14 @@
       deleteComment(id);
       return;
     }
-    document.querySelectorAll(".comment-actions .danger.armed").forEach(function (b) { b.classList.remove("armed"); b.textContent = "Delete"; });
     deleteCommentArmId = id;
-    btn.classList.add("armed");
-    btn.textContent = "Confirm?";
     clearTimeout(deleteCommentArmTimer);
     deleteCommentArmTimer = setTimeout(function () {
       deleteCommentArmId = null;
-      btn.classList.remove("armed");
-      btn.textContent = "Delete";
+      renderComments();
     }, 2800);
+    captureReplyDrafts();
+    renderComments();
   }
 
   function toggleReplyComposer(id) {
@@ -7208,7 +7585,7 @@
 
   function jumpToComment(cmtId) {
     var hideResolvedBox = document.getElementById("comments-hide-resolved");
-    if (hideResolvedBox.checked) { hideResolvedBox.checked = false; renderComments(); }
+    if (hideResolvedBox.checked) { hideResolvedBox.checked = false; captureReplyDrafts(); renderComments(); }
     openCommentsPanel();
     setTimeout(function () {
       var card = document.querySelector('.comment-card[data-id="' + safeId(cmtId, "c") + '"]');
@@ -7279,7 +7656,9 @@
         '<div class="comment-actions">' +
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Resolve") + '</button>' +
           (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
-          '<button type="button" class="danger" data-action="delete-comment" data-id="' + c.id + '">Delete</button>' +
+          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+            '" data-action="delete-comment" data-id="' + c.id + '">' +
+            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
         '</div>' +
       '</div>'
     );
@@ -7301,7 +7680,9 @@
         '<div class="comment-actions">' +
           '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
-          '<button type="button" class="danger" data-action="delete-comment" data-id="' + c.id + '">Delete</button>' +
+          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+            '" data-action="delete-comment" data-id="' + c.id + '">' +
+            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
         '</div>' +
       '</div>'
     );
@@ -7312,6 +7693,16 @@
     var ci = findCommentIndex(commentId);
     if (ci === -1) return;
     var c = state.comments[ci];
+    if (c.field === "title") {
+      pushSnapshot("Before using your version of the title");
+      state.title = c.emptyValue ? "" : (c.titleValue || "");
+      state.comments.splice(ci, 1);
+      markDirty();
+      render();
+      queueAutoSave();
+      showToast("Restored your version of the title", "ok");
+      return;
+    }
     var ri = findRowIndex(c.rowId);
     if (ri === -1) { showToast("That row no longer exists.", "warn"); return; }
 
@@ -7385,8 +7776,14 @@
 
   var VISUAL_LABEL_RE = /^\s*(visual|video|scene|shot|b-?roll|image|screen)\s*:\s*(.*)$/i;
   var AUDIO_LABEL_RE = /^\s*(audio|vo|voiceover|voice-over|narration|dialogue|script)\s*:\s*(.*)$/i;
-  var VISUAL_WORD_RE = /visual|video|scene|shot|b-?roll|image|screen/i;
-  var AUDIO_WORD_RE = /audio|\bvo\b|voiceover|narration|dialogue/i;
+  /* Anchored to the WHOLE cell (only a trailing plural allowed), unlike the
+     LABEL_REs above which only need to match a line's prefix before ":".
+     These are for judging whether rows[0] of a table/tab paste is really a
+     header — a bare .test() for "shot" or "scene" anywhere in the string
+     also matches ordinary shot-list content like "Wide shot of the ocean",
+     misclassifying the first real data row as a header and discarding it. */
+  var VISUAL_HEADER_RE = /^(visual|video|scene|shot|b-?roll|image|screen)s?$/i;
+  var AUDIO_HEADER_RE = /^(audio|vo|voiceover|voice-over|narration|dialogue|script)s?$/i;
 
   function detectTwoColumnFormat(text) {
     var norm = String(text || "").replace(/\r\n/g, "\n");
@@ -7394,23 +7791,63 @@
     var nonBlank = lines.filter(function (l) { return l.trim() !== ""; });
     if (nonBlank.length < 2) return null;
 
-    var pipeLines = nonBlank.filter(function (l) { return /^\s*\|/.test(l); });
-    if (pipeLines.length >= 2) return "table";
+    /* Requires a majority of lines to carry a pipe, not just two — two
+       incidental pipe characters in an otherwise plain paste (a leading
+       "|" bullet, a quoted log snippet) used to be enough to classify the
+       WHOLE document as a table, and parseMarkdownTable then discards every
+       line that isn't itself pipe-delimited. Matching on "contains a pipe"
+       rather than "starts with a pipe" too, since that's what
+       parseMarkdownTable itself actually reads (line.indexOf("|") === -1). */
+    var pipeLines = nonBlank.filter(function (l) { return l.indexOf("|") !== -1; });
+    if (pipeLines.length >= 2 && pipeLines.length / nonBlank.length > 0.6) return "table";
 
     var tabLines = nonBlank.filter(function (l) { return l.indexOf("\t") !== -1; });
     if (tabLines.length / nonBlank.length > 0.6) return "tab";
 
     var hasVisualLabel = nonBlank.some(function (l) { return VISUAL_LABEL_RE.test(l); });
     var hasAudioLabel = nonBlank.some(function (l) { return AUDIO_LABEL_RE.test(l); });
-    if (hasVisualLabel && hasAudioLabel) return "labels";
+    /* parseLabeledLines silently drops every line before the first label
+       match (current stays null until then), so detecting "labels" from
+       one coincidental visual-word line and one unrelated audio-word line
+       anywhere in an otherwise plain document used to make Import quietly
+       eat everything before whichever came first. Requiring the very first
+       line to already look like a label means there is nothing ahead of it
+       for the parser to throw away. */
+    var firstIsLabel = VISUAL_LABEL_RE.test(nonBlank[0]) || AUDIO_LABEL_RE.test(nonBlank[0]);
+    if (hasVisualLabel && hasAudioLabel && firstIsLabel) return "labels";
 
     return null;
   }
 
   function columnIndicesFromHeader(header) {
-    var visualIdx = header.findIndex(function (c) { return VISUAL_WORD_RE.test(c); });
-    var audioIdx = header.findIndex(function (c) { return AUDIO_WORD_RE.test(c); });
+    var visualIdx = header.findIndex(function (c) { return VISUAL_HEADER_RE.test(c.trim()); });
+    var audioIdx = header.findIndex(function (c) { return AUDIO_HEADER_RE.test(c.trim()); });
+    /* A row can only tell us where ONE of the two columns is (say, a
+       header that only names "Audio"); the other index used to fall back
+       to its bare default (0), which can collide with the one that WAS
+       found and silently point both fields at the same column. Nudge the
+       unresolved side to whichever of the first two columns the found one
+       isn't sitting on. */
+    if (visualIdx !== -1 && audioIdx === -1) audioIdx = visualIdx === 0 ? 1 : 0;
+    else if (audioIdx !== -1 && visualIdx === -1) visualIdx = audioIdx === 0 ? 1 : 0;
     return { visualIdx: visualIdx, audioIdx: audioIdx };
+  }
+
+  /* A plain split("|") has no idea that markdown lets a cell contain a
+     literal pipe as "\|" — it would cut that cell in two and shift every
+     following column's content into the next index, silently truncating
+     whatever landed past visualIdx/audioIdx. Splits only on an
+     unescaped "|", then un-escapes "\|" back to "|" in each cell. */
+  function splitTableRowCells(line) {
+    var trimmed = line.replace(/^\|/, "").replace(/\|$/, "");
+    var cells = [], current = "";
+    for (var i = 0; i < trimmed.length; i++) {
+      if (trimmed[i] === "\\" && trimmed[i + 1] === "|") { current += "|"; i++; continue; }
+      if (trimmed[i] === "|") { cells.push(current.trim()); current = ""; continue; }
+      current += trimmed[i];
+    }
+    cells.push(current.trim());
+    return cells;
   }
 
   function parseMarkdownTable(text) {
@@ -7418,7 +7855,7 @@
     var rows = [];
     lines.forEach(function (line) {
       if (line.indexOf("|") === -1) return;
-      var cells = line.replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
+      var cells = splitTableRowCells(line);
       if (cells.every(function (c) { return /^:?-{2,}:?$/.test(c) || c === ""; })) return;
       rows.push(cells);
     });
@@ -7517,12 +7954,19 @@
 
   /* turn raw {visualText, audioText} pairs into real rows */
   function normalizeImportedRows(rows) {
+    /* Every other write path into state.rows runs its content through
+       sanitizeHtml() before it lands in the document (see migrateRows(),
+       06-rows.js, 07-production-tags.js, 09-find-replace.js, 10-comments.js,
+       19-writer.js, 21-events.js). This one didn't — legacyMdToHtml() escapes
+       plain text but is not a sanitizer, so a pasted line containing a raw
+       '<' (a page whose markup was preserved as text, or a deliberately
+       crafted paste) went straight into the document as live HTML. */
     return rows.map(function (r) {
       return {
         id: makeId(),
-        visualText: legacyMdToHtml(r.visualText || ""),
+        visualText: sanitizeHtml(legacyMdToHtml(r.visualText || "")),
         visualImage: null,
-        audioText: legacyMdToHtml(r.audioText || "")
+        audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
       };
     });
   }
@@ -7664,6 +8108,14 @@
      closed to be saved. They are one control with two faces: nothing
      addresses either of them directly, so they cannot come to disagree about
      whether there is anything to save. */
+  /* Set by saveDoc() (14-export.js) around the actual write/save-to-server
+     call. While a save is genuinely in flight, markDirty() must not
+     overwrite the button's "Saving…" text with "Save •" just because a
+     keystroke landed in the meantime — the button stays visibly disabled
+     either way, so the mismatch is purely cosmetic, but it reads as "the
+     save already finished (or never started)" to anyone watching it. */
+  var saveInFlight = false;
+
   function setSaveButtons(text, disabled) {
     ["btn-save", "wr-save"].forEach(function (id) {
       var btn = document.getElementById(id);
@@ -7677,8 +8129,17 @@
   function markDirty() {
     dirty = true;
     editSeq++;
-    setSaveButtons("Save •");
+    if (!saveInFlight) setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
+    /* A hosted document has no openedFile.name (openServerDoc() sets it to
+       null on purpose — one Save button, one home for it), so the branch
+       above never ran for it. updateHeaderFileChip() derives its hosted
+       text from the live `dirty` flag, but nothing else called it at edit
+       time — the chip kept showing its last "v5, everyone sees this" text
+       after an edit, until an unrelated autosave or a manual Save
+       eventually refreshed it, misleading a glance at the chip into
+       thinking the edit was already synced. */
+    else if (onServerDoc()) { updateFileChip(); }
   }
 
   function clearDirty() {
@@ -7816,16 +8277,31 @@
       pending = raw ? JSON.parse(raw) : null;
     } catch (e) { pending = null; }
     if (!pending || !pending.id) return false;
-    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+
+    /* init() fires detectServer() (which leads here) and loadInitialState()
+       concurrently with no coordination between them — loadInitialState()
+       resolves almost immediately and renders a blank, fully editable
+       document, while this is still doing network round trips. Remember
+       what was on screen and the edit counter before awaiting anything, so
+       keystrokes typed into that transitional document during the wait can
+       be recovered rather than silently overwritten below. */
+    var seqAtStart = editSeq;
+    var stateAtStart = state ? cloneState(state) : null;
 
     var body;
     try {
       body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
     } catch (err) {
-      /* still signed out, or the document is gone — leave the stash alone so
-         a later reload can still recover it */
+      /* still signed out, or the document is gone — leave SERVER_RESUME_KEY
+         (and the stash it points at) alone so a later reload can still
+         recover it. Removing it here, before success is known, is what
+         applyStashedWork() (14-export.js) uses to decide a stash belongs to
+         a fresh/local document rather than this hosted one — clear it too
+         early and a later reload would splice this doc's stashed edits into
+         an unrelated blank document instead. */
       return false;
     }
+    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
 
     var stash = readStash();
     var theirs = migrateRows(cloneState(body.state));
@@ -7833,7 +8309,20 @@
     htmlFileHandle = null;
     resetProductionPanelState();
 
+    var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
+
     if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) {
+      if (typedDuringResume) {
+        var freshResult = mergeStates(stateAtStart, migrateRows(cloneState(state)), theirs, false);
+        state = freshResult.merged;
+        baseState = cloneState(theirs);
+        render();
+        updateIdentityChip();
+        updateFileChip();
+        showToast("Signed back in — merged what you typed while " + (state.title || body.id) + " was reopening", "warn", true);
+        reportMerge(freshResult);
+        return true;
+      }
       state = theirs;
       baseState = cloneState(state);
       clearDirty();
@@ -7845,10 +8334,18 @@
     }
 
     clearStash();
+    var mine = migrateRows(cloneState(stash.mine));
+    if (typedDuringResume) {
+      /* fold the keystrokes typed on top of the blank interim document into
+         what the stash already remembers as "mine", so both survive the
+         three-way merge below rather than one silently replacing the other. */
+      mine = mergeStates(stateAtStart, migrateRows(cloneState(state)), mine, false).merged;
+    }
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
-      migrateRows(cloneState(stash.mine)),
-      theirs
+      mine,
+      theirs,
+      !!stash.imagesStripped
     );
     state = result.merged;
     baseState = cloneState(theirs);
@@ -8031,22 +8528,31 @@
      here forever — three rounds is far more contention than a script gets. */
   async function saveToServer() {
     if (serverSessionExpired) return false;
+    /* The server picker is never disabled while a save is in flight, so
+       openServerDoc() can reassign serverDoc/state/baseState to a different
+       hosted document mid-save. Remember which document THIS call is for,
+       and refuse to write a result — success or conflict — into whatever
+       serverDoc/state/baseState point at now if it has moved on. */
+    var docId = serverDoc.id;
     var attempts = 0;
     var mergeResult = null;
 
     while (attempts < 3) {
       attempts++;
+      if (serverDoc.id !== docId) return false;
       state.rev = (state.rev || 0) + 1;
       state.lastEditedBy = getEditorName();
       state.lastEditedAt = nowIso();
       var published = cloneState(state);
       var seqAtSave = editSeq;
+      var baseRevAtSave = serverDoc.rev;
 
       try {
-        var body = await apiFetch("api/docs/" + encodeURIComponent(serverDoc.id), {
+        var body = await apiFetch("api/docs/" + encodeURIComponent(docId), {
           method: "PUT",
-          body: { baseRev: serverDoc.rev, state: published, by: getEditorName() }
+          body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
         });
+        if (serverDoc.id !== docId) return true; /* saved, but the open document has since changed */
         serverDoc.rev = body.rev;
         baseState = published;
         if (editSeq === seqAtSave) clearDirty();
@@ -8056,6 +8562,7 @@
         if (mergeResult) reportMerge(mergeResult, { alreadySaved: true });
         return true;
       } catch (err) {
+        if (serverDoc.id !== docId) return false;
         state.rev = Math.max(0, (state.rev || 1) - 1);
 
         if (err && err.code === "conflict" && err.payload && err.payload.state) {
@@ -8593,6 +9100,7 @@
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
+    saveInFlight = true;
     setSaveButtons("Saving…", true);
 
     /* A hosted document saves to the server, not to disk. "Save As" still
@@ -8603,6 +9111,7 @@
       try {
         await saveToServer();
       } finally {
+        saveInFlight = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
       }
       return;
@@ -8622,6 +9131,7 @@
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
       state.rev = Math.max(0, (state.rev || 1) - 1);
+      saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
       return;
     }
@@ -8668,6 +9178,7 @@
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
+      saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
     }
   }
@@ -8699,7 +9210,8 @@
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
       migrateRows(cloneState(stash.mine)),
-      loaded
+      loaded,
+      !!stash.imagesStripped
     );
     return { state: result.merged, report: result };
   }
@@ -9449,10 +9961,26 @@
   var VISUAL_HEAD = /^(video|visual|picture|image|shot|shots|action|camera|b-?roll|screen|graphics?)\b/;
   var AUDIO_HEAD = /^(audio|voice|vo|narration|narrator|dialogue|dialog|script|line|lines|copy|speech)\b/;
 
+  /* buildDocx()'s own "Production breakdown" table, verbatim — none of its
+     header words match VISUAL_HEAD/AUDIO_HEAD, so without this check
+     mapTableColumns() fell into its no-header fallback and grabbed the
+     first two columns ("Category"/"Item") as if they were Visual/Audio,
+     turning every breakdown row (and the header row itself) into a
+     fabricated scene on reimport. */
+  var BREAKDOWN_HEADER = ["category", "item", "status", "assigned to", "mentions", "scenes", "notes"];
+  function isBreakdownHeader(head) {
+    if (head.length !== BREAKDOWN_HEADER.length) return false;
+    for (var i = 0; i < BREAKDOWN_HEADER.length; i++) {
+      if (head[i] !== BREAKDOWN_HEADER[i]) return false;
+    }
+    return true;
+  }
+
   /* Work out which columns hold the visual and the audio. Tables in the wild
      have an extra scene-number column, and put the columns in either order. */
   function mapTableColumns(rowsText) {
     var head = (rowsText[0] || []).map(function (t) { return t.toLowerCase().trim(); });
+    if (isBreakdownHeader(head)) return null;
     var vi = head.findIndex(function (t) { return VISUAL_HEAD.test(t); });
     var ai = head.findIndex(function (t) { return AUDIO_HEAD.test(t); });
     if (vi !== -1 && ai !== -1 && vi !== ai) return { vi: vi, ai: ai, skipHeader: true };
@@ -9503,9 +10031,6 @@
     var withText = loose.filter(function (n) { return htmlToPlainText(docxParaToHtml(n, linkMap)); });
     var boldCount = withText.filter(isAllBoldPara).length;
     var boldMeansVisual = boldCount > 0 && boldCount < withText.length * 0.7;
-
-    var headings = blocks.filter(isHeadingBlock).length;
-    function isHeadingBlock(n) { return n.localName === "p" && isHeadingPara(n); }
 
     var rows = [], title = null, pending = null;
 
@@ -9567,9 +10092,18 @@
       if (!plain && !target) return;
 
       if (isHeadingPara(node)) {
-        /* a lone heading at the very top is the document's title; otherwise
-           headings are section markers worth keeping as their own row */
-        if (title === null && !rows.length && !pending && headings <= 1) { title = plain; return; }
+        /* a heading at the very top, before anything else has been kept, is
+           the document's title; otherwise headings are section markers
+           worth keeping as their own row. This used to also require there
+           be no MORE than one heading anywhere in the whole document — but
+           buildDocx() always adds a second Heading1 ("Comments" /
+           "Production breakdown") once there's a saved comment or tracked
+           item, which defeated that count on every one of its own exports:
+           the title paragraph became a bogus row, and the whole appended
+           section got walked as narration. Position (nothing kept yet) is
+           the actual invariant the comment above describes — count of
+           headings elsewhere in the document has nothing to do with it. */
+        if (title === null && !rows.length && !pending) { title = plain; return; }
         flush();
         rows.push(newRow({ visualText: "<strong>" + html + "</strong>" }));
         return;
@@ -9762,6 +10296,14 @@
     } else if (table[0].length >= 3 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
       /* our own export shape: Scene, Visual, Audio */
       vi = 1; ai = 2;
+    } else if (table[0].length === 2 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
+      /* A plain two-column sheet whose first column is just a scene/shot
+         index (e.g. "Scene,Description") has no separate audio column at
+         all — falling to the vi=0/ai=1 default below put the bare scene
+         NUMBER into Visual and the real content into Audio, backwards on
+         both counts. The one real content column reads as Visual (a
+         shot/scene description), with Audio left blank. */
+      vi = 1; ai = -1;
     } else {
       vi = 0; ai = 1;
     }
@@ -9954,7 +10496,25 @@
           var dim = safeAspect(jpegSize(bytes));
           var name = "Im" + (images.length + 1);
           images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
-          imgRef = { name: name, w: COLW, h: COLW * dim.ratio };
+          var natW = COLW, natH = COLW * dim.ratio;
+          /* A tall/portrait image (a phone-screenshot crop, say) can have a
+             natural height that alone exceeds a WHOLE page's usable height
+             — safeAspect() only guards against a zero/negative width, not
+             an extreme ratio. The draw guard further down only checks
+             whether it fits from the current y, with no fallback if it
+             can't fit ANYWHERE — even a fresh page — so it was silently
+             skipped: never drawn, no warning. Cap it to the full usable
+             page height here (PH - 2*M), shrinking width to match, so
+             there's always at least one page it fits on. */
+          /* The most vertical room an image can ever get is right after a
+             forced page break: newPage() lands at PH - M, then the row
+             loop's own "y -= 6" plus drawColumnHeaders()'s 8pt + 16pt of
+             header/rule/gap eat 30pt of that before the image is drawn —
+             capping to the whole page's height (PH - 2*M) still left it
+             30pt short of fitting even there. */
+          var maxH = PH - 2 * M - 30;
+          if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
+          imgRef = { name: name, w: natW, h: natH };
           imgH = imgRef.h + 8;
         } catch (e) { /* skip an unreadable image */ }
       }
@@ -9978,8 +10538,15 @@
       var vCursor = vy, aCursor = y;
       var guard = 0;
       while ((vRest.length || aRest.length) && guard++ < 400) {
-        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD));
-        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD));
+        /* A block of n lines starting at startY = cursor - SIZE has its
+           last baseline at cursor - SIZE - (n-1)*LEAD, so the largest n
+           whose baseline still clears the bottom margin M is
+           floor((cursor - SIZE - M) / LEAD) + 1, not the bare floor() —
+           the missing +1 undercounted by exactly one line on every
+           multi-page row, forcing an unnecessary early page break and an
+           ~LEAD-tall blank gap at the bottom of the column. */
+        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
+        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
         var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
         var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
         var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;
@@ -10092,20 +10659,34 @@
           };
         });
 
-        var need = columnHeight(headerLines) + columnHeight(quoteLines) + columnHeight(bodyLines) + 14;
-        replyBlocks.forEach(function (rb) { need += columnHeight(rb.headerLines) + columnHeight(rb.bodyLines); });
-        if (y - need < M) {
-          newPage(); y -= 6;
-          text("Comments (continued)", M, y - 12, "F2", 12);
-          y -= 34;
+        /* Flattened into one ordered (line, indent) list and drawn one line
+           at a time, each checked against the bottom margin as it goes —
+           a single up-front `need` check (the old approach) only proved
+           the START of the thread fit on the page; a long body or several
+           replies still ran straight past the margin with no further
+           check, silently losing whatever text landed below it. This
+           mirrors how the scene-row loop above already paginates. */
+        var threadLines = [];
+        headerLines.forEach(function (l) { threadLines.push({ line: l, x: M }); });
+        quoteLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+        bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+        replyBlocks.forEach(function (rb) {
+          rb.headerLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+          rb.bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+        });
+
+        function ensureCommentRoom() {
+          if (y - LEAD < M) {
+            newPage(); y -= 6;
+            text("Comments (continued)", M, y - 12, "F2", 12);
+            y -= 34;
+          }
         }
 
-        y = drawLines(headerLines, M, y - SIZE);
-        if (quoteLines.length) y = drawLines(quoteLines, M + 12, y - SIZE);
-        y = drawLines(bodyLines, M + 12, y - SIZE);
-        replyBlocks.forEach(function (rb) {
-          y = drawLines(rb.headerLines, M + 24, y - SIZE);
-          y = drawLines(rb.bodyLines, M + 24, y - SIZE);
+        ensureCommentRoom();
+        threadLines.forEach(function (b) {
+          ensureCommentRoom();
+          y = drawLines([b.line], b.x, y - SIZE);
         });
         y -= 6;
         ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 4).toFixed(2) + " m " +
@@ -10246,13 +10827,24 @@
       y -= LEAD;
     }
 
+    /* Unlike buildPdf()'s two columns, this line was never run through
+       pdfWrapRuns — a long item name/status/owner combination just ran
+       straight off the page's right edge (unwrapped, untruncated, simply
+       invisible past x=612) instead of wrapping to a second line. */
+    var ITEM_TEXT_W = PW - M * 2 - 18;
     items.forEach(function (item) {
-      if (y - LEAD < M) { newPage(); header(); }
       var owner = personById(item.owner);
       var st = tagStatus(item.status) || TAG_STATUSES[0];
+      var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "");
+      var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
+      var need = wrapped.length * LEAD;
+      if (y - need < M) { newPage(); header(); }
       box(M, y - SIZE + 1, 10);
-      text(item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : ""),
-        M + 18, y - SIZE, "F1", SIZE);
+      wrapped.forEach(function (lineSegs, li) {
+        var lineStr = lineSegs.map(function (s) { return s.text; }).join("");
+        text(lineStr, M + 18, y - SIZE, "F1", SIZE);
+        if (li < wrapped.length - 1) y -= LEAD;
+      });
       y -= LEAD;
       rule(M, y + 8, PW - M * 2);
     });
@@ -10326,6 +10918,20 @@
   function updateFileChip() {
     updateHeaderFileChip();
     mirrorFileChipToWriter();
+    updateReadonlyBanner();
+  }
+
+  /* The banner's own markup (page.html) has always been there, fully
+     written, but nothing ever referenced #readonly-banner by id anywhere
+     in src/js — serverMode.readOnly only disabled the "publish new doc"
+     menu item and showed a one-off toast on a blocked save. A reader
+     opening a script they cannot edit got no persistent explanation of
+     that. Piggybacks on updateFileChip() so it stays in sync with every
+     place document/server state actually changes. */
+  function updateReadonlyBanner() {
+    var banner = document.getElementById("readonly-banner");
+    if (!banner) return;
+    banner.hidden = !(serverMode.readOnly && onServerDoc());
   }
 
   /* The writer's bar carries the same chip, because it covers the header and
@@ -10544,7 +11150,15 @@
   async function resumeFromHandle(handle) {
     try {
       var file = await handle.getFile();
-      await openSplitpageFile(file, handle, { skipSnapshot: true, resumed: true });
+      /* The resume banner needs a real click to grant permission, and that
+         can happen well after launch — the user may have typed straight
+         into the interim blank document, or opened something else first
+         via File > Open, while it sat there. skipSnapshot used to be
+         hardcoded true on the assumption nothing worth keeping could exist
+         yet; once something does (dirty), this needs the same undo safety
+         net a normal file-open gets, or replacing state below silently
+         discards it with no way back. */
+      await openSplitpageFile(file, handle, { skipSnapshot: !dirty, resumed: true });
     } catch (e) {
       /* moved, renamed, deleted, or on a drive that isn't connected right
          now — not worth interrupting startup over; Version history and the
@@ -10701,15 +11315,25 @@
     if (openedFile.handle && openedFile.handle.createWritable) {
       /* has the file changed on disk since we opened it? */
       if (!opts || !opts.force) {
+        var current, readFailed = false;
         try {
-          var current = await openedFile.handle.getFile();
-          var changed = (openedFile.lastModified && current.lastModified &&
-                         current.lastModified !== openedFile.lastModified);
-          if (changed) {
-            showFileConflict(current);
-            return;
-          }
-        } catch (e) { /* cannot re-read it — fall through and let the write decide */ }
+          current = await openedFile.handle.getFile();
+        } catch (e) {
+          /* Used to fall through here and let the write proceed — but that
+             defeats the one thing this guard exists to catch ("Never
+             overwrite silently"). A failed re-read is not proof the file is
+             still safely there and unchanged; treat it the same as a
+             detected conflict; force: true (the "Overwrite it" button)
+             still gets past this uncondtionally. */
+          readFailed = true;
+        }
+        if (readFailed) { showFileConflict(null); return; }
+        var changed = (openedFile.lastModified && current.lastModified &&
+                       current.lastModified !== openedFile.lastModified);
+        if (changed) {
+          showFileConflict(current);
+          return;
+        }
       }
       try {
         var writable = await openedFile.handle.createWritable();
@@ -10741,7 +11365,20 @@
   /* The file on disk moved under us. Never overwrite silently — the whole
      point of this guard is that the other version might be someone's work. */
   function showFileConflict(currentFile) {
-    var when = currentFile && currentFile.lastModified
+    if (!currentFile) {
+      /* The file couldn't be re-read at all (moved, deleted, or the drive
+         it's on isn't connected right now) — not the same as "changed",
+         but the same "don't overwrite without asking" principle applies:
+         proceeding straight to a write here (what used to happen — the
+         read failure was silently swallowed) defeats the one thing this
+         guard exists to catch. Reuses the same modal/force-save path. */
+      document.getElementById("file-conflict-detail").textContent =
+        "Could not check whether " + openedFile.name + " is still there — it may have been moved, " +
+        "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
+      document.getElementById("file-conflict-modal").hidden = false;
+      return;
+    }
+    var when = currentFile.lastModified
       ? formatTimestamp(new Date(currentFile.lastModified).toISOString())
       : "recently";
     document.getElementById("file-conflict-detail").textContent =
@@ -11403,15 +12040,28 @@
      teleprompter. Best-effort: unsupported browsers just don't get it, and
      the OS revokes it on tab switch, so it is re-acquired on return. */
   var prompterWakeLock = null;
+  /* Bumped on every acquire/release so a request's resolution can tell
+     whether it is still the one that matters. request() is fire-and-forget
+     with no cancellation token: the prompter can close (or visibilitychange
+     can fire another acquire, which it does every time the tab regains
+     focus while open) before it resolves, and releaseWakeLock() can only
+     ever act on whatever is CURRENTLY in prompterWakeLock — a lock that
+     lands after the fact, or a lock superseded by a newer request, used to
+     just get silently stored over top with nothing left to release it,
+     keeping the screen awake indefinitely. */
+  var wakeLockGen = 0;
 
   function acquireWakeLock() {
     if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+    var gen = ++wakeLockGen;
     navigator.wakeLock.request("screen").then(function (lock) {
+      if (gen !== wakeLockGen || !prompterOpen) { lock.release().catch(function () {}); return; }
       prompterWakeLock = lock;
     }).catch(function () { /* denied (low battery etc.) — nothing to do */ });
   }
 
   function releaseWakeLock() {
+    wakeLockGen++;
     if (prompterWakeLock) {
       prompterWakeLock.release().catch(function () {});
       prompterWakeLock = null;
@@ -11705,7 +12355,19 @@
       setTimeout(function () {
         if (mySession !== voiceSession || !voiceFollowActive || !recognition) return;
         try { recognition.start(); }
-        catch (e) { voiceFollowActive = false; updateVoiceButtonUI(); }
+        catch (e) {
+          /* start() throwing synchronously (Chrome's "recognition has
+             already started" when it hasn't fully torn down the previous
+             session yet) means no further "end" event will ever fire for
+             this attempt — this is a dead end, not just a stopped follow.
+             Release the mic now, or it stays open (and the leaked
+             `recognition` reference blocks a later manual restart from
+             ever cleaning it up) with the UI showing "stopped". */
+          voiceFollowActive = false;
+          recognition = null;
+          releaseVoiceStream();
+          updateVoiceButtonUI();
+        }
       }, Math.min(2000, 150 * voiceRestarts));
     };
     try {
@@ -11947,8 +12609,8 @@
 
     var bulkDel = e.target.closest('[data-action="bulk-delete"]');
     if (bulkDel) {
-      if (bulkDeleteArmed) bulkDeleteSelected();
-      else { bulkDeleteArmed = true; renderProduction(); }
+      if (bulkDeleteArmed) { disarmBulkDelete(); bulkDeleteSelected(); }
+      else { armBulkDelete(); renderProduction(); }
       return;
     }
 
@@ -12346,18 +13008,31 @@
       drop.closest(".visual-cell").classList.add("drag-over");
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row || row.getAttribute("data-id") === dragRowId) return;
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
-    var box = row.getBoundingClientRect();
-    var after = (e.clientY - box.top) > box.height / 2;
-    document.querySelectorAll("#rows .row").forEach(function (r) {
-      if (r !== row) r.classList.remove("drop-before", "drop-after");
-    });
-    row.classList.toggle("drop-before", !after);
-    row.classList.toggle("drop-after", after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row || row.getAttribute("data-id") === dragRowId) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
+      var box = row.getBoundingClientRect();
+      var after = (e.clientY - box.top) > box.height / 2;
+      document.querySelectorAll("#rows .row").forEach(function (r) {
+        if (r !== row) r.classList.remove("drop-before", "drop-after");
+      });
+      row.classList.toggle("drop-before", !after);
+      row.classList.toggle("drop-after", after);
+      return;
+    }
+    /* Foreign content being dragged in from outside the page (another tab,
+       another app) onto a script cell. preventDefault here so 'drop' is
+       guaranteed to fire and land in onRootDrop's plain-text-only path below
+       instead of some engine's own native "accept the drop" default —
+       Chromium's own default for a contenteditable region is to accept it
+       and insert raw HTML regardless of what this handler does, which is
+       exactly the paste bypass onRootPaste already exists to block. */
+    if (e.target.closest && e.target.closest(".cell-editable")) {
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
+    }
   }
 
   function onRootDragLeave(e) {
@@ -12377,16 +13052,44 @@
       if (file) handleImageFile(drop.getAttribute("data-id"), file);
       return;
     }
-    if (!dragRowId) return;
-    var row = e.target.closest(".row");
-    if (!row) return;
-    e.preventDefault();
-    var after = row.classList.contains("drop-after");
-    var targetId = row.getAttribute("data-id");
-    var movingId = dragRowId;
-    dragRowId = null;
-    clearDropMarkers();
-    moveRowTo(movingId, targetId, after);
+    if (dragRowId) {
+      var row = e.target.closest(".row");
+      if (!row) return;
+      e.preventDefault();
+      var after = row.classList.contains("drop-after");
+      var targetId = row.getAttribute("data-id");
+      var movingId = dragRowId;
+      dragRowId = null;
+      clearDropMarkers();
+      moveRowTo(movingId, targetId, after);
+      return;
+    }
+    /* Any other drop onto a script cell is foreign content — a page or app
+       outside Splitpage dragging in its own text/HTML. onRootPaste already
+       forces plain text for exactly this reason (Ctrl+V bypassing
+       sanitizeHtml would be as bad as this); mirror it here rather than
+       letting the browser perform its own native HTML insertion, which
+       never passes through sanitizeHtml/walkSanitize at all. */
+    var cellEl = e.target.closest && e.target.closest(".cell-editable");
+    if (cellEl) {
+      e.preventDefault();
+      var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+      if (text) {
+        /* Unlike paste, nothing has focused this cell or put a caret in it —
+           the user was dragging, never clicked in. insertText writes at the
+           current selection, so without one first it has nowhere to land. */
+        cellEl.focus();
+        try {
+          var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+          if (range && cellEl.contains(range.startContainer)) {
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        } catch (err) {}
+        document.execCommand("insertText", false, text);
+      }
+    }
   }
 
   function init() {
@@ -12516,6 +13219,14 @@
          writer — opening it there hands the keystroke to something the
          writer cannot see */
       if (writerOpen) return;
+      /* Every modal dialog (.modal-backdrop — Import, Google Doc, Comment,
+         file-conflict, Server, Drive, Tag) sits fixed above the find bar,
+         which is a plain static-flow element with no z-index of its own.
+         Without this check, Ctrl+F while typing inside any of them still
+         focused the (now invisible, covered) find-input — every further
+         keystroke meant for that modal's own field silently vanished into
+         a search box the user couldn't even see. */
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
       /* the script lives across dozens of separate contenteditables, so the
          browser's own find is close to useless here — take the shortcut */
       e.preventDefault();
@@ -12546,6 +13257,15 @@
         else if (e.key === "Escape") { e.preventDefault(); tagAddingPersonFor = null; renderProduction(); }
         return;
       }
+      /* wireTagEntityContainer's own keydown listener (registered on this
+         SAME element) already handles Escape for these two inputs —
+         cancelling a per-card rename or add-person popup. Both listeners
+         fire for one keydown since neither calls stopPropagation, so
+         without this check, Escape here ALSO ran the "clear the bulk
+         selection" branch below — silently wiping out an unrelated
+         multi-select the user was still building, as a side effect of
+         cancelling an unrelated popup. */
+      if (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input")) return;
       /* Escape drops the selection — the counterpart to the bar's ×, and the
          reason a plain click is allowed to leave a selection standing */
       if (e.key === "Escape" && selectedKeys().length) {
@@ -12818,9 +13538,21 @@
     document.getElementById("import-close").addEventListener("click", closeImportModal);
     document.getElementById("import-cancel").addEventListener("click", closeImportModal);
     document.getElementById("import-confirm").addEventListener("click", confirmImport);
+    /* maybeAutoDetectTwoColumn + updateImportPreview together re-scan and
+       re-parse the WHOLE textarea (detectTwoColumnFormat runs twice, once
+       in each) with no memoization — on a large pasted script, that ran
+       in full on every subsequent keystroke, not just the paste itself.
+       Debounced so a run of edits (typing, or the flurry of "input"
+       events a paste itself can fire) coalesces into one pass after
+       things settle, rather than one per keystroke. */
+    var importPreviewDebounce = null;
     document.getElementById("import-textarea").addEventListener("input", function (e) {
-      maybeAutoDetectTwoColumn(e.target.value);
-      updateImportPreview();
+      var value = e.target.value;
+      clearTimeout(importPreviewDebounce);
+      importPreviewDebounce = setTimeout(function () {
+        maybeAutoDetectTwoColumn(value);
+        updateImportPreview();
+      }, 150);
     });
     document.querySelectorAll('input[name="import-split"]').forEach(function (r) {
       r.addEventListener("change", function () {
