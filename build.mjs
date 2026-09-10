@@ -68,6 +68,36 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
+/* ---- the pristine-seed gate (invariant #30) ----
+ *
+ * A cheap synchronous checksum over a JS string's own UTF-16 code units —
+ * not real FNV-1a over bytes, but the same mixing step, and it only has to
+ * agree with ITSELF: this exact function runs again in the browser
+ * (20b-onboarding.js) against the live #state-data element's textContent,
+ * and both sides are plain JS strings, so there is no encoding to agree on.
+ * No crypto.subtle (that's async; this gate runs synchronously at boot,
+ * before the first paint has a chance to flash the wizard open then shut).
+ */
+function checksumText(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/* The exact string that ends up as #state-data's textContent once
+ * {{SEED_STATE}} below is substituted: the template surrounds that marker
+ * with one newline on each side, and PARTS chomps the loaded file's own
+ * trailing newline before splicing it in. Recomputing that shape here,
+ * rather than reading it back out of `html`, keeps this independent of
+ * where the marker ends up landing in page.html. */
+function seedCheckValue() {
+  const text = "\n" + chomp(src("seed-state.json")) + "\n";
+  return text.length + "-" + checksumText(text);
+}
+
 /* Inline formatting: code spans first (so `**not bold**` inside backticks is
    protected), then links, then bold, then italic. <kbd>/</kbd> are the only
    literal HTML README writes outside of code — everything else stays
@@ -260,6 +290,7 @@ const PARTS = [
      About box can name a version even on a file:// open, where there is no
      launcher to ask. */
   ["{{VERSION}}", () => readFileSync(join(ROOT, "VERSION"), "utf8")],
+  ["{{SEED_CHECK}}", seedCheckValue],
   ["/*{{APP_CSS}}*/", () => src("app.css")],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
   ["{{HELP_TOC}}", () => readmeHtml().toc],

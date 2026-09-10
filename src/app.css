@@ -2299,6 +2299,7 @@
 .tour-actions-nav { display: flex; gap: 8px; }
 @media (max-width: 480px) {
   .tour-card { position: fixed; left: 16px; right: 16px; width: auto; bottom: 16px; top: auto !important; }
+}
 /* ---------- connecting to a server (20e-connect.js) ---------- */
 .pin-panel { max-width: 420px; }
 .connect-panel { max-width: 600px; }
@@ -2384,3 +2385,31 @@
   .connect-field > span { flex: none; }
   .connect-field input { width: 100%; }
 }
+
+/* ---------- first-run setup wizard (20b-onboarding.js) ---------- */
+.onboard-panel { max-width: 560px; }
+.onboard-steps { display: flex; justify-content: center; gap: 8px; margin: 2px 0 16px; }
+.onboard-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border);
+}
+.onboard-dot.is-current { background: var(--visual); }
+.onboard-dot.is-done { background: var(--text-faint); }
+.onboard-panel-body { min-height: 120px; }
+.onboard-step[hidden] { display: none; }
+.onboard-cards { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.onboard-card {
+  display: flex; flex-direction: column; gap: 2px;
+  text-align: left; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--text);
+  cursor: pointer;
+}
+.onboard-card:hover { border-color: var(--visual); }
+.onboard-card.is-selected { border-color: var(--visual); background: var(--visual-soft); }
+.onboard-card strong { font-size: 14px; }
+.onboard-card span { font-size: 12.5px; color: var(--text-dim); }
+.onboard-work-panel { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border); }
+.onboard-work-panel[hidden] { display: none; }
+#onboard-install-body .btn { margin-top: 10px; }
+#onboard-install-body p.modal-hint:last-child { margin-bottom: 0; }

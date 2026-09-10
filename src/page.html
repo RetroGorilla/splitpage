@@ -6,6 +6,13 @@
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
 <meta name="splitpage-version" content="{{VERSION}}">
+<!-- The pristine-seed gate (invariant #30): "<#state-data text length>-<checksum>"
+     for the demo document this build shipped with, computed by build.mjs
+     from src/seed-state.json. 20b-onboarding.js recomputes the same checksum
+     from the live #state-data element and only offers the first-run wizard
+     when the two agree — the one way it can tell a fresh copy of the app
+     from one that already has somebody's script open. -->
+<meta name="splitpage-seed-check" content="{{SEED_CHECK}}">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#F6F4EC" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16130F" media="(prefers-color-scheme: dark)">
@@ -105,6 +112,7 @@
           <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
           <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
+          <button type="button" role="menuitem" data-file-action="setup">Set up Splitpage…</button>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
           <button type="button" role="menuitem" data-file-action="help">User guide…</button>
           <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
@@ -741,6 +749,117 @@
       <button type="button" class="btn" data-connect-action="back">Back to this copy</button>
       <div class="modal-footer-actions">
         <button type="button" class="btn" data-connect-action="close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== first-run setup wizard (20b-onboarding.js) =====
+     Shown once, only over a pristine copy of the app (invariant #30). File ▸
+     "Set up Splitpage…" reopens it without touching the key that keeps it
+     from auto-showing again. Never edits the document (invariant #17):
+     everything here is browser state or a command to run, same as
+     13-hosted.js / 20e-connect.js. -->
+<div class="modal-backdrop" id="onboarding-modal" hidden>
+  <div class="modal-panel onboard-panel" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
+    <div class="modal-header">
+      <h2 id="onboard-title">Set up Splitpage</h2>
+      <button type="button" class="modal-close" data-onboard-action="skip" aria-label="Skip setup">×</button>
+    </div>
+
+    <div class="onboard-steps" id="onboard-steps" aria-hidden="true">
+      <span class="onboard-dot" data-step="1"></span>
+      <span class="onboard-dot" data-step="2"></span>
+      <span class="onboard-dot" data-step="3"></span>
+      <span class="onboard-dot" data-step="4"></span>
+    </div>
+
+    <div class="onboard-panel-body">
+      <section class="onboard-step" data-onboard-step="1">
+        <p class="modal-hint">Splitpage is a two-column visual/audio script editor with a
+          built-in teleprompter. Scripts save as readable <strong>Markdown (.md)</strong>
+          files by default — a table you can read and edit anywhere, with everything
+          Splitpage needs kept alongside it — or as Splitpage's own native
+          <strong>.splitpage</strong> format, which is exactly what it looks like
+          internally, if you would rather have zero translation.</p>
+      </section>
+
+      <section class="onboard-step" data-onboard-step="2">
+        <div id="onboard-install-body">
+          <p class="modal-hint">Checking how this copy was started…</p>
+        </div>
+      </section>
+
+      <section class="onboard-step" data-onboard-step="3">
+        <p class="modal-hint">How will you be working?</p>
+        <div class="onboard-cards" id="onboard-work-cards">
+          <button type="button" class="onboard-card" data-onboard-work="solo" aria-pressed="false">
+            <strong>Just me</strong>
+            <span>Nothing to set up — save files wherever you like.</span>
+          </button>
+          <button type="button" class="onboard-card" data-onboard-work="host" aria-pressed="false">
+            <strong>Host for others on my network</strong>
+            <span>Share a session with a join PIN over your LAN.</span>
+          </button>
+          <button type="button" class="onboard-card" data-onboard-work="join" aria-pressed="false">
+            <strong>Join a server</strong>
+            <span>Connect to a session someone else is hosting.</span>
+          </button>
+        </div>
+
+        <div class="onboard-work-panel" id="onboard-host-panel" hidden>
+          <p class="modal-hint">Run this from the folder Splitpage is in, then share the
+            address it prints, along with the PIN, with whoever is joining. This travels
+            in the clear over plain HTTP — fine on your own network, not over the
+            internet.</p>
+          <pre class="connect-cmd" id="onboard-host-cmd">start.bat --host --pin</pre>
+          <div class="modal-row">
+            <span></span>
+            <span class="modal-footer-actions">
+              <button type="button" class="btn" data-onboard-action="host-copy">Copy</button>
+              <button type="button" class="btn" data-onboard-action="host-save">Save a .cmd</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="onboard-work-panel" id="onboard-join-panel" hidden>
+          <label class="connect-field"><span>Name</span>
+            <input type="text" id="onboard-join-name" placeholder="Studio Mac" autocomplete="off"></label>
+          <label class="connect-field"><span>Address</span>
+            <input type="text" id="onboard-join-url" placeholder="http://192.168.1.20:8791/"
+                   autocomplete="off" spellcheck="false"></label>
+          <label class="connect-field"><span>Join PIN</span>
+            <input type="text" id="onboard-join-pin" placeholder="only if they gave you one"
+                   inputmode="numeric" autocomplete="off"></label>
+          <label class="connect-check"><input type="checkbox" id="onboard-join-remember">
+            Remember the PIN on this device</label>
+          <div class="connect-error" id="onboard-join-error" hidden></div>
+          <div class="modal-row">
+            <span class="modal-hint">Need SSH, or more than one server?
+              <a href="#" data-onboard-action="open-servers">Servers…</a></span>
+            <button type="button" class="btn btn-accent" data-onboard-action="join-submit">Join</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="onboard-step" data-onboard-step="4">
+        <p class="modal-hint">That's it — Splitpage saves your scripts as Markdown files
+          you keep wherever you like, and everything above is always reachable again from
+          File ▸ Set up Splitpage… and File ▸ Servers….</p>
+        <div class="modal-row">
+          <span class="modal-hint">Want a quick tour of the editor?</span>
+          <button type="button" class="btn btn-accent" data-onboard-action="finish-tour">Take the 5-step tour</button>
+        </div>
+        <p class="modal-hint"><a href="#" data-onboard-action="open-help">Open the user guide</a>
+          any time from the File menu.</p>
+      </section>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn" data-onboard-action="skip">Skip setup</button>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" data-onboard-action="back">Back</button>
+        <button type="button" class="btn btn-accent" data-onboard-action="next">Next</button>
       </div>
     </div>
   </div>
