@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/07-production-tags.js",
+    "line": 1142,
+    "severity": "high",
+    "summary": "applyTag()'s single-mention path assumes the first occurrence of the phrase in the cell is the one the user selected, so it silently tags the wrong text (or discards the tag entirely) whenever the phrase repeats or a same-named tag already exists in that cell.",
+    "refuted": false,
+    "reasoning": "Confirmed: openTagComposer's ctx (05-render.js:273-277) captures only {rowId, field, quotedText} with no Range/position, so applyTag (line 1142-1149) has no way to know which occurrence was selected. It tags every plain-text occurrence via tagFieldOccurrences, then unwraps body.querySelectorAll('.tag-anchor[data-tag-name=...]') spans after index 0, with no data-tag-cat filter, so a pre-existing same-named (even differently-categorized) tag earlier in the cell causes the just-created tag to be the one stripped, silently."
+  },
+  {
+    "file": "src/js/07-production-tags.js",
+    "line": 897,
+    "severity": "medium",
+    "summary": "tagFieldOccurrences() tests word boundaries with the ASCII-only class [A-Za-z0-9], the same bug the file's own comment (lines 666-670) documents as fixed in buildUntaggedIndex's matcher, but never applied here.",
+    "refuted": false,
+    "reasoning": "Confirmed by reading lines 889-911: tagFieldOccurrences() checks before/after chars against /[A-Za-z0-9]/ only, unlike buildUntaggedIndex's \\p{L}\\p{N}-based pattern built specifically to fix this. A non-ASCII letter like 'ï' fails the ASCII test, so tagging 'Ana' inside 'Anaïs' passes the boundary check incorrectly, wrapping part of the word."
+  },
+  {
+    "file": "src/js/07-production-tags.js",
+    "line": 976,
+    "severity": "high",
+    "summary": "renameTag() never checks whether the new name collides with a different existing registry entry in the same category, letting two productionTags records share the same effective key with one silently hidden by productionEntries()'s first-wins de-dup.",
+    "refuted": false,
+    "reasoning": "Confirmed: renameTag (lines 976-988) only renames matching spans and sets entry.name = clean with no collision check against other state.productionTags entries. saveTagRename (08-production-panels.js:881-895) calls it with no such check either. productionEntries() (lines 279-312) does 'if (seen[key]) return;' first-wins de-dup on registryKey(cat,name), so a collision silently hides the second entry's owner/notes/status."
+  },
+  {
+    "file": "src/js/08-production-panels.js",
+    "line": 771,
+    "severity": "high",
+    "summary": "The bulk-delete 'armed' confirmation state has no timeout and is never cleared when the production panel is closed, unlike armRemoveTag/armDeleteTag/armPersonDelete which all auto-disarm via a 2800ms timer.",
+    "refuted": false,
+    "reasoning": "Confirmed: bulkDeleteArmed (07-production-tags.js:1024) is a plain boolean with no timer anywhere, and closeProductionPanel() (08-production-panels.js:9-12) only hides the panel and calls syncPanelClass() -- it never calls resetProductionPanelState()/clearProductionSelection(). resetProductionPanelState is only invoked from document-load paths (03-sync.js, 13-hosted.js, 18-local-files.js), not on panel close, so a stale arm plus the selection persist across a close/reopen and the next click on Delete (still rendered armed by renderBulkBar, 08-production-panels.js:771-777) deletes immediately."
+  },
+  {
+    "file": "src/js/08-production-panels.js",
+    "line": 492,
+    "severity": "low",
+    "summary": "jumpToTag() flashes every tag-anchor in the row matching by name only, regardless of category, unlike eachTagSpan which also checks data-tag-cat.",
+    "refuted": false,
+    "reasoning": "Confirmed: jumpToTag (lines 486-498) filters row.querySelectorAll('.tag-anchor') solely on normalizeTagName(data-tag-name), with no data-tag-cat comparison, while eachTagSpan (07-production-tags.js:953-974) explicitly checks 'el.getAttribute(\"data-tag-cat\") !== cat' first. Two differently-categorized same-named tags in one row would both flash on a single click."
+  },
+  {
+    "file": "src/js/08-production-panels.js",
+    "line": 225,
+    "severity": "low",
+    "summary": "tagEntityHtml() renders is-selected/aria-selected from the shared productionSelection map, but the Gear panel also renders its cards via tagEntityHtml, so an item selected via the Production panel's multi-select shows as 'selected' in the Gear panel despite having no selection UI there.",
+    "refuted": false,
+    "reasoning": "Confirmed: renderGearList() (line 83) calls entries.map(tagEntityHtml), the same function the Production panel uses, and tagEntityHtml (lines 214-227) unconditionally checks productionSelection[item.key]. 'gear' is one of TAG_CATEGORIES (07-production-tags.js:25) so gear items appear in the Production panel's category grouping too; the multi-select gesture is scoped via '#production-list .tag-entity' (21-events.js:67-68), and 21-events.js:677-679 explicitly comments 'the gear panel has no selection state' -- yet closing/reopening panels never clears productionSelection, so a gear item selected from the Production panel shows selected when later viewed in the Gear panel."
+  },
+  {
+    "file": "src/js/10-comments.js",
+    "line": 244,
+    "severity": "high",
+    "summary": "openCommentsPanel()/jumpToComment() call renderComments() directly without captureReplyDrafts() first, silently wiping an in-progress unposted reply whenever the panel is (re)opened or another comment's anchor is clicked.",
+    "refuted": false,
+    "reasoning": "Confirmed: openCommentsPanel (lines 244-248) and jumpToComment (lines 352-364, which calls openCommentsPanel) call renderComments() with no preceding captureReplyDrafts(), while every other renderComments() call site does capture first (toggleReplyComposer:297, 21-events.js:860/864, 05-render.js:122-123). Clicking a .cmt-anchor in the script triggers jumpToComment (21-events.js:241) even while the panel is already open, so an expanded, uncaptured reply draft gets overwritten by commentCardHtml's stale replyDrafts[commentId] on the resulting re-render."
+  },
+  {
+    "file": "src/js/10-comments.js",
+    "line": 277,
+    "severity": "high",
+    "summary": "The two-click delete confirmation for a comment can be silently defeated: actions like toggleReplyComposer call renderComments() directly (bypassing render()'s resetTransientUiState()), redrawing the Delete button as unarmed while deleteCommentArmId/timer is still live, so the next single click deletes without showing 'Confirm?'.",
+    "refuted": false,
+    "reasoning": "Confirmed: commentCardHtml's Delete button (line 425) is static markup with no reference to deleteCommentArmId, so any re-render shows it unarmed. resetTransientUiState() (05-render.js:88-95) explicitly clears deleteCommentArmId/timer specifically to prevent 'an armed delete would fire without ever showing its confirm' -- but it's only called from full render(), not from renderComments(). toggleReplyComposer (lines 296-305) calls captureReplyDrafts() + renderComments() only, leaving deleteCommentArmId live while the Delete button visually resets; the next click on that button re-enters armDeleteComment with the id still matching and deletes immediately."
+  },
+  {
+    "file": "src/js/09-find-replace.js",
+    "line": 143,
+    "severity": "high",
+    "summary": "Case-insensitive matching lowercases the haystack with toLowerCase() but reuses the resulting index/needle.length to slice the ORIGINAL un-lowercased string; characters whose lowercase form is longer in code-unit count (e.g. Turkish dotted capital I, U+0130) desync the index, corrupting the replacement.",
+    "refuted": false,
+    "reasoning": "Confirmed both by reading replaceInHtml (lines 143-171, uses hay=raw.toLowerCase() to find `at`, then raw.slice(cursor, at)) and by direct Node.js reproduction: 'abc\\u0130def'.toLowerCase() is 8 chars (the dotted I becomes 'i' + combining dot, U+0307) vs the 7-char original, so indexOf('def') in the lowercased string returns 5, but slicing the ORIGINAL string at index 5 yields 'ef' instead of 'def' -- a genuine off-by-one corruption reproduced at the console."
+  }
+]
