@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/03-sync.js",
+    "line": 339,
+    "severity": "critical",
+    "summary": "The oversized-stash fallback strips images to a \"__IMAGE__\" sentinel, but that sentinel is not a valid data: URI, so migrateRows()/safeImageSrc() silently turn it into null on the way back into mergeStates() -- making every image field in both base and mine look identical (and identical to no-image), so a real offline image edit is discarded with no conflict raised at all.",
+    "refuted": false,
+    "reasoning": "Confirmed by tracing the real code: safeImageSrc() (04-richtext.js:20-23) rejects '__IMAGE__' via its data:image regex and returns null, and resumeServerDoc() (13-hosted.js:121-143) runs migrateRows() on both stash.base and stash.mine before mergeStates(), so both collapse to visualImage:null while theirs keeps the real value. In mergeRow() (03-sync.js:136-144) this makes mv===bv (null===null), taking the 'only they changed it' branch and overwriting mine with theirs silently. imagesStripped is written at line 340 but grep confirms it is never read anywhere in src/."
+  },
+  {
+    "file": "src/js/03-sync.js",
+    "line": 209,
+    "severity": "high",
+    "summary": "Comment merging treats a comment that exists in base but was deleted on one side as gone unconditionally, even when the other side concurrently edited it (replied, resolved) -- unlike row merging, an edit never outranks a delete for comments.",
+    "refuted": false,
+    "reasoning": "Confirmed: at 03-sync.js:203-218, the branch `else if (t && !m) { if (b) return; ... }` drops the comment whenever it existed in base and is missing from mine, with no check for whether t actually differs from b (i.e. whether the other side edited it). Row merging explicitly has the opposite rule at line 165 ('an edit outranks my delete'), so comments really do lack that protection."
+  },
+  {
+    "file": "src/js/03-sync.js",
+    "line": 208,
+    "severity": "high",
+    "summary": "A comment present on both sides is merged as a whole object (newest updatedAt wins) rather than field-by-field, so an unrelated action that bumps updatedAt on one side (e.g. a reply) can silently revert an independent field change on the other side (e.g. a resolved toggle) that happened earlier in wall-clock time.",
+    "refuted": false,
+    "reasoning": "Confirmed: line 208 `pick = JSON.parse(JSON.stringify(newer(m, t)))` takes the entire object from whichever side has the later updatedAt/createdAt, only replies get unioned afterward (lines 211-216). Any other field only present on the older-updatedAt side (e.g. resolved) is dropped wholesale, unlike the explicit per-field reconciliation used for rows."
+  },
+  {
+    "file": "src/js/03-sync.js",
+    "line": 246,
+    "severity": "medium",
+    "summary": "Concurrent title edits are not reconciled like row fields are: if both sides changed the title (or base is unavailable), mergeStates() silently keeps theirs and drops mine, with no conflict comment and no stats entry.",
+    "refuted": false,
+    "reasoning": "Confirmed by direct read of lines 245-246: `mergedTitle = theirs.title;` is the default, overridden only when `base && mine.title !== base.title && theirs.title === base.title`. When both differ from base, or when base is null, theirs wins unconditionally with no entry pushed to `conflicts` and no stats field touched, unlike row-field conflicts which always produce a comment."
+  },
+  {
+    "file": "src/js/03-sync.js",
+    "line": 62,
+    "severity": "medium",
+    "summary": "writeSnapshots()'s over-quota fallback shifts entries out from the oldest end and, if even the single newest entry alone still exceeds the byte budget, ends up wiping the entire local snapshot history via localStorage.removeItem instead of preserving older entries that would have fit on their own.",
+    "refuted": false,
+    "reasoning": "Confirmed: the loop at lines 51-63 only ever tests suffixes of the list (shift() removes from index 0 forward), so it only ever tries the list as a whole or trailing subsets ending at the newest entry; it never retries with just the oldest/smaller entries once the newest alone still exceeds MAX_SNAPSHOT_BYTES. When working.length reaches 0 the function calls localStorage.removeItem (line 64), clearing everything even though earlier, smaller entries it already discarded might have fit under the budget alone."
+  },
+  {
+    "file": "src/js/02-state.js",
+    "line": 49,
+    "severity": "critical",
+    "summary": "migrateRows() only validates that s.rows/s.comments/s.productionTags are arrays, not that their elements are objects, unlike the people array a few lines below which explicitly filters p && typeof p === object -- so a single non-object element crashes the whole load.",
+    "refuted": false,
+    "reasoning": "Confirmed: lines 48-77 only check Array.isArray before iterating and immediately do `r.id = ...` / `c.id = ...` on each element with no object-type filter, while line 89 explicitly does `s.people.filter(function (p) { return p && typeof p === 'object'; })`. A `null` element in rows/comments/productionTags (valid JSON) throws a TypeError on property assignment. The call site at 18-local-files.js:180 (`state = migrateRows(parsed)`) has no surrounding try/catch, so a malformed/corrupted .html file with e.g. `\"rows\":[null]` would crash the open flow uncaught, exactly as described."
+  },
+  {
+    "file": "src/js/02-state.js",
+    "line": 28,
+    "severity": "critical",
+    "summary": "legacyMdToHtml()'s heuristic for this-text-is-already-HTML is just text.indexOf('<') !== -1; when a legacy plain-text note merely contains a bracketed phrase starting with a letter (a common director's-note convention), the unescaped '<' is later parsed as a real, unrecognized HTML tag by sanitizeHtml()'s DOMParser, and the bracketed phrase is silently deleted rather than escaped.",
+    "refuted": false,
+    "reasoning": "Confirmed the parsing mechanism empirically: parsing 'Camera pans <insert VFX here>then reveal the room.' through the same DOMParser-based approach used by inertBody()/sanitizeHtml() (04-richtext.js:7-17) yields innerHTML with an <insert vfx=\"\" here=\"\"> element swallowing the trailing text, and textContent becomes 'Camera pans then reveal the room.' -- the literal '<insert VFX here>' phrase is gone. Since legacyMdToHtml (line 28) returns any text containing '<' completely unescaped, and walkSanitize's fallback for unknown tags (04-richtext.js:165-166) unwraps rather than restoring the original bracket text, any legacy plain text with a stray '<' followed by a letter loses that bracketed phrase on migration."
+  },
+  {
+    "file": "src/js/02-state.js",
+    "line": 32,
+    "severity": "high",
+    "summary": "legacyMdToHtml() escapes the whole line (URL included) with escapeHtml() before extracting the markdown link's URL, then escapes that already-escaped URL again when building the href attribute -- double-encoding any '&' in the URL and corrupting the link's query string.",
+    "refuted": false,
+    "reasoning": "Confirmed by tracing lines 29-35: `out = escapeHtml(text)` runs first, so any '&' in a markdown URL is already '&amp;' by the time the `\\[...\\]\\(...\\)` regex captures `url` from `out`. safeHref(url) (04-richtext.js:25-34) only checks scheme prefixes and returns the string verbatim without unescaping, then `escapeHtml(safe)` (line 34) re-escapes it, turning '&amp;' into '&amp;amp;' -- a real double-encoding of any '&' in the URL's query string."
+  },
+  {
+    "file": "src/js/02-state.js",
+    "line": 46,
+    "severity": "high",
+    "summary": "The is-this-legacy test is a strict inequality against the current constant (s.schema !== SCHEMA_VERSION) rather than a schema-is-older-than-current test, so it fires for ANY schema value that isn't exactly today's SCHEMA_VERSION, re-running the buggy legacyMdToHtml conversion on ordinary, already-migrated content.",
+    "refuted": false,
+    "reasoning": "Confirmed: line 46 is literally `s.schema !== SCHEMA_VERSION`, an equality check, not `<`. SCHEMA_VERSION is a single fixed constant (00-prelude.js:18, value 2) and migrateRows always stamps s.schema = SCHEMA_VERSION on exit (line 125), so under normal same-version use this rarely misfires; but for any document whose schema field doesn't exactly match the running build's constant (e.g. a document from a differently-versioned copy of this self-contained HTML app, or a corrupted schema value), legacy=true fires even on already-migrated rich-text content. Because legacyMdToHtml only skips text containing '<', already-migrated fields with an unescaped '&' and no tags would be re-escaped, double-encoding the entity -- a real, if narrower, consequence of using strict inequality instead of a less-than check."
+  }
+]
