@@ -1,0 +1,118 @@
+# The two project formats: .splitpage and lossless Markdown.
+#
+# Neither file picker can run headless, so this drives the serializers and
+# the open path through window.__splitpageFormats (20d-formats.js) — the
+# same trick 03-exports.txt plays on URL.createObjectURL, one level up.
+# openFile() takes a real File object and runs the whole open path, modal
+# and all, so what is tested here is what File > Open actually does.
+
+open
+
+# __norm strips the two fields a save legitimately changes and sorts every
+# key, so "deep-equals" is a string comparison that cannot be fooled by
+# property order.
+eval (function(){window.F=window.__splitpageFormats;var sortAll=function(v){if(Array.isArray(v))return v.map(sortAll);if(v&&typeof v==='object'){var o={};Object.keys(v).sort().forEach(function(k){o[k]=sortAll(v[k]);});return o;}return v;};window.__norm=function(s){var c=F.migrate(F.clone(s));delete c.rev;delete c.lastEditedAt;delete c.lastEditedBy;return JSON.stringify(sortAll(c));};return 'hooked';})()
+expect typeof window.F.buildSplitpage === 'function'
+
+# --- a document worth round-tripping ----------------------------------------
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] to the {kitchen}.
+sleep 600
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+eval document.activeElement.blur()
+sleep 300
+
+# an inline image, a comment with a live anchor span, a scene status, a
+# reading speed, a crew member — and a cell full of the characters a fence
+# could collide with
+eval (function(){var s=F.state();var r=s.rows[0];r.visualImage='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';r.audioText='<span class="cmt-anchor" data-cmt="ctest1">Anchored</span> '+r.audioText;r.status='shot';if(s.rows[1])s.rows[1].visualText='a ~~~~ b | c `d` ~~~~~ and <u>underlined</u>';s.wordsPerMinute=175;s.people.push({id:'ptest1',name:'Jordan'});s.comments.push({id:'ctest1',rowId:r.id,field:'audioText',anchorId:'ctest1',quotedText:'gaffer tape',author:'Tester',body:'look here',resolved:false,kind:'anchor',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]});window.__base=__norm(s);window.__rows=s.rows.length;return s.rows.length;})()
+expect window.__rows > 1
+
+# --- .splitpage round trip ---------------------------------------------------
+eval (function(){window.__sp=F.buildSplitpage();return window.__sp.length;})()
+# no envelope: the file IS the state object
+expect JSON.parse(window.__sp).schema === 2
+expect Array.isArray(JSON.parse(window.__sp).rows)
+expect JSON.parse(window.__sp).rows.length === window.__rows
+eval (function(){F.openFile(new File([window.__sp],'round.splitpage'));return true;})()
+wait F.docFile().kind === 'splitpage'
+expect __norm(F.state()) === window.__base
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+
+# --- .md round trip ----------------------------------------------------------
+eval (function(){window.__md=F.buildMarkdown();return window.__md.length;})()
+# the human half still reads as a two-column table, with the status column
+expect window.__md.indexOf('| # | Visual | Audio | Status |') !== -1
+expect window.__md.indexOf('| shot |') !== -1
+expect window.__md.indexOf('## Production breakdown') !== -1
+# the fence outgrows the five tildes sitting in scene 2
+expect /\n~{6}splitpage\n/.test(window.__md)
+expect /\n~{6}\n/.test(window.__md.slice(window.__md.indexOf('~~~~~~splitpage')))
+expect window.__md.indexOf('leave this block alone') !== -1
+eval (function(){F.openFile(new File([window.__md],'round.md'));return true;})()
+wait F.docFile().kind === 'md'
+expect __norm(F.state()) === window.__base
+# tags, comment anchors and the image all survived the trip through Markdown
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="ctest1"]').length == 1
+expect F.state().rows[0].visualImage.indexOf('data:image/png;base64,') === 0
+expect F.state().rows[0].status === 'shot'
+expect F.state().wordsPerMinute === 175
+expect F.state().people.some(function(p){return p.name==='Jordan';})
+expect F.state().productionTags.length >= 2
+
+# a hand-edited .md is still parsed as one of ours, and a foreign one is not
+expect F.parseMarkdown(window.__md) !== null
+expect F.parseMarkdown('# Just a document\n\nNo data block here.\n') === null
+
+# --- one table cell edited outside Splitpage ---------------------------------
+# the table wins for that cell's text; the block wins for everything else,
+# and the tags in it are re-attached by name
+eval (function(){window.__edited=window.__md.replace(/^(\| 01 \|.*)\| (todo|ready|shot) \|$/m,function(m,head,st){return head+'right now | '+st+' |';});return window.__edited !== window.__md;})()
+expect window.__edited !== window.__md
+eval (function(){F.openFile(new File([window.__edited],'edited.md'));return true;})()
+wait F.state().rows[0].audioText.indexOf('right now') !== -1
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+expect F.state().rows[0].audioText.indexOf('data-tag-name="gaffer tape"') !== -1
+expect F.state().rows[0].audioText.indexOf('data-tag-name="kitchen"') !== -1
+# the anchor on the rebuilt cell is gone, but the comment and its quote stay
+expect F.state().comments.some(function(c){return c.id==='ctest1' && c.quotedText==='gaffer tape';})
+expect F.state().rows[0].audioText.indexOf('cmt-anchor') === -1
+# everything the table cannot show is untouched
+expect F.state().rows[0].visualImage.indexOf('data:image/png;base64,') === 0
+expect F.state().rows[0].status === 'shot'
+expect F.state().wordsPerMinute === 175
+expect F.state().rows.length === window.__rows
+
+# --- a scene added by hand: never a silent choice ----------------------------
+eval (function(){window.__added=window.__md.replace(/^\| 01 \|.*$/m,function(l){return l+'\n| 01b | extra visual | extra audio | todo |';});return window.__added.length>window.__md.length;})()
+eval (function(){F.openFile(new File([window.__added],'added.md'));return true;})()
+wait !document.getElementById('md-rows-modal').hidden
+expect document.getElementById('md-rows-detail').textContent.indexOf('scene') !== -1
+# "Keep Splitpage's record" ignores the table
+click #md-rows-keep
+wait document.getElementById('md-rows-modal').hidden
+expect F.state().rows.length === window.__rows
+expect __norm(F.state()) === window.__base
+
+# "Use the table's text" rebuilds the scenes from it, in order
+eval (function(){F.openFile(new File([window.__added],'added.md'));return true;})()
+wait !document.getElementById('md-rows-modal').hidden
+click #md-rows-table
+wait document.getElementById('md-rows-modal').hidden
+expect F.state().rows.length === window.__rows + 1
+expect F.state().rows.some(function(r){return r.audioText.indexOf('extra audio') !== -1;})
+# the things the table cannot say are kept by position
+expect F.state().rows[0].status === 'shot'
+expect F.state().wordsPerMinute === 175
+expect F.state().comments.some(function(c){return c.id==='ctest1';})
+
+# --- a legacy .html project still opens --------------------------------------
+eval (function(){window.__legacy=F.buildStandaloneHtml();window.__legacyNorm=__norm(F.state());return window.__legacy.length>10000;})()
+expect window.__legacy.indexOf('<script id="state-data"') !== -1
+eval (function(){F.openFile(new File([window.__legacy],'legacy.html'));return true;})()
+wait F.docFile().kind === 'html'
+expect __norm(F.state()) === window.__legacyNorm
+expect document.querySelectorAll('#rows .row').length === F.state().rows.length
+
+quit
