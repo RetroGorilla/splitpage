@@ -317,6 +317,19 @@ Typing shortcuts (`[prop]` `{kitchen}` `~vfx~` `<gear>`), comments, status,
 exports, the **Gear** screen and its packing lists, the server features —
 everything else is exactly the same.
 
+## Two shapes of Markdown export
+
+**File ▸ Export a copy** has two Markdown options. **Markdown (.md)** lists
+the script scene by scene — a `## Scene 01` heading, then the Visual notes,
+then the Audio, stacked. **Markdown, two columns (.md)** lays the same
+script out as a table instead, one row per scene with a Visual column next
+to an Audio column — the way the split view itself looks, and the way a
+GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side
+by side rather than stacked. It's also exactly the shape **Paste a
+script…** already reads back in "Two columns" mode, so a two-column
+Markdown export round-trips back into Splitpage with the split intact.
+Both carry the production breakdown and comments the same way.
+
 ## Importing a Google Doc
 
 **File ▸ Import from Google Doc link…** takes a Google Docs share link (or
