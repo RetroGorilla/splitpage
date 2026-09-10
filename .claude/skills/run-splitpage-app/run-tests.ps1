@@ -8,7 +8,7 @@
 # Each suite gets its own driver process, its own server port and its own
 # browser, so one wedged suite cannot take the others down with it. When
 # -Port/-CdpPort are omitted the bases are auto-picked (see below) so two
-# runs on the same machine — two worktrees, two agents — don't fight over
+# runs on the same machine - two worktrees, two agents - don't fight over
 # the same fixed ports.
 
 [CmdletBinding()]
@@ -27,12 +27,12 @@ $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 
 # Start-Process returns Edge's launcher, which hands off to a process tree and
-# exits — so the driver's own Stop-Process kills a corpse and leaves the real
+# exits - so the driver's own Stop-Process kills a corpse and leaves the real
 # browser running. Worse, this runner kills the driver the moment it sees the
 # RESULT line, which can be before that teardown runs at all. Left alone the
 # orphans pile up (20 of them after one six-suite run) until a later suite's
 # browser is too slow to answer and its CDP socket times out on the very first
-# command — a suite that passes alone and fails in a full run.
+# command - a suite that passes alone and fails in a full run.
 #
 # Matched on the profile directory, never on the process name: killing every
 # msedge.exe would take down the browser the person running the tests is
@@ -65,7 +65,7 @@ if (-not $files) { Write-Host "no test files matched"; exit 1 }
 # ports ($Port + $i) / ($CdpPort + $i), so the block each run actually needs
 # is base+1 .. base+files.Count on both ranges. Two suites on one machine
 # (different worktrees, two agents) used to collide on the old fixed
-# defaults (9601/10201) and fail with "static server did not come up" —
+# defaults (9601/10201) and fail with "static server did not come up" -
 # instead, derive a starting base from a stable hash of this worktree's own
 # path (so two worktrees rarely even try the same block), probe every port
 # the run needs with a real TcpListener bind, and step the base forward by
@@ -139,7 +139,7 @@ foreach ($f in $files) {
     if ((Test-Path $out) -and (Select-String -Path $out -Pattern '^RESULT:' -Quiet)) { $done = $true; break }
     if ($p.HasExited -and $sw.Elapsed.TotalSeconds -gt 3) { $done = $true; break }
   }
-  # Give the driver a moment to reach its own finally block before killing it —
+  # Give the driver a moment to reach its own finally block before killing it -
   # it prints RESULT first and tears the browser down after.
   if ($done -and -not $p.HasExited) {
     $grace = [Diagnostics.Stopwatch]::StartNew()
