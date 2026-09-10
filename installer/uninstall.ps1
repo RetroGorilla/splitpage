@@ -30,9 +30,13 @@ if (-not $Silent) {
 }
 
 # A running server holds node.exe open, so stop anything launched from here
-# before trying to delete it.
+# before trying to delete it. A trailing separator on the prefix matters: a
+# bare StartsWith($target) also matches a sibling folder whose name merely
+# begins with the same characters (e.g. "Splitpage" install path also
+# matching a "SplitpageLegacy" one), force-killing an unrelated process.
+$targetPrefix = $target.TrimEnd('\') + "\"
 Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($target, "OrdinalIgnoreCase") } |
+  Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($targetPrefix, "OrdinalIgnoreCase") } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 foreach ($root in @($env:APPDATA, $env:ProgramData)) {
