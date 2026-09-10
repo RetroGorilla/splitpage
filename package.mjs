@@ -211,10 +211,15 @@ console.log(`  ${zipPath}  (${kb(statSync(zipPath).size)})`);
 if (process.argv.includes("--installer")) {
   const { fetchRuntime } = await import("./tools/fetch-runtime.mjs");
 
-  /* Parse --arch flag: x64 (default), arm64, or both */
-  const archArg = process.argv[process.argv.indexOf("--installer") + 1] === "--arch"
-    ? process.argv[process.argv.indexOf("--arch") + 1]
-    : "x64";
+  /* --arch x64 (default) | arm64 | both. "both" builds one setup per
+     architecture, each carrying only its own runtime: an x64 user should not
+     download an 87 MB ARM binary they can never run. */
+  const archIdx = process.argv.indexOf("--arch");
+  const archArg = archIdx === -1 ? "x64" : String(process.argv[archIdx + 1] || "");
+  if (!["x64", "arm64", "both"].includes(archArg)) {
+    console.error("--arch must be x64, arm64 or both");
+    process.exit(1);
+  }
   const archs = archArg === "both" ? ["x64", "arm64"] : [archArg];
 
   async function buildSetup(arch) {
@@ -223,13 +228,14 @@ if (process.argv.includes("--installer")) {
        uninstaller that Add/Remove Programs will call. */
     const payloadEntries = [
       ...ENTRIES,
-      ...archs.map((a) => [`runtime/node-${a}.exe`, 0o755]),
+      [`runtime/node-${arch}.exe`, 0o755],
       ["icon.ico", 0o644],
       ["uninstall.ps1", 0o644]
     ];
     const extra = {};
-    for (const a of archs) {
-      extra[`runtime/node-${a}.exe`] = await fetchRuntime({ arch: a, log: () => {} });
+    {
+      const a = arch;
+      extra[`runtime/node-${a}.exe`] = await fetchRuntime({ arch: a, log: (m) => console.log(m) });
     }
     extra["icon.ico"] = join(ROOT, "installer", "icon.ico");
     extra["uninstall.ps1"] = join(ROOT, "installer", "uninstall.ps1");
@@ -254,7 +260,9 @@ if (process.argv.includes("--installer")) {
     console.log(`  payload (${arch}): ${(payload.length / 1024 / 1024).toFixed(0)} MB`);
 
     /* install.ps1 with the version stamped in */
-    const installPs1 = join(DIST, `install-${arch}.ps1`);
+    /* Named install.ps1 because that is what AppLaunched and the quiet commands
+       run inside the extractor. Its content is the same for every arch. */
+    const installPs1 = join(DIST, "install.ps1");
     writeFileSync(installPs1,
       readFileSync(join(ROOT, "installer", "install.ps1"), "utf8").split("@VERSION@").join(VERSION));
 
@@ -293,7 +301,7 @@ if (process.argv.includes("--installer")) {
       "FriendlyName=Splitpage Setup",
       "AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1",
       "PostInstallCmd=<None>",
-      `FILE0=\"install-${arch}.ps1\"`,
+      `FILE0=\"install.ps1\"`,
       `FILE1=\"splitpage-payload-${arch}.zip\"`,
       "[SourceFiles]",
       "SourceFiles0=" + win(DIST),
@@ -313,7 +321,7 @@ if (process.argv.includes("--installer")) {
   It ships with Windows — this is not something to install, it just means the
   build is not running on Windows. Everything it needs is already in dist/:
 
-      dist/install-${arch}.ps1
+      dist/install.ps1
       dist/splitpage-payload-${arch}.zip
       dist/splitpage-${arch}.SED
 

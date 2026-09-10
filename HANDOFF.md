@@ -1091,6 +1091,8 @@ cycle — all exercised in a real browser against the API contract.
 
 ### NOT verified — say so, don't imply otherwise
 
+- **The ARM64 setup.** `node package.mjs --installer --arch arm64` builds `SplitpageSetup-<v>-arm64.exe` with the win-arm64 Node (verified against nodejs.org checksums), and install.ps1 picks the runtime by `PROCESSOR_ARCHITECTURE`, but there is no ARM64 Windows machine here: it has never been run. The x64 setup from the same code has.
+
 - **No real phone has touched the mobile interface.** Everything above ran in
   Chromium's mobile emulation — real touch translation, but not a real iOS
   Safari (its keyboard/viewport dance is famously its own thing) or a real

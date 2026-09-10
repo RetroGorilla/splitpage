@@ -112,7 +112,11 @@ if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Forc
 # The payload is a zip rather than loose files because IExpress extracts
 # everything into one flat folder, which would lose server\ and runtime\.
 $payload = Join-Path $Source "splitpage-payload.zip"
-if (-not (Test-Path $payload)) { throw "splitpage-payload.zip is missing from this installer." }
+if (-not (Test-Path $payload)) {
+  # Per-architecture builds name it splitpage-payload-<arch>.zip.
+  $alt = Get-ChildItem -Path $Source -Filter "splitpage-payload-*.zip" | Select-Object -First 1
+  if ($alt) { $payload = $alt.FullName } else { throw "splitpage-payload.zip is missing from this installer." }
+}
 
 $stage = Join-Path $env:TEMP ("splitpage-install-" + [System.Guid]::NewGuid().ToString("N"))
 try {
@@ -122,6 +126,26 @@ try {
   $from = if ($inner) { $inner.FullName } else { $stage }
   Copy-Item (Join-Path $from "*") $target -Recurse -Force
 
+  # Copy-Item above only adds/overwrites - it never removes a file an
+  # upgrade left behind. Mirror instead: anything in $target that isn't
+  # in this release's payload gets removed, so reinstalling over an older
+  # version doesn't accumulate stale files (e.g. a renamed/deleted script)
+  # indefinitely. Scoped entirely to $target, which never contains the
+  # user's documents (those live in $dataDir, outside the app folder).
+  $fromFull = (Resolve-Path $from).Path
+  $newRel = @{}
+  Get-ChildItem -Path $from -Recurse -File | ForEach-Object {
+    $newRel[$_.FullName.Substring($fromFull.Length).TrimStart('\')] = $true
+  }
+  $targetFull = (Resolve-Path $target).Path
+  Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $rel = $_.FullName.Substring($targetFull.Length).TrimStart('\')
+    if (-not $newRel.ContainsKey($rel)) { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+  }
+
+  # Runs AFTER the mirror step above: the mirror removes anything not in the
+  # payload, and runtime\node.exe is created here, not shipped, so doing this
+  # earlier would delete the runtime it just chose.
   # --- select the appropriate Node runtime --------------------------------
   #
   # After extraction, we have one or more runtime/node-<arch>.exe files.
@@ -154,38 +178,23 @@ try {
       Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
     }
 
-    # Update the manifest to reflect the selected runtime
+    # The manifest lists runtime/node-<arch>.exe; the file on disk is now
+    # runtime/node.exe. Rename the entry (same hash, same mode) rather than
+    # dropping it, so the uninstaller still removes node.exe and the updater
+    # still recognises it as a shipped file, and drop the other archs.
     $manifestPath = Join-Path $target ".splitpage-release.json"
     if (Test-Path $manifestPath) {
-      $manifest = Get-Content $manifestPath | ConvertFrom-Json
-      $filesToRemove = @()
-      foreach ($file in ($manifest.files | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name)) {
-        if ($file -match "runtime/node-\w+\.exe" -and $file -ne "runtime/node.exe") {
-          $filesToRemove += $file
+      $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+      $names = @($manifest.files.PSObject.Properties | ForEach-Object { $_.Name })
+      foreach ($name in $names) {
+        if ($name -notmatch "^runtime/node-[A-Za-z0-9]+.exe$") { continue }
+        if ($name -eq ("runtime/" + $selected)) {
+          $manifest.files | Add-Member -NotePropertyName "runtime/node.exe" -NotePropertyValue $manifest.files.$name -Force
         }
+        $manifest.files.PSObject.Properties.Remove($name)
       }
-      foreach ($file in $filesToRemove) {
-        $manifest.files.PSObject.Properties.Remove($file)
-      }
-      $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath
+      [System.IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 10) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
     }
-  }
-
-  # Copy-Item above only adds/overwrites - it never removes a file an
-  # upgrade left behind. Mirror instead: anything in $target that isn't
-  # in this release's payload gets removed, so reinstalling over an older
-  # version doesn't accumulate stale files (e.g. a renamed/deleted script)
-  # indefinitely. Scoped entirely to $target, which never contains the
-  # user's documents (those live in $dataDir, outside the app folder).
-  $fromFull = (Resolve-Path $from).Path
-  $newRel = @{}
-  Get-ChildItem -Path $from -Recurse -File | ForEach-Object {
-    $newRel[$_.FullName.Substring($fromFull.Length).TrimStart('\')] = $true
-  }
-  $targetFull = (Resolve-Path $target).Path
-  Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-    $rel = $_.FullName.Substring($targetFull.Length).TrimStart('\')
-    if (-not $newRel.ContainsKey($rel)) { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
   }
 } finally {
   if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
