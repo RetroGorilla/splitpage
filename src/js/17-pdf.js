@@ -171,7 +171,25 @@
           var dim = safeAspect(jpegSize(bytes));
           var name = "Im" + (images.length + 1);
           images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
-          imgRef = { name: name, w: COLW, h: COLW * dim.ratio };
+          var natW = COLW, natH = COLW * dim.ratio;
+          /* A tall/portrait image (a phone-screenshot crop, say) can have a
+             natural height that alone exceeds a WHOLE page's usable height
+             — safeAspect() only guards against a zero/negative width, not
+             an extreme ratio. The draw guard further down only checks
+             whether it fits from the current y, with no fallback if it
+             can't fit ANYWHERE — even a fresh page — so it was silently
+             skipped: never drawn, no warning. Cap it to the full usable
+             page height here (PH - 2*M), shrinking width to match, so
+             there's always at least one page it fits on. */
+          /* The most vertical room an image can ever get is right after a
+             forced page break: newPage() lands at PH - M, then the row
+             loop's own "y -= 6" plus drawColumnHeaders()'s 8pt + 16pt of
+             header/rule/gap eat 30pt of that before the image is drawn —
+             capping to the whole page's height (PH - 2*M) still left it
+             30pt short of fitting even there. */
+          var maxH = PH - 2 * M - 30;
+          if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
+          imgRef = { name: name, w: natW, h: natH };
           imgH = imgRef.h + 8;
         } catch (e) { /* skip an unreadable image */ }
       }
@@ -477,13 +495,24 @@
       y -= LEAD;
     }
 
+    /* Unlike buildPdf()'s two columns, this line was never run through
+       pdfWrapRuns — a long item name/status/owner combination just ran
+       straight off the page's right edge (unwrapped, untruncated, simply
+       invisible past x=612) instead of wrapping to a second line. */
+    var ITEM_TEXT_W = PW - M * 2 - 18;
     items.forEach(function (item) {
-      if (y - LEAD < M) { newPage(); header(); }
       var owner = personById(item.owner);
       var st = tagStatus(item.status) || TAG_STATUSES[0];
+      var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "");
+      var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
+      var need = wrapped.length * LEAD;
+      if (y - need < M) { newPage(); header(); }
       box(M, y - SIZE + 1, 10);
-      text(item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : ""),
-        M + 18, y - SIZE, "F1", SIZE);
+      wrapped.forEach(function (lineSegs, li) {
+        var lineStr = lineSegs.map(function (s) { return s.text; }).join("");
+        text(lineStr, M + 18, y - SIZE, "F1", SIZE);
+        if (li < wrapped.length - 1) y -= LEAD;
+      });
       y -= LEAD;
       rule(M, y + 8, PW - M * 2);
     });
