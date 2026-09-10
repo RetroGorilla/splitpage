@@ -140,15 +140,21 @@ async function writeDoc(doc) {
 
 /* ---------- http helpers ---------- */
 
-function sendJson(res, status, body) {
+function sendJson(res, status, body, opts) {
   const payload = JSON.stringify(body);
-  res.writeHead(status, {
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(payload),
     /* documents must never be cached by the browser or by Cloudflare — a
        stale rev would make the client think it is up to date and clobber */
     "Cache-Control": "no-store"
-  });
+  };
+  /* Set when we are answering without having read the rest of the request
+     body (an over-length upload). The client is still sending; keeping the
+     connection alive would leave its unread bytes in front of the next
+     request on it, so this response ends the connection. */
+  if (opts && opts.close) headers["Connection"] = "close";
+  res.writeHead(status, headers);
   res.end(payload);
 }
 
@@ -156,16 +162,27 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
+    let aborted = false;
     req.on("data", (chunk) => {
+      if (aborted) return;
       size += chunk.length;
       if (size > MAX_BODY) {
+        /* Pause rather than destroy. req.destroy() tears the socket down
+           immediately, so the 413 below never reaches the client and it sees
+           a connection reset instead of a message telling it the document is
+           too big — which, for a script carrying too many embedded images, is
+           the one thing the user needs to be told. The socket is closed for
+           real once that response has been written (Connection: close). */
+        aborted = true;
+        chunks.length = 0;
+        req.pause();
         reject(Object.assign(new Error("too-large"), { code: "TOO_LARGE" }));
-        req.destroy();
         return;
       }
       chunks.push(chunk);
     });
     req.on("end", () => {
+      if (aborted) return;
       try {
         const text = Buffer.concat(chunks).toString("utf8");
         resolve(text ? JSON.parse(text) : {});
@@ -372,7 +389,7 @@ const server = http.createServer((req, res) => {
 
   Promise.resolve(done).catch((err) => {
     if (res.headersSent) { res.destroy(); return; }
-    if (err && err.code === "TOO_LARGE") return sendJson(res, 413, { error: "too-large" });
+    if (err && err.code === "TOO_LARGE") return sendJson(res, 413, { error: "too-large" }, { close: true });
     if (err && err.code === "BAD_JSON") return sendJson(res, 400, { error: "bad-json" });
     console.error("[splitpage]", req.method, url.pathname, err && err.stack ? err.stack : err);
     sendJson(res, 500, { error: "server-error" });
