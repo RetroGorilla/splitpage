@@ -35,6 +35,12 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const VERSION = readFileSync(join(ROOT, "VERSION"), "utf8").trim();
+let releaseConfig = {};
+try {
+  releaseConfig = JSON.parse(readFileSync(join(ROOT, "release.json"), "utf8"));
+} catch {
+  // release.json is optional; updateApi defaults to current hard-coded value
+}
 
 /* ---------- build first ---------- */
 
@@ -103,6 +109,7 @@ const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 const manifest = {
   name: "Splitpage",
   version: VERSION,
+  ...(releaseConfig.updateApi && { updateApi: releaseConfig.updateApi }),
   files: Object.fromEntries(
     FILES.map(([rel, mode]) => [rel, { sha256: sha256(readFileSync(join(STAGE, rel))), mode }])
   )
@@ -251,6 +258,7 @@ if (process.argv.includes("--installer")) {
     const payloadManifest = Buffer.from(JSON.stringify({
       name: "Splitpage",
       version: VERSION,
+      ...(releaseConfig.updateApi && { updateApi: releaseConfig.updateApi }),
       files: Object.fromEntries(
         payloadEntries
           .filter(([rel]) => rel !== MANIFEST_NAME)

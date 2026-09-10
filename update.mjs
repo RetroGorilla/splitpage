@@ -35,8 +35,7 @@ const MANIFEST_NAME = ".splitpage-release.json";
 
 /* Overridable so this can be pointed at a test server — and so anyone running
    their own fork is not stuck fetching someone else's releases. */
-const API = process.env.SPLITPAGE_UPDATE_API
-  || "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
+const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
 
 const argv = process.argv.slice(2);
 const cmd = argv.find((a) => !a.startsWith("-")) || "stage";
@@ -81,6 +80,20 @@ function localVersion() {
 
 function localManifest() {
   try { return JSON.parse(readFileSync(join(ROOT, MANIFEST_NAME), "utf8")); } catch { return null; }
+}
+
+/* Resolve the update API URL in priority order:
+   1. SPLITPAGE_UPDATE_API env var (overrides everything)
+   2. updateApi from local .splitpage-release.json (if valid https URL)
+   3. Default hard-coded URL
+   Exported so start.mjs can use the same resolution logic. */
+export function updateApiUrl() {
+  if (process.env.SPLITPAGE_UPDATE_API) return process.env.SPLITPAGE_UPDATE_API;
+  const manifest = localManifest();
+  if (manifest?.updateApi && typeof manifest.updateApi === "string" && manifest.updateApi.startsWith("https://")) {
+    return manifest.updateApi;
+  }
+  return DEFAULT_API;
 }
 
 /* ---------- zip reading ---------- */
@@ -140,7 +153,7 @@ function stripTopLevel(files) {
 /* ---------- the remote release ---------- */
 
 async function latestRelease() {
-  const res = await fetch(API, { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-updater" } });
+  const res = await fetch(updateApiUrl(), { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-updater" } });
   if (!res.ok) throw new Error(`update check failed: ${res.status} ${res.statusText}`);
   const body = await res.json();
   const version = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
@@ -244,8 +257,37 @@ export function apply({ log = console.log } = {}) {
   const entries = [...Object.entries(manifest.files || {}), [MANIFEST_NAME, { mode: 0o644 }]];
 
   const backup = join(UPDATE_DIR, "backup");
-  rmSync(backup, { recursive: true, force: true });
+  const sentinel = join(backup, ".in-progress");
+
+  /* If a previous apply() was hard-killed mid-copy, the sentinel will exist and
+     the backup will be incomplete or mixed with new files. Restore from the
+     existing backup first to get back to a good state, then proceed fresh. */
+  if (existsSync(sentinel)) {
+    log(`  recovering from interrupted update`);
+    const oldManifest = (() => {
+      try {
+        const old = join(UPDATE_DIR, "backup.manifest.json");
+        return existsSync(old) ? JSON.parse(readFileSync(old, "utf8")) : manifest;
+      } catch { return manifest; }
+    })();
+    const oldEntries = [...Object.entries(oldManifest.files || {}), [MANIFEST_NAME, { mode: 0o644 }]];
+    for (const [rel] of oldEntries) {
+      const keep = safeJoin(backup, rel);
+      const to = safeJoin(ROOT, rel);
+      if (existsSync(keep)) cpSync(keep, to);
+      else rmSync(to, { force: true });
+    }
+    rmSync(backup, { recursive: true, force: true });
+  }
+
   mkdirSync(backup, { recursive: true });
+
+  /* Write sentinel BEFORE any files are replaced. If the process dies before
+     this update completes, the next run will see this and restore from backup
+     first instead of wiping the only good backup and rebuilding from a mixed state. */
+  writeFileSync(sentinel, info.to);
+  /* Save the old manifest in case we need to restore it on interrupt. */
+  writeFileSync(join(UPDATE_DIR, "backup.manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
   const done = [];
   try {
@@ -282,7 +324,11 @@ export function apply({ log = console.log } = {}) {
     throw err;
   }
 
+  /* Update succeeded: clean up the staging area and marker files, but keep backup
+     for a while in case a user manually needs to revert. */
   rmSync(stagedDir, { recursive: true, force: true });
+  rmSync(sentinel, { force: true });
+  rmSync(join(UPDATE_DIR, "backup.manifest.json"), { force: true });
   rmSync(join(UPDATE_DIR, "pending.json"), { force: true });
   log(`  updated ${info.from} -> ${info.to}`);
   return info;

@@ -336,8 +336,7 @@ writeStatus({ pending: updater ? updater.pending() : null, justUpdated: applied 
 if (!has("--no-update-check") && updater) {
   (async () => {
     try {
-      const res = await fetch(process.env.SPLITPAGE_UPDATE_API
-        || "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest",
+      const res = await fetch(updater.updateApiUrl(),
         { headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-launcher" } });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const body = await res.json();
