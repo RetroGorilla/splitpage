@@ -906,7 +906,12 @@
         while (at !== -1) {
           var before = at === 0 ? "" : text.charAt(at - 1);
           var after = text.charAt(at + phrase.length);
-          if (!/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after)) {
+          /* \p{L}\p{N}, not [A-Za-z0-9] — the same ASCII-only class the
+             comment on buildUntaggedIndex's matcher (below) says was found
+             and fixed there. Left as ASCII here, "Ana" inside "Anaïs"
+             passed the boundary check (the accented "ï" isn't in
+             [A-Za-z0-9]) and got wrapped mid-word. */
+          if (!/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after)) {
             var wrapThisOne = !countOnly && (onlyOccurrence === undefined || onlyOccurrence === matchIndex);
             if (wrapThisOne) {
               hits++;

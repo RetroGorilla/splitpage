@@ -53,14 +53,23 @@
      type inside one — see the contenteditable="false" note), and rewriting
      their words here would leave the visible text saying one thing while the
      tag still tracked another. Renaming a tag is the Production panel's job,
-     which changes both halves together. */
+     which changes both halves together.
+
+     .cmt-anchor gets the same exclusion, for the same reason: it isn't
+     atomic (a comment's quoted phrase stays plain editable text, unlike a
+     tag), but a comment's cached quotedText is only ever set once, at
+     creation — there is no equivalent "rename this quote" step that keeps
+     it in sync afterward. A global replace rewriting the words inside an
+     anchor used to leave the panel showing a quote that no longer exists
+     anywhere in the script, with the comment never flagged orphaned since
+     the span itself survives untouched. */
   function editableTextNodes(root) {
     var doc = root.ownerDocument || document;
     var out = [], walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
     var n;
     while ((n = walker.nextNode())) {
       var p = n.parentNode;
-      if (p && p.closest && p.closest(".tag-anchor")) continue;
+      if (p && p.closest && (p.closest(".tag-anchor") || p.closest(".cmt-anchor"))) continue;
       out.push(n);
     }
     return out;
