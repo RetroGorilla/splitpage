@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/13-hosted.js",
+    "line": 127,
+    "severity": "high",
+    "summary": "resumeServerDoc() unconditionally overwrites the global state/baseState/dirty when it finishes, racing the unrelated initial-load path that already rendered an editable document, so edits typed during the resume window are silently discarded and the dirty flag is left clean.",
+    "refuted": false,
+    "reasoning": "Confirmed: init() in 21-events.js fires detectServer() and loadInitialState().then(...) concurrently without coordination; loadInitialState() resolves almost immediately (no real await) and renders a blank editable doc, while detectServer() awaits two network calls before calling resumeServerDoc(), which later unconditionally does state=theirs; baseState=cloneState(state); clearDirty(); render() with no check of intervening edits or editSeq."
+  },
+  {
+    "file": "src/js/13-hosted.js",
+    "line": 110,
+    "severity": "high",
+    "summary": "SERVER_RESUME_KEY is deleted from sessionStorage before the resume fetch is known to succeed, so a failed resume attempt permanently loses the pointer to which stashed edits belong to which document -- contradicting the function's own comment and defeating applyStashedWork's safety guard against splicing an unrelated document's stash into a fresh load.",
+    "refuted": false,
+    "reasoning": "Confirmed: sessionStorage.removeItem(SERVER_RESUME_KEY) runs before the apiFetch, and on failure the catch block only returns false without restoring the key. applyStashedWork() in 14-export.js (line 96) uses presence of SERVER_RESUME_KEY as the guard to defer stash-merging to resumeServerDoc(); once that key is gone, the next reload's applyStashedWork() will merge the hosted-doc stash into a fresh/blank local document instead."
+  },
+  {
+    "file": "src/js/13-hosted.js",
+    "line": 341,
+    "severity": "medium",
+    "summary": "saveToServer()'s success/conflict handlers write the PUT result straight into the shared globals serverDoc, baseState, and state without checking those globals still refer to the document the save was issued for, so switching to a different hosted document via the picker (never disabled during a save) while a save is in flight lets a slow-finishing save corrupt the newly-opened document's rev/base tracking.",
+    "refuted": false,
+    "reasoning": "Confirmed: openServerDoc() (line 251) reassigns the shared serverDoc/state/baseState globals with no check for an in-flight save, and the server-modal click handler in 21-events.js never disables the picker or guards against saveInFlight; a slow saveToServer() PUT resolving afterward mutates serverDoc.rev and overwrites baseState/state with the stale, unrelated document's data."
+  },
+  {
+    "file": "src/js/12-dirty-toast.js",
+    "line": 18,
+    "severity": "medium",
+    "summary": "markDirty() only refreshes the file/status chip when openedFile.name is set (the local-file case), so for a hosted document -- where openedFile.name is deliberately null -- the header/writer chip keeps showing its last 'saved' text after an edit instead of switching to a dirty/unsaved state.",
+    "refuted": false,
+    "reasoning": "Confirmed: markDirty() gates updateFileChip() behind `if (openedFile.name)`, and openServerDoc()/resumeServerDoc() explicitly set openedFile.name to null for hosted docs. updateHeaderFileChip() derives its hosted-doc text from the live `dirty` flag, but is otherwise only called from a handful of spots in 13-hosted.js/18-local-files.js -- not from markDirty() for the hosted case -- so the chip does not refresh at edit time for hosted documents."
+  },
+  {
+    "file": "src/js/12-dirty-toast.js",
+    "line": 8,
+    "severity": "low",
+    "summary": "setSaveButtons() always overwrites the Save button's text, so any markDirty()/clearDirty() call that fires while a save is genuinely in flight (buttons disabled, text 'Saving...') flips the label back to 'Save' while the button is still disabled -- making an in-progress save look finished or reset.",
+    "refuted": false,
+    "reasoning": "Confirmed: saveDoc() sets text 'Saving…' with disabled=true; any markDirty() during that window (e.g. further typing while an autosave is in flight) calls setSaveButtons('Save •') with `disabled` undefined, so disabled stays true but the visible text is overwritten to 'Save •', misrepresenting the in-progress save as finished/dirty rather than saving."
+  },
+  {
+    "file": "src/js/15-docx.js",
+    "line": 544,
+    "severity": "high",
+    "summary": "Reimporting a Splitpage-exported .docx loses the document title and duplicates the appended Comments section as bogus scene rows, because a second heading-styled paragraph anywhere in the file (which the exporter itself always adds once there is a saved comment) defeats the 'headings <= 1' title-detection check.",
+    "refuted": false,
+    "reasoning": "Confirmed: buildDocx() emits the title with pStyle 'Title' (line 96) and, when there are comments (or a production breakdown), a second 'Heading1' paragraph ('Comments' / 'Production breakdown', lines 144 and 170). docxToRows() counts ALL heading-styled paragraphs document-wide into `headings` (line 479) and only treats the first heading as the title when `headings <= 1` (line 544); with the Comments/breakdown heading present this is false, so the title paragraph becomes a bogus '<strong>' row and the whole Comments section (heading + author/quote/body/reply paragraphs) is walked as ordinary narration, producing extra fabricated rows."
+  },
+  {
+    "file": "src/js/15-docx.js",
+    "line": 426,
+    "severity": "high",
+    "summary": "The 'Production breakdown' table that buildDocx() appends to an exported .docx is walked by docxToRows() as if it were a Visual/Audio scene table, because mapTableColumns() only recognizes visual/audio headers and otherwise falls back to grabbing the first two non-empty columns -- silently importing breakdown data (Category/Item/etc) as fabricated scenes on reimport.",
+    "refuted": false,
+    "reasoning": "Confirmed: the breakdown table's header row is [\"Category\",\"Item\",\"Status\",\"Assigned to\",\"Mentions\",\"Scenes\",\"Notes\"], none of which match VISUAL_HEAD/AUDIO_HEAD, so mapTableColumns() falls into the fallback branch and returns the first two non-empty columns with skipHeader:false -- meaning even the header row itself becomes a fabricated scene row (visual='Category', audio='Item'), plus one bogus row per breakdown item."
+  },
+  {
+    "file": "src/js/17-pdf.js",
+    "line": 312,
+    "severity": "high",
+    "summary": "The Comments section in PDF export draws an entire comment thread (header + quote + body + all replies) in one shot with only a single before-the-fact page-break check, unlike the main scene-row loop which explicitly paginates line-by-line -- a long comment thread runs text below the bottom margin and off the printable page, silently losing later reply/body lines.",
+    "refuted": false,
+    "reasoning": "Confirmed: the comments loop computes a single `need` for the whole thread and does at most one newPage() if it doesn't fit (line 314), then calls drawLines() for header/quote/body/each reply back-to-back with no further bound checks; drawLines() (line 125) just decrements y by LEAD per line with no page-break logic at all, unlike the scene-row loop's explicit vFit/aFit/newPage while-loop (lines 194-215) -- so a thread whose total height exceeds one full page still overflows past the bottom margin uncaught."
+  },
+  {
+    "file": "src/js/17-pdf.js",
+    "line": 185,
+    "severity": "medium",
+    "summary": "A tall/portrait image whose scaled height exceeds the whole page's usable height is silently dropped from the PDF export -- never drawn on any page, with no scaling fallback or warning, because the draw condition requires the image to fit even at the very top of a fresh page.",
+    "refuted": false,
+    "reasoning": "Confirmed: imgRef.h = COLW * dim.ratio has no cap on aspect ratio (safeAspect() in 15-docx.js only guards against a zero/undefined width, not extreme ratios), and the draw guard `if (imgRef && vy - imgRef.h >= M)` (line 185) has no else branch -- if imgRef.h alone exceeds the page's usable column height, the image is skipped entirely, on the current page and any subsequent one, with the surrounding row-pagination logic (line 180) also declining to force a further page once already near the top of a fresh one."
+  }
+]
