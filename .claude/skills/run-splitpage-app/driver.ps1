@@ -127,6 +127,21 @@ function Connect-Cdp {
   Log 'cdp connected'
   $null = Send-Cdp 'Page.enable'
   $null = Send-Cdp 'Runtime.enable'
+  # The first-run wizard shows itself over the pristine demo (invariant #30),
+  # which is exactly what every suite loads - and its backdrop swallows the
+  # real mouse clicks the suites make. Mark onboarding as done before any
+  # page script runs, unless the script asked for the wizard with ?wizard=1
+  # (13-onboarding.txt does). Runs again on every navigation, so a suite
+  # that removes the key and reloads without ?wizard=1 still gets no wizard.
+  $null = Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = @'
+if (!/[?&]wizard=1(&|$)/.test(location.search)) {
+  try {
+    if (!localStorage.getItem('splitpage-onboarding')) {
+      localStorage.setItem('splitpage-onboarding', JSON.stringify({ v: 1, done: true, skipped: true, at: 'harness' }));
+    }
+  } catch (e) {}
+}
+'@ }
   $null = Send-Cdp 'Log.enable'
 }
 
