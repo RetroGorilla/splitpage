@@ -327,15 +327,40 @@ Two traps found while building it:
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, ~400 lines, deliberately
+`server/server.js` — plain Node, no dependencies, ~600 lines, deliberately
 small enough to audit by reading. One JSON file per document in `DATA_DIR`;
 that is the entire database.
 
-- **No authentication, on purpose.** Cloudflare Access sits in front. The
-  server only ever *reads* `Cf-Access-Authenticated-User-Email`, for display
-  and attribution — never as a permission check, because by the time a request
-  arrives Access has already made that decision. Do not add auth here without
-  deciding it belongs here.
+- **No *identity*, on purpose.** Cloudflare Access sits in front and decides
+  who anybody is. The server only ever *reads*
+  `Cf-Access-Authenticated-User-Email`, for display and attribution — never as
+  a permission check, because by the time a request arrives Access has already
+  made that decision. Do not add real auth here without deciding it belongs
+  here.
+- **`JOIN_PIN` is a door lock, not identity, and knows it.** Empty (the
+  default) and the server behaves exactly as it always did. Set, and every
+  `/api/*` route except `/api/health` and `POST /api/join` needs the header
+  `x-splitpage-token` carrying the token this process minted at startup. The
+  PIN is compared as sha256 digests through `timingSafeEqual` — equal lengths
+  by construction, so it can neither throw nor leak how much matched — and
+  wrong guesses are capped at ten a minute per address. It exists for the
+  launcher's case: a laptop hosting for the people in the room, no TLS, no
+  Access. One shared string, the same for everyone, revoked only by restarting.
+  **The refusal is JSON `401 {error: "pin-required"}`**, because `apiFetch()`
+  reads a non-JSON answer as a lapsed Access session and would stash and
+  reload — exactly the wrong move for a code that is one dialog away.
+- **CORS is opt-in per origin and never carries credentials.** `ALLOW_ORIGINS`
+  is an exact-match allowlist (the literal `null` covers a page opened from
+  `file://`). The headers are stamped onto the response object by the request
+  handler, so a route added later cannot forget them, and `handleStatic()`
+  never gets them. `OPTIONS /api/*` is answered 204 before any route runs: a
+  preflight carries no token and must never meet the gate.
+- **`/api/launcher/*` is the one route that runs another program**, hedged
+  three ways: a launch token minted per launch by `start.mjs` and delivered in
+  the URL fragment, `HOST === "127.0.0.1"` (so never under `--host`), and a
+  fixed script path with nothing from the request anywhere near a command line.
+  Any of those failing is a **404**, not a 401 — under those conditions the
+  route genuinely does not exist. Invariant #28.
 - **Document ids are whitelisted** (`^[a-z0-9][a-z0-9-]{0,63}$`), not
   sanitised — an id becomes a filename, and a whitelist can't be out-thought
   the way a blacklist can.
@@ -892,6 +917,36 @@ the merge reconciles *as content*. `status` is merged separately, by rank
     already landed correctly in `state`. Full mechanism in SKILL.md's
     gotchas. Real user clicks blur the cell as part of the click itself and
     do not hit this.
+28. **No HTTP endpoint spawns a process or installs files — except
+    `/api/launcher/*`, which is loopback-only and launch-token-gated** (§3.7).
+    This was the standing rule that kept `update-status.json` a *file the page
+    reads* rather than an endpoint that installs updates: the local server has
+    no real authentication, so any route that could run something would be
+    reachable from every other tab in the browser. The launcher's two routes
+    are the one agreed exception and stay inside three locks — the per-launch
+    token from the URL fragment, `HOST === "127.0.0.1"`, and a fixed script
+    path with no request data near a command line. A missing lock answers 404,
+    not 401. Anything else that wants to run a program from a request is a
+    redesign, not a patch.
+29. **The join PIN, the session token and the launch token never enter
+    `update-status.json`, the document, or any file the static handler
+    serves.** `update-status.json` is handed to anyone who can reach the port,
+    which is exactly the audience the PIN exists to exclude; the document is
+    something people mail each other. The PIN is printed to the launcher's own
+    console and passed to the server as an environment variable; the tokens
+    live in the server's memory and the browser's session storage. Nothing
+    writes any of the three to disk, and no code path may start.
+
+    The same rule read from the client's side: **everything about connecting
+    to a server is browser state, not document state.**
+    `splitpage-server-base`, `-token`, `-bookmarks` and
+    `splitpage-launch-token` (`13-hosted.js`, `20e-connect.js`) are
+    localStorage and sessionStorage, per person and per browser. Invariant #4
+    is deliberately not in play here — and what keeps it that way is that none
+    of them ever moves into `state`. A bookmark carries a name, a URL and
+    optionally an SSH host with two port numbers: never a password, a key or a
+    passphrase, because Splitpage is not a credential store and has nowhere
+    safe to be one.
 
 ---
 

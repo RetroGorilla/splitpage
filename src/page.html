@@ -71,6 +71,11 @@
           <div class="menu-sep" id="menu-server-sep" hidden></div>
           <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
           <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
+          <!-- Always shown, unlike the two above: this is where you point the
+               app at a server in the first place, so it cannot wait for one
+               to answer. Handled in 20e-connect.js, not the File dispatch. -->
+          <div class="menu-sep" id="menu-connect-sep"></div>
+          <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
           <div class="menu-sep"></div>
@@ -581,6 +586,105 @@
     </span>
   </div>
   <div class="comments-list" id="comments-list"></div>
+</div>
+
+<!-- ===== connecting to a server (20e-connect.js) =====
+     Two dialogs: the code a shared session may ask for, and the list of
+     servers this browser knows about. Nothing here is ever part of a
+     document — see the note on browser state at the top of 13-hosted.js. -->
+
+<div class="modal-backdrop" id="pin-modal" hidden>
+  <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
+    <div class="modal-header">
+      <h2 id="pin-title">Join PIN</h2>
+      <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint" id="pin-reason">This server asks for a join PIN.</p>
+    <input type="text" id="pin-input" inputmode="numeric" autocomplete="off"
+           spellcheck="false" placeholder="e.g. 481923" aria-labelledby="pin-title">
+    <div class="connect-error" id="pin-error" hidden></div>
+    <label class="connect-check"><input type="checkbox" id="pin-remember">
+      Remember this code on this device</label>
+    <p class="modal-hint connect-caveat">The code is checked by the computer hosting the session,
+      but it travels in the clear over plain HTTP — fine on your own network, not over the
+      internet.</p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" data-connect-action="pin-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" data-connect-action="pin-submit">Join</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="connect-modal" hidden>
+  <div class="modal-panel connect-panel" role="dialog" aria-modal="true" aria-labelledby="connect-title">
+    <div class="modal-header">
+      <h2 id="connect-title">Servers</h2>
+      <button type="button" class="modal-close" data-connect-action="close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">A server is someone's shared session — theirs or your own. Add its
+      address once and this browser remembers it. Splitpage never stores a password or an SSH
+      key; a join PIN is kept only for as long as this tab is open unless you ask otherwise.</p>
+
+    <div class="connect-current" id="connect-current"></div>
+    <div class="connect-list" id="connect-list"></div>
+
+    <div class="connect-add">
+      <div class="connect-add-title">Add a server</div>
+      <label class="connect-field"><span>Name</span>
+        <input type="text" id="connect-name" placeholder="Studio Mac" autocomplete="off"></label>
+      <label class="connect-field"><span>Address</span>
+        <input type="text" id="connect-url" placeholder="http://192.168.1.20:8791/"
+               autocomplete="off" spellcheck="false"></label>
+      <label class="connect-field"><span>Join PIN</span>
+        <input type="text" id="connect-pin" placeholder="only if they gave you one"
+               inputmode="numeric" autocomplete="off"></label>
+      <label class="connect-check"><input type="checkbox" id="connect-remember">
+        Remember the PIN on this device</label>
+
+      <label class="connect-check"><input type="checkbox" id="connect-ssh-toggle">
+        Reach it over SSH (a tunnel from this computer)</label>
+      <div class="connect-ssh-fields" id="connect-ssh-fields" hidden>
+        <label class="connect-field"><span>SSH login</span>
+          <input type="text" id="connect-ssh-userhost" placeholder="me@studio.example.com"
+                 autocomplete="off" spellcheck="false"></label>
+        <label class="connect-field"><span>Port there</span>
+          <input type="text" id="connect-ssh-remote" placeholder="8791" inputmode="numeric"></label>
+        <label class="connect-field"><span>Port here</span>
+          <input type="text" id="connect-ssh-local" placeholder="8791" inputmode="numeric"></label>
+        <p class="modal-hint">The address above should then be
+          <code>http://localhost:&lt;port here&gt;/</code>. Splitpage does not run ssh for you and
+          keeps no key or password — it writes the command out for you to run.</p>
+      </div>
+
+      <div class="connect-error" id="connect-error" hidden></div>
+      <div class="modal-row">
+        <span></span>
+        <button type="button" class="btn btn-accent" data-connect-action="add">Add server</button>
+      </div>
+    </div>
+
+    <div class="connect-ssh-out" id="connect-ssh-out" hidden>
+      <div class="connect-add-title">Open the tunnel first</div>
+      <pre class="connect-cmd" id="connect-ssh-cmd"></pre>
+      <div class="modal-row">
+        <span class="modal-hint" id="connect-ssh-note"></span>
+        <span class="modal-footer-actions">
+          <button type="button" class="btn" data-connect-action="ssh-copy">Copy</button>
+          <button type="button" class="btn" data-connect-action="ssh-save">Save a .cmd</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn" data-connect-action="back">Back to this copy</button>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" data-connect-action="close">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script id="state-data" type="application/json">

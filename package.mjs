@@ -62,6 +62,11 @@ const FILES = [
   ["uninstall.bat", 0o644],
   ["uninstall.sh", 0o755],
   ["update.mjs", 0o644],
+  /* Shipped in the portable zip so an unzipped copy can put itself in the
+     Start Menu without downloading the installer: the app's setup step calls
+     the launcher's loopback-only register endpoint, which runs this with
+     -InPlace. Nothing runs it at unzip time. */
+  ["installer/install.ps1", 0o644],
   ["README.md", 0o644],
   ["VERSION", 0o644]
 ];
