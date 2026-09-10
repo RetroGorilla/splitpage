@@ -924,7 +924,43 @@ line-number table this replaced, they do not drift as you edit.
 | `19-writer.js` | 477 | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | 460 | teleprompter and voice follow |
 | `20a-update.js` | 87 | the update notice and About box |
+| `20c-help.js` | — | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
 | `21-events.js` | 1129 | all event wiring, `init()`, closes the IIFE |
+
+Phase 5 added the in-app Help page and the tutorial without touching
+`21-events.js`, which is worth understanding if you add a sixth thing the
+same way:
+
+- **`20c-help.js` wires itself, not through `init()`.** Every other fragment
+  registers its listeners from `init()` (`21-events.js`), which runs on
+  `DOMContentLoaded`. This fragment can't add itself to that function, so it
+  runs its own top-level wiring immediately instead — safe because a classic
+  `<script>` pauses the HTML parser in place, so every element earlier in
+  `page.html` (which is where `#help-modal`, `#tour-overlay` and `#file-menu`
+  all live) already exists in the DOM by the time this fragment's own code
+  runs, `init()` or not. See `00-prelude.js`'s `PAGE_SHELL` comment for the
+  same reasoning applied to reading the DOM instead of writing to it.
+- **The File-menu items are a capture-phase listener on `#file-menu`
+  itself, not a `handleFileMenuAction()` branch.** `handleFileMenuAction()`
+  (`18-local-files.js`) is off limits for this change, and its own listener
+  runs at the bubble phase. `20c-help.js` adds a *second*, capture-phase
+  listener to the same `#file-menu` element that matches only
+  `data-file-action="help"`/`"tour"` and calls `stopPropagation()`. Because
+  both listeners sit on the exact same node, `stopPropagation()` during the
+  capture pass stops the event before it ever reaches the target or bubbles
+  back up — `18-local-files.js`'s dispatcher never sees these two actions.
+  Any future menu item that a fragment other than `18-local-files.js` needs
+  to own can reuse this pattern rather than adding a branch to
+  `handleFileMenuAction()` in a file it isn't allowed to touch.
+- **`README.md` is a build input now.** `build.mjs`'s `mdToHtml()` (~130
+  lines, no dependencies) renders it to the Help modal's body and TOC at
+  build time — see its own comment block for the escape-then-block-then-
+  inline ordering and what it does and doesn't support. `.githooks/pre-commit`'s
+  build-check trigger regex gained `README\.md` alongside `index\.html`,
+  `src/`, `build\.mjs` and `VERSION`, so an edit to just the README also
+  gets `node build.mjs --check`'d before it can be committed. Developer-only
+  sections are wrapped in `<!-- help:skip-start -->`/`<!-- help:skip-end -->`
+  and never reach the shipped page.
 
 `src/page.html` is the shell — topbar, File menu, modals, and the three build
 markers. `src/app.css` is everything visual. `src/seed-state.json` is the one
