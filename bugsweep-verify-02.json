@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/02-state.js",
+    "line": 55,
+    "severity": "medium",
+    "summary": "Missing r.updatedAt is normalized to null, but new Date(null) is the valid epoch date, not Invalid Date, so formatTimestamp fabricates a date instead of blanking.",
+    "refuted": false,
+    "reasoning": "Confirmed: 02-state.js:55 sets updatedAt=null independently of updatedBy; formatTimestamp (10-comments.js:45-56) does `new Date(iso); if (isNaN(d.getTime())) return \"\"`, and new Date(null) coerces to epoch (a valid, non-NaN date), so it does not blank out. 05-render.js:68-71 gates the meta block on updatedBy truthy (not updatedAt), so a row with updatedBy set but updatedAt null (e.g. a hand-edited/legacy save file) reaches formatTimestamp(null) and renders a fabricated epoch date."
+  },
+  {
+    "file": "src/js/02-state.js",
+    "line": 112,
+    "severity": "low",
+    "summary": "knownPeople is a plain object used as a set, so an owner id matching an inherited Object.prototype property name (e.g. \"constructor\", \"toString\") resolves truthy without a matching person, leaving the dangling id unsanitized.",
+    "refuted": false,
+    "reasoning": "Confirmed at 02-state.js:95-96,112: `knownPeople = {}` then `knownPeople[t.owner]` is looked up directly, so t.owner values like \"constructor\" or \"hasOwnProperty\" resolve to a truthy inherited Object.prototype member and bypass the reset-to-\"\" sanitization, leaving the dangling string in the data model instead of \"\" as the comment documents intends. Downstream consumers (personById, an honest array scan) mostly render it as unassigned anyway, but the specific sanitization line is genuinely bypassed as described."
+  },
+  {
+    "file": "src/js/21-events.js",
+    "line": 508,
+    "severity": "high",
+    "summary": "onRootDrop never intercepts a foreign (non-image, non-row-reorder) drag onto a contenteditable cell, so the browser's native drop-into-contenteditable behavior inserts raw HTML from the drag data without ever calling preventDefault or routing through sanitizeHtml, unlike paste which is forced to plain text.",
+    "refuted": false,
+    "reasoning": "Confirmed: onRootDrop (21-events.js:508-528) only handles the imageDropTarget case and the dragRowId (internal row-reorder) case; if neither matches it returns via `if (!dragRowId) return;` without calling e.preventDefault(), so a drop from outside the page falls through to the browser's default contenteditable drop handling. onRootPaste (line 364-370) by contrast explicitly preventDefaults and forces execCommand(\"insertText\", plain text only). syncFieldFromDom (05-render.js:140-151) then persists cellEl.innerHTML straight into state with no sanitizeHtml call, so anything the browser inserted via native drop is stored unsanitized."
+  },
+  {
+    "file": "src/js/04-richtext.js",
+    "line": 77,
+    "severity": "medium",
+    "summary": "walkSanitize's DIV/P rule appends an extra <br> after recursing, so a blank paragraph (<div><br></div>) between two other paragraphs produces two <br> instead of one, doubling the blank line.",
+    "refuted": false,
+    "reasoning": "Confirmed at 04-richtext.js:77-81: for a blank `<div><br></div>`, the recursive walkSanitize(node, destParent) call first appends one <br> from the inner BR handling (line 82), then the outer DIV/P branch unconditionally appends a second <br> afterward — so <div>Line1</div><div><br></div><div>Line3</div> becomes \"Line1<br><br><br>Line3<br>\", i.e. two blank lines where the source had one."
+  },
+  {
+    "file": "src/js/05-render.js",
+    "line": 113,
+    "severity": "medium",
+    "summary": "render() unconditionally overwrites #rows.innerHTML with no focus/caret guard (unlike the explicit check for the title input), and is called from async network completions unrelated to what the user is currently doing.",
+    "refuted": false,
+    "reasoning": "Confirmed at 05-render.js:100-116: rowsEl.innerHTML is replaced unconditionally while titleInput.value is only overwritten `if (document.activeElement !== titleInput)`; no equivalent check exists for any focused .cell-editable inside #rows. render() is indeed called from 13-hosted.js (e.g. lines 131, 146, 270, 362, inside save/merge/resume flows triggered by server responses including 409 conflicts), which can fire while the user is mid-edit and would blow away focus/caret."
+  },
+  {
+    "file": "src/js/05-render.js",
+    "line": 216,
+    "severity": "low",
+    "summary": "The highlight toggle decision only recognizes a <mark> element, but applyHighlight (execCommand hiliteColor/backColor) actually produces a styled <span>, so a second click re-applies highlighting instead of removing it.",
+    "refuted": false,
+    "reasoning": "Confirmed at 05-render.js:174-220: handleToolbarCmd's highlight branch and updateToolbarState both call isSelectionInsideTag(cellEl, \"MARK\") exclusively, while removeHighlight (line 180-192) explicitly checks for both MARK and `node.tagName === \"SPAN\" && node.style.backgroundColor` — showing the developers knew execCommand hiliteColor/backColor produces a styled SPAN in modern browsers, but the toggle decision point was never updated to match, so clicking Highlight again on span-highlighted text calls applyHighlight() again instead of removeHighlight()."
+  },
+  {
+    "file": "src/js/04-richtext.js",
+    "line": 184,
+    "summary": "walkToMd builds markdown links as \"[\" + text + \"](\" + href + \")\" without escaping the link text, producing broken markdown if the visible text contains ']' or '('.",
+    "severity": "low",
+    "refuted": false,
+    "reasoning": "Confirmed at 04-richtext.js:184: `out += \"[\" + inner + \"](\" + child.getAttribute(\"href\") + \")\"` with no escaping of `inner` (the link's rendered text) for `]` or `(`/`)` characters, so a link whose visible text is e.g. \"click (here)\" or \"a]b\" produces syntactically incorrect markdown on export."
+  },
+  {
+    "file": "src/js/06-rows.js",
+    "line": 189,
+    "severity": "medium",
+    "summary": "compressImageFile() always re-encodes images as JPEG via canvas.toDataURL('image/jpeg', quality), which per the canvas spec flattens transparent pixels to black, permanently destroying alpha-channel transparency.",
+    "refuted": false,
+    "reasoning": "Confirmed at 06-rows.js:186-190: the canvas is always serialized with `canvas.toDataURL(\"image/jpeg\", quality)` regardless of source file type/alpha. A 2D canvas initializes as transparent black (0,0,0,0) and drawImage with a source-over composite leaves un-covered/transparent source pixels at (0,0,0,0); JPEG has no alpha channel, so those pixels serialize as opaque black — any PNG/GIF/WebP with transparency attached to a row permanently loses it."
+  },
+  {
+    "file": "src/js/06-rows.js",
+    "line": 181,
+    "severity": "medium",
+    "summary": "img.onload runs outside the Promise executor's synchronous scope, so a synchronous throw inside it (e.g. a SecurityError from toDataURL on a tainted canvas, such as an SVG referencing a cross-origin resource) never resolves or rejects the promise, hanging forever with no error shown.",
+    "refuted": false,
+    "reasoning": "Confirmed at 06-rows.js:173-196: img.onload (lines 181-191) has no try/catch, and per Promise semantics a synchronous throw inside an asynchronously-invoked callback like onload is not caught by the executor and does not reject the promise (only a throw during the executor's own synchronous run does). compressImageFile's file-type gate (`file.type.indexOf(\"image/\") !== 0`) admits image/svg+xml, and drawing a cross-origin-referencing SVG onto the canvas taints it, making canvas.toDataURL() throw a SecurityError synchronously inside onload — which would be an uncaught exception rather than a rejection, leaving handleImageFile's .then()/.catch() (06-rows.js:198-207) permanently pending with no toast shown."
+  }
+]
