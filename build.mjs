@@ -248,12 +248,25 @@ function mdToHtml(markdown) {
     }
 
     if (/^-\s+/.test(line) || /^\d+\.\s+/.test(line)) {
+      /* A blank line normally ends a list, but README also uses blank lines
+         to separate ordered items that carry a trailing paragraph or nested
+         bullets. So a blank line doesn't end the list by itself — only when
+         nothing after it (skipping further blank lines) continues the list:
+         another item at the same marker, or an indented continuation line. */
+      const itemRe = /^\d+\.\s+/.test(line) ? /^\d+\.\s+/ : /^-\s+/;
       const list = [line];
       let j = i + 1;
-      while (j < lines.length && lines[j].trim() !== "" &&
-             !/^(#{1,4})\s/.test(lines[j]) && !lines[j].trim().startsWith("```") &&
-             !/^&gt;\s?/.test(lines[j])) {
-        list.push(lines[j]); j++;
+      while (j < lines.length) {
+        const cur = lines[j];
+        if (cur.trim() === "") {
+          let k = j + 1;
+          while (k < lines.length && lines[k].trim() === "") k++;
+          const next = lines[k];
+          if (k < lines.length && (itemRe.test(next) || /^\s{2,}\S/.test(next))) { j = k; continue; }
+          break;
+        }
+        if (/^(#{1,4})\s/.test(cur) || cur.trim().startsWith("```") || /^&gt;\s?/.test(cur)) break;
+        list.push(cur); j++;
       }
       out.push(mdList(list));
       i = j;
