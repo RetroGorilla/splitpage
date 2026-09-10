@@ -2233,6 +2233,9 @@
           <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
+          <!-- the old save format, now an export: one self-contained page for
+               sending a script to someone with nothing installed -->
+          <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
           <div class="menu-sep"></div>
           <div class="menu-label">Export the narration</div>
           <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
@@ -2352,7 +2355,7 @@
 
 <input type="file" id="file-input" accept="image/*" hidden>
 <input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
-<input type="file" id="open-file-input" accept=".html,.htm,.docx,.md,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
+<input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
@@ -2538,6 +2541,27 @@
         <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
         <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
         <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- A .md project whose scene table gained or lost rows somewhere else.
+     There is no right answer to guess at, so it is asked (20d-formats.js). -->
+<div class="modal-backdrop" id="md-rows-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">
+    <div class="modal-header">
+      <h2 id="md-rows-title">This file's scenes don't line up</h2>
+    </div>
+    <p class="modal-hint" id="md-rows-detail"></p>
+    <p class="modal-hint">Keeping Splitpage's record ignores the table and opens the script exactly as it
+      was last saved here. Using the table's text rebuilds the scenes from it, in order — your
+      breakdown, crew, comments and reading speed are kept either way.</p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="md-rows-table">Use the table's text</button>
+        <button type="button" class="btn btn-accent" id="md-rows-keep">Keep Splitpage's record</button>
       </div>
     </div>
   </div>
@@ -2755,11 +2779,14 @@
   var editSeq = 0;
   var dirty = false;
   var suppressUnloadWarning = false;
-  /* File System Access API handle for the .html file itself, once the user
-     has picked or created one via Save — lets subsequent saves write in
-     place instead of prompting again. Stays null (and Save falls back to a
-     plain download) in browsers without the API, e.g. Firefox. */
-  var htmlFileHandle = null;
+  /* The project file this document lives in: a File System Access API
+     handle, once the user has picked or created one via Save, plus which
+     format it is — "md" | "splitpage" | "html". The handle lets subsequent
+     saves write in place instead of prompting again; the kind decides which
+     serializer runs (14-export.js). `handle` stays null (and Save falls back
+     to a plain download) in browsers without the API, e.g. Firefox.
+     "html" only ever arrives by OPENING a legacy file — nothing writes it. */
+  var docFileHandle = { handle: null, kind: null };
   var deleteArmId = null;
   var deleteArmTimer = null;
 
@@ -3005,6 +3032,17 @@
     var out = escapeHtml(text);
     out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    /* The other four things htmlToMarkdown() can emit. Without these, a
+       Markdown table cell edited outside Splitpage and reconciled back in
+       (20d-formats.js) lost every strikethrough, underline and highlight in
+       it, and every line break inside the cell came back as the literal
+       text "<br>". They run against the already-escaped string, so the
+       markup here is reintroduced deliberately, one closed pair at a time,
+       and sanitizeHtml() still has the last word at every call site. */
+    out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+    out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
+    out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
+    out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
     out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
       /* `url` was captured out of `out`, which escapeHtml() already ran over
          once — it is already correctly entity-encoded for an HTML attribute
@@ -3287,7 +3325,7 @@
     if (!entry) return;
     pushSnapshot("Before restoring an earlier version");
     state = migrateRows(cloneState(entry.state));
-    resetProductionPanelState(); /* same reason as openSplitpageFile — different document underneath */
+    resetProductionPanelState(); /* same reason as adoptProjectState — different document underneath */
     markDirty();
     render();
     closeHistoryPanel();
@@ -7850,7 +7888,14 @@
     return cells;
   }
 
-  function parseMarkdownTable(text) {
+  /* opts.keepEmpty keeps a data row whose Visual and Audio cells are both
+     empty. Off by default, because a foreign table's blank line carries no
+     information; on when reading one of our OWN Markdown projects
+     (20d-formats.js), where a scene with nothing typed in it yet is still a
+     scene and dropping it would shift every row after it out of line with
+     the file's own record. */
+  function parseMarkdownTable(text, opts) {
+    opts = opts || {};
     var lines = text.replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
     var rows = [];
     lines.forEach(function (line) {
@@ -7860,18 +7905,24 @@
       rows.push(cells);
     });
     if (!rows.length) return [];
-    var visualIdx = 0, audioIdx = 1, startIdx = 0;
+    var visualIdx = 0, audioIdx = 1, startIdx = 0, statusIdx = -1;
     var header = rows[0].map(function (c) { return c.toLowerCase(); });
     var idxs = columnIndicesFromHeader(header);
     if (idxs.visualIdx !== -1 || idxs.audioIdx !== -1) {
       startIdx = 1;
       if (idxs.visualIdx !== -1) visualIdx = idxs.visualIdx;
       if (idxs.audioIdx !== -1) audioIdx = idxs.audioIdx;
+      statusIdx = header.findIndex(function (c) { return c.trim() === "status"; });
     }
     var out = [];
     for (var i = startIdx; i < rows.length; i++) {
       var v = rows[i][visualIdx] || "", a = rows[i][audioIdx] || "";
-      if (v || a) out.push({ visualText: v, audioText: a });
+      if (!v && !a && !opts.keepEmpty) continue;
+      out.push({
+        visualText: v,
+        audioText: a,
+        statusText: statusIdx === -1 ? "" : (rows[i][statusIdx] || "")
+      });
     }
     return out;
   }
@@ -7962,10 +8013,25 @@
        '<' (a page whose markup was preserved as text, or a deliberately
        crafted paste) went straight into the document as live HTML. */
     return rows.map(function (r) {
+      /* An inline image at the head of the Visual cell is how this app's own
+         Markdown writes a storyboard frame (toMarkdownTableDoc). This used
+         to be hardcoded to null, so a two-column export re-imported lost
+         every picture in it — and left the data: URI sitting in the text as
+         several thousand characters of visible gibberish, because
+         legacyMdToHtml's link rule rejects a data: href. Only a data: image
+         this app would itself accept is taken; an ordinary ![](http…) in a
+         foreign document still imports exactly as it did before. */
+      var visual = String(r.visualText || "");
+      var image = null;
+      var m = MD_IMAGE_PREFIX_RE.exec(visual);
+      if (m) {
+        image = safeImageSrc(m[1]);
+        if (image) visual = visual.slice(m[0].length);
+      }
       return {
         id: makeId(),
-        visualText: sanitizeHtml(legacyMdToHtml(r.visualText || "")),
-        visualImage: null,
+        visualText: sanitizeHtml(legacyMdToHtml(visual)),
+        visualImage: image,
         audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
       };
     });
@@ -8306,7 +8372,7 @@
     var stash = readStash();
     var theirs = migrateRows(cloneState(body.state));
     serverDoc = { id: body.id, rev: body.rev || 0 };
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     resetProductionPanelState();
 
     var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
@@ -8468,7 +8534,7 @@
     serverDoc = { id: body.id, rev: body.rev || 0 };
     /* a hosted document and a local file are different homes for the same
        Save button — holding both would make it ambiguous which one it writes */
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
     resetProductionPanelState();
 
@@ -8490,7 +8556,7 @@
     } catch (err) { handleApiError(err, "Could not put that on the server"); return; }
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     clearDirty();
     updateFileChip();
     showToast("Published to the server as “" + (state.title || body.id) + "” — collaborators can open it now", "ok");
@@ -9117,6 +9183,16 @@
       return;
     }
 
+    /* A project opened from a legacy .html file is never written back as
+       HTML — the page stopped being a document format when .md and
+       .splitpage arrived (HANDOFF §3.1). The first Save after opening one
+       behaves as Save As, defaulting to <slug>.md, and says why. */
+    var converting = !saveAs && docFileHandle.kind === "html";
+    if (converting) {
+      saveAs = true;
+      showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
+    }
+
     /* Freeze exactly what we save. `state` keeps mutating while the write is
        in flight, so re-cloning here means edits typed during the save aren't
        silently included as if they'd already been saved. */
@@ -9125,44 +9201,55 @@
     state.lastEditedAt = nowIso();
     var published = cloneState(state);
     var seqAtSave = editSeq;
-    var fullHtml;
-    try {
-      fullHtml = buildPublishHtml(JSON.stringify(published));
-    } catch (e) {
-      showToast("Could not prepare the file to save.", "error");
-      state.rev = Math.max(0, (state.rev || 1) - 1);
-      saveInFlight = false;
-      setSaveButtons(dirty ? "Save •" : "Save", false);
-      return;
-    }
-    var filename = slugify(published.title) + ".html";
+    var slug = slugify(published.title);
     /* Save As always asks where to write, ignoring any file we already have.
        Plain Save reuses that file once one exists, and only asks the first
        time it has none. Either way, a fresh pick becomes the file future
        plain Saves write to. */
-    var targetHandle = saveAs ? null : htmlFileHandle;
+    var targetHandle = saveAs ? null : docFileHandle.handle;
+    /* Which serializer runs is decided by the file, not by a preference —
+       and for a fresh pick that cannot be known until the picker has come
+       back with the name the user typed. */
+    var kind = saveAs ? "md" : (docFileHandle.kind || "md");
 
     try {
       if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: "Splitpage script", accept: { "text/html": [".html"] } }]
+          suggestedName: slug + ".md",
+          types: [
+            { description: "Markdown script", accept: { "text/markdown": [".md"] } },
+            { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
+          ]
         });
-        htmlFileHandle = targetHandle;
+        kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
+        docFileHandle = { handle: targetHandle, kind: kind };
         rememberLastFileHandle(targetHandle);
+      }
+
+      var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
+      var body;
+      try {
+        body = kind === "splitpage" ? buildSplitpageFile(published) : buildMarkdownProject(published);
+      } catch (e) {
+        showToast("Could not prepare the file to save.", "error");
+        state.rev = Math.max(0, (state.rev || 1) - 1);
+        saveInFlight = false;
+        setSaveButtons(dirty ? "Save •" : "Save", false);
+        return;
       }
 
       if (targetHandle) {
         var writable = await targetHandle.createWritable();
-        await writable.write(fullHtml);
+        await writable.write(body);
         await writable.close();
         baseState = published;
         if (editSeq === seqAtSave) clearDirty();
         showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       } else {
         /* no File System Access API (e.g. Firefox) — a plain download is the
-           best this browser can do; the user re-opens the newest copy next time */
-        var ok = await deliverFile(filename, fullHtml, { savedMsg: "Downloaded " + filename });
+           best this browser can do; the user re-opens the newest copy next
+           time. Same bytes, same extension as the in-place write above. */
+        var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
         if (ok) {
           baseState = published;
           if (editSeq === seqAtSave) clearDirty();
@@ -9230,7 +9317,10 @@
        from the first edit — there is no file dialog to ambush anyone with.
        A lapsed sign-in stops it, or every queued save would refire the same
        failure until the tab is reloaded. */
-    if (!htmlFileHandle && !onServerDoc()) return;
+    if (!docFileHandle.handle && !onServerDoc()) return;
+    /* A legacy .html project's next save opens a picker (see saveDoc) —
+       exactly the ambush the gate above exists to prevent. */
+    if (docFileHandle.kind === "html") return;
     if (serverSessionExpired) return;
     if (saveInFlight) { saveQueued = true; return; }
     saveInFlight = true;
@@ -9345,26 +9435,47 @@
     return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
   }
 
+  /* What a scene's two table cells say, as one description used twice: to
+     write the table below, and — on the way back in — to decide whether a
+     cell was edited outside Splitpage (`reconcileMarkdownRows`,
+     20d-formats.js). Two copies of this composition would drift, and the
+     drift would read as "every cell was edited" on the next open.
+
+     Newlines are folded to <br> here because that is part of what the cell
+     *says*; the pipe-escaping mdRichTableCell adds is a property of the
+     table *row* and is undone again by parseMarkdownTable, so it is
+     deliberately not part of this comparison basis. */
+  function mdSceneCellSource(row, i) {
+    var visual = htmlToMarkdown(row.visualText);
+    if (row.visualImage) {
+      visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
+    }
+    return {
+      visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
+      audio: String(htmlToMarkdown(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
+    };
+  }
+
   /* The same script as toMarkdownDoc, laid out as a Visual/Audio table
      instead of a stacked Scene-by-scene list — this is also exactly the
      table shape Import ▸ Two columns already knows how to read back in, so
-     round-tripping through this export doesn't lose the split. */
-  function toMarkdownTableDoc() {
+     round-tripping through this export doesn't lose the split, and it is the
+     human-readable half of a saved .splitpage-in-Markdown project
+     (buildMarkdownProject, 20d-formats.js). */
+  function toMarkdownTableDoc(s) {
+    s = s || state;
     var lines = [];
-    lines.push("# " + (state.title || "Untitled Script"));
+    lines.push("# " + (s.title || "Untitled Script"));
     lines.push("");
-    if (!state.rows.length) {
+    if (!s.rows.length) {
       lines.push("_No rows yet._");
     } else {
-      lines.push("| # | Visual | Audio |");
-      lines.push("| --- | --- | --- |");
-      state.rows.forEach(function (row, i) {
-        var visual = htmlToMarkdown(row.visualText);
-        if (row.visualImage) {
-          visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
-        }
-        var audio = htmlToMarkdown(row.audioText);
-        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(visual) + " | " + mdRichTableCell(audio) + " |");
+      lines.push("| # | Visual | Audio | Status |");
+      lines.push("| --- | --- | --- | --- |");
+      s.rows.forEach(function (row, i) {
+        var cell = mdSceneCellSource(row, i);
+        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(cell.visual) + " | " +
+                   mdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
       });
     }
     lines.push("");
@@ -10912,6 +11023,12 @@
     if (ext === "csv") return "csv";
     if (ext === "md" || ext === "markdown") return "md";
     if (ext === "txt") return "txt";
+    /* The two project formats and the legacy one. "md" is deliberately in
+       both worlds: whether a .md file is one of ours or somebody else's is
+       decided by whether it carries a data block, not by its name
+       (openProjectFile). */
+    if (ext === "splitpage") return "splitpage";
+    if (ext === "html" || ext === "htm") return "html";
     return null;
   }
 
@@ -11000,6 +11117,10 @@
       return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
     }
     if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: baseName + " - two column.md" };
+    /* The old save format, kept as an export only: one file that opens in
+       any browser with nothing installed. PAGE_SHELL and buildPublishHtml
+       exist for this and for nothing else now (HANDOFF §3.1). */
+    if (kind === "html") return { data: buildPublishHtml(JSON.stringify(migrateRows(cloneState(state)))), filename: baseName + ".html" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -11064,17 +11185,27 @@
     return lines.join("\n");
   }
 
-  function isSplitpageHtmlName(name) {
-    return /\.html?$/i.test(name || "");
-  }
+  /* Re-opening one of this app's OWN project files — pull the full document
+     (rows, comments, tags, statuses, title) back out of it rather than
+     treating it as plain text to import. Three shapes arrive here:
 
-  /* Re-opening one of this app's OWN saved files — pull the full document
-     (rows, comments, tags, title) back out of its embedded #state-data,
-     same as a fresh page load does, rather than treating it as plain text
-     to import. It also becomes the file Save/Save As writes to from here
-     on, exactly as if you'd just done a Save As into it. */
-  async function openSplitpageFile(file, handle, opts) {
+       .splitpage  the state JSON itself
+       .md         a Markdown table plus the same JSON in a data block —
+                   and, if the table was edited elsewhere, those edits
+                   reconciled back into it (20d-formats.js)
+       .html       a legacy save: the whole app with #state-data inside it
+
+     Anything else — and any .md WITHOUT a data block, i.e. somebody else's
+     Markdown — falls through to the ordinary lossy import, unchanged.
+     Whichever it was becomes the file Save writes to from here on, in its
+     own format; a legacy .html converts to .md on that first Save. */
+  async function openProjectFile(file, handle, opts) {
     opts = opts || {};
+    var kind = fileKindFromName(file.name);
+    if (kind !== "splitpage" && kind !== "md" && kind !== "html") {
+      return loadFileIntoEditor(file, handle);
+    }
+
     var text;
     try {
       text = await file.text();
@@ -11082,28 +11213,64 @@
       showToast("Could not read " + file.name + ".", "error");
       return false;
     }
-    var doc = new DOMParser().parseFromString(text, "text/html");
-    var dataEl = doc.getElementById("state-data");
-    var parsed;
-    try {
-      parsed = JSON.parse(dataEl.textContent);
-    } catch (e) {
-      showToast(file.name + " doesn't look like a Splitpage file.", "error");
-      return false;
+
+    if (kind === "splitpage") {
+      var native;
+      try {
+        native = parseSplitpageFile(text);
+      } catch (e) {
+        showToast(file.name + " doesn't look like a Splitpage file.", "error");
+        return false;
+      }
+      return adoptProjectState(migrateRows(native), file, handle, "splitpage", opts);
     }
 
+    if (kind === "html") {
+      var doc = new DOMParser().parseFromString(text, "text/html");
+      var dataEl = doc.getElementById("state-data");
+      var legacy;
+      try {
+        legacy = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        showToast(file.name + " doesn't look like a Splitpage file.", "error");
+        return false;
+      }
+      return adoptProjectState(migrateRows(legacy), file, handle, "html", opts);
+    }
+
+    var project = null;
+    try {
+      project = parseMarkdownProject(text);
+    } catch (e) {
+      project = null;
+    }
+    if (!project) return loadFileIntoEditor(file, handle);
+    /* awaits the row-count question when the table and the record disagree */
+    var reconciled = await applyMarkdownProject(project);
+    return adoptProjectState(reconciled, file, handle, "md", opts);
+  }
+
+  /* The one place a parsed project becomes THE document, whichever format
+     it arrived in. `newState` has already been through migrateRows(). */
+  function adoptProjectState(newState, file, handle, kind, opts) {
+    opts = opts || {};
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
-    state = migrateRows(parsed);
+    state = newState;
     baseState = cloneState(state);
-    htmlFileHandle = handle || null;
+    docFileHandle = { handle: handle || null, kind: kind };
+    /* A hosted document and a local file are two homes for one Save button
+       (§3.1). Opening a server document already clears the file side; this
+       is the other half, which was missing — open a file while a hosted
+       document was loaded and Save still went to the server. */
+    serverDoc = { id: null, rev: 0 };
     /* The breakdown panel's open card, rename box and group mode all belong
        to the document that was on screen a moment ago. Carrying them into a
        different project meant a card springing open by itself whenever the
        two happened to share an item name. */
     resetProductionPanelState();
-    /* an .html open replaces the project outright — any file previously
-       opened for round-trip export (a .docx/.md/.csv) no longer applies */
+    /* opening a project replaces it outright — any file previously opened
+       for round-trip export (a .docx/.csv/foreign .md) no longer applies */
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
 
     clearDirty();
@@ -11117,11 +11284,6 @@
 
     if (handle) rememberLastFileHandle(handle);
     return true;
-  }
-
-  function openAnyLocalFile(file, handle) {
-    if (isSplitpageHtmlName(file.name)) return openSplitpageFile(file, handle);
-    return loadFileIntoEditor(file, handle);
   }
 
   /* ---- resuming the last project on launch ---- */
@@ -11158,7 +11320,9 @@
          yet; once something does (dirty), this needs the same undo safety
          net a normal file-open gets, or replacing state below silently
          discards it with no way back. */
-      await openSplitpageFile(file, handle, { skipSnapshot: !dirty, resumed: true });
+      /* kind-agnostic on purpose: whatever the last project was — .md,
+         .splitpage or a legacy .html — is what reopens here. */
+      await openProjectFile(file, handle, { skipSnapshot: !dirty, resumed: true });
     } catch (e) {
       /* moved, renamed, deleted, or on a drive that isn't connected right
          now — not worth interrupting startup over; Version history and the
@@ -11181,6 +11345,10 @@
 
   async function loadFileIntoEditor(file, handle) {
     var kind = fileKindFromName(file.name);
+    /* The two project formats never belong here: openProjectFile reads them
+       properly and only ever hands this function a foreign document (that
+       includes a .md with no data block, which really is plain text). */
+    if (kind === "splitpage" || kind === "html") kind = null;
     if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
     var newRows = null, newTitle = null;
@@ -11249,6 +11417,7 @@
           types: [{
             description: "Scripts and documents",
             accept: {
+              "application/json": [".splitpage"],
               "text/html": [".html", ".htm"],
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
               "text/markdown": [".md"],
@@ -11258,7 +11427,7 @@
           }]
         });
         var handle = handles[0];
-        await openAnyLocalFile(await handle.getFile(), handle);
+        await openProjectFile(await handle.getFile(), handle);
         return;
       } catch (err) {
         if (err && err.name === "AbortError") return; /* user cancelled the picker */
@@ -11275,6 +11444,7 @@
     if (ext === "md" || ext === "markdown") return "text/markdown";
     if (ext === "pdf") return "application/pdf";
     if (ext === "html") return "text/html";
+    if (ext === "splitpage") return "application/json";
     return "text/plain";
   }
 
@@ -11462,6 +11632,7 @@
     else if (action === "export-csv") exportAs("csv");
     else if (action === "export-breakdown") exportAs("breakdown");
     else if (action === "export-pdf") exportAs("pdf");
+    else if (action === "export-html") exportAs("html");
     else if (action === "export-narration-docx") exportNarration("narration-docx");
     else if (action === "export-narration-txt") exportNarration("narration-txt");
     else if (action === "export-packing-gear") exportPackingList("gear");
@@ -12522,6 +12693,272 @@
     var meta = document.querySelector('meta[name="splitpage-version"]');
     return meta ? meta.getAttribute("content") : null;
   }
+  /* ================= document file formats =================
+
+     Two formats, one document. Both are plain text, neither carries a copy
+     of the app, and both go through migrateRows() on the way in like
+     everything else from outside this page (invariant #2).
+
+       .splitpage   the state object itself, pretty-printed. No envelope and
+                    no translation: what the server stores, what #state-data
+                    holds at boot, and what this file contains are the same
+                    object (invariant #31).
+
+       .md          a Markdown table a human (or Obsidian, or GitHub) can
+                    read, followed by that same JSON in a fenced block. The
+                    table is what you edit elsewhere; the block is what the
+                    table cannot say — tags, comment anchors, images, ids,
+                    statuses, people, reading speed (invariant #32).
+
+     The old .html "save the whole app with the script inside it" format is
+     still READ here (openProjectFile, 18-local-files.js) and can still be
+     written by Export ▸ Standalone HTML, but Save never produces it. */
+
+  /* ---- the native format ---- */
+
+  function buildSplitpageFile(s) {
+    return JSON.stringify(migrateRows(cloneState(s || state)), null, 2);
+  }
+
+  /* Throws on anything that isn't one of ours; the caller decides what to
+     say about it. Deliberately does NOT migrate — every entry point wants
+     to do that itself, at the one moment it is actually adopting the
+     document, so there is never a half-trusted object in flight. */
+  function parseSplitpageFile(text) {
+    var parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.rows)) {
+      throw new Error("not-a-splitpage-file");
+    }
+    return parsed;
+  }
+
+  /* ---- the Markdown project ---- */
+
+  var MD_DATA_INFO = "splitpage";
+  var MD_DATA_NOTE = "<!-- splitpage: everything below is Splitpage's own record of this " +
+    "script. Edit the text above freely; leave this block alone. -->";
+
+  /* CommonMark closes a tilde fence on the first line of at least as many
+     tildes as opened it, so a fence is only safe if it is longer than any
+     run of tildes the content contains. Four is the floor (JSON of
+     sanitised HTML has no tildes at all in the ordinary case); a script
+     with "~~~~~" typed into it gets a longer one rather than a data block
+     that ends in the middle of somebody's dialogue. */
+  function splitpageDataFence(json) {
+    var longest = 3, re = /~{3,}/g, m;
+    while ((m = re.exec(json)) !== null) {
+      if (m[0].length > longest) longest = m[0].length;
+    }
+    return new Array(Math.max(4, longest + 1) + 1).join("~");
+  }
+
+  function buildMarkdownProject(s) {
+    s = s || state;
+    var json = buildSplitpageFile(s);
+    var fence = splitpageDataFence(json);
+    return toMarkdownTableDoc(s) + "\n" + MD_DATA_NOTE + "\n" +
+      fence + MD_DATA_INFO + "\n" + json + "\n" + fence + "\n";
+  }
+
+  /* The LAST opening fence wins: a script that quotes this very block as an
+     example earlier in its prose must not be able to shadow the real one.
+     An opener can never occur inside the block itself — JSON.stringify
+     escapes every newline, so every line of the JSON begins with the
+     pretty-printer's indent, never with a tilde. */
+  function findMarkdownDataBlock(text) {
+    var lines = String(text || "").replace(/\r\n|\r/g, "\n").split("\n");
+    var openAt = -1, fenceLen = 0, i;
+    for (i = 0; i < lines.length; i++) {
+      var m = /^(~{3,})\s*splitpage\s*$/.exec(lines[i]);
+      if (m) { openAt = i; fenceLen = m[1].length; }
+    }
+    if (openAt === -1) return null;
+    var closeRe = new RegExp("^~{" + fenceLen + ",}\\s*$");
+    var closeAt = -1;
+    for (i = openAt + 1; i < lines.length; i++) {
+      if (closeRe.test(lines[i])) { closeAt = i; break; }
+    }
+    return {
+      json: lines.slice(openAt + 1, closeAt === -1 ? lines.length : closeAt).join("\n"),
+      before: lines.slice(0, openAt).join("\n")
+    };
+  }
+
+  /* Returns null for Markdown that is not one of ours — a script someone
+     wrote in a text editor, an export from something else — so the caller
+     falls through to the ordinary lossy import, unchanged. A block that is
+     present but unreadable reads the same way: the table is still there and
+     still worth importing, and refusing the file outright would help nobody. */
+  function parseMarkdownProject(text) {
+    var block = findMarkdownDataBlock(text);
+    if (!block) return null;
+    var parsed;
+    try { parsed = parseSplitpageFile(block.json); } catch (e) { return null; }
+
+    /* Only the scene table. The breakdown and the comments appendix are
+       pipe tables too, and parseMarkdownTable reads every pipe line it is
+       given — they sit under "## " headings, and the scene table is
+       everything before the first one. */
+    var sceneSection = block.before.split(/^##\s/m)[0];
+    var heading = /^#\s+(.+)$/m.exec(block.before);
+    return {
+      state: migrateRows(parsed),
+      /* keepEmpty: a scene with nothing typed in it yet is still a row of
+         the table, and dropping it here would misread every later row as
+         shifted and pop the "scenes were added or removed" question on
+         every open of a document with one blank scene in it. */
+      table: parseMarkdownTable(sceneSection, { keepEmpty: true }),
+      title: heading ? heading[1].trim() : null
+    };
+  }
+
+  /* ---- reconciling hand edits made outside Splitpage ---- */
+
+  var MD_IMAGE_PREFIX_RE = /^!\[[^\]]*\]\((data:image\/[^)\s]+)\)\s*(?:<br\s*\/?>)?\s*/i;
+
+  /* A cell that was edited elsewhere is plain Markdown again: it has lost
+     its tag spans and its comment anchors, because neither survives
+     htmlToMarkdown(). Rebuild the rich text, then re-wrap every name the
+     breakdown still tracks — a tag survives a wording tweak that way, which
+     is the whole point of keeping the registry as real storage (§3.4).
+     Comment anchors on the cell are gone for good; the comments themselves
+     keep their quotedText and show as not-in-script in the panel. */
+  function markdownCellToHtml(s, md) {
+    /* contenteditable sprays non-breaking spaces into anything typed at the
+       end of a line, and they travel out into the Markdown as-is. A tag name
+       in the registry has ordinary spaces in it, so leaving them would mean
+       "gaffer tape" quietly failing to re-attach to text that looks
+       identical. Nothing downstream wants a nbsp in rebuilt prose either. */
+    var html = sanitizeHtml(legacyMdToHtml(String(md == null ? "" : md).replace(/ /g, " ")));
+    var names = (s.productionTags || []).slice().sort(function (a, b) {
+      return String(b.name || "").length - String(a.name || "").length;
+    });
+    names.forEach(function (t) {
+      var name = String(t.name || "").trim();
+      if (!name) return;
+      var res = tagFieldOccurrences(html, name, t.cat, name, false);
+      if (res.hits) html = res.html;
+    });
+    return sanitizeHtml(html);
+  }
+
+  /* The Visual cell can carry an inline image ahead of its text — today's
+     foreign import throws that away, but in one of our own files it is the
+     picture the scene was storyboarded with. */
+  function applyMarkdownVisualCell(s, row, md) {
+    var text = String(md == null ? "" : md);
+    var m = MD_IMAGE_PREFIX_RE.exec(text);
+    row.visualImage = m ? (safeImageSrc(m[1]) || null) : null;
+    if (m) text = text.slice(m[0].length);
+    row.visualText = markdownCellToHtml(s, text);
+  }
+
+  function markdownCellChanged(cellText, was) {
+    return String(cellText == null ? "" : cellText).trim() !== was;
+  }
+
+  /* Same row count on both sides: the block is authoritative except where
+     the table disagrees, cell by cell. An untouched cell keeps the block's
+     HTML exactly — tags, anchors, links, formatting — because rebuilding it
+     from the table would be a lossy no-op. */
+  function reconcileMarkdownRows(s, table) {
+    var changed = 0;
+    s.rows.forEach(function (row, i) {
+      var cells = table[i];
+      if (!cells) return;
+      var was = mdSceneCellSource(row, i);
+      if (markdownCellChanged(cells.visualText, was.visual)) {
+        applyMarkdownVisualCell(s, row, cells.visualText);
+        changed++;
+      }
+      if (markdownCellChanged(cells.audioText, was.audio)) {
+        row.audioText = markdownCellToHtml(s, cells.audioText);
+        changed++;
+      }
+    });
+    return changed;
+  }
+
+  /* "Use the table's text": the table decides how many scenes there are and
+     what they say; everything the table cannot say is kept by position —
+     ids (so comments stay attached), statuses, images, timestamps. */
+  function rowsFromMarkdownTable(s, table) {
+    return table.map(function (cells, i) {
+      var old = s.rows[i] || null;
+      var row = old || { id: makeId(), status: "todo", visualImage: null, updatedAt: "", updatedBy: null };
+      var was = old ? mdSceneCellSource(old, i) : { visual: "", audio: "" };
+      if (!old || markdownCellChanged(cells.visualText, was.visual)) {
+        applyMarkdownVisualCell(s, row, cells.visualText);
+      }
+      if (!old || markdownCellChanged(cells.audioText, was.audio)) {
+        row.audioText = markdownCellToHtml(s, cells.audioText);
+      }
+      return row;
+    });
+  }
+
+  /* ---- "the scenes don't line up" question ---- */
+
+  var pendingMdRowChoice = null;
+
+  function askMarkdownRowChoice(blockRows, tableRows) {
+    return new Promise(function (resolve) {
+      var modal = document.getElementById("md-rows-modal");
+      if (!modal) { resolve("keep"); return; }
+      document.getElementById("md-rows-detail").textContent =
+        "This file's own record has " + blockRows + " scene" + (blockRows === 1 ? "" : "s") +
+        ", but the table in it now has " + tableRows + ". Scenes were added or removed " +
+        "somewhere other than Splitpage, so the two can no longer be lined up scene by scene.";
+      pendingMdRowChoice = resolve;
+      modal.hidden = false;
+    });
+  }
+
+  /* Never resolved twice: whichever of the two buttons (or Esc, which means
+     "keep", the choice that changes nothing) gets here first takes the
+     resolver with it. */
+  function finishMarkdownRowChoice(choice) {
+    var modal = document.getElementById("md-rows-modal");
+    if (modal) modal.hidden = true;
+    var resolve = pendingMdRowChoice;
+    pendingMdRowChoice = null;
+    if (resolve) resolve(choice === "table" ? "table" : "keep");
+  }
+
+  /* Turn a parsed project into the state to adopt. Async only because the
+     row-count question is a real modal — no silent choice. */
+  async function applyMarkdownProject(proj) {
+    var s = proj.state;
+    if (proj.title && proj.title !== s.title) s.title = plainText(proj.title).slice(0, 300);
+
+    if (proj.table.length === s.rows.length) {
+      reconcileMarkdownRows(s, proj.table);
+    } else {
+      var choice = await askMarkdownRowChoice(s.rows.length, proj.table.length);
+      if (choice === "table") s.rows = rowsFromMarkdownTable(s, proj.table);
+    }
+    /* Everything that enters `state` goes through the one door, including
+       what we just rebuilt out of a text file (invariant #2). */
+    return migrateRows(s);
+  }
+
+  /* ---- test hook ----
+     Neither file picker can run headless, so the regression suite
+     (17-formats.txt) drives the serializers and the open path directly.
+     Nothing in the app reads this; it is the same trick 03-exports.txt
+     plays on URL.createObjectURL, one level up. */
+  window.__splitpageFormats = {
+    buildSplitpage: buildSplitpageFile,
+    parseSplitpage: parseSplitpageFile,
+    buildMarkdown: buildMarkdownProject,
+    parseMarkdown: parseMarkdownProject,
+    buildStandaloneHtml: function () { return buildPublishHtml(JSON.stringify(cloneState(state))); },
+    openFile: function (file) { return openProjectFile(file, null, { skipSnapshot: true }); },
+    migrate: migrateRows,
+    clone: cloneState,
+    state: function () { return state; },
+    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind }; }
+  };
   /* ================= events ================= */
 
   function onRootClick(e) {
@@ -13532,7 +13969,22 @@
     document.getElementById("open-file-input").addEventListener("change", function (e) {
       var file = e.target.files && e.target.files[0];
       e.target.value = "";
-      if (file) openAnyLocalFile(file, null);
+      if (file) openProjectFile(file, null);
+    });
+
+    document.getElementById("md-rows-keep").addEventListener("click", function () {
+      finishMarkdownRowChoice("keep");
+    });
+    document.getElementById("md-rows-table").addEventListener("click", function () {
+      finishMarkdownRowChoice("table");
+    });
+    window.addEventListener("keydown", function (e) {
+      /* Esc means "keep Splitpage's record" — the choice that changes
+         nothing. Dismissing a question must never silently rebuild the
+         script out of a table. */
+      if (e.key === "Escape" && !document.getElementById("md-rows-modal").hidden) {
+        finishMarkdownRowChoice("keep");
+      }
     });
 
     document.getElementById("import-close").addEventListener("click", closeImportModal);

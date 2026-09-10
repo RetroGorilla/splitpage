@@ -19,11 +19,14 @@
   var editSeq = 0;
   var dirty = false;
   var suppressUnloadWarning = false;
-  /* File System Access API handle for the .html file itself, once the user
-     has picked or created one via Save — lets subsequent saves write in
-     place instead of prompting again. Stays null (and Save falls back to a
-     plain download) in browsers without the API, e.g. Firefox. */
-  var htmlFileHandle = null;
+  /* The project file this document lives in: a File System Access API
+     handle, once the user has picked or created one via Save, plus which
+     format it is — "md" | "splitpage" | "html". The handle lets subsequent
+     saves write in place instead of prompting again; the kind decides which
+     serializer runs (14-export.js). `handle` stays null (and Save falls back
+     to a plain download) in browsers without the API, e.g. Firefox.
+     "html" only ever arrives by OPENING a legacy file — nothing writes it. */
+  var docFileHandle = { handle: null, kind: null };
   var deleteArmId = null;
   var deleteArmTimer = null;
 

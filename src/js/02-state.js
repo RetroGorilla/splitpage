@@ -36,6 +36,17 @@
     var out = escapeHtml(text);
     out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    /* The other four things htmlToMarkdown() can emit. Without these, a
+       Markdown table cell edited outside Splitpage and reconciled back in
+       (20d-formats.js) lost every strikethrough, underline and highlight in
+       it, and every line break inside the cell came back as the literal
+       text "<br>". They run against the already-escaped string, so the
+       markup here is reintroduced deliberately, one closed pair at a time,
+       and sanitizeHtml() still has the last word at every call site. */
+    out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+    out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
+    out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
+    out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
     out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
       /* `url` was captured out of `out`, which escapeHtml() already ran over
          once — it is already correctly entity-encoded for an HTML attribute
