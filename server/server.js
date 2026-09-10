@@ -5,11 +5,15 @@
  * scope. No dependencies — plain Node (18+), so the image is just `node:alpine`
  * plus this file and there is nothing to audit but what you can read here.
  *
- * There is deliberately NO authentication in this process. It is designed to
- * sit behind Cloudflare Access (or a VPN), which rejects unauthenticated
- * requests before they arrive. If you expose this port directly to the
- * internet, anyone who finds it can read and rewrite every document. See
- * DEPLOY.md.
+ * There is no *real* authentication in this process. It is designed to sit
+ * behind Cloudflare Access (or a VPN), which rejects unauthenticated requests
+ * before they arrive. If you expose this port directly to the internet,
+ * anyone who finds it can read and rewrite every document. See DEPLOY.md.
+ *
+ * JOIN_PIN is the one exception, and it is a small one: a shared code that
+ * stops a curious neighbour on the same wifi from opening your scripts. It
+ * travels in the clear over plain HTTP, so it is a door lock for a LAN, not
+ * a substitute for Access on the internet.
  *
  * Storage is one JSON file per document in DATA_DIR. That is the whole
  * database: no index to corrupt, and `cp -r` is a valid backup.
@@ -22,6 +26,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const child_process = require("node:child_process");
 
 const PORT = Number(process.env.PORT || 8791);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -39,6 +44,33 @@ const READ_ONLY = process.env.READ_ONLY === "1";
    server-side library because a launcher happened to run Node would be a
    surprise, not an upgrade. `start --library` is the opt-in. */
 const NO_API = process.env.NO_API === "1";
+
+/* ---------- the join PIN ----------
+ *
+ * Empty (the default) means open, exactly as this server has always been.
+ * Set it and every /api/* route except /api/health and /api/join needs a
+ * token, which a client gets by posting the right PIN once.
+ *
+ * The token lives in this process's memory and nowhere else: it is minted at
+ * startup, never written to disk, never logged, and never put in
+ * update-status.json or any file the static handler serves (invariant #29).
+ * Restarting the server invalidates every session, which is the right
+ * trade for a tool you start when you want to share and close when you stop.
+ */
+const JOIN_PIN = String(process.env.JOIN_PIN || "");
+const SESSION_TOKEN = crypto.randomBytes(32).toString("hex");
+
+/* Origins allowed to call this API from another page — a comma list, empty
+   (the default) meaning same-origin only. A copy of the app opened from disk
+   sends `Origin: null`, so the literal entry `null` is what lets a portable
+   copy talk to a server; see DEPLOY.md for why that is broader than it looks. */
+const ALLOW_ORIGINS = String(process.env.ALLOW_ORIGINS || "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+
+/* Set by start.mjs, per launch, for the wizard's "install this copy" step.
+   Absent (a Docker deployment, or a server started by hand) the launcher
+   routes do not exist at all. */
+const LAUNCH_TOKEN = String(process.env.LAUNCH_TOKEN || "");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -72,6 +104,95 @@ function identityOf(req) {
     .join(" ");
   return { email, name: name || null };
 }
+
+/* ---------- the join PIN, CORS, and the launch token ----------
+ *
+ * Everything in this block is about *who may call the API*, and it is the
+ * only place in the process that decides that. Three separate keys, on
+ * purpose: the PIN is shared with people, the session token is what the
+ * browser then carries, and the launch token belongs to the launcher that
+ * started this process and to nothing else.
+ */
+
+/* Constant-time by construction: both sides are hashed to a fixed 32 bytes
+   first, so timingSafeEqual never sees mismatched lengths (which throws) and
+   the comparison leaks neither the PIN's length nor how far it matched. */
+function sameSecret(given, expected) {
+  const a = crypto.createHash("sha256").update(String(given == null ? "" : given)).digest();
+  const b = crypto.createHash("sha256").update(String(expected == null ? "" : expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+/* A wrong PIN is cheap to guess six digits at a time, so make guessing
+   expensive: ten failures from one address in a minute and that address is
+   told to come back later. In memory, per process — a launcher that runs for
+   an afternoon does not need a store for this, and neither does a container. */
+const PIN_WINDOW_MS = 60 * 1000;
+const PIN_MAX_FAILURES = 10;
+const pinFailures = new Map();
+
+function clientIp(req) {
+  return String((req.socket && req.socket.remoteAddress) || "unknown");
+}
+
+function recentFailures(ip) {
+  const now = Date.now();
+  const list = (pinFailures.get(ip) || []).filter((t) => now - t < PIN_WINDOW_MS);
+  if (list.length) pinFailures.set(ip, list); else pinFailures.delete(ip);
+  /* Nothing else prunes this map, and an attacker gets to choose the key by
+     choosing a source address. Sweep the whole thing whenever it grows past
+     anything a real shared session would produce. */
+  if (pinFailures.size > 1000) {
+    for (const [key, times] of pinFailures) {
+      if (!times.some((t) => now - t < PIN_WINDOW_MS)) pinFailures.delete(key);
+    }
+  }
+  return list;
+}
+
+function noteFailure(ip) {
+  const list = recentFailures(ip);
+  list.push(Date.now());
+  pinFailures.set(ip, list);
+}
+
+function hasSessionToken(req) {
+  const given = String(req.headers["x-splitpage-token"] || "");
+  /* length check first: timingSafeEqual throws on a length mismatch, and the
+     token's length is not a secret (it is always 64 hex characters) */
+  if (given.length !== SESSION_TOKEN.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(SESSION_TOKEN));
+}
+
+/* Echoed only for an origin that was explicitly allowed, never `*`, and never
+   with Allow-Credentials: a cross-origin caller proves itself with the token
+   header, so there is no reason to let a browser attach a cookie it happens
+   to hold for this host. */
+function corsHeaders(req) {
+  const origin = req.headers.origin;
+  if (!origin || ALLOW_ORIGINS.indexOf(origin) === -1) return null;
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
+  };
+}
+
+/* The version this copy is, for a client deciding whether it is talking to
+   something older than itself. VERSION sits beside the static files in every
+   layout we ship (the launcher points STATIC_DIR at the app folder; the
+   Docker image copies both into /app/public). */
+const VERSION = (() => {
+  if (process.env.SPLITPAGE_VERSION) return String(process.env.SPLITPAGE_VERSION).trim();
+  for (const dir of [STATIC_DIR, path.join(STATIC_DIR, ".."), path.join(__dirname, "..")]) {
+    try {
+      const v = fs.readFileSync(path.join(dir, "VERSION"), "utf8").trim();
+      if (v) return v;
+    } catch (e) { /* not there — try the next */ }
+  }
+  return null;
+})();
 
 /* ---------- document ids ----------
  *
@@ -171,6 +292,12 @@ function sendJson(res, status, body, opts) {
      connection alive would leave its unread bytes in front of the next
      request on it, so this response ends the connection. */
   if (opts && opts.close) headers["Connection"] = "close";
+  /* Stamped on the response object by the request handler below, where the
+     request is still in scope. Doing it there rather than threading `req`
+     through every sendJson() call site means a route added later cannot
+     forget the CORS headers — and static files, which are answered without
+     this helper, still never get them. */
+  if (res.corsHeaders) Object.assign(headers, res.corsHeaders);
   res.writeHead(status, headers);
   res.end(payload);
 }
@@ -225,14 +352,156 @@ function summarise(doc) {
   };
 }
 
+/* ---------- the launcher's routes ----------
+ *
+ * This is the ONE place in the process that runs another program (invariant
+ * #28), and it exists so the first-run wizard can offer "put this copy in
+ * the Start Menu" without the user going to find a command line.
+ *
+ * Three locks, all of which must be open:
+ *   1. a launch token, minted by start.mjs for this launch and handed to the
+ *      page in the URL fragment — so another tab in the same browser, which
+ *      can reach localhost just as easily, cannot call this;
+ *   2. HOST === "127.0.0.1" — never under --host, where the port is on the
+ *      network and "install something" would be a remote code execution
+ *      route with a friendly name;
+ *   3. the script it runs is a fixed path inside this installation. Nothing
+ *      from the request reaches a command line.
+ *
+ * A refusal is 404, not 401: when these conditions are not met the routes
+ * genuinely do not exist, and saying so gives a prober nothing to work with.
+ */
+
+function launcherAllowed(req) {
+  if (!LAUNCH_TOKEN || HOST !== "127.0.0.1") return false;
+  const given = String(req.headers["x-splitpage-launch"] || "");
+  if (given.length !== LAUNCH_TOKEN.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(LAUNCH_TOKEN));
+}
+
+/* Is there an Add/Remove Programs entry pointing at THIS folder? Not "is
+   Splitpage installed" — a portable copy sitting next to an installed one
+   must still be able to offer to register itself. */
+function installedHere(root) {
+  if (process.platform !== "win32") return false;
+  const key = "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Splitpage";
+  for (const hive of ["HKCU", "HKLM"]) {
+    let out;
+    try {
+      out = child_process.spawnSync("reg", ["query", hive + key, "/v", "InstallLocation"],
+        { encoding: "utf8", windowsHide: true, timeout: 5000 });
+    } catch (e) { continue; }
+    if (!out || out.status !== 0 || !out.stdout) continue;
+    const m = /InstallLocation\s+REG_SZ\s+(.+)/i.exec(out.stdout);
+    if (!m) continue;
+    try {
+      if (path.resolve(m[1].trim()) === path.resolve(root)) return true;
+    } catch (e) { /* an unparseable path is not this one */ }
+  }
+  return false;
+}
+
+function handleLauncher(req, res, parts) {
+  if (!launcherAllowed(req)) return sendJson(res, 404, { error: "not-found" });
+
+  const root = path.resolve(STATIC_DIR);
+  const script = path.join(root, "installer", "install.ps1");
+
+  if (parts[2] === "info" && req.method === "GET") {
+    return sendJson(res, 200, {
+      root,
+      installed: installedHere(root),
+      arch: process.arch,
+      platform: process.platform,
+      canRegister: process.platform === "win32" && fs.existsSync(script)
+    });
+  }
+
+  if (parts[2] === "register" && req.method === "POST") {
+    if (process.platform !== "win32") {
+      return sendJson(res, 501, { error: "not-supported" });
+    }
+    if (!fs.existsSync(script)) return sendJson(res, 500, { error: "installer-missing" });
+    return new Promise((resolve) => {
+      /* An argument array, never a shell, and every argument is a constant
+         or a path this process computed for itself. */
+      const child = child_process.spawn("powershell.exe", [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+        "-InPlace", "-Dir", root
+      ], { cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      let output = "";
+      const take = (chunk) => { if (output.length < 8000) output += chunk; };
+      child.stdout.on("data", take);
+      child.stderr.on("data", take);
+      const timer = setTimeout(() => child.kill(), 120000);
+      child.on("error", (err) => {
+        clearTimeout(timer);
+        resolve(sendJson(res, 500, { error: "could-not-run", detail: String(err && err.message) }));
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        if (code === 0) resolve(sendJson(res, 200, { ok: true, root, output: output.trim() }));
+        else resolve(sendJson(res, 500, { error: "install-failed", code, output: output.trim() }));
+      });
+    });
+  }
+
+  return sendJson(res, 404, { error: "not-found" });
+}
+
 /* ---------- API ---------- */
 
 async function handleApi(req, res, url) {
   const who = identityOf(req);
   const parts = url.pathname.split("/").filter(Boolean); /* ["api", "docs", id?] */
 
+  /* Open, always: this is how a client finds out a server is here at all,
+     and (with authRequired) whether it needs to ask for a PIN before it can
+     do anything else. It says nothing a caller could not learn by looking at
+     the page it was served. */
   if (parts[1] === "health" && req.method === "GET") {
-    return sendJson(res, 200, { ok: true, mode: "server", readOnly: READ_ONLY });
+    return sendJson(res, 200, {
+      ok: true,
+      mode: "server",
+      readOnly: READ_ONLY,
+      authRequired: !!JOIN_PIN,
+      version: VERSION
+    });
+  }
+
+  /* Open, because it is the door: post the PIN, get the token every other
+     route wants. Rate-limited per address so the six digits cannot simply be
+     enumerated. */
+  if (parts[1] === "join" && req.method === "POST") {
+    if (!JOIN_PIN) return sendJson(res, 200, { token: SESSION_TOKEN, open: true });
+    const ip = clientIp(req);
+    if (recentFailures(ip).length >= PIN_MAX_FAILURES) {
+      return sendJson(res, 429, { error: "too-many-attempts" });
+    }
+    const body = await readBody(req);
+    if (!sameSecret(body && body.pin, JOIN_PIN)) {
+      noteFailure(ip);
+      return sendJson(res, 401, { error: "bad-pin" });
+    }
+    pinFailures.delete(ip);
+    return sendJson(res, 200, { token: SESSION_TOKEN });
+  }
+
+  /* The launcher's own routes carry their own key and their own refusals
+     (loopback only, launch token only), so they are settled before the PIN
+     gate rather than behind it — a PIN is about sharing documents with
+     people, and none of this is reachable by anyone but the launcher that
+     started this process. See invariant #28. */
+  if (parts[1] === "launcher") return handleLauncher(req, res, parts);
+
+  /* The gate. Everything below needs the token once a PIN is set — including
+     /api/me, which is a name and an email address.
+
+     JSON, deliberately: the client treats a non-JSON answer as a lapsed
+     Cloudflare Access session and reloads the page to sign in again, which
+     would be exactly the wrong move here. */
+  if (JOIN_PIN && !hasSessionToken(req)) {
+    return sendJson(res, 401, { error: "pin-required" });
   }
 
   if (parts[1] === "me" && req.method === "GET") {
@@ -437,7 +706,26 @@ async function handleStatic(req, res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
-  const done = (!NO_API && url.pathname.startsWith("/api/"))
+  const isApi = !NO_API && url.pathname.startsWith("/api/");
+
+  /* CORS belongs to the API and only to the API. Static files stay
+     same-origin whatever ALLOW_ORIGINS says: a page on another origin has no
+     business reading this app's HTML through fetch(), and it can always just
+     link to it. */
+  if (isApi) {
+    const cors = corsHeaders(req);
+    if (cors) res.corsHeaders = cors;
+    if (req.method === "OPTIONS") {
+      /* The preflight. Answered before any route runs — a browser sends it
+         without the token header, so making it pass the gate would fail
+         every cross-origin request before it was even made. */
+      res.writeHead(204, Object.assign({ "Content-Length": 0 }, cors || {}));
+      res.end();
+      return;
+    }
+  }
+
+  const done = isApi
     ? handleApi(req, res, url)
     : handleStatic(req, res, url);
 
@@ -473,7 +761,14 @@ async function start() {
     console.log("[splitpage] static files from " + STATIC_DIR);
     if (READ_ONLY) console.log("[splitpage] READ-ONLY mode");
     if (NO_API) console.log("[splitpage] static only — no document API");
-    console.log("[splitpage] no authentication in this process — put it behind Cloudflare Access or a VPN");
+    if (ALLOW_ORIGINS.length) console.log("[splitpage] cross-origin calls allowed from: " + ALLOW_ORIGINS.join(", "));
+    if (JOIN_PIN) {
+      /* Never the PIN itself: this stream is inherited by the launcher and
+         may end up in a log file. That it is set is all anyone needs here. */
+      console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
+    } else {
+      console.log("[splitpage] no authentication in this process — put it behind Cloudflare Access or a VPN");
+    }
   });
 }
 
