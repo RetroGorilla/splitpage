@@ -10399,20 +10399,34 @@
           };
         });
 
-        var need = columnHeight(headerLines) + columnHeight(quoteLines) + columnHeight(bodyLines) + 14;
-        replyBlocks.forEach(function (rb) { need += columnHeight(rb.headerLines) + columnHeight(rb.bodyLines); });
-        if (y - need < M) {
-          newPage(); y -= 6;
-          text("Comments (continued)", M, y - 12, "F2", 12);
-          y -= 34;
+        /* Flattened into one ordered (line, indent) list and drawn one line
+           at a time, each checked against the bottom margin as it goes —
+           a single up-front `need` check (the old approach) only proved
+           the START of the thread fit on the page; a long body or several
+           replies still ran straight past the margin with no further
+           check, silently losing whatever text landed below it. This
+           mirrors how the scene-row loop above already paginates. */
+        var threadLines = [];
+        headerLines.forEach(function (l) { threadLines.push({ line: l, x: M }); });
+        quoteLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+        bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+        replyBlocks.forEach(function (rb) {
+          rb.headerLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+          rb.bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+        });
+
+        function ensureCommentRoom() {
+          if (y - LEAD < M) {
+            newPage(); y -= 6;
+            text("Comments (continued)", M, y - 12, "F2", 12);
+            y -= 34;
+          }
         }
 
-        y = drawLines(headerLines, M, y - SIZE);
-        if (quoteLines.length) y = drawLines(quoteLines, M + 12, y - SIZE);
-        y = drawLines(bodyLines, M + 12, y - SIZE);
-        replyBlocks.forEach(function (rb) {
-          y = drawLines(rb.headerLines, M + 24, y - SIZE);
-          y = drawLines(rb.bodyLines, M + 24, y - SIZE);
+        ensureCommentRoom();
+        threadLines.forEach(function (b) {
+          ensureCommentRoom();
+          y = drawLines([b.line], b.x, y - SIZE);
         });
         y -= 6;
         ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 4).toFixed(2) + " m " +
