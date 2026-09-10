@@ -42,13 +42,13 @@ try {
             } elseif (-not (Test-Path $filePath -PathType Leaf)) {
                 $response.StatusCode = 404
                 $bytes = [System.Text.Encoding]::UTF8.GetBytes("Not found: $reqPath")
-                $response.OutputStream.Write($bytes, 0, $bytes.Length)
+                if ($request.HttpMethod -ne "HEAD") { $response.OutputStream.Write($bytes, 0, $bytes.Length) }
             } else {
                 $ext = [System.IO.Path]::GetExtension($filePath).ToLower()
                 if ($mime.ContainsKey($ext)) { $response.ContentType = $mime[$ext] } else { $response.ContentType = "application/octet-stream" }
                 $bytes = [System.IO.File]::ReadAllBytes($filePath)
                 $response.ContentLength64 = $bytes.Length
-                $response.OutputStream.Write($bytes, 0, $bytes.Length)
+                if ($request.HttpMethod -ne "HEAD") { $response.OutputStream.Write($bytes, 0, $bytes.Length) }
             }
         } catch {
             $response.StatusCode = 500
