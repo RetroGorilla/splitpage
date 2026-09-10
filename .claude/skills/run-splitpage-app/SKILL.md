@@ -33,7 +33,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 289/289 checks across 12 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 326/326 checks across 13 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -59,6 +59,25 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/10-comments-panel.txt` | clicking a comment card jumps without closing the panel, a live selection suppresses the jump, script-order vs. most-recent sorting (replies count as activity), exports stay in script order regardless |
 | `tests/11-comments-sort-persist.txt` | the comments sort preference survives a reload |
 | `tests/12-gear.txt` | the `<gear>` shortcut and its colour, the header badge, quick-add reconciliation (orphaned items un-track, live-tagged ones don't), scene grouping, status/rename/remove/delete through the shared card wiring, mutual exclusivity, and both packing-list PDF exports |
+| `tests/18-connect.txt` | the Servers dialog from the File menu, bookmarks persisting (and holding nothing credential-shaped), the SSH command, the join-PIN dialog's validation, `#launch=` stripped from the URL on load |
+
+## The server's own tests
+
+The harness serves static files from its own `HttpListener` and cannot start
+`server/server.js` with an environment, so everything that depends on
+`JOIN_PIN`, `ALLOW_ORIGINS` or `LAUNCH_TOKEN` is tested by a plain Node script
+instead. No dependencies, a few seconds, real servers on free ports:
+
+```bash
+node tools/test-server.mjs
+```
+
+Ends with `ALL PASS - 39/39 server checks` and exit 0. It covers the join PIN
+(open health, gated routes, wrong PIN, the rate limit, the right PIN), the CORS
+allowlist (including the literal `null` origin and static files never getting
+the headers), the 409 compare-and-set, and the launcher routes answering 404
+without the launch token and under `--host` **with** it. Run it after any
+change to `server/server.js`.
 
 ## Ad-hoc driving
 

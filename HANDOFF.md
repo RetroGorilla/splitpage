@@ -979,7 +979,18 @@ line-number table this replaced, they do not drift as you edit.
 | `19-writer.js` | 477 | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | 460 | teleprompter and voice follow |
 | `20a-update.js` | 87 | the update notice and About box |
+| `20e-connect.js` | 430 | the join-PIN dialog, server bookmarks, the SSH helper |
 | `21-events.js` | 1129 | all event wiring, `init()`, closes the IIFE |
+
+**`20e-connect.js` wires its own File-menu entry.** The dispatch in
+`18-local-files.js` knows nothing about `data-file-action="servers"`; instead
+`20e` listens on `#file-menu` in the **capture** phase, which runs before that
+file's bubbling handler, and calls `stopPropagation()` when the action is one
+of its own. That was the least invasive of the options (the alternative was
+editing `handleFileMenuAction()` to reach forwards into a later fragment), and
+it keeps everything about connecting to a server in one file. A second feature
+wanting the same trick should think twice — two capture listeners racing for
+the same element is how this gets confusing.
 
 `src/page.html` is the shell — topbar, File menu, modals, and the three build
 markers. `src/app.css` is everything visual. `src/seed-state.json` is the one
@@ -1170,6 +1181,19 @@ cycle — all exercised in a real browser against the API contract.
   container), and no browser has driven the hosted client against this file —
   the client-side hosted tests still ran against the PowerShell double. §2 of
   DEPLOY.md remains the smoke test.
+- **Phase 3's server half is tested; its edges are not.** `node
+  tools/test-server.mjs` drives real `server.js` processes on free ports and
+  covers the join PIN, the rate limit, CORS (allowed origin, other origin, the
+  literal `null`, static files), the unchanged 409, and the launcher routes
+  refusing without the token and under `--host` with it — 39/39. What has
+  **not** happened: two browsers on two machines joining one PIN-protected
+  session; a real cross-origin client (a `file://` copy with
+  `--allow-origin null`) opening and saving a hosted document; `--tunnel`
+  against a real SSH host; and `POST /api/launcher/register` actually running
+  `install.ps1 -InPlace` (that writes shortcuts and a registry key, so it needs
+  Adam's say-so first). The client-side dialogs are covered by
+  `tests/18-connect.txt`, but only against a static harness — no dialog in that
+  suite has ever received a real 401 from a real server.
 - **Cloudflare Access has never been in the loop.** The identity header and the
   lapsed-session path were tested by simulating what Access sends (an email
   header, and an HTML sign-in page where JSON was expected). The real thing may
