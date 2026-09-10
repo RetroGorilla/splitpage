@@ -79,6 +79,25 @@ the headers), the 409 compare-and-set, and the launcher routes answering 404
 without the launch token and under `--host` **with** it. Run it after any
 change to `server/server.js`.
 
+### The join PIN end to end (a real server, by hand)
+
+The two automated halves never meet: `tools/test-server.mjs` has no browser and
+`18-connect.txt` has no server. To drive the whole thing, start a real one and
+point the driver at it with an absolute URL (`goto` accepts one):
+
+```bash
+node start.mjs --library --pin 4821 --no-open --port 8890 --data %TEMP%\pindata
+powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/driver.ps1 -Script check.txt -Port 8894 -CdpPort 9394
+```
+
+with `check.txt` doing `goto http://localhost:8890/index.html`, then: the PIN
+dialog appears on its own; `0000` is refused **in the dialog** with no reload
+and no token stored; `4821` closes it and puts a 64-character token in
+`sessionStorage` and nothing in `localStorage`; Put this script on the server
+and Open from the server… both then work. Run 2026-09-10: 12/13, the one
+failure being a wrong expectation in the check itself (the server menu entries
+appear as soon as health answers, before the PIN is accepted — deliberate).
+
 ## Ad-hoc driving
 
 For one-off exploration, write a script and run the driver directly:

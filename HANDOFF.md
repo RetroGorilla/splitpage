@@ -1187,7 +1187,10 @@ cycle — all exercised in a real browser against the API contract.
   literal `null`, static files), the unchanged 409, and the launcher routes
   refusing without the token and under `--host` with it — 39/39. What has
   **not** happened: two browsers on two machines joining one PIN-protected
-  session; a real cross-origin client (a `file://` copy with
+  session (**one** browser against a real `--library --pin` server has: dialog
+  on load, wrong code refused in place, right code joining, publish and list
+  working with the token — the recipe is in SKILL.md); a real cross-origin
+  client (a `file://` copy with
   `--allow-origin null`) opening and saving a hosted document; `--tunnel`
   against a real SSH host; and `POST /api/launcher/register` actually running
   `install.ps1 -InPlace` (that writes shortcuts and a registry key, so it needs
