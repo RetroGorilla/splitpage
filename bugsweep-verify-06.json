@@ -1,0 +1,74 @@
+[
+  {
+    "file": "src/js/17-pdf.js",
+    "line": 471,
+    "severity": "medium",
+    "summary": "buildPackingListPdf() never wraps or width-checks the per-item text line, unlike buildPdf()'s columns which use pdfWrapRuns -- a long item name/status/owner string runs straight off the right edge of the page.",
+    "refuted": false,
+    "reasoning": "Read lines 466-473: the item line is emitted via a single text() call at fixed x=M+18 with no call to pdfWrapRuns or any width check, unlike buildPdf()'s and buildPackingListPdf()'s own breakdown columns elsewhere that do wrap. A long item.name/st.label/owner.name string will overflow the page's right edge unchecked."
+  },
+  {
+    "file": "src/js/16-csv.js",
+    "line": 94,
+    "severity": "medium",
+    "summary": "csvToRows() misroutes a plain 2-column CSV that has an index-style header (e.g. 'Scene,Description'): the index-column remap only applies when there are 3+ columns, so the Scene number is imported as the row's Visual text and the real content becomes Audio text.",
+    "refuted": false,
+    "reasoning": "Traced csvToRows lines 87-102: for header ['scene','description'], hv=-1 and ha=-1 (neither regex matches 'description'), looksLikeHeader=true (matches the scene regex), but table[0].length is 2 so the `>=3` branch is skipped and it falls to `vi=0, ai=1` -- putting the Scene-number column into visualText and the real Description column into audioText, exactly as described."
+  },
+  {
+    "file": "src/js/17-pdf.js",
+    "line": 198,
+    "severity": "low",
+    "summary": "The per-page line-fit calculation for rows that span multiple pages systematically undercounts by exactly one line (floor(D/LEAD) instead of floor(D/LEAD)+1), forcing an unnecessary early page break and a visible blank gap. Content is not lost, just deferred to the next page.",
+    "refuted": false,
+    "reasoning": "Worked the geometry from drawLines(): a block of n lines starting at startY=vCursor-SIZE has its last baseline at vCursor-SIZE-(n-1)*LEAD, so max n satisfying baseline>=M is floor((vCursor-SIZE-M)/LEAD)+1, but the code computes vFit=floor((vCursor-SIZE-M)/LEAD) with no +1 -- confirmed off by exactly one line, causing an early, unnecessary page break with no content loss."
+  },
+  {
+    "file": "src/js/18-local-files.js",
+    "line": 236,
+    "severity": "high",
+    "summary": "Resuming the last project on launch always skips the undo snapshot (skipSnapshot hardcoded true in resumeFromHandle), so it can silently discard whatever is currently in memory (freshly typed content, or a different file the user just opened) with no way to get it back, if the resume banner is clicked after the user already started something else.",
+    "refuted": false,
+    "reasoning": "Confirmed resumeFromHandle (line 233-242) always passes {skipSnapshot:true}, and openSplitpageFile's pushSnapshot call (line 178) is unconditionally skipped when that flag is set. The resume banner path (showResumeBanner -> pendingResumeHandle, wired to the resume-continue click handler in 21-events.js:794) requires an explicit user click that can happen well after page load, during which the user could have started a fresh blank document; clicking Continue then discards it with no snapshot to undo to (pushSnapshot in 03-sync.js is the only undo mechanism found)."
+  },
+  {
+    "file": "src/js/18-local-files.js",
+    "line": 401,
+    "severity": "medium",
+    "summary": "The save-in-place conflict check is bypassed whenever the underlying file can't be re-read (deleted or replaced since it was opened, e.g. by a cloud-sync unlink+recreate), so the write proceeds without ever showing the 'file changed on disk' warning it exists specifically to show.",
+    "refuted": false,
+    "reasoning": "Code at lines 392-401 matches exactly: the try/catch around handle.getFile() silently swallows any read failure and falls through to the write path below (createWritable/write) without ever calling showFileConflict(), so a file deleted/replaced out from under the handle skips the conflict warning entirely -- a concrete, traceable bypass regardless of the accompanying rationale comment."
+  },
+  {
+    "file": "src/js/18-local-files.js",
+    "line": 180,
+    "severity": "medium",
+    "summary": "Opening a Splitpage .html file whose embedded state JSON parses but has a malformed shape throws uncaught out of openSplitpageFile (no try/catch around migrateRows); openLocalFile's catch swallows it and silently pops a second, unrelated file picker instead of reporting the real error.",
+    "refuted": false,
+    "reasoning": "migrateRows (02-state.js:44) guards that s.rows is an array but never checks that each element is an object before doing r.id=... inside the forEach (line 50) -- a rows array containing a non-object element (e.g. null) throws synchronously, uncaught by openSplitpageFile (line 180, no try/catch). That rejection propagates through openAnyLocalFile to openLocalFile's outer catch (line 338), which only special-cases AbortError and otherwise falls through to `document.getElementById('open-file-input').click()`, exactly as described."
+  },
+  {
+    "file": "src/js/20-teleprompter.js",
+    "line": 390,
+    "severity": "high",
+    "summary": "The auto-restart path in recognition.onend swallows a synchronous start() failure without releasing the held microphone stream, and the next manual restart then clobbers that leaked stream instead of stopping it first.",
+    "refuted": false,
+    "reasoning": "Confirmed at lines 390-394: the catch around recognition.start() only sets voiceFollowActive=false and updates the UI, never calling releaseVoiceStream(), so voiceStream stays alive. startVoiceFollow() (line 307) then does `voiceStream = await getUserMedia(...)` on the next manual start with no releaseVoiceStream() call beforehand, overwriting the leaked stream's reference without ever stopping its tracks."
+  },
+  {
+    "file": "src/js/20-teleprompter.js",
+    "line": 92,
+    "severity": "high",
+    "summary": "acquireWakeLock()'s promise resolution races with releaseWakeLock(): if the prompter is closed (or the tab is backgrounded and refocused again) before navigator.wakeLock.request() resolves, the lock that arrives afterward is stored into prompterWakeLock with nothing left to ever release it.",
+    "refuted": false,
+    "reasoning": "Confirmed acquireWakeLock (line 92-97) is fire-and-forget with no cancellation token, and releaseWakeLock (line 99-104) only acts if prompterWakeLock is already set; if closePrompter() runs before the request resolves, prompterWakeLock is still null when release runs, and the lock arriving afterward is stored with nothing left to release it. Also confirmed 21-events.js:557-558 re-calls acquireWakeLock() on visibilitychange while prompterOpen, reproducing the same race on tab refocus."
+  },
+  {
+    "file": "src/js/21-events.js",
+    "line": 650,
+    "severity": "medium",
+    "summary": "The global Ctrl/Cmd+F handler hijacks focus into the (hidden) find bar even while a centered modal dialog is open (e.g. Import, comment/tag composer), silently stealing keystrokes from whatever the user was typing in that modal, because it only checks state and writerOpen, not any modal-open flag.",
+    "refuted": false,
+    "reasoning": "Confirmed the handler at lines 650-662 only returns early for missing state or writerOpen, with no check against any other modal's hidden state (tag-modal, import-modal, comment-modal, drive-modal, server-modal, gdoc-modal are all otherwise checked individually elsewhere in this file for Escape, but not here for Ctrl+F), so it unconditionally preventDefault()s and opens/focuses the find bar even while typing inside one of those modals."
+  }
+]
