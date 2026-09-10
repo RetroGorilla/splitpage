@@ -562,7 +562,7 @@
     if (productionSelection[key]) delete productionSelection[key];
     else productionSelection[key] = true;
     selectionAnchorKey = key;
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
     renderProduction();
   }
 
@@ -647,7 +647,7 @@
     /* a Ctrl/Shift+click leaves a stray text selection across the card */
     var sel = window.getSelection();
     if (sel && sel.removeAllRanges) sel.removeAllRanges();
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
     renderProduction();
     return true;
   }

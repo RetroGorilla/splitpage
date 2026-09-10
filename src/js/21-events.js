@@ -85,8 +85,8 @@
 
     var bulkDel = e.target.closest('[data-action="bulk-delete"]');
     if (bulkDel) {
-      if (bulkDeleteArmed) bulkDeleteSelected();
-      else { bulkDeleteArmed = true; renderProduction(); }
+      if (bulkDeleteArmed) { disarmBulkDelete(); bulkDeleteSelected(); }
+      else { armBulkDelete(); renderProduction(); }
       return;
     }
 

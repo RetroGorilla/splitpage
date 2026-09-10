@@ -1060,13 +1060,33 @@
   var productionSelection = {};    /* key -> true */
   var selectionAnchorKey = null;   /* where a Shift+click range starts from */
   var bulkDeleteArmed = false;
+  var bulkDeleteArmTimer = null;
 
   function selectedKeys() { return Object.keys(productionSelection); }
+
+  /* Mirrors armRemoveTag/armDeleteTag's 2800ms confirm window — without
+     this, an armed bulk-delete button that nothing else happens to touch
+     stayed armed forever, so a later click anywhere on it (after the user
+     had walked away and forgotten) deleted immediately with no fresh
+     confirm gesture. */
+  function armBulkDelete() {
+    bulkDeleteArmed = true;
+    clearTimeout(bulkDeleteArmTimer);
+    bulkDeleteArmTimer = setTimeout(function () {
+      bulkDeleteArmed = false;
+      renderProduction();
+    }, 2800);
+  }
+
+  function disarmBulkDelete() {
+    clearTimeout(bulkDeleteArmTimer);
+    bulkDeleteArmed = false;
+  }
 
   function clearProductionSelection() {
     productionSelection = {};
     selectionAnchorKey = null;
-    bulkDeleteArmed = false;
+    disarmBulkDelete();
   }
 
   /* Keys can vanish under us — an item gets renamed, deleted, or the script
@@ -1079,7 +1099,7 @@
     selectedKeys().forEach(function (k) {
       if (!live[k]) { delete productionSelection[k]; dropped = true; }
     });
-    if (dropped) bulkDeleteArmed = false;
+    if (dropped) disarmBulkDelete();
     if (selectionAnchorKey && !live[selectionAnchorKey]) selectionAnchorKey = null;
   }
 
