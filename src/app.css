@@ -1357,6 +1357,14 @@
     line-height: 16px;
   }
   .comments-badge[hidden] { display: none; }
+  /* .comments-badge's red is for "unresolved comments" specifically — the
+     Production/Gear count badges share its layout via .tag-badge but carry
+     both classes (class="comments-badge tag-badge"), and .tag-badge's own
+     teal (line 699 above) loses the equal-specificity tie simply for being
+     declared earlier in the file. Two classes outrank one regardless of
+     source order, so this restores the teal for anything that is also
+     .tag-badge without touching a plain .comments-badge's red. */
+  .comments-badge.tag-badge { background: var(--visual); }
 
   .cmt-anchor {
     background: color-mix(in srgb, var(--accent) 26%, transparent);
@@ -2105,7 +2113,13 @@
   border: 1px solid var(--rule, #d8d2c4);
   border-left: 3px solid #1B7A68;
   border-radius: 8px;
-  background: #ffffff;
+  /* Was a literal #ffffff with no color of its own — in dark mode it
+     inherited body's near-white --text (#F3EFE5), giving near-invisible
+     text on a hardcoded white box. --surface is the theme token every
+     other panel/card sources its background from, and already flips
+     correctly under prefers-color-scheme/data-theme. */
+  background: var(--surface);
+  color: var(--text);
   font-size: 13px;
 }
 .update-bar-icon { color: #1B7A68; font-size: 14px; }
