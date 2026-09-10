@@ -265,9 +265,10 @@ if (process.argv.includes("--installer")) {
     "SEDVersion=3",
     "[Options]",
     "PackagePurpose=InstallApp",
-    /* 0 = don't show IExpress's own progress window: the only thing the user
-       should see is our installer. */
-    "ShowInstallProgramWindow=0",
+    /* 1 = show the window install.ps1 runs in. It is a console script that
+       asks where to install; with 0 IExpress ran it hidden and the prompt
+       could never be answered (found the first time the setup was run). */
+    "ShowInstallProgramWindow=1",
     "HideExtractAnimation=1",
     "UseLongFileName=1",
     "InsideCompressed=0",
@@ -281,8 +282,12 @@ if (process.argv.includes("--installer")) {
     "FriendlyName=%FriendlyName%",
     "AppLaunched=%AppLaunched%",
     "PostInstallCmd=%PostInstallCmd%",
-    "AdminQuietInstCmd=",
-    "UserQuietInstCmd=",
+    /* What runs for a silent install. IExpress has no /S: its quiet switches
+       are /Q (or /Q:U, per-user) and /Q:A (all users), and each runs one of
+       these instead of AppLaunched. A custom folder is /C: overriding the
+       command, e.g. /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\Splitpage". */
+    "AdminQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -AllUsers",
+    "UserQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent",
     "SourceFiles=SourceFiles",
     "[Strings]",
     "InstallPrompt=",

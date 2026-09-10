@@ -52,8 +52,10 @@ The installer asks where to put it:
 - **Somewhere else** — type any path.
 
 and whether you want a desktop shortcut and a *shared session* shortcut. It
-registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /S`
-installs silently, with `/D=C:\path` to choose where.
+registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /Q`
+installs silently for the current user and `/Q:A` for everyone (needs an
+administrator prompt). To choose the folder as well, override the command:
+`SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"`.
 
 ### Building a release
 

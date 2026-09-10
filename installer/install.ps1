@@ -11,7 +11,9 @@
   That is the point: one download, and hosting a shared session works out of the
   box instead of sending the user off to install Node.
 
-  Silent install (for scripting):  SplitpageSetup.exe /S [/D=C:\path]
+  Silent install (for scripting):  SplitpageSetup.exe /Q     (this user)
+                                   SplitpageSetup.exe /Q:A   (everyone; needs admin)
+  Custom folder: SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"
 #>
 
 [CmdletBinding()]
@@ -120,7 +122,7 @@ try {
   $from = if ($inner) { $inner.FullName } else { $stage }
   Copy-Item (Join-Path $from "*") $target -Recurse -Force
 
-  # Copy-Item above only adds/overwrites — it never removes a file an
+  # Copy-Item above only adds/overwrites - it never removes a file an
   # upgrade left behind. Mirror instead: anything in $target that isn't
   # in this release's payload gets removed, so reinstalling over an older
   # version doesn't accumulate stale files (e.g. a renamed/deleted script)
