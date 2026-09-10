@@ -458,4 +458,3 @@
       if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
     });
   }
-

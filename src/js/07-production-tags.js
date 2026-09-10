@@ -1161,4 +1161,3 @@
     queueAutoSave();
     showToast("Labelled as " + name, "ok");
   }
-

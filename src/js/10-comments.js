@@ -500,4 +500,3 @@
     }
     listEl.innerHTML = items.map(commentCardHtml).join("");
   }
-

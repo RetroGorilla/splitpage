@@ -389,4 +389,3 @@
     if (!wrap) return;
     wrap.querySelector(".video-popover").hidden = true;
   }
-

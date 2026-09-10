@@ -118,4 +118,3 @@
     scheduleProductionRefresh();  /* the Shoot view counts shot scenes */
     queueAutoSave();
   }
-

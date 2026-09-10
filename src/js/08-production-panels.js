@@ -949,4 +949,3 @@
     if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
     return "﻿" + lines.join("\r\n");
   }
-

@@ -162,34 +162,9 @@
       .replace(/\r\n|\r|\n/g, " ");
   }
 
-  function toMarkdownDoc() {
-    var lines = [];
-    lines.push("# " + (state.title || "Untitled Script"));
-    lines.push("");
-    if (!state.rows.length) {
-      lines.push("_No rows yet._");
-    }
-    state.rows.forEach(function (row, i) {
-      lines.push("## Scene " + pad2(i + 1));
-      lines.push("");
-      lines.push("**Visual**");
-      lines.push("");
-      if (row.visualImage) {
-        lines.push("![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")");
-        lines.push("");
-      }
-      var vmd = htmlToMarkdown(row.visualText);
-      lines.push(vmd ? vmd : "_(no visual notes)_");
-      lines.push("");
-      lines.push("**Audio**");
-      lines.push("");
-      var amd = htmlToMarkdown(row.audioText);
-      lines.push(amd ? amd : "_(no dialogue)_");
-      lines.push("");
-      lines.push("---");
-      lines.push("");
-    });
-
+  /* Shared by both Markdown shapes below: the breakdown and comments always
+     follow the script, however the scenes themselves were laid out. */
+  function appendMarkdownTail(lines) {
     var breakdown = breakdownRows();
     if (breakdown.length) {
       lines.push("## Production breakdown");
@@ -226,6 +201,72 @@
         lines.push("");
       });
     }
+  }
+
+  function toMarkdownDoc() {
+    var lines = [];
+    lines.push("# " + (state.title || "Untitled Script"));
+    lines.push("");
+    if (!state.rows.length) {
+      lines.push("_No rows yet._");
+    }
+    state.rows.forEach(function (row, i) {
+      lines.push("## Scene " + pad2(i + 1));
+      lines.push("");
+      lines.push("**Visual**");
+      lines.push("");
+      if (row.visualImage) {
+        lines.push("![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")");
+        lines.push("");
+      }
+      var vmd = htmlToMarkdown(row.visualText);
+      lines.push(vmd ? vmd : "_(no visual notes)_");
+      lines.push("");
+      lines.push("**Audio**");
+      lines.push("");
+      var amd = htmlToMarkdown(row.audioText);
+      lines.push(amd ? amd : "_(no dialogue)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+    appendMarkdownTail(lines);
+    return lines.join("\n");
+  }
+
+  /* A table-shaped Markdown cell can't hold a literal newline or an
+     unescaped pipe without breaking the row, so line breaks become <br> (the
+     one bit of raw HTML every Markdown table renderer still honors inside a
+     cell) and pipes are backslash-escaped rather than flattened to a space —
+     unlike mdCell, which is only ever fed plain single-line breakdown data. */
+  function mdRichTableCell(md) {
+    return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
+  }
+
+  /* The same script as toMarkdownDoc, laid out as a Visual/Audio table
+     instead of a stacked Scene-by-scene list — this is also exactly the
+     table shape Import ▸ Two columns already knows how to read back in, so
+     round-tripping through this export doesn't lose the split. */
+  function toMarkdownTableDoc() {
+    var lines = [];
+    lines.push("# " + (state.title || "Untitled Script"));
+    lines.push("");
+    if (!state.rows.length) {
+      lines.push("_No rows yet._");
+    } else {
+      lines.push("| # | Visual | Audio |");
+      lines.push("| --- | --- | --- |");
+      state.rows.forEach(function (row, i) {
+        var visual = htmlToMarkdown(row.visualText);
+        if (row.visualImage) {
+          visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
+        }
+        var audio = htmlToMarkdown(row.audioText);
+        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(visual) + " | " + mdRichTableCell(audio) + " |");
+      });
+    }
+    lines.push("");
+    appendMarkdownTail(lines);
     return lines.join("\n");
   }
 
@@ -395,4 +436,3 @@
     })(container, { b: false, i: false, u: false, s: false, mark: false, href: null });
     return runs;
   }
-

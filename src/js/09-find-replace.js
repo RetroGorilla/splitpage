@@ -241,4 +241,3 @@
     findMatches = [];
     findIndex = -1;
   }
-

@@ -732,6 +732,51 @@
       if (e.key === "Escape" && !document.getElementById("server-modal").hidden) closeServerPicker();
     });
 
+    document.getElementById("drive-modal").addEventListener("click", function (e) {
+      if (e.target.id === "drive-modal") { closeDriveModal(); return; }
+      var t = e.target.closest("[data-action]");
+      if (!t) return;
+      var act = t.getAttribute("data-action");
+      var id = t.getAttribute("data-id");
+      if (act === "drive-save-creds") driveSaveCredsFromForm();
+      else if (act === "drive-edit-creds") driveShowCredsForm();
+      else if (act === "drive-connect") driveConnect(document.getElementById("drive-folder-input").value);
+      else if (act === "drive-crumb") driveCrumbTo(Number(t.getAttribute("data-index")));
+      else if (act === "drive-open-item") driveOpenItem(id);
+      else if (act === "drive-refresh") driveListCurrent();
+      else if (act === "drive-newfolder-toggle") toggleDriveNewFolder();
+      else if (act === "drive-newfolder-create") driveCreateFolder();
+      else if (act === "drive-newfolder-cancel") toggleDriveNewFolder(false);
+      else if (act === "drive-upload") document.getElementById("drive-upload-input").click();
+      else if (act === "drive-signin") driveSignIn();
+      else if (act === "drive-signout") driveSignOut();
+      else if (act === "drive-rename") driveStartRename(id);
+      else if (act === "drive-rename-save") driveSaveRename(id);
+      else if (act === "drive-rename-cancel") driveCancelRename();
+      else if (act === "drive-delete") { var it = driveItemById(id); if (it) armDriveDelete(t, it); }
+    });
+    document.getElementById("drive-close").addEventListener("click", closeDriveModal);
+    document.getElementById("drive-done").addEventListener("click", closeDriveModal);
+    document.getElementById("drive-folder-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); driveConnect(e.target.value); }
+    });
+    document.getElementById("drive-newfolder-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); driveCreateFolder(); }
+      else if (e.key === "Escape") { e.preventDefault(); toggleDriveNewFolder(false); }
+    });
+    ["drive-api-key", "drive-client-id"].forEach(function (id) {
+      document.getElementById(id).addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); driveSaveCredsFromForm(); }
+      });
+    });
+    document.getElementById("drive-upload-input").addEventListener("change", function (e) {
+      driveUploadFiles(e.target.files);
+      e.target.value = "";
+    });
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !document.getElementById("drive-modal").hidden) closeDriveModal();
+    });
+
     document.getElementById("tag-modal").addEventListener("click", onRootClick);
     document.getElementById("tag-close").addEventListener("click", closeTagComposer);
     document.getElementById("tag-cancel").addEventListener("click", closeTagComposer);
@@ -936,6 +981,19 @@
       if (e.key === "Escape" && !document.getElementById("import-modal").hidden) closeImportModal();
     });
 
+    document.getElementById("gdoc-close").addEventListener("click", closeGdocModal);
+    document.getElementById("gdoc-cancel").addEventListener("click", closeGdocModal);
+    document.getElementById("gdoc-confirm").addEventListener("click", confirmGdocImport);
+    document.getElementById("gdoc-url-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") confirmGdocImport();
+    });
+    document.getElementById("gdoc-modal").addEventListener("click", function (e) {
+      if (e.target.id === "gdoc-modal") closeGdocModal();
+    });
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !document.getElementById("gdoc-modal").hidden) closeGdocModal();
+    });
+
     document.getElementById("pp-close").addEventListener("click", closePrompter);
     document.getElementById("pp-voice").addEventListener("click", function () {
       if (voiceFollowActive) stopVoiceFollow(); else startVoiceFollow();
@@ -1069,4 +1127,3 @@
     init();
   }
 })();
-

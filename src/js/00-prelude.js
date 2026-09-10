@@ -111,4 +111,3 @@
   var voiceStream = null;
   var finalTranscript = "";
   var interimTranscript = "";
-
