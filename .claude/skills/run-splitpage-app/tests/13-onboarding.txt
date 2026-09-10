@@ -4,7 +4,7 @@
 # reopening it on demand without touching that key, and never editing the
 # document (invariant #17) along the way.
 
-open
+open /index.html?wizard=1
 
 # --- a fresh profile has no key yet: the wizard shows on its own -----------
 wait document.getElementById('onboarding-modal').hidden == false
@@ -23,7 +23,7 @@ wait document.getElementById('onboarding-modal').hidden == true
 
 # --- removing the key and reloading shows it again --------------------------
 eval localStorage.removeItem('splitpage-onboarding')
-goto /index.html
+goto /index.html?wizard=1
 wait document.getElementById('onboarding-modal').hidden == false
 # a reload is a fresh window - window.__rowsBefore from before goto is gone
 eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()

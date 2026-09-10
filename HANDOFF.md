@@ -1258,6 +1258,26 @@ The way that worked (used for the Drive / Google Doc / Markdown merge):
 
 ### Built and verified live
 
+- **2026-09-10, on Windows 11 x64 (Adam's machine).** The installer end to end:
+  `node package.mjs --installer` -> `SplitpageSetup-1.0.0.exe /Q` installs per
+  user with shortcuts and the Add/Remove entry; the registered uninstaller
+  removes everything and leaves `%LOCALAPPDATA%Splitpagedata`. The ARM64 and
+  x64 setups built by `--arch both` carry one runtime each; install.ps1
+  renames the right one to runtime
+ode.exe and rewrites the manifest entry
+  (x64 verified by a real install; ARM64 built only). A hosted session with
+  two browsers: publish, join, a different-scene merge (banner "Kept 1 row
+  you edited, 1 changed by someone else"), and a same-field conflict kept as
+  an Unmerged-edit comment. A `--pin` server: the PIN dialog on load, a wrong
+  code refused in place, the right one storing only a session token. The
+  first-run wizard on a launcher-opened copy: "Add to Start Menu" registers in
+  place (`install.ps1 -InPlace`), and the Add/Remove entry it writes runs
+  `install.ps1 -Unregister`, which removes the shortcuts, the key and the
+  marker and touches nothing else in the folder. The regression harness runs
+  with the wizard pre-dismissed (driver.ps1 injects the onboarding key before
+  page scripts; `?wizard=1` asks for it), because a rendered wizard swallows
+  the suites' real mouse clicks.
+
 Tagging shortcuts `[prop]` `{location}` `~vfx~`, Tab autocomplete (category-aware,
 falls back across categories and says so), Music/SFX split out from VFX,
 production registry with orphan warnings, crew list + per-item owner + notes,
@@ -1456,16 +1476,11 @@ that check only ever looks at the `#state-data` line.
   Adam's say-so first). The client-side dialogs are covered by
   `tests/18-connect.txt`, but only against a static harness — no dialog in that
   suite has ever received a real 401 from a real server.
-- **The wizard's "Add to Start Menu" button has never actually been clicked.**
-  `tests/13-onboarding.txt` proves the *other* branch of step 2 — the harness
-  is not the launcher, so `api/launcher/info` 404s and the plain-instructions
-  copy renders — but the button only appears when `launchToken` is set (a
-  real launch via `start.mjs`, on loopback), which no headless suite can be.
-  `registerLauncher()` (`20b-onboarding.js`) is a thin wrapper around
-  `launcherFetch("api/launcher/register", {method:"POST"})`, the same call
-  the "not happened" item above already flags — one real click, from a
-  launcher-served copy, is still owed, and it needs Adam's say-so the same
-  way installing the `.exe` does.
+- **"Add to Start Menu" has been clicked for real (2026-09-10)** from a
+  launcher-opened copy: it registered in place, and the Add/Remove entry it
+  wrote (`install.ps1 -Unregister`) took everything back without touching the
+  folder. `tests/13-onboarding.txt` still only covers the no-launcher branch,
+  because a headless suite is never launcher-opened.
 - **Cloudflare Access has never been in the loop.** The identity header and the
   lapsed-session path were tested by simulating what Access sends (an email
   header, and an HTML sign-in page where JSON was expected). The real thing may
@@ -1510,15 +1525,12 @@ that check only ever looks at the `#state-data` line.
 **Immediate, and all of it needs a Windows machine — none of it can be done
 from a Linux container:**
 
-1. **Run the regression suite.** `node build.mjs` then the suite. Nothing since
-   the refactor has been through it, and the refactor moved every line of the
-   app into different files. This is the first thing.
-2. **Build and run the installer.** `node package.mjs --installer`, then the
-   resulting `SplitpageSetup-<version>.exe` end to end: install, launch, host a
-   shared session, uninstall. `iexpress.exe`, `installer/install.ps1` and
-   `installer/uninstall.ps1` are all Windows-only and have never executed. If
-   anything is broken, the IExpress directive in `package.mjs` is the likely
-   spot.
+1. ~~Run the regression suite~~ Done 2026-09-10: green after the seed-schema
+   fix (see "Built and verified live"); it has grown to 19 suites since.
+2. ~~Build and run the installer~~ Done 2026-09-10: `/Q` install, launch,
+   host+join, and the registered uninstall all verified. IExpress needed
+   `/Q` (not `/S`), a visible console, ASCII-only scripts, and the payload
+   script named `install.ps1` - all fixed in `package.mjs`/`installer/`.
 3. **Confirm voice follow** over a real 2-minute read — still the oldest open
    loop, and still unverifiable in any sandbox because the microphone is
    blocked.
