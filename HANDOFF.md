@@ -1050,13 +1050,19 @@ cycle — all exercised in a real browser against the API contract.
   writer.** Splitting a scene hangs off a real Enter keydown, and a soft
   keyboard's Enter is exactly the kind of key that arrives differently — an
   Android IME may commit it as text, and iOS may send it with no `key` at all.
-- **`server/server.js` has never been executed.** No Node and no Docker on the
-  dev machine. It parses, and it was checked line by line against the contract
-  the client actually calls, but every client-side test above ran against a
-  PowerShell double implementing the same API — not against this file. The
-  first real run will be on Unraid. §2 of DEPLOY.md is the smoke test: build,
-  `curl /api/health`, publish a document, open it in a second browser.
-  Treat anything in that file as unproven until that passes.
+- **`server/server.js` HAS now been executed** (2026-09-09, in a Linux
+  container with Node 22 — the dev machine still has neither Node nor Docker).
+  Exercised against the live process: health, identity parsing from the
+  Cloudflare Access header, create, list, read, delete, id validation, path
+  traversal, `READ_ONLY=1`, and the compare-and-set — five concurrent PUTs at
+  one `baseRev` gave exactly one 200 and four 409s, so the per-document write
+  lock does its job. One bug found and fixed: an over-length body destroyed
+  the socket before its 413 could be written, so the client saw a reset rather
+  than a reason.
+  **Still unproven:** the Docker image has never been built (no daemon in that
+  container), and no browser has driven the hosted client against this file —
+  the client-side hosted tests still ran against the PowerShell double. §2 of
+  DEPLOY.md remains the smoke test.
 - **Cloudflare Access has never been in the loop.** The identity header and the
   lapsed-session path were tested by simulating what Access sends (an email
   header, and an HTML sign-in page where JSON was expected). The real thing may
