@@ -15,10 +15,18 @@ Splitpage is Adam's personal tool for scripting videos: a two-column
 visual/audio editor with a teleprompter, review comments, and a production
 breakdown for props/locations/cast/VFX/sound.
 
-- **Edit `src/`, never `index.html`.** The source is split into
-  `src/page.html` (the HTML shell), `src/app.css` (~2,000 lines),
-  `src/app.js` (~9,500 lines) and `src/seed-state.json` (the demo document).
-  `node build.mjs` inlines all four back into `index.html`.
+- **Edit `src/`, never `index.html`.** The source is `src/page.html` (the HTML
+  shell), `src/app.css` (~2,100 lines), `src/seed-state.json` (the demo
+  document), and `src/js/` — 22 numbered fragments, `00-prelude.js` through
+  `21-events.js`. `node build.mjs` inlines the lot back into `index.html`.
+- **The `src/js/` files are fragments of ONE IIFE, not modules.**
+  `00-prelude.js` opens the function, `21-events.js` closes it, and they all
+  share a single closure — which is why none of them is valid JS on its own
+  and why the build concatenates them in filename order. That was deliberate:
+  it makes the scoping identical to the single file they were cut out of, with
+  no bundler and no dependency. It also means **filename order is load order**,
+  so renaming one moves it. (`20a-update.js` sorts between `20-` and `21-`
+  precisely so it lands before the `init()` that calls into it.)
 - **`index.html` is a build output.** Editing it directly looks like it works
   and is destroyed by the next build. The pre-commit hook refuses a commit
   where `index.html` and `src/` disagree; `node build.mjs --check` is the same
@@ -77,13 +85,24 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite now — 289 assertions across 12 suites, driving
-headless Edge over CDP. **Run it before and after any change to
-`index.html`:**
+There is a real regression suite — 289 assertions across 12 suites, driving
+headless Edge over CDP. **Rebuild, then run it before and after any change to
+`src/`:**
 
 ```bash
+node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
+
+The rebuild is not optional. Without it you are testing the previous version
+of the app, which looks exactly like a change that did nothing.
+
+**The suite is Windows-only** — PowerShell 5.1 plus `msedge.exe` — so it does
+not run in a Linux container, and a session that cannot run it should say so
+rather than implying the app was tested. **And it predates several features**:
+nothing in it covers the Google Drive file manager, Google Doc import, the
+two-column Markdown export, or the update notice and About box. Those have
+been exercised by hand and in a headless Chromium, never by the suite.
 
 `ALL PASS - 289/289` and exit 0, or it names every failing assertion and exits 1.
 `-Only 02` runs one suite, `-Headed` shows you the browser. Full command
@@ -876,34 +895,63 @@ the merge reconciles *as content*. `status` is merged separately, by rank
 
 ---
 
-## 6. Map of `index.html`
+## 6. Map of the source
 
-CSS ends around line 1750; the app script runs from there to the end.
+`src/js/` is the map now — the filenames say where things live and, unlike the
+line-number table this replaced, they do not drift as you edit.
 
-| Section | Line |
-| --- | --- |
-| scene status and runtime | 1831 |
-| state / `migrateRows` | 1906 |
-| sync: identity, snapshots, **merge** | 2060 |
-| sanitizing rich text (`walkSanitize`) | 2628 |
-| rendering (`rowHtml`, `render`) | 2847 |
-| rich text commands | 2984 |
-| row actions (add/move/**drag**) | 3224 |
-| **production tags** (registry, people, panel, shoot view) | 3375 |
-| **find & replace** | 4613 |
-| comments | 4857 |
-| import | 5317 |
-| save / export | 5602 |
-| docx write / read | 5979 / 6230 |
-| csv | 6560 |
-| pdf | 6678 |
-| local documents: open, save back | 7079 |
-| **the narration on its own** (narration .txt / .docx) | 7711 |
-| **the writer** (word-processor view of the audio column) | 9092 |
-| **teleprompter + voice follow** | 9464 |
-| events + `init()` | 9886 |
+| Fragment | Lines | What is in it |
+| --- | --- | --- |
+| `00-prelude.js` | 113 | opens the IIFE, `PAGE_SHELL`, module-wide vars, last-project memory |
+| `01-scene-status.js` | 120 | scene status and runtime estimates |
+| `02-state.js` | 157 | `defaultState`, `migrateRows`, schema |
+| `03-sync.js` | 573 | identity, snapshots, **`mergeStates`**, version history |
+| `04-richtext.js` | 218 | `walkSanitize`, html→markdown, video link cards |
+| `05-render.js` | 391 | `rowHtml`, `render`, field sync, rich-text commands |
+| `06-rows.js` | 216 | row add/move/**drag**, images |
+| `07-production-tags.js` | 1163 | the tag registry, people, applying tags, autocomplete, untagged mentions |
+| `08-production-panels.js` | 951 | the production and gear panels, multi-select, the breakdown |
+| `09-find-replace.js` | 243 | find & replace |
+| `10-comments.js` | 502 | comments: composer, panel, cards |
+| `11-import.js` | 300 | paste-a-script import, two-column detection, **Google Doc import** |
+| `12-dirty-toast.js` | 50 | the dirty flag and toasts |
+| `13-hosted.js` | 881 | server detection, the picker, compare-and-set save, **Google Drive files** |
+| `14-export.js` | 438 | save/export, binary helpers, the zip writer |
+| `15-docx.js` | 638 | .docx writing and reading, narration-only export |
+| `16-csv.js` | 117 | csv |
+| `17-pdf.js` | 528 | pdf, packing lists |
+| `18-local-files.js` | 527 | open/save-back, resume-on-launch, the **File menu dispatch** |
+| `19-writer.js` | 477 | the writer (word-processor view of the audio column) |
+| `20-teleprompter.js` | 460 | teleprompter and voice follow |
+| `20a-update.js` | 87 | the update notice and About box |
+| `21-events.js` | 1129 | all event wiring, `init()`, closes the IIFE |
 
-Line numbers drift with every edit — grep for the section banner text instead.
+`src/page.html` is the shell — topbar, File menu, modals, and the three build
+markers. `src/app.css` is everything visual. `src/seed-state.json` is the one
+line of JSON that is the demo document.
+
+### Merging main into a branch that has `src/`
+
+Main still edits `index.html` directly, so any branch carrying this refactor
+will conflict with it, and a textual merge of a generated file is meaningless.
+The way that worked (used for the Drive / Google Doc / Markdown merge):
+
+1. Split main's `index.html` with the *same* boundaries `src/` was cut on —
+   `<style>`, `</style>`, `#state-data`, `<script id="app-logic">` — to get a
+   comparable "theirs".
+2. Prove the splitter first: run it over the merge base and check it
+   reproduces this branch's original `src/` byte for byte. If it does not,
+   stop; every merge after that is guesswork.
+3. Cut main's JS into the same 22 fragments by matching each base fragment's
+   **first line** as an anchor, asserting each anchor is unique before use.
+4. `git merge-file` each piece against its own base — `app.css`, `page.html`,
+   `seed-state.json`, and every fragment. Fragments new on this side have no
+   counterpart; skip them.
+5. Normalise trailing newlines on all three sides first, or every fragment
+   boundary reports a spurious conflict.
+6. Rebuild, then diff main's `index.html` against the rebuilt one and read
+   **every removal**. Additions are expected; a removal you cannot name is
+   main's work being dropped.
 
 ---
 
@@ -1105,8 +1153,25 @@ cycle — all exercised in a real browser against the API contract.
 
 ## 8. Where to pick up
 
-**Immediate:** get Adam to confirm voice follow works over a real 2-minute read.
-That's the one open loop.
+**Immediate, and all of it needs a Windows machine — none of it can be done
+from a Linux container:**
+
+1. **Run the regression suite.** `node build.mjs` then the suite. Nothing since
+   the refactor has been through it, and the refactor moved every line of the
+   app into different files. This is the first thing.
+2. **Build and run the installer.** `node package.mjs --installer`, then the
+   resulting `SplitpageSetup-<version>.exe` end to end: install, launch, host a
+   shared session, uninstall. `iexpress.exe`, `installer/install.ps1` and
+   `installer/uninstall.ps1` are all Windows-only and have never executed. If
+   anything is broken, the IExpress directive in `package.mjs` is the likely
+   spot.
+3. **Confirm voice follow** over a real 2-minute read — still the oldest open
+   loop, and still unverifiable in any sandbox because the microphone is
+   blocked.
+4. **Point the updater at a real release.** `node update.mjs check` once a
+   GitHub release with a `splitpage-*.zip` asset exists. It has only ever
+   spoken to a local stand-in, since `api.github.com` was blocked where it was
+   written. It needs `tag_name` and an `assets[].browser_download_url`.
 
 **Pitched and accepted, already built:** runtime estimates, scene status, shoot
 order, find & replace, drag reorder.

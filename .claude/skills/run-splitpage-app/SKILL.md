@@ -1,23 +1,35 @@
 ---
 name: run-splitpage-app
-description: Run, drive and test the Splitpage app in a real headless browser. Use when changing index.html, verifying a Splitpage feature works, reproducing a reported bug, taking screenshots of the app, or running the regression suite before committing. Also use when asked to "test splitpage", "run the tests", or "check nothing broke".
+description: Run, drive and test the Splitpage app in a real headless browser. Use when changing the app source in src/, verifying a Splitpage feature works, reproducing a reported bug, taking screenshots of the app, or running the regression suite before committing. Also use when asked to "test splitpage", "run the tests", or "check nothing broke".
 ---
 
 # Running and testing Splitpage
 
-Splitpage is one self-contained `index.html`. There is no build and no test
-framework — this skill is the test framework: a PowerShell driver that serves
+Splitpage ships as one self-contained `index.html`, but **that file is
+generated — do not edit it.** The source is `src/` (`page.html`, `app.css`,
+`seed-state.json`, and the numbered fragments in `src/js/`), and
+`node build.mjs` inlines them back into `index.html`. Edit `src/`, rebuild,
+then test. A change made directly to `index.html` will look like it worked
+and be destroyed by the next build; the pre-commit hook refuses a commit
+where the two disagree.
+
+There is no test framework beyond this skill: a PowerShell driver that serves
 the app, launches headless Edge over the Chrome DevTools Protocol, and runs
 plain-text command scripts against it.
 
-There is no Node and no Python on this machine. The whole harness is Windows
-PowerShell 5.1 + .NET (`HttpListener`, `ClientWebSocket`) + `msedge.exe`.
+The harness itself is Windows PowerShell 5.1 + .NET (`HttpListener`,
+`ClientWebSocket`) + `msedge.exe`, so it runs on Adam's machine and nowhere
+else. Building and packaging need Node 18+, which that machine may not have —
+if `node build.mjs` cannot run, you cannot test a source change at all, and
+saying so is better than testing a stale `index.html`.
 
 ## Run the regression suite
 
-Do this before committing any change to `index.html`.
+Do this before committing any change to `src/`, and **rebuild first** or you
+will be testing the previous version of the app:
 
 ```bash
+node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
@@ -93,7 +105,18 @@ yourself the guess.
 ## Gotchas that have already cost time
 
 These are why tests fail when the app is fine. Check them before suspecting
-`index.html`.
+the app.
+
+- **Did you rebuild?** `node build.mjs` after every `src/` edit. Testing a
+  stale `index.html` is the cheapest mistake to make here and looks exactly
+  like a change that had no effect. `node build.mjs --check` answers it.
+
+- **A blank page with no error is a blocked stylesheet, not broken JS.** A
+  stylesheet that is still pending stops the browser running every classic
+  script after it, so if `fonts.googleapis.com` hangs, `<script id="app-logic">`
+  never executes: static markup renders, `document.readyState` sticks at
+  `"loading"`, and the console is clean. The topbar being visible therefore
+  proves nothing — it is markup. Assert on `#rows` having children.
 
 - **`press`, not `type`, for tag shortcuts.** The `[ ] { } ~` shortcuts run off
   real key events; `type` commits the whole string as one `insertText`, so the
@@ -164,7 +187,7 @@ These are why tests fail when the app is fine. Check them before suspecting
   by the `splitpage-edge-*` profile directory (never by process name — that
   would close the browser you are reading this in). If you see
   `The WebSocket is in an invalid state ('Aborted')` on the *first* command of
-  a suite, check for leftovers before suspecting `index.html`:
+  a suite, check for leftovers before suspecting the app:
 
   ```bash
   powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { \$_.CommandLine -like '*splitpage-edge-*' }).Count"
