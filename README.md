@@ -1,9 +1,20 @@
-# Splitpage — standalone
+# Splitpage
 
-This is your Splitpage script editor, converted out of the Claude artifact
-runtime into a plain, self-contained web app. Nothing here talks to Claude
-or to any server — everything (script text, comments, tags, version
-snapshots) lives in the page itself and in files you save to your own disk.
+Splitpage is a two-column visual/audio script editor — pictures on one side,
+narration on the other — with a built-in teleprompter, comments for
+collaborating on a draft, and a production breakdown that tracks every prop,
+location, VFX shot, and person mentioned in the script.
+
+Scripts save as plain Markdown (`.md`) files by default, so you can open and
+edit them anywhere, or as native `.splitpage` files that keep everything —
+tags, comments, version history — in one file. Splitpage itself runs
+portable straight out of a folder with nothing to install, or you can
+[install it](#installing-it) properly, with a Start Menu entry and
+auto-updates.
+
+You can also work with other people: [host a shared session](#hosting-a-shared-session)
+so others on your network open and edit the same scripts live, or
+[connect to a server](#connecting-to-a-server) someone else is hosting.
 
 ## Setting up
 
