@@ -24,7 +24,7 @@
 import { inflateRawSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import {
-  cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync
+  cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, chmodSync
 } from "node:fs";
 import { dirname, join, sep, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -259,23 +259,34 @@ export function apply({ log = console.log } = {}) {
   const backup = join(UPDATE_DIR, "backup");
   const sentinel = join(backup, ".in-progress");
 
-  /* If a previous apply() was hard-killed mid-copy, the sentinel will exist and
-     the backup will be incomplete or mixed with new files. Restore from the
-     existing backup first to get back to a good state, then proceed fresh. */
+  /* A previous apply() that was hard-killed mid-copy leaves the sentinel
+     behind. At that point the backup holds exactly the files that were
+     replaced (each one is copied there just before it is overwritten) and
+     nothing else, so recovery is: put back everything the backup holds, and
+     remove any file the NEW release introduced that got copied in before the
+     crash (it has no backup copy because nothing was there before). A file
+     the copy loop never reached is still the original on disk and is not in
+     the backup: it must be left alone, never deleted. */
   if (existsSync(sentinel)) {
-    log(`  recovering from interrupted update`);
-    const oldManifest = (() => {
-      try {
-        const old = join(UPDATE_DIR, "backup.manifest.json");
-        return existsSync(old) ? JSON.parse(readFileSync(old, "utf8")) : manifest;
-      } catch { return manifest; }
-    })();
-    const oldEntries = [...Object.entries(oldManifest.files || {}), [MANIFEST_NAME, { mode: 0o644 }]];
-    for (const [rel] of oldEntries) {
-      const keep = safeJoin(backup, rel);
-      const to = safeJoin(ROOT, rel);
-      if (existsSync(keep)) cpSync(keep, to);
-      else rmSync(to, { force: true });
+    log("  recovering from an interrupted update");
+    const restore = (dir, rel) => {
+      for (const name of readdirSync(dir)) {
+        if (rel === "" && name === ".in-progress") continue;
+        const sub = rel ? rel + "/" + name : name;
+        const keep = join(dir, name);
+        if (statSync(keep).isDirectory()) { restore(keep, sub); continue; }
+        const to = safeJoin(ROOT, sub);
+        mkdirSync(dirname(to), { recursive: true });
+        cpSync(keep, to);
+      }
+    };
+    restore(backup, "");
+    let staged = null;
+    try { staged = JSON.parse(readFileSync(join(UPDATE_DIR, "staged.manifest.json"), "utf8")); } catch { staged = null; }
+    const before = localManifest(); /* back on disk after restore(), if it was ever replaced */
+    for (const rel of Object.keys((staged && staged.files) || {})) {
+      const wasShipped = !!(before && before.files && before.files[rel]);
+      if (!wasShipped && !existsSync(safeJoin(backup, rel))) rmSync(safeJoin(ROOT, rel), { force: true });
     }
     rmSync(backup, { recursive: true, force: true });
   }
@@ -286,8 +297,9 @@ export function apply({ log = console.log } = {}) {
      this update completes, the next run will see this and restore from backup
      first instead of wiping the only good backup and rebuilding from a mixed state. */
   writeFileSync(sentinel, info.to);
-  /* Save the old manifest in case we need to restore it on interrupt. */
-  writeFileSync(join(UPDATE_DIR, "backup.manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  /* The NEW manifest, kept beside the backup so recovery can tell which
+     files this release introduced (and therefore has no backup copy of). */
+  writeFileSync(join(UPDATE_DIR, "staged.manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
   const done = [];
   try {
@@ -328,7 +340,7 @@ export function apply({ log = console.log } = {}) {
      for a while in case a user manually needs to revert. */
   rmSync(stagedDir, { recursive: true, force: true });
   rmSync(sentinel, { force: true });
-  rmSync(join(UPDATE_DIR, "backup.manifest.json"), { force: true });
+  rmSync(join(UPDATE_DIR, "staged.manifest.json"), { force: true });
   rmSync(join(UPDATE_DIR, "pending.json"), { force: true });
   log(`  updated ${info.from} -> ${info.to}`);
   return info;

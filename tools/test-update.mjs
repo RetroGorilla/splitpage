@@ -191,6 +191,56 @@ eq("manifest updateApi is used when env not set", testUpdateApiUrl(), MIRROR_API
 
 rmSync(testAppRoot, { recursive: true, force: true });
 
+
+/* ---------- a REAL interrupted apply(), end to end ----------
+   apply() works on the folder update.mjs lives in, so copy update.mjs into a
+   scratch app folder and import THAT copy: its ROOT is then the scratch
+   folder and nothing here touches the real app. */
+console.log("\napply() after a hard kill, for real:\n");
+{
+  const { mkdtempSync, mkdirSync: mk, writeFileSync: wf, readFileSync: rf, existsSync: ex, rmSync: rm } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join: j, dirname: dn } = await import("node:path");
+  const { pathToFileURL, fileURLToPath } = await import("node:url");
+  const here = dn(fileURLToPath(import.meta.url));
+  const app = mkdtempSync(j(tmpdir(), "splitpage-apply-"));
+  const put = (root, rel, text) => { mk(dn(j(root, rel)), { recursive: true }); wf(j(root, rel), text); };
+  wf(j(app, "update.mjs"), rf(j(here, "..", "update.mjs")));
+  /* the installed (old) app */
+  const oldManifest = { name: "Splitpage", version: "1.0.0", files: { "a.txt": {}, "b.txt": {}, "sub/c.txt": {} } };
+  put(app, "a.txt", "a-old"); put(app, "b.txt", "b-old"); put(app, "sub/c.txt", "c-old");
+  put(app, ".splitpage-release.json", JSON.stringify(oldManifest));
+  put(app, "VERSION", "1.0.0");
+  /* the staged (new) release: a and c change, b unchanged, new.txt is new */
+  const newManifest = { name: "Splitpage", version: "1.0.1", files: { "a.txt": {}, "b.txt": {}, "sub/c.txt": {}, "new.txt": {} } };
+  const staged = j(app, ".update", "staged");
+  put(staged, "a.txt", "a-new"); put(staged, "b.txt", "b-old"); put(staged, "sub/c.txt", "c-new"); put(staged, "new.txt", "brand new");
+  put(staged, ".splitpage-release.json", JSON.stringify(newManifest));
+  put(app, ".update/pending.json", JSON.stringify({ from: "1.0.0", to: "1.0.1" }));
+  /* the crash: a.txt and new.txt were copied in, a.txt was backed up first;
+     b.txt and sub/c.txt were never reached */
+  put(app, ".update/backup/a.txt", "a-old");
+  put(app, ".update/backup/.in-progress", "1.0.1");
+  put(app, ".update/staged.manifest.json", JSON.stringify(newManifest));
+  put(app, "a.txt", "a-new"); put(app, "new.txt", "brand new");
+
+  const mod = await import(pathToFileURL(j(app, "update.mjs")).href);
+  const logs = [];
+  const info = mod.apply({ log: (m) => logs.push(m) });
+  check("apply() reports the update it applied", info && info.to === "1.0.1", JSON.stringify(info));
+  check("recovery was announced", logs.some((l) => /recovering/.test(l)), logs.join(" | "));
+  eq("a.txt ends up new", rf(j(app, "a.txt"), "utf8"), "a-new");
+  eq("sub/c.txt (never reached by the crashed run) ends up new", rf(j(app, "sub/c.txt"), "utf8"), "c-new");
+  eq("b.txt unchanged content survives", rf(j(app, "b.txt"), "utf8"), "b-old");
+  eq("new.txt present after the completed apply", rf(j(app, "new.txt"), "utf8"), "brand new");
+  check("sentinel cleared", !ex(j(app, ".update", "backup", ".in-progress")), null);
+  check("pending.json cleared", !ex(j(app, ".update", "pending.json")), null);
+  /* the backup taken by the fresh run holds the ORIGINALS, not the crashed run's leftovers */
+  eq("backup holds the original a.txt", rf(j(app, ".update", "backup", "a.txt"), "utf8"), "a-old");
+  eq("backup holds the original sub/c.txt", rf(j(app, ".update", "backup", "sub", "c.txt"), "utf8"), "c-old");
+  check("backup has no new.txt (nothing existed to back up)", !ex(j(app, ".update", "backup", "new.txt")), null);
+  rm(app, { recursive: true, force: true });
+}
 /* ---------- summary ---------- */
 
 console.log(`\n${passed} passed`);
