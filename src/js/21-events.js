@@ -1014,9 +1014,21 @@
     document.getElementById("import-close").addEventListener("click", closeImportModal);
     document.getElementById("import-cancel").addEventListener("click", closeImportModal);
     document.getElementById("import-confirm").addEventListener("click", confirmImport);
+    /* maybeAutoDetectTwoColumn + updateImportPreview together re-scan and
+       re-parse the WHOLE textarea (detectTwoColumnFormat runs twice, once
+       in each) with no memoization — on a large pasted script, that ran
+       in full on every subsequent keystroke, not just the paste itself.
+       Debounced so a run of edits (typing, or the flurry of "input"
+       events a paste itself can fire) coalesces into one pass after
+       things settle, rather than one per keystroke. */
+    var importPreviewDebounce = null;
     document.getElementById("import-textarea").addEventListener("input", function (e) {
-      maybeAutoDetectTwoColumn(e.target.value);
-      updateImportPreview();
+      var value = e.target.value;
+      clearTimeout(importPreviewDebounce);
+      importPreviewDebounce = setTimeout(function () {
+        maybeAutoDetectTwoColumn(value);
+        updateImportPreview();
+      }, 150);
     });
     document.querySelectorAll('input[name="import-split"]').forEach(function (r) {
       r.addEventListener("change", function () {

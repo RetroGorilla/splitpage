@@ -172,6 +172,14 @@ function writeStatus(extra) {
      than carried, so it goes false by itself once the update is installed. */
   const latest = extra.latest !== undefined ? extra.latest : (previous.latest ?? null);
   const status = {
+    /* Carry the whole previous status forward, not just `latest` — a
+       field like justUpdated (set right after applying a staged update,
+       for the frontend to show a "you're now on vX" banner) used to be
+       silently dropped the moment ANY later writeStatus() call didn't
+       itself re-supply it, which the background update-check does
+       moments later. Fields below override this as intended; `extra`
+       (the caller's actual update) always wins last. */
+    ...previous,
     version,
     checkedAt: new Date().toISOString(),
     latest,

@@ -573,7 +573,11 @@
   }
 
   /* ---------- Google Drive file manager ---------- */
-  .drive-panel { max-width: 640px; }
+  /* .modal-panel (below) also sets max-width, at equal specificity and
+     later in the file — a bare .drive-panel always lost that tie despite
+     being more specific here. .modal-panel.drive-panel outranks it
+     regardless of source order. */
+  .modal-panel.drive-panel { max-width: 640px; }
   .drive-setup-steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
   .drive-setup-steps li { margin-bottom: 4px; }
   .drive-field { margin-bottom: 10px; }
@@ -1254,6 +1258,12 @@
   }
   .identity-chip:hover { border-color: var(--visual); color: var(--text); }
   .identity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+  /* Toggled in JS (03-sync.js) whenever no author name is set, but nothing
+     styled it — a named and unnamed chip looked identical apart from the
+     text itself. Dims the dot to invite setting a name, the same signal
+     --ok/--danger already give elsewhere for "set" vs "needs attention". */
+  .identity-chip.unnamed { border-style: dashed; }
+  .identity-chip.unnamed .identity-dot { background: var(--text-faint); }
 
   .row-meta {
     font-family: var(--font-display);
@@ -3104,7 +3114,12 @@
       p.name = plainText(p.name).trim().slice(0, 60);
     });
     s.people = s.people.filter(function (p) { return p.name; });
-    var knownPeople = {};
+    /* Object.create(null) — a plain {} inherits Object.prototype, so an
+       owner id that happens to collide with an inherited member name
+       (e.g. "constructor", "hasOwnProperty") would resolve truthy below
+       even with no matching person, leaving a dangling owner id instead
+       of clearing it to "" as intended. */
+    var knownPeople = Object.create(null);
     s.people.forEach(function (p) { knownPeople[p.id] = true; });
 
     if (!Array.isArray(s.productionTags)) {
@@ -4007,7 +4022,11 @@
       else if (tag === "U") out += "<u>" + inner + "</u>";
       else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
       else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
-      else if (tag === "A") out += "[" + inner + "](" + child.getAttribute("href") + ")";
+      /* A link's visible text becomes markdown's [text](href) — but a
+         literal "]" in that text closes the link early for any standard
+         parser, and "(" / ")" break the destination parse the same way;
+         escaping them is what CommonMark itself expects inside link text. */
+      else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
       else if (tag === "BR") out += "\n";
       else out += inner;
     });
@@ -4242,6 +4261,26 @@
     return false;
   }
 
+  /* execCommand("hiliteColor"/"backColor") produces a styled <span
+     style="background-color:...">, never a <mark>, in every modern
+     browser — removeHighlight() below already knows to look for both, but
+     the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
+     state indicator only ever checked for MARK, so clicking Highlight a
+     second time re-applied it instead of removing it (the field only
+     turned into a real <mark> — and so became toggle-able — once it had
+     been blurred and sanitizeHtml() ran). */
+  function isSelectionHighlighted(root) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return false;
+    var node = sel.getRangeAt(0).commonAncestorContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    while (node && node !== root) {
+      if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   function unwrapElement(el) {
     var parent = el.parentNode;
     if (!parent) return;
@@ -4282,7 +4321,7 @@
       btn.classList.toggle("is-active", on);
     });
     var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
-    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionInsideTag(cellEl, "MARK"));
+    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
   }
 
   function handleToolbarCmd(btn) {
@@ -4291,7 +4330,7 @@
     var cmd = btn.getAttribute("data-cmd");
     cellEl.focus();
     if (cmd === "highlight") {
-      if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
+      if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
       else applyHighlight();
       syncFieldFromDom(cellEl);
       updateToolbarState(cellEl);
@@ -6025,7 +6064,7 @@
       return;
     }
 
-    listEl.innerHTML = entries.map(tagEntityHtml).join("");
+    listEl.innerHTML = entries.map(function (e) { return tagEntityHtml(e, false); }).join("");
   }
 
   /* The textarea always opens showing what's actually tracked, sorted the
@@ -6156,20 +6195,27 @@
     '</div>';
   }
 
-  function tagEntityHtml(item) {
+  function tagEntityHtml(item, showSelection) {
     var renaming = tagRenaming === item.key;
     var expanded = tagExpanded === item.key || renaming;
     var owner = personById(item.owner);
     var st = tagStatus(item.status) || TAG_STATUSES[0];
     var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
     var k = escapeHtml(item.key);
+    /* productionSelection is Production-panel-only state (the Gear panel
+       wires no Ctrl/Shift-click, no bulk bar, nothing to clear or explain
+       a highlight with — see the multi-select comment below) but this
+       function is shared by both panels; without gating on showSelection,
+       an item selected via Production still rendered "selected" when
+       later viewed in Gear, with no way to make sense of or clear it. */
+    var selected = showSelection && productionSelection[item.key];
     var meta = (owner ? '<span class="tag-owner-chip">' + escapeHtml(owner.name) + '</span>' : '') +
       (item.notes ? '<span class="tag-note-flag" title="Has notes">Notes</span>' : '');
     return '<div class="tag-entity' + (item.orphaned ? ' is-orphaned' : '') +
         (expanded ? ' is-expanded' : '') +
-        (productionSelection[item.key] ? ' is-selected' : '') +
+        (selected ? ' is-selected' : '') +
         '" style="--dot:' + item.cat.color + '" data-key="' + k +
-        '" aria-selected="' + (productionSelection[item.key] ? 'true' : 'false') + '">' +
+        '" aria-selected="' + (selected ? 'true' : 'false') + '">' +
       '<div class="tag-entity-head" data-action="tag-expand" data-key="' + k + '">' +
         '<span class="tag-entity-name">' + escapeHtml(item.name) + '</span>' +
         '<span class="tag-entity-head-right">' +
@@ -6245,7 +6291,7 @@
                   'data-person="' + escapeHtml(id) + '" title="Remove from the crew list">×</button>' : '') +
         '</div>' +
         (g.items.length
-          ? g.items.map(tagEntityHtml).join("")
+          ? g.items.map(function (e) { return tagEntityHtml(e, true); }).join("")
           : '<div class="tag-orphan-note">Nothing assigned yet.</div>');
     }).join("");
   }
@@ -6418,7 +6464,7 @@
           escapeHtml(g.cat.plural) +
           '<span class="tag-group-count">' + g.items.length + '</span>' +
         '</div>' +
-        g.items.map(tagEntityHtml).join("");
+        g.items.map(function (e) { return tagEntityHtml(e, true); }).join("");
     }).join("");
   }
 
@@ -6435,6 +6481,10 @@
     var item = findTagByKey(key);
     if (!item) return;
     Array.prototype.forEach.call(row.querySelectorAll(".tag-anchor"), function (el) {
+      /* category too, not just name — eachTagSpan (07-production-tags.js)
+         already checks both; without it, a Prop and an unrelated Cast tag
+         sharing a name in the same row both flashed on one click. */
+      if (el.getAttribute("data-tag-cat") !== item.cat.id) return;
       if (normalizeTagName(el.getAttribute("data-tag-name")) !== normalizeTagName(item.name)) return;
       el.classList.remove("flash");
       void el.offsetWidth;
@@ -8058,6 +8108,14 @@
      closed to be saved. They are one control with two faces: nothing
      addresses either of them directly, so they cannot come to disagree about
      whether there is anything to save. */
+  /* Set by saveDoc() (14-export.js) around the actual write/save-to-server
+     call. While a save is genuinely in flight, markDirty() must not
+     overwrite the button's "Saving…" text with "Save •" just because a
+     keystroke landed in the meantime — the button stays visibly disabled
+     either way, so the mismatch is purely cosmetic, but it reads as "the
+     save already finished (or never started)" to anyone watching it. */
+  var saveInFlight = false;
+
   function setSaveButtons(text, disabled) {
     ["btn-save", "wr-save"].forEach(function (id) {
       var btn = document.getElementById(id);
@@ -8071,7 +8129,7 @@
   function markDirty() {
     dirty = true;
     editSeq++;
-    setSaveButtons("Save •");
+    if (!saveInFlight) setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
     /* A hosted document has no openedFile.name (openServerDoc() sets it to
        null on purpose — one Save button, one home for it), so the branch
@@ -9042,6 +9100,7 @@
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
+    saveInFlight = true;
     setSaveButtons("Saving…", true);
 
     /* A hosted document saves to the server, not to disk. "Save As" still
@@ -9052,6 +9111,7 @@
       try {
         await saveToServer();
       } finally {
+        saveInFlight = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
       }
       return;
@@ -9071,6 +9131,7 @@
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
       state.rev = Math.max(0, (state.rev || 1) - 1);
+      saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
       return;
     }
@@ -9117,6 +9178,7 @@
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
+      saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
     }
   }
@@ -10476,8 +10538,15 @@
       var vCursor = vy, aCursor = y;
       var guard = 0;
       while ((vRest.length || aRest.length) && guard++ < 400) {
-        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD));
-        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD));
+        /* A block of n lines starting at startY = cursor - SIZE has its
+           last baseline at cursor - SIZE - (n-1)*LEAD, so the largest n
+           whose baseline still clears the bottom margin M is
+           floor((cursor - SIZE - M) / LEAD) + 1, not the bare floor() —
+           the missing +1 undercounted by exactly one line on every
+           multi-page row, forcing an unnecessary early page break and an
+           ~LEAD-tall blank gap at the bottom of the column. */
+        var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
+        var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
         var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
         var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
         var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;
@@ -13469,9 +13538,21 @@
     document.getElementById("import-close").addEventListener("click", closeImportModal);
     document.getElementById("import-cancel").addEventListener("click", closeImportModal);
     document.getElementById("import-confirm").addEventListener("click", confirmImport);
+    /* maybeAutoDetectTwoColumn + updateImportPreview together re-scan and
+       re-parse the WHOLE textarea (detectTwoColumnFormat runs twice, once
+       in each) with no memoization — on a large pasted script, that ran
+       in full on every subsequent keystroke, not just the paste itself.
+       Debounced so a run of edits (typing, or the flurry of "input"
+       events a paste itself can fire) coalesces into one pass after
+       things settle, rather than one per keystroke. */
+    var importPreviewDebounce = null;
     document.getElementById("import-textarea").addEventListener("input", function (e) {
-      maybeAutoDetectTwoColumn(e.target.value);
-      updateImportPreview();
+      var value = e.target.value;
+      clearTimeout(importPreviewDebounce);
+      importPreviewDebounce = setTimeout(function () {
+        maybeAutoDetectTwoColumn(value);
+        updateImportPreview();
+      }, 150);
     });
     document.querySelectorAll('input[name="import-split"]').forEach(function (r) {
       r.addEventListener("change", function () {

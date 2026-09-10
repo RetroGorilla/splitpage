@@ -3,6 +3,7 @@
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
+    saveInFlight = true;
     setSaveButtons("Saving…", true);
 
     /* A hosted document saves to the server, not to disk. "Save As" still
@@ -13,6 +14,7 @@
       try {
         await saveToServer();
       } finally {
+        saveInFlight = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
       }
       return;
@@ -32,6 +34,7 @@
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
       state.rev = Math.max(0, (state.rev || 1) - 1);
+      saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
       return;
     }
@@ -78,6 +81,7 @@
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
+      saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
     }
   }

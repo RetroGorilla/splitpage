@@ -374,7 +374,17 @@ async function handleStatic(req, res, url) {
     res.writeHead(405).end();
     return;
   }
-  let rel = decodeURIComponent(url.pathname);
+  let rel;
+  try {
+    rel = decodeURIComponent(url.pathname);
+  } catch (e) {
+    /* malformed percent-encoding (e.g. a truncated "%zz" or a cut-off
+       multi-byte escape) throws a URIError here — that's an ordinary bad
+       request, not a server fault, and left unguarded it was only caught
+       by the generic top-level handler, which logs it and answers 500. */
+    res.writeHead(400).end();
+    return;
+  }
   if (rel === "/") rel = "/index.html";
 
   /* resolve, then confirm the result is still inside STATIC_DIR — the check
