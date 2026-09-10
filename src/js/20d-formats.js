@@ -258,9 +258,18 @@
     buildMarkdown: buildMarkdownProject,
     parseMarkdown: parseMarkdownProject,
     buildStandaloneHtml: function () { return buildPublishHtml(JSON.stringify(cloneState(state))); },
-    openFile: function (file) { return openProjectFile(file, null, { skipSnapshot: true }); },
+    /* `handle` is optional — a real Open never has one either — but
+       19-save-conflict.txt passes a fake FileSystemFileHandle-shaped object
+       (name + getFile() + createWritable()) so the on-disk-conflict guard in
+       saveDoc() (14-export.js) has something to compare against, exactly
+       the way a real handle from showOpenFilePicker would. */
+    openFile: function (file, handle) { return openProjectFile(file, handle || null, { skipSnapshot: true }); },
+    /* Drives Save the same way the header/File-menu buttons do, so the
+       on-disk-conflict check saveDoc() runs before writing is exercised
+       without a real file picker (headless can't run one). */
+    save: function (opts) { return saveDoc(opts || {}); },
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return state; },
-    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind }; }
+    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; }
   };

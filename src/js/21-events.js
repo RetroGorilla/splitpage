@@ -885,13 +885,20 @@
 
     document.getElementById("file-conflict-close").addEventListener("click", closeFileConflict);
     document.getElementById("file-conflict-cancel").addEventListener("click", closeFileConflict);
-    document.getElementById("file-conflict-reload").addEventListener("click", reloadFileFromDisk);
+    document.getElementById("file-conflict-reload").addEventListener("click", function () {
+      if (fileConflictCtx && fileConflictCtx.kind === "project") reloadProjectFromDisk();
+      else reloadFileFromDisk();
+    });
     document.getElementById("file-conflict-overwrite").addEventListener("click", function () {
+      var ctx = fileConflictCtx;
       closeFileConflict();
-      saveBackToFile({ force: true });
+      if (ctx && ctx.kind === "project") saveDoc({ force: true });
+      else saveBackToFile({ force: true });
     });
     document.getElementById("file-conflict-copy").addEventListener("click", function () {
+      var ctx = fileConflictCtx;
       closeFileConflict();
+      if (ctx && ctx.kind === "project") { saveDoc({ saveAs: true }); return; }
       var base = openedFile.name.replace(/\.[^.]+$/, "");
       var ext = (/\.([^.]+)$/.exec(openedFile.name) || [, "md"])[1];
       buildFileData(openedFile.kind, base + " (copy)").then(function (built) {

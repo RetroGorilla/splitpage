@@ -3293,8 +3293,12 @@ node update.mjs           # download and verify it</code></pre>
      saves write in place instead of prompting again; the kind decides which
      serializer runs (14-export.js). `handle` stays null (and Save falls back
      to a plain download) in browsers without the API, e.g. Firefox.
-     "html" only ever arrives by OPENING a legacy file — nothing writes it. */
-  var docFileHandle = { handle: null, kind: null };
+     "html" only ever arrives by OPENING a legacy file — nothing writes it.
+     `lastModified` is the file's own timestamp as of the last time we read
+     or wrote it — the same on-disk-conflict guard the import re-save path
+     has always had (openedFile.lastModified, 18-local-files.js), applied
+     here to project saves too (checkFileConflict). */
+  var docFileHandle = { handle: null, kind: null, lastModified: null };
   var deleteArmId = null;
   var deleteArmTimer = null;
 
@@ -9930,6 +9934,14 @@ node update.mjs           # download and verify it</code></pre>
        back with the name the user typed. */
     var kind = saveAs ? "md" : (docFileHandle.kind || "md");
 
+    /* Was this the same file we already had open, with a fresh-pick not
+       needed? Then the on-disk-conflict check below applies — a brand new
+       pick from the Save As dialog has no prior baseline to compare against
+       (checkFileConflict skips it when lastModified is unset), and a picked
+       file that happens to already exist is a deliberate replace through
+       the OS's own picker, not "changed under us". */
+    var reusingHandle = !!targetHandle;
+
     try {
       if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
@@ -9940,8 +9952,23 @@ node update.mjs           # download and verify it</code></pre>
           ]
         });
         kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
-        docFileHandle = { handle: targetHandle, kind: kind };
+        docFileHandle = { handle: targetHandle, kind: kind, lastModified: null };
         rememberLastFileHandle(targetHandle);
+      }
+
+      /* On-disk conflict check (HANDOFF #1, same guard as the import
+         re-save path's saveBackToFile) — only when writing back into the
+         file we already had open, and not when opts.force says the user
+         just chose "Overwrite it" in that modal. */
+      if (reusingHandle && !opts.force) {
+        var check = await checkFileConflict(targetHandle, docFileHandle.lastModified);
+        if (!check.ok) {
+          showFileConflict(targetHandle.name, check.current, { kind: "project" });
+          state.rev = Math.max(0, (state.rev || 1) - 1);
+          saveInFlight = false;
+          setSaveButtons(dirty ? "Save •" : "Save", false);
+          return;
+        }
       }
 
       var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
@@ -9961,6 +9988,10 @@ node update.mjs           # download and verify it</code></pre>
         await writable.write(body);
         await writable.close();
         baseState = published;
+        try {
+          var afterFile = await targetHandle.getFile();
+          docFileHandle.lastModified = afterFile.lastModified;
+        } catch (e) { /* not fatal — the write already succeeded */ }
         if (editSeq === seqAtSave) clearDirty();
         showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       } else {
@@ -11976,7 +12007,7 @@ node update.mjs           # download and verify it</code></pre>
 
     state = newState;
     baseState = cloneState(state);
-    docFileHandle = { handle: handle || null, kind: kind };
+    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null };
     /* A hosted document and a local file are two homes for one Save button
        (§3.1). Opening a server document already clears the file side; this
        is the other half, which was missing — open a file while a hosted
@@ -12188,6 +12219,35 @@ node update.mjs           # download and verify it</code></pre>
     }
   }
 
+  /* Shared by both on-disk-conflict guards: the import re-save path
+     (saveBackToFile, below) and the project-save path (saveDoc, 14-export.js).
+     Compares `handle`'s file right now against the timestamp recorded the
+     last time we successfully read or wrote it. A failed re-read (file
+     moved, deleted, or on a drive that isn't connected) is reported the same
+     way as a detected change — "Never overwrite silently" (HANDOFF #1)
+     covers both, and force:true (the "Overwrite it" button) still gets
+     past either uncondtionally. Returns {ok:true} or
+     {ok:false, current: File|null}. */
+  async function checkFileConflict(handle, lastModified) {
+    if (!lastModified) return { ok: true }; /* nothing recorded yet to compare against */
+    var current;
+    try {
+      current = await handle.getFile();
+    } catch (e) {
+      return { ok: false, current: null };
+    }
+    if (current.lastModified && current.lastModified !== lastModified) {
+      return { ok: false, current: current };
+    }
+    return { ok: true };
+  }
+
+  /* Which flow popped the conflict modal, so its three buttons (reload /
+     overwrite / save-as-a-copy) know whether to act on the import re-save
+     path's `openedFile` or the project-save path's `docFileHandle`. Set by
+     showFileConflict(), read by 21-events.js's button wiring. */
+  var fileConflictCtx = { kind: "import" };
+
   async function saveBackToFile(opts) {
     if (!openedFile.name) return;
     var baseName = openedFile.name.replace(/\.[^.]+$/, "");
@@ -12203,23 +12263,9 @@ node update.mjs           # download and verify it</code></pre>
     if (openedFile.handle && openedFile.handle.createWritable) {
       /* has the file changed on disk since we opened it? */
       if (!opts || !opts.force) {
-        var current, readFailed = false;
-        try {
-          current = await openedFile.handle.getFile();
-        } catch (e) {
-          /* Used to fall through here and let the write proceed — but that
-             defeats the one thing this guard exists to catch ("Never
-             overwrite silently"). A failed re-read is not proof the file is
-             still safely there and unchanged; treat it the same as a
-             detected conflict; force: true (the "Overwrite it" button)
-             still gets past this uncondtionally. */
-          readFailed = true;
-        }
-        if (readFailed) { showFileConflict(null); return; }
-        var changed = (openedFile.lastModified && current.lastModified &&
-                       current.lastModified !== openedFile.lastModified);
-        if (changed) {
-          showFileConflict(current);
+        var check = await checkFileConflict(openedFile.handle, openedFile.lastModified);
+        if (!check.ok) {
+          showFileConflict(openedFile.name, check.current, { kind: "import" });
           return;
         }
       }
@@ -12251,8 +12297,12 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   /* The file on disk moved under us. Never overwrite silently — the whole
-     point of this guard is that the other version might be someone's work. */
-  function showFileConflict(currentFile) {
+     point of this guard is that the other version might be someone's work.
+     `ctx` records which flow this is for ({kind:"import"} or
+     {kind:"project"}) so the modal's three buttons (21-events.js) know
+     whether to act on `openedFile` or `docFileHandle`. */
+  function showFileConflict(fileName, currentFile, ctx) {
+    fileConflictCtx = ctx || { kind: "import" };
     if (!currentFile) {
       /* The file couldn't be re-read at all (moved, deleted, or the drive
          it's on isn't connected right now) — not the same as "changed",
@@ -12261,7 +12311,7 @@ node update.mjs           # download and verify it</code></pre>
          read failure was silently swallowed) defeats the one thing this
          guard exists to catch. Reuses the same modal/force-save path. */
       document.getElementById("file-conflict-detail").textContent =
-        "Could not check whether " + openedFile.name + " is still there — it may have been moved, " +
+        "Could not check whether " + fileName + " is still there — it may have been moved, " +
         "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
       document.getElementById("file-conflict-modal").hidden = false;
       return;
@@ -12270,7 +12320,7 @@ node update.mjs           # download and verify it</code></pre>
       ? formatTimestamp(new Date(currentFile.lastModified).toISOString())
       : "recently";
     document.getElementById("file-conflict-detail").textContent =
-      openedFile.name + " changed on disk at " + when +
+      fileName + " changed on disk at " + when +
       ", after you opened it here. Saving now would overwrite that version.";
     document.getElementById("file-conflict-modal").hidden = false;
   }
@@ -12285,6 +12335,20 @@ node update.mjs           # download and verify it</code></pre>
     try {
       pushSnapshot("Before reloading " + openedFile.name + " from disk");
       await loadFileIntoEditor(await openedFile.handle.getFile(), openedFile.handle);
+    } catch (e) {
+      showToast("Could not re-read that file.", "error");
+    }
+  }
+
+  /* The project-save counterpart of reloadFileFromDisk() above — reopens
+     through openProjectFile() rather than loadFileIntoEditor() so a newer
+     on-disk version is read as a project (.md/.splitpage), tags, comments,
+     statuses and all, not flattened through the plain-text import path. */
+  async function reloadProjectFromDisk() {
+    closeFileConflict();
+    if (!docFileHandle.handle) return;
+    try {
+      await openProjectFile(await docFileHandle.handle.getFile(), docFileHandle.handle);
     } catch (e) {
       showToast("Could not re-read that file.", "error");
     }
@@ -13999,11 +14063,20 @@ node update.mjs           # download and verify it</code></pre>
     buildMarkdown: buildMarkdownProject,
     parseMarkdown: parseMarkdownProject,
     buildStandaloneHtml: function () { return buildPublishHtml(JSON.stringify(cloneState(state))); },
-    openFile: function (file) { return openProjectFile(file, null, { skipSnapshot: true }); },
+    /* `handle` is optional — a real Open never has one either — but
+       19-save-conflict.txt passes a fake FileSystemFileHandle-shaped object
+       (name + getFile() + createWritable()) so the on-disk-conflict guard in
+       saveDoc() (14-export.js) has something to compare against, exactly
+       the way a real handle from showOpenFilePicker would. */
+    openFile: function (file, handle) { return openProjectFile(file, handle || null, { skipSnapshot: true }); },
+    /* Drives Save the same way the header/File-menu buttons do, so the
+       on-disk-conflict check saveDoc() runs before writing is exercised
+       without a real file picker (headless can't run one). */
+    save: function (opts) { return saveDoc(opts || {}); },
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return state; },
-    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind }; }
+    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; }
   };
   /* ================= connecting to a server =================
 
@@ -15414,13 +15487,20 @@ node update.mjs           # download and verify it</code></pre>
 
     document.getElementById("file-conflict-close").addEventListener("click", closeFileConflict);
     document.getElementById("file-conflict-cancel").addEventListener("click", closeFileConflict);
-    document.getElementById("file-conflict-reload").addEventListener("click", reloadFileFromDisk);
+    document.getElementById("file-conflict-reload").addEventListener("click", function () {
+      if (fileConflictCtx && fileConflictCtx.kind === "project") reloadProjectFromDisk();
+      else reloadFileFromDisk();
+    });
     document.getElementById("file-conflict-overwrite").addEventListener("click", function () {
+      var ctx = fileConflictCtx;
       closeFileConflict();
-      saveBackToFile({ force: true });
+      if (ctx && ctx.kind === "project") saveDoc({ force: true });
+      else saveBackToFile({ force: true });
     });
     document.getElementById("file-conflict-copy").addEventListener("click", function () {
+      var ctx = fileConflictCtx;
       closeFileConflict();
+      if (ctx && ctx.kind === "project") { saveDoc({ saveAs: true }); return; }
       var base = openedFile.name.replace(/\.[^.]+$/, "");
       var ext = (/\.([^.]+)$/.exec(openedFile.name) || [, "md"])[1];
       buildFileData(openedFile.kind, base + " (copy)").then(function (built) {
