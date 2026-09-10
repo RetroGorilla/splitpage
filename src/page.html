@@ -87,6 +87,9 @@
           <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
+          <!-- the old save format, now an export: one self-contained page for
+               sending a script to someone with nothing installed -->
+          <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
           <div class="menu-sep"></div>
           <div class="menu-label">Export the narration</div>
           <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
@@ -208,7 +211,7 @@
 
 <input type="file" id="file-input" accept="image/*" hidden>
 <input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
-<input type="file" id="open-file-input" accept=".html,.htm,.docx,.md,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
+<input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
@@ -394,6 +397,27 @@
         <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
         <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
         <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- A .md project whose scene table gained or lost rows somewhere else.
+     There is no right answer to guess at, so it is asked (20d-formats.js). -->
+<div class="modal-backdrop" id="md-rows-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">
+    <div class="modal-header">
+      <h2 id="md-rows-title">This file's scenes don't line up</h2>
+    </div>
+    <p class="modal-hint" id="md-rows-detail"></p>
+    <p class="modal-hint">Keeping Splitpage's record ignores the table and opens the script exactly as it
+      was last saved here. Using the table's text rebuilds the scenes from it, in order — your
+      breakdown, crew, comments and reading speed are kept either way.</p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="md-rows-table">Use the table's text</button>
+        <button type="button" class="btn btn-accent" id="md-rows-keep">Keep Splitpage's record</button>
       </div>
     </div>
   </div>

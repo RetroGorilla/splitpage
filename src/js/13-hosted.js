@@ -136,7 +136,7 @@
     var stash = readStash();
     var theirs = migrateRows(cloneState(body.state));
     serverDoc = { id: body.id, rev: body.rev || 0 };
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     resetProductionPanelState();
 
     var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
@@ -298,7 +298,7 @@
     serverDoc = { id: body.id, rev: body.rev || 0 };
     /* a hosted document and a local file are different homes for the same
        Save button — holding both would make it ambiguous which one it writes */
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
     resetProductionPanelState();
 
@@ -320,7 +320,7 @@
     } catch (err) { handleApiError(err, "Could not put that on the server"); return; }
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     clearDirty();
     updateFileChip();
     showToast("Published to the server as “" + (state.title || body.id) + "” — collaborators can open it now", "ok");

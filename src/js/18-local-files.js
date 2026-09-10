@@ -9,6 +9,12 @@
     if (ext === "csv") return "csv";
     if (ext === "md" || ext === "markdown") return "md";
     if (ext === "txt") return "txt";
+    /* The two project formats and the legacy one. "md" is deliberately in
+       both worlds: whether a .md file is one of ours or somebody else's is
+       decided by whether it carries a data block, not by its name
+       (openProjectFile). */
+    if (ext === "splitpage") return "splitpage";
+    if (ext === "html" || ext === "htm") return "html";
     return null;
   }
 
@@ -97,6 +103,10 @@
       return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
     }
     if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: baseName + " - two column.md" };
+    /* The old save format, kept as an export only: one file that opens in
+       any browser with nothing installed. PAGE_SHELL and buildPublishHtml
+       exist for this and for nothing else now (HANDOFF §3.1). */
+    if (kind === "html") return { data: buildPublishHtml(JSON.stringify(migrateRows(cloneState(state)))), filename: baseName + ".html" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -161,17 +171,27 @@
     return lines.join("\n");
   }
 
-  function isSplitpageHtmlName(name) {
-    return /\.html?$/i.test(name || "");
-  }
+  /* Re-opening one of this app's OWN project files — pull the full document
+     (rows, comments, tags, statuses, title) back out of it rather than
+     treating it as plain text to import. Three shapes arrive here:
 
-  /* Re-opening one of this app's OWN saved files — pull the full document
-     (rows, comments, tags, title) back out of its embedded #state-data,
-     same as a fresh page load does, rather than treating it as plain text
-     to import. It also becomes the file Save/Save As writes to from here
-     on, exactly as if you'd just done a Save As into it. */
-  async function openSplitpageFile(file, handle, opts) {
+       .splitpage  the state JSON itself
+       .md         a Markdown table plus the same JSON in a data block —
+                   and, if the table was edited elsewhere, those edits
+                   reconciled back into it (20d-formats.js)
+       .html       a legacy save: the whole app with #state-data inside it
+
+     Anything else — and any .md WITHOUT a data block, i.e. somebody else's
+     Markdown — falls through to the ordinary lossy import, unchanged.
+     Whichever it was becomes the file Save writes to from here on, in its
+     own format; a legacy .html converts to .md on that first Save. */
+  async function openProjectFile(file, handle, opts) {
     opts = opts || {};
+    var kind = fileKindFromName(file.name);
+    if (kind !== "splitpage" && kind !== "md" && kind !== "html") {
+      return loadFileIntoEditor(file, handle);
+    }
+
     var text;
     try {
       text = await file.text();
@@ -179,28 +199,64 @@
       showToast("Could not read " + file.name + ".", "error");
       return false;
     }
-    var doc = new DOMParser().parseFromString(text, "text/html");
-    var dataEl = doc.getElementById("state-data");
-    var parsed;
-    try {
-      parsed = JSON.parse(dataEl.textContent);
-    } catch (e) {
-      showToast(file.name + " doesn't look like a Splitpage file.", "error");
-      return false;
+
+    if (kind === "splitpage") {
+      var native;
+      try {
+        native = parseSplitpageFile(text);
+      } catch (e) {
+        showToast(file.name + " doesn't look like a Splitpage file.", "error");
+        return false;
+      }
+      return adoptProjectState(migrateRows(native), file, handle, "splitpage", opts);
     }
 
+    if (kind === "html") {
+      var doc = new DOMParser().parseFromString(text, "text/html");
+      var dataEl = doc.getElementById("state-data");
+      var legacy;
+      try {
+        legacy = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        showToast(file.name + " doesn't look like a Splitpage file.", "error");
+        return false;
+      }
+      return adoptProjectState(migrateRows(legacy), file, handle, "html", opts);
+    }
+
+    var project = null;
+    try {
+      project = parseMarkdownProject(text);
+    } catch (e) {
+      project = null;
+    }
+    if (!project) return loadFileIntoEditor(file, handle);
+    /* awaits the row-count question when the table and the record disagree */
+    var reconciled = await applyMarkdownProject(project);
+    return adoptProjectState(reconciled, file, handle, "md", opts);
+  }
+
+  /* The one place a parsed project becomes THE document, whichever format
+     it arrived in. `newState` has already been through migrateRows(). */
+  function adoptProjectState(newState, file, handle, kind, opts) {
+    opts = opts || {};
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
-    state = migrateRows(parsed);
+    state = newState;
     baseState = cloneState(state);
-    htmlFileHandle = handle || null;
+    docFileHandle = { handle: handle || null, kind: kind };
+    /* A hosted document and a local file are two homes for one Save button
+       (§3.1). Opening a server document already clears the file side; this
+       is the other half, which was missing — open a file while a hosted
+       document was loaded and Save still went to the server. */
+    serverDoc = { id: null, rev: 0 };
     /* The breakdown panel's open card, rename box and group mode all belong
        to the document that was on screen a moment ago. Carrying them into a
        different project meant a card springing open by itself whenever the
        two happened to share an item name. */
     resetProductionPanelState();
-    /* an .html open replaces the project outright — any file previously
-       opened for round-trip export (a .docx/.md/.csv) no longer applies */
+    /* opening a project replaces it outright — any file previously opened
+       for round-trip export (a .docx/.csv/foreign .md) no longer applies */
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
 
     clearDirty();
@@ -214,11 +270,6 @@
 
     if (handle) rememberLastFileHandle(handle);
     return true;
-  }
-
-  function openAnyLocalFile(file, handle) {
-    if (isSplitpageHtmlName(file.name)) return openSplitpageFile(file, handle);
-    return loadFileIntoEditor(file, handle);
   }
 
   /* ---- resuming the last project on launch ---- */
@@ -255,7 +306,9 @@
          yet; once something does (dirty), this needs the same undo safety
          net a normal file-open gets, or replacing state below silently
          discards it with no way back. */
-      await openSplitpageFile(file, handle, { skipSnapshot: !dirty, resumed: true });
+      /* kind-agnostic on purpose: whatever the last project was — .md,
+         .splitpage or a legacy .html — is what reopens here. */
+      await openProjectFile(file, handle, { skipSnapshot: !dirty, resumed: true });
     } catch (e) {
       /* moved, renamed, deleted, or on a drive that isn't connected right
          now — not worth interrupting startup over; Version history and the
@@ -278,6 +331,10 @@
 
   async function loadFileIntoEditor(file, handle) {
     var kind = fileKindFromName(file.name);
+    /* The two project formats never belong here: openProjectFile reads them
+       properly and only ever hands this function a foreign document (that
+       includes a .md with no data block, which really is plain text). */
+    if (kind === "splitpage" || kind === "html") kind = null;
     if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
     var newRows = null, newTitle = null;
@@ -346,6 +403,7 @@
           types: [{
             description: "Scripts and documents",
             accept: {
+              "application/json": [".splitpage"],
               "text/html": [".html", ".htm"],
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
               "text/markdown": [".md"],
@@ -355,7 +413,7 @@
           }]
         });
         var handle = handles[0];
-        await openAnyLocalFile(await handle.getFile(), handle);
+        await openProjectFile(await handle.getFile(), handle);
         return;
       } catch (err) {
         if (err && err.name === "AbortError") return; /* user cancelled the picker */
@@ -372,6 +430,7 @@
     if (ext === "md" || ext === "markdown") return "text/markdown";
     if (ext === "pdf") return "application/pdf";
     if (ext === "html") return "text/html";
+    if (ext === "splitpage") return "application/json";
     return "text/plain";
   }
 
@@ -559,6 +618,7 @@
     else if (action === "export-csv") exportAs("csv");
     else if (action === "export-breakdown") exportAs("breakdown");
     else if (action === "export-pdf") exportAs("pdf");
+    else if (action === "export-html") exportAs("html");
     else if (action === "export-narration-docx") exportNarration("narration-docx");
     else if (action === "export-narration-txt") exportNarration("narration-txt");
     else if (action === "export-packing-gear") exportPackingList("gear");

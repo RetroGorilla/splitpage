@@ -29,8 +29,8 @@ path. To get that:
    a taskbar entry, running in the browser engine that all of Splitpage's
    features (in-place saving, Follow My Voice) are built on.
 3. Leave that window open while you work; closing it (or Ctrl+C) stops the
-   server. Re-run it any time — your saved `.html` file doesn't depend on
-   the server, so you can always fall back to just double-clicking it.
+   server. Re-run it any time — your saved script is an ordinary file on
+   your computer and doesn't depend on the server at all.
 
 **Options** (`node start.mjs --help`): `--port 9000` if 8791 is taken —
 though it finds the next free port by itself; `--no-open` to skip launching
@@ -112,7 +112,7 @@ The installed copy registers itself, so remove it from **Add/Remove Programs**
 For the portable copy, run **`uninstall.bat`** (Windows) or **`./uninstall.sh`**,
 which removes exactly the files the release shipped and lists anything else it
 found so you can see what it is leaving behind. Your scripts are never touched:
-saved `.html` files and the `data/` folder both survive, and it tells you they
+saved scripts and the `data/` folder both survive, and it tells you they
 did. `--dry-run` shows what would go without doing it.
 
 ## Keeping it up to date
@@ -495,6 +495,12 @@ script…** already reads back in "Two columns" mode, so a two-column
 Markdown export round-trips back into Splitpage with the split intact.
 Both carry the production breakdown and comments the same way.
 
+Neither is the same thing as **Save**. These are copies for reading and
+sharing: they carry the words, not the tagging, the comment anchors, the
+images or the scene statuses. Saving as `.md` writes the same two-column
+table *plus* Splitpage's own record of the script underneath it, so nothing
+is lost — see [Saving your script](#saving-your-script).
+
 ## Importing a Google Doc
 
 **File ▸ Import from Google Doc link…** takes a Google Docs share link (or
@@ -508,17 +514,82 @@ the link," make sure the browser tab that opens is signed in to an account
 that can see it, or the download will be a Google sign-in page instead of a
 document.
 
+## Saving your script
+
+**Save** writes your script to a real document file. The first Save asks
+where to put it and offers two formats; after that, Save writes straight
+back to the same file.
+
+**Markdown (`.md`) — the default.** A plain-text file anyone can read. At
+the top is your script as a table, one row per scene, Visual beside Audio,
+with a Status column, followed by your production breakdown and your
+comments — it renders properly in Obsidian, VS Code, GitHub, or anything
+else that knows Markdown. Below that is a fenced block Splitpage writes for
+itself:
+
+```
+<!-- splitpage: everything below is Splitpage's own record of this script. … -->
+~~~~splitpage
+{ … }
+~~~~
+```
+
+That block holds what the table cannot say: which words are tagged as props
+or locations, where your comments are anchored, your storyboard images,
+each scene's status, your crew list and your reading speed. Leave it alone
+and nothing is ever lost.
+
+**Splitpage (`.splitpage`).** The same information with none of the
+readable table — just Splitpage's own record, and a smaller file. Pick this
+if you never intend to read the file anywhere else.
+
+Either way the file is your script and nothing else: it carries no copy of
+the app, so it stays small and it opens in seconds.
+
+### If you edit the `.md` somewhere else
+
+You can. Open it in any editor, fix a line of narration in the table, save,
+and reopen it in Splitpage — your edit is there. Splitpage compares the
+table against its own record cell by cell: a cell you did not touch keeps
+everything it had, and a cell you rewrote is taken from your version, with
+any tracked prop, location, cast, gear or sound name in it tagged again
+automatically. The one thing it cannot rescue is a comment that pointed at
+exact words in a cell you rewrote — the comment stays, along with the text
+it quoted, but it no longer has a place to point to and shows in the panel
+as no longer in the script. Changing the `# ` heading renames the script.
+Adding or deleting whole scene rows is the one thing Splitpage will not
+guess at: it asks whether to keep its own record or rebuild the scenes from
+your table.
+
+### Sending it to someone who has nothing installed
+
+**File ▸ Export a copy ▸ Standalone HTML (.html)** writes one self-contained
+page: your script with a copy of Splitpage wrapped around it. They
+double-click it and the script is there, editable, with nothing to install
+and no account. It is a far bigger file than a `.md`, so it is for sending,
+not for working in.
+
 ## Reopening a saved project
 
 A file Splitpage saved is a complete project, not just text — reopen it and
-you get everything back: rows, comments, tags, title. Two ways to do that:
+you get everything back: scenes, comments, tags, images, title. Two ways:
 
-- **Double-click the saved `.html` file directly.** It opens straight into
-  that project — this is how the file is self-contained in the first place.
-- **File ▸ Open a document…**, then pick that `.html` file. Same result,
-  useful when you're already in the app and want to switch projects. (This
-  same menu still also imports `.docx`/`.md`/`.txt`/`.csv` as plain script
-  text, same as before — Splitpage tells the two apart by file extension.)
+- **File ▸ Open a document…**, then pick the `.md` or `.splitpage` file.
+  Useful when you're already in the app and want to switch projects.
+- **Double-click a saved Standalone HTML file.** It opens straight into that
+  project — that is what being self-contained means.
+
+That same menu still imports `.docx`/`.txt`/`.csv`, and Markdown that isn't
+one of Splitpage's own, as plain script text, same as before.
+
+### Older `.html` projects
+
+Splitpage used to save every project as a page like the standalone export
+above. Those files still open exactly as they always did — there is nothing
+to convert by hand. The first time you Save one, though, Splitpage asks
+where to keep it as a `.md` instead and tells you why; from then on it is an
+ordinary Markdown project. Your original `.html` file is left where it is,
+untouched.
 
 ## Resuming your last project on launch
 
@@ -546,9 +617,10 @@ always works regardless.
 
 - `index.html` — the whole app, and **a build output**: generated from `src/`
   by `node build.mjs`, so edit the source, not this. It is self-contained on
-  purpose (a saved script is a copy of this page with your document inside
-  it); the only thing it fetches is the Google Fonts stylesheet, loaded so
-  that a slow or unreachable font server cannot stop the app starting.
+  purpose (that is what makes **Export a copy ▸ Standalone HTML** possible,
+  and what lets the app run straight off a USB stick); the only thing it
+  fetches is the Google Fonts stylesheet, loaded so that a slow or
+  unreachable font server cannot stop the app starting.
 - `src/` — the source. `page.html` (the shell), `app.css`,
   `seed-state.json` (the demo document), and `js/` — numbered fragments of
   one script, concatenated in filename order.

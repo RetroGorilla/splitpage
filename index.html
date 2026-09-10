@@ -2386,6 +2386,9 @@
           <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
+          <!-- the old save format, now an export: one self-contained page for
+               sending a script to someone with nothing installed -->
+          <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
           <div class="menu-sep"></div>
           <div class="menu-label">Export the narration</div>
           <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
@@ -2507,7 +2510,7 @@
 
 <input type="file" id="file-input" accept="image/*" hidden>
 <input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
-<input type="file" id="open-file-input" accept=".html,.htm,.docx,.md,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
+<input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
@@ -2693,6 +2696,27 @@
         <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
         <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
         <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- A .md project whose scene table gained or lost rows somewhere else.
+     There is no right answer to guess at, so it is asked (20d-formats.js). -->
+<div class="modal-backdrop" id="md-rows-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">
+    <div class="modal-header">
+      <h2 id="md-rows-title">This file's scenes don't line up</h2>
+    </div>
+    <p class="modal-hint" id="md-rows-detail"></p>
+    <p class="modal-hint">Keeping Splitpage's record ignores the table and opens the script exactly as it
+      was last saved here. Using the table's text rebuilds the scenes from it, in order — your
+      breakdown, crew, comments and reading speed are kept either way.</p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="md-rows-table">Use the table's text</button>
+        <button type="button" class="btn btn-accent" id="md-rows-keep">Keep Splitpage's record</button>
       </div>
     </div>
   </div>
@@ -2895,7 +2919,7 @@
       <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
     </div>
     <div class="help-layout">
-      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-running-it">Running it</a></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
+      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-running-it">Running it</a></li><li><a href="#help-installing-it">Installing it</a><ul><li><a href="#help-windows-on-arm">Windows on ARM</a></li></ul></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li></ul></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
       <div id="help-body"><h1 id="help-splitpage-standalone">Splitpage — standalone</h1>
 <p>This is your Splitpage script editor, converted out of the Claude artifact runtime into a plain, self-contained web app. Nothing here talks to Claude or to any server — everything (script text, comments, tags, version snapshots) lives in the page itself and in files you save to your own disk.</p>
 <h2 id="help-running-it">Running it</h2>
@@ -2903,13 +2927,15 @@
 <p><strong>For "Install app" / offline support.</strong> Browsers only offer to install a page as an app (and only let its service worker cache it for offline use) when the page is served from <code>http://</code>/<code>https://</code>, not from a <code>file://</code> path. To get that:</p>
 <ol><li>Start the local server:<ul><li><strong>Windows</strong> — double-click <strong><a href="start.bat" target="_blank" rel="noopener">start.bat</a></strong>.</li><li><strong>macOS / Linux</strong> — run <strong><code>./start.sh</code></strong> in a terminal.</li><li><strong>Anywhere, if you have Node</strong> — <code>node start.mjs</code>.</li></ul></li></ol>
 <p>   Either way it serves the app at <code>http://localhost:8791/</code> and opens your    browser there. <code>start.bat</code> uses Node if you have it and falls back to a    pure-PowerShell server that needs nothing installed at all.</p>
-<ol><li>In Chrome or Edge, click the <strong>install icon</strong> in the address bar (or Menu ▸ "Install Splitpage…") to add it as its own app window with a taskbar/Start Menu entry. That <em>is</em> the desktop app — a real window and a taskbar entry, running in the browser engine that all of Splitpage's features (in-place saving, Follow My Voice) are built on.</li><li>Leave that window open while you work; closing it (or Ctrl+C) stops the server. Re-run it any time — your saved <code>.html</code> file doesn't depend on the server, so you can always fall back to just double-clicking it.</li></ol>
+<ol><li>In Chrome or Edge, click the <strong>install icon</strong> in the address bar (or Menu ▸ "Install Splitpage…") to add it as its own app window with a taskbar/Start Menu entry. That <em>is</em> the desktop app — a real window and a taskbar entry, running in the browser engine that all of Splitpage's features (in-place saving, Follow My Voice) are built on.</li><li>Leave that window open while you work; closing it (or Ctrl+C) stops the server. Re-run it any time — your saved script is an ordinary file on your computer and doesn't depend on the server at all.</li></ol>
 <p><strong>Options</strong> (<code>node start.mjs --help</code>): <code>--port 9000</code> if 8791 is taken — though it finds the next free port by itself; <code>--no-open</code> to skip launching a browser; and <code>--library</code>, which keeps documents on the server in <code>./data</code> instead of as files you save to disk. Without <code>--library</code> the launcher serves files and nothing else, so the app behaves exactly as it always has.</p>
 <h2 id="help-installing-it">Installing it</h2>
 <p><strong><code>SplitpageSetup-&lt;version&gt;.exe</code> is the whole product.</strong> One download, one installer, and you are working — open a local script, or host a session other people on your network join. It carries its own Node runtime, so there is no second thing to go and install first.</p>
 <p>The installer asks where to put it:</p>
 <ul><li><strong>Just for me</strong> — <code>%LOCALAPPDATA%\Programs\Splitpage</code>, no administrator.</li><li><strong>Everyone on this PC</strong> — <code>C:\Program Files\Splitpage</code>, needs administrator.</li><li><strong>Somewhere else</strong> — type any path.</li></ul>
 <p>and whether you want a desktop shortcut and a <em>shared session</em> shortcut. It registers with Add/Remove Programs like anything else. <code>SplitpageSetup.exe /Q</code> installs silently for the current user and <code>/Q:A</code> for everyone (needs an administrator prompt). To choose the folder as well, override the command: <code>SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"</code>.</p>
+<h3 id="help-windows-on-arm">Windows on ARM</h3>
+<p>On Windows machines with ARM64 processors, build with <code>node package.mjs --installer --arch arm64</code> for an ARM64-only setup, or <code>--arch both</code> to bundle both architectures. The installer detects your machine's architecture and uses the matching runtime; for portable copies with both runtimes, <code>start.bat</code> picks the right one automatically.</p>
 <h2 id="help-hosting-a-shared-session">Hosting a shared session</h2>
 <p>Pick <strong>Splitpage (shared session)</strong> in the Start Menu, or run:</p>
 <pre><code>node start.mjs --host</code></pre>
@@ -2917,7 +2943,7 @@
 <blockquote><p><strong>There is no password on it.</strong> Anyone who can reach that address can read and edit. That is the point on your own network and a mistake on a public one, so the launcher says so every time it starts. Putting Splitpage on the <em>internet</em> is a different job with a different answer — see <a href="DEPLOY.md" target="_blank" rel="noopener">DEPLOY.md</a>, which puts Cloudflare Access in front.</p></blockquote>
 <h2 id="help-uninstalling">Uninstalling</h2>
 <p>The installed copy registers itself, so remove it from <strong>Add/Remove Programs</strong> — that clears the shortcuts too, and leaves any shared-session scripts in <code>%LOCALAPPDATA%\Splitpage\data</code> where they are.</p>
-<p>For the portable copy, run <strong><code>uninstall.bat</code></strong> (Windows) or <strong><code>./uninstall.sh</code></strong>, which removes exactly the files the release shipped and lists anything else it found so you can see what it is leaving behind. Your scripts are never touched: saved <code>.html</code> files and the <code>data/</code> folder both survive, and it tells you they did. <code>--dry-run</code> shows what would go without doing it.</p>
+<p>For the portable copy, run <strong><code>uninstall.bat</code></strong> (Windows) or <strong><code>./uninstall.sh</code></strong>, which removes exactly the files the release shipped and lists anything else it found so you can see what it is leaving behind. Your scripts are never touched: saved scripts and the <code>data/</code> folder both survive, and it tells you they did. <code>--dry-run</code> shows what would go without doing it.</p>
 <h2 id="help-keeping-it-up-to-date">Keeping it up to date</h2>
 <pre><code>node update.mjs check     # is there a newer version?
 node update.mjs           # download and verify it</code></pre>
@@ -2972,18 +2998,36 @@ node update.mjs           # download and verify it</code></pre>
 <p>Typing shortcuts (<code>[prop]</code> <code>{kitchen}</code> <code>~vfx~</code> <code>&lt;gear&gt;</code>), comments, status, exports, the <strong>Gear</strong> screen and its packing lists, the server features — everything else is exactly the same.</p>
 <h2 id="help-two-shapes-of-markdown-export">Two shapes of Markdown export</h2>
 <p><strong>File ▸ Export a copy</strong> has two Markdown options. <strong>Markdown (.md)</strong> lists the script scene by scene — a <code>## Scene 01</code> heading, then the Visual notes, then the Audio, stacked. <strong>Markdown, two columns (.md)</strong> lays the same script out as a table instead, one row per scene with a Visual column next to an Audio column — the way the split view itself looks, and the way a GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side by side rather than stacked. It's also exactly the shape <strong>Paste a script…</strong> already reads back in "Two columns" mode, so a two-column Markdown export round-trips back into Splitpage with the split intact. Both carry the production breakdown and comments the same way.</p>
+<p>Neither is the same thing as <strong>Save</strong>. These are copies for reading and sharing: they carry the words, not the tagging, the comment anchors, the images or the scene statuses. Saving as <code>.md</code> writes the same two-column table <em>plus</em> Splitpage's own record of the script underneath it, so nothing is lost — see <a href="#help-saving-your-script">Saving your script</a>.</p>
 <h2 id="help-importing-a-google-doc">Importing a Google Doc</h2>
 <p><strong>File ▸ Import from Google Doc link…</strong> takes a Google Docs share link (or just the document's ID) instead of a file. Splitpage has no server and no Google sign-in of its own, so it can't read the Doc directly — instead it opens Google's own Word (.docx) export of it in a new tab, which downloads straight to your computer using whatever Google account you're signed in to in that tab. Once the download lands, bring it in the same way as any other Word file: <strong>File ▸ Open a document…</strong>. If the doc isn't shared "Anyone with the link," make sure the browser tab that opens is signed in to an account that can see it, or the download will be a Google sign-in page instead of a document.</p>
+<h2 id="help-saving-your-script">Saving your script</h2>
+<p><strong>Save</strong> writes your script to a real document file. The first Save asks where to put it and offers two formats; after that, Save writes straight back to the same file.</p>
+<p><strong>Markdown (<code>.md</code>) — the default.</strong> A plain-text file anyone can read. At the top is your script as a table, one row per scene, Visual beside Audio, with a Status column, followed by your production breakdown and your comments — it renders properly in Obsidian, VS Code, GitHub, or anything else that knows Markdown. Below that is a fenced block Splitpage writes for itself:</p>
+<pre><code>&lt;!-- splitpage: everything below is Splitpage's own record of this script. … --&gt;
+~~~~splitpage
+{ … }
+~~~~</code></pre>
+<p>That block holds what the table cannot say: which words are tagged as props or locations, where your comments are anchored, your storyboard images, each scene's status, your crew list and your reading speed. Leave it alone and nothing is ever lost.</p>
+<p><strong>Splitpage (<code>.splitpage</code>).</strong> The same information with none of the readable table — just Splitpage's own record, and a smaller file. Pick this if you never intend to read the file anywhere else.</p>
+<p>Either way the file is your script and nothing else: it carries no copy of the app, so it stays small and it opens in seconds.</p>
+<h3 id="help-if-you-edit-the-md-somewhere-else">If you edit the <code>.md</code> somewhere else</h3>
+<p>You can. Open it in any editor, fix a line of narration in the table, save, and reopen it in Splitpage — your edit is there. Splitpage compares the table against its own record cell by cell: a cell you did not touch keeps everything it had, and a cell you rewrote is taken from your version, with any tracked prop, location, cast, gear or sound name in it tagged again automatically. The one thing it cannot rescue is a comment that pointed at exact words in a cell you rewrote — the comment stays, along with the text it quoted, but it no longer has a place to point to and shows in the panel as no longer in the script. Changing the <code># </code> heading renames the script. Adding or deleting whole scene rows is the one thing Splitpage will not guess at: it asks whether to keep its own record or rebuild the scenes from your table.</p>
+<h3 id="help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</h3>
+<p><strong>File ▸ Export a copy ▸ Standalone HTML (.html)</strong> writes one self-contained page: your script with a copy of Splitpage wrapped around it. They double-click it and the script is there, editable, with nothing to install and no account. It is a far bigger file than a <code>.md</code>, so it is for sending, not for working in.</p>
 <h2 id="help-reopening-a-saved-project">Reopening a saved project</h2>
-<p>A file Splitpage saved is a complete project, not just text — reopen it and you get everything back: rows, comments, tags, title. Two ways to do that:</p>
-<ul><li><strong>Double-click the saved <code>.html</code> file directly.</strong> It opens straight into that project — this is how the file is self-contained in the first place.</li><li><strong>File ▸ Open a document…</strong>, then pick that <code>.html</code> file. Same result, useful when you're already in the app and want to switch projects. (This same menu still also imports <code>.docx</code>/<code>.md</code>/<code>.txt</code>/<code>.csv</code> as plain script text, same as before — Splitpage tells the two apart by file extension.)</li></ul>
+<p>A file Splitpage saved is a complete project, not just text — reopen it and you get everything back: scenes, comments, tags, images, title. Two ways:</p>
+<ul><li><strong>File ▸ Open a document…</strong>, then pick the <code>.md</code> or <code>.splitpage</code> file. Useful when you're already in the app and want to switch projects.</li><li><strong>Double-click a saved Standalone HTML file.</strong> It opens straight into that project — that is what being self-contained means.</li></ul>
+<p>That same menu still imports <code>.docx</code>/<code>.txt</code>/<code>.csv</code>, and Markdown that isn't one of Splitpage's own, as plain script text, same as before.</p>
+<h3 id="help-older-html-projects">Older <code>.html</code> projects</h3>
+<p>Splitpage used to save every project as a page like the standalone export above. Those files still open exactly as they always did — there is nothing to convert by hand. The first time you Save one, though, Splitpage asks where to keep it as a <code>.md</code> instead and tells you why; from then on it is an ordinary Markdown project. Your original <code>.html</code> file is left where it is, untouched.</p>
 <h2 id="help-resuming-your-last-project-on-launch">Resuming your last project on launch</h2>
 <p>In Chrome/Edge, Splitpage remembers the file you last saved or opened and tries to reopen it automatically the next time you start the app — but only when you're looking at a fresh, never-saved copy of the page (so opening one specific saved project never gets silently swapped for a different one). Two ways this can go:</p>
 <ul><li><strong>Silent.</strong> Most of the time it just reopens with no prompt at all.</li><li><strong>One click.</strong> Browsers require an actual click before quietly reusing file access across separate launches in some cases — when that hasn't happened yet, you'll see a small <strong>"Continue where you left off?"</strong> banner at the top instead of a picker. One click on <strong>Continue</strong> reopens it.</li></ul>
 <p>This relies on IndexedDB, which needs a real page origin to behave reliably — it works over <code>http://</code>/<code>https://</code> (i.e. via <strong>start.bat</strong>), and may not persist across launches when the page is opened as a raw <code>file://</code> path. Either way, opening files by hand (double-click, or File ▸ Open) always works regardless.</p>
 <h2 id="help-files">Files</h2>
 <p><strong>The app</strong></p>
-<ul><li><code>index.html</code> — the whole app, and <strong>a build output</strong>: generated from <code>src/</code> by <code>node build.mjs</code>, so edit the source, not this. It is self-contained on purpose (a saved script is a copy of this page with your document inside it); the only thing it fetches is the Google Fonts stylesheet, loaded so that a slow or unreachable font server cannot stop the app starting.</li><li><code>src/</code> — the source. <code>page.html</code> (the shell), <code>app.css</code>, <code>seed-state.json</code> (the demo document), and <code>js/</code> — numbered fragments of one script, concatenated in filename order.</li><li><code>build.mjs</code> — inlines all of it back into <code>index.html</code>. <code>--check</code> says whether the two are in step.</li><li><code>manifest.webmanifest</code>, <code>icon.svg</code> — makes "Install app" possible.</li><li><code>sw.js</code> — a small service worker so the app shell still opens offline once you've loaded it at least once while served over <code>http://</code>.</li></ul>
+<ul><li><code>index.html</code> — the whole app, and <strong>a build output</strong>: generated from <code>src/</code> by <code>node build.mjs</code>, so edit the source, not this. It is self-contained on purpose (that is what makes <strong>Export a copy ▸ Standalone HTML</strong> possible, and what lets the app run straight off a USB stick); the only thing it fetches is the Google Fonts stylesheet, loaded so that a slow or unreachable font server cannot stop the app starting.</li><li><code>src/</code> — the source. <code>page.html</code> (the shell), <code>app.css</code>, <code>seed-state.json</code> (the demo document), and <code>js/</code> — numbered fragments of one script, concatenated in filename order.</li><li><code>build.mjs</code> — inlines all of it back into <code>index.html</code>. <code>--check</code> says whether the two are in step.</li><li><code>manifest.webmanifest</code>, <code>icon.svg</code> — makes "Install app" possible.</li><li><code>sw.js</code> — a small service worker so the app shell still opens offline once you've loaded it at least once while served over <code>http://</code>.</li></ul>
 <p><strong>Running it</strong></p>
 <ul><li><code>start.mjs</code> — the launcher: serves the app, opens your browser, installs a staged update, and with <code>--host</code> shares the session with your network.</li><li><code>start.bat</code> / <code>start.sh</code> — the double-click and terminal ways in. <code>start.bat</code> prefers the bundled runtime, then a Node on PATH, then <code>start.ps1</code>.</li><li><code>start.ps1</code> — the zero-install fallback: a static server built on .NET's <code>HttpListener</code>, for a machine with no Node. Serves the app; cannot host.</li><li><code>update.mjs</code> — checks for a new version, verifies it, stages it. The install happens at the next launch, never while the app is open.</li><li><code>uninstall.mjs</code> / <code>uninstall.bat</code> / <code>uninstall.sh</code> — removes a portable copy, and only the files the release shipped.</li></ul>
 <p><strong>Packaging</strong></p>
@@ -3043,11 +3087,14 @@ node update.mjs           # download and verify it</code></pre>
   var editSeq = 0;
   var dirty = false;
   var suppressUnloadWarning = false;
-  /* File System Access API handle for the .html file itself, once the user
-     has picked or created one via Save — lets subsequent saves write in
-     place instead of prompting again. Stays null (and Save falls back to a
-     plain download) in browsers without the API, e.g. Firefox. */
-  var htmlFileHandle = null;
+  /* The project file this document lives in: a File System Access API
+     handle, once the user has picked or created one via Save, plus which
+     format it is — "md" | "splitpage" | "html". The handle lets subsequent
+     saves write in place instead of prompting again; the kind decides which
+     serializer runs (14-export.js). `handle` stays null (and Save falls back
+     to a plain download) in browsers without the API, e.g. Firefox.
+     "html" only ever arrives by OPENING a legacy file — nothing writes it. */
+  var docFileHandle = { handle: null, kind: null };
   var deleteArmId = null;
   var deleteArmTimer = null;
 
@@ -3293,6 +3340,17 @@ node update.mjs           # download and verify it</code></pre>
     var out = escapeHtml(text);
     out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    /* The other four things htmlToMarkdown() can emit. Without these, a
+       Markdown table cell edited outside Splitpage and reconciled back in
+       (20d-formats.js) lost every strikethrough, underline and highlight in
+       it, and every line break inside the cell came back as the literal
+       text "<br>". They run against the already-escaped string, so the
+       markup here is reintroduced deliberately, one closed pair at a time,
+       and sanitizeHtml() still has the last word at every call site. */
+    out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+    out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
+    out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
+    out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
     out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
       /* `url` was captured out of `out`, which escapeHtml() already ran over
          once — it is already correctly entity-encoded for an HTML attribute
@@ -3575,7 +3633,7 @@ node update.mjs           # download and verify it</code></pre>
     if (!entry) return;
     pushSnapshot("Before restoring an earlier version");
     state = migrateRows(cloneState(entry.state));
-    resetProductionPanelState(); /* same reason as openSplitpageFile — different document underneath */
+    resetProductionPanelState(); /* same reason as adoptProjectState — different document underneath */
     markDirty();
     render();
     closeHistoryPanel();
@@ -8138,7 +8196,14 @@ node update.mjs           # download and verify it</code></pre>
     return cells;
   }
 
-  function parseMarkdownTable(text) {
+  /* opts.keepEmpty keeps a data row whose Visual and Audio cells are both
+     empty. Off by default, because a foreign table's blank line carries no
+     information; on when reading one of our OWN Markdown projects
+     (20d-formats.js), where a scene with nothing typed in it yet is still a
+     scene and dropping it would shift every row after it out of line with
+     the file's own record. */
+  function parseMarkdownTable(text, opts) {
+    opts = opts || {};
     var lines = text.replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
     var rows = [];
     lines.forEach(function (line) {
@@ -8148,18 +8213,24 @@ node update.mjs           # download and verify it</code></pre>
       rows.push(cells);
     });
     if (!rows.length) return [];
-    var visualIdx = 0, audioIdx = 1, startIdx = 0;
+    var visualIdx = 0, audioIdx = 1, startIdx = 0, statusIdx = -1;
     var header = rows[0].map(function (c) { return c.toLowerCase(); });
     var idxs = columnIndicesFromHeader(header);
     if (idxs.visualIdx !== -1 || idxs.audioIdx !== -1) {
       startIdx = 1;
       if (idxs.visualIdx !== -1) visualIdx = idxs.visualIdx;
       if (idxs.audioIdx !== -1) audioIdx = idxs.audioIdx;
+      statusIdx = header.findIndex(function (c) { return c.trim() === "status"; });
     }
     var out = [];
     for (var i = startIdx; i < rows.length; i++) {
       var v = rows[i][visualIdx] || "", a = rows[i][audioIdx] || "";
-      if (v || a) out.push({ visualText: v, audioText: a });
+      if (!v && !a && !opts.keepEmpty) continue;
+      out.push({
+        visualText: v,
+        audioText: a,
+        statusText: statusIdx === -1 ? "" : (rows[i][statusIdx] || "")
+      });
     }
     return out;
   }
@@ -8250,10 +8321,25 @@ node update.mjs           # download and verify it</code></pre>
        '<' (a page whose markup was preserved as text, or a deliberately
        crafted paste) went straight into the document as live HTML. */
     return rows.map(function (r) {
+      /* An inline image at the head of the Visual cell is how this app's own
+         Markdown writes a storyboard frame (toMarkdownTableDoc). This used
+         to be hardcoded to null, so a two-column export re-imported lost
+         every picture in it — and left the data: URI sitting in the text as
+         several thousand characters of visible gibberish, because
+         legacyMdToHtml's link rule rejects a data: href. Only a data: image
+         this app would itself accept is taken; an ordinary ![](http…) in a
+         foreign document still imports exactly as it did before. */
+      var visual = String(r.visualText || "");
+      var image = null;
+      var m = MD_IMAGE_PREFIX_RE.exec(visual);
+      if (m) {
+        image = safeImageSrc(m[1]);
+        if (image) visual = visual.slice(m[0].length);
+      }
       return {
         id: makeId(),
-        visualText: sanitizeHtml(legacyMdToHtml(r.visualText || "")),
-        visualImage: null,
+        visualText: sanitizeHtml(legacyMdToHtml(visual)),
+        visualImage: image,
         audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
       };
     });
@@ -8594,7 +8680,7 @@ node update.mjs           # download and verify it</code></pre>
     var stash = readStash();
     var theirs = migrateRows(cloneState(body.state));
     serverDoc = { id: body.id, rev: body.rev || 0 };
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     resetProductionPanelState();
 
     var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
@@ -8756,7 +8842,7 @@ node update.mjs           # download and verify it</code></pre>
     serverDoc = { id: body.id, rev: body.rev || 0 };
     /* a hosted document and a local file are different homes for the same
        Save button — holding both would make it ambiguous which one it writes */
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
     resetProductionPanelState();
 
@@ -8778,7 +8864,7 @@ node update.mjs           # download and verify it</code></pre>
     } catch (err) { handleApiError(err, "Could not put that on the server"); return; }
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
-    htmlFileHandle = null;
+    docFileHandle = { handle: null, kind: null };
     clearDirty();
     updateFileChip();
     showToast("Published to the server as “" + (state.title || body.id) + "” — collaborators can open it now", "ok");
@@ -9405,6 +9491,16 @@ node update.mjs           # download and verify it</code></pre>
       return;
     }
 
+    /* A project opened from a legacy .html file is never written back as
+       HTML — the page stopped being a document format when .md and
+       .splitpage arrived (HANDOFF §3.1). The first Save after opening one
+       behaves as Save As, defaulting to <slug>.md, and says why. */
+    var converting = !saveAs && docFileHandle.kind === "html";
+    if (converting) {
+      saveAs = true;
+      showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
+    }
+
     /* Freeze exactly what we save. `state` keeps mutating while the write is
        in flight, so re-cloning here means edits typed during the save aren't
        silently included as if they'd already been saved. */
@@ -9413,44 +9509,55 @@ node update.mjs           # download and verify it</code></pre>
     state.lastEditedAt = nowIso();
     var published = cloneState(state);
     var seqAtSave = editSeq;
-    var fullHtml;
-    try {
-      fullHtml = buildPublishHtml(JSON.stringify(published));
-    } catch (e) {
-      showToast("Could not prepare the file to save.", "error");
-      state.rev = Math.max(0, (state.rev || 1) - 1);
-      saveInFlight = false;
-      setSaveButtons(dirty ? "Save •" : "Save", false);
-      return;
-    }
-    var filename = slugify(published.title) + ".html";
+    var slug = slugify(published.title);
     /* Save As always asks where to write, ignoring any file we already have.
        Plain Save reuses that file once one exists, and only asks the first
        time it has none. Either way, a fresh pick becomes the file future
        plain Saves write to. */
-    var targetHandle = saveAs ? null : htmlFileHandle;
+    var targetHandle = saveAs ? null : docFileHandle.handle;
+    /* Which serializer runs is decided by the file, not by a preference —
+       and for a fresh pick that cannot be known until the picker has come
+       back with the name the user typed. */
+    var kind = saveAs ? "md" : (docFileHandle.kind || "md");
 
     try {
       if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: "Splitpage script", accept: { "text/html": [".html"] } }]
+          suggestedName: slug + ".md",
+          types: [
+            { description: "Markdown script", accept: { "text/markdown": [".md"] } },
+            { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
+          ]
         });
-        htmlFileHandle = targetHandle;
+        kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
+        docFileHandle = { handle: targetHandle, kind: kind };
         rememberLastFileHandle(targetHandle);
+      }
+
+      var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
+      var body;
+      try {
+        body = kind === "splitpage" ? buildSplitpageFile(published) : buildMarkdownProject(published);
+      } catch (e) {
+        showToast("Could not prepare the file to save.", "error");
+        state.rev = Math.max(0, (state.rev || 1) - 1);
+        saveInFlight = false;
+        setSaveButtons(dirty ? "Save •" : "Save", false);
+        return;
       }
 
       if (targetHandle) {
         var writable = await targetHandle.createWritable();
-        await writable.write(fullHtml);
+        await writable.write(body);
         await writable.close();
         baseState = published;
         if (editSeq === seqAtSave) clearDirty();
         showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       } else {
         /* no File System Access API (e.g. Firefox) — a plain download is the
-           best this browser can do; the user re-opens the newest copy next time */
-        var ok = await deliverFile(filename, fullHtml, { savedMsg: "Downloaded " + filename });
+           best this browser can do; the user re-opens the newest copy next
+           time. Same bytes, same extension as the in-place write above. */
+        var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
         if (ok) {
           baseState = published;
           if (editSeq === seqAtSave) clearDirty();
@@ -9518,7 +9625,10 @@ node update.mjs           # download and verify it</code></pre>
        from the first edit — there is no file dialog to ambush anyone with.
        A lapsed sign-in stops it, or every queued save would refire the same
        failure until the tab is reloaded. */
-    if (!htmlFileHandle && !onServerDoc()) return;
+    if (!docFileHandle.handle && !onServerDoc()) return;
+    /* A legacy .html project's next save opens a picker (see saveDoc) —
+       exactly the ambush the gate above exists to prevent. */
+    if (docFileHandle.kind === "html") return;
     if (serverSessionExpired) return;
     if (saveInFlight) { saveQueued = true; return; }
     saveInFlight = true;
@@ -9633,26 +9743,47 @@ node update.mjs           # download and verify it</code></pre>
     return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
   }
 
+  /* What a scene's two table cells say, as one description used twice: to
+     write the table below, and — on the way back in — to decide whether a
+     cell was edited outside Splitpage (`reconcileMarkdownRows`,
+     20d-formats.js). Two copies of this composition would drift, and the
+     drift would read as "every cell was edited" on the next open.
+
+     Newlines are folded to <br> here because that is part of what the cell
+     *says*; the pipe-escaping mdRichTableCell adds is a property of the
+     table *row* and is undone again by parseMarkdownTable, so it is
+     deliberately not part of this comparison basis. */
+  function mdSceneCellSource(row, i) {
+    var visual = htmlToMarkdown(row.visualText);
+    if (row.visualImage) {
+      visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
+    }
+    return {
+      visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
+      audio: String(htmlToMarkdown(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
+    };
+  }
+
   /* The same script as toMarkdownDoc, laid out as a Visual/Audio table
      instead of a stacked Scene-by-scene list — this is also exactly the
      table shape Import ▸ Two columns already knows how to read back in, so
-     round-tripping through this export doesn't lose the split. */
-  function toMarkdownTableDoc() {
+     round-tripping through this export doesn't lose the split, and it is the
+     human-readable half of a saved .splitpage-in-Markdown project
+     (buildMarkdownProject, 20d-formats.js). */
+  function toMarkdownTableDoc(s) {
+    s = s || state;
     var lines = [];
-    lines.push("# " + (state.title || "Untitled Script"));
+    lines.push("# " + (s.title || "Untitled Script"));
     lines.push("");
-    if (!state.rows.length) {
+    if (!s.rows.length) {
       lines.push("_No rows yet._");
     } else {
-      lines.push("| # | Visual | Audio |");
-      lines.push("| --- | --- | --- |");
-      state.rows.forEach(function (row, i) {
-        var visual = htmlToMarkdown(row.visualText);
-        if (row.visualImage) {
-          visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
-        }
-        var audio = htmlToMarkdown(row.audioText);
-        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(visual) + " | " + mdRichTableCell(audio) + " |");
+      lines.push("| # | Visual | Audio | Status |");
+      lines.push("| --- | --- | --- | --- |");
+      s.rows.forEach(function (row, i) {
+        var cell = mdSceneCellSource(row, i);
+        lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(cell.visual) + " | " +
+                   mdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
       });
     }
     lines.push("");
@@ -11200,6 +11331,12 @@ node update.mjs           # download and verify it</code></pre>
     if (ext === "csv") return "csv";
     if (ext === "md" || ext === "markdown") return "md";
     if (ext === "txt") return "txt";
+    /* The two project formats and the legacy one. "md" is deliberately in
+       both worlds: whether a .md file is one of ours or somebody else's is
+       decided by whether it carries a data block, not by its name
+       (openProjectFile). */
+    if (ext === "splitpage") return "splitpage";
+    if (ext === "html" || ext === "htm") return "html";
     return null;
   }
 
@@ -11288,6 +11425,10 @@ node update.mjs           # download and verify it</code></pre>
       return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
     }
     if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: baseName + " - two column.md" };
+    /* The old save format, kept as an export only: one file that opens in
+       any browser with nothing installed. PAGE_SHELL and buildPublishHtml
+       exist for this and for nothing else now (HANDOFF §3.1). */
+    if (kind === "html") return { data: buildPublishHtml(JSON.stringify(migrateRows(cloneState(state)))), filename: baseName + ".html" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -11352,17 +11493,27 @@ node update.mjs           # download and verify it</code></pre>
     return lines.join("\n");
   }
 
-  function isSplitpageHtmlName(name) {
-    return /\.html?$/i.test(name || "");
-  }
+  /* Re-opening one of this app's OWN project files — pull the full document
+     (rows, comments, tags, statuses, title) back out of it rather than
+     treating it as plain text to import. Three shapes arrive here:
 
-  /* Re-opening one of this app's OWN saved files — pull the full document
-     (rows, comments, tags, title) back out of its embedded #state-data,
-     same as a fresh page load does, rather than treating it as plain text
-     to import. It also becomes the file Save/Save As writes to from here
-     on, exactly as if you'd just done a Save As into it. */
-  async function openSplitpageFile(file, handle, opts) {
+       .splitpage  the state JSON itself
+       .md         a Markdown table plus the same JSON in a data block —
+                   and, if the table was edited elsewhere, those edits
+                   reconciled back into it (20d-formats.js)
+       .html       a legacy save: the whole app with #state-data inside it
+
+     Anything else — and any .md WITHOUT a data block, i.e. somebody else's
+     Markdown — falls through to the ordinary lossy import, unchanged.
+     Whichever it was becomes the file Save writes to from here on, in its
+     own format; a legacy .html converts to .md on that first Save. */
+  async function openProjectFile(file, handle, opts) {
     opts = opts || {};
+    var kind = fileKindFromName(file.name);
+    if (kind !== "splitpage" && kind !== "md" && kind !== "html") {
+      return loadFileIntoEditor(file, handle);
+    }
+
     var text;
     try {
       text = await file.text();
@@ -11370,28 +11521,64 @@ node update.mjs           # download and verify it</code></pre>
       showToast("Could not read " + file.name + ".", "error");
       return false;
     }
-    var doc = new DOMParser().parseFromString(text, "text/html");
-    var dataEl = doc.getElementById("state-data");
-    var parsed;
-    try {
-      parsed = JSON.parse(dataEl.textContent);
-    } catch (e) {
-      showToast(file.name + " doesn't look like a Splitpage file.", "error");
-      return false;
+
+    if (kind === "splitpage") {
+      var native;
+      try {
+        native = parseSplitpageFile(text);
+      } catch (e) {
+        showToast(file.name + " doesn't look like a Splitpage file.", "error");
+        return false;
+      }
+      return adoptProjectState(migrateRows(native), file, handle, "splitpage", opts);
     }
 
+    if (kind === "html") {
+      var doc = new DOMParser().parseFromString(text, "text/html");
+      var dataEl = doc.getElementById("state-data");
+      var legacy;
+      try {
+        legacy = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        showToast(file.name + " doesn't look like a Splitpage file.", "error");
+        return false;
+      }
+      return adoptProjectState(migrateRows(legacy), file, handle, "html", opts);
+    }
+
+    var project = null;
+    try {
+      project = parseMarkdownProject(text);
+    } catch (e) {
+      project = null;
+    }
+    if (!project) return loadFileIntoEditor(file, handle);
+    /* awaits the row-count question when the table and the record disagree */
+    var reconciled = await applyMarkdownProject(project);
+    return adoptProjectState(reconciled, file, handle, "md", opts);
+  }
+
+  /* The one place a parsed project becomes THE document, whichever format
+     it arrived in. `newState` has already been through migrateRows(). */
+  function adoptProjectState(newState, file, handle, kind, opts) {
+    opts = opts || {};
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
-    state = migrateRows(parsed);
+    state = newState;
     baseState = cloneState(state);
-    htmlFileHandle = handle || null;
+    docFileHandle = { handle: handle || null, kind: kind };
+    /* A hosted document and a local file are two homes for one Save button
+       (§3.1). Opening a server document already clears the file side; this
+       is the other half, which was missing — open a file while a hosted
+       document was loaded and Save still went to the server. */
+    serverDoc = { id: null, rev: 0 };
     /* The breakdown panel's open card, rename box and group mode all belong
        to the document that was on screen a moment ago. Carrying them into a
        different project meant a card springing open by itself whenever the
        two happened to share an item name. */
     resetProductionPanelState();
-    /* an .html open replaces the project outright — any file previously
-       opened for round-trip export (a .docx/.md/.csv) no longer applies */
+    /* opening a project replaces it outright — any file previously opened
+       for round-trip export (a .docx/.csv/foreign .md) no longer applies */
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
 
     clearDirty();
@@ -11405,11 +11592,6 @@ node update.mjs           # download and verify it</code></pre>
 
     if (handle) rememberLastFileHandle(handle);
     return true;
-  }
-
-  function openAnyLocalFile(file, handle) {
-    if (isSplitpageHtmlName(file.name)) return openSplitpageFile(file, handle);
-    return loadFileIntoEditor(file, handle);
   }
 
   /* ---- resuming the last project on launch ---- */
@@ -11446,7 +11628,9 @@ node update.mjs           # download and verify it</code></pre>
          yet; once something does (dirty), this needs the same undo safety
          net a normal file-open gets, or replacing state below silently
          discards it with no way back. */
-      await openSplitpageFile(file, handle, { skipSnapshot: !dirty, resumed: true });
+      /* kind-agnostic on purpose: whatever the last project was — .md,
+         .splitpage or a legacy .html — is what reopens here. */
+      await openProjectFile(file, handle, { skipSnapshot: !dirty, resumed: true });
     } catch (e) {
       /* moved, renamed, deleted, or on a drive that isn't connected right
          now — not worth interrupting startup over; Version history and the
@@ -11469,6 +11653,10 @@ node update.mjs           # download and verify it</code></pre>
 
   async function loadFileIntoEditor(file, handle) {
     var kind = fileKindFromName(file.name);
+    /* The two project formats never belong here: openProjectFile reads them
+       properly and only ever hands this function a foreign document (that
+       includes a .md with no data block, which really is plain text). */
+    if (kind === "splitpage" || kind === "html") kind = null;
     if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
     var newRows = null, newTitle = null;
@@ -11537,6 +11725,7 @@ node update.mjs           # download and verify it</code></pre>
           types: [{
             description: "Scripts and documents",
             accept: {
+              "application/json": [".splitpage"],
               "text/html": [".html", ".htm"],
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
               "text/markdown": [".md"],
@@ -11546,7 +11735,7 @@ node update.mjs           # download and verify it</code></pre>
           }]
         });
         var handle = handles[0];
-        await openAnyLocalFile(await handle.getFile(), handle);
+        await openProjectFile(await handle.getFile(), handle);
         return;
       } catch (err) {
         if (err && err.name === "AbortError") return; /* user cancelled the picker */
@@ -11563,6 +11752,7 @@ node update.mjs           # download and verify it</code></pre>
     if (ext === "md" || ext === "markdown") return "text/markdown";
     if (ext === "pdf") return "application/pdf";
     if (ext === "html") return "text/html";
+    if (ext === "splitpage") return "application/json";
     return "text/plain";
   }
 
@@ -11750,6 +11940,7 @@ node update.mjs           # download and verify it</code></pre>
     else if (action === "export-csv") exportAs("csv");
     else if (action === "export-breakdown") exportAs("breakdown");
     else if (action === "export-pdf") exportAs("pdf");
+    else if (action === "export-html") exportAs("html");
     else if (action === "export-narration-docx") exportNarration("narration-docx");
     else if (action === "export-narration-txt") exportNarration("narration-txt");
     else if (action === "export-packing-gear") exportPackingList("gear");
@@ -13138,6 +13329,272 @@ node update.mjs           # download and verify it</code></pre>
       if (e.key === "Escape" && !overlay.hidden) { e.preventDefault(); endTour(); }
     });
   })();
+  /* ================= document file formats =================
+
+     Two formats, one document. Both are plain text, neither carries a copy
+     of the app, and both go through migrateRows() on the way in like
+     everything else from outside this page (invariant #2).
+
+       .splitpage   the state object itself, pretty-printed. No envelope and
+                    no translation: what the server stores, what #state-data
+                    holds at boot, and what this file contains are the same
+                    object (invariant #31).
+
+       .md          a Markdown table a human (or Obsidian, or GitHub) can
+                    read, followed by that same JSON in a fenced block. The
+                    table is what you edit elsewhere; the block is what the
+                    table cannot say — tags, comment anchors, images, ids,
+                    statuses, people, reading speed (invariant #32).
+
+     The old .html "save the whole app with the script inside it" format is
+     still READ here (openProjectFile, 18-local-files.js) and can still be
+     written by Export ▸ Standalone HTML, but Save never produces it. */
+
+  /* ---- the native format ---- */
+
+  function buildSplitpageFile(s) {
+    return JSON.stringify(migrateRows(cloneState(s || state)), null, 2);
+  }
+
+  /* Throws on anything that isn't one of ours; the caller decides what to
+     say about it. Deliberately does NOT migrate — every entry point wants
+     to do that itself, at the one moment it is actually adopting the
+     document, so there is never a half-trusted object in flight. */
+  function parseSplitpageFile(text) {
+    var parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.rows)) {
+      throw new Error("not-a-splitpage-file");
+    }
+    return parsed;
+  }
+
+  /* ---- the Markdown project ---- */
+
+  var MD_DATA_INFO = "splitpage";
+  var MD_DATA_NOTE = "<!-- splitpage: everything below is Splitpage's own record of this " +
+    "script. Edit the text above freely; leave this block alone. -->";
+
+  /* CommonMark closes a tilde fence on the first line of at least as many
+     tildes as opened it, so a fence is only safe if it is longer than any
+     run of tildes the content contains. Four is the floor (JSON of
+     sanitised HTML has no tildes at all in the ordinary case); a script
+     with "~~~~~" typed into it gets a longer one rather than a data block
+     that ends in the middle of somebody's dialogue. */
+  function splitpageDataFence(json) {
+    var longest = 3, re = /~{3,}/g, m;
+    while ((m = re.exec(json)) !== null) {
+      if (m[0].length > longest) longest = m[0].length;
+    }
+    return new Array(Math.max(4, longest + 1) + 1).join("~");
+  }
+
+  function buildMarkdownProject(s) {
+    s = s || state;
+    var json = buildSplitpageFile(s);
+    var fence = splitpageDataFence(json);
+    return toMarkdownTableDoc(s) + "\n" + MD_DATA_NOTE + "\n" +
+      fence + MD_DATA_INFO + "\n" + json + "\n" + fence + "\n";
+  }
+
+  /* The LAST opening fence wins: a script that quotes this very block as an
+     example earlier in its prose must not be able to shadow the real one.
+     An opener can never occur inside the block itself — JSON.stringify
+     escapes every newline, so every line of the JSON begins with the
+     pretty-printer's indent, never with a tilde. */
+  function findMarkdownDataBlock(text) {
+    var lines = String(text || "").replace(/\r\n|\r/g, "\n").split("\n");
+    var openAt = -1, fenceLen = 0, i;
+    for (i = 0; i < lines.length; i++) {
+      var m = /^(~{3,})\s*splitpage\s*$/.exec(lines[i]);
+      if (m) { openAt = i; fenceLen = m[1].length; }
+    }
+    if (openAt === -1) return null;
+    var closeRe = new RegExp("^~{" + fenceLen + ",}\\s*$");
+    var closeAt = -1;
+    for (i = openAt + 1; i < lines.length; i++) {
+      if (closeRe.test(lines[i])) { closeAt = i; break; }
+    }
+    return {
+      json: lines.slice(openAt + 1, closeAt === -1 ? lines.length : closeAt).join("\n"),
+      before: lines.slice(0, openAt).join("\n")
+    };
+  }
+
+  /* Returns null for Markdown that is not one of ours — a script someone
+     wrote in a text editor, an export from something else — so the caller
+     falls through to the ordinary lossy import, unchanged. A block that is
+     present but unreadable reads the same way: the table is still there and
+     still worth importing, and refusing the file outright would help nobody. */
+  function parseMarkdownProject(text) {
+    var block = findMarkdownDataBlock(text);
+    if (!block) return null;
+    var parsed;
+    try { parsed = parseSplitpageFile(block.json); } catch (e) { return null; }
+
+    /* Only the scene table. The breakdown and the comments appendix are
+       pipe tables too, and parseMarkdownTable reads every pipe line it is
+       given — they sit under "## " headings, and the scene table is
+       everything before the first one. */
+    var sceneSection = block.before.split(/^##\s/m)[0];
+    var heading = /^#\s+(.+)$/m.exec(block.before);
+    return {
+      state: migrateRows(parsed),
+      /* keepEmpty: a scene with nothing typed in it yet is still a row of
+         the table, and dropping it here would misread every later row as
+         shifted and pop the "scenes were added or removed" question on
+         every open of a document with one blank scene in it. */
+      table: parseMarkdownTable(sceneSection, { keepEmpty: true }),
+      title: heading ? heading[1].trim() : null
+    };
+  }
+
+  /* ---- reconciling hand edits made outside Splitpage ---- */
+
+  var MD_IMAGE_PREFIX_RE = /^!\[[^\]]*\]\((data:image\/[^)\s]+)\)\s*(?:<br\s*\/?>)?\s*/i;
+
+  /* A cell that was edited elsewhere is plain Markdown again: it has lost
+     its tag spans and its comment anchors, because neither survives
+     htmlToMarkdown(). Rebuild the rich text, then re-wrap every name the
+     breakdown still tracks — a tag survives a wording tweak that way, which
+     is the whole point of keeping the registry as real storage (§3.4).
+     Comment anchors on the cell are gone for good; the comments themselves
+     keep their quotedText and show as not-in-script in the panel. */
+  function markdownCellToHtml(s, md) {
+    /* contenteditable sprays non-breaking spaces into anything typed at the
+       end of a line, and they travel out into the Markdown as-is. A tag name
+       in the registry has ordinary spaces in it, so leaving them would mean
+       "gaffer tape" quietly failing to re-attach to text that looks
+       identical. Nothing downstream wants a nbsp in rebuilt prose either. */
+    var html = sanitizeHtml(legacyMdToHtml(String(md == null ? "" : md).replace(/ /g, " ")));
+    var names = (s.productionTags || []).slice().sort(function (a, b) {
+      return String(b.name || "").length - String(a.name || "").length;
+    });
+    names.forEach(function (t) {
+      var name = String(t.name || "").trim();
+      if (!name) return;
+      var res = tagFieldOccurrences(html, name, t.cat, name, false);
+      if (res.hits) html = res.html;
+    });
+    return sanitizeHtml(html);
+  }
+
+  /* The Visual cell can carry an inline image ahead of its text — today's
+     foreign import throws that away, but in one of our own files it is the
+     picture the scene was storyboarded with. */
+  function applyMarkdownVisualCell(s, row, md) {
+    var text = String(md == null ? "" : md);
+    var m = MD_IMAGE_PREFIX_RE.exec(text);
+    row.visualImage = m ? (safeImageSrc(m[1]) || null) : null;
+    if (m) text = text.slice(m[0].length);
+    row.visualText = markdownCellToHtml(s, text);
+  }
+
+  function markdownCellChanged(cellText, was) {
+    return String(cellText == null ? "" : cellText).trim() !== was;
+  }
+
+  /* Same row count on both sides: the block is authoritative except where
+     the table disagrees, cell by cell. An untouched cell keeps the block's
+     HTML exactly — tags, anchors, links, formatting — because rebuilding it
+     from the table would be a lossy no-op. */
+  function reconcileMarkdownRows(s, table) {
+    var changed = 0;
+    s.rows.forEach(function (row, i) {
+      var cells = table[i];
+      if (!cells) return;
+      var was = mdSceneCellSource(row, i);
+      if (markdownCellChanged(cells.visualText, was.visual)) {
+        applyMarkdownVisualCell(s, row, cells.visualText);
+        changed++;
+      }
+      if (markdownCellChanged(cells.audioText, was.audio)) {
+        row.audioText = markdownCellToHtml(s, cells.audioText);
+        changed++;
+      }
+    });
+    return changed;
+  }
+
+  /* "Use the table's text": the table decides how many scenes there are and
+     what they say; everything the table cannot say is kept by position —
+     ids (so comments stay attached), statuses, images, timestamps. */
+  function rowsFromMarkdownTable(s, table) {
+    return table.map(function (cells, i) {
+      var old = s.rows[i] || null;
+      var row = old || { id: makeId(), status: "todo", visualImage: null, updatedAt: "", updatedBy: null };
+      var was = old ? mdSceneCellSource(old, i) : { visual: "", audio: "" };
+      if (!old || markdownCellChanged(cells.visualText, was.visual)) {
+        applyMarkdownVisualCell(s, row, cells.visualText);
+      }
+      if (!old || markdownCellChanged(cells.audioText, was.audio)) {
+        row.audioText = markdownCellToHtml(s, cells.audioText);
+      }
+      return row;
+    });
+  }
+
+  /* ---- "the scenes don't line up" question ---- */
+
+  var pendingMdRowChoice = null;
+
+  function askMarkdownRowChoice(blockRows, tableRows) {
+    return new Promise(function (resolve) {
+      var modal = document.getElementById("md-rows-modal");
+      if (!modal) { resolve("keep"); return; }
+      document.getElementById("md-rows-detail").textContent =
+        "This file's own record has " + blockRows + " scene" + (blockRows === 1 ? "" : "s") +
+        ", but the table in it now has " + tableRows + ". Scenes were added or removed " +
+        "somewhere other than Splitpage, so the two can no longer be lined up scene by scene.";
+      pendingMdRowChoice = resolve;
+      modal.hidden = false;
+    });
+  }
+
+  /* Never resolved twice: whichever of the two buttons (or Esc, which means
+     "keep", the choice that changes nothing) gets here first takes the
+     resolver with it. */
+  function finishMarkdownRowChoice(choice) {
+    var modal = document.getElementById("md-rows-modal");
+    if (modal) modal.hidden = true;
+    var resolve = pendingMdRowChoice;
+    pendingMdRowChoice = null;
+    if (resolve) resolve(choice === "table" ? "table" : "keep");
+  }
+
+  /* Turn a parsed project into the state to adopt. Async only because the
+     row-count question is a real modal — no silent choice. */
+  async function applyMarkdownProject(proj) {
+    var s = proj.state;
+    if (proj.title && proj.title !== s.title) s.title = plainText(proj.title).slice(0, 300);
+
+    if (proj.table.length === s.rows.length) {
+      reconcileMarkdownRows(s, proj.table);
+    } else {
+      var choice = await askMarkdownRowChoice(s.rows.length, proj.table.length);
+      if (choice === "table") s.rows = rowsFromMarkdownTable(s, proj.table);
+    }
+    /* Everything that enters `state` goes through the one door, including
+       what we just rebuilt out of a text file (invariant #2). */
+    return migrateRows(s);
+  }
+
+  /* ---- test hook ----
+     Neither file picker can run headless, so the regression suite
+     (17-formats.txt) drives the serializers and the open path directly.
+     Nothing in the app reads this; it is the same trick 03-exports.txt
+     plays on URL.createObjectURL, one level up. */
+  window.__splitpageFormats = {
+    buildSplitpage: buildSplitpageFile,
+    parseSplitpage: parseSplitpageFile,
+    buildMarkdown: buildMarkdownProject,
+    parseMarkdown: parseMarkdownProject,
+    buildStandaloneHtml: function () { return buildPublishHtml(JSON.stringify(cloneState(state))); },
+    openFile: function (file) { return openProjectFile(file, null, { skipSnapshot: true }); },
+    migrate: migrateRows,
+    clone: cloneState,
+    state: function () { return state; },
+    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind }; }
+  };
   /* ================= events ================= */
 
   function onRootClick(e) {
@@ -14148,7 +14605,22 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("open-file-input").addEventListener("change", function (e) {
       var file = e.target.files && e.target.files[0];
       e.target.value = "";
-      if (file) openAnyLocalFile(file, null);
+      if (file) openProjectFile(file, null);
+    });
+
+    document.getElementById("md-rows-keep").addEventListener("click", function () {
+      finishMarkdownRowChoice("keep");
+    });
+    document.getElementById("md-rows-table").addEventListener("click", function () {
+      finishMarkdownRowChoice("table");
+    });
+    window.addEventListener("keydown", function (e) {
+      /* Esc means "keep Splitpage's record" — the choice that changes
+         nothing. Dismissing a question must never silently rebuild the
+         script out of a table. */
+      if (e.key === "Escape" && !document.getElementById("md-rows-modal").hidden) {
+        finishMarkdownRowChoice("keep");
+      }
     });
 
     document.getElementById("import-close").addEventListener("click", closeImportModal);
