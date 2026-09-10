@@ -91,11 +91,85 @@ the same scripts; two people editing different scenes merge silently, and two
 people editing the same field keep both versions — one live, one as a review
 comment.
 
-> **There is no password on it.** Anyone who can reach that address can read
-> and edit. That is the point on your own network and a mistake on a public
-> one, so the launcher says so every time it starts. Putting Splitpage on the
-> *internet* is a different job with a different answer — see
+> **By default there is no password on it.** Anyone who can reach that address
+> can read and edit. That is the point on your own network and a mistake on a
+> public one, so the launcher says so every time it starts. Putting Splitpage
+> on the *internet* is a different job with a different answer — see
 > [DEPLOY.md](DEPLOY.md), which puts Cloudflare Access in front.
+
+### Asking for a code
+
+```
+node start.mjs --host --pin
+```
+
+The launcher prints a six-digit **join PIN** in a box beside the addresses.
+Everyone who opens the address is asked for it once; read it out to them.
+`--pin 4821` uses a code you chose instead of a generated one.
+
+What the PIN does: it stops someone who is merely on the same wifi — a hotel, a
+co-working floor, a client's office — from opening your scripts by typing an
+address. What it does **not** do is hide anything. It is checked by your
+computer but travels in the clear over plain HTTP, so anyone able to watch the
+network can read it as it goes past, and read the scripts with it. It is a door
+lock for a room you are already in, not encryption, and it is not a substitute
+for Cloudflare Access on the internet.
+
+The code is remembered for as long as the other person's browser tab is open,
+unless they tick "remember on this device". Restarting your session invalidates
+every code you handed out.
+
+## Connecting to a server
+
+Normally the app talks to whatever served it. **File ▸ Servers…** lets it talk
+to a different one — someone else's shared session, or your own machine from a
+laptop — and remembers the ones you use.
+
+- **Add a server**: a name, the address they gave you
+  (`http://192.168.1.20:8791/`), and the join PIN if they set one. The PIN is
+  checked as you add it, so a typo in either is caught there and then.
+- **Use this server** points the app at it; **Back to this copy** returns to the
+  one you have open. The File menu says which one you are on.
+- Splitpage stores the name, the address, and (only if you ask) the join PIN. It
+  never stores a password, an SSH key or a passphrase, and there is nowhere in
+  it that could.
+
+For this to work the person hosting has to let your copy in: their launcher
+needs `--allow-origin` with the address *your* copy is served from, e.g.
+
+```
+node start.mjs --host --pin --allow-origin http://192.168.1.7:8791
+```
+
+A copy opened straight off disk (a `file://` page) counts as the origin `null`,
+so `--allow-origin null` is what lets a portable copy connect — which is broad,
+because every `file://` page in every browser shares that one origin. Serving
+your copy is better where you can.
+
+## Connecting over SSH
+
+If the machine is not on your network, do not put its port on the internet.
+Forward it over SSH instead: the connection is then encrypted and authenticated
+by SSH, and Splitpage's port never faces outward at all.
+
+From the launcher:
+
+```
+node start.mjs --tunnel me@studio.example.com
+```
+
+That runs `ssh -N -L 8791:localhost:8791 me@studio.example.com`, waits for the
+tunnel, and opens `http://localhost:8791/`. `--remote-port` and `--local-port`
+change either end; closing the window closes the tunnel. If the local port
+collides with a Splitpage you are already running, give `--local-port`
+something else.
+
+From inside the app: tick **Reach it over SSH** when adding a server, and
+Splitpage writes the exact `ssh` command out for you, with a **Copy** button and
+a **Save a .cmd** button for a double-clickable shortcut. It does not run `ssh`
+itself — a page that could start programs would be a far bigger hole than the
+one it opened — and it keeps no key, password or passphrase; ssh's own agent
+does that job.
 
 ## Uninstalling
 
