@@ -57,6 +57,7 @@ installs silently for the current user and `/Q:A` for everyone (needs an
 administrator prompt). To choose the folder as well, override the command:
 `SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"`.
 
+<!-- help:skip-start -->
 ### Building a release
 
 ```
@@ -77,6 +78,7 @@ tells you the one command to finish on Windows.
 `start.bat` or `./start.sh`; it uses a Node you already have, and without one
 it falls back to a PowerShell file server that serves the app but cannot host
 a session.
+<!-- help:skip-end -->
 
 ## Hosting a shared session
 
@@ -127,6 +129,7 @@ next time you launch, before it serves anything. If an update fails halfway it
 rolls back to the copy it made, and if you have hand-edited any of the app's
 files it refuses to overwrite them until you say `--force`.
 
+<!-- help:skip-start -->
 ## Working on the code
 
 `index.html` is **generated**. The source is in `src/` — `page.html` (the
@@ -183,6 +186,7 @@ microphone is released. When Chrome asks, choosing **Allow on every visit**
 (`showSaveFilePicker`), so **Save** falls back to downloading a fresh
 `.html` copy each time, same as Export — open the newest one next session.
 Chrome, Edge, and other Chromium-based browsers get true in-place saving.
+<!-- help:skip-end -->
 
 ## Tagging and the production breakdown
 

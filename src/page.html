@@ -98,6 +98,8 @@
           <div class="menu-sep"></div>
           <div class="menu-label">Help</div>
           <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+          <button type="button" role="menuitem" data-file-action="help">User guide…</button>
+          <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
           <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
         </div>
       </div>
@@ -581,6 +583,44 @@
     </span>
   </div>
   <div class="comments-list" id="comments-list"></div>
+</div>
+
+<!-- Rendered from README.md at build time by mdToHtml() in build.mjs — see
+     20c-help.js for openHelp()/startTour(). A modal, not a side panel: it
+     covers the whole screen and owns focus (invariant #19), and opening it
+     closes the side panels (invariant #16) the same way the writer does. -->
+<div class="modal-backdrop" id="help-modal" hidden>
+  <div class="modal-panel help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="modal-header">
+      <h2 id="help-title">Help</h2>
+      <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
+    </div>
+    <div class="help-layout">
+      <nav id="help-toc" aria-label="Help topics">{{HELP_TOC}}</nav>
+      <div id="help-body">{{README_HTML}}</div>
+    </div>
+  </div>
+</div>
+
+<!-- The 5-step coach-mark tour (20c-help.js). One fixed overlay reused for
+     every step: a cut-out div sits over the current target's own rect, and
+     the card is repositioned beside it. Never edits the document
+     (invariant #17). -->
+<div class="tour-overlay" id="tour-overlay" hidden>
+  <div class="tour-cutout" id="tour-cutout"></div>
+  <div class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+    <div class="tour-step" id="tour-step"></div>
+    <h3 id="tour-title"></h3>
+    <p id="tour-body"></p>
+    <a href="#" id="tour-readmore" class="tour-readmore">Read more</a>
+    <div class="tour-actions">
+      <button type="button" class="btn" id="tour-skip">Skip tour</button>
+      <div class="tour-actions-nav">
+        <button type="button" class="btn" id="tour-back">Back</button>
+        <button type="button" class="btn btn-accent" id="tour-next">Next</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script id="state-data" type="application/json">
