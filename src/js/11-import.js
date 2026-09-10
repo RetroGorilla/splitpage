@@ -252,3 +252,49 @@
     showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + ".", "ok");
   }
 
+  /* ================= Google Doc import =================
+
+     Splitpage has no server and no Google sign-in of its own, so it can't
+     fetch a Doc's contents directly — a plain in-page fetch() to
+     docs.google.com is blocked by CORS regardless of sharing settings. The
+     one thing that does work with no account plumbing at all is a real
+     browser navigation: Google's own /export endpoint sends the doc back as
+     a .docx with Content-Disposition: attachment, so opening it (carrying
+     whatever Google session cookies the browser already has) downloads it
+     like any other link — no fetch, no CORS. From there it's just a Word
+     file, and the existing .docx importer takes it from there. */
+
+  function extractGoogleDocId(input) {
+    var s = (input || "").trim();
+    var m = /\/document\/d\/([a-zA-Z0-9_-]+)/.exec(s);
+    if (m) return m[1];
+    if (/^[a-zA-Z0-9_-]{15,}$/.test(s)) return s; /* the bare ID, pasted directly */
+    return null;
+  }
+
+  function openGdocModal() {
+    document.getElementById("gdoc-url-input").value = "";
+    document.getElementById("gdoc-modal").hidden = false;
+    document.getElementById("gdoc-url-input").focus();
+  }
+
+  function closeGdocModal() {
+    document.getElementById("gdoc-modal").hidden = true;
+  }
+
+  function confirmGdocImport() {
+    var id = extractGoogleDocId(document.getElementById("gdoc-url-input").value);
+    if (!id) { showToast("That doesn't look like a Google Doc link.", "warn"); return; }
+    var url = "https://docs.google.com/document/d/" + id + "/export?format=docx";
+    /* target=_blank rather than a same-tab anchor: a private/unshared doc
+       sends back a Google sign-in page instead of a file, which would
+       otherwise navigate this tab away from the script mid-edit. Sever
+       .opener by hand rather than passing "noopener" to window.open — that
+       feature makes window.open always return null, even on success, which
+       is also the only way to detect a blocked popup. */
+    var win = window.open(url, "_blank");
+    if (!win) { showToast("Your browser blocked the download — allow popups for this page and try again.", "warn"); return; }
+    win.opener = null;
+    closeGdocModal();
+    showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open a document… to bring it in.", "ok", true);
+  }

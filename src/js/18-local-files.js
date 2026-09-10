@@ -82,6 +82,7 @@
       var packCat = tagCategory(packCatId);
       return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
     }
+    if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: baseName + " - two column.md" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -497,14 +498,19 @@
 
   function handleFileMenuAction(action) {
     toggleFileMenu(false);
-    if (!state && action !== "history" && action !== "tagging-help" && action !== "about") { showToast("Still loading…", "warn"); return; }
+    if (!state && action !== "history" && action !== "tagging-help"
+        && action !== "drive-open" && action !== "about") {
+      showToast("Still loading…", "warn"); return;
+    }
     if (action === "save-as") saveDoc({ saveAs: true });
     else if (action === "open") openLocalFile();
     else if (action === "paste") openImportModal();
+    else if (action === "gdoc-import") openGdocModal();
     else if (action === "save-back") saveBackToFile();
     else if (action === "history") openHistoryPanel();
     else if (action === "export-docx") exportAs("docx");
     else if (action === "export-md") exportAs("md");
+    else if (action === "export-md-table") exportAs("md-table");
     else if (action === "export-csv") exportAs("csv");
     else if (action === "export-breakdown") exportAs("breakdown");
     else if (action === "export-pdf") exportAs("pdf");
@@ -512,10 +518,10 @@
     else if (action === "export-narration-txt") exportNarration("narration-txt");
     else if (action === "export-packing-gear") exportPackingList("gear");
     else if (action === "export-packing-prop") exportPackingList("prop");
+    else if (action === "drive-open") openDriveModal();
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
     else if (action === "tagging-help") showTaggingHelp();
     else if (action === "about") showAbout();
   }
-

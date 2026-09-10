@@ -475,4 +475,3 @@
     void target.offsetWidth;
     target.classList.add("just-merged");
   }
-

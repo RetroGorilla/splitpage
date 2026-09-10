@@ -155,4 +155,3 @@
     var safeJson = String(stateJson).replace(/<\//g, "<\\/");
     return PAGE_SHELL.slice(0, openEnd) + "\n" + safeJson + "\n" + PAGE_SHELL.slice(close);
   }
-

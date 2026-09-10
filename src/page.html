@@ -63,6 +63,9 @@
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
           <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
+          <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
           <!-- shown only when the page was served by a Splitpage document
                server; hidden on file:// and on plain static hosting -->
           <div class="menu-sep" id="menu-server-sep" hidden></div>
@@ -80,6 +83,7 @@
           <div class="menu-label">Export a copy</div>
           <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
           <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
+          <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
           <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
           <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
@@ -235,6 +239,27 @@
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="import-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="import-confirm">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="gdoc-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="gdoc-title">
+    <div class="modal-header">
+      <h2 id="gdoc-title">Import from Google Doc</h2>
+      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Paste the link to a Google Doc (or just its ID). Splitpage can't read it directly — it
+      opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
+      it lands, bring it in the same way as any other Word file: File ▸ Open a document…. If the doc isn't
+      shared "Anyone with the link", make sure you're signed in to the right Google account in that tab first.</p>
+    <input type="text" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="gdoc-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="gdoc-confirm">Download &amp; open</button>
       </div>
     </div>
   </div>
@@ -436,6 +461,74 @@
     </div>
   </div>
 </div>
+
+<div class="modal-backdrop" id="drive-modal" hidden>
+  <div class="modal-panel drive-panel" role="dialog" aria-modal="true" aria-labelledby="drive-title">
+    <div class="modal-header">
+      <h2 id="drive-title">Google Drive files</h2>
+      <button type="button" class="modal-close" id="drive-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint">Browse, upload, rename, and delete files in any publicly shared Google
+      Drive folder, straight from here — separate from opening and saving your script.</p>
+
+    <div id="drive-setup">
+      <p class="modal-hint">Google requires a project of your own for this: an <strong>API key</strong>
+        to read a public folder, and an <strong>OAuth Client ID</strong> to make changes to it. Both are
+        free, and only ever leave this browser to talk to Google's own APIs.</p>
+      <ol class="drive-setup-steps">
+        <li>Open <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a> and enable the <strong>Google Drive API</strong> for a project (create one if needed).</li>
+        <li>Under <strong>APIs &amp; Services ▸ Credentials</strong>, create an <strong>API key</strong> and paste it below.</li>
+        <li>Also create an <strong>OAuth client ID</strong> (type: Web application), add this page's address as an <strong>Authorized JavaScript origin</strong>, and paste that Client ID below too.</li>
+      </ol>
+      <div class="drive-field">
+        <label for="drive-api-key">API key</label>
+        <input type="text" id="drive-api-key" placeholder="AIza…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="drive-field">
+        <label for="drive-client-id">OAuth Client ID</label>
+        <input type="text" id="drive-client-id" placeholder="123456…apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-row">
+        <span></span>
+        <button type="button" class="btn btn-accent" data-action="drive-save-creds">Save</button>
+      </div>
+    </div>
+
+    <div id="drive-main" hidden>
+      <div class="modal-row drive-account" id="drive-account"></div>
+      <div class="drive-connect-row">
+        <input type="text" id="drive-folder-input" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn btn-accent" id="drive-connect-btn" data-action="drive-connect">Open folder</button>
+      </div>
+      <button type="button" class="drive-edit-creds" data-action="drive-edit-creds">Change API key / Client ID…</button>
+
+      <div id="drive-browser" hidden>
+        <div class="drive-toolbar">
+          <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
+          <div class="drive-toolbar-actions">
+            <button type="button" class="btn" data-action="drive-refresh" title="Refresh">⟳</button>
+            <button type="button" class="btn" data-action="drive-newfolder-toggle" id="drive-newfolder-toggle">New folder</button>
+            <button type="button" class="btn" data-action="drive-upload">Upload…</button>
+          </div>
+        </div>
+        <div class="drive-newfolder-row" id="drive-newfolder-row" hidden>
+          <input type="text" id="drive-newfolder-input" placeholder="Folder name…">
+          <button type="button" class="btn btn-accent" data-action="drive-newfolder-create">Create</button>
+          <button type="button" class="btn" data-action="drive-newfolder-cancel">Cancel</button>
+        </div>
+        <div class="drive-list" id="drive-list"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="drive-done">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="drive-upload-input" hidden multiple>
 
 <div class="modal-backdrop" id="tag-modal" hidden>
   <div class="modal-panel tag-panel" role="dialog" aria-modal="true" aria-labelledby="tag-title">

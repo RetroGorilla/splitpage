@@ -636,4 +636,3 @@
     }
     return "data:" + mime + ";base64," + btoa(bin);
   }
-

@@ -409,6 +409,36 @@ None of this affects working locally. Opened from disk, the app behaves exactly
 as it always has, and **Save As** still gives you a local copy of a hosted
 script whenever you want one.
 
+## Google Drive files
+
+**File ▸ Google Drive files…** opens a small file manager for any publicly
+shared Google Drive folder — browse it, download files, upload new ones,
+rename, delete, and create subfolders, right from Splitpage. It's separate
+from opening and saving your script; think of it as a way to move files in
+and out of a shared folder without leaving the app.
+
+Google splits this into two permissions, so Splitpage needs two credentials
+of your own (the app has no server to hold them for you — they're kept only
+in your browser's local storage):
+
+- An **API key**, to list and download files from a public folder — no
+  sign-in needed, since Google treats "anyone with the link" as exactly that.
+- An **OAuth Client ID**, to make changes — uploading, renaming, deleting, or
+  creating a folder always needs a real signed-in Google account, even on a
+  folder anyone with the link can edit.
+
+The panel walks you through creating both in the [Google Cloud
+Console](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+the first time you open it (enable the Drive API, create an API key, create
+a Web-application OAuth client with this page's address as an authorized
+JavaScript origin). Paste a folder's share link or its ID to connect, and
+sign in with Google when you want to change something — browsing and
+downloading work without signing in at all.
+
+Note: sign-in needs the page served over `http://`/`https://` — see
+**Running it** above for `start.bat`; it doesn't work opened straight off
+disk (`file://`).
+
 ## On a phone
 
 The whole app works on a phone — same file, same features, re-flowed. Scenes
@@ -434,6 +464,32 @@ above each scene, and panels and menus go full screen. A few things translate:
 Typing shortcuts (`[prop]` `{kitchen}` `~vfx~` `<gear>`), comments, status,
 exports, the **Gear** screen and its packing lists, the server features —
 everything else is exactly the same.
+
+## Two shapes of Markdown export
+
+**File ▸ Export a copy** has two Markdown options. **Markdown (.md)** lists
+the script scene by scene — a `## Scene 01` heading, then the Visual notes,
+then the Audio, stacked. **Markdown, two columns (.md)** lays the same
+script out as a table instead, one row per scene with a Visual column next
+to an Audio column — the way the split view itself looks, and the way a
+GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side
+by side rather than stacked. It's also exactly the shape **Paste a
+script…** already reads back in "Two columns" mode, so a two-column
+Markdown export round-trips back into Splitpage with the split intact.
+Both carry the production breakdown and comments the same way.
+
+## Importing a Google Doc
+
+**File ▸ Import from Google Doc link…** takes a Google Docs share link (or
+just the document's ID) instead of a file. Splitpage has no server and no
+Google sign-in of its own, so it can't read the Doc directly — instead it
+opens Google's own Word (.docx) export of it in a new tab, which downloads
+straight to your computer using whatever Google account you're signed in to
+in that tab. Once the download lands, bring it in the same way as any other
+Word file: **File ▸ Open a document…**. If the doc isn't shared "Anyone with
+the link," make sure the browser tab that opens is signed in to an account
+that can see it, or the download will be a Google sign-in page instead of a
+document.
 
 ## Reopening a saved project
 
