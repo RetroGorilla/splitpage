@@ -2,6 +2,10 @@
 # Splitpage on macOS and Linux.
 set -e
 cd "$(dirname "$0")"
+# A bundled runtime wins, same as on Windows.
+if [ -x "./runtime/node" ]; then
+  exec ./runtime/node start.mjs "$@"
+fi
 if command -v node >/dev/null 2>&1; then
   exec node start.mjs "$@"
 fi

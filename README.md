@@ -40,32 +40,66 @@ serves files and nothing else, so the app behaves exactly as it always has.
 
 ## Installing it
 
-Two ways, both from the repo root:
+**`SplitpageSetup-<version>.exe` is the whole product.** One download, one
+installer, and you are working — open a local script, or host a session other
+people on your network join. It carries its own Node runtime, so there is no
+second thing to go and install first.
+
+The installer asks where to put it:
+
+- **Just for me** — `%LOCALAPPDATA%\Programs\Splitpage`, no administrator.
+- **Everyone on this PC** — `C:\Program Files\Splitpage`, needs administrator.
+- **Somewhere else** — type any path.
+
+and whether you want a desktop shortcut and a *shared session* shortcut. It
+registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /S`
+installs silently, with `/D=C:\path` to choose where.
+
+### Building a release
 
 ```
-node package.mjs              # dist/splitpage-<version>.zip — the portable app
-node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe
+node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 KB
+node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB
 ```
 
-**The zip is the whole app.** Unzip it anywhere and run `start.bat` or
-`./start.sh`. Nothing is compiled, nothing is registered, and deleting the
-folder uninstalls it.
+**Nothing needs installing to build this.** The setup is a self-extracting
+archive made by `iexpress.exe`, which is part of Windows. `--installer` also
+downloads the official Node build for Windows and checks it against
+nodejs.org's published SHA-256 before packing it — that happens once and is
+cached in `.cache/`.
 
-**The setup.exe** is a normal Windows installer — Start Menu entry, optional
-desktop shortcut, and an Add/Remove Programs entry. It installs per-user, so
-there is no administrator prompt. Building it needs
-[Inno Setup 6](https://jrsoftware.org/isdl.php) installed once; `--installer`
-then calls its compiler for you.
+Run `--installer` on a non-Windows machine and it prepares everything and
+tells you the one command to finish on Windows.
 
-Neither one installs Node, and neither needs to: `start.bat` falls back to a
-PowerShell server when Node is absent, which is enough to serve the app so
-the browser will offer **Install app** and give the teleprompter a microphone.
-With Node you also get `--library` and a rebuild on launch.
+**The portable zip** is still there and still tiny. Unzip it anywhere and run
+`start.bat` or `./start.sh`; it uses a Node you already have, and without one
+it falls back to a PowerShell file server that serves the app but cannot host
+a session.
+
+## Hosting a shared session
+
+Pick **Splitpage (shared session)** in the Start Menu, or run:
+
+```
+node start.mjs --host
+```
+
+It prints the addresses other people type into their browsers. Everyone edits
+the same scripts; two people editing different scenes merge silently, and two
+people editing the same field keep both versions — one live, one as a review
+comment.
+
+> **There is no password on it.** Anyone who can reach that address can read
+> and edit. That is the point on your own network and a mistake on a public
+> one, so the launcher says so every time it starts. Putting Splitpage on the
+> *internet* is a different job with a different answer — see
+> [DEPLOY.md](DEPLOY.md), which puts Cloudflare Access in front.
 
 ## Uninstalling
 
-The setup.exe registers itself, so remove it from **Add/Remove Programs** —
-that clears the Start Menu entry too.
+The installed copy registers itself, so remove it from **Add/Remove Programs**
+— that clears the shortcuts too, and leaves any shared-session scripts in
+`%LOCALAPPDATA%\Splitpage\data` where they are.
 
 For the portable copy, run **`uninstall.bat`** (Windows) or **`./uninstall.sh`**,
 which removes exactly the files the release shipped and lists anything else it

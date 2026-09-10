@@ -74,7 +74,7 @@ function localManifest() {
 /* Reads the central directory rather than scanning for local headers, which
    is the only way to get the authoritative list of entries. Store and deflate
    are the only methods package.mjs emits, and the only ones handled. */
-function readZip(buf) {
+export function readZip(buf) {
   let eocd = -1;
   for (let i = buf.length - 22; i >= 0 && i > buf.length - 66000; i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }

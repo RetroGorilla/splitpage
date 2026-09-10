@@ -27,6 +27,7 @@ import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platform } from "node:process";
+import { networkInterfaces } from "node:os";
 import { writeFileSync, readFileSync } from "node:fs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,8 @@ Splitpage launcher
 
   node start.mjs                serve the app and open it in your browser
   node start.mjs --library      keep documents on the server, in ./data
+  node start.mjs --host         host a shared session others on your network
+                                can open and edit (implies --library)
   node start.mjs --port 9000    use a different port (default 8791)
   node start.mjs --no-open      don't launch a browser
   node start.mjs --data DIR     where --library keeps documents
@@ -59,7 +62,10 @@ Updates install at launch and never while the app is open (see update.mjs):
   process.exit(0);
 }
 
-const LIBRARY = has("--library");
+/* Hosting is sharing, and sharing means the documents have to live somewhere
+   both people can reach — so it implies the library. */
+const HOSTING = has("--host");
+const LIBRARY = HOSTING || has("--library");
 /* An installed copy lives somewhere the user does not browse, so documents
    should be able to live somewhere they do. */
 const DATA_DIR = valueOf("--data", join(ROOT, "data"));
@@ -211,10 +217,12 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
   env: {
     ...process.env,
     PORT: String(port),
-    /* localhost only. There is no authentication in that process on purpose,
-       so a launcher must never put it on the network — that is what the
-       Docker image plus Cloudflare Access in DEPLOY.md is for. */
-    HOST: "127.0.0.1",
+    /* Loopback unless the user asked to host. There is no authentication in
+       that process by design, so reaching the network is never the default
+       and never silent — see the warning printed below. Putting it on the
+       INTERNET is a different job again: the Docker image behind Cloudflare
+       Access, in DEPLOY.md. */
+    HOST: HOSTING ? "0.0.0.0" : "127.0.0.1",
     STATIC_DIR: ROOT,
     DATA_DIR,
     NO_API: LIBRARY ? "0" : "1"
@@ -244,10 +252,41 @@ if (!(await waitForServer())) {
   process.exit(1);
 }
 
+/* Every address someone else could actually type. */
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(networkInterfaces())) {
+    for (const net of list || []) {
+      if (net.family === "IPv4" && !net.internal) out.push(net.address);
+    }
+  }
+  return out;
+}
+
 console.log(`
   Splitpage is running at ${url}
   ${LIBRARY ? `Documents are kept on the server, in ${DATA_DIR}` : "Documents are files you save to disk (--library keeps them on the server)"}
+`);
 
+if (HOSTING) {
+  const addresses = lanAddresses();
+  console.log("  Other people on your network open one of these:");
+  if (addresses.length) {
+    for (const address of addresses) console.log(`      http://${address}:${port}/`);
+  } else {
+    console.log("      (no network address found — are you connected?)");
+  }
+  /* Said plainly, every time, because it cannot be inferred from the URL:
+     there is no password on this. On a home or office network that is the
+     point; on a cafe's wifi it is a mistake, and nobody should have to read
+     the source to find that out. */
+  console.log(`
+  Anyone who can reach that address can read and edit these scripts —
+  there is no password. Fine on your own network, not on a public one.
+  Close this window to stop sharing.`);
+}
+
+console.log(`
   In Chrome or Edge, use the install icon in the address bar to add it as
   its own app window. Leave this window open while you work; Ctrl+C stops it.
 `);
