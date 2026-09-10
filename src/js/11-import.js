@@ -158,12 +158,19 @@
 
   /* turn raw {visualText, audioText} pairs into real rows */
   function normalizeImportedRows(rows) {
+    /* Every other write path into state.rows runs its content through
+       sanitizeHtml() before it lands in the document (see migrateRows(),
+       06-rows.js, 07-production-tags.js, 09-find-replace.js, 10-comments.js,
+       19-writer.js, 21-events.js). This one didn't — legacyMdToHtml() escapes
+       plain text but is not a sanitizer, so a pasted line containing a raw
+       '<' (a page whose markup was preserved as text, or a deliberately
+       crafted paste) went straight into the document as live HTML. */
     return rows.map(function (r) {
       return {
         id: makeId(),
-        visualText: legacyMdToHtml(r.visualText || ""),
+        visualText: sanitizeHtml(legacyMdToHtml(r.visualText || "")),
         visualImage: null,
-        audioText: legacyMdToHtml(r.audioText || "")
+        audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
       };
     });
   }

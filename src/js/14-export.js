@@ -109,7 +109,8 @@
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
       migrateRows(cloneState(stash.mine)),
-      loaded
+      loaded,
+      !!stash.imagesStripped
     );
     return { state: result.merged, report: result };
   }

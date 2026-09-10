@@ -16,11 +16,27 @@
 
 import { createInterface } from "node:readline/promises";
 import { existsSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(ROOT, ".splitpage-release.json");
+
+/* Every path this script touches comes from a key in .splitpage-release.json
+   — written by this project's own packager, but a crafted or corrupted copy
+   of that file is exactly what an uninstaller must be paranoid about. join()
+   alone does not stop "../../.ssh/authorized_keys": it normalizes right out
+   of ROOT. So every one of those paths is checked against the resolved root
+   before rmSync ever sees it — the one thing this tool must never get wrong
+   is deleting something it did not ship. */
+function safeJoin(root, rel) {
+  const target = resolve(join(root, rel));
+  const base = resolve(root);
+  if (target !== base && !target.startsWith(base + sep)) {
+    throw new Error(`refusing to touch a path outside ${root}: ${rel}`);
+  }
+  return target;
+}
 
 const argv = process.argv.slice(2);
 const YES = argv.includes("--yes") || argv.includes("-y");
@@ -53,7 +69,9 @@ function walk(dir) {
 }
 
 const present = walk(ROOT);
-const ours = owned.filter((rel) => existsSync(join(ROOT, rel)));
+const ours = owned.filter((rel) => {
+  try { return existsSync(safeJoin(ROOT, rel)); } catch { return false; }
+});
 const theirs = present.filter((rel) => !owned.includes(rel) && rel !== ".splitpage-release.json");
 
 /* ---------- report ---------- */
@@ -109,7 +127,7 @@ const order = [...ours.filter((r) => r !== self), ...ours.filter((r) => r === se
 
 for (const rel of order) {
   try {
-    rmSync(join(ROOT, rel));
+    rmSync(safeJoin(ROOT, rel));
     removed++;
   } catch (err) {
     failed.push(`${rel}: ${err.message}`);
@@ -119,7 +137,8 @@ try { rmSync(MANIFEST); } catch { /* already gone */ }
 
 /* Directories we emptied (server/), but never one with anything left in it. */
 for (const dir of new Set(ours.map((rel) => dirname(rel)).filter((d) => d !== "."))) {
-  const full = join(ROOT, dir);
+  let full;
+  try { full = safeJoin(ROOT, dir); } catch { continue; }
   try {
     if (existsSync(full) && statSync(full).isDirectory() && !readdirSync(full).length) rmdirSync(full);
   } catch { /* not empty, or gone — either is fine */ }

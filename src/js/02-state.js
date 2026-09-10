@@ -21,17 +21,31 @@
   }
 
   /* one-time upgrade path for rows saved before rich text: plain markdown-ish
-     text (no tags) gets turned into the equivalent HTML; anything that
-     already looks like HTML is left alone */
+     text (no tags) gets turned into the equivalent HTML.
+     There used to be an early return here for text that "already looks like
+     HTML" (contained a '<'). A schema<SCHEMA_VERSION row predates rich text
+     by definition, so it can never legitimately contain real markup — that
+     check only ever fired on plain text that happened to contain a bracketed
+     note (e.g. "<insert B-roll here>"), and silently deleted it once
+     sanitizeHtml's DOMParser tried to parse the bracket as an unknown tag.
+     Removed: every legacy row is now always escaped-then-transformed, so a
+     stray '<' survives as visible text the way the rest of this function
+     already treats every other character. */
   function legacyMdToHtml(text) {
     if (typeof text !== "string") return "";
-    if (text.indexOf("<") !== -1) return text;
     var out = escapeHtml(text);
     out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
     out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
+      /* `url` was captured out of `out`, which escapeHtml() already ran over
+         once — it is already correctly entity-encoded for an HTML attribute
+         (e.g. a literal "&" is already "&amp;"). Escaping `safe` again here
+         used to double-encode it ("&amp;amp;"), corrupting the query string
+         of any link containing '&'. safeHref() only validates a scheme
+         prefix; it does not decode, so passing the already-escaped string
+         straight through is correct, not a bypass. */
       var safe = safeHref(url);
-      return safe ? '<a href="' + escapeHtml(safe) + '" target="_blank" rel="noopener">' + label + '</a>' : m;
+      return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : m;
     });
     out = out.replace(/\n/g, "<br>");
     return out;
@@ -43,9 +57,22 @@
      already been through this so plain text is never re-escaped on later loads. */
   function migrateRows(s) {
     if (!s || typeof s !== "object") s = { title: "Untitled Script", rows: [], comments: [] };
-    var legacy = s.schema !== SCHEMA_VERSION;
+    /* "!== SCHEMA_VERSION" used to fire for ANY schema that wasn't exactly
+       today's constant — including a NEWER one (e.g. saved by a future
+       build, or just hand-set to a bogus number). That re-ran the lossy
+       legacyMdToHtml conversion on ordinary, already-migrated content the
+       moment SCHEMA_VERSION is next bumped for an unrelated reason. This is
+       an "older than current" test instead: missing/non-numeric reads as
+       the oldest possible schema (legacy), anything current or newer is not. */
+    var legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;
 
     if (!Array.isArray(s.rows)) s.rows = [];
+    /* Untrusted input (see the file comment above this function) can contain
+       a non-object element — a bad merge, a hand-edited save, a truncated
+       file. Every field access below assumes an object; filter first so one
+       stray null/primitive doesn't throw and take the whole load down with
+       it, the same protection `people` already gets a few lines down. */
+    s.rows = s.rows.filter(function (r) { return r && typeof r === "object"; });
     s.rows.forEach(function (r) {
       r.id = safeId(r.id, "r");
       r.status = rowStatus(r.status) ? r.status : "todo";
@@ -57,12 +84,14 @@
     });
 
     if (!Array.isArray(s.comments)) s.comments = [];
+    s.comments = s.comments.filter(function (c) { return c && typeof c === "object"; });
     s.comments.forEach(function (c) {
       c.id = safeId(c.id, "c");
       c.rowId = safeId(c.rowId, "r");
       c.anchorId = c.anchorId ? safeId(c.anchorId, "c") : null;
       c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
       if (!Array.isArray(c.replies)) c.replies = [];
+      c.replies = c.replies.filter(function (rep) { return rep && typeof rep === "object"; });
       c.replies.forEach(function (rep) {
         rep.id = safeId(rep.id, "rp");
         rep.body = sanitizeHtml(rep.body || "");
@@ -100,6 +129,7 @@
         return { cat: t.cat.id, name: t.name };
       });
     }
+    s.productionTags = s.productionTags.filter(function (t) { return t && typeof t === "object"; });
     s.productionTags.forEach(function (t) {
       t.cat = (tagCategory(t.cat) || TAG_CATEGORIES[0]).id;
       t.name = plainText(t.name).trim().slice(0, 80);
