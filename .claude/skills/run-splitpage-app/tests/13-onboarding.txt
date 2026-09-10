@@ -10,6 +10,10 @@ open
 wait document.getElementById('onboarding-modal').hidden == false
 expect document.querySelector('.onboard-step[data-onboard-step="1"]').hidden == false
 
+# --- the wizard is actually laid out, not just unhidden three levels deep ---
+expect document.getElementById('onboarding-modal').getBoundingClientRect().width > 0
+expect document.querySelector('#onboarding-modal .modal-panel').offsetParent !== null
+
 eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
 
 # --- hidden once the key is set ---------------------------------------------
