@@ -19,3 +19,6 @@ desktop.ini
 *.swp
 .vscode/
 .idea/
+
+# Built releases. `node package.mjs` regenerates the lot.
+dist/

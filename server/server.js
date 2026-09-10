@@ -404,7 +404,10 @@ const server = http.createServer((req, res) => {
 });
 
 async function start() {
-  await fsp.mkdir(DATA_DIR, { recursive: true });
+  /* Only when there is an API to store anything. In NO_API mode (the local
+     launcher's default) this process is a static file server and has no
+     business creating a data directory next to someone's app. */
+  if (!NO_API) await fsp.mkdir(DATA_DIR, { recursive: true });
   server.listen(PORT, HOST, () => {
     console.log("[splitpage] listening on " + HOST + ":" + PORT);
     console.log("[splitpage] documents in " + DATA_DIR);
