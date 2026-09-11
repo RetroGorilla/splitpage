@@ -58,7 +58,33 @@
     var reusingHandle = !!targetHandle;
 
     try {
-      if (!targetHandle && window.showSaveFilePicker) {
+      /* Desktop has no File System Access API at all (it is a Chromium
+         feature, not something Electron's renderer gets for free), and a
+         native Save dialog is the whole point of running as a real app —
+         DESKTOP.saveFileDialog() is checked first so it is never shadowed
+         by the browser branch below, which stays exactly as it was for the
+         web build. A cancelled native dialog resolves null, same shape as
+         the picker's AbortError just below: restore the rev bump, no error
+         toast, nothing written. */
+      if (!targetHandle && DESKTOP) {
+        var pickedDesktop = await DESKTOP.saveFileDialog({
+          suggestedName: slug + ".md",
+          filters: [
+            { name: "Markdown script", extensions: ["md"] },
+            { name: "Splitpage script", extensions: ["splitpage"] }
+          ]
+        });
+        if (!pickedDesktop) {
+          state.rev = Math.max(0, (state.rev || 1) - 1);
+          saveInFlight = false;
+          setSaveButtons(dirty ? "Save •" : "Save", false);
+          return;
+        }
+        targetHandle = makeDesktopHandle(pickedDesktop);
+        kind = fileKindFromName(pickedDesktop.name) === "splitpage" ? "splitpage" : "md";
+        docFileHandle = { handle: targetHandle, kind: kind, lastModified: null };
+        rememberLastFileHandle(targetHandle);
+      } else if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
           suggestedName: slug + ".md",
           types: [

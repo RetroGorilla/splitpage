@@ -600,7 +600,7 @@
     });
 
     state = null;
-    loadInitialState().then(function (loaded) {
+    initialStateReady = loadInitialState().then(function (loaded) {
       var applied = applyStashedWork(loaded);
       state = applied.state;
       baseState = cloneState(applied.report ? loaded : state);
@@ -618,7 +618,26 @@
          Save (see saveDoc()). Double-clicking an already-saved project's own
          .html must always show exactly that file, never get swapped out from
          under you for some *other* file this browser remembers editing. */
-      if (!applied.report && !loaded.rev && !loaded.lastEditedBy) tryResumeLastProject();
+      if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
+        /* DESKTOP.hasFileToOpen (read synchronously by preload, before this
+           line ever runs) means the OS already handed this launch a file to
+           open — a double-click, a second instance's argv. Racing that
+           against tryResumeLastProjectDesktop()'s own IPC round trips (both
+           end in adoptProjectState(), 18-local-files.js, which unconditionally
+           overwrites `state` AND `docFileHandle`) meant whichever finished
+           last silently won, and the loser wasn't just the wrong document on
+           screen — it could also become the target of the next Save. Skip
+           the resume outright when a file is already winning; DESKTOP's own
+           onOpenFile handler (20f-desktop.js) opens it once this promise
+           settles. */
+        if (DESKTOP) { if (!DESKTOP.hasFileToOpen) tryResumeLastProjectDesktop(); } else tryResumeLastProject();
+      }
+      /* Desktop's window title mirrors the document (20f-desktop.js) —
+         push an initial value now rather than waiting for the first edit,
+         since a fresh load never touches markDirty()/clearDirty() (the
+         hook inside setSaveButtons()) until one of the resume paths above
+         runs, or the reader types something. */
+      if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
     });
 
     var rowsEl = document.getElementById("rows");
@@ -1206,11 +1225,22 @@
       if (dirty && !suppressUnloadWarning) { e.preventDefault(); e.returnValue = ""; }
     });
 
-    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    /* The service worker is for offline http(s) use — splitpage://app is
+       already served locally by the main process, with no network round
+       trip to cache anything against, and registering one there would just
+       be dead weight sitting on a scheme it was never meant for. */
+    if (!DESKTOP && "serviceWorker" in navigator && location.protocol !== "file:") {
       window.addEventListener("load", function () {
         navigator.serviceWorker.register("sw.js").catch(function () {});
       });
     }
+
+    /* Desktop glue (20f-desktop.js): wires the native File-menu/header
+       commands, file-open events and window-title updates into the exact
+       same code paths the in-page UI already uses. A no-op — and every
+       DESKTOP-gated branch throughout src/js along with it — whenever this
+       page is not running inside the Electron shell. */
+    if (DESKTOP && typeof initDesktop === "function") initDesktop();
   }
 
   if (document.readyState === "loading") {

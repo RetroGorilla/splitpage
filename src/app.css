@@ -2147,6 +2147,17 @@
   font-size: 13px;
 }
 .update-bar-icon { color: #1B7A68; font-size: 14px; }
+.update-bar-action {
+  border: 1px solid #1B7A68;
+  background: none;
+  color: #1B7A68;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-bar-action:hover { background: #1B7A68; color: #fff; }
 .update-bar-dismiss {
   margin-left: auto;
   border: 0;
@@ -2391,6 +2402,24 @@
   border-radius: var(--radius-sm);
   padding: 10px 12px; margin: 0;
   white-space: pre-wrap; word-break: break-all;
+}
+
+/* ---- desktop hosting summary (20f-desktop.js's renderDesktopShareInfo) ----
+   What start.mjs used to print to a console window this app doesn't have. */
+.connect-share-url {
+  font-family: var(--font-display); font-size: 13px;
+  color: var(--text); padding: 3px 0;
+}
+.connect-share-pin {
+  font-size: 13px; color: var(--text-dim); margin-top: 8px;
+}
+.connect-share-pin strong {
+  font-family: var(--font-display); font-size: 22px; letter-spacing: .08em;
+  color: var(--text); margin-left: 6px;
+}
+.connect-share-nopin {
+  color: var(--danger); background: var(--danger-soft);
+  border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 8px;
 }
 @media (max-width: 640px) {
   .connect-field { align-items: flex-start; flex-direction: column; gap: 4px; }

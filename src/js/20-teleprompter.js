@@ -184,7 +184,17 @@
   function updateVoiceAvailability() {
     var btn = document.getElementById("pp-voice");
     if (!btn) return;
-    if (!SpeechRecognitionCtor) {
+    /* The Web Speech API's constructor exists in Electron's Chromium, but
+       recognition itself fails immediately with a 'network' error — Google's
+       speech backend that powers it is not reachable from inside Electron
+       the way it is from an actual Chrome/Edge install. Adam wants this
+       fixed properly after the desktop conversion lands, not patched around
+       here; for now this is a known, explained unavailability rather than a
+       button that looks live and then fails on click. */
+    if (DESKTOP) {
+      btn.disabled = true;
+      setVoiceStatus("Follow My Voice isn't available in the desktop app yet — it's coming in an update. It still works in Chrome or Edge.", "");
+    } else if (!SpeechRecognitionCtor) {
       btn.disabled = true;
       setVoiceStatus("Voice follow needs Chrome or Edge.", "");
     } else if (!window.isSecureContext) {
@@ -289,7 +299,7 @@
   }
 
   async function startVoiceFollow() {
-    if (!SpeechRecognitionCtor) return;
+    if (DESKTOP || !SpeechRecognitionCtor) return;
     /* recognition.start() is async and voiceFollowActive only flips in onstart,
        so without this a second click builds a second recognizer and orphans the
        first — an invisible live microphone session. */

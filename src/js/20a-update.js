@@ -27,7 +27,30 @@
 
   function renderUpdateNotice() {
     var bar = document.getElementById("update-bar");
+    var actionBtn = document.getElementById("update-bar-action");
     if (!bar || !updateStatus) return;
+
+    /* The desktop build never stages or auto-installs anything (see the
+       bridge contract's UPDATES section — this is a background GET and
+       nothing more), so "restart to finish installing" and "run node
+       update.mjs" are both wrong here; there is exactly one thing to say
+       and one thing to do about it. */
+    if (DESKTOP && updateStatus.desktop) {
+      if (updateStatus.updateAvailable && updateStatus.latest) {
+        document.getElementById("update-bar-text").textContent =
+          "Splitpage " + updateStatus.latest + " is available. You have " + (updateStatus.version || "?") + ".";
+        if (actionBtn) {
+          actionBtn.hidden = false;
+          actionBtn.onclick = function () { DESKTOP.openExternal(updateStatus.releaseUrl); };
+        }
+        bar.hidden = false;
+        return;
+      }
+      if (actionBtn) actionBtn.hidden = true;
+      bar.hidden = true;
+      return;
+    }
+    if (actionBtn) actionBtn.hidden = true;
 
     /* Staged and waiting beats merely available: it is one restart away and
        needs nothing from the user but closing the window. */
@@ -55,6 +78,26 @@
     var lines = [];
     var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
     lines.push("Splitpage " + (version || "(version unknown)"));
+
+    if (DESKTOP) {
+      if (!updateStatus) {
+        lines.push("");
+        lines.push("Could not check for updates.");
+      } else if (updateStatus.updateAvailable && updateStatus.latest) {
+        lines.push("");
+        lines.push("Version " + updateStatus.latest + " is available.");
+        lines.push("Use the Download button in the update notice, or get it from " +
+          (updateStatus.releaseUrl || "the release page") + ".");
+      } else if (updateStatus.error) {
+        lines.push("");
+        lines.push("Last update check failed: " + updateStatus.error);
+      } else {
+        lines.push("");
+        lines.push("Up to date.");
+      }
+      window.alert(lines.join("\n"));
+      return;
+    }
 
     if (!updateStatus) {
       lines.push("");

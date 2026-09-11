@@ -21,6 +21,12 @@
       if (disabled !== undefined) btn.disabled = disabled;
       btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
     });
+    /* Both markDirty() and clearDirty() funnel through here (invariant #20 —
+       one save state behind the two Save buttons), which makes this the one
+       place a desktop window title needs to hear about too, rather than a
+       third thing to remember to call from every mutation site. Defined in
+       20f-desktop.js; hoisted, so the fragment order doesn't matter. */
+    if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   }
 
   function markDirty() {

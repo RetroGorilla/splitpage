@@ -1,0 +1,58 @@
+appId: com.retrogorilla.splitpage
+productName: Splitpage
+copyright: Copyright 2024-2025 RetroGorilla
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+extraResources:
+  - from: .stage/splitpage
+    to: splitpage
+
+asar: true
+
+win:
+  target:
+    - nsis
+  artifactName: SplitpageDesktopSetup-${version}-${arch}.${ext}
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Splitpage
+  # Puts the main Start Menu shortcut in the same "Splitpage" subfolder that
+  # installer.nsh's customInstall macro already creates for the "(shared
+  # session)" shortcut, instead of the main one landing loose at the Start
+  # Menu root while a same-named "Splitpage" folder sits next to it holding
+  # only the second shortcut — easy to miss or mistake for a duplicate.
+  menuCategory: Splitpage
+  include: build/installer.nsh
+
+fileAssociations:
+  - ext: splitpage
+    name: Splitpage script
+    description: Splitpage script
+    role: Editor
+
+# macOS target (not built on this machine, but configured for future use)
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+
+# Linux target (not built on this machine, but configured for future use)
+linux:
+  target:
+    - AppImage
+
+publish: null
