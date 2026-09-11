@@ -73,11 +73,12 @@ installer, and you are working — open a local script, or host a session other
 people on your network join. It carries its own Node runtime, so there is no
 second thing to go and install first.
 
-The installer asks where to put it:
+Double-click it and a window asks where to put it:
 
 - **Just for me** — `%LOCALAPPDATA%\Programs\Splitpage`, no administrator.
-- **Everyone on this PC** — `C:\Program Files\Splitpage`, needs administrator.
-- **Somewhere else** — type any path.
+- **Everyone on this PC** — `C:\Program Files\Splitpage`, offered only when
+  you started the setup as an administrator, since it cannot ask for that later.
+- **Somewhere else** — any folder you pick.
 
 and whether you want a desktop shortcut and a *shared session* shortcut. It
 registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /Q`

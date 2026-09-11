@@ -1258,6 +1258,26 @@ The way that worked (used for the Drive / Google Doc / Markdown merge):
 
 ### Built and verified live
 
+- **The setup window (2026-09-11).** Double-clicking the setup used to look
+  like nothing happening: IExpress runs install.ps1 with no console anyone can
+  see, and the script sat on a Read-Host asking where to install. It asks in a
+  WPF window now, with a progress window during the copy and a completion
+  window that offers to open the app. If WPF will not load it installs to the
+  per-user default rather than asking into a console nobody can answer, and a
+  script-level trap reports any failure in a message box instead of exiting
+  silently. Verified by driving the real, mark-of-the-web-marked arm64 setup
+  from a plain double-click with UI Automation: dialog, both checkboxes,
+  progress, completion, shortcuts, registry, native arm64 runtime on disk.
+  Cancel leaves nothing behind. -Silent, -Dir, -InPlace and -Unregister are
+  unchanged and were re-run.
+- **Runtime selection no longer trusts $env:PROCESSOR_ARCHITECTURE.** A setup
+  built by IExpress is an x64 program, so on Windows on ARM it runs emulated
+  and calls an ARM64 machine "AMD64" - the arm64 setup then looked for a
+  runtime it does not carry, found none, and installed an app with no Node at
+  all. What the download carries decides it now (a single-arch setup has
+  exactly one runtime), and where a choice is needed the registry and
+  Win32_Processor are asked, both of which stay honest under emulation.
+
 - **The ARM64 setup, natively (2026-09-10).** Adam's machine turned out to be a
   Snapdragon X running Windows 11 ARM64 - Git Bash is an x64 process under
   emulation and reports AMD64, which is why earlier notes called it an x64
