@@ -2181,6 +2181,17 @@
   font-size: 13px;
 }
 .update-bar-icon { color: #1B7A68; font-size: 14px; }
+.update-bar-action {
+  border: 1px solid #1B7A68;
+  background: none;
+  color: #1B7A68;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-bar-action:hover { background: #1B7A68; color: #fff; }
 .update-bar-dismiss {
   margin-left: auto;
   border: 0;
@@ -2426,6 +2437,24 @@
   padding: 10px 12px; margin: 0;
   white-space: pre-wrap; word-break: break-all;
 }
+
+/* ---- desktop hosting summary (20f-desktop.js's renderDesktopShareInfo) ----
+   What start.mjs used to print to a console window this app doesn't have. */
+.connect-share-url {
+  font-family: var(--font-display); font-size: 13px;
+  color: var(--text); padding: 3px 0;
+}
+.connect-share-pin {
+  font-size: 13px; color: var(--text-dim); margin-top: 8px;
+}
+.connect-share-pin strong {
+  font-family: var(--font-display); font-size: 22px; letter-spacing: .08em;
+  color: var(--text); margin-left: 6px;
+}
+.connect-share-nopin {
+  color: var(--danger); background: var(--danger-soft);
+  border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 8px;
+}
 @media (max-width: 640px) {
   .connect-field { align-items: flex-start; flex-direction: column; gap: 4px; }
   .connect-field > span { flex: none; }
@@ -2570,6 +2599,10 @@
   <div class="update-bar" id="update-bar" hidden>
     <span class="update-bar-icon" aria-hidden="true">⬆</span>
     <span id="update-bar-text"></span>
+    <!-- Desktop-only: 20a-update.js shows this and points it at the release
+         page (DESKTOP.openExternal) instead of the launcher's restart copy —
+         there is no in-place installer to restart in the desktop build. -->
+    <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
   </div>
 
@@ -3262,6 +3295,12 @@ node update.mjs           # download and verify it</code></pre>
       key; a join PIN is kept only for as long as this tab is open unless you ask otherwise.</p>
 
     <div class="connect-current" id="connect-current"></div>
+    <!-- Desktop-only: filled in and shown by 20f-desktop.js's
+         renderDesktopShareInfo() whenever this launch is hosting others —
+         the same address/PIN/caution start.mjs used to print to a console
+         window this app doesn't have. Never touches state, localStorage or
+         anything served (invariant #29) — it lives only in this element. -->
+    <div class="connect-current" id="desktop-share-info" hidden></div>
     <div class="connect-list" id="connect-list"></div>
 
     <div class="connect-add">
@@ -3452,7 +3491,31 @@ node update.mjs           # download and verify it</code></pre>
      about, because this copy is taken before the DOM is live at all. */
   var PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
+  /* The Electron bridge, when this page is running inside the desktop shell.
+     desktop/preload.js (a sibling project, not part of this build) defines
+     window.splitpageDesktop ONLY on documents loaded from the privileged
+     splitpage://app origin — never on a tunnelled remote page — so its mere
+     presence here is already the security check, not just a feature test.
+     Captured once, into a plain var rather than read from window each time,
+     so every gate in src/js reads the same snapshot and a test hook
+     (20f-desktop.js's window.__desktopTest) can swap it for a fake backend
+     without touching window.splitpageDesktop itself. Everything gated on
+     DESKTOP falls through to the exact same code the browser build always
+     ran when it is null — that is the whole contract this branch exists to
+     keep (see desktop/main.js and desktop/preload.js for the other half). */
+  var DESKTOP = window.splitpageDesktop || null;
+
   var state = null;
+  /* Resolves once the boot state load in init() (21-events.js) has settled
+     `state` for the first time — the desktop-only race this exists for:
+     DESKTOP.onOpenFile() (20f-desktop.js) can fire as soon as it's
+     registered, which is well before loadInitialState()'s fetch resolves
+     when the app was launched by double-clicking a project file, and
+     without this, adoptProjectState() setting `state` to that file would
+     just get clobbered a moment later when the boot load finally resolves
+     and assigns the default/seed state over it. Stays null in the browser
+     build, where nothing reads it. */
+  var initialStateReady = null;
   var SCHEMA_VERSION = 2;
   var editSeq = 0;
   var dirty = false;
@@ -3492,6 +3555,17 @@ node update.mjs           # download and verify it</code></pre>
 
   async function rememberLastFileHandle(handle) {
     if (!handle) return;
+    /* Desktop has no IndexedDB worth trusting across the app's own origin
+       swap (splitpage://app is stable, but the main process is the thing
+       that actually persists this — desktop-state.json, not a browser
+       store) and a much simpler way to say the same thing: the handle IS
+       an opaque id the main process already tracks (20f-desktop.js's
+       makeDesktopHandle). Mutually exclusive with the IndexedDB path below
+       by construction — DESKTOP is one fixed value for the life of the page. */
+    if (DESKTOP) {
+      try { await DESKTOP.setLastFile(handle._desktopId); } catch (e) { /* not fatal — a nicety */ }
+      return;
+    }
     try {
       var db = await openHandleDb();
       await new Promise(function (resolve, reject) {
@@ -8866,6 +8940,21 @@ node update.mjs           # download and verify it</code></pre>
     var id = extractGoogleDocId(document.getElementById("gdoc-url-input").value);
     if (!id) { showToast("That doesn't look like a Google Doc link.", "warn"); return; }
     var url = "https://docs.google.com/document/d/" + id + "/export?format=docx";
+    /* No OAuth involved either way (see the comment above this function) —
+       just a real navigation to Google's own /export endpoint. Electron's
+       renderer has no tab strip for window.open(url, "_blank") to open a
+       new one in, and no cookie jar shared with a real browser for a
+       private doc's sign-in to land in either, so this hands the URL to
+       DESKTOP.openExternal() instead: the system's default browser does the
+       download, carrying whatever Google session it already has, exactly
+       the same trick this always was. */
+    if (DESKTOP) {
+      DESKTOP.openExternal(url);
+      closeGdocModal();
+      showToast("Opening the Doc as a .docx download in your browser — once it's in your Downloads " +
+        "folder, use File ▸ Open a document… to bring it in.", "ok", true);
+      return;
+    }
     /* target=_blank rather than a same-tab anchor: a private/unshared doc
        sends back a Google sign-in page instead of a file, which would
        otherwise navigate this tab away from the script mid-edit. Sever
@@ -8901,6 +8990,12 @@ node update.mjs           # download and verify it</code></pre>
       if (disabled !== undefined) btn.disabled = disabled;
       btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
     });
+    /* Both markDirty() and clearDirty() funnel through here (invariant #20 —
+       one save state behind the two Save buttons), which makes this the one
+       place a desktop window title needs to hear about too, rather than a
+       third thing to remember to call from every mutation site. Defined in
+       20f-desktop.js; hoisted, so the fragment order doesn't matter. */
+    if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   }
 
   function markDirty() {
@@ -9642,6 +9737,19 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function openDriveModal() {
+    /* Google Identity Services only ever authorizes an http/https origin
+       (Google Cloud Console has no "custom scheme" option for Authorized
+       JavaScript origins), and this page runs at splitpage://app — the menu
+       entry that reaches here is hidden on desktop for exactly that reason
+       (20f-desktop.js's initDesktop()). This is the defensive half, in case
+       something still calls the action directly (a native menu command, a
+       stale keyboard shortcut) — say why plainly instead of opening a modal
+       whose Sign in button can only ever fail. */
+    if (DESKTOP) {
+      showToast("Google Drive isn't available in the desktop app — sign-in needs a web address Google " +
+        "can redirect back to. Use File ▸ Open a document… instead.", "warn");
+      return;
+    }
     loadDriveCreds();
     document.getElementById("drive-modal").hidden = false;
     document.getElementById("drive-folder-input").value = driveLastFolder();
@@ -10142,7 +10250,33 @@ node update.mjs           # download and verify it</code></pre>
     var reusingHandle = !!targetHandle;
 
     try {
-      if (!targetHandle && window.showSaveFilePicker) {
+      /* Desktop has no File System Access API at all (it is a Chromium
+         feature, not something Electron's renderer gets for free), and a
+         native Save dialog is the whole point of running as a real app —
+         DESKTOP.saveFileDialog() is checked first so it is never shadowed
+         by the browser branch below, which stays exactly as it was for the
+         web build. A cancelled native dialog resolves null, same shape as
+         the picker's AbortError just below: restore the rev bump, no error
+         toast, nothing written. */
+      if (!targetHandle && DESKTOP) {
+        var pickedDesktop = await DESKTOP.saveFileDialog({
+          suggestedName: slug + ".md",
+          filters: [
+            { name: "Markdown script", extensions: ["md"] },
+            { name: "Splitpage script", extensions: ["splitpage"] }
+          ]
+        });
+        if (!pickedDesktop) {
+          state.rev = Math.max(0, (state.rev || 1) - 1);
+          saveInFlight = false;
+          setSaveButtons(dirty ? "Save •" : "Save", false);
+          return;
+        }
+        targetHandle = makeDesktopHandle(pickedDesktop);
+        kind = fileKindFromName(pickedDesktop.name) === "splitpage" ? "splitpage" : "md";
+        docFileHandle = { handle: targetHandle, kind: kind, lastModified: null };
+        rememberLastFileHandle(targetHandle);
+      } else if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
           suggestedName: slug + ".md",
           types: [
@@ -12355,6 +12489,18 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   async function openLocalFile() {
+    /* Desktop has a real native Open dialog — DESKTOP.openFileDialog() —
+       checked before either web fallback below, which are otherwise
+       untouched. null means the user cancelled the dialog; that is not an
+       error, so there is nothing further to do. */
+    if (DESKTOP) {
+      var entry = await DESKTOP.openFileDialog();
+      if (!entry) return;
+      var desktopHandle = makeDesktopHandle(entry);
+      var desktopFile = await desktopHandle.getFile();
+      await openProjectFile(desktopFile, desktopHandle);
+      return;
+    }
     /* Prefer the File System Access API: it is the only path that can write the
        user's own file back in place. It is blocked in cross-origin frames, so
        fall back to a plain file input whenever it is unavailable or refused. */
@@ -12396,10 +12542,39 @@ node update.mjs           # download and verify it</code></pre>
     return "text/plain";
   }
 
-  /* Standard browser download: build a Blob, click a hidden <a download>,
-     revoke the object URL once the click has had a moment to be handled. */
+  /* Every export and every "save a copy" goes through here. Desktop has no
+     download tray to drop a file into — an <a download> click is inert in
+     Electron's renderer sandbox anyway (see the Artifact runtime's own note
+     on this) — so it asks the native Save dialog for a destination and
+     writes the bytes there directly. A cancelled dialog is not a failure:
+     it returns false with no toast, exactly like a cancelled browser
+     download does nothing rather than erroring. */
   async function deliverFile(filename, data, opts) {
     opts = opts || {};
+    if (DESKTOP) {
+      try {
+        var ext = (/\.([a-z0-9]+)$/i.exec(filename) || [, ""])[1].toLowerCase();
+        var picked = await DESKTOP.saveFileDialog({
+          suggestedName: filename,
+          filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]
+        });
+        if (!picked) return false;
+        var bytes;
+        if (data instanceof Blob) bytes = new Uint8Array(await data.arrayBuffer());
+        else if (data instanceof Uint8Array) bytes = data;
+        else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+        else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        else bytes = strBytes(String(data));
+        await DESKTOP.writeFile(picked.id, bytes);
+        showToast(opts.savedMsg || ("Saved " + filename), "ok");
+        return true;
+      } catch (err) {
+        showToast("Could not save the file. Please try again.", "error");
+        return false;
+      }
+    }
+    /* Standard browser download: build a Blob, click a hidden <a download>,
+       revoke the object URL once the click has had a moment to be handled. */
     try {
       var blob = data instanceof Blob ? data : new Blob([data], { type: mimeForFilename(filename) });
       var url = URL.createObjectURL(blob);
@@ -13288,7 +13463,17 @@ node update.mjs           # download and verify it</code></pre>
   function updateVoiceAvailability() {
     var btn = document.getElementById("pp-voice");
     if (!btn) return;
-    if (!SpeechRecognitionCtor) {
+    /* The Web Speech API's constructor exists in Electron's Chromium, but
+       recognition itself fails immediately with a 'network' error — Google's
+       speech backend that powers it is not reachable from inside Electron
+       the way it is from an actual Chrome/Edge install. Adam wants this
+       fixed properly after the desktop conversion lands, not patched around
+       here; for now this is a known, explained unavailability rather than a
+       button that looks live and then fails on click. */
+    if (DESKTOP) {
+      btn.disabled = true;
+      setVoiceStatus("Follow My Voice isn't available in the desktop app yet — it's coming in an update. It still works in Chrome or Edge.", "");
+    } else if (!SpeechRecognitionCtor) {
       btn.disabled = true;
       setVoiceStatus("Voice follow needs Chrome or Edge.", "");
     } else if (!window.isSecureContext) {
@@ -13393,7 +13578,7 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   async function startVoiceFollow() {
-    if (!SpeechRecognitionCtor) return;
+    if (DESKTOP || !SpeechRecognitionCtor) return;
     /* recognition.start() is async and voiceFollowActive only flips in onstart,
        so without this a second click builds a second recognizer and orphans the
        first — an invisible live microphone session. */
@@ -13616,7 +13801,30 @@ node update.mjs           # download and verify it</code></pre>
 
   function renderUpdateNotice() {
     var bar = document.getElementById("update-bar");
+    var actionBtn = document.getElementById("update-bar-action");
     if (!bar || !updateStatus) return;
+
+    /* The desktop build never stages or auto-installs anything (see the
+       bridge contract's UPDATES section — this is a background GET and
+       nothing more), so "restart to finish installing" and "run node
+       update.mjs" are both wrong here; there is exactly one thing to say
+       and one thing to do about it. */
+    if (DESKTOP && updateStatus.desktop) {
+      if (updateStatus.updateAvailable && updateStatus.latest) {
+        document.getElementById("update-bar-text").textContent =
+          "Splitpage " + updateStatus.latest + " is available. You have " + (updateStatus.version || "?") + ".";
+        if (actionBtn) {
+          actionBtn.hidden = false;
+          actionBtn.onclick = function () { DESKTOP.openExternal(updateStatus.releaseUrl); };
+        }
+        bar.hidden = false;
+        return;
+      }
+      if (actionBtn) actionBtn.hidden = true;
+      bar.hidden = true;
+      return;
+    }
+    if (actionBtn) actionBtn.hidden = true;
 
     /* Staged and waiting beats merely available: it is one restart away and
        needs nothing from the user but closing the window. */
@@ -13644,6 +13852,26 @@ node update.mjs           # download and verify it</code></pre>
     var lines = [];
     var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
     lines.push("Splitpage " + (version || "(version unknown)"));
+
+    if (DESKTOP) {
+      if (!updateStatus) {
+        lines.push("");
+        lines.push("Could not check for updates.");
+      } else if (updateStatus.updateAvailable && updateStatus.latest) {
+        lines.push("");
+        lines.push("Version " + updateStatus.latest + " is available.");
+        lines.push("Use the Download button in the update notice, or get it from " +
+          (updateStatus.releaseUrl || "the release page") + ".");
+      } else if (updateStatus.error) {
+        lines.push("");
+        lines.push("Last update check failed: " + updateStatus.error);
+      } else {
+        lines.push("");
+        lines.push("Up to date.");
+      }
+      window.alert(lines.join("\n"));
+      return;
+    }
 
     if (!updateStatus) {
       lines.push("");
@@ -13886,6 +14114,16 @@ node update.mjs           # download and verify it</code></pre>
     if (el) el.innerHTML = html;
   }
 
+  /* The desktop app has no launcher and no /api/launcher/* routes to ask —
+     it is already the thing the launcher's Start Menu step exists to
+     produce, so the honest answer is "you already have this", not a
+     register button that would 404. */
+  function desktopInstallHtml() {
+    return '<p class="modal-hint">Splitpage is already installed as a desktop app — this is it. ' +
+      "Opening a <code>.splitpage</code> file (or a Markdown script saved from here) opens it " +
+      "with Splitpage automatically.</p>";
+  }
+
   function renderLauncherInfo(info) {
     var html = '<p class="modal-hint">Running from <code>' + escapeHtml(info.root || "") + "</code>.</p>";
     if (info.installed) {
@@ -13903,6 +14141,11 @@ node update.mjs           # download and verify it</code></pre>
   async function loadLauncherInfo() {
     if (launcherInfoState !== "unloaded") return;
     launcherInfoState = "loading";
+    if (DESKTOP) {
+      launcherInfoState = "done";
+      renderLauncherInfoBody(desktopInstallHtml());
+      return;
+    }
     var info = null;
     try { info = await launcherFetch("api/launcher/info"); }
     catch (e) { info = null; }
@@ -14170,12 +14413,24 @@ node update.mjs           # download and verify it</code></pre>
     if (readOnboardKey()) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
-    var handle = null;
-    try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
-    if (handle) return false;
-    /* Re-check what may have changed while the IndexedDB round trip above
-       was in flight (a file could have finished opening, or Skip/Finish
-       could have already run from a very fast manual File ▸ Setup…). */
+    /* The browser's "a remembered handle exists at all" check reads
+       IndexedDB, which desktop never writes to (00-prelude.js's
+       rememberLastFileHandle routes through DESKTOP.setLastFile() instead)
+       — so on desktop this has to ask the main process for the same fact,
+       or a copy that opens straight back into last night's script would
+       show the wizard over it regardless. */
+    if (DESKTOP) {
+      var lastEntry = null;
+      try { lastEntry = await DESKTOP.getLastFile(); } catch (e) { lastEntry = null; }
+      if (lastEntry) return false;
+    } else {
+      var handle = null;
+      try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
+      if (handle) return false;
+    }
+    /* Re-check what may have changed while the round trip above was in
+       flight (a file could have finished opening, or Skip/Finish could have
+       already run from a very fast manual File ▸ Setup…). */
     if (readOnboardKey()) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
@@ -15049,6 +15304,10 @@ node update.mjs           # download and verify it</code></pre>
     setConnectError("");
     modal.hidden = false;
     renderConnect();
+    /* Desktop's own "who's connected to me" summary — defined in
+       20f-desktop.js, a no-op (and the element it would fill stays hidden)
+       whenever DESKTOP is null, i.e. the whole web build. */
+    if (typeof renderDesktopShareInfo === "function") renderDesktopShareInfo();
   }
 
   function closeServersDialog() {
@@ -15401,6 +15660,362 @@ node update.mjs           # download and verify it</code></pre>
   })();
 
   updateConnectMenu();
+  /* ================= desktop glue (Electron shell) =================
+
+     Everything here is gated on DESKTOP (00-prelude.js) being non-null,
+     which only happens on a document served from splitpage://app by the
+     desktop shell's main process — see desktop/preload.js for the other
+     half of that guarantee. When DESKTOP is null (the whole web build,
+     including every suite in tests/) nothing in this file runs anything;
+     every function below either returns immediately or is never called.
+
+     The design goal throughout is "no second copy of the app's own logic":
+     opening a file goes through openProjectFile() exactly the way File ▸
+     Open already does; every native menu command reaches the SAME element
+     the in-page File menu or header button would, by finding it and
+     clicking it — real DOM clicks run every capture-phase listener several
+     other fragments have already wired onto #file-menu (20c-help.js,
+     20e-connect.js, 20b-onboarding.js), so this file needs no branch for
+     "help" or "servers" or "setup" of its own. */
+
+  /* ---- a FileSystemFileHandle-shaped wrapper over the bridge ----
+
+     openProjectFile(), saveDoc() and deliverFile() all already know how to
+     drive a real FileSystemFileHandle (getFile/createWritable, see
+     18-local-files.js and 14-export.js) — this is the same shape, built
+     over DESKTOP.readFile/writeFile instead of the File System Access API,
+     so none of that calling code needs to know which one it has. `entry`
+     is either a full FileEntry (from openFileDialog/onOpenFile/getLastFile
+     — carries bytes already, which getFile() below ignores in favor of a
+     fresh read, so a handle is never stale the moment it's minted) or the
+     smaller {id, name} a fresh saveFileDialog() pick returns before
+     anything has been written to disk yet. */
+  function makeDesktopHandle(entry) {
+    var id = entry.id;
+    var name = entry.name;
+    var handle = {
+      kind: "file",
+      name: name,
+      /* Not part of the FileSystemFileHandle shape — rememberLastFileHandle()
+         (00-prelude.js) and isSameEntry() below read it directly, since the
+         id IS the durable thing here, the way a real handle's own internal
+         identity is for the browser API. */
+      _desktopId: id,
+      getFile: function () {
+        return DESKTOP.readFile(id).then(function (fresh) {
+          name = fresh.name || name;
+          handle.name = name;
+          var bytes = fresh.bytes instanceof Uint8Array ? fresh.bytes : new Uint8Array(fresh.bytes || []);
+          return new File([bytes], name, { lastModified: fresh.lastModified, type: mimeForFilename(name) });
+        });
+      },
+      /* write() buffers every chunk in order and does exactly one
+         DESKTOP.writeFile() on close() — the bridge contract's write is
+         whole-file and atomic (temp file + rename), so there is nothing to
+         gain from streaming chunks across the IPC boundary one at a time,
+         and buffering keeps this the same shape as a real
+         FileSystemWritableFileStream from the caller's point of view. */
+      createWritable: function () {
+        var chunks = [];
+        return Promise.resolve({
+          write: function (chunk) {
+            if (typeof chunk === "string") { chunks.push(strBytes(chunk)); return Promise.resolve(); }
+            if (chunk instanceof Blob) {
+              return chunk.arrayBuffer().then(function (buf) { chunks.push(new Uint8Array(buf)); });
+            }
+            if (chunk instanceof ArrayBuffer) { chunks.push(new Uint8Array(chunk)); return Promise.resolve(); }
+            if (ArrayBuffer.isView(chunk)) {
+              chunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+              return Promise.resolve();
+            }
+            chunks.push(strBytes(String(chunk)));
+            return Promise.resolve();
+          },
+          close: function () {
+            return DESKTOP.writeFile(id, concatBytes(chunks)).then(function () {});
+          }
+        });
+      },
+      queryPermission: function () { return Promise.resolve("granted"); },
+      requestPermission: function () { return Promise.resolve("granted"); },
+      isSameEntry: function (other) { return !!other && other._desktopId === id; }
+    };
+    return handle;
+  }
+
+  /* ---- resuming the last project on launch (desktop's counterpart to
+     18-local-files.js's tryResumeLastProject/resumeFromHandle) ----
+
+     No permission banner: unlike a browser's File System Access handle,
+     which can genuinely lose permission between launches, the desktop app
+     owns this file the same way any other desktop app owns the file it
+     opened last — DESKTOP.getLastFile() already tells us whether it's still
+     there. Same resumed/skipSnapshot semantics as the browser path. */
+  async function tryResumeLastProjectDesktop() {
+    var entry = null;
+    try { entry = await DESKTOP.getLastFile(); } catch (e) { entry = null; }
+    if (!entry) return;
+    var handle = makeDesktopHandle(entry);
+    try {
+      var file = await handle.getFile();
+      await openProjectFile(file, handle, { skipSnapshot: !dirty, resumed: true });
+    } catch (e) {
+      /* moved, renamed, or deleted since the app last quit — not worth
+         interrupting startup over, same reasoning as the browser path */
+    }
+  }
+
+  /* ---- window title / dirty-dot ----
+     Called from setSaveButtons() (12-dirty-toast.js), the one place
+     markDirty() and clearDirty() both funnel through (invariant #20). */
+  function notifyDesktopDocumentState() {
+    if (!DESKTOP || !state) return;
+    DESKTOP.setDocumentState({ title: state.title || "Untitled Script", dirty: !!dirty });
+  }
+
+  /* ---- the native menu / header-button dispatcher ----
+
+     Every data-file-action the desktop menu can send maps to the actual
+     <button data-file-action="..."> living inside #file-menu — clicking it
+     for real runs the exact chain a mouse click would: the capture-phase
+     listeners 20c-help.js/20e-connect.js/20b-onboarding.js each add to
+     #file-menu for "help"/"tour"/"servers"/"setup" see it FIRST (exactly as
+     they do for a real click) and, for everything else, it bubbles to
+     18-local-files.js's handleFileMenuAction(). Nothing here duplicates
+     that dispatch or needs updating when a new File-menu action is added —
+     add the button to page.html with the right data-file-action and this
+     keeps working. The header buttons (save/production/gear/comments/
+     write/present) have no data attribute to key off, so those five are a
+     small fixed map to their own ids instead. */
+  var DESKTOP_HEADER_BUTTONS = {
+    "save": "btn-save",
+    "toggle-production": "btn-production",
+    "toggle-gear": "btn-gear",
+    "toggle-comments": "btn-comments",
+    "write": "btn-write",
+    "present": "btn-present"
+  };
+
+  function runDesktopMenuCommand(cmd) {
+    var btnId = DESKTOP_HEADER_BUTTONS[cmd];
+    if (btnId) {
+      var btn = document.getElementById(btnId);
+      if (btn && !btn.disabled) btn.click();
+      return;
+    }
+    var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');
+    /* A disabled menu item (Save to file with nothing opened yet, etc.)
+       staying inert here matches what a real click on it would do — the
+       button itself refuses the click, not this dispatcher deciding for it. */
+    if (item && !item.disabled) item.click();
+    /* An unrecognized command from the native menu has nothing to run —
+       the menu and this map are meant to agree, and a mismatch here (an
+       older build's menu, say) should never take the app down over it. */
+  }
+
+  /* ---- Servers dialog: "you are sharing this session" ----
+
+     What start.mjs used to print to the console window that launched it —
+     the desktop app has no console, so this is that information's other
+     home. Shown automatically once at boot when hosting (initDesktop()
+     below) and reachable again any time from File ▸ Servers… (the one
+     extra line in openServersDialog(), 20e-connect.js). Nothing here ever
+     touches state, localStorage or anything the server hands out — the PIN
+     lives only in this element's rendered text, for as long as it's on
+     screen (invariant #29). */
+  async function renderDesktopShareInfo() {
+    var el = document.getElementById("desktop-share-info");
+    if (!el || !DESKTOP) return;
+    var info = null;
+    try { info = await DESKTOP.getSessionInfo(); } catch (e) { info = null; }
+    if (!info || !info.hosting) { el.hidden = true; el.innerHTML = ""; return; }
+    var lanUrls = info.lanUrls || [];
+    var addrs = lanUrls.length
+      ? lanUrls.map(function (u) { return '<div class="connect-share-url">' + escapeHtml(u) + "</div>"; }).join("")
+      : '<div class="modal-hint">No network address found yet — check this computer is on a network.</div>';
+    var pinHtml = "";
+    if (info.pin) {
+      pinHtml = '<div class="connect-share-pin">Join PIN:<strong>' + escapeHtml(info.pin) + "</strong></div>" +
+        '<p class="modal-hint">This code travels in the clear over plain HTTP — fine on your own ' +
+        "network, not on a public one.</p>";
+    } else {
+      /* No PIN means server.js is running with authRequired:false — anyone
+         who can reach one of the addresses above gets full read/write
+         access with nothing to type in. Silently omitting this section
+         (the old behavior) let that pass for "sharing", full stop, when it
+         is actually the more dangerous of the two modes this dialog can be
+         showing. Say so plainly rather than just leaving the PIN block out. */
+      pinHtml = '<p class="modal-hint connect-share-nopin">No PIN — anyone who can reach one of ' +
+        "these addresses can open and edit this document.</p>";
+    }
+    el.innerHTML = '<div class="connect-add-title">Sharing this session</div>' +
+      '<p class="modal-hint">Others on your network can open:</p>' + addrs + pinHtml +
+      '<p class="modal-hint">Closing Splitpage stops sharing.</p>';
+    el.hidden = false;
+  }
+
+  /* ---- boot wiring ----
+     Called once from init() (21-events.js), after every other listener in
+     this build is already wired up. */
+  function initDesktop() {
+    if (!DESKTOP) return;
+
+    /* Google Drive needs a real http/https origin for Google's own sign-in
+       to redirect back to (Google Cloud Console has no "custom scheme"
+       option for Authorized JavaScript origins) — splitpage://app cannot
+       ever satisfy that, so the entry is hidden rather than left to open a
+       modal whose Sign in button can only fail. openDriveModal()
+       (13-hosted.js) carries the same guard defensively, in case something
+       still reaches it directly. Google Doc import is different — it needs
+       no OAuth at all (11-import.js's confirmGdocImport() explains why) and
+       stays enabled, routed through DESKTOP.openExternal() instead of
+       window.open(). */
+    var driveItem = document.getElementById("menu-drive-open");
+    if (driveItem) driveItem.hidden = true;
+
+    /* Files the OS hands us — argv at launch, a second instance, macOS
+       "open-file" — open exactly the way File ▸ Open does: through
+       openProjectFile(), with the same snapshot/dirty safety as any other
+       open. The main process queues these until this callback is
+       registered, then flushes them, so nothing launched before this line
+       ran is lost. */
+    DESKTOP.onOpenFile(function (entry) {
+      function proceed() {
+        var handle = makeDesktopHandle(entry);
+        handle.getFile().then(function (file) {
+          return openProjectFile(file, handle);
+        }).catch(function () {
+          showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
+        });
+      }
+      /* The main process queues an open-file event until this callback is
+         registered, then flushes it — which can mean it fires the instant
+         the line above runs, well before init()'s own boot load
+         (loadInitialState(), 21-events.js) has finished setting `state` for
+         the first time. Opening straight away in that case would just get
+         overwritten a moment later when the boot load resolves and assigns
+         the seed/default state over it — wait for it first (00-prelude.js's
+         initialStateReady) exactly like a launch double-clicking a project
+         file should behave: the file wins, not whatever the app opens to
+         by default. */
+      if (state) proceed();
+      else if (initialStateReady) initialStateReady.then(proceed);
+      else proceed();
+    });
+
+    DESKTOP.onMenuCommand(runDesktopMenuCommand);
+
+    /* A fresh load never calls markDirty()/clearDirty() until a resume path
+       runs or the reader types something — push the starting title now
+       rather than leaving the window's default title showing indefinitely
+       on an empty document. init()'s own loadInitialState().then() callback
+       does the same once `state` exists on first load; this covers
+       initDesktop() running before that promise resolves. */
+    notifyDesktopDocumentState();
+
+    /* Nobody printed the sharing address to a console the user can see —
+       there isn't one — so the first time this launch is actually hosting
+       anyone, say so once, unprompted. Reusing openServersDialog() means
+       there is exactly one place that renders this information, not a
+       second copy that could drift from what File ▸ Servers… shows. */
+    DESKTOP.getSessionInfo().then(function (info) {
+      if (info && info.hosting && typeof openServersDialog === "function") openServersDialog();
+    }).catch(function () {});
+  }
+
+  /* ---- test hook ----
+     There is no pre-load hook in the harness that can inject a real
+     window.splitpageDesktop before this script runs — DESKTOP is captured
+     once, at the top of 00-prelude.js, before any fragment's own top-level
+     code (including this one) executes. Rather than teach the driver a new
+     trick, tests/21-desktop-shim.txt swaps DESKTOP itself for an in-memory
+     fake through setBackend()/restoreBackend() and drives the real code
+     paths (saveDoc, deliverFile, openLocalFile, makeDesktopHandle) against
+     it directly. Exists in both modes but does nothing unless a test calls
+     it — same trick window.__splitpageFormats (20d-formats.js) plays. */
+  function makeFakeDesktopBackend() {
+    var files = {};
+    var nextId = 1;
+    var lastFileId = null;
+    var openHandler = null;
+    var menuHandler = null;
+    function newId() { return "fake" + (nextId++); }
+    return {
+      isDesktop: true,
+      platform: "test",
+      appVersion: "0.0.0-test",
+      hasFileToOpen: false,
+      openFileDialog: function () { return Promise.resolve(null); },
+      saveFileDialog: function (opts) {
+        if (this._cancelNextSave) { this._cancelNextSave = false; return Promise.resolve(null); }
+        var id = newId();
+        files[id] = { name: (opts && opts.suggestedName) || "untitled", bytes: new Uint8Array(0), lastModified: Date.now() + nextId };
+        return Promise.resolve({ id: id, name: files[id].name });
+      },
+      readFile: function (id) {
+        var f = files[id];
+        if (!f) return Promise.reject(new Error("ENOENT"));
+        return Promise.resolve({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
+      },
+      writeFile: function (id, data) {
+        var f = files[id];
+        if (!f) return Promise.reject(new Error("ENOENT"));
+        var bytes = data instanceof Uint8Array ? data
+          : (data instanceof ArrayBuffer ? new Uint8Array(data)
+          : (ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+          : new Uint8Array(0)));
+        f.bytes = bytes;
+        f.lastModified = Date.now() + (nextId++);
+        return Promise.resolve({ lastModified: f.lastModified, size: bytes.length });
+      },
+      statFile: function (id) {
+        var f = files[id];
+        return Promise.resolve(f ? { lastModified: f.lastModified, size: f.bytes.length } : null);
+      },
+      getLastFile: function () {
+        var f = files[lastFileId];
+        if (!f) return Promise.resolve(null);
+        return Promise.resolve({ id: lastFileId, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
+      },
+      setLastFile: function (id) { lastFileId = id; return Promise.resolve(); },
+      onOpenFile: function (cb) { openHandler = cb; },
+      onMenuCommand: function (cb) { menuHandler = cb; },
+      setDocumentState: function () {},
+      getSessionInfo: function () {
+        return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
+      },
+      openExternal: function () {},
+      /* test-only extras below this line — nothing in src/js ever calls these */
+      _addFile: function (name, text) {
+        var id = newId();
+        files[id] = { name: name, bytes: strBytes(text), lastModified: Date.now() + nextId };
+        return id;
+      },
+      _text: function (id) { return new TextDecoder().decode(files[id].bytes); },
+      _touch: function (id) { if (files[id]) files[id].lastModified = Date.now() + (nextId++); },
+      _fireOpenFile: function (id) {
+        var f = files[id];
+        if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
+      },
+      _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); }
+    };
+  }
+
+  window.__desktopTest = {
+    makeHandle: makeDesktopHandle,
+    runMenuCommand: runDesktopMenuCommand,
+    makeFakeBackend: makeFakeDesktopBackend,
+    setBackend: function (fake) { DESKTOP = fake; },
+    restoreBackend: function () { DESKTOP = window.splitpageDesktop || null; },
+    /* Lets desktop/test/smoke.mjs dirty the document with NO DOM
+       interaction at all — no click, no synthetic event dispatch — which is
+       exactly the "no user activation this session" scenario the
+       close-relies-on-beforeunload-activation fix (main.js's 'close'
+       handler) exists for. A real click, even a JS-dispatched one, risks
+       looking like user activation to Chromium; calling markDirty()
+       directly never does. */
+    markDirtyForTest: function () { markDirty(); }
+  };
   /* ================= events ================= */
 
   function onRootClick(e) {
@@ -16003,7 +16618,7 @@ node update.mjs           # download and verify it</code></pre>
     });
 
     state = null;
-    loadInitialState().then(function (loaded) {
+    initialStateReady = loadInitialState().then(function (loaded) {
       var applied = applyStashedWork(loaded);
       state = applied.state;
       baseState = cloneState(applied.report ? loaded : state);
@@ -16021,7 +16636,26 @@ node update.mjs           # download and verify it</code></pre>
          Save (see saveDoc()). Double-clicking an already-saved project's own
          .html must always show exactly that file, never get swapped out from
          under you for some *other* file this browser remembers editing. */
-      if (!applied.report && !loaded.rev && !loaded.lastEditedBy) tryResumeLastProject();
+      if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
+        /* DESKTOP.hasFileToOpen (read synchronously by preload, before this
+           line ever runs) means the OS already handed this launch a file to
+           open — a double-click, a second instance's argv. Racing that
+           against tryResumeLastProjectDesktop()'s own IPC round trips (both
+           end in adoptProjectState(), 18-local-files.js, which unconditionally
+           overwrites `state` AND `docFileHandle`) meant whichever finished
+           last silently won, and the loser wasn't just the wrong document on
+           screen — it could also become the target of the next Save. Skip
+           the resume outright when a file is already winning; DESKTOP's own
+           onOpenFile handler (20f-desktop.js) opens it once this promise
+           settles. */
+        if (DESKTOP) { if (!DESKTOP.hasFileToOpen) tryResumeLastProjectDesktop(); } else tryResumeLastProject();
+      }
+      /* Desktop's window title mirrors the document (20f-desktop.js) —
+         push an initial value now rather than waiting for the first edit,
+         since a fresh load never touches markDirty()/clearDirty() (the
+         hook inside setSaveButtons()) until one of the resume paths above
+         runs, or the reader types something. */
+      if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
     });
 
     var rowsEl = document.getElementById("rows");
@@ -16609,11 +17243,22 @@ node update.mjs           # download and verify it</code></pre>
       if (dirty && !suppressUnloadWarning) { e.preventDefault(); e.returnValue = ""; }
     });
 
-    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    /* The service worker is for offline http(s) use — splitpage://app is
+       already served locally by the main process, with no network round
+       trip to cache anything against, and registering one there would just
+       be dead weight sitting on a scheme it was never meant for. */
+    if (!DESKTOP && "serviceWorker" in navigator && location.protocol !== "file:") {
       window.addEventListener("load", function () {
         navigator.serviceWorker.register("sw.js").catch(function () {});
       });
     }
+
+    /* Desktop glue (20f-desktop.js): wires the native File-menu/header
+       commands, file-open events and window-title updates into the exact
+       same code paths the in-page UI already uses. A no-op — and every
+       DESKTOP-gated branch throughout src/js along with it — whenever this
+       page is not running inside the Electron shell. */
+    if (DESKTOP && typeof initDesktop === "function") initDesktop();
   }
 
   if (document.readyState === "loading") {

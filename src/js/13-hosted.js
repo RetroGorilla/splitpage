@@ -695,6 +695,19 @@
   }
 
   function openDriveModal() {
+    /* Google Identity Services only ever authorizes an http/https origin
+       (Google Cloud Console has no "custom scheme" option for Authorized
+       JavaScript origins), and this page runs at splitpage://app — the menu
+       entry that reaches here is hidden on desktop for exactly that reason
+       (20f-desktop.js's initDesktop()). This is the defensive half, in case
+       something still calls the action directly (a native menu command, a
+       stale keyboard shortcut) — say why plainly instead of opening a modal
+       whose Sign in button can only ever fail. */
+    if (DESKTOP) {
+      showToast("Google Drive isn't available in the desktop app — sign-in needs a web address Google " +
+        "can redirect back to. Use File ▸ Open a document… instead.", "warn");
+      return;
+    }
     loadDriveCreds();
     document.getElementById("drive-modal").hidden = false;
     document.getElementById("drive-folder-input").value = driveLastFolder();

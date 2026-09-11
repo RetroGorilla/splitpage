@@ -393,6 +393,18 @@
   }
 
   async function openLocalFile() {
+    /* Desktop has a real native Open dialog — DESKTOP.openFileDialog() —
+       checked before either web fallback below, which are otherwise
+       untouched. null means the user cancelled the dialog; that is not an
+       error, so there is nothing further to do. */
+    if (DESKTOP) {
+      var entry = await DESKTOP.openFileDialog();
+      if (!entry) return;
+      var desktopHandle = makeDesktopHandle(entry);
+      var desktopFile = await desktopHandle.getFile();
+      await openProjectFile(desktopFile, desktopHandle);
+      return;
+    }
     /* Prefer the File System Access API: it is the only path that can write the
        user's own file back in place. It is blocked in cross-origin frames, so
        fall back to a plain file input whenever it is unavailable or refused. */
@@ -434,10 +446,39 @@
     return "text/plain";
   }
 
-  /* Standard browser download: build a Blob, click a hidden <a download>,
-     revoke the object URL once the click has had a moment to be handled. */
+  /* Every export and every "save a copy" goes through here. Desktop has no
+     download tray to drop a file into — an <a download> click is inert in
+     Electron's renderer sandbox anyway (see the Artifact runtime's own note
+     on this) — so it asks the native Save dialog for a destination and
+     writes the bytes there directly. A cancelled dialog is not a failure:
+     it returns false with no toast, exactly like a cancelled browser
+     download does nothing rather than erroring. */
   async function deliverFile(filename, data, opts) {
     opts = opts || {};
+    if (DESKTOP) {
+      try {
+        var ext = (/\.([a-z0-9]+)$/i.exec(filename) || [, ""])[1].toLowerCase();
+        var picked = await DESKTOP.saveFileDialog({
+          suggestedName: filename,
+          filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]
+        });
+        if (!picked) return false;
+        var bytes;
+        if (data instanceof Blob) bytes = new Uint8Array(await data.arrayBuffer());
+        else if (data instanceof Uint8Array) bytes = data;
+        else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+        else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        else bytes = strBytes(String(data));
+        await DESKTOP.writeFile(picked.id, bytes);
+        showToast(opts.savedMsg || ("Saved " + filename), "ok");
+        return true;
+      } catch (err) {
+        showToast("Could not save the file. Please try again.", "error");
+        return false;
+      }
+    }
+    /* Standard browser download: build a Blob, click a hidden <a download>,
+       revoke the object URL once the click has had a moment to be handled. */
     try {
       var blob = data instanceof Blob ? data : new Blob([data], { type: mimeForFilename(filename) });
       var url = URL.createObjectURL(blob);

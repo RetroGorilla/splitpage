@@ -144,6 +144,10 @@
   <div class="update-bar" id="update-bar" hidden>
     <span class="update-bar-icon" aria-hidden="true">⬆</span>
     <span id="update-bar-text"></span>
+    <!-- Desktop-only: 20a-update.js shows this and points it at the release
+         page (DESKTOP.openExternal) instead of the launcher's restart copy —
+         there is no in-place installer to restart in the desktop build. -->
+    <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
   </div>
 
@@ -701,6 +705,12 @@
       key; a join PIN is kept only for as long as this tab is open unless you ask otherwise.</p>
 
     <div class="connect-current" id="connect-current"></div>
+    <!-- Desktop-only: filled in and shown by 20f-desktop.js's
+         renderDesktopShareInfo() whenever this launch is hosting others —
+         the same address/PIN/caution start.mjs used to print to a console
+         window this app doesn't have. Never touches state, localStorage or
+         anything served (invariant #29) — it lives only in this element. -->
+    <div class="connect-current" id="desktop-share-info" hidden></div>
     <div class="connect-list" id="connect-list"></div>
 
     <div class="connect-add">

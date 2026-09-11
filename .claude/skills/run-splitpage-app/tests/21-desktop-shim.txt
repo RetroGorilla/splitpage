@@ -1,0 +1,62 @@
+# The desktop bridge (20f-desktop.js), driven without a real Electron shell.
+#
+# There is no pre-load hook in this harness that can inject a real
+# window.splitpageDesktop before the app script runs — DESKTOP (00-prelude.js)
+# is captured once, at load, before any fragment's own top-level code runs.
+# So this drives the real code paths a different way: window.__desktopTest
+# (20f-desktop.js) swaps the module-scope DESKTOP variable for an in-memory
+# fake backend, and everything below — saveDoc, the on-disk-conflict guard,
+# the native-menu-command dispatcher — runs exactly the code that would run
+# for a real Electron main process, just talking to a fake in place of the
+# IPC bridge. Every `eval` here is one physical line — the driver splits a
+# script file on newlines, so a multi-line JS block would be read back as one
+# command per line and fail with "unknown command". DESKTOP is null again
+# (see the last line) once this suite is done, same as every other suite's boot.
+
+open
+
+eval (function(){window.D = window.__desktopTest; window.F = window.__splitpageFormats; return !!(D && D.makeHandle && D.runMenuCommand && F);})()
+expect true
+
+# ---- a desktop handle round-trips non-ASCII text byte-exactly ------------
+eval (function(){window.fake1 = D.makeFakeBackend(); D.setBackend(window.fake1); return true;})()
+eval (async function(){ var id = window.fake1._addFile('roundtrip.splitpage', ''); var handle = D.makeHandle({id: id, name: 'roundtrip.splitpage'}); var text = 'café — 日本語 😀 end'; var w = await handle.createWritable(); await w.write(text); await w.close(); var file = await handle.getFile(); var back = await file.text(); window.__rtOk = back === text; return true; })()
+expect window.__rtOk
+
+# ---- Save As, cancelled at the native dialog: no rev bump, no error ------
+eval (function(){window.fake2 = D.makeFakeBackend(); window.fake2._cancelNextSave = true; D.setBackend(window.fake2); window.__revBefore = F.state().rev; window.__errToastsBefore = document.querySelectorAll('.toast.error').length; return true;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect F.state().rev === window.__revBefore
+expect document.querySelectorAll('.toast.error').length === window.__errToastsBefore
+
+# ---- the on-disk conflict guard fires when the fake file's mtime moves ---
+eval (function(){window.fake3 = D.makeFakeBackend(); D.setBackend(window.fake3); window.__id3 = window.fake3._addFile('conflict.md', F.buildMarkdown()); return true;})()
+eval (async function(){ var handle = D.makeHandle({id: window.__id3, name: 'conflict.md'}); var file = await handle.getFile(); await F.openFile(file, handle); return true; })()
+wait F.docFile().kind === 'md'
+expect F.docFile().name === 'conflict.md'
+expect document.getElementById('file-conflict-modal').hidden
+eval (function(){ window.fake3._touch(window.__id3); return true; })()
+eval (function(){ F.save(); return true; })()
+wait !document.getElementById('file-conflict-modal').hidden
+expect document.getElementById('file-conflict-detail').textContent.indexOf('conflict.md') !== -1
+click #file-conflict-cancel
+wait document.getElementById('file-conflict-modal').hidden
+
+# ---- native menu command 'find' reaches the same UI the File menu does ---
+expect document.getElementById('findbar').hidden
+eval (function(){ D.runMenuCommand('find'); return true; })()
+wait !document.getElementById('findbar').hidden
+jsclick #find-close
+wait document.getElementById('findbar').hidden
+
+# ---- native menu command 'toggle-comments' opens the comments panel ------
+expect document.getElementById('comments-panel').hidden
+eval (function(){ D.runMenuCommand('toggle-comments'); return true; })()
+wait !document.getElementById('comments-panel').hidden
+jsclick #comments-panel-close
+wait document.getElementById('comments-panel').hidden
+
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
+quit

@@ -210,6 +210,16 @@
     if (el) el.innerHTML = html;
   }
 
+  /* The desktop app has no launcher and no /api/launcher/* routes to ask —
+     it is already the thing the launcher's Start Menu step exists to
+     produce, so the honest answer is "you already have this", not a
+     register button that would 404. */
+  function desktopInstallHtml() {
+    return '<p class="modal-hint">Splitpage is already installed as a desktop app — this is it. ' +
+      "Opening a <code>.splitpage</code> file (or a Markdown script saved from here) opens it " +
+      "with Splitpage automatically.</p>";
+  }
+
   function renderLauncherInfo(info) {
     var html = '<p class="modal-hint">Running from <code>' + escapeHtml(info.root || "") + "</code>.</p>";
     if (info.installed) {
@@ -227,6 +237,11 @@
   async function loadLauncherInfo() {
     if (launcherInfoState !== "unloaded") return;
     launcherInfoState = "loading";
+    if (DESKTOP) {
+      launcherInfoState = "done";
+      renderLauncherInfoBody(desktopInstallHtml());
+      return;
+    }
     var info = null;
     try { info = await launcherFetch("api/launcher/info"); }
     catch (e) { info = null; }
@@ -494,12 +509,24 @@
     if (readOnboardKey()) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
-    var handle = null;
-    try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
-    if (handle) return false;
-    /* Re-check what may have changed while the IndexedDB round trip above
-       was in flight (a file could have finished opening, or Skip/Finish
-       could have already run from a very fast manual File ▸ Setup…). */
+    /* The browser's "a remembered handle exists at all" check reads
+       IndexedDB, which desktop never writes to (00-prelude.js's
+       rememberLastFileHandle routes through DESKTOP.setLastFile() instead)
+       — so on desktop this has to ask the main process for the same fact,
+       or a copy that opens straight back into last night's script would
+       show the wizard over it regardless. */
+    if (DESKTOP) {
+      var lastEntry = null;
+      try { lastEntry = await DESKTOP.getLastFile(); } catch (e) { lastEntry = null; }
+      if (lastEntry) return false;
+    } else {
+      var handle = null;
+      try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
+      if (handle) return false;
+    }
+    /* Re-check what may have changed while the round trip above was in
+       flight (a file could have finished opening, or Skip/Finish could have
+       already run from a very fast manual File ▸ Setup…). */
     if (readOnboardKey()) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
