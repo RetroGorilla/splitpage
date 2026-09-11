@@ -1,3 +1,15 @@
+  /* The hidden attribute wins, always.
+
+     Every component here styles itself with a class that sets display, and
+     a class beats the UA stylesheet's [hidden] { display: none } on
+     specificity — so an element the code had marked hidden stayed on
+     screen. That is how the update notice sat empty above every script,
+     and how "Open from the server..." showed in the File menu on a copy
+     with no server. Seventeen rules below spell out the same fix one
+     component at a time; this states it once, for every component, present
+     and future. Anything that wants to show itself clears the attribute. */
+  [hidden] { display: none !important; }
+
   :root {
     --bg: #F6F4EC;
     --surface: #FFFFFF;
