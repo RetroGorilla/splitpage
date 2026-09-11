@@ -36,6 +36,13 @@ $Source = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AppName = "Splitpage"
 # Stamped in by package.mjs when the setup is built.
 $script:SetupVersion = "@VERSION@"
+# Set when the setup window did the asking, so the end of the script knows
+# whether to report in a window or on a console.
+$script:UsedGui = $false
+$script:GuiDesktop = $true
+$script:GuiHost = $false
+$script:ProgressWindow = $null
+$script:WpfReady = $false
 
 # --- -Unregister: the inverse of -InPlace -----------------------------------
 #
@@ -85,6 +92,235 @@ function Test-Admin {
     [Security.Principal.WindowsBuiltinRole]::Administrator)
 }
 
+# --- the setup window -------------------------------------------------------
+#
+# A double-clicked installer has no console anyone can see (IExpress runs it
+# hidden), so asking questions with Read-Host meant the setup appeared to do
+# nothing at all while it sat waiting for an answer. These build real windows
+# instead, with WPF, which ships with Windows - nothing to install.
+#
+# If WPF cannot load for any reason, Show-SetupDialog returns $null and the
+# caller installs to the per-user default rather than asking: doing the
+# ordinary thing is always better than hanging on a prompt nobody can see.
+
+function Initialize-Wpf {
+  if ($script:WpfReady) { return $true }
+  try {
+    Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+    Add-Type -AssemblyName PresentationCore -ErrorAction Stop
+    Add-Type -AssemblyName WindowsBase -ErrorAction Stop
+    $script:WpfReady = $true
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+# Paints a window that is about to be blocked. The install runs on this same
+# thread, so without pumping the dispatcher once the progress window would be
+# an empty white rectangle for the whole copy.
+function Invoke-UiPump {
+  $frame = New-Object System.Windows.Threading.DispatcherFrame
+  $null = [System.Windows.Threading.Dispatcher]::CurrentDispatcher.BeginInvoke(
+    [System.Windows.Threading.DispatcherPriority]::Background,
+    [action]{ $frame.Continue = $false })
+  [System.Windows.Threading.Dispatcher]::PushFrame($frame)
+}
+
+function New-SetupWindow([string]$xaml) {
+  $reader = New-Object System.Xml.XmlNodeReader ([xml]$xaml)
+  [Windows.Markup.XamlReader]::Load($reader)
+}
+
+# Returns a hashtable of answers, or $null for "cancelled", or $false when
+# there is no WPF to show.
+function Show-SetupDialog([string]$defaultUser, [string]$defaultAll, [string]$suggested) {
+  if (-not (Initialize-Wpf)) { return $false }
+  $isAdmin = Test-Admin
+  $version = $script:SetupVersion
+
+  $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Splitpage Setup" SizeToContent="Height" Width="520"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="#F6F4EC" FontFamily="Segoe UI" FontSize="13">
+  <StackPanel Margin="22,18,22,16">
+    <TextBlock Text="Install Splitpage" FontSize="20" Foreground="#221F1A"/>
+    <TextBlock x:Name="Version" Foreground="#6E6858" Margin="0,2,0,14"/>
+    <TextBlock Text="Where should it go?" Foreground="#221F1A" Margin="0,0,0,8"/>
+    <RadioButton x:Name="RbUser" GroupName="Where" IsChecked="True" AutomationProperties.Name="Just for me">
+      <StackPanel>
+        <TextBlock Text="Just for me" Foreground="#221F1A"/>
+        <TextBlock x:Name="PathUser" Foreground="#6E6858" FontSize="11" TextWrapping="Wrap"/>
+      </StackPanel>
+    </RadioButton>
+    <RadioButton x:Name="RbAll" GroupName="Where" Margin="0,10,0,0" AutomationProperties.Name="Everyone on this PC">
+      <StackPanel>
+        <TextBlock x:Name="AllLabel" Foreground="#221F1A"/>
+        <TextBlock x:Name="PathAll" Foreground="#6E6858" FontSize="11" TextWrapping="Wrap"/>
+      </StackPanel>
+    </RadioButton>
+    <RadioButton x:Name="RbCustom" GroupName="Where" Content="Somewhere else" Foreground="#221F1A" Margin="0,10,0,0"/>
+    <Grid Margin="18,6,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+      <TextBox x:Name="CustomPath" Grid.Column="0" IsEnabled="False" Padding="4,3" VerticalContentAlignment="Center"/>
+      <Button x:Name="Browse" Grid.Column="1" Content="Browse..." IsEnabled="False" Margin="8,0,0,0" Padding="12,4"/>
+    </Grid>
+    <Border Background="#EFEAE0" BorderBrush="#DCD5C4" BorderThickness="1" CornerRadius="6" Margin="0,16,0,0" Padding="12,10">
+      <StackPanel>
+        <CheckBox x:Name="CbDesktop" Content="Put a shortcut on the desktop" IsChecked="True" Foreground="#221F1A"/>
+        <CheckBox x:Name="CbHost" Content="Add a shortcut for hosting a shared session" Foreground="#221F1A" Margin="0,8,0,0"/>
+        <TextBlock Text="A shared session lets other people on your network open a link and edit the same scripts as you." Foreground="#6E6858" FontSize="11" TextWrapping="Wrap" Margin="24,3,0,0"/>
+      </StackPanel>
+    </Border>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+      <Button x:Name="Cancel" Content="Cancel" Width="92" Height="30" IsCancel="True"/>
+      <Button x:Name="Install" Content="Install" Width="110" Height="30" Margin="10,0,0,0" IsDefault="True"/>
+    </StackPanel>
+  </StackPanel>
+</Window>
+"@
+
+  try { $win = New-SetupWindow $xaml } catch { return $false }
+
+  $find = { param($n) $win.FindName($n) }
+  $rbUser = & $find "RbUser"; $rbAll = & $find "RbAll"; $rbCustom = & $find "RbCustom"
+  $custom = & $find "CustomPath"; $browse = & $find "Browse"
+  $cbDesktop = & $find "CbDesktop"; $cbHost = & $find "CbHost"
+
+  (& $find "Version").Text = if ($version) { "version $version" } else { "" }
+  (& $find "PathUser").Text = $defaultUser
+  (& $find "PathAll").Text = $defaultAll
+  (& $find "AllLabel").Text = if ($isAdmin) { "Everyone on this PC" } else { "Everyone on this PC (needs an administrator window)" }
+  # Offered only when this window can actually do it. Elevating mid-install
+  # would mean relaunching the setup, and a greyed-out choice that explains
+  # itself is honest where a prompt that then fails is not.
+  $rbAll.IsEnabled = $isAdmin
+
+  if ($suggested) { $custom.Text = $suggested; $rbCustom.IsChecked = $true }
+
+  $syncCustom = {
+    $on = [bool]$rbCustom.IsChecked
+    $custom.IsEnabled = $on
+    $browse.IsEnabled = $on
+  }
+  $rbUser.Add_Checked($syncCustom); $rbAll.Add_Checked($syncCustom); $rbCustom.Add_Checked($syncCustom)
+  & $syncCustom
+
+  $browse.Add_Click({
+    try {
+      Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+      $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+      $dlg.Description = "Choose a folder for Splitpage"
+      if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $custom.Text = Join-Path $dlg.SelectedPath "Splitpage"
+      }
+    } catch { }
+  })
+
+  $script:SetupAnswers = $null
+  (& $find "Install").Add_Click({
+    $chosen = if ($rbAll.IsChecked) { $defaultAll }
+              elseif ($rbCustom.IsChecked) { $custom.Text.Trim() }
+              else { $defaultUser }
+    if ([string]::IsNullOrWhiteSpace($chosen)) {
+      $null = [System.Windows.MessageBox]::Show($win, "Type a folder, or pick one with Browse.", "Splitpage Setup")
+      return
+    }
+    $script:SetupAnswers = @{
+      Target = $chosen
+      AllUsers = [bool]$rbAll.IsChecked
+      Desktop = [bool]$cbDesktop.IsChecked
+      Host = [bool]$cbHost.IsChecked
+    }
+    $win.Close()
+  })
+  (& $find "Cancel").Add_Click({ $script:SetupAnswers = $null; $win.Close() })
+
+  $null = $win.ShowDialog()
+  return $script:SetupAnswers
+}
+
+# Stays up, frozen but painted, for the few seconds the copy takes.
+function Show-SetupProgress([string]$where) {
+  if (-not (Initialize-Wpf)) { return $null }
+  $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Splitpage Setup" SizeToContent="Height" Width="420"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="#F6F4EC" FontFamily="Segoe UI" FontSize="13">
+  <StackPanel Margin="24,22,24,22">
+    <TextBlock Text="Installing Splitpage..." FontSize="16" Foreground="#221F1A"/>
+    <TextBlock x:Name="Where" Foreground="#6E6858" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,12"/>
+    <ProgressBar IsIndeterminate="True" Height="6" Foreground="#1B7A68" Background="#EFEAE0" BorderThickness="0"/>
+  </StackPanel>
+</Window>
+"@
+  try { $win = New-SetupWindow $xaml } catch { return $null }
+  $win.FindName("Where").Text = $where
+  $win.Show()
+  Invoke-UiPump
+  return $win
+}
+
+# Returns $true when the user asked to open Splitpage now.
+function Show-SetupDone([string]$where) {
+  if (-not (Initialize-Wpf)) { return $false }
+  $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Splitpage Setup" SizeToContent="Height" Width="460"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="#F6F4EC" FontFamily="Segoe UI" FontSize="13">
+  <StackPanel Margin="24,22,24,18">
+    <TextBlock Text="Splitpage is installed." FontSize="18" Foreground="#221F1A"/>
+    <TextBlock x:Name="Where" Foreground="#6E6858" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    <TextBlock Text="It is in your Start Menu. Splitpage opens in your browser - in Chrome or Edge, click the install icon in the address bar to give it its own window." Foreground="#221F1A" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+      <Button x:Name="Close" Content="Close" Width="92" Height="30" IsCancel="True"/>
+      <Button x:Name="Open" Content="Open Splitpage" Width="140" Height="30" Margin="10,0,0,0" IsDefault="True"/>
+    </StackPanel>
+  </StackPanel>
+</Window>
+"@
+  try { $win = New-SetupWindow $xaml } catch { return $false }
+  $win.FindName("Where").Text = $where
+  $script:OpenNow = $false
+  $win.FindName("Open").Add_Click({ $script:OpenNow = $true; $win.Close() })
+  $win.FindName("Close").Add_Click({ $script:OpenNow = $false; $win.Close() })
+  $null = $win.ShowDialog()
+  return $script:OpenNow
+}
+
+# Anything that goes wrong below reaches this, and a setup launched by a
+# double-click has no console to print it on. Say it in a window, put the
+# progress window away first, and leave with a failing exit code.
+function Show-SetupFailed([string]$message) {
+  if (-not (Initialize-Wpf)) { return }
+  try {
+    $null = [System.Windows.MessageBox]::Show(
+      "Splitpage could not be installed.`r`n`r`n$message",
+      "Splitpage Setup",
+      [System.Windows.MessageBoxButton]::OK,
+      [System.Windows.MessageBoxImage]::Error)
+  } catch { }
+}
+
+trap {
+  if ($script:ProgressWindow) {
+    try { $script:ProgressWindow.Close() } catch { }
+    $script:ProgressWindow = $null
+  }
+  if ($script:UsedGui) { Show-SetupFailed $_.Exception.Message }
+  else { Write-Host ""; Write-Host ("  " + $_.Exception.Message) -ForegroundColor Red; Write-Host "" }
+  exit 1
+}
+
 # --- where to install -------------------------------------------------------
 #
 # Per-user by default: it needs no administrator, and it keeps the app folder
@@ -108,51 +344,32 @@ if ($InPlace) {
 } elseif ($Silent) {
   $target = if ($AllUsers) { $defaultAll } else { $defaultUser }
 } else {
-  Write-Head
-  Write-Host "  Where should Splitpage go?"
-  Write-Host ""
-  Write-Host "    [1] Just for me            $defaultUser" -ForegroundColor Gray
-  Write-Host "        (no administrator needed)"
-  Write-Host "    [2] Everyone on this PC    $defaultAll" -ForegroundColor Gray
-  Write-Host "        (needs administrator)"
-  Write-Host "    [3] Somewhere else         (type a path)"
-  Write-Host ""
-  $choice = Read-Host "  Choose 1, 2 or 3 [1]"
-  switch ($choice) {
-    "2" {
-      if (-not (Test-Admin)) {
-        Write-Host ""
-        Write-Host "  That needs administrator rights, and this is not an elevated window." -ForegroundColor Yellow
-        Write-Host "  Installing just for you instead - it works exactly the same." -ForegroundColor Yellow
-        $target = $defaultUser
-      } else {
-        $target = $defaultAll
-        $AllUsers = $true
-      }
-    }
-    "3" {
-      $typed = Read-Host "  Full path"
-      if ([string]::IsNullOrWhiteSpace($typed)) { $target = $defaultUser } else { $target = $typed }
-    }
-    default { $target = $defaultUser }
+  # The window. $UsedGui decides who reports the result at the end: the
+  # dialog that asked, or the console the script was started from.
+  $answers = Show-SetupDialog $defaultUser $defaultAll $Dir
+  if ($answers -is [hashtable]) {
+    $script:UsedGui = $true
+    $target = $answers.Target
+    $AllUsers = $answers.AllUsers
+    $script:GuiDesktop = $answers.Desktop
+    $script:GuiHost = $answers.Host
+  } elseif ($null -eq $answers) {
+    # Cancel, and nothing has been written yet.
+    exit 0
+  } else {
+    # No WPF here. Install the ordinary way rather than ask a question into
+    # a console the user may well not be able to see.
+    $target = $defaultUser
   }
 }
 
 # --- options ----------------------------------------------------------------
 
-$desktopIcon = $true
-$hostIcon = $false
-
-if (-not $Silent) {
-  Write-Host ""
-  $d = Read-Host "  Add a desktop shortcut? [Y/n]"
-  $desktopIcon = -not ($d -match '^[Nn]')
-  Write-Host ""
-  Write-Host "  Splitpage can also host a shared session, so other people on your"
-  Write-Host "  network open a link and edit the same scripts as you." -ForegroundColor Gray
-  $h = Read-Host "  Add a shortcut for that too? [y/N]"
-  $hostIcon = ($h -match '^[Yy]')
-}
+# Asked in the dialog, alongside where to install. A run with flags (or one
+# where WPF would not load) takes the defaults: a desktop shortcut, and no
+# shared-session shortcut for a feature the user has not asked for.
+$desktopIcon = if ($script:UsedGui) { $script:GuiDesktop } else { $true }
+$hostIcon = if ($script:UsedGui) { $script:GuiHost } else { $false }
 
 # --- copy -------------------------------------------------------------------
 
@@ -166,6 +383,8 @@ if ($InPlace) {
 if (-not $InPlace) {
 
 if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
+
+if ($script:UsedGui) { $script:ProgressWindow = Show-SetupProgress $target }
 
 # The payload is a zip rather than loose files because IExpress extracts
 # everything into one flat folder, which would lose server\ and runtime\.
@@ -204,36 +423,71 @@ try {
   # Runs AFTER the mirror step above: the mirror removes anything not in the
   # payload, and runtime\node.exe is created here, not shipped, so doing this
   # earlier would delete the runtime it just chose.
-  # --- select the appropriate Node runtime --------------------------------
+  # --- pick the Node runtime this machine can actually run ----------------
   #
-  # After extraction, we have one or more runtime/node-<arch>.exe files.
-  # Pick the one for this machine's architecture, rename it to runtime/node.exe,
-  # and delete the others. Check both PROCESSOR_ARCHITECTURE (native) and
-  # PROCESSOR_ARCHITEW6432 (for 32-bit processes on 64-bit Windows).
+  # NOT $env:PROCESSOR_ARCHITECTURE: that is the architecture of THIS
+  # process, and a setup built by IExpress is an x64 program, so on a
+  # Windows-on-ARM PC it runs emulated and says "AMD64" about an ARM64
+  # machine. Believing it made the arm64 setup look for a runtime it does
+  # not carry, find nothing, and install an app with no Node at all.
+  #
+  # What the download carries decides it. A single-architecture setup (what
+  # we publish) has exactly one runtime and there is nothing to choose; the
+  # --arch both build has two, and only then does the machine get a vote.
 
   $runtimeDir = Join-Path $target "runtime"
-  $procArch = $env:PROCESSOR_ARCHITECTURE
-  if ($env:PROCESSOR_ARCHITEW6432) { $procArch = $env:PROCESSOR_ARCHITEW6432 }
+  $runtimes = @(Get-ChildItem (Join-Path $runtimeDir "node-*.exe") -ErrorAction SilentlyContinue)
 
-  # Prefer ARM64 on ARM64 machines, else x64, else legacy node.exe
+  # The machine, not the process - and only sources that survive emulation.
+  # Measured on a Snapdragon PC from an emulated x64 shell, where an ARM64
+  # machine reports itself as:
+  #
+  #   registry PROCESSOR_ARCHITECTURE ... ARM64   (right)
+  #   Win32_Processor.Architecture ....... 12      (right: ARM64)
+  #   RuntimeInformation::OSArchitecture .. X64     (wrong)
+  #   $env:PROCESSOR_ARCHITECTURE ........ AMD64   (wrong)
+  #
+  # The registry value is what Windows itself records about the hardware, so
+  # it is asked first and the two liars come last.
+  $osArch = $null
+  try {
+    $osArch = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name PROCESSOR_ARCHITECTURE -ErrorAction Stop).PROCESSOR_ARCHITECTURE
+  } catch { }
+  if (-not $osArch) {
+    try {
+      $code = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).Architecture
+      if ($code -eq 12) { $osArch = "ARM64" } elseif ($code -eq 9) { $osArch = "AMD64" }
+    } catch { }
+  }
+  if (-not $osArch) {
+    try { $osArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() } catch { }
+  }
+  if (-not $osArch) { $osArch = $env:PROCESSOR_ARCHITEW6432 }
+  if (-not $osArch) { $osArch = $env:PROCESSOR_ARCHITECTURE }
+  $isArm = ("$osArch" -match "(?i)arm64")
+
   $selected = $null
-  if ($procArch -eq "ARM64" -and (Test-Path (Join-Path $runtimeDir "node-arm64.exe"))) {
-    $selected = "node-arm64.exe"
-  } elseif (Test-Path (Join-Path $runtimeDir "node-x64.exe")) {
-    $selected = "node-x64.exe"
+  if ($runtimes.Count -eq 1) {
+    $selected = $runtimes[0].Name
+  } elseif ($runtimes.Count -gt 1) {
+    $want = if ($isArm) { "node-arm64.exe" } else { "node-x64.exe" }
+    if (Test-Path (Join-Path $runtimeDir $want)) { $selected = $want }
+    else { $selected = $runtimes[0].Name }
   } elseif (Test-Path (Join-Path $runtimeDir "node.exe")) {
     $selected = "node.exe"
   }
 
-  if ($selected -and $selected -ne "node.exe") {
-    # Rename the selected runtime to node.exe
-    $selectedPath = Join-Path $runtimeDir $selected
-    $targetPath = Join-Path $runtimeDir "node.exe"
-    Move-Item $selectedPath $targetPath -Force
+  # An ARM64 binary cannot run on an Intel PC - the other way round is fine,
+  # because Windows on ARM emulates x64. Saying so now beats an installed
+  # copy that never starts.
+  if ($selected -eq "node-arm64.exe" -and -not $isArm) {
+    throw "This is the ARM version of Splitpage and this PC is $osArch. Download SplitpageSetup-x64.exe instead."
+  }
 
-    # Delete all other architecture-specific runtimes
-    Get-Item (Join-Path $runtimeDir "node-*.exe") -ErrorAction SilentlyContinue | ForEach-Object {
-      Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+  if ($selected -and $selected -ne "node.exe") {
+    Move-Item (Join-Path $runtimeDir $selected) (Join-Path $runtimeDir "node.exe") -Force
+    foreach ($other in @(Get-ChildItem (Join-Path $runtimeDir "node-*.exe") -ErrorAction SilentlyContinue)) {
+      Remove-Item $other.FullName -Force -ErrorAction SilentlyContinue
     }
 
     # The manifest lists runtime/node-<arch>.exe; the file on disk is now
@@ -245,7 +499,7 @@ try {
       $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
       $names = @($manifest.files.PSObject.Properties | ForEach-Object { $_.Name })
       foreach ($name in $names) {
-        if ($name -notmatch "^runtime/node-[A-Za-z0-9]+.exe$") { continue }
+        if ($name -notmatch "^runtime/node-[A-Za-z0-9]+\.exe$") { continue }
         if ($name -eq ("runtime/" + $selected)) {
           $manifest.files | Add-Member -NotePropertyName "runtime/node.exe" -NotePropertyValue $manifest.files.$name -Force
         }
@@ -347,7 +601,19 @@ if ($InPlace) {
   exit 0
 }
 
-if (-not $Silent) {
+if ($script:ProgressWindow) {
+  $script:ProgressWindow.Close()
+  $script:ProgressWindow = $null
+}
+
+if ($script:UsedGui) {
+  # The dialog asked; the dialog reports. Opening Splitpage is the user's
+  # call here, unlike the console path, where the command they typed is
+  # itself the request to get on with it.
+  if (Show-SetupDone $target) {
+    Start-Process -FilePath $launcher -WorkingDirectory $target -WindowStyle Minimized
+  }
+} elseif (-not $Silent) {
   Write-Host ""
   Write-Host "  Done." -ForegroundColor Green
   Write-Host ""
