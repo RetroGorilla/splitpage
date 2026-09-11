@@ -113,4 +113,60 @@ expect document.getElementById('tour-card').getBoundingClientRect().right <= inn
 jsclick #tour-skip
 sleep 300
 
+# --- "Read more" pauses the tour, it does not end it ------------------------
+# Reading the section a step points at is part of taking the tour. The guide
+# opens over it, the tour waits, and closing the guide puts the reader back
+# on the same step with the tour still unfinished.
+viewport reset
+sleep 300
+eval localStorage.removeItem('splitpage-tour-done')
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tour"]
+sleep 400
+jsclick #tour-next
+sleep 250
+jsclick #tour-next
+sleep 250
+eval window.__tourLeftAt = document.getElementById('tour-step').textContent
+eval window.__rowsBeforeReadMore = document.getElementById('rows').innerHTML
+jsclick #tour-readmore
+sleep 500
+expect document.getElementById('help-modal').hidden == false
+expect document.getElementById('tour-overlay').hidden == true
+expect localStorage.getItem('splitpage-tour-done') === null
+expect document.getElementById('help-body').scrollTop > 0
+
+# closing the guide brings the tour back, on the step it was left on
+jsclick #help-close
+sleep 400
+expect document.getElementById('help-modal').hidden == true
+expect document.getElementById('tour-overlay').hidden == false
+expect document.getElementById('tour-step').textContent === window.__tourLeftAt
+expect localStorage.getItem('splitpage-tour-done') === null
+expect document.getElementById('tour-card').getBoundingClientRect().width > 0
+
+# and the tour carries on from there
+jsclick #tour-next
+sleep 300
+expect document.getElementById('tour-step').textContent !== window.__tourLeftAt
+expect document.getElementById('rows').innerHTML === window.__rowsBeforeReadMore
+
+# Escape closes the guide and resumes the tour on ONE keypress: the guide's
+# handler and the tour's both listen on window, and the tour's must not skip
+# the tour that the guide's just put back.
+jsclick #tour-readmore
+sleep 500
+expect document.getElementById('help-modal').hidden == false
+key Escape
+sleep 400
+expect document.getElementById('help-modal').hidden == true
+expect document.getElementById('tour-overlay').hidden == false
+expect localStorage.getItem('splitpage-tour-done') === null
+
+# with no guide open, Escape still skips the tour
+key Escape
+sleep 300
+expect document.getElementById('tour-overlay').hidden == true
+expect localStorage.getItem('splitpage-tour-done') == 1
+
 quit

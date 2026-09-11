@@ -14234,6 +14234,11 @@ node update.mjs           # download and verify it</code></pre>
   function openHelp(anchor) {
     var modal = document.getElementById("help-modal");
     if (!modal) return;
+    /* Two full-screen overlays at once serve nobody, so the tour steps
+       aside — but reading the section a step points at is part of taking
+       the tour, not a reason to end it. Remember where the reader was;
+       closeHelp() brings them back. */
+    suspendTourForHelp();
     closeSidePanelsForHelp();
     helpReturnFocus = document.activeElement;
     modal.hidden = false;
@@ -14250,10 +14255,39 @@ node update.mjs           # download and verify it</code></pre>
     var modal = document.getElementById("help-modal");
     if (!modal || modal.hidden) return;
     modal.hidden = true;
+    if (tourSuspendedAt >= 0) {
+      helpReturnFocus = null;
+      resumeTourAfterHelp();
+      return;
+    }
     if (helpReturnFocus && typeof helpReturnFocus.focus === "function") {
       try { helpReturnFocus.focus(); } catch (e) {}
     }
     helpReturnFocus = null;
+  }
+
+  /* Both halves of the pause. Hiding the overlay and parking the index at
+     -1 keeps the scroll/resize handler a no-op while the guide is up; the
+     tagging strip is left exactly as the tour set it, because the tour is
+     coming back to the same step. Neither half marks the tour done. */
+  function suspendTourForHelp() {
+    if (tourStepIndex < 0) return;
+    var overlay = document.getElementById("tour-overlay");
+    if (!overlay) return;
+    tourSuspendedAt = tourStepIndex;
+    tourStepIndex = -1;
+    overlay.hidden = true;
+  }
+
+  function resumeTourAfterHelp() {
+    var at = tourSuspendedAt;
+    tourSuspendedAt = -1;
+    if (at < 0) return;
+    var overlay = document.getElementById("tour-overlay");
+    if (!overlay) return;
+    tourStepIndex = at;
+    overlay.hidden = false;
+    renderTourStep();
   }
 
   /* The static "Tagging quick reference" strip (page.html, wired by
@@ -14384,6 +14418,10 @@ node update.mjs           # download and verify it</code></pre>
   var tourStepIndex = -1;
   var tourResizeHandler = null;
   var tourTaggingHelpWasHidden = true;
+  /* Set while the guide is open OVER a tour: the tour is paused, not over,
+     and closing the guide puts the reader back on the step they left. -1
+     means no tour is waiting. */
+  var tourSuspendedAt = -1;
 
   function markTourDone() {
     try { localStorage.setItem(TOUR_DONE_KEY, "1"); } catch (e) {}
@@ -14444,14 +14482,13 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("tour-title").textContent = step.title;
     document.getElementById("tour-body").textContent = step.body;
 
-    /* Reading more ends the tour first — Help is a full-screen modal of its
-       own and stacking two full-screen overlays at once serves nobody. */
+    /* openHelp() pauses the tour and closing the guide resumes it on this
+       same step, so a reader can look something up without losing their
+       place — and without the tour quietly counting itself finished. */
     var link = document.getElementById("tour-readmore");
     link.onclick = function (e) {
       e.preventDefault();
-      var slug = step.slug;
-      endTour();
-      openHelp(slug);
+      openHelp(step.slug);
     };
 
     document.getElementById("tour-back").disabled = tourStepIndex === 0;
@@ -14474,6 +14511,9 @@ node update.mjs           # download and verify it</code></pre>
     var overlay = document.getElementById("tour-overlay");
     if (!overlay) return;
     closeSidePanelsForHelp();
+    /* Cleared first: closeHelp() resumes a suspended tour, and this is a
+       fresh one starting from step 1. */
+    tourSuspendedAt = -1;
     closeHelp();
     var taggingHelp = document.getElementById("tagging-help");
     tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
@@ -14490,6 +14530,7 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function endTour() {
+    tourSuspendedAt = -1;
     var overlay = document.getElementById("tour-overlay");
     if (overlay) overlay.hidden = true;
     var taggingHelp = document.getElementById("tagging-help");
@@ -14513,8 +14554,16 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("tour-next").addEventListener("click", tourNext);
     document.getElementById("tour-back").addEventListener("click", tourBack);
     document.getElementById("tour-skip").addEventListener("click", function () { endTour(); });
+    /* defaultPrevented, because the guide's own Escape handler (also on
+       window, registered earlier) closes Help on the same event — and
+       closing Help puts a suspended tour back on screen. Without this
+       guard that one keypress would close the guide and then immediately
+       skip the tour it had just restored. */
     window.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !overlay.hidden) { e.preventDefault(); endTour(); }
+      if (e.key === "Escape" && !e.defaultPrevented && !overlay.hidden) {
+        e.preventDefault();
+        endTour();
+      }
     });
   })();
   /* ================= document file formats =================
