@@ -1258,6 +1258,17 @@ The way that worked (used for the Drive / Google Doc / Markdown merge):
 
 ### Built and verified live
 
+- **The ARM64 setup, natively (2026-09-10).** Adam's machine turned out to be a
+  Snapdragon X running Windows 11 ARM64 - Git Bash is an x64 process under
+  emulation and reports AMD64, which is why earlier notes called it an x64
+  PC. `SplitpageSetup-1.0.0-arm64.exe /Q` installed, runtime
+ode.exe is a
+  native ARM64 binary (PE machine 0xAA64, `process.arch === "arm64"`), the
+  installed copy served the app, and the silent uninstall left nothing. The
+  x64 setup verified earlier ran the same way under emulation. Check
+  architecture from native PowerShell (`[RuntimeInformation]::OSArchitecture`),
+  not from Git Bash.
+
 - **2026-09-10, on Windows 11 x64 (Adam's machine).** The installer end to end:
   `node package.mjs --installer` -> `SplitpageSetup-1.0.0.exe /Q` installs per
   user with shortcuts and the Add/Remove entry; the registered uninstaller
@@ -1434,7 +1445,6 @@ that check only ever looks at the `#state-data` line.
 
 ### NOT verified — say so, don't imply otherwise
 
-- **The ARM64 setup.** `node package.mjs --installer --arch arm64` builds `SplitpageSetup-<v>-arm64.exe` with the win-arm64 Node (verified against nodejs.org checksums), and install.ps1 picks the runtime by `PROCESSOR_ARCHITECTURE`, but there is no ARM64 Windows machine here: it has never been run. The x64 setup from the same code has.
 
 - **No real phone has touched the mobile interface.** Everything above ran in
   Chromium's mobile emulation — real touch translation, but not a real iOS
