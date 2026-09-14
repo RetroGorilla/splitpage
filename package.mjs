@@ -223,6 +223,53 @@ console.log(`  ${zipPath}  (${kb(statSync(zipPath).size)})`);
 if (process.argv.includes("--installer")) {
   const { fetchRuntime } = await import("./tools/fetch-runtime.mjs");
 
+  /* ---------- the extractor stub's own architecture ----------
+   *
+   * IExpress does not cross-build. The self-extractor it produces is a copy of
+   * the wextract stub belonging to the iexpress.exe that ran, so a setup
+   * inherits the architecture of the build machine's binary and NOT of the
+   * payload it wraps. On Windows on ARM, System32\iexpress.exe is ARM64, and
+   * the x64 setup it builds is an ARM64 program wrapped around an x64 payload:
+   * Windows refuses it on an x64 PC with "This app can't run on your PC" long
+   * before install.ps1 — and its own architecture check — gets to run. 1.0.1
+   * shipped exactly that.
+   *
+   * SysWOW64 holds the 32-bit x86 copy, present on x64 and on ARM64 Windows
+   * alike, and an x86 stub starts everywhere: natively on x86, under WOW64 on
+   * x64, under emulation on ARM64. So prefer it and leave the architecture to
+   * the payload, which is what the per-arch SED already decides. A 32-bit stub
+   * also spawns 32-bit powershell.exe, which is safe here only because
+   * install.ps1 reads the machine's architecture from the registry rather than
+   * from $env:PROCESSOR_ARCHITECTURE.
+   */
+  const IEXPRESS = (() => {
+    const root = process.env.SystemRoot || "C:\\Windows";
+    for (const dir of ["SysWOW64", "System32"]) {
+      const exe = join(root, dir, "iexpress.exe");
+      if (existsSync(exe)) return exe;
+    }
+    /* Not Windows, or a layout we do not know: let PATH answer, and let the
+       ENOENT below explain itself. */
+    return "iexpress";
+  })();
+
+  const PE_MACHINE = { 0x014c: "x86", 0x8664: "x64", 0xaa64: "arm64" };
+
+  /* Which stubs a PC of a given architecture can actually start: x86 runs
+     everywhere, x64 runs on x64 and emulated on ARM64, ARM64 only on ARM64. */
+  const RUNS_ON = { x64: ["x86", "x64"], arm64: ["x86", "x64", "arm64"] };
+
+  /* The PE machine field, which is what Windows checks before it will load the
+     file at all. MZ at 0, e_lfanew at 0x3C, "PE\0\0", then the machine word. */
+  function stubMachine(exe) {
+    const buf = readFileSync(exe);
+    if (buf.length < 0x40 || buf.readUInt16LE(0) !== 0x5a4d) return null;
+    const off = buf.readUInt32LE(0x3c);
+    if (off + 6 > buf.length || buf.readUInt32LE(off) !== 0x00004550) return null;
+    const machine = buf.readUInt16LE(off + 4);
+    return PE_MACHINE[machine] || `0x${machine.toString(16).padStart(4, "0")}`;
+  }
+
   /* --arch x64 (default) | arm64 | both. "both" builds one setup per
      architecture, each carrying only its own runtime: an x64 user should not
      download an 87 MB ARM binary they can never run. */
@@ -326,10 +373,10 @@ if (process.argv.includes("--installer")) {
     const sedPath = join(DIST, `splitpage-${arch}.SED`);
     writeFileSync(sedPath, sed);
 
-    const res = spawnSync("iexpress", ["/N", win(sedPath)], { cwd: DIST, stdio: "inherit" });
+    const res = spawnSync(IEXPRESS, ["/N", win(sedPath)], { cwd: DIST, stdio: "inherit" });
     if (res.error && res.error.code === "ENOENT") {
       console.error(`
-  iexpress was not found, so no setup.exe was built.
+  iexpress was not found (looked for ${IEXPRESS}), so no setup.exe was built.
 
   It ships with Windows — this is not something to install, it just means the
   build is not running on Windows. Everything it needs is already in dist/:
@@ -345,7 +392,33 @@ if (process.argv.includes("--installer")) {
       console.error("\n  IExpress failed — see the output above.");
       process.exit(1);
     }
-    console.log(`  ${setupPath}`);
+
+    /* Never ship a setup that the PC it is meant for cannot start. This is the
+       one failure the build can see and the user cannot: to them it is a
+       download that does nothing, with no installer log, because no installer
+       ever ran. */
+    const machine = stubMachine(setupPath);
+    if (!machine) {
+      console.error(`\n  ${setupPath} is not a PE executable — refusing to ship it.`);
+      process.exit(1);
+    }
+    if (!RUNS_ON[arch].includes(machine)) {
+      console.error(`
+  The ${arch} setup came out with a ${machine} extractor stub, which a ${arch} PC
+  cannot start: Windows answers "This app can't run on your PC" and nothing in
+  the installer ever runs.
+
+  IExpress stamps the setup with the architecture of the iexpress.exe that built
+  it, whatever the payload holds. This build used:
+
+      ${IEXPRESS}
+
+  Build with the 32-bit copy instead — %SystemRoot%\\SysWOW64\\iexpress.exe —
+  whose stub starts on every architecture.`);
+      process.exit(1);
+    }
+
+    console.log(`  ${setupPath}  (${machine} stub, ${arch} payload)`);
     return setupPath;
   }
 

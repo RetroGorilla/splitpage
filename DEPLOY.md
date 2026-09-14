@@ -277,6 +277,33 @@ When it's time to cut a new release for users to update to:
 node package.mjs --installer --arch both
 ```
 
+The packager prints the architecture of each setup as it builds it, and refuses
+to finish if a setup cannot start on the PC it is meant for:
+
+```
+  dist\SplitpageSetup-1.0.2-x64.exe  (x86 stub, x64 payload)
+```
+
+**Check that line before you upload anything.** IExpress does not cross-build:
+the self-extracting wrapper is a copy of the stub belonging to the
+`iexpress.exe` that ran, so it takes the architecture of *the build machine*,
+not of the payload inside it. Building on Windows on ARM with
+`System32\iexpress.exe` produces an ARM64 wrapper around a perfectly good x64
+payload, and every x64 user gets "This app can't run on your PC" with no
+installer log, because no installer ever ran. That is what shipped as 1.0.1.
+`package.mjs` now prefers the 32-bit `SysWOW64\iexpress.exe`, whose `x86` stub
+starts on x86, x64 and ARM64 alike.
+
+To check a file by hand — a download, or an asset already published:
+
+```powershell
+$f = [IO.File]::ReadAllBytes("$HOME\Downloads\SplitpageSetup-1.0.2-x64.exe")
+'{0:X4}' -f [BitConverter]::ToUInt16($f, [BitConverter]::ToInt32($f, 0x3C) + 4)
+```
+
+`014C` is x86 and runs everywhere, `8664` is x64, `AA64` is ARM64-only. An x64
+asset reporting `AA64` is broken.
+
 On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
 
 1. **Create a new release** with tag `v<version>` (where `<version>` matches `VERSION` in the repo).
@@ -285,6 +312,9 @@ On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
    - `dist/SplitpageSetup-<version>-x64.exe` (installer for x64)
    - `dist/SplitpageSetup-<version>-arm64.exe` (installer for ARM64)
 3. **Publish the release.**
+
+Never replace the assets on a published release: someone who already downloaded
+a broken file has no way to tell it changed. Cut the next patch version instead.
 
 Existing installations will check the mirror on startup and offer the update. The `release.json` file in the repo controls the mirror URL, so if you need to change where releases come from, update that file and the next build will point there.
 
