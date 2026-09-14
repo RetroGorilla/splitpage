@@ -297,6 +297,23 @@ stages files) and then `electron-builder`, producing:
 Nothing under `dist/`, `.stage/` or `node_modules/` is committed
 (`desktop/.gitignore`).
 
+**Check the architectures before publishing anything.** electron-builder
+builds for the host's architecture unless told otherwise, and this build
+machine is ARM64. `electron-builder.yml` and `dist:win` both pin x64 + arm64,
+and `dist:win` finishes by running `node verify-dist.mjs` (also
+`npm run verify-dist` on its own). The script reads the PE machine field of
+each binary (014C x86, 8664 x64, AA64 ARM64) and fails unless:
+- each unpacked `Splitpage.exe`, and every other `.exe`/`.dll`/`.node` beside
+  it, is exactly its architecture (electron-builder's x86 `elevate.exe` is
+  allowlisted);
+- each installer's stub can start on its target PC. electron-builder's NSIS
+  stub is x86 by design, so a setup exe reading 014C is correct;
+- each installer is no older than the unpacked app it was built from.
+
+The same trap shipped 1.0.1's IExpress `SplitpageSetup-x64.exe` as an ARM64
+binary that no x64 PC could start: IExpress stamps the architecture of the
+`iexpress.exe` that built it.
+
 ### What's NOT verified
 
 - **The installers have never been published.** They land in `dist/` and are unsigned.

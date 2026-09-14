@@ -106,7 +106,10 @@
     /* The old save format, kept as an export only: one file that opens in
        any browser with nothing installed. PAGE_SHELL and buildPublishHtml
        exist for this and for nothing else now (HANDOFF §3.1). */
-    if (kind === "html") return { data: buildPublishHtml(JSON.stringify(migrateRows(cloneState(state)))), filename: baseName + ".html" };
+    /* standaloneHtmlFor (02b-doc-id.js) leaves the document id out: this
+       export is a copy handed to someone else, and carrying the id would make
+       it a duplicate of this document the moment both are open. */
+    if (kind === "html") return { data: standaloneHtmlFor(state), filename: baseName + ".html" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -208,7 +211,11 @@
         showToast(file.name + " doesn't look like a Splitpage file.", "error");
         return false;
       }
-      return adoptProjectState(migrateRows(native), file, handle, "splitpage", opts);
+      /* migrateDocument, not bare migrateRows: a file saved before document
+         ids existed would otherwise get a new random id on every open, and
+         its version history would start over each time. Its id is derived
+         from its own content instead (02b-doc-id.js). */
+      return adoptProjectState(migrateDocument(native, { kind: "file" }), file, handle, "splitpage", opts);
     }
 
     if (kind === "html") {
@@ -221,7 +228,9 @@
         showToast(file.name + " doesn't look like a Splitpage file.", "error");
         return false;
       }
-      return adoptProjectState(migrateRows(legacy), file, handle, "html", opts);
+      /* same reason as the .splitpage branch above — a legacy page carries
+         no id, so it gets the same content-derived one every time it opens */
+      return adoptProjectState(migrateDocument(legacy, { kind: "file" }), file, handle, "html", opts);
     }
 
     var project = null;
@@ -237,14 +246,17 @@
   }
 
   /* The one place a parsed project becomes THE document, whichever format
-     it arrived in. `newState` has already been through migrateRows(). */
+     it arrived in. `newState` has already been through migrateRows() — by
+     way of migrateDocument(), so it carries its document id. */
   function adoptProjectState(newState, file, handle, kind, opts) {
     opts = opts || {};
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
     state = newState;
     baseState = cloneState(state);
-    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null };
+    /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
+       there is no handle to ask — a plain <input type=file> open. */
+    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null, name: file.name };
     /* A hosted document and a local file are two homes for one Save button
        (§3.1). Opening a server document already clears the file side; this
        is the other half, which was missing — open a file while a hosted
@@ -259,6 +271,11 @@
        for round-trip export (a .docx/.csv/foreign .md) no longer applies */
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
 
+    /* This id came from a file on disk, so it has already left the page: a
+       later Save As must fork a new one rather than put this id in a second
+       file. Set before clearDirty(), whose setSaveButtons() funnel is where
+       syncDocIdentity() notices the new document. */
+    docIdWrittenOut = true;
     clearDirty();
     render();
     updateIdentityChip();
@@ -371,6 +388,10 @@
     if (state.rows.length) pushSnapshot("Before opening " + file.name);
 
     newRows.forEach(stampRow);
+    /* An import keeps state.docId on purpose. Only the rows and the title
+       are replaced; the document is still the one on screen (same history,
+       same Save target for its project file), and a foreign .docx/.csv/.md
+       has no id of its own to offer anyway. */
     state.rows = newRows;
     if (newTitle) state.title = newTitle;
     else state.title = file.name.replace(/\.[^.]+$/, "");

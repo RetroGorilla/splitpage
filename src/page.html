@@ -184,6 +184,8 @@
     </div>
   </div>
 
+  <div id="draft-pending-banner" class="notice" hidden><span id="draft-pending-text"></span> <button type="button" id="draft-pending-copy">Open them here as an unsaved copy</button></div>
+
   <div class="notice notice-readonly" id="readonly-banner" hidden>
     <strong>Read-only view.</strong> You can read and export this script, but changes won't be saved. Ask the owner for edit access.
   </div>
@@ -604,8 +606,9 @@
     <h2>Version history</h2>
     <button type="button" class="modal-close" id="history-close" aria-label="Close">×</button>
   </div>
-  <div class="comments-panel-toggle">Local safety net — snapshots kept in this browser before anything destructive.</div>
+  <div class="comments-panel-toggle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</div>
   <div class="comments-list" id="history-list"></div>
+  <details id="history-older" class="history-older" hidden><summary id="history-older-summary">Older history (before per-document history)</summary><p class="modal-hint">Saved before Splitpage kept history per document, so these may belong to a different script. Restoring one replaces this document's content.</p><div id="history-older-list"></div></details><div id="history-usage" class="modal-hint" hidden></div>
 </div>
 
 <div class="comments-panel" id="comments-panel" hidden>

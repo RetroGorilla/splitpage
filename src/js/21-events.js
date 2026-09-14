@@ -182,7 +182,7 @@
     if (catBtn) { renderTagCategories(catBtn.getAttribute("data-tag-cat")); return; }
 
     var restoreSnapBtn = e.target.closest('[data-action="restore-snapshot"]');
-    if (restoreSnapBtn) { restoreSnapshot(restoreSnapBtn.getAttribute("data-id")); return; }
+    if (restoreSnapBtn) { restoreSnapshotFromCard(restoreSnapBtn); return; }
 
     var statusBtn = e.target.closest('[data-action="cycle-status"]');
     if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
@@ -637,7 +637,18 @@
          since a fresh load never touches markDirty()/clearDirty() (the
          hook inside setSaveButtons()) until one of the resume paths above
          runs, or the reader types something. */
+      /* For the same reason, the boot document's identity is adopted here:
+         nothing on this path goes through setSaveButtons(), the funnel that
+         notices identity changes afterwards. Then the browser's duplicate
+         check opens its channel and announces this document (desktop has
+         the main process's claim table instead, and must not run both). */
+      if (typeof syncDocIdentity === "function") syncDocIdentity();
+      if (!DESKTOP) initDocIdentityChannel();
       if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+      /* Move the old shared snapshot list into "Older history" once. Not
+         awaited: it never rejects, the key is removed only after the copy is
+         confirmed, and nothing at boot depends on it finishing. */
+      startHistoryMigration();
     });
 
     var rowsEl = document.getElementById("rows");
@@ -1218,6 +1229,13 @@
       /* Escape belongs to the tag suggestion first, if one is showing */
       if (tagGhost) { hideTagGhost(); return; }
       closeWriter();
+    });
+
+    /* Another tab still running a build from before per-document history can
+       write the old shared key at any time. Migrate what it wrote as soon as
+       it lands, rather than leaving it until this page next loads. */
+    window.addEventListener("storage", function (e) {
+      if (e.key === SNAPSHOT_KEY && e.newValue) startHistoryMigration();
     });
 
     window.addEventListener("beforeunload", function (e) {

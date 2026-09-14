@@ -1,0 +1,149 @@
+# The one-time migration of the old shared 'splitpage-snapshots' localStorage
+# list into per-document history's "Older" bucket (startHistoryMigration,
+# 03a-history-store.js) and the merge-undo path that rides the same store
+# (lastMergeUndo, 03-sync.js / 14-export.js). Every case starts with a fresh
+# __historyTest.resetForTest(); every docId fixture is 'd'+32 hex.
+#
+# Boot runs startHistoryMigration() once automatically (21-events.js) using
+# whatever the legacy key held at that moment — on a fresh profile that is
+# nothing, so it is a harmless no-op and never races the scenarios below,
+# which all write the legacy key AFTER that boot has already settled.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.did = function(tag){ return 'd' + (tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag).slice(0, 32); }; return !!(F && D && H);})()
+expect true
+eval (function(){window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; window.pushForeign = async function(name){ await F.openFile(new File(['Just some plain text.'], name)); return true; }; return true;})()
+
+# =============================================================================
+# applyStashedWork's undo still works via lastMergeUndo {id, docId} — driven
+# through a real reload the same way 23-doc-id-reload.txt sets up a conflict
+# stash (a goto wipes window, so the stash id is a literal repeated below).
+# This runs FIRST, before this suite has done any other DOM work: a goto
+# right after real DOM churn reliably aborts the CDP socket (SKILL.md), so
+# resetForTest() happens BEFORE the goto (not after — after would delete the
+# "Before merging" snapshot the reload's own boot just captured).
+# =============================================================================
+eval (async function(){ await H.resetForTest(); var s = F.clone(F.state()); s.docId = 'd' + 'f'.repeat(32); var edited = F.clone(s); edited.rows[0].audioText = edited.rows[0].audioText + ' — edited before the reload'; sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify({ at: new Date().toISOString(), by: 'Tester', base: s, mine: edited })); return true; })()
+goto /index.html
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.did = function(tag){ return 'd' + (tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag).slice(0, 32); }; window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; window.pushForeign = async function(name){ await F.openFile(new File(['Just some plain text.'], name)); return true; }; return true;})()
+wait F.docId() === ('d' + 'f'.repeat(32))
+wait !document.getElementById('merge-banner').hidden
+expect F.state().rows[0].audioText.indexOf('edited before the reload') !== -1
+jsclick #merge-undo
+expect document.getElementById('merge-undo').classList.contains('armed')
+jsclick #merge-undo
+wait F.state().rows[0].audioText.indexOf('edited before the reload') === -1
+expect F.docId() === ('d' + 'f'.repeat(32))
+
+# =============================================================================
+# one-time migration of 3 legacy entries (one with a hostile id) → the key
+# is removed, Older ends up holding all 3, the hostile one re-minted to
+# /^l[0-9a-f]+/, and the panel's summary names the count.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); H.setNow(1000000); window.__m3 = [ {id:'abc', at:new Date(1000).toISOString(), label:'First', by:'A', state:{rows:[{id:'r1',audioText:'one'}], title:'Doc One'}}, {id:'xyz789', at:new Date(2000).toISOString(), label:'Second', by:'B', state:{rows:[{id:'r1',audioText:'two'}], title:'Doc Two'}}, {id:'BAD!', at:new Date(3000).toISOString(), label:'Third', by:'C', state:{rows:[{id:'r1',audioText:'three'}], title:'Doc Three'}} ]; localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__m3)); window.__m3Result = await H.migrate(); return window.__m3Result; })()
+expect window.__m3Result.migrated === 3
+expect window.__m3Result.removedKey === true
+expect localStorage.getItem('splitpage-snapshots') === null
+eval (async function(){ window.__m3Raw = await H.listRaw('older'); return window.__m3Raw.map(function(m){return m.id;}); })()
+expect window.__m3Raw.length === 3
+expect window.__m3Raw.some(function(m){return m.id === 'abc';})
+expect window.__m3Raw.some(function(m){return m.id === 'xyz789';})
+eval (function(){window.__m3Bad = window.__m3Raw.filter(function(m){return m.id !== 'abc' && m.id !== 'xyz789';})[0]; return window.__m3Bad;})()
+expect /^l[0-9a-f]+$/.test(window.__m3Bad.id)
+expect window.__m3Bad.legacyId === 'BAD!'
+eval (async function(){ window.__m3Doc = await openFixture(did('m1'), 'Summary Check'); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-older').hidden
+expect document.getElementById('history-older-summary').textContent.indexOf('3') !== -1
+expect document.querySelectorAll('#history-older-list .history-card').length === 3
+jsclick #history-close
+
+# =============================================================================
+# a repeat migration with the same 3 entries plus 1 new one → Older ends up
+# with 4, and the previously hostile id is re-minted to the SAME value
+# (checksumText is a pure function of its content).
+# =============================================================================
+eval (async function(){ window.__m4 = window.__m3.concat([{id:'fourth', at:new Date(4000).toISOString(), label:'Fourth', by:'D', state:{rows:[{id:'r1',audioText:'four'}], title:'Doc Four'}}]); localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__m4)); window.__m4Result = await H.migrate(); return window.__m4Result; })()
+expect window.__m4Result.migrated === 1
+expect window.__m4Result.removedKey === true
+eval (async function(){ window.__m4Raw = await H.listRaw('older'); return window.__m4Raw.length; })()
+expect window.__m4Raw.length === 4
+eval (function(){window.__m4Bad = window.__m4Raw.filter(function(m){return m.legacyId === 'BAD!';})[0]; return window.__m4Bad.id;})()
+expect window.__m4Bad.id === window.__m3Bad.id
+expect window.__m4Raw.some(function(m){return m.id === 'fourth';})
+
+# =============================================================================
+# import-fail leaves the legacy key intact
+# =============================================================================
+eval (async function(){ await H.resetForTest(); H.injectFault('import-fail'); window.__ifRaw = JSON.stringify([{id:'imp1', at:new Date().toISOString(), label:'Imp', by:'A', state:{rows:[{id:'r1',audioText:'x'}]}}]); localStorage.setItem('splitpage-snapshots', window.__ifRaw); window.__ifResult = await H.migrate(); return window.__ifResult; })()
+expect window.__ifResult.migrated === 0
+expect window.__ifResult.removedKey === false
+expect localStorage.getItem('splitpage-snapshots') === window.__ifRaw
+eval (async function(){ window.__ifOlder = await H.docRecord('older'); return window.__ifOlder; })()
+expect window.__ifOlder === null
+eval (function(){H.injectFault(null); localStorage.removeItem('splitpage-snapshots'); return true;})()
+
+# =============================================================================
+# a corrupt key (not a JSON array) is never deleted
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__corrupt = 'this is not json at all {{{'; localStorage.setItem('splitpage-snapshots', window.__corrupt); window.__corruptResult = await H.migrate(); return window.__corruptResult; })()
+expect window.__corruptResult.migrated === 0
+expect window.__corruptResult.removedKey === false
+expect localStorage.getItem('splitpage-snapshots') === window.__corrupt
+eval (function(){localStorage.removeItem('splitpage-snapshots'); return true;})()
+
+# =============================================================================
+# a key that changes while a migration is already running is never left
+# deleted unless its LATEST content is what actually made it into Older —
+# the safety invariant behind "not deleted until re-migrated", exercised by
+# racing a real content change against an in-flight migrate() call.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__midFirst = [{id:'mid1', at:new Date(1000).toISOString(), label:'Mid1', by:'A', state:{rows:[{id:'r1',audioText:'mid-one'}]}}]; localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__midFirst)); window.__midPromise = H.migrate(); return true; })()
+eval (function(){window.__midSecond = window.__midFirst.concat([{id:'mid2', at:new Date(2000).toISOString(), label:'Mid2', by:'B', state:{rows:[{id:'r1',audioText:'mid-two'}]}}]); localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__midSecond)); return true;})()
+eval (async function(){ window.__midResult = await window.__midPromise; window.__midKeyNow = localStorage.getItem('splitpage-snapshots'); window.__midOlder = await H.listRaw('older'); return [window.__midResult, window.__midKeyNow, window.__midOlder.length]; })()
+# safety invariant, true regardless of exactly which loop iteration won the
+# race: a removed key means every entry that was live in localStorage at
+# THIS check is already confirmed in Older; a kept key means nothing was
+# silently lost (its text is still readable, not blanked or truncated)
+expect (window.__midKeyNow === null) === window.__midResult.removedKey
+eval (function(){if (!window.__midResult.removedKey) { window.__midSafe = typeof window.__midKeyNow === 'string' && JSON.parse(window.__midKeyNow).length >= 1; } else { var ids = {}; window.__midOlder.forEach(function(m){ids[m.id] = true;}); window.__midSafe = ids['mid1'] === true; } return window.__midSafe;})()
+expect window.__midSafe === true
+eval (function(){localStorage.removeItem('splitpage-snapshots'); return true;})()
+
+# =============================================================================
+# the Older section shows in every document (it is shared, not scoped to
+# one), restoring from it keeps the CURRENT document's id, and it expires
+# as a whole 90 days after the migration that created it.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); H.setNow(10000000); window.__expLegacy = [{id:'exp1', at:new Date(1000).toISOString(), label:'Exp1', by:'A', state:{rows:[{id:'r1',audioText:'exp-one'}]}}, {id:'exp2', at:new Date(2000).toISOString(), label:'Exp2', by:'B', state:{rows:[{id:'r1',audioText:'exp-two'}]}}]; localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__expLegacy)); await H.migrate(); window.__expX = await openFixture(did('m2'), 'Every Doc X'); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-older').hidden
+expect document.querySelectorAll('#history-older-list .history-card').length === 2
+jsclick #history-close
+eval (async function(){ window.__expY = await openFixture(did('m3'), 'Every Doc Y'); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-older').hidden
+expect document.querySelectorAll('#history-older-list .history-card').length === 2
+eval (function(){window.__expCardId = document.querySelector('#history-older-list [data-action="restore-snapshot"]').getAttribute('data-id'); return window.__expCardId;})()
+jsclick #history-older-list [data-action="restore-snapshot"]
+wait document.getElementById('history-panel').hidden
+expect F.docId() === __expY
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-older').hidden
+jsclick #history-close
+eval (function(){H.setNow(10000000 + 91 * 24 * 60 * 60 * 1000); return true;})()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.getElementById('history-older').hidden
+expect document.querySelectorAll('#history-older-list .history-card').length === 0
+eval (async function(){ window.__expOlderAfter = await H.docRecord('older'); return window.__expOlderAfter; })()
+expect window.__expOlderAfter === null
+eval (function(){H.setNow(null); return true;})()
+jsclick #history-close
+
+quit

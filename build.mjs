@@ -94,6 +94,14 @@ function checksumText(str) {
  * rather than reading it back out of `html`, keeps this independent of
  * where the marker ends up landing in page.html. */
 function seedCheckValue() {
+  /* The seed is copied into every fresh copy of the app, so a docId in it
+     would give every new document everywhere the same identity — one shared
+     version history for strangers' scripts. migrateRows mints a random id at
+     boot instead (src/js/02b-doc-id.js). */
+  const seed = JSON.parse(src("seed-state.json"));
+  if (seed && typeof seed === "object" && Object.prototype.hasOwnProperty.call(seed, "docId")) {
+    throw new Error("seed-state.json must not contain docId — every fresh copy of the app would share one document identity");
+  }
   const text = "\n" + chomp(src("seed-state.json")) + "\n";
   return text.length + "-" + checksumText(text);
 }

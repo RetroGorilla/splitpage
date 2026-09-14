@@ -10,7 +10,8 @@
     "start": "electron .",
     "stage": "node stage.mjs",
     "dist": "node stage.mjs && electron-builder --config electron-builder.yml",
-    "dist:win": "node stage.mjs && electron-builder --config electron-builder.yml --win --x64 --arm64",
+    "dist:win": "node stage.mjs && electron-builder --config electron-builder.yml --win --x64 --arm64 && node verify-dist.mjs --arch both",
+    "verify-dist": "node verify-dist.mjs --arch both",
     "test": "node test/smoke.mjs"
   },
   "devDependencies": {
