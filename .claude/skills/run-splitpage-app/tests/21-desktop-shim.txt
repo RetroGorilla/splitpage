@@ -42,6 +42,32 @@ expect document.getElementById('file-conflict-detail').textContent.indexOf('conf
 click #file-conflict-cancel
 wait document.getElementById('file-conflict-modal').hidden
 
+# ---- what main is told about this document (DOCUMENT-STATE-AND-ROUTING-IPC)
+# conflict.md above was opened through a real desktop handle, so the last
+# setDocumentState report must name this document's id and the OPAQUE file id
+# of that handle — never a path (invariant #34). Main keys its duplicate-id
+# claim table on exactly this pair.
+eval (function(){ window.__ds = window.fake3._lastDocState || {}; return Object.keys(window.__ds).join(','); })()
+expect window.__ds.docId === F.docId()
+expect window.__ds.fileId === window.__id3
+
+# ---- main's duplicate-id verdict is applied here (DOC-CLAIMS) ------------
+# Two copies of one file open side by side share one id; main picks the loser
+# and sends splitpage:reassign-doc-id. The page adopts the new id and logs the
+# history copy — and, per orchestrator override §1, writes nothing.
+eval (function(){ window.__dupFrom = F.docId(); window.__dupTo = 'd' + 'e'.repeat(32); window.fake3._fireReassignDocId({fromId: window.__dupFrom, toId: window.__dupTo, otherTitle: 'X'}); return F.docId(); })()
+expect F.docId() === window.__dupTo
+expect F.docIdEvents().filter(function(e){ return e.type === 'copy' && e.from === window.__dupFrom && e.to === window.__dupTo; }).length === 1
+expect F.writtenOut() === false
+
+# a message whose fromId is no longer this document's id (main raced a save,
+# or the page re-id'd itself first) and one carrying a malformed toId are both
+# dropped — the id on screen does not move.
+eval (function(){ window.fake3._fireReassignDocId({fromId: window.__dupFrom, toId: 'd' + 'a'.repeat(32), otherTitle: 'Y'}); return F.docId(); })()
+expect F.docId() === window.__dupTo
+eval (function(){ window.fake3._fireReassignDocId({fromId: window.__dupTo, toId: 'nope', otherTitle: 'Y'}); return F.docId(); })()
+expect F.docId() === window.__dupTo
+
 # ---- native menu command 'find' reaches the same UI the File menu does ---
 expect document.getElementById('findbar').hidden
 eval (function(){ D.runMenuCommand('find'); return true; })()
@@ -55,6 +81,49 @@ eval (function(){ D.runMenuCommand('toggle-comments'); return true; })()
 wait !document.getElementById('comments-panel').hidden
 jsclick #comments-panel-close
 wait document.getElementById('comments-panel').hidden
+
+# ---- version history goes to the DESKTOP store, not IndexedDB ------------
+# makeFakeBackend({history:true}) adds the seven HISTORY-IPC methods
+# (20f-desktop.js), so resolveHistoryBackend (03a-history-store.js) picks the
+# desktop backend the moment DESKTOP.historyPut exists. The capture rides a
+# real caller — loadFileIntoEditor's "Before opening X" push, reached by
+# opening a plain .txt — because pushSnapshot lives inside the build's one
+# closure and is not exposed. loadFileIntoEditor KEEPS state.docId, so the
+# snapshot lands under the document that is still on screen.
+eval (function(){window.H = window.__historyTest; window.fakeH = D.makeFakeBackend({history:true}); D.setBackend(window.fakeH); return typeof window.fakeH.historyPut === 'function' && typeof window.fakeH._historyDump === 'function';})()
+expect true
+eval (function(){ D.markDirtyForTest(); window.__hDocId = F.state().docId; window.__hTitle = F.state().title; window.__hRows = F.state().rows.length; return window.__hDocId;})()
+eval (async function(){ await F.openFile(new File(['A plain paragraph of text.'], 'history-shim.txt')); await H.idle(); return true; })()
+wait F.state().title === 'history-shim'
+expect H.backendName() === 'desktop'
+eval (function(){ window.__hDump = window.fakeH._historyDump(); return Object.keys(window.__hDump); })()
+expect window.__hDump[window.__hDocId].length === 1
+expect typeof window.__hDump[window.__hDocId][0].stateJson === 'string'
+expect window.__hDump[window.__hDocId][0].stateJson.indexOf(window.__hTitle) !== -1
+# the desktop store is the ONLY place it went: no legacy localStorage key,
+# and nothing was left pending in this page
+expect localStorage.getItem('splitpage-snapshots') === null
+expect H.pending(window.__hDocId).length === 0
+
+# restoring that snapshot round-trips the title and the rows through the
+# desktop backend (list -> get -> adoptRestoredState), and stores its own
+# "Before restoring" backup there first — so the bucket holds 2 afterwards.
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+jsclick #history-list [data-action="restore-snapshot"]
+wait document.getElementById('history-panel').hidden
+wait F.state().title === window.__hTitle
+expect F.state().rows.length === window.__hRows
+expect F.state().docId === window.__hDocId
+eval (async function(){ await H.idle(); window.__hDump2 = window.fakeH._historyDump(); return window.__hDump2[window.__hDocId].length; })()
+expect window.__hDump2[window.__hDocId].length === 2
+expect localStorage.getItem('splitpage-snapshots') === null
+
+# with the bridge gone the backend falls back to IndexedDB, unchanged
+eval (async function(){ D.restoreBackend(); window.__hBackend = await H.forceBackend(null); return window.__hBackend; })()
+expect window.__hBackend === 'idb'
+expect H.backendName() === 'idb'
 
 eval (function(){ D.restoreBackend(); return true; })()
 expect !window.splitpageDesktop

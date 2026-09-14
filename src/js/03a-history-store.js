@@ -968,28 +968,162 @@
     rawDoc: function (bucket) { return Promise.resolve(historyMem.docs[bucket] || null); }
   };
 
-  /* ---- desktop backend: STUB — step I replaces this object ----
+  /* ---- desktop backend (HISTORY-IPC) ----
 
-     Step I implements it over the HISTORY-IPC bridge (DESKTOP.historyPut,
-     historyList, historyGet, historyCopy, historyTouch, historyImportOlder,
-     historyUsage), each call raced against 30 s → code 'timeout' and an
-     invoke rejection → code 'invalid'. Main owns validation, eviction and the
-     on-disk format there, so this object will have no putOnce/evict of its
-     own. Until step I lands nothing selects it: resolveHistoryBackend() picks
-     it only when DESKTOP.historyPut is a function, and no preload defines
-     that yet. If something did, every write reports 'no-backend' and stays
-     pending rather than silently going to IndexedDB under a different
-     origin's rules. */
+     On the desktop the store is a folder tree under userData, and the MAIN
+     process owns all of it — validation, the on-disk format, the per-document
+     trim, eviction (desktop/main.js section 8b). So this object is a thin
+     translator with no putOnce and no evict of its own: it reshapes main's
+     answers into the same HistoryWriteResult / list / usage shapes the
+     IndexedDB and memory backends return, and nothing above it has to know
+     which one it is talking to.
+
+     WHY EVERY CALL IS RACED. An invoke that never settles — main wedged
+     behind a slow disk, this view torn off mid-call, a handler that threw
+     before replying — would hold the one history queue (enqueueHistory) for
+     the life of the page. The snapshot would not even be reported as failed;
+     it would simply hang, never becoming 'pending', so nothing would ever
+     retry it. Thirty seconds, then code 'timeout' and the entry stays this
+     page's to retry.
+
+     WHY A REJECTION IS 'invalid'. Main answers a value for everything a
+     retry could fix (a full disk, an I/O error, a read-only folder, a body
+     over 256 MiB) and rejects ONLY when the call itself was malformed. An
+     entry that can never succeed is dropped rather than held in RAM forever
+     (historyStoreEntry). */
+  var HISTORY_DESKTOP_TIMEOUT_MS = 30000;
+
+  function historyDesktopCall(run, onTimeout, onReject) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var timer = null;
+      function finish(v) {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(v);
+      }
+      timer = setTimeout(function () { finish(onTimeout); }, HISTORY_DESKTOP_TIMEOUT_MS);
+      var p;
+      try { p = run(); } catch (e) {
+        if (window.console) console.error(e);
+        finish(onReject);
+        return;
+      }
+      Promise.resolve(p).then(finish, function (e) {
+        if (window.console) console.error(e);
+        finish(onReject);
+      });
+    });
+  }
+
   var desktopHistoryBackend = {
     name: "desktop",
     persistent: true,
-    put: function () { return Promise.resolve({ stored: false, code: "no-backend" }); },
-    list: function () { return Promise.resolve({ entries: [], older: [], olderExpiresAt: null }); },
-    get: function () { return Promise.resolve(null); },
-    copy: function () { return Promise.resolve({ ok: false, copied: 0, code: "no-backend" }); },
-    touch: function () { return Promise.resolve(); },
-    importOlder: function () { return Promise.resolve({ ok: false, count: 0, added: 0, code: "no-backend" }); },
-    usage: function () { return Promise.resolve({ totalBytes: 0, capBytes: 0, overCap: false, docCount: 0, readOnly: true }); },
+
+    /* Main does the quota retry and the eviction, so there is no
+       historyPutWithQuotaRetry here — its answer already says how many
+       snapshots went and whether we are still over the cap. The held
+       snapshots travel WITH the call (orchestrator override §2b): a restore
+       from Older is reading one of them while this very write may be what
+       forces an eviction. */
+    put: function (docId, meta, stateJson) {
+      var clean = sanitizeHistoryMeta(meta);
+      if (!normalizeDocId(docId) || !clean || typeof stateJson !== "string") {
+        return Promise.resolve({ stored: false, code: "invalid" });
+      }
+      return historyDesktopCall(function () {
+        return DESKTOP.historyPut(docId, clean, stateJson, historyProtectedList());
+      }, { stored: false, code: "timeout" }, { stored: false, code: "invalid" }).then(function (r) {
+        if (!r || typeof r !== "object") return { stored: false, code: "io" };
+        if (r.stored === false) return r;           /* our own timeout/invalid answer */
+        if (!r.ok) return { stored: false, code: typeof r.code === "string" ? r.code : "io" };
+        var out = { stored: true, evicted: Number(r.evicted) || 0, overCap: !!r.overCap };
+        if (r.duplicate) out.duplicate = true;
+        return out;
+      });
+    },
+
+    list: function (docId) {
+      var empty = { entries: [], older: [], olderExpiresAt: null };
+      return historyDesktopCall(function () {
+        return DESKTOP.historyList(docId || null);
+      }, empty, empty).then(function (r) {
+        if (!r || typeof r !== "object") return empty;
+        /* Main sends metas with no document id in them (on disk the folder
+           IS the document), so stamp it back on for the panel — the other
+           two backends carry it on every meta they hand out. */
+        var entries = (r.entries || []).map(historyStripMeta).filter(Boolean);
+        if (docId) entries.forEach(function (m) { m.docId = docId; });
+        var older = (r.older || []).map(historyStripMeta).filter(Boolean);
+        older.forEach(function (m) { m.docId = HISTORY_OLDER_KEY; });
+        return {
+          entries: entries,
+          older: older,
+          olderExpiresAt: r.olderExpiresAt == null ? null : Number(r.olderExpiresAt)
+        };
+      });
+    },
+
+    get: function (bucket, id) {
+      var query = bucket === HISTORY_OLDER_KEY ? { older: true } : { docId: bucket };
+      return historyDesktopCall(function () {
+        return DESKTOP.historyGet(query, id);
+      }, null, null).then(function (r) {
+        if (!r || typeof r !== "object" || typeof r.stateJson !== "string") return null;
+        var meta = historyStripMeta(r.meta);
+        if (!meta) return null;
+        meta.docId = bucket;
+        return { meta: meta, stateJson: r.stateJson };
+      });
+    },
+
+    copy: function (from, to) {
+      return historyDesktopCall(function () {
+        return DESKTOP.historyCopy(from, to);
+      }, { ok: false, copied: 0, code: "timeout" }, { ok: false, copied: 0, code: "invalid" })
+        .then(function (r) {
+          if (!r || typeof r !== "object") return { ok: false, copied: 0, code: "io" };
+          return { ok: !!r.ok, copied: Number(r.copied) || 0, code: r.code };
+        });
+    },
+
+    touch: function (docId, title) {
+      return historyDesktopCall(function () {
+        return DESKTOP.historyTouch(docId, title);
+      }, null, null);
+    },
+
+    importOlder: function (entries) {
+      return historyDesktopCall(function () {
+        return DESKTOP.historyImportOlder(entries);
+      }, { ok: false, count: 0, added: 0, code: "timeout" }, { ok: false, count: 0, added: 0, code: "invalid" })
+        .then(function (r) {
+          if (!r || typeof r !== "object") return { ok: false, count: 0, added: 0, code: "io" };
+          return { ok: !!r.ok, count: Number(r.count) || 0, added: Number(r.added) || 0, code: r.code };
+        });
+    },
+
+    usage: function () {
+      var unknown = { totalBytes: 0, capBytes: Infinity, overCap: false, docCount: 0, readOnly: false };
+      return historyDesktopCall(function () {
+        return DESKTOP.historyUsage();
+      }, unknown, unknown).then(function (r) {
+        if (!r || typeof r !== "object") return unknown;
+        return {
+          totalBytes: Number(r.totalBytes) || 0,
+          capBytes: Number(r.capBytes) || 0,
+          overCap: !!r.overCap,
+          docCount: Number(r.docCount) || 0,
+          readOnly: !!r.readOnly
+        };
+      });
+    },
+
+    /* Main evicts as part of every write it accepts, including the expired
+       Older bucket a list() reports empty — so there is nothing for this side
+       to ask for. It stays a function because runHistoryMigration's expiry
+       sweep and historyFinishList both probe for one. */
     evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); }
   };
 
