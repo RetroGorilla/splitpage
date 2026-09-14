@@ -46,6 +46,13 @@ Copy this template into the right section below:
 - **Description:** The main two-column interface is too fixed-width — it should be more flexible and expand to use available space on wider windows/screens instead of staying capped.
 - **Repro / notes:** Resize the window wider and the two-column view doesn't grow to fill it.
 
+### Add-image button is oversized
+- **Type:** Feature
+- **Priority:** Low
+- **Area:** UI
+- **Description:** The "add image" button is still needlessly big. Consider shrinking it to a small attachment icon/button living in the left gutter instead.
+- **Repro / notes:** Visual/UX only — no functional bug, just needs a smaller, less prominent treatment (e.g. paperclip-style icon in the left gutter).
+
 <!-- add entries here -->
 
 ---
