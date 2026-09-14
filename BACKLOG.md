@@ -30,8 +30,8 @@ Copy this template into the right section below:
 - **Type:** Bug
 - **Priority:** Medium
 - **Area:** Tagging / editing
-- **Description:** If the last word in a paragraph is tagged, you can't type additional text into that scene (can't place cursor after the tag / continue the paragraph). Not yet confirmed whether this is specific to prop tags or affects all tag types.
-- **Repro / notes:** Tag the final word of a paragraph, then try to add more text after it — typing doesn't work. Needs repro across different tag types (prop, person, etc.) to narrow scope. Likely related to `.tag-anchor` being `contenteditable="false"` (noted in `src/js/21-events.js` around line 334) — cursor may have nowhere to land after an atomic tag at the end of a line.
+- **Description:** If the last word in a paragraph is tagged, you can't type additional text into that scene (can't place cursor after the tag / continue the paragraph). Not specific to prop tags — narrowed down to happening specifically when the tag falls on the bottom (last) row of the text cell.
+- **Repro / notes:** Tag a word on the bottom row of a text cell, then try to add more text after it — typing doesn't work. Tags elsewhere (not on the bottom row) don't have this problem. Likely related to `.tag-anchor` being `contenteditable="false"` (noted in `src/js/21-events.js` around line 334) — cursor may have nowhere to land after an atomic tag when there's no row below it to fall into.
 
 ### Tags don't survive app updates
 - **Type:** Bug
