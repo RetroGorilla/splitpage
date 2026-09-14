@@ -18,12 +18,19 @@ param(
   # Read commands from a file instead of stdin. Prefer this: piping into
   # [Console]::In from another PowerShell is fragile — the parent can sit on a
   # buffered pipeline long after the driver has finished and exited.
-  [string]$Script
+  [string]$Script,
+  # Identifies which run-tests.ps1 invocation (if any) spawned this driver, so
+  # its Edge profile can be swept only by that same run — see Start-Edge and
+  # run-tests.ps1's Clear-SplitpageEdge. Minted below when absent so a
+  # standalone driver.ps1 (ad-hoc, or the join-PIN walkthrough in SKILL.md)
+  # still gets its own scope instead of an empty/shared one.
+  [string]$RunId
 )
 
 $ErrorActionPreference = 'Stop'
 if (-not $Root)    { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path }
 if (-not $ShotDir) { $ShotDir = Join-Path $env:TEMP 'splitpage-shots' }
+if (-not $RunId)   { $RunId = [guid]::NewGuid().ToString('N').Substring(0, 8) }
 New-Item -ItemType Directory -Force -Path $ShotDir | Out-Null
 
 function Log($m)  { [Console]::Error.WriteLine("[driver] $m") }
@@ -91,7 +98,11 @@ function Find-Edge {
 function Start-Edge {
   if ($script:EdgeProc) { return }
   $exe = Find-Edge
-  $script:UserDataDir = Join-Path $env:TEMP ("splitpage-edge-" + [guid]::NewGuid().ToString('N').Substring(0,8))
+  # $RunId first, then a fresh guid: run-tests.ps1's sweep matches on the
+  # "splitpage-edge-<RunId>-" prefix to find only this run's leftover
+  # browsers, and the trailing guid still keeps two suites of the SAME run
+  # (each its own driver.ps1) from ever matching each other's directory.
+  $script:UserDataDir = Join-Path $env:TEMP ("splitpage-edge-" + $RunId + "-" + [guid]::NewGuid().ToString('N').Substring(0,8))
   $a = @(
     "--remote-debugging-port=$CdpPort",
     "--user-data-dir=$script:UserDataDir",

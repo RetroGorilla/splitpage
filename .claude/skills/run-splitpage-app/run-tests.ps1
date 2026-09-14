@@ -9,7 +9,10 @@
 # browser, so one wedged suite cannot take the others down with it. When
 # -Port/-CdpPort are omitted the bases are auto-picked (see below) so two
 # runs on the same machine - two worktrees, two agents - don't fight over
-# the same fixed ports.
+# the same fixed ports. Two runs are also safe together on Edge: this script
+# mints its own runId and every driver.ps1 it spawns tags its browser profile
+# with it, so each run's leftover-browser sweep (see Clear-SplitpageEdge
+# below) only ever touches its own run.
 
 [CmdletBinding()]
 param(
@@ -36,26 +39,30 @@ New-Item -ItemType Directory -Force -Path $logs | Out-Null
 #
 # Matched on the profile directory, never on the process name: killing every
 # msedge.exe would take down the browser the person running the tests is
-# reading this in.
-function Clear-SplitpageEdge {
+# reading this in. And matched on THIS run's own $RunId, not on the bare
+# "splitpage-edge-*" glob: every run-tests.ps1 invocation mints its own runId
+# below and hands it to every driver.ps1 it spawns (see $RunId), so this sweep
+# only ever touches leftovers from a killed suite of the SAME run. A second,
+# concurrent run-tests.ps1 on this machine has a different runId, so its live
+# browsers no longer look like ours and don't get swept - that used to kill a
+# second run's browser mid-suite with
+# "The WebSocket is in an invalid state ('Aborted')".
+function Clear-SplitpageEdge([string]$RunId) {
   try {
     Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction Stop |
-      Where-Object { $_.CommandLine -and $_.CommandLine -like '*splitpage-edge-*' } |
+      Where-Object { $_.CommandLine -and $_.CommandLine -like "*splitpage-edge-$RunId-*" } |
       ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   } catch {}
 }
 
-# Only sweep when no other suite is running on this machine. The sweep is for
-# browsers a killed run left behind; a second run-tests.ps1 (another worktree)
-# has live browsers that look identical, and killing those aborted its suites
-# with "WebSocket ... Aborted" until this guard existed.
-$otherDrivers = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*driver.ps1*' })
-if ($otherDrivers.Count -gt 0) {
-  Write-Host "another suite is running (pid $($otherDrivers[0].ProcessId)); not sweeping its browsers" -ForegroundColor DarkGray
-} else {
-  Clear-SplitpageEdge
-}
+# Mint this run's id before spawning anything - every driver.ps1 below gets it
+# via -RunId, and it's what scopes Clear-SplitpageEdge to our own browsers
+# (see the comment above). No more "is another suite running" guard: that
+# check only saw other driver.ps1 *processes*, so a second run-tests.ps1 that
+# hadn't spawned its first driver yet was invisible to it and got swept
+# anyway. Runid-scoping the glob itself removes the race instead of narrowing it.
+$RunId = [guid]::NewGuid().ToString('N').Substring(0, 8)
+Clear-SplitpageEdge $RunId
 
 $files = Get-ChildItem -Path $tests -Filter '*.txt' | Sort-Object Name
 if ($Only) { $files = $files | Where-Object { $_.Name -like "$Only*" } }
@@ -122,7 +129,8 @@ foreach ($f in $files) {
   # collide with the next one.
   $a = @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'driver.ps1'),
-    '-Port', ($Port + $i), '-CdpPort', ($CdpPort + $i), '-Script', $f.FullName
+    '-Port', ($Port + $i), '-CdpPort', ($CdpPort + $i), '-Script', $f.FullName,
+    '-RunId', $RunId
   )
   if ($Headed) { $a += '-Headed' }
 
@@ -146,17 +154,10 @@ foreach ($f in $files) {
     while (-not $p.HasExited -and $grace.Elapsed.TotalSeconds -lt 5) { Start-Sleep -Milliseconds 200 }
   }
   if (-not $p.HasExited) { try { $p.Kill() } catch {} }
-  # Only sweep when no other suite is running on this machine. The sweep is for
-# browsers a killed run left behind; a second run-tests.ps1 (another worktree)
-# has live browsers that look identical, and killing those aborted its suites
-# with "WebSocket ... Aborted" until this guard existed.
-$otherDrivers = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*driver.ps1*' })
-if ($otherDrivers.Count -gt 0) {
-  Write-Host "another suite is running (pid $($otherDrivers[0].ProcessId)); not sweeping its browsers" -ForegroundColor DarkGray
-} else {
-  Clear-SplitpageEdge
-}
+  # Sweep leftovers from this run's own killed/orphaned browsers between
+  # suites - scoped to $RunId, so a concurrent run-tests.ps1 elsewhere on this
+  # machine is untouched (see Clear-SplitpageEdge above for why).
+  Clear-SplitpageEdge $RunId
 
   if (-not $done) {
     Write-Host "    TIMED OUT after ${TimeoutSec}s" -ForegroundColor Red
