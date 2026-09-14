@@ -33,7 +33,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 537/537 checks across 20 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 538/538 checks across 20 suite(s)` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -269,3 +269,59 @@ the app.
   the actual scroll speed is not.
 - **Real iOS Safari and Android keyboards.** `viewport mobile` is Chromium
   emulating a phone, which is not the same as the real thing.
+
+## Desktop app (Electron)
+
+The Splitpage desktop shell (Electron 44 + electron-builder 26) has its own
+integration suite separate from the browser harness, because it drives a real
+native window rather than headless Chromium.
+
+### Smoke suite commands
+
+From `desktop/`:
+
+```bash
+node test/smoke.mjs                       # dev + both packaged exes (if they exist)
+node test/smoke.mjs --exe <path to .exe>  # one specific target
+node test/smoke.mjs --only-target dev|packaged-x64|packaged-arm64  # filter (for debugging)
+```
+
+Every launch gets its own fresh temp `SPLITPAGE_USER_DATA`, its own free
+`--remote-debugging-port`, and `SPLITPAGE_NO_UPDATE_CHECK=1`. Nothing touches
+the developer's real Splitpage profile or documents.
+
+The last full run (2026-09-14) passed 327/327 checks, 109 per target (dev + packaged-x64 + packaged-arm64
+targets).
+
+### SPLITPAGE_TEST rule
+
+Every automated launch of the desktop app must set `SPLITPAGE_TEST=1` (HANDOFF
+invariant #33) — the suite's `launchApp()` already does; any ad-hoc launch must
+too. This is someone's working machine: without it, windows and error dialogs
+appear on their screen. In test mode the window never shows, a dialog not
+pre-answered through `SPLITPAGE_TEST_DIALOGS` resolves as Cancel, and a
+main-process crash prints `[splitpage-test] uncaught main-process error` to
+stderr and exits 70 — every case's teardown fails on that line. Kill whatever
+you start (`taskkill /PID <pid> /T /F`). If a window or dialog ever appears
+during a run, stop and fix that before anything else.
+
+### Gotchas worth recording
+
+- **Dev Electron is x64 under emulation on this ARM64 machine and slow.** Teardown
+  takes 10–15 s; poll for process exit rather than trusting timeouts.
+- **`document.visibilityState` reads "visible" even in test mode.** Check invisibility
+  with `(Get-Process -Id <pid>).MainWindowHandle -eq 0` instead.
+- **A CDP `Runtime.evaluate` is not a user gesture unless `userGesture:true`.**
+  Chromium only honours a page's `beforeunload` block after user activation, so an
+  edit made through a plain evaluate leaves the page unactivated. Pass
+  `userGesture:true` when a test means "the user typed this"; leave it off when the
+  point is that the main process's own close prompt works without activation
+  (`caseCloseAuthorityNoGesture`).
+- **Never test "the user closes the window" with a page `window.close()`.** It skips
+  the `BrowserWindow` `'close'` event entirely, so a dirty document closes with no
+  prompt and the test proves nothing about a real close. Use the test-mode-only
+  `window.splitpageDesktop.__testRequestClose()` (main calls `win.close()`, like the
+  title-bar ×) or `__testRequestQuit()` (`app.quit()`, like File ▸ Exit). They don't
+  exist without `SPLITPAGE_TEST=1`.
+- **Page targets are found via `/json` (type "page").** This will need a target filter
+  once tabs add more pages (currently there is only one page per window).

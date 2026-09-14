@@ -432,7 +432,11 @@ async function teardown(app, tag) {
   if (!exited) {
     notes.push("did not exit after Browser.close; force-killed via taskkill");
     killPid(app.proc.pid);
-    exited = await waitForExit(app.proc, 10000);
+    /* 30 s, not 10: taskkill /F is authoritative, but an x64 Electron tree
+       under ARM64 emulation on a loaded machine (an installer build or the
+       browser suite running alongside) can take well over 10 s to REPORT
+       its exit — which once failed a case whose processes were all gone. */
+    exited = await waitForExit(app.proc, 30000);
     if (!exited) notes.push("process still reported alive after taskkill");
   }
   // A packaged app's launcher exe can spawn a child renderer/utility process
@@ -807,7 +811,10 @@ async function caseHostMode(target) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
   let app = null;
   try {
-    app = await launchApp(target, { label: "host", flags: ["--host", "--pin", "4821"], dataDir });
+    /* dialogs: ["confirm"] answers the "stop sharing and close" prompt that
+       teardown's Browser.close raises — without it test mode answers Cancel,
+       the app rightly stays open, and teardown can only force-kill it. */
+    app = await launchApp(target, { label: "host", flags: ["--host", "--pin", "4821"], dataDir, dialogs: ["confirm"] });
     await waitForRows(app.cdp, 20000);
 
     const info = await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
@@ -1032,11 +1039,26 @@ async function caseUnsavedChangesClose(target) {
    (20f-desktop.js) calls markDirty() directly with zero DOM interaction,
    the same shape as a real no-gesture dirty path (applyStashedWork merging
    a stash at load, a resumed project, an OS-opened file marked dirty on
-   open) — and window.close() itself is fired with no userGesture either.
-   Before the fix, this closed the window silently with no prompt at all;
-   after it, main.js's 'close' handler reads lastDirtyByWebContents (kept
-   current by splitpage:set-document-state) directly, so the prompt fires
-   regardless of activation. */
+   open).
+
+   The close itself is driven through window.splitpageDesktop.__testRequestClose()
+   (preload.js/main.js, TEST_MODE-only), NOT the page's own window.close().
+   An experiment run while diagnosing this case proved those are not the
+   same operation: a page-initiated window.close() asks Chromium's own
+   beforeunload negotiation, which — with no user activation having ever
+   happened — Chromium settles on its own without asking the main process
+   at all, then tears the WebContents down directly. BrowserWindow's
+   'close' event, which main.js's dirty check (lastDirtyByWebContents) lives
+   entirely inside, never fires; only 'closed' does, after the fact. So a
+   dirty, never-activated document closed with no prompt whenever the test
+   used window.close(), REGARDLESS of what main.js's own close authority
+   fix did — the fix was never being exercised at all.
+   __testRequestClose() instead calls BrowserWindow#close() from the main
+   process, exactly like a real user's title-bar X / Alt+F4 does
+   (NativeWindow::Close() is that same call), which DOES fire 'close'. See
+   main.js's own comment on splitpage:test-request-close for the full
+   story, and caseCloseFromPageIsUnguarded below, which documents the
+   window.close() behaviour this case used to (wrongly) rely on. */
 async function caseCloseAuthorityNoGesture(target) {
   const tag = target.name + " close authority (no user gesture anywhere)";
   let app = null;
@@ -1058,12 +1080,12 @@ async function caseCloseAuthorityNoGesture(target) {
     // guarantees main has already processed it before we ask it to close.
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
-    // First close request, no userGesture at all: dialogs[0] = "cancel" ->
-    // the 'close' handler's own dirty check answers "Stay" -> window stays
-    // open. If this were still relying on will-prevent-unload, Chromium
-    // would never even fire it here (no activation ever happened), and the
-    // window would just close silently instead.
-    await fireEval(cdp, "window.close()", { awaitPromise: false });
+    // First close request, no userGesture at all, driven through
+    // __testRequestClose() -> main's BrowserWindow#close() -> the SAME
+    // 'close' event a real title-bar X / Alt+F4 fires: dialogs[0] =
+    // "cancel" -> the 'close' handler's own dirty check answers "Stay" ->
+    // window stays open.
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     await sleep(1500);
     const stillAliveAfterCancel = app.proc.exitCode === null;
     let pageStillThere = false;
@@ -1071,18 +1093,156 @@ async function caseCloseAuthorityNoGesture(target) {
       const list = (await fetchJson(`http://127.0.0.1:${app.port}/json`, undefined, 4000).catch(() => ({ body: [] }))).body || [];
       pageStillThere = Array.isArray(list) && list.some((t) => t.type === "page");
     }
-    let dbgLog = "";
-    try { dbgLog = fs.readFileSync(path.join(app.userDataDir, "debug.log"), "utf8"); } catch {}
     record(tag + ": close is still prompted with no user gesture, and 'cancel' keeps the window open",
       stillAliveAfterCancel && pageStillThere,
-      "exitCode=" + app.proc.exitCode + " pageStillThere=" + pageStillThere + " DBGLOG=" + dbgLog);
+      "exitCode=" + app.proc.exitCode + " pageStillThere=" + pageStillThere);
 
     // Second close request: dialogs[1] = "confirm" -> "Leave without saving"
     // -> the window actually closes, still with no gesture ever having
     // happened this session.
-    await fireEval(cdp, "window.close()", { awaitPromise: false });
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 20000);
     record(tag + ": 'confirm' closes the window for real, still with no user gesture", exited === true);
+    record(tag + ": process exits with code 0", app.proc.exitCode === 0, "exitCode=" + app.proc.exitCode);
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+  }
+}
+
+/* Documents (rather than regression-tests a fix for) the OTHER close path:
+   the page's OWN window.close(), fired with no user gesture. Confirmed by
+   experiment while building caseCloseAuthorityNoGesture above: with no
+   activation ever having happened, Chromium settles its beforeunload
+   negotiation on its own, WITHOUT ever asking the main process, then tears
+   the WebContents down directly — BrowserWindow's 'close' event never
+   fires, so main.js's dirty check (which lives entirely in that handler)
+   never runs, and a dirty document is lost with no prompt at all.
+   Leaving this undefended is only safe because it is not a user-reachable
+   path: src/js never calls window.close() anywhere (grep it) — every real
+   close goes through the title bar / Alt+F4 (BrowserWindow#close(),
+   exercised above via __testRequestClose) or File > Exit (app.quit(),
+   exercised in caseQuitAuthorityNoGesture below). If src/js ever grows a
+   call to window.close() (a "close this document" menu command, say),
+   this check starts failing and the app would need the same main-process
+   authority the real close path already has extended to that new caller
+   too. No dialogs are pre-answered here — none should be consulted, since
+   'close' never fires to ask them. */
+async function caseCloseFromPageIsUnguarded(target) {
+  const tag = target.name + " page-initiated window.close() (documented, not user-reachable)";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "close-from-page-unguarded" });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
+    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+
+    await fireEval(cdp, "window.close()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 20000);
+    record(tag + ": closes immediately with no dialog and no chance to cancel, even though the document is dirty",
+      exited === true && app.proc.exitCode === 0,
+      "exited=" + exited + " exitCode=" + app.proc.exitCode);
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+  }
+}
+
+/* Same regression as caseCloseAuthorityNoGesture, but through the File >
+   Exit path (role: "quit" -> app.quit(), main.js section 13) instead of a
+   single window's close button. app.quit() asks every open BrowserWindow
+   to close before the app actually exits, which fires the same
+   win.on('close') handler this whole fix is about — this proves the
+   authority holds on the quit path too, not only a direct window close. */
+/* Regression case: a CANCELLED quit must leave the document server running.
+   Electron emits 'before-quit' before it asks the windows to close, and a
+   window's close handler can still cancel the quit (unsaved changes -> Stay).
+   main.js used to kill the server in before-quit, so File ▸ Exit -> Stay left
+   the app running with no server behind /api: sharing silently stopped and
+   the Save the user stayed for could not reach it. The kill lives in
+   'will-quit' now, which only fires once every window has really closed —
+   the second half of this case proves it still happens then. */
+async function caseQuitCancelKeepsServer(target) {
+  const tag = target.name + " --library quit cancelled keeps the document server";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "quit-cancel-server", flags: ["--library"], dataDir, dialogs: ["cancel", "confirm"] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+
+    const before = await poll(cdp, "fetch('/api/health').then(function(r){return r.status;})", 15000);
+    record(tag + ": /api/health is 200 before quitting", before === 200, "status=" + before);
+    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+    const port = info && info.port;
+
+    await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
+    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    // invoke round trip: main has processed the dirty report before the quit
+    await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+
+    // First quit: dialogs[0] = "cancel" -> Stay.
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    await sleep(3000);
+    record(tag + ": 'Stay' keeps the app running", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+
+    const viaProxy = await evalPage(cdp, "fetch('/api/health').then(function(r){return r.status;}).catch(function(){return 0;})");
+    record(tag + ": /api/health through the app is still 200 after the cancelled quit", viaProxy === 200, "status=" + viaProxy);
+    const direct = port
+      ? await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(4000) }).then((r) => r.status).catch(() => 0)
+      : 0;
+    record(tag + ": the document server itself still answers on its port", direct === 200, "port=" + port + " status=" + direct);
+
+    // Second quit: dialogs[1] = "confirm" -> the app really exits, and the
+    // server goes with it (will-quit).
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": 'confirm' quits for real with exit code 0", exited === true && app.proc.exitCode === 0, "exitCode=" + app.proc.exitCode);
+    if (port) {
+      const closed = await portClosed(port, "127.0.0.1");
+      record(tag + ": document server port closed after the real quit", closed === true, "port=" + port);
+    } else {
+      record(tag + ": document server port closed after the real quit", false, "no port was ever reported by getSessionInfo()");
+    }
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+    rmrf(dataDir);
+  }
+}
+
+async function caseQuitAuthorityNoGesture(target) {
+  const tag = target.name + " quit authority (no user gesture anywhere)";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "quit-authority-no-gesture", dialogs: ["cancel", "confirm"] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
+    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+
+    // First quit request, no userGesture at all: dialogs[0] = "cancel" ->
+    // the 'close' handler answers "Stay" -> app.quit() aborts, process
+    // stays alive.
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    await sleep(1500);
+    record(tag + ": quitting still prompts with no user gesture, and 'cancel' keeps the app alive",
+      app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+
+    // Second quit request: dialogs[1] = "confirm" -> the app actually
+    // exits, still with no gesture ever having happened this session.
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 20000);
+    record(tag + ": 'confirm' quits for real, still with no user gesture", exited === true);
     record(tag + ": process exits with code 0", app.proc.exitCode === 0, "exitCode=" + app.proc.exitCode);
   } finally {
     if (app) {
@@ -1139,7 +1299,8 @@ async function caseHostModeAutoPin(target) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
   let app = null;
   try {
-    app = await launchApp(target, { label: "host-auto-pin", flags: ["--host", "--pin"], dataDir });
+    // "confirm": the stop-sharing prompt at teardown (see caseHostMode)
+    app = await launchApp(target, { label: "host-auto-pin", flags: ["--host", "--pin"], dataDir, dialogs: ["confirm"] });
     await waitForRows(app.cdp, 20000);
     const info = await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
     record(tag + ": a bare '--pin' auto-generates a 6-digit PIN instead of leaving JOIN_PIN empty",
@@ -1161,7 +1322,8 @@ async function caseHostModeNoPinWarning(target) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
   let app = null;
   try {
-    app = await launchApp(target, { label: "host-no-pin", flags: ["--host"], dataDir });
+    // "confirm": the stop-sharing prompt at teardown (see caseHostMode)
+    app = await launchApp(target, { label: "host-no-pin", flags: ["--host"], dataDir, dialogs: ["confirm"] });
     await waitForRows(app.cdp, 20000);
     await poll(app.cdp, "(function(){ var el = document.getElementById('desktop-share-info'); return el && el.hidden === false; })()", 15000);
     const warningText = await evalPage(app.cdp,
@@ -1199,6 +1361,9 @@ async function runTargetSuite(target) {
     ["update status", () => caseUpdateStatus(target)],
     ["unsaved-changes close", () => caseUnsavedChangesClose(target)],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
+    ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],
+    ["quit authority (no user gesture)", () => caseQuitAuthorityNoGesture(target)],
+    ["--library quit cancelled keeps the server", () => caseQuitCancelKeepsServer(target)],
     ["clean close (regression)", () => caseCleanClose(target)]
   ];
   try {

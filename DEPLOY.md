@@ -269,7 +269,60 @@ live in the mounted volume, so they are unaffected.
 
 ---
 
-## 6. Publishing a release to the mirror
+## 6. Desktop installers (Windows)
+
+Splitpage is available as a standalone desktop application built with Electron 44
+and packaged with electron-builder 26. The Windows installers and portable executables
+are **NOT YET PART OF THE RELEASE RECIPE** — integrating them is a pending decision.
+
+### Building the installers
+
+From the `desktop/` folder:
+
+```bash
+npm install
+npm run dist:win
+```
+
+This runs `stage.mjs` (which runs the app's `build.mjs`, verifies versions match,
+stages files) and then `electron-builder`, producing:
+
+- `dist/SplitpageDesktopSetup-<version>-x64.exe` — x64 only (~106 MB)
+- `dist/SplitpageDesktopSetup-<version>-arm64.exe` — ARM64 only (~100 MB)
+- `dist/SplitpageDesktopSetup-<version>.exe` — combined installer carrying both
+  architectures (~206 MB); it installs the one that matches the machine
+- `dist/win-unpacked/` and `dist/win-arm64-unpacked/` — the unpacked apps the
+  installers are built from; `desktop/test/smoke.mjs` tests these directly
+
+Nothing under `dist/`, `.stage/` or `node_modules/` is committed
+(`desktop/.gitignore`).
+
+### What's NOT verified
+
+- **The installers have never been published.** They land in `dist/` and are unsigned.
+  Signing (Windows SmartScreen + macOS notarization if macOS builds are added) is a
+  pending decision.
+- **Publishing them to the releases mirror.** The private main repo stays private;
+  assets would go to `RetroGorilla/splitpage-releases` like the portable zip does,
+  but the release recipe currently still uses IExpress for the old setup.exe.
+  Whether these Electron-built installers replace it or run alongside it is pending.
+
+### Where they differ from the current release recipe
+
+The current `start.bat` + `package.mjs` + `installer/install.ps1` recipe ships a
+PowerShell installer wrapped in IExpress. The Electron-built installers:
+
+- Run natively inside Electron's window frame with native title bar and menus
+- Have stable `splitpage://app` origin, so localStorage/IndexedDB/version history
+  survive across launches regardless of port changes
+- Use `electron-builder`'s NSIS configuration instead of IExpress
+- Carry their own runtime: Electron bundles Chromium and Node, so the portable
+  Node the IExpress setups ship is not used
+- Support both x64 and ARM64 architectures with native binaries
+
+---
+
+## 7. Publishing a release to the mirror
 
 When it's time to cut a new release for users to update to:
 

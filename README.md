@@ -66,6 +66,41 @@ a browser; and `--library`, which keeps documents on the server in `./data`
 instead of as files you save to disk. Without `--library` the launcher
 serves files and nothing else, so the app behaves exactly as it always has.
 
+## Desktop app
+
+Splitpage also comes as a desktop app for Windows (x64 and ARM64): the same
+app in its own window, with native menus and Open/Save dialogs, and `.splitpage`
+files open in it when you double-click them. Editing, saving and hosting a
+shared session on your network all work the same as in the browser, with two
+exceptions for now:
+
+- **Follow My Voice** isn't available in the desktop app yet. It still works in
+  Chrome or Edge, and a fix is planned.
+- **Google Drive files** can't be browsed from the desktop app, because Google's
+  sign-in only returns to a web address. **Import from Google Doc link** still
+  works: it opens the Doc's .docx download in your browser, and you then open
+  the downloaded file with File ▸ Open.
+
+**Installing:** run `SplitpageDesktopSetup-<version>.exe`. It installs for you
+only (no administrator needed) and lets you choose the folder, and there is
+nothing else to install first. It isn't on the releases page yet — for now it
+is built from source (see DEPLOY.md) — and it isn't code-signed yet, so Windows
+may warn before running it.
+
+The installer adds a desktop shortcut and a **Splitpage** folder in the Start
+Menu with two shortcuts:
+
+- **Splitpage** — the app on its own.
+- **Splitpage (shared session)** — starts hosting for others on your network
+  straight away, always with a join PIN. The Servers dialog opens to show the
+  addresses to open and the PIN; closing Splitpage stops sharing.
+
+**Command-line flags** match the browser launcher's: `--library`, `--host`,
+`--pin [code]`, `--data DIR`, `--port N`, `--allow-origin URL` and
+`--tunnel user@host`. The desktop app has no console window to type an SSH
+password into, so `--tunnel` needs key-based SSH login. Script files named on
+the command line open at launch.
+
 ## Installing it
 
 **`SplitpageSetup-<version>.exe` is the whole product.** One download, one
