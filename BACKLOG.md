@@ -39,6 +39,13 @@ Copy this template into the right section below:
 
 ## Features
 
+### Main two-column layout should widen with the window
+- **Type:** Feature
+- **Priority:** Medium
+- **Area:** UI / layout
+- **Description:** The main two-column interface is too fixed-width — it should be more flexible and expand to use available space on wider windows/screens instead of staying capped.
+- **Repro / notes:** Resize the window wider and the two-column view doesn't grow to fill it.
+
 <!-- add entries here -->
 
 ---
