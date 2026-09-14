@@ -19,6 +19,13 @@ Copy this template into the right section below:
 
 ## Bugs
 
+### Copy/paste doesn't preserve tags
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** Tagging / copy-paste
+- **Description:** When copying and pasting tagged objects into a new scene, the tags don't carry over. Tags should stick to the object through copy/paste.
+- **Repro / notes:** Tag an object, copy it, paste into a different scene — tag is missing on the pasted copy. Relevant code likely around tag parsing/anchors in `src/js/21-events.js` (`.tag-anchor`, tag composer) and wherever copy/paste is handled.
+
 <!-- add entries here -->
 
 ---
