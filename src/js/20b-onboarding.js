@@ -509,16 +509,19 @@
     if (readOnboardKey()) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
-    /* The browser's "a remembered handle exists at all" check reads
-       IndexedDB, which desktop never writes to (00-prelude.js's
-       rememberLastFileHandle routes through DESKTOP.setLastFile() instead)
-       — so on desktop this has to ask the main process for the same fact,
-       or a copy that opens straight back into last night's script would
-       show the wizard over it regardless. */
+    /* Desktop has no per-tab equivalent of "a remembered handle exists" to
+       ask for any more (00-prelude.js's rememberLastFileHandle no longer
+       writes anything desktop-side — the main process persists open
+       documents itself, in desktop-state.json). TAB-BOOT-SYNC's fields
+       already say everything this gate needs: the wizard must appear at
+       most once per launch (firstTabOfLaunch), never over a session that
+       had anything open before (hadPriorSession), never over a tab about to
+       open a file or server document (launchIntent.type !== 'blank'), and
+       never over a tab about to restore a crash draft (hasDraftToRestore). */
     if (DESKTOP) {
-      var lastEntry = null;
-      try { lastEntry = await DESKTOP.getLastFile(); } catch (e) { lastEntry = null; }
-      if (lastEntry) return false;
+      if (!DESKTOP.firstTabOfLaunch || DESKTOP.hadPriorSession ||
+          (DESKTOP.launchIntent && DESKTOP.launchIntent.type !== "blank") ||
+          DESKTOP.hasDraftToRestore) return false;
     } else {
       var handle = null;
       try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }

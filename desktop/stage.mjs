@@ -85,6 +85,17 @@ for (const filename of files) {
   console.log(`  ${filename} (${data.length} bytes)`);
 }
 
+// tabstrip/ (the splitpage://tabstrip origin's three files — main.js serves
+// them from APP_ROOT/tabstrip when packaged, __dirname/tabstrip in dev, and
+// its TABSTRIP_ALLOWLIST is exactly this list)
+const tabstripDir = resolve(STAGE_DIR, "tabstrip");
+await fs.mkdir(tabstripDir, { recursive: true });
+for (const filename of ["index.html", "tabstrip.js", "tabstrip.css"]) {
+  const data = await fs.readFile(resolve(__dirname, "tabstrip", filename));
+  await fs.writeFile(resolve(tabstripDir, filename), data);
+  console.log(`  tabstrip/${filename} (${data.length} bytes)`);
+}
+
 // server/server.js (subdirectory)
 const serverDir = resolve(STAGE_DIR, "server");
 await fs.mkdir(serverDir, { recursive: true });

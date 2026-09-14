@@ -619,18 +619,14 @@
          .html must always show exactly that file, never get swapped out from
          under you for some *other* file this browser remembers editing. */
       if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
-        /* DESKTOP.hasFileToOpen (read synchronously by preload, before this
-           line ever runs) means the OS already handed this launch a file to
-           open — a double-click, a second instance's argv. Racing that
-           against tryResumeLastProjectDesktop()'s own IPC round trips (both
-           end in adoptProjectState(), 18-local-files.js, which unconditionally
-           overwrites `state` AND `docFileHandle`) meant whichever finished
-           last silently won, and the loser wasn't just the wrong document on
-           screen — it could also become the target of the next Save. Skip
-           the resume outright when a file is already winning; DESKTOP's own
-           onOpenFile handler (20f-desktop.js) opens it once this promise
-           settles. */
-        if (DESKTOP) { if (!DESKTOP.hasFileToOpen) tryResumeLastProjectDesktop(); } else tryResumeLastProject();
+        /* Desktop restores whole SESSIONS (every window, every tab) in the
+           main process at launch (TAB-BOOT-SYNC / DESKTOP-STATE-V2) — this
+           page's own launchIntent already says what it's for (blank,
+           open-file, restore-draft, open-server), so there is nothing left
+           for the renderer's own "resume the last project" guess to do on
+           desktop. Only the plain browser build, which has no main process
+           to ask, still resumes from its own remembered IndexedDB handle. */
+        if (!DESKTOP) tryResumeLastProject();
       }
       /* Desktop's window title mirrors the document (20f-desktop.js) —
          push an initial value now rather than waiting for the first edit,
@@ -810,7 +806,23 @@
     document.getElementById("server-modal").addEventListener("click", function (e) {
       if (e.target.id === "server-modal") { closeServerPicker(); return; }
       var openBtn = e.target.closest('[data-action="server-open"]');
-      if (openBtn) { openServerDoc(openBtn.getAttribute("data-id")); return; }
+      if (openBtn) {
+        var sid = openBtn.getAttribute("data-id");
+        /* Desktop routes through main first — it may already have this
+           server document open in another tab (or another window), in
+           which case that tab is activated instead of a second copy
+           opening here. this-tab means main confirmed this sender tab is
+           the right place (pristine and ready), same as opening it always
+           has. */
+        if (DESKTOP) {
+          DESKTOP.routeOpen({ kind: "server", serverDocId: sid }).then(function (r) {
+            if (r && r.where === "this-tab") openServerDoc(sid); else closeServerPicker();
+          });
+        } else {
+          openServerDoc(sid);
+        }
+        return;
+      }
       var delBtn = e.target.closest('[data-action="server-delete"]');
       if (delBtn) { armServerDelete(delBtn, delBtn.getAttribute("data-id")); return; }
     });

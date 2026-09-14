@@ -23,8 +23,8 @@
      18-local-files.js and 14-export.js) — this is the same shape, built
      over DESKTOP.readFile/writeFile instead of the File System Access API,
      so none of that calling code needs to know which one it has. `entry`
-     is either a full FileEntry (from openFileDialog/onOpenFile/getLastFile
-     — carries bytes already, which getFile() below ignores in favor of a
+     is either a full FileEntry (from openFileDialog/onOpenFile — carries
+     bytes already, which getFile() below ignores in favor of a
      fresh read, so a handle is never stale the moment it's minted) or the
      smaller {id, name} a fresh saveFileDialog() pick returns before
      anything has been written to disk yet. */
@@ -81,34 +81,26 @@
     return handle;
   }
 
-  /* ---- resuming the last project on launch (desktop's counterpart to
-     18-local-files.js's tryResumeLastProject/resumeFromHandle) ----
-
-     No permission banner: unlike a browser's File System Access handle,
-     which can genuinely lose permission between launches, the desktop app
-     owns this file the same way any other desktop app owns the file it
-     opened last — DESKTOP.getLastFile() already tells us whether it's still
-     there. Same resumed/skipSnapshot semantics as the browser path. */
-  async function tryResumeLastProjectDesktop() {
-    var entry = null;
-    try { entry = await DESKTOP.getLastFile(); } catch (e) { entry = null; }
-    if (!entry) return;
-    var handle = makeDesktopHandle(entry);
-    try {
-      var file = await handle.getFile();
-      await openProjectFile(file, handle, { skipSnapshot: !dirty, resumed: true });
-    } catch (e) {
-      /* moved, renamed, or deleted since the app last quit — not worth
-         interrupting startup over, same reasoning as the browser path */
-    }
-  }
-
   /* ---- window title / dirty-dot ----
      Called from setSaveButtons() (12-dirty-toast.js), the one place
-     markDirty() and clearDirty() both funnel through (invariant #20). */
+     markDirty() and clearDirty() both funnel through (invariant #20).
+
+     draftRestorePending is a step-K (20g-drafts.js) variable that does not
+     exist yet — guarded with typeof so this file runs unchanged before that
+     step lands. Once it does, a tab with a crash draft still being restored
+     must never report itself dirty=false/pristine=true: main would treat it
+     as a document with nothing to protect. */
   function notifyDesktopDocumentState() {
     if (!DESKTOP || !state) return;
-    DESKTOP.setDocumentState({ title: state.title || "Untitled Script", dirty: !!dirty });
+    var restoring = typeof draftRestorePending !== "undefined" && draftRestorePending;
+    DESKTOP.setDocumentState({
+      title: state.title || "Untitled Script",
+      dirty: !!dirty || restoring,
+      pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
+      docId: state.docId || null,
+      fileId: (!onServerDoc() && docFileHandle.handle && docFileHandle.handle._desktopId) || null,
+      serverKey: onServerDoc() ? serverDoc.id : null
+    });
   }
 
   /* ---- the native menu / header-button dispatcher ----
@@ -192,6 +184,26 @@
     el.hidden = false;
   }
 
+  /* Main has spotted that this document's identity is also claimed by a
+     document open in another tab — two copies of one file, opened side by
+     side — and has picked this tab as the one to re-id (DOC-CLAIMS). The
+     typeof guard is for the fake backends the browser suites build: a bridge
+     without this member simply never re-ids, which is what the browser build
+     does anyway. reassignDocId validates all three fields again and refuses a
+     message that no longer fits what is on screen.
+
+     It is its own function, rather than four lines inside initDesktop, only
+     because __desktopTest.setBackend has to be able to re-run it: initDesktop
+     itself returns immediately in a browser suite (there is no bridge at
+     boot), so swapping a fake in afterwards is the only moment this
+     registration can happen there. */
+  function wireReassignDocId() {
+    if (!DESKTOP || typeof DESKTOP.onReassignDocId !== "function") return;
+    DESKTOP.onReassignDocId(function (msg) {
+      if (msg) reassignDocId(msg.toId, msg);
+    });
+  }
+
   /* ---- boot wiring ----
      Called once from init() (21-events.js), after every other listener in
      this build is already wired up. */
@@ -241,6 +253,36 @@
       else proceed();
     });
 
+    /* main routed an open into THIS tab (splitpage:route-open said
+       'this-tab' or 'new-tab', or this tab is opening straight into a
+       server document at launch — TAB-BOOT-SYNC's launchIntent 'open-
+       server'). Same initialStateReady wait as onOpenFile above, so this
+       never races the boot load's own assignment to `state`. */
+    DESKTOP.onOpenServerDoc(function (payload) {
+      var serverDocId = payload && payload.serverDocId;
+      if (!serverDocId) return;
+      function proceed() { openPendingServerDocForTab(serverDocId); }
+      if (state) proceed();
+      else if (initialStateReady) initialStateReady.then(proceed);
+      else proceed();
+    });
+
+    /* A launch that skipped one or more remembered tabs (a missing file, an
+       unreadable one, a server document whose server never answered) tells
+       the user once, in the first window's active tab, rather than failing
+       silently or interrupting every tab that was NOT affected. */
+    DESKTOP.onRestoreNotice(function (notice) {
+      var skipped = (notice && notice.skipped) || [];
+      if (!skipped.length) return;
+      var reasonWord = { missing: "missing", unreadable: "unreadable", "server-unreachable": "server unreachable" };
+      var lines = skipped.map(function (s) {
+        return (s.name || "a document") + " (" + (reasonWord[s.reason] || s.reason || "unknown") + ")";
+      });
+      showToast("Could not restore: " + lines.join(", ") + ".", "warn", true);
+    });
+
+    wireReassignDocId();
+
     DESKTOP.onMenuCommand(runDesktopMenuCommand);
 
     /* A fresh load never calls markDirty()/clearDirty() until a resume path
@@ -261,6 +303,52 @@
     }).catch(function () {});
   }
 
+  /* ---- opening a server document routed to this tab at boot ----
+
+     Main names a server document by id only (invariant #34) — this tab has
+     to run the browser's own server-detection handshake (13-hosted.js)
+     before openServerDoc() can mean anything: the server has to be probed
+     and, if it asks for a PIN, that PIN has to actually be entered by the
+     reader before the document exists to open.
+
+     The natural hook would be a one-shot call FROM 13-hosted.js's own
+     finishServerDetect() the moment auth succeeds — a typeof-guarded
+     `if (typeof openPendingServerDocForTab === "function") …` there would
+     cost nothing when this id is DESKTOP.only and nothing is pending. That
+     one line lives in 13-hosted.js, which is not one of this step's files,
+     so this polls serverMode/serverToken instead of being called back;
+     step K (13-hosted.js) can wire the direct call later without this
+     function needing to change shape. */
+  function openPendingServerDocForTab(serverDocId) {
+    var CHECK_TIMEOUT_MS = 15000;
+    var AUTH_TIMEOUT_MS = 10 * 60 * 1000;
+    var POLL_MS = 500;
+    var checkStart = Date.now();
+
+    function isChecked() { return typeof serverMode !== "undefined" && serverMode && serverMode.checked; }
+    function needsAuth() {
+      return typeof serverMode !== "undefined" && serverMode && serverMode.authRequired &&
+        !(typeof serverToken !== "undefined" && serverToken);
+    }
+    function openIt() {
+      if (typeof openServerDoc === "function") openServerDoc(serverDocId);
+    }
+
+    (function waitForDetect() {
+      if (isChecked() || Date.now() - checkStart > CHECK_TIMEOUT_MS) { afterDetect(); return; }
+      setTimeout(waitForDetect, POLL_MS);
+    })();
+
+    function afterDetect() {
+      if (!needsAuth()) { openIt(); return; }
+      var authStart = Date.now();
+      (function waitForAuth() {
+        if (!needsAuth() || Date.now() - authStart > AUTH_TIMEOUT_MS) { openIt(); return; }
+        setTimeout(waitForAuth, POLL_MS);
+      })();
+    }
+  }
+
   /* ---- test hook ----
      There is no pre-load hook in the harness that can inject a real
      window.splitpageDesktop before this script runs — DESKTOP is captured
@@ -271,18 +359,38 @@
      paths (saveDoc, deliverFile, openLocalFile, makeDesktopHandle) against
      it directly. Exists in both modes but does nothing unless a test calls
      it — same trick window.__splitpageFormats (20d-formats.js) plays. */
-  function makeFakeDesktopBackend() {
+  /* opts.history === true gives the fake the seven HISTORY-IPC methods, kept
+     in memory, validating with the SAME regexes the real main process uses
+     (normalizeDocId and HISTORY_SNAP_ID_RE, both from 03a-history-store.js)
+     and applying the same "50 newest per document" trim. That is enough for
+     a browser suite to prove the desktop path is taken — a capture lands in
+     the desktop store, never in IndexedDB and never in localStorage — without
+     a real Electron shell. _historyDump() hands the whole store back for
+     assertions. */
+  function makeFakeDesktopBackend(opts) {
     var files = {};
     var nextId = 1;
-    var lastFileId = null;
     var openHandler = null;
     var menuHandler = null;
+    var openServerDocHandler = null;
+    var restoreNoticeHandler = null;
+    var reassignDocIdHandler = null;
     function newId() { return "fake" + (nextId++); }
-    return {
+    var backend = {
       isDesktop: true,
       platform: "test",
       appVersion: "0.0.0-test",
-      hasFileToOpen: false,
+
+      /* TAB-BOOT-SYNC's fields, fixed at the FAKE-DESKTOP-BACKEND contract's
+         values — a single blank, first, no-prior-session tab. No draft or
+         history members yet: those land in steps I/K. */
+      tabId: "f".repeat(32),
+      windowId: "w".repeat(32),
+      launchIntent: { type: "blank" },
+      hadPriorSession: false,
+      firstTabOfLaunch: true,
+      hasDraftToRestore: false,
+
       openFileDialog: function () { return Promise.resolve(null); },
       saveFileDialog: function (opts) {
         if (this._cancelNextSave) { this._cancelNextSave = false; return Promise.resolve(null); }
@@ -310,15 +418,18 @@
         var f = files[id];
         return Promise.resolve(f ? { lastModified: f.lastModified, size: f.bytes.length } : null);
       },
-      getLastFile: function () {
-        var f = files[lastFileId];
-        if (!f) return Promise.resolve(null);
-        return Promise.resolve({ id: lastFileId, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
+      /* Always resolves {where:'this-tab'} unless a test points
+         _routeAnswer at something else first — the single-tab shape every
+         existing caller (openLocalFile, the server picker) already expects. */
+      routeOpen: function (p) {
+        return Promise.resolve(this._routeAnswer || { where: "this-tab" });
       },
-      setLastFile: function (id) { lastFileId = id; return Promise.resolve(); },
       onOpenFile: function (cb) { openHandler = cb; },
+      onOpenServerDoc: function (cb) { openServerDocHandler = cb; },
+      onRestoreNotice: function (cb) { restoreNoticeHandler = cb; },
+      onReassignDocId: function (cb) { reassignDocIdHandler = cb; },
       onMenuCommand: function (cb) { menuHandler = cb; },
-      setDocumentState: function () {},
+      setDocumentState: function (s) { this._lastDocState = s; },
       getSessionInfo: function () {
         return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
       },
@@ -335,7 +446,157 @@
         var f = files[id];
         if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
       },
-      _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); }
+      _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
+      _fireOpenServerDoc: function (payload) { if (openServerDocHandler) openServerDocHandler(payload); },
+      /* Stands in for main's duplicate-id verdict (DOC-CLAIMS): a suite can
+         hand the page the exact {fromId, toId, otherTitle} message a real
+         main process would send, without two Electron tabs. */
+      _fireReassignDocId: function (msg) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
+    };
+    if (opts && opts.history) addFakeDesktopHistory(backend);
+    return backend;
+  }
+
+  /* The HISTORY-IPC surface, faked in memory. Deliberately the same SHAPES
+     desktop/main.js answers with ({ok:true, sizeBytes, duplicate?, evicted,
+     overCap} and friends), because the code under test is the translator in
+     03a-history-store.js's desktopHistoryBackend — a fake that answered a
+     tidier shape would prove nothing about it. Invalid arguments REJECT, the
+     way main's handlers do, so the 'invalid' path is reachable too. */
+  function addFakeDesktopHistory(backend) {
+    var buckets = {};   /* bucket -> [{meta, stateJson}], oldest first */
+    var records = {};   /* bucket -> {title, lastOpenedAt, migratedAt, expiresAt} */
+
+    function listOf(bucket) { return buckets[bucket] || (buckets[bucket] = []); }
+    function recordOf(bucket) { return records[bucket] || (records[bucket] = { title: "", lastOpenedAt: 0 }); }
+    function bytesOf(bucket) {
+      return listOf(bucket).reduce(function (n, e) { return n + (e.meta.sizeBytes || 0); }, 0);
+    }
+    function findIn(bucket, id) {
+      var list = buckets[bucket] || [];
+      for (var i = 0; i < list.length; i++) if (list[i].meta.id === id) return list[i];
+      return null;
+    }
+    function metasNewestFirst(bucket) {
+      return (buckets[bucket] || []).slice().reverse().map(function (e) { return sanitizeHistoryMeta(e.meta); });
+    }
+    function trim(bucket) {
+      /* A document keeps its 50 newest; the Older bucket is only ever emptied
+         as a whole, so it is never trimmed. */
+      if (bucket === HISTORY_OLDER_KEY) return 0;
+      var list = listOf(bucket), dropped = 0;
+      while (list.length > HISTORY_PER_DOC) { list.shift(); dropped++; }
+      return dropped;
+    }
+    function bucketOf(query) {
+      if (query && query.older === true) return HISTORY_OLDER_KEY;
+      return normalizeDocId(query && query.docId) || null;
+    }
+
+    backend.historyPut = function (docId, meta, stateJson) {
+      var id = normalizeDocId(docId);
+      var m = sanitizeHistoryMeta(meta);
+      if (!id || !m || typeof stateJson !== "string") return Promise.reject(new Error("history: invalid put"));
+      var existing = findIn(id, m.id);
+      if (existing) return Promise.resolve({ ok: true, sizeBytes: existing.meta.sizeBytes, duplicate: true, evicted: 0, overCap: false });
+      var list = listOf(id), rec = recordOf(id);
+      m.sizeBytes = historyUtf8Length(stateJson);
+      historyStampAfter(m, list.length ? list[list.length - 1].meta.atMs : null);
+      list.push({ meta: m, stateJson: stateJson });
+      if (m.title) rec.title = m.title;
+      rec.lastOpenedAt = Date.now();
+      return Promise.resolve({ ok: true, sizeBytes: m.sizeBytes, duplicate: false, evicted: trim(id), overCap: false });
+    };
+
+    backend.historyList = function (docId) {
+      var id = docId == null ? null : normalizeDocId(docId);
+      if (docId != null && !id) return Promise.reject(new Error("history: invalid document id"));
+      var older = records[HISTORY_OLDER_KEY];
+      return Promise.resolve({
+        entries: id ? metasNewestFirst(id) : [],
+        older: metasNewestFirst(HISTORY_OLDER_KEY),
+        olderExpiresAt: older && older.expiresAt != null ? older.expiresAt : null
+      });
+    };
+
+    backend.historyGet = function (query, snapshotId) {
+      var bucket = bucketOf(query);
+      if (!bucket) return Promise.reject(new Error("history: invalid document id"));
+      if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) {
+        return Promise.reject(new Error("history: invalid snapshot id"));
+      }
+      var hit = findIn(bucket, snapshotId);
+      return Promise.resolve(hit ? { meta: sanitizeHistoryMeta(hit.meta), stateJson: hit.stateJson } : null);
+    };
+
+    backend.historyCopy = function (fromDocId, toDocId) {
+      var from = normalizeDocId(fromDocId), to = normalizeDocId(toDocId);
+      if (!from || !to) return Promise.reject(new Error("history: invalid document id"));
+      if (from === to) return Promise.resolve({ ok: true, copied: 0 });
+      if (!buckets[from] && !buckets[to]) return Promise.resolve({ ok: true, copied: 0 });
+      var dst = listOf(to), copied = 0;
+      (buckets[from] || []).forEach(function (e) {
+        if (findIn(to, e.meta.id)) return;      /* ids are kept: a second copy is a no-op */
+        dst.push({ meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson });
+        copied++;
+      });
+      dst.sort(function (a, b) { return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : 1); });
+      recordOf(to).lastOpenedAt = Date.now();
+      trim(to);
+      return Promise.resolve({ ok: true, copied: copied });
+    };
+
+    backend.historyTouch = function (docId, title) {
+      var id = normalizeDocId(docId);
+      if (!id) return Promise.reject(new Error("history: invalid document id"));
+      /* Never creates a record, same as the real store. */
+      if (buckets[id] && buckets[id].length) {
+        var rec = recordOf(id);
+        rec.lastOpenedAt = Date.now();
+        var t = String(title == null ? "" : title).slice(0, 300);
+        if (t) rec.title = t;
+      }
+      return Promise.resolve();
+    };
+
+    backend.historyImportOlder = function (entries) {
+      if (!Array.isArray(entries)) return Promise.reject(new Error("history: invalid import"));
+      var fresh = !records[HISTORY_OLDER_KEY];
+      var list = listOf(HISTORY_OLDER_KEY), rec = recordOf(HISTORY_OLDER_KEY), added = 0;
+      if (fresh) {
+        /* migratedAt/expiresAt only on creation: re-running an interrupted
+           migration must never extend the 90 days. */
+        rec.migratedAt = Date.now();
+        rec.expiresAt = rec.migratedAt + HISTORY_OLDER_TTL_MS;
+      }
+      entries.forEach(function (e) {
+        var m = sanitizeHistoryMeta(e && e.meta);
+        if (!m || typeof (e && e.stateJson) !== "string" || findIn(HISTORY_OLDER_KEY, m.id)) return;
+        m.sizeBytes = historyUtf8Length(e.stateJson);
+        list.push({ meta: m, stateJson: e.stateJson });
+        added++;
+      });
+      return Promise.resolve({ ok: true, count: list.length, added: added });
+    };
+
+    backend.historyUsage = function () {
+      var total = 0, docCount = 0;
+      Object.keys(buckets).forEach(function (k) {
+        total += bytesOf(k);
+        if (k !== HISTORY_OLDER_KEY) docCount++;
+      });
+      return Promise.resolve({ totalBytes: total, capBytes: Infinity, overCap: false, docCount: docCount, readOnly: false });
+    };
+
+    /* The whole store: bucket -> [{meta, stateJson}], oldest first. */
+    backend._historyDump = function () {
+      var out = {};
+      Object.keys(buckets).forEach(function (k) {
+        out[k] = buckets[k].map(function (e) {
+          return { meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson };
+        });
+      });
+      return out;
     };
   }
 
@@ -343,8 +604,19 @@
     makeHandle: makeDesktopHandle,
     runMenuCommand: runDesktopMenuCommand,
     makeFakeBackend: makeFakeDesktopBackend,
-    setBackend: function (fake) { DESKTOP = fake; },
+    setBackend: function (fake) {
+      DESKTOP = fake;
+      /* initDesktop() ran at boot against the REAL bridge, which in a browser
+         suite is null — so no DESKTOP callback was ever registered there.
+         Swapping a fake in has to re-do the duplicate-id registration, or
+         _fireReassignDocId would fire into nothing and "prove" the glue
+         works when nothing is listening to it. */
+      wireReassignDocId();
+    },
     restoreBackend: function () { DESKTOP = window.splitpageDesktop || null; },
+    /* Lets desktop/test/smoke.mjs (SMOKE-HARNESS's tabIdOfTarget/shell) read
+       which tab a given page is, over CDP, without any DOM UI to click on. */
+    get tabId() { return DESKTOP && DESKTOP.tabId; },
     /* Lets desktop/test/smoke.mjs dirty the document with NO DOM
        interaction at all — no click, no synthetic event dispatch — which is
        exactly the "no user activation this session" scenario the

@@ -21,6 +21,7 @@
 "use strict";
 
 import { spawn, execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -260,36 +261,256 @@ async function waitForCdpReady(port, timeoutMs) {
   throw new Error("CDP never came up on port " + port + (lastErr ? " (" + lastErr.message + ")" : ""));
 }
 
-async function findPageTarget(port, timeoutMs) {
+// Pulls the ?tab=<tabId> query param off a page target's url, tab-strip and
+// pre-navigation (about:blank) targets included — those just come back null.
+function parseTabIdFromUrl(url) {
+  if (typeof url !== "string") return null;
+  const m = /[?&]tab=([^&]+)/.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/* SMOKE-HARNESS target discovery. Today (pre-F1) the app is still a single
+   splitpage://app/index.html page with no tab strip and no ?tab= query
+   string at all — tabTargets/tabStripTargets and the tabId-less findPageTarget
+   call below must keep finding exactly that one page unchanged. Once F1 lands,
+   splitpage://tabstrip/... becomes the window's primary webContents and each
+   tab page gets its own ?tab=<tabId>; findTargetsByKind is what lets every
+   other helper (and F1's own suite) tell the two apart without ever treating
+   the strip as a page a case can drive assertions against. */
+async function findTargetsByKind(port) {
+  const { body } = await fetchJson(`http://127.0.0.1:${port}/json`);
+  const list = Array.isArray(body) ? body : [];
+  const isPage = (t) => t.type === "page" && t.webSocketDebuggerUrl && !/^devtools:/.test(t.url || "");
+  const tabStripTargets = list.filter((t) => isPage(t) && (t.url || "").indexOf("splitpage://tabstrip/") === 0);
+  const tabTargets = list
+    .filter((t) => isPage(t) && (t.url || "").indexOf("splitpage://app/index.html") === 0)
+    .map((t) => Object.assign({}, t, { tabId: parseTabIdFromUrl(t.url) }));
+  return { tabStripTargets, tabTargets };
+}
+
+// Returns a splitpage://app/index.html tab target — NEVER the tab-strip
+// target, even once one exists. opts.tabId narrows to that one tab; with no
+// tabId (today's single-window app, or "any tab is fine") the first tab
+// target found wins.
+async function findPageTarget(port, timeoutMs, opts) {
+  opts = opts || {};
+  const wantTabId = opts.tabId || null;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const { body } = await fetchJson(`http://127.0.0.1:${port}/json`);
-      if (Array.isArray(body)) {
-        const page = body.find((t) => t.type === "page" && t.webSocketDebuggerUrl && !/^devtools:/.test(t.url || ""));
-        if (page) return page;
-      }
+      const { tabTargets } = await findTargetsByKind(port);
+      const candidates = wantTabId ? tabTargets.filter((t) => t.tabId === wantTabId) : tabTargets;
+      if (candidates.length) return candidates[0];
     } catch { /* keep trying */ }
     await sleep(300);
   }
-  throw new Error("no page target appeared on port " + port);
+  throw new Error("no page target appeared on port " + port + (wantTabId ? " for tabId=" + wantTabId : ""));
 }
 
-/* opts: { flags:[], fixtures:[], dialogs:[]|null, userDataDir, dataDir,
-           allowUpdateCheck:false, updateApi, label } */
-async function launchApp(target, opts) {
-  opts = opts || {};
-  const port = await freePort();
-  const userDataDir = opts.userDataDir || fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
-  if (!opts.userDataDir) fs.mkdirSync(userDataDir, { recursive: true });
+// window.__desktopTest.tabId doesn't exist until F1/F3 land (it's the
+// renderer's own copy of TAB-BOOT-SYNC's tabId) — harness plumbing ahead of
+// that landing, not exercised by any case in this step.
+async function tabIdOfTarget(cdp) {
+  return evalPage(cdp, "(window.__desktopTest && window.__desktopTest.tabId) || null");
+}
 
+// A second CDP connection to one specific tab, alongside the app's primary
+// one (e.g. the tab strip's) — used once multiple pages can be live at once.
+async function connectTab(app, tabId) {
+  const t = await findPageTarget(app.port, 30000, { tabId });
+  const cdp = new CDPConn(t.webSocketDebuggerUrl);
+  await cdp.open();
+  return cdp;
+}
+
+// window.splitpageDesktop.__testShell(op, args) is F1's TEST_MODE-only main-
+// process driver hook (create/close/move tabs etc. without real DOM/menu
+// interaction) — not defined until F1 lands. Harness side implemented now
+// per SMOKE-HARNESS so F1 is verifiable against it without touching this file.
+async function shell(cdp, op, args) {
+  return evalPage(cdp, "window.splitpageDesktop.__testShell(" + JSON.stringify(op) + ", " + JSON.stringify(args === undefined ? null : args) + ")");
+}
+
+// --- desktop/drafts.js on-disk layout (DRAFT-STORE), read directly rather
+// than through any IPC — the harness must be able to see a draft that
+// survived a real crash even though nothing is left alive to ask over CDP.
+function parseDraftFile(p) {
+  if (!fs.existsSync(p)) return null;
+  const text = fs.readFileSync(p, "utf8");
+  const nl = text.indexOf("\n");
+  const line1 = nl === -1 ? text : text.slice(0, nl);
+  const rest = nl === -1 ? "" : text.slice(nl + 1);
+  let header = null, state = null;
+  try { header = JSON.parse(line1); } catch { /* corrupt/partial write */ }
+  try { state = JSON.parse(rest); } catch { /* corrupt/partial write */ }
+  return { header, state, bytes: Buffer.byteLength(text, "utf8") };
+}
+
+// { <tabId>: { dir, current, previous, baseFiles: [...] } } for every tab
+// folder under <userDataDir>/drafts — corrupt/, .trash-* and .tmp-* entries
+// (DRAFT-STORE's own transient/quarantine names) are not tab folders and are
+// skipped.
+function readDraftDirs(userDataDir) {
+  const draftsRoot = path.join(userDataDir, "drafts");
+  const out = {};
+  if (!fs.existsSync(draftsRoot)) return out;
+  for (const ent of fs.readdirSync(draftsRoot, { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue;
+    if (ent.name === "corrupt" || ent.name.indexOf(".trash-") === 0 || ent.name.indexOf(".tmp-") === 0) continue;
+    const tabDir = path.join(draftsRoot, ent.name);
+    let files = [];
+    try { files = fs.readdirSync(tabDir); } catch { continue; }
+    out[ent.name] = {
+      dir: tabDir,
+      current: parseDraftFile(path.join(tabDir, "current.draft")),
+      previous: parseDraftFile(path.join(tabDir, "previous.draft")),
+      baseFiles: files.filter((f) => /^base-[0-9a-f]{12}\.json$/.test(f))
+    };
+  }
+  return out;
+}
+
+// <userDataDir>/drafts/session.json — null for "doesn't exist yet" or
+// "unparseable", exactly like DRAFT-STORE's own init() treats a missing file.
+function readSession(userDataDir) {
+  const p = path.join(userDataDir, "drafts", "session.json");
+  if (!fs.existsSync(p)) return null;
+  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+}
+
+/* ----------------------------------------------------------------------
+ * 1b. Step L2 extras: helpers the tab-shell cases below share. TAB-IDENTITY's
+ *     tabId/windowId are 32 lowercase hex from crypto.randomBytes(16) — the
+ *     v1-migration and restore-at-launch cases hand-write desktop-state.json
+ *     themselves (rather than build a session live through the UI) and need
+ *     ids in that exact shape so main's own normalizeDesktopStateV2 accepts
+ *     them unchanged instead of minting replacements out from under the test.
+ * -------------------------------------------------------------------- */
+
+function newHexId() { return crypto.randomBytes(16).toString("hex"); }
+
+// Hand-writes <userDataDir>/desktop-state.json (DESKTOP-STATE-V2 / v1) BEFORE
+// a launch, so a case can control exactly what session main restores without
+// driving a whole prior app run through the UI first.
+function writeDesktopStateFile(userDataDir, state) {
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.writeFileSync(path.join(userDataDir, "desktop-state.json"), JSON.stringify(state), "utf8");
+}
+
+// Reads it back — null for "doesn't exist" or "unparseable", same convention
+// as readSession above.
+function readDesktopStateFile(userDataDir) {
+  const p = path.join(userDataDir, "desktop-state.json");
+  if (!fs.existsSync(p)) return null;
+  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+}
+
+// window.__desktopTest.markDirtyForTest() (20f-desktop.js) calls markDirty()
+// directly with zero DOM interaction — see caseCloseAuthorityNoGesture's own
+// comment on why that matters for a close/quit prompt to actually fire. Every
+// L2 case that needs a dirty tab uses this same no-gesture path so a real
+// user click is never required just to set up a precondition.
+async function dirtyTabForTest(cdp) {
+  await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
+  await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+}
+
+// Fire-and-forget __testShell call: for an op whose target tab or window may
+// be destroyed as a direct RESULT of the call (closing the tab/window the
+// calling page itself lives in) — same reasoning as fireEval's own comment.
+// A normal awaited shell() would hang until CDPConn's own long sendTimeoutMs
+// on exactly this case, since the reply can never arrive once the context is
+// gone.
+async function fireShell(cdp, op, args) {
+  const expr = "window.splitpageDesktop.__testShell(" + JSON.stringify(op) + "," + JSON.stringify(args === undefined ? null : args) + ")";
+  await fireEval(cdp, expr, { awaitPromise: false });
+}
+
+// Node-side poll (unlike poll() above, which evaluates an EXPRESSION on the
+// page) — for waiting on a condition that itself has to run several page
+// evals / CDP calls to compute, such as "a tab other than this known one has
+// appeared". Swallows errors while polling, same as poll().
+async function pollNode(fn, timeoutMs, intervalMs) {
+  const deadline = Date.now() + (timeoutMs || 15000);
+  let last;
+  while (Date.now() < deadline) {
+    try {
+      last = await fn();
+      if (last) return last;
+    } catch { /* keep polling */ }
+    await sleep(intervalMs || 250);
+  }
+  throw new Error("pollNode: timed out (last value: " + JSON.stringify(last) + ")");
+}
+
+// Opens a fresh, independent CDP connection to a /json target object (as
+// returned by findTargetsByKind), alongside whatever connection(s) a case
+// already has open.
+async function connectTarget(t) {
+  const cdp = new CDPConn(t.webSocketDebuggerUrl);
+  await cdp.open();
+  return cdp;
+}
+
+// Polls __testShell('listTargets') (over ANY still-alive tab's connection —
+// a witness tab in a window/tab that is not itself being closed) until
+// `predicate` accepts the shell state, or times out.
+async function pollShellState(cdp, predicate, timeoutMs) {
+  return pollNode(async () => {
+    const listing = await shell(cdp, "listTargets", {});
+    return predicate(listing) ? listing : null;
+  }, timeoutMs || 15000);
+}
+
+// Shared fixture for the close/quit multi-window cases below: window1 keeps
+// the launch's own first tab plus a second tab created alongside it; a third
+// tab is created and immediately torn off into its own new window2. Returns
+// every id and a live CDP connection to each of the three tabs so a case can
+// dirty/close/read any of them independently.
+async function setupTwoDirtyWindows(target, opts) {
+  const app = await launchApp(target, opts);
+  await waitForRows(app.cdp, 20000);
+  const tab1Id = await tabIdOfTarget(app.cdp);
+
+  const tab2Id = await shell(app.cdp, "createTab", {});
+  const cdp2 = await connectTab(app, tab2Id);
+  await waitForRows(cdp2, 20000);
+
+  const tab3Id = await shell(app.cdp, "createTab", {});
+  const cdp3 = await connectTab(app, tab3Id);
+  await waitForRows(cdp3, 20000);
+  const window2Id = await shell(app.cdp, "moveTabToWindow", { tabId: tab3Id, windowId: null });
+
+  const listing = await shell(app.cdp, "listTargets", {});
+  const window1 = listing.windows.find((w) => w.tabs.some((t) => t.tabId === tab1Id));
+
+  return {
+    app, tab1Id, tab2Id, tab3Id,
+    window1Id: window1 ? window1.windowId : null,
+    window2Id,
+    cdp1: app.cdp, cdp2, cdp3
+  };
+}
+
+/* One spawn attempt: builds the env/flags/args for `target` against `port`
+   and `userDataDir`, spawns it, and waits just long enough for an immediate
+   ENOENT-style spawn error to surface. Split out of launchApp so a CDP-never-
+   came-up retry (see launchApp) can spawn a fresh process on a fresh port
+   without duplicating this setup. */
+async function spawnAttempt(target, opts, userDataDir, port) {
   /* SPLITPAGE_TEST=1: the window never shows, unanswered dialogs cancel
      themselves, and a main-process crash exits with its stack on stderr
-     instead of popping a modal error box on whoever's desktop this is. */
+     instead of popping a modal error box on whoever's desktop this is.
+     opts.env is merged in AFTER these built-in vars (so a case can override
+     anything here, e.g. SPLITPAGE_NO_UPDATE_CHECK), but SPLITPAGE_TEST itself
+     is re-pinned to "1" below no matter what opts.env said — it must never be
+     the thing that lets an automated run show a real window on this machine. */
   const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1" };
   if (opts.allowUpdateCheck) delete env.SPLITPAGE_NO_UPDATE_CHECK;
   else env.SPLITPAGE_NO_UPDATE_CHECK = "1";
   if (opts.updateApi) env.SPLITPAGE_UPDATE_API = opts.updateApi;
+  if (opts.env) Object.assign(env, opts.env);
+  env.SPLITPAGE_TEST = "1";
 
   let dialogsPath = null;
   if (opts.dialogs) {
@@ -316,30 +537,66 @@ async function launchApp(target, opts) {
   await sleep(150); // let an immediate ENOENT-style spawn error surface
   if (spawnErr) throw new Error("failed to spawn " + target.exe + ": " + spawnErr.message);
 
+  return { proc, dialogsPath, getStdout: () => stdout, getStderr: () => stderr };
+}
+
+/* opts: { flags:[], fixtures:[], dialogs:[]|null, userDataDir, dataDir,
+           allowUpdateCheck:false, updateApi, label, env } */
+async function launchApp(target, opts) {
+  opts = opts || {};
+  const userDataDir = opts.userDataDir || fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  if (!opts.userDataDir) fs.mkdirSync(userDataDir, { recursive: true });
+
   // A second instance that loses the single-instance lock calls app.quit()
   // before app.whenReady() ever runs — it never opens a --remote-debugging
   // port at all, so waiting on CDP here would just time out. Callers that
   // expect exactly that (case 7) ask for skipCdp and drive teardown/exit
-  // detection off `proc` directly instead.
-  if (opts.skipCdp) {
-    return {
-      target, proc, port, userDataDir, dialogsPath, cdp: null, browserWsUrl: null,
-      label: opts.label || "launch", getStdout: () => stdout, getStderr: () => stderr
-    };
+  // detection off `proc` directly instead. That's also not a "CDP never came
+  // up" failure, so it gets exactly one attempt, no retry.
+  const maxAttempts = opts.skipCdp ? 1 : 2;
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // freePort() only PROBES a port free and releases the listener straight
+    // back — under two suite runs going at once (one per tree, per the
+    // orchestrator's own concurrency rule) another process can grab that
+    // same port in the gap before Electron binds its own listener. Retrying
+    // with a freshly probed port recovers from that race instead of failing
+    // the whole launch outright.
+    const port = await freePort();
+    const { proc, dialogsPath, getStdout, getStderr } = await spawnAttempt(target, opts, userDataDir, port);
+
+    if (opts.skipCdp) {
+      return {
+        target, proc, port, userDataDir, dialogsPath, cdp: null, browserWsUrl: null,
+        label: opts.label || "launch", getStdout, getStderr
+      };
+    }
+
+    try {
+      const verInfo = await waitForCdpReady(port, 30000);
+      const pageTarget = await findPageTarget(port, 30000);
+      const cdp = new CDPConn(pageTarget.webSocketDebuggerUrl);
+      await cdp.open();
+      return {
+        target, proc, port, userDataDir, dialogsPath, cdp,
+        browserWsUrl: verInfo.webSocketDebuggerUrl,
+        label: opts.label || "launch",
+        getStdout, getStderr
+      };
+    } catch (e) {
+      lastErr = e;
+      // PID-scoped kill, exactly like teardown() — never by image name, this
+      // is someone's working computer and other launches (this tree's other
+      // targets, or the other tree's own concurrent run) must be untouched.
+      killPid(proc.pid);
+      await waitForExit(proc, 10000);
+      if (attempt >= maxAttempts) {
+        throw new Error("launchApp: CDP never came up after " + attempt + " attempt(s) on " + target.name + ": " + (lastErr && lastErr.message || lastErr));
+      }
+      // else: loop retries with a fresh freePort() and a fresh spawn.
+    }
   }
-
-  const verInfo = await waitForCdpReady(port, 30000);
-  const pageTarget = await findPageTarget(port, 30000);
-  const cdp = new CDPConn(pageTarget.webSocketDebuggerUrl);
-  await cdp.open();
-
-  return {
-    target, proc, port, userDataDir, dialogsPath, cdp,
-    browserWsUrl: verInfo.webSocketDebuggerUrl,
-    label: opts.label || "launch",
-    getStdout: () => stdout,
-    getStderr: () => stderr
-  };
+  throw lastErr || new Error("launchApp: exhausted attempts with no error recorded");
 }
 
 function waitForExit(proc, timeoutMs) {
@@ -424,7 +681,8 @@ async function closeBrowserGracefully(app) {
    suite loudly even when the case's own assertions all happened to pass
    before the crash. `app.getStderr()` reads a closure over already-
    captured output, so it's safe to call after the process has exited. */
-async function teardown(app, tag) {
+async function teardown(app, tag, opts) {
+  opts = opts || {};
   const notes = [];
   try { app.cdp && app.cdp.close(); } catch {}
   if (app.cdp) await closeBrowserGracefully(app);
@@ -442,6 +700,9 @@ async function teardown(app, tag) {
   // A packaged app's launcher exe can spawn a child renderer/utility process
   // tree under a different top pid than the one we spawned — search by the
   // user-data dir string (unique per launch) rather than trust one pid.
+  // PID/userDataDir-scoped, same as killPid above — never by image name, so
+  // a concurrent run (this tree's other targets, or the other tree's own
+  // suite) is never touched.
   await sleep(500);
   const leftover = psProcessesMatching([app.userDataDir]);
   if (leftover.length) {
@@ -459,8 +720,26 @@ async function teardown(app, tag) {
     const uncaught = /\[splitpage-test\] uncaught/.test(stderrText);
     record(tag + ": no main-process crash (stderr has no \"[splitpage-test] uncaught\")",
       !uncaught, uncaught ? stderrText.slice(-2000) : "");
+    if (opts.expectExitCode !== undefined) {
+      record(tag + ": exit code is " + opts.expectExitCode,
+        app.proc.exitCode === opts.expectExitCode,
+        "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
+    }
   }
   return notes;
+}
+
+// Simulates a real crash: no CDP Browser.close negotiation at all, just a
+// hard PID-scoped kill (same killPid as teardown's fallback path — never by
+// image name) and a wait for the OS to actually report the process gone.
+// Leaves app.userDataDir's drafts/session.json exactly as DRAFT-STORE's own
+// crash-detection (previousSession !== 'clean-exit') expects to find it on
+// the next launchApp({ userDataDir: app.userDataDir }).
+async function crashApp(app) {
+  killPid(app.proc.pid);
+  const exited = await waitForExit(app.proc, 30000);
+  try { app.cdp && app.cdp.close(); } catch {}
+  return exited;
 }
 
 function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch {} }
@@ -528,7 +807,15 @@ async function caseBootAndSecurity(target, fixturesDir) {
     // for a moment before loadURL's navigation lands — poll instead of a
     // single read so this isn't a coin flip on how fast the app boots.
     const url = await poll(cdp, "location.href !== 'about:blank' && location.href", 15000).catch(() => "about:blank");
-    record(tag + ": origin is splitpage://app/index.html", url === "splitpage://app/index.html", url);
+    // TAB-IDENTITY: every tab page is splitpage://app/index.html?tab=<32 hex>.
+    // The exact-equality form this check used before F1 can never hold again —
+    // the tabId in the query string is what findTargetsByKind/connectTab use to
+    // tell one tab from another — so it is matched as a whole here instead,
+    // which also proves the tabId is well formed (a stricter check, not a
+    // looser one). Step L2 owns this file; this one line moved with F1 because
+    // nothing else in the suite could pass until it did.
+    record(tag + ": origin is splitpage://app/index.html with a tabId",
+      /^splitpage:\/\/app\/index\.html\?tab=[0-9a-f]{32}$/.test(url), url);
 
     const isDesktop = await evalPage(cdp, "!!(window.splitpageDesktop && window.splitpageDesktop.isDesktop)");
     record(tag + ": window.splitpageDesktop.isDesktop", isDesktop === true);
@@ -704,18 +991,44 @@ async function caseSecondInstance(target, fixturesDir) {
 
   let first = null;
   let second = null;
+  let secondTabCdp = null;
   try {
     first = await launchApp(target, { label: "first-instance", userDataDir, fixtures: [fixtureA] });
     await waitForRows(first.cdp, 20000);
     await poll(first.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("First Instance Doc"), 15000);
+    const firstTabId = await tabIdOfTarget(first.cdp);
 
     second = await launchApp(target, { label: "second-instance", userDataDir, fixtures: [fixtureB], skipCdp: true });
     const secondExited = await waitForExit(second.proc, 15000);
     record(tag + ": second launch exits quickly (single-instance lock)", secondExited === true);
 
-    const gotSecondDoc = await poll(first.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Second Instance Doc — 🚀"), 15000);
-    record(tag + ": first window now shows the second file's title", !!gotSecondDoc);
+    // DOCUMENT-STATE-AND-ROUTING-IPC's route-open rule: the running instance's
+    // tab already holds fixtureA, so it is no longer pristine
+    // (isPristineSeedDocument() requires no file ever opened, 03a-history-
+    // store.js) — routeOpenPath's "reuse this tab" branch therefore does NOT
+    // apply, and the second file has to land in a brand-new tab, leaving the
+    // first tab and its document completely untouched (TAB-IDENTITY). Before
+    // F3 wired up real pristine reporting this landed in the SAME tab; see
+    // F1's own deviations note on this exact case.
+    const newTabTarget = await pollNode(async () => {
+      const { tabTargets } = await findTargetsByKind(first.port);
+      const extra = tabTargets.filter((t) => t.tabId && t.tabId !== firstTabId);
+      return extra.length ? extra[0] : null;
+    }, 20000);
+    record(tag + ": the second file opens in a NEW tab, not the first (it is no longer pristine)", !!newTabTarget);
+
+    if (newTabTarget) {
+      secondTabCdp = await connectTarget(newTabTarget);
+      const gotSecondDoc = await poll(secondTabCdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Second Instance Doc — 🚀"), 15000);
+      record(tag + ": the new tab shows the second file's title", !!gotSecondDoc);
+    } else {
+      record(tag + ": the new tab shows the second file's title", false, "no new tab target appeared");
+    }
+
+    const firstStillA = await evalPage(first.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("First Instance Doc"));
+    record(tag + ": the first tab's document is untouched", firstStillA === true, String(firstStillA));
   } finally {
+    if (secondTabCdp) { try { secondTabCdp.close(); } catch {} }
     if (second) {
       // Only close what still needs closing — a real single-instance exit
       // already tore this one down.
@@ -729,8 +1042,15 @@ async function caseSecondInstance(target, fixturesDir) {
   }
 }
 
-async function caseLastFileResume(target, fixturesDir) {
-  const tag = target.name + " last-file resume";
+// SMOKE-HARNESS: caseLastFileResume renamed caseSessionRestore for the tab
+// shell — same flow (open a fixture via argv, save, teardown, relaunch with
+// the same userDataDir, assert the title and row count), now proving
+// DESKTOP-STATE-V2's own session restore (the tab this fixture landed in is
+// written back to desktop-state.json as a file source on save, and
+// restoreSessionAtLaunch recreates it) rather than the old single-window
+// "last file" bookkeeping it used to exercise.
+async function caseSessionRestore(target, fixturesDir) {
+  const tag = target.name + " session restore";
   const fixtureC = writeFixture(fixturesDir, "case8-resume.splitpage", "Resume Me — 🎬", [["x", "y"], ["p", "q"]]);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
 
@@ -1337,6 +1657,578 @@ async function caseHostModeNoPinWarning(target) {
 }
 
 /* ----------------------------------------------------------------------
+ * 5b. Step L2 — the tab shell cases (SMOKE-HARNESS, TAB-IDENTITY,
+ *     DESKTOP-STATE-V2, TAB-BOOT-SYNC, DOCUMENT-STATE-AND-ROUTING-IPC,
+ *     TABSTRIP-BRIDGE, CLOSE-QUIT-LIFECYCLE). Every case launches through
+ *     launchApp (SPLITPAGE_TEST=1), drives tab/window operations through
+ *     window.splitpageDesktop.__testShell — the same functions the menu, the
+ *     strip and drag-and-drop call in real use (invariant #33: no click ever
+ *     has to land on this machine's screen) — and closes only through the
+ *     TEST_MODE hooks (__testRequestClose/__testRequestQuit/__testShell
+ *     closeTab), never a page window.close().
+ * -------------------------------------------------------------------- */
+
+/* "tabstrip origin: on the strip target, typeof window.splitpageDesktop ===
+   'undefined'; window.splitpageTabStrip.readFile is undefined;
+   fetch('splitpage://tabstrip/api/health') is 404" — TABSTRIP-BRIDGE. */
+async function caseTabstripOrigin(target) {
+  const tag = target.name + " tabstrip origin: no file/draft/history bridge, no /api proxy";
+  let app = null;
+  let stripCdp = null;
+  try {
+    app = await launchApp(target, { label: "tabstrip-origin" });
+    await waitForRows(app.cdp, 20000);
+
+    const stripTarget = await pollNode(async () => {
+      const { tabStripTargets } = await findTargetsByKind(app.port);
+      return tabStripTargets.length ? tabStripTargets[0] : null;
+    }, 20000).catch(() => null);
+    record(tag + ": the tab strip's own CDP target appears", !!stripTarget);
+    if (!stripTarget) return;
+
+    stripCdp = await connectTarget(stripTarget);
+    await poll(stripCdp, "typeof window.splitpageTabStrip !== 'undefined'", 15000).catch(() => {});
+
+    const noDesktopBridge = await evalPage(stripCdp, "typeof window.splitpageDesktop === 'undefined'");
+    record(tag + ": window.splitpageDesktop is undefined on the strip origin", noDesktopBridge === true, String(noDesktopBridge));
+
+    const noReadFile = await evalPage(stripCdp, "typeof (window.splitpageTabStrip && window.splitpageTabStrip.readFile) === 'undefined'");
+    record(tag + ": window.splitpageTabStrip.readFile is undefined", noReadFile === true, String(noReadFile));
+
+    const healthStatus = await evalPage(stripCdp, "fetch('splitpage://tabstrip/api/health').then(function(r){return r.status;}).catch(function(){return -1;})");
+    record(tag + ": fetch('splitpage://tabstrip/api/health') is 404", healthStatus === 404, "status=" + healthStatus);
+  } finally {
+    if (stripCdp) { try { stripCdp.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* "Ctrl+T via __testShell createTab → a new pristine blank tab whose
+   DESKTOP.launchIntent.type === 'blank'". */
+async function caseCtrlTNewTab(target) {
+  const tag = target.name + " Ctrl+T (__testShell createTab): a new pristine blank tab";
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "ctrl-t-new-tab" });
+    await waitForRows(app.cdp, 20000);
+
+    const newTabId = await shell(app.cdp, "createTab", {});
+    record(tag + ": createTab returns a well-formed tabId", typeof newTabId === "string" && /^[0-9a-f]{32}$/.test(newTabId), String(newTabId));
+    if (typeof newTabId !== "string") return;
+
+    cdp2 = await connectTab(app, newTabId);
+    await pollNode(async () => (await tabIdOfTarget(cdp2)) === newTabId, 15000);
+    const intentType = await evalPage(cdp2, "window.splitpageDesktop.launchIntent.type");
+    record(tag + ": the new tab's DESKTOP.launchIntent.type is 'blank'", intentType === "blank", String(intentType));
+
+    const listing = await shell(app.cdp, "listTargets", {});
+    const w = listing.windows.find((x) => x.tabs.some((t) => t.tabId === newTabId));
+    const t = w && w.tabs.find((tt) => tt.tabId === newTabId);
+    record(tag + ": main records the new tab as pristine and not dirty",
+      !!t && t.pristine === true && t.dirty === false, JSON.stringify(t));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* "pristine reuse vs new tab: route a file open from a fresh tab → count
+   stays 1; from a dirty tab → count 2 and the original is untouched" +
+   "path dedupe: opening the same path twice → switches, no duplicate; also
+   from a second window" + "second-instance argv → a tab in the running
+   instance, same dedupe" — all three exercised through real second-instance
+   launches (the actual DOCUMENT-STATE-AND-ROUTING-IPC path, not a stand-in),
+   since routeOpenPath is exactly what app.on('second-instance') calls. */
+async function caseTabRoutingRules(target, fixturesDir) {
+  const tag = target.name + " routing: pristine reuse, dirty->new tab, path dedupe (same and cross window)";
+  const fixtureA = writeFixture(fixturesDir, "case-route-a.splitpage", "Route A Doc", [["1", "2"]]);
+  const fixtureB = writeFixture(fixturesDir, "case-route-b.splitpage", "Route B Doc — 🧭", [["3", "4"]]);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+
+  async function sendSecondInstance(fixturePath) {
+    const port = await freePort();
+    const flags = [`--remote-debugging-port=${port}`];
+    const args = target.kind === "dev" ? [target.appPath, ...flags, fixturePath] : [...flags, fixturePath];
+    const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
+    const proc = spawn(target.exe, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+    await waitForExit(proc, 15000);
+  }
+
+  let app = null;
+  let cdpB = null;
+  try {
+    app = await launchApp(target, { label: "routing-rules", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const tab1Id = await tabIdOfTarget(app.cdp);
+
+    // --- pristine reuse: a fresh, never-touched tab absorbs the file ---
+    await sendSecondInstance(fixtureA);
+    const reused = await poll(app.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Route A Doc"), 15000).catch(() => null);
+    record(tag + ": routing into a pristine tab reuses it (count stays 1)", !!reused);
+    let listing = await shell(app.cdp, "listTargets", {});
+    let totalTabs = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
+    record(tag + ": tab count is still 1 after the pristine reuse", totalTabs === 1, "total=" + totalTabs);
+
+    // --- dirty tab: this same tab now holds a real file (no longer
+    //     pristine) — dirty it explicitly too, then route a second file. It
+    //     must land in a NEW tab, and the first tab must be untouched. ---
+    await dirtyTabForTest(app.cdp);
+    await sendSecondInstance(fixtureB);
+    const newTabTarget = await pollNode(async () => {
+      const { tabTargets } = await findTargetsByKind(app.port);
+      const extra = tabTargets.filter((t) => t.tabId && t.tabId !== tab1Id);
+      return extra.length ? extra[0] : null;
+    }, 20000).catch(() => null);
+    record(tag + ": routing from a dirty tab opens a NEW tab (count becomes 2)", !!newTabTarget);
+    const tab1TitleStill = await evalPage(app.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Route A Doc"));
+    record(tag + ": the original (dirty) tab is untouched", tab1TitleStill === true, String(tab1TitleStill));
+    if (!newTabTarget) return;
+
+    cdpB = await connectTarget(newTabTarget);
+    // findTargetsByKind already parsed the tabId straight off the target's
+    // own URL (?tab=<tabId>) — reading it there avoids a race against this
+    // brand-new page's own preload/boot script actually having run yet,
+    // which a page-side tabIdOfTarget() eval cannot avoid the moment after
+    // the target first appears.
+    const tabBId = newTabTarget.tabId;
+    const gotB = await poll(cdpB, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Route B Doc — 🧭"), 15000).catch(() => null);
+    record(tag + ": the new tab shows the second file's document", !!gotB);
+
+    // --- path dedupe, same window: opening fixtureB again switches, no dup ---
+    await sendSecondInstance(fixtureB);
+    listing = await shell(app.cdp, "listTargets", {});
+    totalTabs = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
+    record(tag + ": opening the same path again does not duplicate the tab (still 2)", totalTabs === 2, "total=" + totalTabs);
+    let ownerWindow = listing.windows.find((w) => w.tabs.some((t) => t.tabId === tabBId));
+    record(tag + ": the existing tab for that path is activated, not duplicated", !!ownerWindow && ownerWindow.activeTabId === tabBId, JSON.stringify(ownerWindow));
+
+    // --- path dedupe, from a second window: move fixtureB's tab out, then
+    //     open the same path again — it must still resolve to that tab,
+    //     wherever it now lives, not spawn a third one. ---
+    const newWindowId = await shell(app.cdp, "moveTabToWindow", { tabId: tabBId, windowId: null });
+    record(tag + ": the tab moved into a new window", typeof newWindowId === "string");
+    await sendSecondInstance(fixtureB);
+    listing = await shell(app.cdp, "listTargets", {});
+    totalTabs = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
+    record(tag + ": opening the same path from a second window still dedupes (still 2 tabs, 2 windows)",
+      totalTabs === 2 && listing.windows.length === 2, JSON.stringify(listing.windows));
+    ownerWindow = listing.windows.find((w) => w.tabs.some((t) => t.tabId === tabBId));
+    record(tag + ": the tab in the second window is the one activated",
+      !!ownerWindow && ownerWindow.windowId === newWindowId && ownerWindow.activeTabId === tabBId, JSON.stringify(ownerWindow));
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* "middle-click/close-tab on a clean tab closes with no dialog consumed; a
+   dirty tab honours 'cancel' then 'confirm'" + "close-tab affects only that
+   tab" (a driver and a witness tab are never touched throughout). __testShell
+   closeTab(tabId) IS the middle-click/Ctrl+W path (requestCloseTab) per
+   TABSTRIP-BRIDGE's own comment — not a stand-in for it. */
+async function caseCloseTabCleanAndDirty(target) {
+  const tag = target.name + " close-tab (same path as middle-click): clean vs dirty, only that tab";
+  let app = null;
+  let cdpWitness = null, cdpDirty = null;
+  try {
+    app = await launchApp(target, { label: "close-tab-clean-dirty", dialogs: ["cancel", "confirm"] });
+    await waitForRows(app.cdp, 20000);
+    const tab1Id = await tabIdOfTarget(app.cdp); // driver — never closed
+
+    const witnessId = await shell(app.cdp, "createTab", {});
+    cdpWitness = await connectTab(app, witnessId);
+    await waitForRows(cdpWitness, 20000);
+
+    // --- a CLEAN tab closes immediately, no dialog consumed ---
+    const cleanId = await shell(app.cdp, "createTab", {});
+    await shell(app.cdp, "closeTab", { tabId: cleanId });
+    let listing = await shell(app.cdp, "listTargets", {});
+    let allTabIds = listing.windows.flatMap((w) => w.tabs.map((t) => t.tabId));
+    record(tag + ": closing a clean tab removes it immediately, no dialog needed", allTabIds.indexOf(cleanId) === -1, JSON.stringify(allTabIds));
+    record(tag + ": the app is still running", app.proc.exitCode === null);
+
+    // --- a DIRTY tab: 'cancel' keeps it, 'confirm' closes it. The clean-tab
+    //     close above touched nothing unsaved, so it consumed no dialog
+    //     answer — dialogs[0] is still 'cancel' here, proving that. ---
+    const dirtyId = await shell(app.cdp, "createTab", {});
+    cdpDirty = await connectTab(app, dirtyId);
+    await waitForRows(cdpDirty, 20000);
+    await dirtyTabForTest(cdpDirty);
+
+    await shell(app.cdp, "closeTab", { tabId: dirtyId });
+    listing = await shell(app.cdp, "listTargets", {});
+    allTabIds = listing.windows.flatMap((w) => w.tabs.map((t) => t.tabId));
+    record(tag + ": 'cancel' keeps the dirty tab open", allTabIds.indexOf(dirtyId) !== -1, JSON.stringify(allTabIds));
+
+    await shell(app.cdp, "closeTab", { tabId: dirtyId });
+    listing = await shell(app.cdp, "listTargets", {});
+    allTabIds = listing.windows.flatMap((w) => w.tabs.map((t) => t.tabId));
+    record(tag + ": 'confirm' closes the dirty tab for real", allTabIds.indexOf(dirtyId) === -1, JSON.stringify(allTabIds));
+
+    record(tag + ": the driver and witness tabs were never touched",
+      allTabIds.indexOf(tab1Id) !== -1 && allTabIds.indexOf(witnessId) !== -1, JSON.stringify(allTabIds));
+  } finally {
+    if (cdpWitness) { try { cdpWitness.close(); } catch {} }
+    if (cdpDirty) { try { cdpDirty.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* "close-tab affects only that tab; the last tab closes the window; the last
+   window quits with exit 0." */
+async function caseLastTabClosesWindowLastWindowQuits(target) {
+  const tag = target.name + " close-tab: last tab closes the window; last window quit exits 0";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "last-tab-closes-window" });
+    await waitForRows(app.cdp, 20000);
+    const tab1Id = await tabIdOfTarget(app.cdp);
+
+    const tab2Id = await shell(app.cdp, "createTab", {});
+    await shell(app.cdp, "closeTab", { tabId: tab2Id });
+    const listing = await shell(app.cdp, "listTargets", {});
+    record(tag + ": closing a non-last tab affects only that tab",
+      listing.windows.length === 1 && listing.windows[0].tabs.length === 1 && listing.windows[0].tabs[0].tabId === tab1Id,
+      JSON.stringify(listing.windows));
+    record(tag + ": the app is still running", app.proc.exitCode === null);
+
+    // Closing the LAST tab of the only window closes the window, which
+    // (being the only window) quits the app — fire-and-forget: the reply
+    // can never arrive once this tab's own context is gone (fireShell, same
+    // reasoning as fireEval's own comment on window.close()).
+    await fireShell(app.cdp, "closeTab", { tabId: tab1Id });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": the last tab closing takes the window, and the last window quit exits 0",
+      exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* "a window with 2 dirty tabs and another window open → one dialog; 'review'
+   focuses the first dirty tab and cancels; 'confirm' closes only that
+   window." */
+async function caseWindowCloseTwoDirtyTabs(target) {
+  const tag = target.name + " window close: 2 dirty tabs + another window open (one dialog)";
+  let ctx = null;
+  try {
+    ctx = await setupTwoDirtyWindows(target, { label: "window-close-2-dirty", dialogs: ["review", "confirm"] });
+    const { app, tab1Id, window1Id, cdp1, cdp2, cdp3 } = ctx;
+
+    await dirtyTabForTest(cdp1);
+    await dirtyTabForTest(cdp2);
+
+    // First close attempt on window1 (2 unsaved tabs -> the scoped 3-button
+    // dialog, CLOSE-QUIT-LIFECYCLE): dialogs[0] = "review" -> the first
+    // unsaved tab (tab1, listed first in strip order) is activated and the
+    // close is cancelled.
+    await fireEval(cdp1, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const afterReview = await pollShellState(cdp3, (l) => {
+      const w1 = l.windows.find((w) => w.windowId === window1Id);
+      return w1 && w1.tabs.length === 2 ? l : null;
+    }, 15000).catch(() => null);
+    record(tag + ": 'review' keeps window1 open with both dirty tabs",
+      !!afterReview, afterReview ? "" : "window1 lost a tab or vanished after review");
+    record(tag + ": the app is still running after 'review'", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+    const w1 = afterReview && afterReview.windows.find((w) => w.windowId === window1Id);
+    record(tag + ": 'review' activates the first unsaved tab", !!w1 && w1.activeTabId === tab1Id, JSON.stringify(w1));
+
+    // Second close attempt: dialogs[1] = "confirm" -> window1 closes (both
+    // tabs go with it); window2, never touched, stays open.
+    await fireEval(cdp1, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const afterConfirm = await pollShellState(cdp3, (l) => (l.windows.every((w) => w.windowId !== window1Id) ? l : null), 20000).catch(() => null);
+    record(tag + ": 'confirm' closes only window1", !!afterConfirm, afterConfirm ? "" : "window1 still present after 'confirm'");
+    record(tag + ": the app is still running (window2 survives)", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+  } finally {
+    if (ctx) {
+      try { ctx.cdp2.close(); } catch {}
+      try { ctx.cdp3.close(); } catch {}
+      await teardown(ctx.app, tag);
+      rmrf(ctx.app.userDataDir);
+    }
+  }
+}
+
+/* "quit with dirty tabs in two windows → exactly one answer consumed;
+   'review' does not quit; 'confirm' → exit 0." One dirty tab per window. */
+async function caseQuitTwoWindowsDirty(target) {
+  const tag = target.name + " quit: dirty tabs in two windows (one answer per attempt)";
+  let ctx = null;
+  try {
+    ctx = await setupTwoDirtyWindows(target, { label: "quit-2-windows-dirty", dialogs: ["review", "confirm"] });
+    const { app, cdp1, cdp2, cdp3 } = ctx;
+
+    await dirtyTabForTest(cdp1); // window1
+    await dirtyTabForTest(cdp3); // window2
+
+    await fireEval(cdp1, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    await sleep(2000);
+    record(tag + ": 'review' does not quit", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+
+    // If before-quit had wrongly consumed more than one dialog answer on the
+    // first attempt, this second attempt would not see dialogs[1] ===
+    // "confirm" and the quit would not go through — this assertion is what
+    // "exactly one answer consumed" actually proves.
+    await fireEval(cdp1, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": 'confirm' quits for real (exactly one answer per attempt was consumed)",
+      exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+  } finally {
+    if (ctx) {
+      try { ctx.cdp2.close(); } catch {}
+      try { ctx.cdp3.close(); } catch {}
+      await teardown(ctx.app, tag);
+      rmrf(ctx.app.userDataDir);
+    }
+  }
+}
+
+/* "--host + quit: the stop-sharing prompt fires once at quit, not when
+   closing a non-last window." Exactly one dialog answer in the whole run: if
+   the hosting prompt wrongly fired at the non-last window's close, it would
+   consume that single answer there, leaving the real quit's own hosting
+   prompt with an empty cursor -> TEST_MODE default (Cancel) -> the quit
+   would wrongly abort, and the final assertion below would fail — which is
+   exactly what this case is proving does not happen. */
+async function caseHostQuitStopSharingOnce(target) {
+  const tag = target.name + " --host: stop-sharing prompt fires once at quit, not at a non-last close";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "host-quit-once", flags: ["--host", "--pin", "3344"], dataDir, dialogs: ["confirm"] });
+    await waitForRows(app.cdp, 20000);
+    await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
+
+    const tab2Id = await shell(app.cdp, "createTab", {});
+    cdp2 = await connectTab(app, tab2Id);
+    await waitForRows(cdp2, 20000);
+    await shell(app.cdp, "moveTabToWindow", { tabId: tab2Id, windowId: null });
+
+    // Close window2 (non-last, nothing unsaved): must ask nothing at all.
+    await fireEval(cdp2, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const afterClose = await pollShellState(app.cdp, (l) => (l.windows.length === 1 ? l : null), 15000).catch(() => null);
+    record(tag + ": closing a non-last window with nothing unsaved asks nothing and just closes",
+      !!afterClose, afterClose ? "" : "window2 did not close cleanly");
+    record(tag + ": the app is still running after the non-last close", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+
+    // Quit the now-last window: the hosting prompt fires exactly once here.
+    await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": quitting the last window asks the stop-sharing prompt once, then exits cleanly",
+      exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(dataDir);
+  }
+}
+
+/* "tear-off preserves live state: edit, __testShell moveTabToWindow null →
+   same tabId, same content, no reload (a window.__marker set before the move
+   survives)." moveTabToWindow re-parents the WebContentsView; it must never
+   recreate it (invariant #42). */
+async function caseTearOffPreservesState(target) {
+  const tag = target.name + " tear-off preserves live tab state (no reload)";
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "tear-off" });
+    await waitForRows(app.cdp, 20000);
+
+    const tab2Id = await shell(app.cdp, "createTab", {});
+    cdp2 = await connectTab(app, tab2Id);
+    await waitForRows(cdp2, 20000);
+
+    await evalPage(cdp2,
+      "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return !!b; })()",
+      { userGesture: true });
+    await poll(cdp2, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+    const rowsBefore = await evalPage(cdp2, "window.__splitpageFormats.state().rows.length");
+    const marker = "preserved-" + Date.now();
+    await evalPage(cdp2, "window.__marker = " + JSON.stringify(marker) + "; true", { awaitPromise: false });
+
+    const newWindowId = await shell(app.cdp, "moveTabToWindow", { tabId: tab2Id, windowId: null });
+    record(tag + ": the move creates a new window", typeof newWindowId === "string" && newWindowId.length === 32, String(newWindowId));
+
+    // Same tabId, over the SAME CDP connection: a reload would have torn
+    // cdp2's execution context (and window.__marker) down.
+    const tabIdAfter = await tabIdOfTarget(cdp2);
+    record(tag + ": the tab keeps the same tabId after the move", tabIdAfter === tab2Id, "before=" + tab2Id + " after=" + tabIdAfter);
+    const markerAfter = await evalPage(cdp2, "window.__marker");
+    record(tag + ": a marker set before the move survives it (no reload)", markerAfter === marker, "before=" + marker + " after=" + markerAfter);
+    const rowsAfter = await evalPage(cdp2, "window.__splitpageFormats.state().rows.length");
+    record(tag + ": the edited content survives the move unchanged", rowsAfter === rowsBefore, "before=" + rowsBefore + " after=" + rowsAfter);
+
+    const listing = await shell(app.cdp, "listTargets", {});
+    const w2 = listing.windows.find((w) => w.windowId === newWindowId);
+    record(tag + ": the strip records the tab under its new window", !!w2 && w2.tabs.some((t) => t.tabId === tab2Id), JSON.stringify(w2));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* "restore at launch: two windows with tabs + a deleted file → the
+   composition, order and active tab are reproduced; the missing file is
+   skipped with a restore-notice toast." desktop-state.json is hand-written
+   (DESKTOP-STATE-V2) rather than built live through the UI, so the exact
+   session main has to restore is fully under this case's control. */
+async function caseRestoreAtLaunch(target, fixturesDir) {
+  const tag = target.name + " restore at launch: two windows, order, active tab, missing file skipped";
+  // Both of window1's tabs are real, existing files — NOT a blank tab:
+  // restoreSessionAtLaunch drops a blank tab with no crash draft outright
+  // (there is nothing to restore), so a blank tab only survives when it is
+  // the SOLE tab left in its window (the "window left with nothing" fallback
+  // a few lines further down in main.js). Two real files exercise
+  // composition/order/active-tab without depending on that fallback at all.
+  const fixtureKeep1 = writeFixture(fixturesDir, "case-restore-keep1.splitpage", "Restore Keep One", [["a", "b"]]);
+  const fixtureKeep2 = writeFixture(fixturesDir, "case-restore-keep2.splitpage", "Restore Keep Two", [["g", "h"]]);
+  const missingName = "case-restore-missing.splitpage";
+  const fixtureMissing = path.join(fixturesDir, missingName);
+  writeFixture(fixturesDir, missingName, "Restore Missing Doc", [["c", "d"]]);
+  fs.unlinkSync(fixtureMissing); // real basename, but gone before this launch
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const win1Id = newHexId(), win2Id = newHexId();
+  const tab1Id = newHexId(), tab2Id = newHexId(), tab3Id = newHexId();
+  writeDesktopStateFile(userDataDir, {
+    version: 2,
+    windows: [
+      {
+        windowId: win1Id, bounds: null, maximized: false, activeTabId: tab2Id,
+        tabs: [
+          { tabId: tab1Id, source: { kind: "file", absPath: fixtureKeep1 }, lastKnownTitle: "Restore Keep One" },
+          { tabId: tab2Id, source: { kind: "file", absPath: fixtureKeep2 }, lastKnownTitle: "Restore Keep Two" }
+        ]
+      },
+      {
+        windowId: win2Id, bounds: null, maximized: false, activeTabId: tab3Id,
+        tabs: [
+          { tabId: tab3Id, source: { kind: "file", absPath: fixtureMissing }, lastKnownTitle: "Restore Missing Doc" }
+        ]
+      }
+    ]
+  });
+
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "restore-at-launch", userDataDir });
+    // window1's active tab (tab2) is where the launch's one restore notice
+    // is delivered (DOCUMENT-STATE-AND-ROUTING-IPC).
+    cdp2 = await connectTab(app, tab2Id);
+
+    const notice = await poll(cdp2,
+      "(function(){ var t=document.querySelectorAll('.toast'); for (var i=0;i<t.length;i++){ if (t[i].textContent.indexOf(" + JSON.stringify(missingName) + ")!==-1 && /missing/i.test(t[i].textContent)) return t[i].textContent; } return null; })()",
+      20000).catch(() => null);
+    record(tag + ": the missing file is skipped with a restore-notice toast naming it", !!notice, String(notice));
+
+    const listing = await shell(cdp2, "listTargets", {});
+    record(tag + ": both windows are reproduced", listing.windows.length === 2, JSON.stringify(listing.windows.map((w) => w.windowId)));
+
+    const w1 = listing.windows.find((w) => w.windowId === win1Id);
+    record(tag + ": window1's composition and order are reproduced (tab1 then tab2)",
+      !!w1 && w1.tabs.length === 2 && w1.tabs[0].tabId === tab1Id && w1.tabs[1].tabId === tab2Id,
+      JSON.stringify(w1));
+    record(tag + ": window1's active tab is reproduced (tab2, not tab1)",
+      !!w1 && w1.activeTabId === tab2Id, JSON.stringify(w1 && w1.activeTabId));
+
+    const w2 = listing.windows.find((w) => w.windowId === win2Id);
+    record(tag + ": window2 survives with a blank replacement for its missing-file tab",
+      !!w2 && w2.tabs.length === 1 && w2.tabs[0].path === null, JSON.stringify(w2));
+
+    const bothTitles = await pollNode(async () => {
+      const l = await shell(cdp2, "listTargets", {});
+      const w = l.windows.find((x) => x.windowId === win1Id);
+      const t1 = w && w.tabs.find((x) => x.tabId === tab1Id);
+      const t2 = w && w.tabs.find((x) => x.tabId === tab2Id);
+      return t1 && t2 && t1.title === "Restore Keep One" && t2.title === "Restore Keep Two" ? { t1, t2 } : null;
+    }, 20000).catch(() => null);
+    record(tag + ": both restored file tabs load their documents and report their real titles",
+      !!bothTitles, JSON.stringify(bothTitles));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* "v1→v2 migration: a hand-written v1 file → one window/one tab, version 2
+   on disk; corrupt JSON boots like a fresh install." */
+async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
+  const tagA = target.name + " v1 -> v2 migration on read, and version 2 on disk";
+  const fixtureV1 = writeFixture(fixturesDir, "case-v1-migrate.splitpage", "V1 Migrated Doc", [["e", "f"]]);
+  const userDataDirA = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  writeDesktopStateFile(userDataDirA, {
+    lastFilePath: fixtureV1,
+    windowBounds: { x: 40, y: 40, width: 1200, height: 800 },
+    windowMaximized: false
+  });
+  let appA = null;
+  try {
+    appA = await launchApp(target, { label: "v1-migrate", userDataDir: userDataDirA });
+    await waitForRows(appA.cdp, 20000);
+    const migratedTitle = await poll(appA.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("V1 Migrated Doc"), 20000).catch(() => null);
+    record(tagA + ": the v1 file's document opens", !!migratedTitle);
+
+    const listing = await shell(appA.cdp, "listTargets", {});
+    record(tagA + ": migrates to exactly one window with one tab",
+      listing.windows.length === 1 && listing.windows[0].tabs.length === 1, JSON.stringify(listing.windows));
+
+    const onDiskAfter = await pollNode(async () => {
+      const s = readDesktopStateFile(userDataDirA);
+      return s && s.version === 2 ? s : null;
+    }, 20000).catch(() => null);
+    record(tagA + ": desktop-state.json on disk is version 2 after the migrated session is saved", !!onDiskAfter, JSON.stringify(onDiskAfter));
+  } finally {
+    if (appA) { await teardown(appA, tagA); rmrf(appA.userDataDir); }
+    rmrf(userDataDirA);
+  }
+
+  const tagB = target.name + " corrupt desktop-state.json boots like a fresh install";
+  const userDataDirB = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  fs.mkdirSync(userDataDirB, { recursive: true });
+  fs.writeFileSync(path.join(userDataDirB, "desktop-state.json"), "{ this is not valid JSON", "utf8");
+  let appB = null;
+  try {
+    appB = await launchApp(target, { label: "corrupt-state", userDataDir: userDataDirB });
+    await waitForRows(appB.cdp, 20000);
+    const listing = await shell(appB.cdp, "listTargets", {});
+    record(tagB + ": one window, one blank tab, exactly like a fresh install",
+      listing.windows.length === 1 && listing.windows[0].tabs.length === 1 &&
+      listing.windows[0].tabs[0].path === null && !listing.windows[0].tabs[0].isServerDoc,
+      JSON.stringify(listing.windows));
+  } finally {
+    if (appB) { await teardown(appB, tagB); rmrf(appB.userDataDir); }
+    rmrf(userDataDirB);
+  }
+}
+
+/* "window.close() canary: grep src/js for 'window.close(' finds nothing (fs
+   read in Node)." Pure source-text check — no launch, no target-dependent
+   behaviour; runs once per target invocation but is cheap and idempotent. */
+async function caseWindowCloseCanary() {
+  const tag = "src/js window.close() canary";
+  const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
+  let files = [];
+  try {
+    files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".js"));
+  } catch (e) {
+    record(tag + ": src/js is readable", false, "exception: " + (e && e.message ? e.message : String(e)));
+    return;
+  }
+  const offenders = [];
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(srcDir, f), "utf8");
+    if (text.indexOf("window.close(") !== -1) offenders.push(f);
+  }
+  record(tag + ": no window.close( call anywhere in src/js", offenders.length === 0, offenders.join(", "));
+}
+
+/* ----------------------------------------------------------------------
  * 6. Runner.
  * -------------------------------------------------------------------- */
 
@@ -1353,7 +2245,7 @@ async function runTargetSuite(target) {
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],
-    ["last-file resume", () => caseLastFileResume(target, fixturesDir)],
+    ["session restore", () => caseSessionRestore(target, fixturesDir)],
     ["--library", () => caseLibraryMode(target)],
     ["--host --pin", () => caseHostMode(target)],
     ["--host --pin (auto-generated)", () => caseHostModeAutoPin(target)],
@@ -1364,7 +2256,20 @@ async function runTargetSuite(target) {
     ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],
     ["quit authority (no user gesture)", () => caseQuitAuthorityNoGesture(target)],
     ["--library quit cancelled keeps the server", () => caseQuitCancelKeepsServer(target)],
-    ["clean close (regression)", () => caseCleanClose(target)]
+    ["clean close (regression)", () => caseCleanClose(target)],
+    // --- step L2: the tab shell ---
+    ["tabstrip origin", () => caseTabstripOrigin(target)],
+    ["Ctrl+T new tab (__testShell createTab)", () => caseCtrlTNewTab(target)],
+    ["routing: pristine reuse / dirty->new tab / path dedupe", () => caseTabRoutingRules(target, fixturesDir)],
+    ["close-tab: clean vs dirty, only that tab", () => caseCloseTabCleanAndDirty(target)],
+    ["close-tab: last tab closes window, last window quits", () => caseLastTabClosesWindowLastWindowQuits(target)],
+    ["window close: 2 dirty tabs + another window (one dialog)", () => caseWindowCloseTwoDirtyTabs(target)],
+    ["quit: dirty tabs in two windows (one answer per attempt)", () => caseQuitTwoWindowsDirty(target)],
+    ["--host + quit: stop-sharing prompt fires once", () => caseHostQuitStopSharingOnce(target)],
+    ["tear-off preserves live tab state", () => caseTearOffPreservesState(target)],
+    ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir)],
+    ["v1->v2 migration; corrupt JSON boots fresh", () => caseV1MigrationAndCorruptJson(target, fixturesDir)],
+    ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {
     for (const [name, fn] of groups) {

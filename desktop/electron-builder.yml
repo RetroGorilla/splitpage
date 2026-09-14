@@ -6,9 +6,16 @@ directories:
   output: dist
   buildResources: build
 
+# main.js requires ./drafts at load and both preloads by path, so all four
+# have to be inside the asar or a packaged launch crashes on startup. The tab
+# strip's own three files are NOT here — they are served from
+# resources/splitpage/tabstrip (stage.mjs stages them, extraResources below
+# ships them), because protocol.handle reads them off disk.
 files:
   - main.js
   - preload.js
+  - tabstrip-preload.js
+  - drafts.js
   - package.json
 
 extraResources:

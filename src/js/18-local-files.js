@@ -421,6 +421,12 @@
     if (DESKTOP) {
       var entry = await DESKTOP.openFileDialog();
       if (!entry) return;
+      /* main may already have this path open in another tab (or window) —
+         routeOpen activates that tab instead of opening a second copy here.
+         'this-tab' is main confirming the sender (this pristine, ready tab)
+         is where it belongs, same as every open always landed before tabs. */
+      var r = await DESKTOP.routeOpen({ kind: "file", fileId: entry.id });
+      if (!r || r.where !== "this-tab") return;
       var desktopHandle = makeDesktopHandle(entry);
       var desktopFile = await desktopHandle.getFile();
       await openProjectFile(desktopFile, desktopHandle);

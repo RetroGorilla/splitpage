@@ -78,17 +78,15 @@
 
   async function rememberLastFileHandle(handle) {
     if (!handle) return;
-    /* Desktop has no IndexedDB worth trusting across the app's own origin
-       swap (splitpage://app is stable, but the main process is the thing
-       that actually persists this — desktop-state.json, not a browser
-       store) and a much simpler way to say the same thing: the handle IS
-       an opaque id the main process already tracks (20f-desktop.js's
-       makeDesktopHandle). Mutually exclusive with the IndexedDB path below
-       by construction — DESKTOP is one fixed value for the life of the page. */
-    if (DESKTOP) {
-      try { await DESKTOP.setLastFile(handle._desktopId); } catch (e) { /* not fatal — a nicety */ }
-      return;
-    }
+    /* Desktop persists what's open itself — the main process writes each
+       tab's document source into desktop-state.json on every source change
+       (splitpage:set-document-state) and restores whole sessions from it at
+       launch (TAB-BOOT-SYNC/DESKTOP-STATE-V2). There is nothing left for
+       this per-page, per-origin IndexedDB store to remember on desktop, and
+       (unlike splitpage://app, which is stable) it would be remembering the
+       wrong thing anyway: this file's real identity there is a path in
+       main's own registry, which this page is never handed (invariant #34). */
+    if (DESKTOP) return;
     try {
       var db = await openHandleDb();
       await new Promise(function (resolve, reject) {
