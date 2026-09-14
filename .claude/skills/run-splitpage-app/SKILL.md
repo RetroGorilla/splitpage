@@ -33,7 +33,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 538/538 checks across 20 suite(s)` and exit 0, or lists
+Ends with `ALL PASS - 860/860 checks across 24 suites` and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -47,10 +47,11 @@ probes every port the run needs with a real socket bind and steps the base by
 100 until the whole block is free on both ranges. That means two runs on one
 machine (two worktrees, two agents) no longer collide on a fixed default port
 and fail with "static server did not come up" — pass `-Port`/`-CdpPort`
-explicitly only if you need a specific, repeatable block. This is unrelated to
-the Edge-profile sweep below — that's a separate mechanism, and two concurrent
-runs can still kill each other's live browser via the profile glob, so keep
-re-running an aborted suite with `-Only` before believing it.
+explicitly only if you need a specific, repeatable block. This is a separate
+mechanism from the Edge-profile sweep below (each run also gets its own
+run-id-scoped browser profile, so two concurrent runs no longer kill each
+other's live browser either) — see "Two `run-tests.ps1` invocations at once"
+under Gotchas.
 
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
@@ -78,6 +79,10 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/18-connect.txt` | the Servers dialog from the File menu, bookmarks persisting (and holding nothing credential-shaped), the SSH command, the join-PIN dialog's validation, `#launch=` stripped from the URL on load |
 | `tests/20-comment-drift.txt` | a `.cmt-anchor`'s live text drifting from `quotedText`: still jumpable with a "text changed" note and the original quote kept visible, orphaned once the span is edited down to nothing |
 | `tests/21-desktop-shim.txt` | the desktop bridge (20f-desktop.js), driven with `window.__desktopTest`'s fake backend in place of a real Electron shell: a desktop file handle round-trips non-ASCII text byte-exactly, a cancelled Save As leaves `state.rev` and the toasts alone, the on-disk-conflict guard fires when the fake file's mtime moves, and the native-menu-command dispatcher reaches the same find bar and comments panel the File menu and header button do |
+| `tests/22-doc-id.txt` | document identity (02b-doc-id.js): boot minting a valid id, the FROZEN SHA-256 vectors (HANDOFF invariant #37), a hostile or missing id replaced vs. a valid one kept, `reassignDocId`'s Save-As fork that never writes the user's file (overrides.md #1), a failed Save-As write not retargeting Save, identity surviving a document opened while the Save As dialog is up, exports carrying no id, a legacy `.splitpage`/`.md` re-deriving the same id on reopen, the `mergedDocId` truth table, `adoptRestoredState` keeping the id regardless of the snapshot, and the fake-BroadcastChannel duplicate-claim reassignment |
+| `tests/23-doc-id-reload.txt` | document identity (02b-doc-id.js) across a real page reload: a pristine boot always mints a fresh id, and ingress decides whether anything needs merging before adopting one — `goto` wipes `window`, so this is its own suite rather than a section tacked onto 22's |
+| `tests/24-history.txt` | per-document version history (03a-history-store.js + the `03-sync.js` glue): real captures via `loadFileIntoEditor`'s foreign-file push and a fixture `.splitpage` reopen (no direct `pushSnapshot` access — see build.mjs), the pristine seed never snapshotted until it's dirtied, per-document isolation and the open history panel following the active document, the newest-50 cap and call-order sorting under a frozen clock, restore backing up first and keeping the current docId, copy idempotence, the quota-always forced restore, and a document edit landing mid-backup aborting or completing the restore correctly |
+| `tests/25-history-migration.txt` | the one-time migration of the old shared `splitpage-snapshots` localStorage list into per-document history's Older bucket (`startHistoryMigration`), and the merge-undo path (`lastMergeUndo`) that rides the same store: legacy entries (including a hostile id) re-minted into Older with the legacy key removed, a repeat migration adding only what's new, a failed import or a corrupt key never deleting the legacy key, a key that changes mid-migration never left deleted unless its latest content actually made it into Older, and Older itself being shared across every document, restoring under the current document's id, and expiring as a whole 90 days after the migration |
 
 ## The server's own tests
 
@@ -235,15 +240,23 @@ the app.
   `[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(...))`.
 - **Harmless console noise:** a 404 for `/favicon.ico`, and service-worker
   registration failures. Don't chase them.
-- **Two suites running at once (two worktrees, two agents) will break each
-  other.** The sweep below matches the `splitpage-edge-*` profile *glob*, not
-  one run's own profile, so a second run starting up kills the first run's
-  live browser and that suite dies mid-command with
-  `The WebSocket is in an invalid state ('Aborted')` — sometimes on the first
-  command, sometimes twenty commands in. It looks exactly like a real failure
-  and is not one: 02-production and 07-untagged both "failed" this way during
-  Phase 3 and both passed 20/20 and 25/25 when re-run alone. Separate ports
-  are not enough. Before believing an aborted suite, re-run it with `-Only`.
+- **Two `run-tests.ps1` invocations at once (two worktrees, two agents) are
+  now safe.** Each invocation mints its own runId and hands it to every
+  `driver.ps1` it spawns via `-RunId`; `driver.ps1` folds that id into its
+  Edge profile directory name (`splitpage-edge-<runId>-<guid8>`), and the
+  leftover-browser sweep in both files matches only
+  `*splitpage-edge-<runId>-*` — its own run's orphans, never another run's
+  live browser. That used to be a bare `splitpage-edge-*` glob: a second run
+  starting up killed the first run's live browser and that suite died
+  mid-command with `The WebSocket is in an invalid state ('Aborted')` —
+  sometimes on the first command, sometimes twenty commands in — which looked
+  exactly like a real failure (02-production and 07-untagged both "failed"
+  this way during Phase 3 and both passed clean when re-run alone). Separate
+  ports were never enough on their own; the run-id scoping is what actually
+  fixed it. `driver.ps1` run standalone (no `-RunId` given) mints its own, so
+  it stays self-contained too. If an aborted suite still turns up, re-run it
+  with `-Only` before suspecting the app — that now points at something else,
+  since run collisions are ruled out.
 
 - **Orphaned browsers.** `Start-Process` hands back Edge's launcher, which
   spawns the real browser tree and exits, so killing it alone left a browser
