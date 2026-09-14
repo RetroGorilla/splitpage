@@ -246,28 +246,40 @@
   }
 
   /* Runs on load: if a stash survived, three-way merge it into whatever
-     version we just loaded so no local edit is lost. */
-  function applyStashedWork(loaded) {
-    var stash = readStash();
-    try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {}
+     version we just loaded so no local edit is lost.
+
+     `override` is the same {base, mine} shape read from somewhere other than
+     sessionStorage — today, a crash draft taken back from disk (20g-drafts.js).
+     Everything that belongs to the sessionStorage stash is then skipped: the
+     reload guard was never set, SERVER_RESUME_KEY says nothing about a draft
+     (a draft of a server document has its own path through resumeServerDoc),
+     there is nothing to clear, and the caller has already aligned the two ids
+     itself under rules a stash does not have (the docIdEmbedded rule,
+     DRAFT-RENDERER-API). The merge below is deliberately identical for both:
+     one three-way merge, one "Before merging" snapshot, one undo point. */
+  function applyStashedWork(loaded, override) {
+    var stash = override || readStash();
+    if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
     if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
     /* A stash left by a lapsed hosted session belongs to a document on the
        server, not to the page's own embedded one. Merging it into `loaded`
        here would splice someone's script into a blank default document —
        leave it for resumeServerDoc(), which knows which document it is. */
-    try {
-      if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null, snapshot: null };
-    } catch (e) {}
+    if (!override) {
+      try {
+        if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null, snapshot: null };
+      } catch (e) {}
 
-    /* The stash is this same document from before the reload, so it keeps
-       its id. Without this copy the equality check just below could never
-       hold — `loaded` carries a fresh random id from migrateRows — and an
-       unchanged stash would always snapshot, merge, mark the document dirty
-       and queue a save for nothing. */
-    var stashId = normalizeDocId(stash.mine.docId);
-    if (stashId) { loaded.docId = stashId; docIdWrittenOut = true; }
+      /* The stash is this same document from before the reload, so it keeps
+         its id. Without this copy the equality check just below could never
+         hold — `loaded` carries a fresh random id from migrateRows — and an
+         unchanged stash would always snapshot, merge, mark the document dirty
+         and queue a save for nothing. */
+      var stashId = normalizeDocId(stash.mine.docId);
+      if (stashId) { loaded.docId = stashId; docIdWrittenOut = true; }
 
-    clearStash();
+      clearStash();
+    }
     /* nothing changed under us after all */
     if (JSON.stringify(stash.mine) === JSON.stringify(loaded)) return { state: loaded, report: null, snapshot: null };
 

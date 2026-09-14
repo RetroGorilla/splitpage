@@ -243,6 +243,15 @@
 
     DESKTOP.onMenuCommand(runDesktopMenuCommand);
 
+    /* The main process asks for a crash draft to be brought up to date before
+       it does anything that could end this page — a close, a quit, a tab
+       moving to another window. flushDraftNow() (20g-drafts.js) answers with
+       the write's own result, so main learns whether the work is safely on
+       disk rather than assuming it. Guarded: the bridge member arrives with
+       the draft IPC, and an older preload (or the browser build's fake
+       backend before a test arms it) simply has no flush to register. */
+    if (typeof DESKTOP.onDraftFlush === "function") DESKTOP.onDraftFlush(flushDraftNow);
+
     /* A fresh load never calls markDirty()/clearDirty() until a resume path
        runs or the reader types something — push the starting title now
        rather than leaving the window's default title showing indefinitely
@@ -278,6 +287,26 @@
     var openHandler = null;
     var menuHandler = null;
     function newId() { return "fake" + (nextId++); }
+
+    /* ---- the crash-draft store, in memory (FAKE-DESKTOP-BACKEND) ----
+       Faithful about the three things the renderer's writer actually has to
+       cope with, and nothing more: seq is a floor (a stale write is refused),
+       a write with no base is refused with NEED_BASE until one has been sent,
+       and each write rotates one generation. desktop/drafts.js is the real
+       thing and has its own Node test suite; this exists so the browser suite
+       can drive 20g-drafts.js without Electron. */
+    var draftStore = { floor: -Infinity, current: null, previous: null, base: null, writes: 0, failures: 0 };
+    var draftLog = [];
+    var draftTaken = null;
+    var flushHandler = null;
+    var draftFailNext = null;
+    function draftFail(code) {
+      /* HELD is not a disk failure — the same rule the real store follows
+         (DRAFT-STORE), and what status().failures means on both sides. */
+      if (code !== "HELD" && code !== "NEED_BASE" && code !== "STALE_SEQ" && code !== "DISCARDED") draftStore.failures++;
+      draftStore.base = null;
+      return Promise.resolve({ ok: false, code: code });
+    }
     return {
       isDesktop: true,
       platform: "test",
@@ -318,12 +347,64 @@
       setLastFile: function (id) { lastFileId = id; return Promise.resolve(); },
       onOpenFile: function (cb) { openHandler = cb; },
       onMenuCommand: function (cb) { menuHandler = cb; },
-      setDocumentState: function () {},
+      /* WHY this stores rather than discards: FAKE-DESKTOP-BACKEND says
+         "setDocumentState(s) stores this._lastDocState" — a test needs to see
+         what notifyDesktopDocumentState() (20f-desktop.js) last told the
+         bridge, e.g. that a tab still mid crash-draft-restore reports itself
+         dirty (26-desktop-drafts.txt). Nothing in src/js reads this back. */
+      setDocumentState: function (s) { this._lastDocState = s; },
       getSessionInfo: function () {
         return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
       },
       openExternal: function () {},
+
+      /* ---- crash drafts (DRAFT-IPC-AND-SHAPES bridge members) ---- */
+      writeDraft: function (payload) {
+        draftLog.push({ op: "write", seq: payload && payload.seq, editSeq: payload && payload.editSeq,
+                        originKind: payload && payload.originKind, hasBase: !!(payload && payload.baseJson) });
+        if (draftFailNext && draftFailNext.count > 0) {
+          draftFailNext.count--;
+          return draftFail(draftFailNext.code);
+        }
+        if (!payload || typeof payload.stateJson !== "string" || typeof payload.seq !== "number") return draftFail("BAD_PAYLOAD");
+        if (!(payload.seq > draftStore.floor)) return draftFail("STALE_SEQ");
+        if (payload.baseJson == null && draftStore.base == null) return draftFail("NEED_BASE");
+        if (payload.baseJson != null) draftStore.base = payload.baseJson;
+        draftStore.previous = draftStore.current;
+        draftStore.current = { header: payload, stateJson: payload.stateJson };
+        draftStore.floor = payload.seq;
+        draftStore.writes++;
+        return Promise.resolve({ ok: true, seq: payload.seq, bytes: payload.stateJson.length });
+      },
+      discardDraft: function (seq) {
+        draftLog.push({ op: "discard", seq: seq });
+        if (typeof seq === "number") {
+          if (seq < draftStore.floor) return Promise.resolve({ ok: false, code: "STALE_SEQ" });
+          draftStore.floor = seq;
+        }
+        draftStore.current = null;
+        draftStore.previous = null;
+        draftStore.base = null;
+        return Promise.resolve({ ok: true });
+      },
+      takeDraft: function () {
+        draftLog.push({ op: "take" });
+        return Promise.resolve(draftTaken);
+      },
+      draftRestoreDone: function (outcome) { draftLog.push({ op: "restore-done", outcome: outcome }); },
+      onDraftFlush: function (cb) { flushHandler = cb; },
+
       /* test-only extras below this line — nothing in src/js ever calls these */
+      _drafts: draftStore,
+      _draftLog: draftLog,
+      /* Arms what takeDraft() hands back: a TakenDraft, {corrupt:true},
+         {unsupported:true} or null. */
+      _setDraft: function (taken) { draftTaken = taken; },
+      _failNextDraftWrites: function (code, count) {
+        draftFailNext = code ? { code: code, count: count == null ? 1 : count } : null;
+      },
+      /* Stands in for main's splitpage:draft-flush message. */
+      _fireDraftFlush: function () { return flushHandler ? flushHandler() : null; },
       _addFile: function (name, text) {
         var id = newId();
         files[id] = { name: name, bytes: strBytes(text), lastModified: Date.now() + nextId };
@@ -331,6 +412,15 @@
       },
       _text: function (id) { return new TextDecoder().decode(files[id].bytes); },
       _touch: function (id) { if (files[id]) files[id].lastModified = Date.now() + (nextId++); },
+      /* WHY this exists: a real sync client can rewrite a file's bytes and
+         happen to leave its mtime alone (or restore it), which is exactly
+         the case the content-based "unchanged on disk" decision (invariant
+         #41, overrides.md) has to see through — draft restore never reads
+         mtime at all. writeFile() above always bumps lastModified, same as
+         a real write would, so there is no other way to construct "content
+         changed, mtime did not" from outside this file. Nothing in src/js
+         calls this. */
+      _setBytesKeepMtime: function (id, text) { if (files[id]) files[id].bytes = strBytes(text); },
       _fireOpenFile: function (id) {
         var f = files[id];
         if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
