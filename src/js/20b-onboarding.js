@@ -507,6 +507,15 @@
   async function onboardEligibleForAutoShow() {
     if (!seedCheckPasses()) return false;
     if (readOnboardKey()) return false;
+    /* A tab restoring a crash draft looks exactly like a first run from here:
+       the page IS the untouched seed until the draft is applied, which happens
+       after the boot load (21-events.js). Putting the welcome wizard over
+       somebody's recovered work would be the worst possible first thing to do
+       with it. draftRestorePending (20g-drafts.js) is DESKTOP.hasDraftToRestore
+       — which the desktop launch-intent gate names as well — so this line is
+       belt to that gate's braces, and is what covers it while the gate below
+       is still the older last-file one. */
+    if (DESKTOP && draftRestorePending) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
     /* The browser's "a remembered handle exists at all" check reads
@@ -550,5 +559,12 @@
     open: openOnboarding,
     close: closeOnboarding,
     seedCheckPasses: seedCheckPasses,
-    readKey: readOnboardKey
+    readKey: readOnboardKey,
+    /* → Promise<boolean>. WHY exposed: T3 (26-desktop-drafts.txt) needs to
+       prove the wizard's gate itself — not just draftRestorePending's raw
+       value — refuses to fire while a crash draft is still restoring
+       (DRAFT-RENDERER-API), the same "must not appear over a document
+       that's about to reopen" rule this gate exists for. Nothing in src/js
+       calls this. */
+    eligible: onboardEligibleForAutoShow
   };
