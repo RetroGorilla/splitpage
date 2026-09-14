@@ -40,6 +40,13 @@ Copy this template into the right section below:
 - **Description:** Tags appear to get lost when the software is updated to a new version. Might have been a one-time thing, but needs confirming — either way, updates shouldn't break existing tags/features.
 - **Repro / notes:** Noticed after updating to a newer version — existing tags were gone. Unconfirmed if reproducible on every update or a one-off. Check what update.mjs does to stored data/tags, and whether tag data survives a version bump intact.
 
+### Undo fails after alt-enter moves text to a new cell
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** Editing / undo
+- **Description:** After using the alt-enter shortcut to move text into a new cell, undo doesn't undo the change.
+- **Repro / notes:** Use alt-enter to split/move text to a new cell, then press undo — the move isn't reverted.
+
 <!-- add entries here -->
 
 ---
