@@ -786,7 +786,6 @@ function createWindow() {
      page happens to have activation and tries to block again — doesn't ask
      either question a second time. --- */
   win.on("close", (event) => {
-    try { fs.appendFileSync(path.join(app.getPath("userData"), "debug.log"), "[close] confirmed=" + closeConfirmedWindows.has(win) + " HOSTING=" + HOSTING + " dirty=" + lastDirtyByWebContents.get(win.webContents.id) + " wcid=" + win.webContents.id + " map=" + JSON.stringify([...lastDirtyByWebContents]) + "\n"); } catch (e) {}
     if (closeConfirmedWindows.has(win)) return; // already decided this attempt
 
     if (HOSTING) {
@@ -1193,7 +1192,6 @@ function registerIpc() {
        beforeunload block, so it must be current the instant the page
        reports it, not only while the window title also happens to update. */
     lastDirtyByWebContents.set(event.sender.id, dirty);
-    try { fs.appendFileSync(path.join(app.getPath("userData"), "debug.log"), "[set-doc-state] senderid=" + event.sender.id + " dirty=" + dirty + "\n"); } catch (e) {}
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return;
     const title = (docState && docState.title) || "Untitled";
@@ -1207,6 +1205,52 @@ function registerIpc() {
     readyMainWindow = event.sender;
     flushOpenFiles();
   });
+
+  /* Synchronous, same pattern as get-app-version-sync/has-file-to-open-sync
+     above: preload reads this once, at load time, to decide whether to
+     expose the TEST_MODE-only __testRequestClose/__testRequestQuit hooks
+     below at all. Safe to always register, unlike those two — it only ever
+     answers the same TEST_MODE boolean that already governs every dialog
+     in this process (see section 1), nothing a normal launch couldn't
+     already infer by watching dialogs never appear. */
+  ipcMain.on("splitpage:is-test-mode-sync", (event) => {
+    event.returnValue = isTrustedSender(event) ? TEST_MODE : false;
+  });
+
+  if (TEST_MODE) {
+    /* TEST_MODE-only bridge for desktop/test/smoke.mjs. A page-initiated
+       window.close() (confirmed experimentally: fires Chromium's own
+       "close this tab" path, which asks beforeunload — and, with no user
+       activation, Chromium answers that on its own without ever reaching
+       this process — then tears the WebContents down directly, WITHOUT
+       emitting BrowserWindow's 'close' event) is a fundamentally different
+       operation from a real user's close. A user only ever triggers the
+       latter: the title-bar X and Alt+F4 deliver a native WM_CLOSE that
+       Electron turns into NativeWindow::Close() — exactly what
+       BrowserWindow#close() does — and File > Exit is app.quit()
+       (test-request-quit below), which closes every window the same way
+       on its way out. The app itself never calls window.close() (grep
+       src/js — it doesn't exist there), so it is not a user-reachable path
+       at all; a test that wants to prove "closing a dirty, never-activated
+       window prompts" has to drive THIS path to be testing something a
+       user can actually do. Gated on TEST_MODE at registration, not just
+       inside the handler, so the channel has no listener — and therefore
+       no effect — at all in a normal launch. */
+    ipcMain.on("splitpage:test-request-close", (event) => {
+      if (!isTrustedSender(event)) return;
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win && !win.isDestroyed()) win.close();
+    });
+
+    /* The File > Exit path (role: "quit" below calls this same app.quit()).
+       Quitting with a dirty window still has to prompt — app.quit() asks
+       every open BrowserWindow to close first, which fires the same
+       win.on('close') this whole fix is about. */
+    ipcMain.on("splitpage:test-request-quit", (event) => {
+      if (!isTrustedSender(event)) return;
+      app.quit();
+    });
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -1295,7 +1339,14 @@ app.on("window-all-closed", () => {
 
 /* Kill every child process on the way out — no orphaned document server or
    ssh tunnel left running once the app quits. */
-app.on("before-quit", () => {
+/* 'will-quit', not 'before-quit': Electron emits before-quit BEFORE it asks
+   the windows to close, and a window's close handler can still cancel the
+   quit (unsaved changes -> Stay, or hosting -> Cancel). Killing the children
+   there meant File ▸ Exit -> Stay left the app running with its document
+   server or tunnel already dead — sharing silently stopped for everyone
+   connected, and the Save the user stayed for could no longer reach the
+   server. will-quit only fires once every window has actually closed. */
+app.on("will-quit", () => {
   killDocumentServer();
   killTunnel();
 });

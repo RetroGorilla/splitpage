@@ -49,7 +49,15 @@ if (location.origin === "splitpage://app") {
      splitpage:has-file-to-open-sync handler. */
   const hasFileToOpen = ipcRenderer.sendSync("splitpage:has-file-to-open-sync");
 
-  contextBridge.exposeInMainWorld("splitpageDesktop", {
+  /* Also read once, at preload time: gates whether the TEST_MODE-only
+     __testRequestClose/__testRequestQuit hooks below get exposed at all.
+     The answer comes from the main process's own TEST_MODE flag (see
+     main.js's splitpage:is-test-mode-sync), not from this script re-reading
+     SPLITPAGE_TEST itself, so there is exactly one source of truth for "is
+     this a test run" and preload can never disagree with main about it. */
+  const testMode = ipcRenderer.sendSync("splitpage:is-test-mode-sync");
+
+  const bridge = {
     isDesktop: true,
     platform: process.platform,
     appVersion,
@@ -107,6 +115,19 @@ if (location.origin === "splitpage://app") {
     openExternal(url) {
       ipcRenderer.send("splitpage:open-external", url);
     }
-  });
+  };
+
+  if (testMode) {
+    /* Exists only so desktop/test/smoke.mjs can drive the SAME close a
+       real user performs (BrowserWindow#close(), which fires the 'close'
+       event main.js's dirty-document check depends on) instead of the
+       page's own window.close(), which is a different, lighter-weight
+       path — see main.js's splitpage:test-request-close comment. Never
+       present outside SPLITPAGE_TEST=1. */
+    bridge.__testRequestClose = () => ipcRenderer.send("splitpage:test-request-close");
+    bridge.__testRequestQuit = () => ipcRenderer.send("splitpage:test-request-quit");
+  }
+
+  contextBridge.exposeInMainWorld("splitpageDesktop", bridge);
 
 }

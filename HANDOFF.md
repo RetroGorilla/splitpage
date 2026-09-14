@@ -714,6 +714,115 @@ dutifully syncs back over the correct rename. Full writeup and the fix (blur
 before `jsclick`) are in SKILL.md's gotchas — read that before trusting a
 "the registry is corrupted" symptom again.
 
+---
+
+### 3.13 The desktop shell
+
+`desktop/main.js` + `desktop/preload.js` turn the web app into a native Windows
+application (Electron 44 + electron-builder 26). The shell is optional: the app
+still runs in a browser exactly as before. The browser suite drives headless
+Edge; `desktop/test/smoke.mjs` is what drives the real desktop window.
+
+**Why a custom scheme.** The page loads from `splitpage://app` instead of
+`http://localhost:<port>/`. This makes the document's origin stable: `localStorage`,
+`IndexedDB`, and `FileSystemFileHandle` are all keyed by origin, and if that
+origin changed every time a port assignment changed (another instance running,
+a busy port, a user's `--port` flag), version history and resumed file handles
+would vanish between launches. `splitpage://app` never changes, so they survive
+regardless of what the server is doing underneath.
+
+**The bridge contract.** `desktop/preload.js` exposes `window.splitpageDesktop`
+to the page (contextIsolation, sandbox, no nodeIntegration). The preload only
+defines it when `location.origin === "splitpage://app"`, and every `ipcMain`
+handler checks again that the sender frame's URL starts with `splitpage://app/`
+(`isTrustedSender`). Two locks, because a `--tunnel` window shows another
+machine's server content at `http://localhost:<port>/` in the same window, and
+that content must never reach the file system; tunnel pages also get no
+auto-granted permissions (clipboard, microphone). The renderer never sends file
+paths to the main process (invariant #34): `main.js` keeps an id → absolute
+path registry, holding only paths the user picked in a native dialog, the OS
+handed over at launch, or persisted from the last session. Writes are atomic
+(temp file in the same folder, then rename; the temp file is removed if the
+rename fails), and `lastModified` is `Math.floor(mtimeMs)` so the on-disk
+conflict guard's `!==` matches what a browser `File` reports.
+`src/js/20f-desktop.js` wraps the bridge in a `FileSystemFileHandle`-shaped
+object so `openProjectFile/saveDoc/deliverFile` run unchanged; every desktop
+branch is gated on `DESKTOP` (from 00-prelude.js) and falls through to
+unchanged browser code when it is null.
+
+**Modes and launch arguments.** `--library` forks `server/server.js` into a
+`utilityProcess` on 127.0.0.1 (first free port from 8791). `--host` binds to
+0.0.0.0 for LAN URLs. `--pin [code]` (no value generates 6 digits). `--data DIR`
+(default `%LOCALAPPDATA%\Splitpage\data`). `--port`, `--allow-origin`, `--tunnel
+user@host [--remote-port N] [--local-port N]` run ssh with `BatchMode` (key-based
+login only). Files passed as arguments (.splitpage, .md, .html, .htm, .docx, .txt,
+.csv) open; relative paths resolve against that launch's own working directory.
+Single instance: a second launch hands its files to the running app and exits.
+When the OS hands the app a file at launch, the last-file resume is skipped so
+the two can't race over which document — and which Save target — wins.
+
+**Window close authority.** The main process is the authority on unsaved changes.
+It keeps the dirty flag each page reports through `setDocumentState()` (sent from
+`setSaveButtons`, the one place markDirty/clearDirty funnel through) and asks
+"You have unsaved changes" in the window's close handler, because Chromium
+ignores a page's `beforeunload` block unless the page has had user activation —
+a document made dirty with no click or keypress (a stash merged at load, a
+resumed project) would otherwise close silently. `will-prevent-unload` remains
+as the safety net for reloads. Because any window's close can still cancel a
+quit, the document server and ssh tunnel are killed in `will-quit`, never
+`before-quit`: Electron emits `before-quit` *before* it asks the windows to
+close, so killing them there meant File ▸ Exit → Stay left the app running with
+its server already gone.
+
+**Test mode and hooks.** `SPLITPAGE_TEST=1` marks an automated run (must never
+put anything on screen). The window is never shown or put on the taskbar, any
+dialog a test did not pre-answer through `SPLITPAGE_TEST_DIALOGS` resolves as
+Cancel instead of appearing, and an uncaught main-process error exits with its
+stack on stderr instead of raising Electron's modal error box. `SPLITPAGE_USER_DATA`
+gives each run a temp profile. `SPLITPAGE_TEST_DIALOGS` is a JSON file holding
+answers (paths, null for cancel, "confirm"/"cancel") consumed in order by
+open/save dialogs and the unsaved/stop-sharing prompts. `SPLITPAGE_NO_UPDATE_CHECK=1`
+skips the background update check. `SPLITPAGE_UPDATE_API` overrides the release
+API URL for testing.
+
+**Closing a window from inside the page is not a user close.** A page-run
+`window.close()` never fires the `BrowserWindow`'s `'close'` event — Chromium
+settles `beforeunload` itself and, with no user activation to honour, tears the
+page down without asking the main process, so a dirty document closes with no
+prompt. A real close (the title-bar ×, Alt+F4, File ▸ Exit, which is
+`app.quit()`) does fire `'close'`, and that is where the prompt lives. Nothing
+in `src/js` calls `window.close()`; keep it that way. Tests therefore close the
+way a user does, through two hooks that exist only in test mode:
+`window.splitpageDesktop.__testRequestClose()` (the main process calls
+`win.close()`) and `__testRequestQuit()` (`app.quit()`). Preload asks the main
+process whether test mode is on (`splitpage:is-test-mode-sync`) and does not
+define either hook otherwise, and the main process registers their handlers
+only under `SPLITPAGE_TEST=1`. `caseCloseFromPageIsUnguarded` pins down the
+page-initiated behaviour so a change to it shows up.
+
+**The smoke suite.** `desktop/test/smoke.mjs`, Node built-ins only, drives the
+real window over CDP (--remote-debugging-port). Run from desktop/: `node
+test/smoke.mjs` (dev + both packaged unpacked exes if built), `--exe <path to
+Splitpage.exe>`, or `--only-target dev|packaged-x64|packaged-arm64`. Covers:
+boot + security (bridge origin, navigation/window.open blocked, allowlist and
+traversal refused, bogus file id rejected), open via argv with non-ASCII, save
+in place round trip, on-disk conflict guard, Save As and cancel, export, second
+instance (absolute and relative path), last-file resume, `--library`, `--host
+--pin` (given and auto-generated), `--host` without a PIN shows the warning,
+update status, unsaved-changes close (cancel/confirm, and no-gesture close
+authority), clean close regression (exit 0, no "Object has been destroyed"),
+and every teardown fails the case if stderr shows a main-process crash.
+
+Gotchas worth recording: dev Electron is x64 under emulation on this ARM64
+machine and slow (teardown 10–15 s; poll for exit). `document.visibilityState`
+reads "visible" even in test mode, so invisibility is checked with `(Get-Process
+-Id <pid>).MainWindowHandle -eq 0`. A CDP `Runtime.evaluate` is not a user
+gesture unless `userGesture:true`, and `beforeunload` only blocks after
+activation. Page targets are found via `/json` (type "page") — this will need a
+target filter once tabs add more pages.
+
+---
+
 ## 4. State schema
 
 ```jsonc
@@ -1080,6 +1189,31 @@ has.
     it renders but does not own (`Status` is written for a human reader and
     deliberately not read back), and do not let a row-count difference pick
     a side on its own.
+33. **Every automated launch of the desktop app sets `SPLITPAGE_TEST=1`, and
+    nothing a test does may appear on screen** (§3.13). This is someone's
+    working computer. On 2026-09-11 a smoke run launched a build that crashed
+    on every window close, without test mode, and Adam got Splitpage windows
+    and "Object has been destroyed" error boxes popping up while he wasn't
+    using the app at all. That modal error box also blocked the main process,
+    which the test misread as "the debug port dies on the first close" — an
+    environment quirk — instead of the app crash it was. In test mode the
+    window is never shown, a dialog not pre-answered through
+    `SPLITPAGE_TEST_DIALOGS` resolves as Cancel, and a main-process crash
+    prints to stderr and exits 70, so it fails the run loudly instead of hiding
+    behind a dialog. Two things it does not cover: a renderer
+    `window.alert`/`confirm` (Help ▸ About uses `alert`), and proof of
+    invisibility — `document.visibilityState` says "visible" in test mode;
+    `(Get-Process -Id <pid>).MainWindowHandle` being 0 is what shows nothing is
+    on screen.
+34. **The renderer never sends a file path to the main process; files are
+    addressed by opaque ids from the main process's registry** (§3.13). The
+    page renders pasted and imported content, so if the bridge accepted a
+    path, any markup that ever slipped past `sanitizeHtml()` could read or
+    overwrite any file the user can. With ids, the most the page can reach is
+    a file the user picked in a native dialog, one the OS handed over at
+    launch, or the last file they had open; an unknown id is rejected. A new
+    bridge method that works on a file takes an id — never add a path-taking
+    convenience, not even for a test.
 
 ---
 
@@ -1116,7 +1250,20 @@ line-number table this replaced, they do not drift as you edit.
 | `20c-help.js` | — | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
 | `20d-formats.js` | 266 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
 | `20e-connect.js` | 430 | the join-PIN dialog, server bookmarks, the SSH helper |
+| `20f-desktop.js` | 356 | **the desktop glue**, inert unless `DESKTOP` is set: the `FileSystemFileHandle`-shaped wrapper over the bridge, last-file resume, window title, native-menu dispatcher, the hosting summary, `window.__desktopTest` |
 | `21-events.js` | 1214 | all event wiring, `init()`, closes the IIFE |
+
+**Desktop files** (the optional Electron shell; the web app runs without them):
+
+| File | What is in it |
+| --- | --- |
+| `desktop/main.js` | Electron main process: the privileged scheme, protocol handler, file dialogs, the file id registry, server launcher, native menus, window management, unsaved-changes authority, test mode |
+| `desktop/preload.js` | preload script with contextIsolation/sandbox, origin-gated `window.splitpageDesktop` bridge |
+| `desktop/package.json` | Electron dependencies, build scripts |
+| `desktop/electron-builder.yml` | packaging config for x64 and ARM64 Windows installers and portable exes |
+| `desktop/build/installer.nsh` | electron-builder's NSIS include: adds (and on uninstall removes) the "Splitpage (shared session)" Start Menu shortcut, which runs `--host --pin` |
+| `desktop/stage.mjs` | build step: runs `build.mjs`, verifies version, stages files for packaging |
+| `desktop/test/smoke.mjs` | integration suite: drives real Electron window over CDP, covers all desktop modes and security |
 
 **`20b-onboarding.js` stamps and checks the pristine-seed gate.**
 `build.mjs` computes `<meta name="splitpage-seed-check">` from
@@ -1463,6 +1610,20 @@ otherwise-idle app. And `.githooks/pre-commit`'s demo-state check still
 passes with the new `<meta name="splitpage-seed-check">` in `<head>`, since
 that check only ever looks at the `#state-data` line.
 
+**Desktop app (Electron 44, verified 2026-09-14):** the smoke suite drives the real window
+over CDP and covers: boot + security (bridge origin, navigation/window.open
+blocked, allowlist and traversal refused, bogus file id rejected), open via
+argv with non-ASCII, save in place round trip, on-disk conflict guard, Save As
+and cancel, export, second instance (absolute and relative path), last-file
+resume, `--library`, `--host --pin` (given and auto-generated), `--host`
+without a PIN shows the warning, update status, unsaved-changes close
+(cancel/confirm, and no-gesture close authority), clean close (exit 0, no
+"Object has been destroyed"), quit authority with no gesture, a cancelled
+quit keeping the document server alive, and what a page-initiated
+`window.close()` does. Last full run: 327/327 checks, 109 per target (dev,
+packaged x64 under emulation, packaged ARM64 native); browser suite 538/538;
+server 39/39.
+
 ### NOT verified — say so, don't imply otherwise
 
 
@@ -1547,6 +1708,24 @@ that check only ever looks at the `#state-data` line.
   restoring from backup first before proceeding fresh).
 - Touch devices. HTML5 drag-and-drop doesn't work on touch; the ↑/↓ buttons are
   the deliberate fallback.
+- **A real OS double-click of a .splitpage file after installing.** The
+  installer has never been run on a real machine or a clean profile. The file
+  association is defined in `electron-builder.yml`, and on Windows a
+  double-clicked file reaches the app as a command-line argument — which the
+  smoke suite does test, by launching the exe with a path — but the registry
+  entry the installer writes and Explorer's hand-off have never been exercised.
+- **Real native Open/Save dialogs and message boxes.** The smoke suite uses
+  `SPLITPAGE_TEST_DIALOGS` to pre-answer every dialog, so the real Windows
+  native dialogs and message boxes have never appeared.
+- **`--tunnel` end to end.** No SSH server exists in the test environment. The
+  command line is parsed and the ssh process would spawn; the connection itself
+  is unproven.
+- **macOS.** The `open-file` event and app menu entries for macOS exist in the
+  code but have never run. No Electron build for macOS exists and no test
+  machine has one.
+- **Code signing.** The packaged installers are unsigned. Signing them
+  (Windows SmartScreen and macOS notarization) is pending a decision on the
+  release recipe.
 
 ---
 
@@ -1569,6 +1748,39 @@ from a Linux container:**
    --installer --arch both`, tag it `v<version>`, then `node update.mjs check`
    against the mirror. The update path is verifiable end-to-end once a mirror
    release exists.
+
+**Pitched for the desktop app, next to build:**
+
+(a) **Tabs.** Agreed design: one isolated page per tab, title-bar tab strip,
+   tear-off between windows, restore all tabs at launch, crash-safe drafts for
+   every unsaved tab, per-document version history keyed by a document id
+   stored inside the file and moved to IndexedDB/userData files. Desktop only,
+   but the document id and per-document history apply to the browser app too.
+
+(b) **Per-tab server and tunnel connections.** For now tunnels stay app-wide;
+   later any tab should be able to connect to any server or tunnel, with a
+   "New tab on server…" command and a connection badge on each tab. This needs
+   a redesign of how connection details and server tokens are held across
+   tabs — PIN/auth code.
+
+(c) **Follow My Voice in the desktop app.** The Web Speech API constructor
+   exists in Electron, but recognition fails with a network error: Chrome and
+   Edge reach Google's/Microsoft's speech service with credentials Electron
+   does not have. The fix is a different speech backend reachable from the
+   desktop app (an on-device engine, or the OS's own recognizer), not a
+   permissions change. Until then `20-teleprompter.js` says it isn't available.
+
+(d) **Google Drive via loopback OAuth.** Google Identity Services only
+   authorizes http/https origins, never custom schemes. Making it work would
+   need a Desktop-app OAuth client with Authorization Code + PKCE and a
+   loopback redirect handled in the main process. Google Doc import still
+   works: it opens Google's .docx export in the system browser and the user
+   opens the downloaded file.
+
+(e) **Pending decisions for Adam:**
+   - Do the desktop installers replace the IExpress setups and update.mjs in
+     the release recipe (and electron-updater vs a download link)?
+   - Code signing (Windows SmartScreen and macOS notarization)?
 
 **Pitched and accepted, already built:** runtime estimates, scene status, shoot
 order, find & replace, drag reorder.
