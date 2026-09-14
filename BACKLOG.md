@@ -33,6 +33,13 @@ Copy this template into the right section below:
 - **Description:** If the last word in a paragraph is tagged, you can't type additional text into that scene (can't place cursor after the tag / continue the paragraph). Not yet confirmed whether this is specific to prop tags or affects all tag types.
 - **Repro / notes:** Tag the final word of a paragraph, then try to add more text after it — typing doesn't work. Needs repro across different tag types (prop, person, etc.) to narrow scope. Likely related to `.tag-anchor` being `contenteditable="false"` (noted in `src/js/21-events.js` around line 334) — cursor may have nowhere to land after an atomic tag at the end of a line.
 
+### Tags don't survive app updates
+- **Type:** Bug
+- **Priority:** High
+- **Area:** Tagging / update process
+- **Description:** Tags appear to get lost when the software is updated to a new version. Might have been a one-time thing, but needs confirming — either way, updates shouldn't break existing tags/features.
+- **Repro / notes:** Noticed after updating to a newer version — existing tags were gone. Unconfirmed if reproducible on every update or a one-off. Check what update.mjs does to stored data/tags, and whether tag data survives a version bump intact.
+
 <!-- add entries here -->
 
 ---
