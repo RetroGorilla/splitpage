@@ -293,21 +293,269 @@ const lastDirtyByWebContents = new Map();
 const closeConfirmedWindows = new WeakSet();
 
 /* ---------------------------------------------------------------------
- * 5. desktop-state.json — last file path, window bounds + maximized.
+ * 5. desktop-state.json (version 2) — windows, their bounds, and their tabs.
+ *
+ *    Shape (contract DESKTOP-STATE-V2):
+ *      {version:2, windows:[{windowId, bounds:{x,y,width,height}|null,
+ *        maximized, activeTabId, tabs:[{tabId, source, lastKnownTitle}]}]}
+ *      source = {kind:'file', absPath} | {kind:'server', serverDocId} | {kind:'blank'}
+ *    Array order is window order and strip order. There is deliberately no
+ *    docId and no draftId: a document's id lives in the document, and a
+ *    tab's draft folder is named by its tabId.
+ *
+ *    The app is still single-window here. Every existing caller reads or
+ *    writes windows[0] and its first tab, and "the last file" is that tab's
+ *    file source. The tab shell (step F1) is what starts using more than one.
  * --------------------------------------------------------------------- */
 
+const DESKTOP_STATE_VERSION = 2;
+const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
+const LAST_KNOWN_TITLE_MAX = 300;
+
 function stateFilePath() { return path.join(app.getPath("userData"), "desktop-state.json"); }
-function readDesktopState() {
-  try { return JSON.parse(fs.readFileSync(stateFilePath(), "utf8")); } catch { return {}; }
-}
-function writeDesktopState(patch) {
-  const current = readDesktopState();
-  const next = { ...current, ...patch };
+
+function mintTabOrWindowId() { return crypto.randomBytes(16).toString("hex"); }
+
+/* WHY FSYNC, AND WHY A LOCAL COPY. The old write was a plain writeFileSync
+   that swallowed errors: a crash or power cut mid-write could leave a torn
+   file, and v1 only lost a window position. v2 holds every window's tabs, so
+   a torn file would lose the whole session. This writes a temp file in the
+   same folder, flushes it to disk, then renames it over the target, so the
+   file on disk is always either the previous complete version or the new one.
+   It is the same sequence as writeFileDurableSync in desktop/drafts.js.
+   Step F1 switches this to require('./drafts').writeFileDurableSync, at the
+   same moment it adds drafts.js to the packaged files; requiring it here
+   before then would break a packaged build that does not ship drafts.js. */
+const DESKTOP_STATE_RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+function writeFileDurableSync(file, text) {
+  const dir = path.dirname(file);
+  const tmp = path.join(dir, `.tmp-${crypto.randomBytes(6).toString("hex")}-${path.basename(file)}`);
+  let fd = null;
   try {
-    fs.mkdirSync(path.dirname(stateFilePath()), { recursive: true });
-    fs.writeFileSync(stateFilePath(), JSON.stringify(next, null, 2));
-  } catch { /* best-effort — losing window-position memory is not fatal */ }
+    fd = fs.openSync(tmp, "wx");
+    const buf = Buffer.from(String(text), "utf8");
+    let off = 0;
+    while (off < buf.length) off += fs.writeSync(fd, buf, off, buf.length - off);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
+    /* A Windows rename fails transiently while an antivirus scan, the
+       search indexer or a sync client holds the destination open. */
+    for (let attempt = 1; ; attempt++) {
+      try {
+        fs.renameSync(tmp, file);
+        break;
+      } catch (err) {
+        if (attempt >= 5 || !err || !DESKTOP_STATE_RENAME_RETRY_CODES.has(err.code)) throw err;
+        try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20); } catch { /* no wait available */ }
+      }
+    }
+  } catch (err) {
+    if (fd !== null) { try { fs.closeSync(fd); } catch { /* already failing */ } }
+    try { fs.unlinkSync(tmp); } catch { /* never created, or already renamed */ }
+    throw err;
+  }
 }
+
+/* WHY A STARTUP SWEEP. The catch above removes the temp file when a write
+   fails, but not when the process dies between creating it and the rename
+   (killed from Task Manager, power cut, OS crash). Nothing else looks in
+   userData itself — drafts.js sweeps only its own drafts folder — so each such
+   crash would leave one more orphan in %APPDATA%\Splitpage for good. Only the
+   exact names this writer makes for desktop-state.json match; nothing else in
+   userData is touched. It runs once from app.whenReady, which is after the
+   single-instance lock is held (no other Splitpage process can be mid-write)
+   and before the first readDesktopStateV2. Keep it when step F1 switches to
+   drafts.writeFileDurableSync: that temp file lands next to
+   desktop-state.json too. */
+const DESKTOP_STATE_TMP_RE = /^\.tmp-[0-9a-f]{12}-desktop-state\.json$/;
+function sweepDesktopStateTempFiles() {
+  const dir = path.dirname(stateFilePath());
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return 0; } // first launch: no folder yet
+  let removed = 0;
+  for (const name of names) {
+    if (!DESKTOP_STATE_TMP_RE.test(name)) continue;
+    try { fs.unlinkSync(path.join(dir, name)); removed++; } catch { /* locked by a scanner — next launch */ }
+  }
+  return removed;
+}
+
+function normalizeBounds(b) {
+  if (!b || typeof b !== "object") return null;
+  const ok = ["x", "y", "width", "height"].every((k) => typeof b[k] === "number" && Number.isFinite(b[k]));
+  return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
+}
+
+function normalizeTabSource(src) {
+  if (src && typeof src === "object") {
+    if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
+      return { kind: "file", absPath: src.absPath };
+    }
+    if (src.kind === "server" && typeof src.serverDocId === "string" && src.serverDocId) {
+      return { kind: "server", serverDocId: src.serverDocId };
+    }
+  }
+  return { kind: "blank" };
+}
+
+function blankDesktopWindow(extra) {
+  const tabId = mintTabOrWindowId();
+  return {
+    windowId: mintTabOrWindowId(),
+    bounds: null,
+    maximized: false,
+    activeTabId: tabId,
+    tabs: [{ tabId, source: { kind: "blank" }, lastKnownTitle: "" }],
+    ...(extra || {})
+  };
+}
+
+function freshDesktopState() {
+  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()] };
+}
+
+/* v1 was {lastFilePath?, windowBounds?, windowMaximized?} with no version
+   field. It becomes one window whose one tab is the last file, or blank. */
+function migrateDesktopStateV1(v1) {
+  const tabId = mintTabOrWindowId();
+  const source = typeof v1.lastFilePath === "string" && v1.lastFilePath
+    ? { kind: "file", absPath: v1.lastFilePath }
+    : { kind: "blank" };
+  return {
+    version: DESKTOP_STATE_VERSION,
+    windows: [{
+      windowId: mintTabOrWindowId(),
+      bounds: normalizeBounds(v1.windowBounds),
+      maximized: v1.windowMaximized === true,
+      activeTabId: tabId,
+      tabs: [{ tabId, source, lastKnownTitle: "" }]
+    }]
+  };
+}
+
+/* Whitelists every field, so nothing the contract does not name (a stray
+   docId or draftId, say) survives a read-modify-write. A malformed id is
+   replaced, and a duplicate one too, because tabId names a draft folder and
+   two tabs must never share one. A window left with no tabs is dropped; no
+   windows at all means a fresh install. */
+function normalizeDesktopStateV2(raw) {
+  const seen = new Set();
+  const uniqueId = (id) => {
+    const v = typeof id === "string" && TAB_OR_WINDOW_ID_RE.test(id) && !seen.has(id) ? id : mintTabOrWindowId();
+    seen.add(v);
+    return v;
+  };
+  const windows = [];
+  for (const w of Array.isArray(raw && raw.windows) ? raw.windows : []) {
+    if (!w || typeof w !== "object") continue;
+    const tabs = [];
+    for (const t of Array.isArray(w.tabs) ? w.tabs : []) {
+      if (!t || typeof t !== "object") continue;
+      tabs.push({
+        tabId: uniqueId(t.tabId),
+        source: normalizeTabSource(t.source),
+        lastKnownTitle: typeof t.lastKnownTitle === "string" ? t.lastKnownTitle.slice(0, LAST_KNOWN_TITLE_MAX) : ""
+      });
+    }
+    if (!tabs.length) continue;
+    windows.push({
+      windowId: uniqueId(w.windowId),
+      bounds: normalizeBounds(w.bounds),
+      maximized: w.maximized === true,
+      activeTabId: tabs.some((t) => t.tabId === w.activeTabId) ? w.activeTabId : tabs[0].tabId,
+      tabs
+    });
+  }
+  if (!windows.length) return freshDesktopState();
+  return { version: DESKTOP_STATE_VERSION, windows };
+}
+
+/* A v1 file, a missing file or a corrupt one has no ids on disk, so each
+   read would mint new random ones until the first write lands. Remembering
+   what the last such read produced, keyed by the exact file text, keeps the
+   ids stable within a process (a tab must not change id between two reads)
+   while still reading the latest file every time. */
+let desktopStateSynthesized = null; // {text, state}
+
+function readDesktopStateV2() {
+  let text = null;
+  try { text = fs.readFileSync(stateFilePath(), "utf8"); } catch { text = null; }
+  if (desktopStateSynthesized && desktopStateSynthesized.text === text) {
+    return structuredClone(desktopStateSynthesized.state);
+  }
+  let parsed;
+  try { parsed = text === null ? undefined : JSON.parse(text); } catch { parsed = undefined; }
+
+  const isObject = !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
+  /* No version field is v1. A newer version this build does not understand,
+     unparseable JSON, a non-object or no file at all is a fresh install.
+     A v2 file is normalized, which mints ids only for ones that are missing,
+     malformed or duplicated; caching it too is harmless, since the same text
+     always normalizes to the same ids otherwise. */
+  const state = isObject && parsed.version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed)
+    : isObject && !("version" in parsed) ? migrateDesktopStateV1(parsed)
+    : freshDesktopState();
+  desktopStateSynthesized = { text, state: structuredClone(state) };
+  return state;
+}
+
+/* The one way desktop-state.json is written: a single in-process serialized
+   queue whose every job reads the latest file, applies `mutator` to it, and
+   writes the result durably. The mutator edits the state it is given in place
+   (or returns a replacement object); returning `false` skips the write.
+
+   WHY A QUEUE. Each job has to read, merge and write as one step, or two
+   callers that each read the same old state lose one of their changes. The
+   jobs run synchronously, straight away when the queue is idle, so a write
+   is on disk by the time the caller's own code continues. A mutator that
+   itself asks for a write gets queued behind the current job instead of
+   nesting inside it.
+
+   Resolves true when the file was written, false when it was skipped or
+   failed. It never rejects: losing window-position memory is not fatal, and
+   no caller can do anything better with the error. */
+const desktopStateQueue = [];
+let desktopStateDraining = false;
+
+function writeDesktopStateV2(mutator) {
+  return new Promise((resolve) => {
+    desktopStateQueue.push({ mutator, resolve });
+    if (!desktopStateDraining) drainDesktopStateQueue();
+  });
+}
+
+function drainDesktopStateQueue() {
+  desktopStateDraining = true;
+  try {
+    while (desktopStateQueue.length) {
+      const job = desktopStateQueue.shift();
+      let written = false;
+      try {
+        const current = readDesktopStateV2();
+        const result = job.mutator(current);
+        if (result !== false) {
+          const next = normalizeDesktopStateV2(result && typeof result === "object" ? result : current);
+          const file = stateFilePath();
+          const text = JSON.stringify(next, null, 2);
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          writeFileDurableSync(file, text);
+          desktopStateSynthesized = null;
+          written = true;
+        }
+      } catch (err) {
+        if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && err.stack || err}\n`);
+      }
+      job.resolve(written);
+    }
+  } finally {
+    desktopStateDraining = false;
+  }
+}
+
+/* The single-window callers' view: windows[0] and its first tab. */
+function primaryDesktopWindow(state) { return state.windows[0]; }
+function primaryDesktopTab(state) { return state.windows[0].tabs[0]; }
 
 /* ---------------------------------------------------------------------
  * 6. FileEntry helpers.
@@ -670,8 +918,7 @@ function backgroundColorForTheme() {
 }
 
 function savedBoundsIfVisible() {
-  const state = readDesktopState();
-  const b = state.windowBounds;
+  const b = primaryDesktopWindow(readDesktopStateV2()).bounds;
   if (!b || typeof b.x !== "number") return null;
   const onScreen = screen.getAllDisplays().some((d) => {
     const wa = d.workArea;
@@ -711,7 +958,7 @@ function createWindow() {
   });
 
   /* maximize() also SHOWS a hidden window, so it is skipped in test runs */
-  if (readDesktopState().windowMaximized && saved && !TEST_MODE) win.maximize();
+  if (primaryDesktopWindow(readDesktopStateV2()).maximized && saved && !TEST_MODE) win.maximize();
 
   win.once("ready-to-show", () => { if (!TEST_MODE) win.show(); });
 
@@ -844,16 +1091,27 @@ function createWindow() {
     clearTimeout(boundsSaveTimer);
     boundsSaveTimer = setTimeout(() => {
       if (win.isDestroyed()) return;
-      writeDesktopState({
-        windowBounds: win.isMaximized() ? readDesktopState().windowBounds : win.getBounds(),
-        windowMaximized: win.isMaximized()
+      const maximized = win.isMaximized();
+      const bounds = maximized ? null : win.getBounds();
+      writeDesktopStateV2((state) => {
+        const w = primaryDesktopWindow(state);
+        /* a maximized window keeps the restored bounds it had before */
+        if (!maximized) w.bounds = bounds;
+        w.maximized = maximized;
       });
     }, 400);
   }
   win.on("resize", scheduleBoundsSave);
   win.on("move", scheduleBoundsSave);
-  win.on("maximize", () => writeDesktopState({ windowMaximized: true }));
-  win.on("unmaximize", () => writeDesktopState({ windowMaximized: false, windowBounds: win.getBounds() }));
+  win.on("maximize", () => writeDesktopStateV2((state) => { primaryDesktopWindow(state).maximized = true; }));
+  win.on("unmaximize", () => {
+    const bounds = win.getBounds();
+    writeDesktopStateV2((state) => {
+      const w = primaryDesktopWindow(state);
+      w.maximized = false;
+      w.bounds = bounds;
+    });
+  });
 
   /* Captured now, while the window is alive: by the time 'closed' fires the
      BrowserWindow is destroyed, and even reading win.webContents from it
@@ -1124,8 +1382,8 @@ function registerIpc() {
 
   ipcMain.handle("splitpage:get-last-file", async (event) => {
     requireTrusted(event);
-    const state = readDesktopState();
-    const last = state.lastFilePath;
+    const source = primaryDesktopTab(readDesktopStateV2()).source;
+    const last = source.kind === "file" ? source.absPath : null;
     if (!last) return null;
     try {
       if (!fs.statSync(last).isFile()) return null;
@@ -1140,7 +1398,13 @@ function registerIpc() {
     requireTrusted(event);
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
-    writeDesktopState({ lastFilePath: absPath });
+    writeDesktopStateV2((state) => {
+      const tab = primaryDesktopTab(state);
+      const same = tab.source.kind === "file" && tab.source.absPath === absPath;
+      tab.source = { kind: "file", absPath };
+      /* a title remembered for a different document would be wrong now */
+      if (!same) tab.lastKnownTitle = "";
+    });
   });
 
   ipcMain.handle("splitpage:get-session-info", async (event) => {
@@ -1278,6 +1542,7 @@ app.on("open-file", (event, filePath) => {
 app.setAppUserModelId("com.retrogorilla.splitpage");
 
 app.whenReady().then(async () => {
+  sweepDesktopStateTempFiles();
   registerProtocol();
   registerIpc();
   buildMenu();

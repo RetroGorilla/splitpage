@@ -11,7 +11,10 @@ open
 # __norm strips the two fields a save legitimately changes and sorts every
 # key, so "deep-equals" is a string comparison that cannot be fooled by
 # property order.
-eval (function(){window.F=window.__splitpageFormats;var sortAll=function(v){if(Array.isArray(v))return v.map(sortAll);if(v&&typeof v==='object'){var o={};Object.keys(v).sort().forEach(function(k){o[k]=sortAll(v[k]);});return o;}return v;};window.__norm=function(s){var c=F.migrate(F.clone(s));delete c.rev;delete c.lastEditedAt;delete c.lastEditedBy;return JSON.stringify(sortAll(c));};return 'hooked';})()
+# __norm also drops docId: it is checked explicitly wherever it matters
+# (T1/22-doc-id.txt owns the identity rules), and the legacy .html section
+# below needs a comparison that tolerates a *different* id on the two sides.
+eval (function(){window.F=window.__splitpageFormats;var sortAll=function(v){if(Array.isArray(v))return v.map(sortAll);if(v&&typeof v==='object'){var o={};Object.keys(v).sort().forEach(function(k){o[k]=sortAll(v[k]);});return o;}return v;};window.__norm=function(s){var c=F.migrate(F.clone(s));delete c.rev;delete c.lastEditedAt;delete c.lastEditedBy;delete c.docId;return JSON.stringify(sortAll(c));};return 'hooked';})()
 expect typeof window.F.buildSplitpage === 'function'
 
 # --- a document worth round-tripping ----------------------------------------
@@ -27,6 +30,10 @@ sleep 300
 # could collide with
 eval (function(){var s=F.state();var r=s.rows[0];r.visualImage='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';r.audioText='<span class="cmt-anchor" data-cmt="ctest1">Anchored</span> '+r.audioText;r.status='shot';if(s.rows[1])s.rows[1].visualText='a ~~~~ b | c `d` ~~~~~ and <u>underlined</u>';s.wordsPerMinute=175;s.people.push({id:'ptest1',name:'Jordan'});s.comments.push({id:'ctest1',rowId:r.id,field:'audioText',anchorId:'ctest1',quotedText:'gaffer tape',author:'Tester',body:'look here',resolved:false,kind:'anchor',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]});window.__base=__norm(s);window.__rows=s.rows.length;return s.rows.length;})()
 expect window.__rows > 1
+# the document's id (02b-doc-id.js) — captured once here, checked at every
+# round trip below
+eval (function(){window.__id = F.docId(); return window.__id;})()
+expect /^d[0-9a-f]{32}$/.test(window.__id)
 
 # --- .splitpage round trip ---------------------------------------------------
 eval (function(){window.__sp=F.buildSplitpage();return window.__sp.length;})()
@@ -37,10 +44,15 @@ expect JSON.parse(window.__sp).rows.length === window.__rows
 eval (function(){F.openFile(new File([window.__sp],'round.splitpage'));return true;})()
 wait F.docFile().kind === 'splitpage'
 expect __norm(F.state()) === window.__base
+expect F.docId() === window.__id
 expect document.querySelectorAll('#rows .tag-anchor').length == 2
 
 # --- .md round trip ----------------------------------------------------------
 eval (function(){window.__md=F.buildMarkdown();return window.__md.length;})()
+# the document's id travels only inside the fenced data block, never in the
+# human-readable table above it
+expect (window.__md.match(new RegExp(window.__id,'g'))||[]).length === 1
+expect window.__md.indexOf(window.__id) > window.__md.indexOf('leave this block alone')
 # the human half still reads as a two-column table, with the status column
 expect window.__md.indexOf('| # | Visual | Audio | Status |') !== -1
 expect window.__md.indexOf('| shot |') !== -1
@@ -52,6 +64,7 @@ expect window.__md.indexOf('leave this block alone') !== -1
 eval (function(){F.openFile(new File([window.__md],'round.md'));return true;})()
 wait F.docFile().kind === 'md'
 expect __norm(F.state()) === window.__base
+expect F.docId() === window.__id
 # tags, comment anchors and the image all survived the trip through Markdown
 expect document.querySelectorAll('#rows .tag-anchor').length == 2
 expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="ctest1"]').length == 1
@@ -72,6 +85,7 @@ eval (function(){window.__edited=window.__md.replace(/^(\| 01 \|.*)\| (todo|read
 expect window.__edited !== window.__md
 eval (function(){F.openFile(new File([window.__edited],'edited.md'));return true;})()
 wait F.state().rows[0].audioText.indexOf('right now') !== -1
+expect F.docId() === window.__id
 expect document.querySelectorAll('#rows .tag-anchor').length == 2
 expect F.state().rows[0].audioText.indexOf('data-tag-name="gaffer tape"') !== -1
 expect F.state().rows[0].audioText.indexOf('data-tag-name="kitchen"') !== -1
@@ -108,11 +122,24 @@ expect F.state().wordsPerMinute === 175
 expect F.state().comments.some(function(c){return c.id==='ctest1';})
 
 # --- a legacy .html project still opens --------------------------------------
+# standaloneHtmlFor (02b-doc-id.js) deletes the id: this export is a copy
+# handed to someone else, not the document itself, and carrying the id would
+# make every such copy read as a duplicate of the original the moment it opens.
 eval (function(){window.__legacy=F.buildStandaloneHtml();window.__legacyNorm=__norm(F.state());return window.__legacy.length>10000;})()
 expect window.__legacy.indexOf('<script id="state-data"') !== -1
+expect window.__legacy.indexOf('"docId"') === -1
 eval (function(){F.openFile(new File([window.__legacy],'legacy.html'));return true;})()
 wait F.docFile().kind === 'html'
 expect __norm(F.state()) === window.__legacyNorm
 expect document.querySelectorAll('#rows .row').length === F.state().rows.length
+# no id survived the export, so opening it derives a fresh one from its own
+# content — valid, but never the source document's own id
+eval (function(){window.__legacyId1 = F.docId(); return window.__legacyId1;})()
+expect /^d[0-9a-f]{32}$/.test(window.__legacyId1)
+expect window.__legacyId1 !== window.__id
+# the SAME bytes opened again derive the SAME id — deterministic, not random
+eval (function(){F.openFile(new File([window.__legacy],'legacy2.html'));return true;})()
+wait F.docFile().kind === 'html'
+expect F.docId() === window.__legacyId1
 
 quit

@@ -106,8 +106,15 @@
        everything before the first one. */
     var sceneSection = block.before.split(/^##\s/m)[0];
     var heading = /^#\s+(.+)$/m.exec(block.before);
+    /* Read BEFORE migrateDocument: migrateRows mutates `parsed` and always
+       leaves a valid id on it, so asking afterwards would say "embedded" for
+       every file. docIdEmbedded tells a draft restore whether the id came
+       from the file itself or was derived from its content (a legacy file
+       changed on disk derives a different one, and must still merge). */
+    var docIdEmbedded = docIdEmbeddedIn(parsed);
     return {
-      state: migrateRows(parsed),
+      state: migrateDocument(parsed, { kind: "file" }),
+      docIdEmbedded: docIdEmbedded,
       /* keepEmpty: a scene with nothing typed in it yet is still a row of
          the table, and dropping it here would misread every later row as
          shifted and pop the "scenes were added or removed" question on
@@ -257,7 +264,20 @@
     parseSplitpage: parseSplitpageFile,
     buildMarkdown: buildMarkdownProject,
     parseMarkdown: parseMarkdownProject,
-    buildStandaloneHtml: function () { return buildPublishHtml(JSON.stringify(cloneState(state))); },
+    buildStandaloneHtml: function () { return standaloneHtmlFor(state); },
+    /* Document identity (02b-doc-id.js), for 22-doc-id.txt and friends. */
+    docId: function () { return state ? state.docId : null; },
+    writtenOut: function () { return docIdWrittenOut; },
+    deriveDocId: deriveDocId,
+    sha256Hex: sha256Hex,
+    mergedDocId: mergedDocId,
+    mergeStates: mergeStates,
+    migrateDocument: migrateDocument,
+    adoptRestoredState: adoptRestoredState,
+    reassignDocId: reassignDocId,
+    docIdEvents: docIdEvents,
+    decideDuplicateLoser: decideDuplicateLoser,
+    initDocIdentityChannel: initDocIdentityChannel,
     /* `handle` is optional — a real Open never has one either — but
        19-save-conflict.txt passes a fake FileSystemFileHandle-shaped object
        (name + getFile() + createWritable()) so the on-disk-conflict guard in

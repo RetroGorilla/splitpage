@@ -26,6 +26,14 @@
        place a desktop window title needs to hear about too, rather than a
        third thing to remember to call from every mutation site. Defined in
        20f-desktop.js; hoisted, so the fragment order doesn't matter. */
+    /* The same funnel is where a change of document identity is noticed
+       (02b-doc-id.js). Every path that makes a different document current —
+       an open, a server load, a Save As fork, a publish — ends in
+       clearDirty() or markDirty(), so checking here means no new ingress path
+       can forget to. It is a string compare when nothing changed, so typing
+       costs nothing. Before the desktop notification, so the main process
+       never hears about a document state whose identity is stale. */
+    if (typeof syncDocIdentity === "function") syncDocIdentity();
     if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   }
 

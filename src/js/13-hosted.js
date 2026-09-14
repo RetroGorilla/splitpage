@@ -246,8 +246,18 @@
     try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
 
     var stash = readStash();
-    var theirs = migrateRows(cloneState(body.state));
+    /* A server document saved by a client older than document ids has none.
+       The stash was taken from this same document before the sign-in lapsed,
+       so the id this view was already using is the right one to keep;
+       failing that, one derived from the server's own document id, the same
+       for everyone who opens it. */
+    var theirs = migrateDocument(cloneState(body.state), {
+      kind: "server",
+      serverId: body.id,
+      fallbackId: normalizeDocId(stash && stash.mine && stash.mine.docId) || null
+    });
     serverDoc = { id: body.id, rev: body.rev || 0 };
+    docIdWrittenOut = true;
     docFileHandle = { handle: null, kind: null };
     resetProductionPanelState();
 
@@ -290,6 +300,8 @@
       !!stash.imagesStripped
     );
     state = result.merged;
+    /* if theirs won the id, the history written under mine follows it */
+    noteMergedDocId(mine.docId);
     baseState = cloneState(theirs);
     render();
     updateIdentityChip();
@@ -446,9 +458,12 @@
 
     if (state && state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
-    state = migrateRows(body.state);
+    /* no fallback id: nothing this page holds is known to be this document,
+       so an id-less server document derives one from its server id */
+    state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
     baseState = cloneState(state);
     serverDoc = { id: body.id, rev: body.rev || 0 };
+    docIdWrittenOut = true;
     /* a hosted document and a local file are different homes for the same
        Save button — holding both would make it ambiguous which one it writes */
     docFileHandle = { handle: null, kind: null };
@@ -467,6 +482,13 @@
   async function publishToServer() {
     if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return; }
     var published = cloneState(state);
+    /* Publishing makes a second home for this script. If its id already
+       lives somewhere else (a file on disk, another server document), the
+       server copy gets a new one — otherwise two documents that will now be
+       edited apart share one version history. Same rule as Save As. */
+    var oldId = state.docId;
+    var forkDocId = docIdWrittenOut ? mintDocId() : null;
+    if (forkDocId) published.docId = forkDocId;
     var body;
     try {
       body = await apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
@@ -474,6 +496,13 @@
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
     docFileHandle = { handle: null, kind: null };
+    /* Adopted only after the server has it, like Save As. The id check keeps
+       a document opened while the POST was in flight from being re-id'd. */
+    if (forkDocId && state.docId === oldId) {
+      state.docId = forkDocId;
+      copyDocHistorySafe(oldId, forkDocId);
+    }
+    docIdWrittenOut = true;
     clearDirty();
     updateFileChip();
     showToast("Published to the server as “" + (state.title || body.id) + "” — collaborators can open it now", "ok");
@@ -549,7 +578,18 @@
         state.rev = Math.max(0, (state.rev || 1) - 1);
 
         if (err && err.code === "conflict" && err.payload && err.payload.state) {
-          var theirs = migrateRows(cloneState(err.payload.state));
+          /* The id this view has been writing history under, before the merge
+             below can hand the document theirs. */
+          var prevDocId = state.docId;
+          /* Their copy came from the same server document, so if a client
+             older than document ids saved it without one, it is still this
+             document: keep our id rather than deriving a new one and splitting
+             the history on every conflict. */
+          var theirs = migrateDocument(cloneState(err.payload.state), {
+            kind: "server",
+            serverId: docId,
+            fallbackId: state.docId
+          });
           pushSnapshot("Before merging in someone else's changes", cloneState(state));
           mergeResult = mergeStates(
             baseState ? migrateRows(cloneState(baseState)) : null,
@@ -557,6 +597,8 @@
             theirs
           );
           state = mergeResult.merged;
+          /* if theirs won the id, the history written under ours follows it */
+          noteMergedDocId(prevDocId);
           serverDoc.rev = err.payload.rev || serverDoc.rev;
           render();
           continue; /* try again against their rev */

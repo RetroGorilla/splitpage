@@ -15,9 +15,6 @@
   var STASH_KEY = "splitpage-conflict-stash";
   var SNAPSHOT_KEY = "splitpage-snapshots";
   var RELOAD_GUARD_KEY = "splitpage-conflict-reloaded";
-  var MAX_SNAPSHOTS = 12;
-  var snapshotWarningShown = false;
-  var MAX_SNAPSHOT_BYTES = 1200000;
 
   /* the version this view loaded (or last successfully published) — the
      common ancestor for every three-way merge */
@@ -34,80 +31,185 @@
     row.updatedBy = getEditorName();
   }
 
-  /* ---- local snapshot history (per viewer, survives reloads) ---- */
+  /* ---- version history (per document — the store is 03a-history-store.js) ---- */
 
-  function readSnapshots() {
+  /* The old shared list's raw text, or null. Nothing writes this key any
+     more: its only reader is the one-time migration into "Older history"
+     (startHistoryMigration, 03a), which needs the exact bytes so it can
+     tell whether another tab changed the key while it was copying. */
+  function readLegacySnapshotsRaw() {
     try {
       var raw = localStorage.getItem(SNAPSHOT_KEY);
-      var list = raw ? JSON.parse(raw) : [];
-      return Array.isArray(list) ? list : [];
-    } catch (e) { return []; }
+      return typeof raw === "string" ? raw : null;
+    } catch (e) { return null; }
   }
 
-  /* Keep the newest snapshots that actually fit. Browsers count UTF-16 code
-     units, so the character budget is deliberately well under the usual 5 MB. */
-  function writeSnapshots(list) {
-    var working = list.slice();
-    while (working.length) {
-      var payload = JSON.stringify(working);
-      if (payload.length <= MAX_SNAPSHOT_BYTES) {
-        try {
-          localStorage.setItem(SNAPSHOT_KEY, payload);
-          /* mirror the pruning back to the caller's list */
-          list.length = 0;
-          Array.prototype.push.apply(list, working);
-          return true;
-        } catch (e) { /* over quota despite the budget — shed and retry */ }
-      }
-      working.shift();
-    }
-    /* Not even the single newest entry fits under the budget on its own —
-       refuse to touch what's already on disk rather than wiping every
-       OLDER snapshot that WAS small enough to keep (this used to call
-       localStorage.removeItem() here, erasing the entire local version
-       history over one oversized push). Leave storage as it was and hand
-       the caller back exactly what's still there. */
-    list.length = 0;
-    Array.prototype.push.apply(list, readSnapshots());
-    return false;
-  }
+  /* Captures synchronously and returns a PushTicket {id, docId, done} or
+     null; the write is queued and never awaited here. WHY it must stay
+     synchronous: these callers replace or mutate `state` on the very next
+     line, so any await before the capture would snapshot the document that
+     REPLACED the one the label names —
+       10-comments.js  restoreConflictValue (twice: title, field)
+       11-import.js    confirmImport (replacing rows)
+       13-hosted.js    openServerDoc; saveToServer's 409 merge
+       18-local-files.js adoptProjectState; loadFileIntoEditor;
+                         reloadFileFromDisk
+     None of them awaits ticket.done: a failed history write must never
+     become a failed open, import or save. Only restoreSnapshot, undoMerge
+     (through it) and draft restore wait for the write.
 
+     With no explicit snapshotState, the untouched demo document is skipped
+     (isPristineSeedDocument): opening a file into a fresh page would
+     otherwise file a copy of the seed under an id no panel ever shows. An
+     explicit state is always captured. */
   function pushSnapshot(label, snapshotState) {
-    var src = snapshotState || state;
-    if (!src) return;
-    var list = readSnapshots();
-    var entry = {
-      id: makeId("s"),
-      label: label,
-      at: nowIso(),
-      by: getEditorName(),
-      rows: src.rows.length,
-      state: cloneState(src)
-    };
-    list.push(entry);
-    while (list.length > MAX_SNAPSHOTS) list.shift();
-    var ok = writeSnapshots(list);
-    if (!ok && !snapshotWarningShown) {
-      snapshotWarningShown = true;
-      showToast("This document is too large to snapshot — version history is unavailable.", "warn");
-    }
-    renderHistory();
-    return ok;
+    return captureSnapshot(label, snapshotState || state, { allowSeedSkip: !snapshotState });
   }
 
-  function restoreSnapshot(id) {
-    var list = readSnapshots();
-    var entry = null;
-    for (var i = 0; i < list.length; i++) if (list[i].id === id) entry = list[i];
-    if (!entry) return;
-    pushSnapshot("Before restoring an earlier version");
-    state = migrateRows(cloneState(entry.state));
-    resetProductionPanelState(); /* same reason as adoptProjectState — different document underneath */
-    markDirty();
-    render();
-    closeHistoryPanel();
-    showToast("Restored the version from " + formatTimestamp(entry.at), "ok");
-    queueAutoSave();
+  var restoreInFlight = false;
+  var RESTORE_BACKUP_ATTEMPTS = 3;
+
+  /* → 'restored' | 'no-backup' | 'missing' | 'changed' | 'corrupt' | 'busy'.
+
+     A restore replaces the document and then queueAutoSave() writes that
+     over the file, so the version on screen is gone for good unless a backup
+     of it was STORED first. Hence the order: read the snapshot, store a
+     "Before restoring" backup and wait for the store to confirm it, and only
+     then adopt. Without a confirmed backup the answer is 'no-backup' and
+     nothing changes, unless the caller passes force (the user said "restore
+     anyway").
+
+     Every await is followed by a document check: opening another document
+     while the backup is being written must not adopt this snapshot over
+     THAT document ('changed'). Typing during the wait is not a reason to
+     abort, but the typed edits must be in the backup too — so the backup is
+     captured again while editSeq keeps moving, up to three times. The same
+     goes for `state` REPLACED under the same docId with no edit (saveToServer's
+     409 merge, a reload from disk, reopening the same server document):
+     editSeq does not move, yet the backup holds the object that was replaced
+     and does not protect the version this restore would overwrite
+     (invariant #39). So a backup counts only while both the state object and
+     editSeq are the ones it was captured from. Nothing awaits between that
+     check and adoptRestoredState, so what counted is exactly what is replaced.
+
+     The snapshot being restored is held (protectHistorySnapshot, 03a) for the
+     whole call: the backup's own write may have to evict, the Older bucket
+     goes first, and without the hold a restore from Older under a full quota
+     could delete the very snapshot it is restoring — leaving nothing for the
+     "restore anyway" click to find. */
+  async function restoreSnapshot(id, opts) {
+    opts = opts || {};
+    if (restoreInFlight) return "busy";
+    if (!state) return "missing";
+    restoreInFlight = true;
+    var docIdAtStart = state.docId;
+    var moved = function () { return !state || state.docId !== docIdAtStart; };
+    var releaseHold = historyNoop;
+    try {
+      releaseHold = protectHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
+
+      var snap = await getHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
+      if (moved()) return "changed";
+      if (!snap) return "missing";
+      var parsed = null;
+      try { parsed = JSON.parse(snap.stateJson); } catch (e) { parsed = null; }
+      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.rows)) return "corrupt";
+
+      var stored = false;
+      for (var attempt = 0; attempt < RESTORE_BACKUP_ATTEMPTS; attempt++) {
+        var stateAtCapture = state;
+        var seqAtCapture = editSeq;
+        var ticket = captureSnapshot("Before restoring an earlier version", state, { allowSeedSkip: false });
+        /* null: the document could not even be serialized — no backup */
+        if (!ticket) { stored = false; break; }
+        var result = await ticket.done;
+        if (moved()) return "changed";
+        stored = !!(result && result.stored);
+        if (state === stateAtCapture && editSeq === seqAtCapture) break;
+        /* edits landed, or the document was replaced under the same docId,
+           while that backup was being written; a backup that misses that
+           version does not protect it, so it does not count */
+        stored = false;
+      }
+      if (!stored && !opts.force) return "no-backup";
+
+      /* adoptRestoredState, not migrateRows: a restore changes the content,
+         never the document's identity (02b-doc-id.js) — even a snapshot from
+         the Older bucket, which may carry some other document's id. */
+      adoptRestoredState(parsed);
+      resetProductionPanelState(); /* same reason as adoptProjectState — different document underneath */
+      markDirty();
+      render();
+      closeHistoryPanel();
+      showToast("Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
+      queueAutoSave();
+      return "restored";
+    } finally {
+      releaseHold();
+      restoreInFlight = false;
+    }
+  }
+
+  /* The panel's "Restore this version" button. A first click that comes
+     back 'no-backup' arms the button for 4 s; a second click inside that
+     window restores anyway. The armed key (not the element) is remembered,
+     because a history write settling in the meantime re-renders the panel
+     and replaces every button — renderHistory re-applies it. */
+  var RESTORE_ARM_MS = 4000;
+  var RESTORE_LABEL = "Restore this version";
+  var RESTORE_ARMED_LABEL = "Couldn't keep a backup — restore anyway?";
+  var restoreArmedKey = null;
+  var restoreArmTimer = null;
+
+  function restoreCardKey(bucket, id) {
+    return (bucket === "older" ? "older" : "doc") + "/" + id;
+  }
+
+  function applyRestoreArm() {
+    var panel = document.getElementById("history-panel");
+    if (!panel) return;
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-action="restore-snapshot"]'), function (b) {
+      var armed = restoreArmedKey !== null &&
+        restoreCardKey(b.getAttribute("data-bucket"), b.getAttribute("data-id")) === restoreArmedKey;
+      b.classList.toggle("armed", armed);
+      b.textContent = armed ? RESTORE_ARMED_LABEL : RESTORE_LABEL;
+    });
+  }
+
+  function disarmRestore() {
+    clearTimeout(restoreArmTimer);
+    restoreArmTimer = null;
+    restoreArmedKey = null;
+    applyRestoreArm();
+  }
+
+  function restoreSnapshotFromCard(btn) {
+    if (!btn) return;
+    var id = btn.getAttribute("data-id") || "";
+    var older = btn.getAttribute("data-bucket") === "older";
+    var key = restoreCardKey(older ? "older" : "doc", id);
+    var force = restoreArmedKey === key;
+    if (force) disarmRestore();
+    return restoreSnapshot(id, { older: older, force: force }).then(function (r) {
+      if (r === "no-backup") {
+        clearTimeout(restoreArmTimer);
+        restoreArmedKey = key;
+        applyRestoreArm();
+        restoreArmTimer = setTimeout(disarmRestore, RESTORE_ARM_MS);
+      } else if (r === "missing") {
+        showToast("That version is no longer in the history.", "warn");
+        renderHistory();
+      } else if (r === "corrupt") {
+        showToast("That version could not be read, so nothing was restored.", "warn");
+      } else if (r === "changed") {
+        showToast("A different document was opened while restoring, so nothing was restored.", "warn");
+      }
+      /* 'busy': a restore is already running — this click adds nothing */
+      return r;
+    }, function (e) {
+      if (window.console) console.error(e);
+      return "corrupt";
+    });
   }
 
   /* ---- three-way merge ---- */
@@ -316,6 +418,10 @@
     return {
       merged: migrateRows({
         title: mergedTitle,
+        /* Invariant #4: a field missing from this literal is destroyed on
+           every merge — without it every server and stash merge would hand
+           the document a fresh random id and orphan its version history. */
+        docId: mergedDocId(base, mine, theirs),
         rows: merged,
         comments: mergedComments,
         people: mergePeople(mine.people, theirs.people),
@@ -547,30 +653,126 @@
     document.body.classList.toggle("panel-open", open);
   }
 
-  function renderHistory() {
+  /* Async, because the list comes from IndexedDB or the desktop store. Every
+     call takes a token; a result that comes back after a newer render began
+     is dropped, and so is a result for a document that is no longer the one
+     on screen — otherwise a slow read could paint document A's snapshots
+     over document B's panel, where "Restore" would then pull A's content
+     into B.
+
+     No caller needs to re-render after a write: captureSnapshot, copyHistory,
+     the pending retry and the migration already call this when they settle
+     (03a-history-store.js). */
+  var historyRenderToken = 0;
+
+  var HISTORY_SUBTITLES = {
+    idb: "Snapshots of this document, kept in this browser before anything that could overwrite your work.",
+    desktop: "Snapshots of this document, kept on this computer before anything that could overwrite your work.",
+    memory: "Snapshots of this document, kept only until this page closes — this browser isn't letting Splitpage store them."
+  };
+  var HISTORY_SUBTITLE_DEFAULT = "Snapshots of this document, kept before anything that could overwrite your work.";
+
+  function historyCardHtml(m, bucket) {
+    var status = m.status === "writing" || m.status === "pending" ? m.status : "stored";
+    var rows = Math.max(0, Math.floor(Number(m.rows) || 0));
+    var armed = restoreArmedKey !== null && restoreCardKey(bucket, m.id) === restoreArmedKey;
+    return '<div class="history-card' + (status === "writing" ? " is-writing" : status === "pending" ? " is-pending" : "") + '">' +
+      (bucket === "older" ? '<div class="history-card-doc">' + escapeHtml(m.title || "Untitled") + '</div>' : "") +
+      '<div class="history-card-label">' + escapeHtml(m.label || "Snapshot") +
+        (status === "pending" ? '<span class="history-card-badge" title="Kept in this window only, and tried again after the next successful write">Not stored</span>' : "") +
+      '</div>' +
+      '<div class="history-card-meta">' + escapeHtml(formatTimestamp(m.at)) + ' · ' + escapeHtml(m.by || "") +
+        ' · ' + rows + ' row' + (rows === 1 ? "" : "s") + '</div>' +
+      '<button type="button" data-action="restore-snapshot" data-id="' + escapeHtml(safeId(m.id, "s")) + '"' +
+        (bucket === "older" ? ' data-bucket="older"' : "") +
+        (armed ? ' class="armed"' : "") + '>' + escapeHtml(armed ? RESTORE_ARMED_LABEL : RESTORE_LABEL) + '</button>' +
+      '</div>';
+  }
+
+  function historyUsageText(backend, usage) {
+    if (!usage || typeof usage !== "object") return "";
+    if (usage.readOnly && backend === "desktop") {
+      return "Version history is read-only: it was written by a newer version of Splitpage.";
+    }
+    var used = driveFormatSize(usage.totalBytes) || "0 KB";
+    var cap = Number(usage.capBytes);
+    var docs = Math.max(0, Math.floor(Number(usage.docCount) || 0));
+    /* The memory backend's cap is our own RAM bound, not storage the user
+       has — quoting it as "of 50 MB" would suggest a disk budget. */
+    var text = "Version history uses " + used +
+      (backend !== "memory" && isFinite(cap) && cap > 0 ? " of " + driveFormatSize(cap) : "") +
+      " across " + docs + " document" + (docs === 1 ? "" : "s") + ".";
+    if (usage.overCap) text += " It is over its limit, so older snapshots are being removed first.";
+    return text;
+  }
+
+  async function renderHistory() {
     var listEl = document.getElementById("history-list");
     var panel = document.getElementById("history-panel");
-    if (!listEl || !panel || panel.hidden) return;
-    var list = readSnapshots().slice().reverse();
-    if (!list.length) {
-      listEl.innerHTML = '<div class="comments-empty">No snapshots yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</div>';
+    if (!listEl || !panel || panel.hidden || !state) return;
+    var token = ++historyRenderToken;
+    var docId = normalizeDocId(state.docId);
+    var data;
+    try {
+      data = await listDocHistory(docId);
+    } catch (e) {
+      if (window.console) console.error(e);
       return;
     }
-    listEl.innerHTML = list.map(function (s) {
-      return '<div class="history-card">' +
-        '<div class="history-card-label">' + escapeHtml(s.label) + '</div>' +
-        '<div class="history-card-meta">' + formatTimestamp(s.at) + ' · ' + escapeHtml(s.by) +
-        ' · ' + s.rows + ' row' + (s.rows === 1 ? "" : "s") + '</div>' +
-        '<button type="button" data-action="restore-snapshot" data-id="' + escapeHtml(safeId(s.id, "s")) + '">Restore this version</button>' +
-        '</div>';
-    }).join("");
+    if (token !== historyRenderToken) return;       /* a newer render owns the panel */
+    if (!state || panel.hidden) return;
+    if (normalizeDocId(state.docId) !== docId) {
+      /* The document changed under this read and nothing newer has asked
+         for a render yet — draw the current document instead of leaving
+         the old list up. Bounded: it recurses only when the id moved. */
+      return renderHistory();
+    }
+    data = data || {};
+
+    var subtitle = document.getElementById("history-subtitle");
+    if (subtitle) subtitle.textContent = HISTORY_SUBTITLES[data.backend] || HISTORY_SUBTITLE_DEFAULT;
+
+    var entries = Array.isArray(data.entries) ? data.entries : [];
+    if (!entries.length) {
+      listEl.innerHTML = '<div class="comments-empty">No snapshots of this document yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</div>';
+    } else {
+      listEl.innerHTML = entries.map(function (m) { return historyCardHtml(m, "doc"); }).join("");
+    }
+
+    var olderEl = document.getElementById("history-older");
+    var olderSummary = document.getElementById("history-older-summary");
+    var olderList = document.getElementById("history-older-list");
+    var older = Array.isArray(data.older) ? data.older : [];
+    if (olderEl) olderEl.hidden = !older.length;
+    if (olderSummary) olderSummary.textContent = "Older history (before per-document history) · " + older.length;
+    if (olderList) {
+      olderList.innerHTML = older.map(function (m) {
+        return historyCardHtml({
+          id: m.id, label: m.label, at: m.at, by: m.by, rows: m.rows, title: m.title, status: "stored"
+        }, "older");
+      }).join("");
+    }
+
+    var usageEl = document.getElementById("history-usage");
+    if (usageEl) {
+      var usageText = historyUsageText(data.backend, data.usage);
+      usageEl.textContent = usageText;
+      usageEl.hidden = !usageText;
+    }
   }
 
   /* ---- merge reporting ---- */
 
+  /* {id, docId} of the "Before merging your unsaved changes" snapshot, or
+     null. The docId is kept because history is per document: after another
+     document is opened, "Undo merge" must not pull the merged-away version
+     of the first one into it. */
   var lastMergeUndo = null;
   var undoArmed = false;
   var undoArmTimer = null;
+  /* Set to the lastMergeUndo it applies to when an undo came back
+     'no-backup'; the user's next confirm then restores anyway. */
+  var undoMergeForceFor = null;
 
   /* `opts.alreadySaved` is for the hosted path, where the merge happened
      *during* a save and the merged result is already on the server by the
@@ -623,10 +825,30 @@
      recoverable afterwards because restoreSnapshot snapshots first. */
   function undoMerge(btn) {
     if (!lastMergeUndo) { showToast("No merge snapshot to undo.", "warn"); return; }
+    if (!state || lastMergeUndo.docId !== state.docId) {
+      showToast("That merge belongs to a different document, so there is nothing to undo here.", "warn");
+      return;
+    }
     if (undoArmed) {
       clearTimeout(undoArmTimer);
       undoArmed = false;
-      restoreSnapshot(lastMergeUndo);
+      btn.textContent = "Undo merge";
+      btn.classList.remove("armed");
+      var undo = lastMergeUndo;
+      var force = undoMergeForceFor === undo;
+      undoMergeForceFor = null;
+      restoreSnapshot(undo.id, { force: force }).then(function (r) {
+        if (r === "no-backup") {
+          undoMergeForceFor = undo;
+          showToast("Couldn't keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
+        } else if (r === "missing") {
+          showToast("The snapshot from before the merge is no longer in the history.", "warn");
+        } else if (r === "corrupt") {
+          showToast("The snapshot from before the merge could not be read, so nothing was undone.", "warn");
+        } else if (r === "changed") {
+          showToast("A different document was opened while undoing, so nothing was undone.", "warn");
+        }
+      }, function (e) { if (window.console) console.error(e); });
       return;
     }
     undoArmed = true;

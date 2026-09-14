@@ -18,8 +18,18 @@ extraResources:
 asar: true
 
 win:
+  # Both architectures are pinned here, not left to electron-builder's
+  # default, which is the HOST's architecture. On this Snapdragon machine
+  # that default is ARM64-only. The IExpress setups hit the same trap: 1.0.1's
+  # "x64" setup came out as an ARM64 binary that no x64 PC could start.
+  # `npm run dist:win` also passes --x64 --arm64 and then runs verify-dist.mjs,
+  # which reads each produced binary's PE machine field and fails the build on
+  # a mismatch.
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
+        - arm64
   artifactName: SplitpageDesktopSetup-${version}-${arch}.${ext}
   icon: build/icon.ico
 

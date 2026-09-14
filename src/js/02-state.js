@@ -192,6 +192,14 @@
 
     s.title = plainText(s.title).slice(0, 300);
     if (typeof s.rev !== "number") s.rev = 0;
+    /* The document's identity (02b-doc-id.js). A missing or hostile id must
+       fail UNIQUE, never shared: two documents that end up with one id share
+       one version history, and "restore an earlier version" would then hand
+       you somebody else's script. So anything that is not a canonical id is
+       replaced with a random one here, and the ingress paths that can do
+       better (a legacy file's content, a server document's id) override it
+       afterwards in migrateDocument(). */
+    s.docId = normalizeDocId(s.docId) || mintDocId();
     s.schema = SCHEMA_VERSION;
     return s;
   }
@@ -202,8 +210,25 @@
        kept state in a side file, "data/state.json", saved with the files
        form of publish(); that form is not available to this artifact —
        every such save silently failed with capability_disabled — so that
-       path has been removed rather than left as a trap.) */
-    return migrateRows(defaultState());
+       path has been removed rather than left as a trap.)
+
+       Identity: the pristine seed, an unreadable block, or a page nobody
+       ever saved gets a random id that has never left this page
+       (docIdWrittenOut false). A legacy .html page that WAS saved is a real
+       document on disk, so it goes through migrateDocument and a page
+       without an embedded id gets the same content-derived id on every
+       open instead of a new random one each launch. */
+    var raw = null;
+    var pristine = seedCheckPasses();
+    if (!pristine) {
+      try { raw = JSON.parse(document.getElementById("state-data").textContent); } catch (e) { raw = null; }
+    }
+    if (pristine || !raw || typeof raw !== "object" || (!raw.rev && !raw.lastEditedBy)) {
+      docIdWrittenOut = false;
+      return migrateRows(defaultState());
+    }
+    docIdWrittenOut = true;
+    return migrateDocument(raw, { kind: "file" });
   }
 
   /* Build the complete replacement page for a save: splice the new document
