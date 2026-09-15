@@ -76,6 +76,10 @@ if (process.env.SPLITPAGE_USER_DATA) {
    which array slot. */
 let testDialogAnswers = null;
 let testDialogCursor = 0;
+/* Every dialog this process WOULD have shown, whether or not a test
+   pre-answered it. TEST_MODE-only field of getSessionInfo (testDialogsSeen)
+   so smoke.mjs can wait for "the prompt was asked" instead of sleeping. */
+let testDialogsSeen = 0;
 if (process.env.SPLITPAGE_TEST_DIALOGS) {
   try {
     testDialogAnswers = JSON.parse(fs.readFileSync(process.env.SPLITPAGE_TEST_DIALOGS, "utf8"));
@@ -85,6 +89,7 @@ if (process.env.SPLITPAGE_TEST_DIALOGS) {
   }
 }
 function consumeTestDialogAnswer() {
+  testDialogsSeen++;
   if (!testDialogAnswers || testDialogCursor >= testDialogAnswers.length) return undefined;
   return testDialogAnswers[testDialogCursor++];
 }
@@ -4177,7 +4182,8 @@ function registerIpc() {
       lanUrls: HOSTING && documentServerPort
         ? lanAddresses().map((addr) => `http://${addr}:${documentServerPort}/`)
         : [],
-      pin: JOIN_PIN || ""
+      pin: JOIN_PIN || "",
+      testDialogsSeen: TEST_MODE ? testDialogsSeen : undefined
     };
   });
 

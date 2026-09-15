@@ -443,6 +443,20 @@ async function waitForMarker(cdp, marker, timeoutMs) {
   return poll(cdp, markerExpr(marker), timeoutMs || 20000).catch(() => false);
 }
 
+// main.js counts every dialog it would have shown (getSessionInfo().
+// testDialogsSeen, TEST_MODE only). Read it before firing a close/quit/
+// Save As, then wait for it to move: that is the moment the pre-answered
+// (or defaulted-to-Cancel) prompt has been consumed and the app has made
+// its decision — which is what the old fixed sleeps were guessing at.
+async function dialogsSeen(cdp) {
+  const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+  return (info && typeof info.testDialogsSeen === "number") ? info.testDialogsSeen : 0;
+}
+async function waitForDialogAnswered(cdp, before, timeoutMs) {
+  return poll(cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return i && i.testDialogsSeen > " + before + "; })", timeoutMs || 10000)
+    .catch(() => false);
+}
+
 // Same "•" convention dirtyTabForTest already polls for, exposed as a
 // one-shot read for cases that need to assert clean vs dirty after a restore.
 async function isDirty(cdp) {
@@ -888,6 +902,18 @@ async function closeBrowserGracefully(app) {
    suite loudly even when the case's own assertions all happened to pass
    before the crash. `app.getStderr()` reads a closure over already-
    captured output, so it's safe to call after the process has exited. */
+// Polls the process table until nothing tagged with this launch's user-data
+// dir is left, or the deadline passes; returns whatever is still there.
+async function waitForNoProcesses(userDataDir, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let left = psProcessesMatching([userDataDir]);
+  while (left.length && Date.now() < deadline) {
+    await sleep(200);
+    left = psProcessesMatching([userDataDir]);
+  }
+  return left;
+}
+
 async function teardown(app, tag, opts) {
   opts = opts || {};
   const notes = [];
@@ -910,13 +936,11 @@ async function teardown(app, tag, opts) {
   // PID/userDataDir-scoped, same as killPid above — never by image name, so
   // a concurrent run (this tree's other targets, or the other tree's own
   // suite) is never touched.
-  await sleep(500);
-  const leftover = psProcessesMatching([app.userDataDir]);
+  const leftover = await waitForNoProcesses(app.userDataDir, 3000);
   if (leftover.length) {
     notes.push("leftover processes after teardown: " + leftover.join(","));
     leftover.forEach(killPid);
-    await sleep(500);
-    const stillThere = psProcessesMatching([app.userDataDir]);
+    const stillThere = await waitForNoProcesses(app.userDataDir, 3000);
     if (stillThere.length) notes.push("still present after forced cleanup: " + stillThere.join(","));
   }
   if (tag) {
@@ -1166,8 +1190,9 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
     }
 
     const toastsBefore = await evalPage(cdp, "document.querySelectorAll('.toast').length");
+    const seenBeforeSaveAs = await dialogsSeen(cdp);
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
-    await sleep(1500); // cancelled dialog: nothing to poll for, just let it settle
+    await waitForDialogAnswered(cdp, seenBeforeSaveAs); // the cancelled dialog has been consumed
     const toastsAfter = await evalPage(cdp, "document.querySelectorAll('.toast').length");
     record(tag + ": cancelled Save As shows no error toast", toastsAfter === toastsBefore, `before=${toastsBefore} after=${toastsAfter}`);
 
@@ -1493,8 +1518,9 @@ async function caseUnsavedChangesClose(target) {
     // First close request: dialogs[0] = "cancel" -> will-prevent-unload's
     // event.preventDefault() is NOT called -> the page's own block stands
     // -> window stays open.
+    const seenBeforeClose = await dialogsSeen(cdp);
     await fireEval(cdp, "window.close()", { awaitPromise: false, userGesture: true });
-    await sleep(1500);
+    await waitForDialogAnswered(cdp, seenBeforeClose);
     const stillAliveAfterCancel = app.proc.exitCode === null;
     let pageStillThere = false;
     if (stillAliveAfterCancel) {
@@ -1542,8 +1568,9 @@ async function caseUnsavedChangesClose(target) {
       { userGesture: true });
     await poll(cdp2, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
 
+    const seenBeforeClose2 = await dialogsSeen(cdp2);
     await fireEval(cdp2, "window.close()", { awaitPromise: false, userGesture: true });
-    await sleep(1500);
+    await waitForDialogAnswered(cdp2, seenBeforeClose2); // the un-answered prompt defaulted to Stay
     const stillAlive2 = app2.proc.exitCode === null;
     record(tag + ": dirty close with NO pre-answered dialog stays open (test-mode default = Stay)",
       stillAlive2, "exitCode=" + app2.proc.exitCode);
@@ -1612,8 +1639,9 @@ async function caseCloseAuthorityNoGesture(target) {
     // 'close' event a real title-bar X / Alt+F4 fires: dialogs[0] =
     // "cancel" -> the 'close' handler's own dirty check answers "Stay" ->
     // window stays open.
+    const seenBeforeClose = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
-    await sleep(1500);
+    await waitForDialogAnswered(cdp, seenBeforeClose);
     const stillAliveAfterCancel = app.proc.exitCode === null;
     let pageStillThere = false;
     if (stillAliveAfterCancel) {
@@ -1715,8 +1743,9 @@ async function caseQuitCancelKeepsServer(target) {
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
     // First quit: dialogs[0] = "cancel" -> Stay.
+    const seenBeforeQuit = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
-    await sleep(3000);
+    await waitForDialogAnswered(cdp, seenBeforeQuit);
     record(tag + ": 'Stay' keeps the app running", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
 
     const viaProxy = await evalPage(cdp, "fetch('/api/health').then(function(r){return r.status;}).catch(function(){return 0;})");
@@ -1760,8 +1789,9 @@ async function caseQuitAuthorityNoGesture(target) {
     // First quit request, no userGesture at all: dialogs[0] = "cancel" ->
     // the 'close' handler answers "Stay" -> app.quit() aborts, process
     // stays alive.
+    const seenBeforeQuit = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
-    await sleep(1500);
+    await waitForDialogAnswered(cdp, seenBeforeQuit);
     record(tag + ": quitting still prompts with no user gesture, and 'cancel' keeps the app alive",
       app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
 
@@ -2170,8 +2200,9 @@ async function caseQuitTwoWindowsDirty(target) {
     await dirtyTabForTest(cdp1); // window1
     await dirtyTabForTest(cdp3); // window2
 
+    const seenBeforeReview = await dialogsSeen(cdp1);
     await fireEval(cdp1, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
-    await sleep(2000);
+    await waitForDialogAnswered(cdp1, seenBeforeReview);
     record(tag + ": 'review' does not quit", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
 
     // If before-quit had wrongly consumed more than one dialog answer on the
@@ -3357,6 +3388,8 @@ async function caseDraftCrashDirtyFile(target, fixturesDir) {
     record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
 
     await crashRenderer(cdp);
+    // Kept as a fixed wait on purpose: the reload reuses the same WebContents,
+    // so the target id does not change and there is no "new target" to poll for.
     await sleep(1000); // let render-process-gone's hold + reload run
 
     const reconnected = await findPageTarget(app.port, 30000, { tabId });
@@ -3981,7 +4014,7 @@ async function caseRendererCrashRestores(target) {
     const cdp = app.cdp;
 
     await crashRenderer(cdp);
-    await sleep(1000);
+    await sleep(1000); // same target id after the reload — see the dirty-file-tab crash case above
 
     const reconnected = await findPageTarget(app.port, 30000, { tabId });
     cdp2 = new CDPConn(reconnected.webSocketDebuggerUrl);
