@@ -185,6 +185,19 @@
      conflict stash already carries unsaved work across that reload. */
   var SERVER_RESUME_KEY = "splitpage-server-resume";
 
+  /* The same "reopen it and merge my edits back in" job, asked for by a crash
+     draft instead of by a lapsed sign-in (20g-drafts.js arms it before
+     detectServer() runs at boot). It is a var rather than a second
+     sessionStorage key on purpose: the draft was read from disk, it may be far
+     bigger than sessionStorage would take, and stashLocalWork()'s quota
+     fallback strips images — which a recovered draft must not lose.
+
+     {id, rev, base, mine, at, onDone(outcome)}. onDone is how the restore
+     learns which way this went ('server-resumed' or 'not-found'); polling
+     serverDoc.id cannot tell a resume that merged the draft from one that
+     simply reopened the document. */
+  var draftServerResume = null;
+
   function flagServerSessionExpired() {
     if (serverSessionExpired) return;
     serverSessionExpired = true;
@@ -213,11 +226,21 @@
      moved on, since the sign-in could have taken a while. Same three-way
      merge as a save conflict, for the same reason. */
   async function resumeServerDoc() {
+    /* A crash draft of a server document asks for the same thing and is
+       answered first: it was read from disk moments ago, so it is the more
+       recent of the two, and a page that has both (a sign-in lapsed, then the
+       app died) would otherwise merge the older sessionStorage stash and drop
+       the draft on the floor. */
+    var override = draftServerResume;
     var pending;
-    try {
-      var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
-      pending = raw ? JSON.parse(raw) : null;
-    } catch (e) { pending = null; }
+    if (override) {
+      pending = { id: override.id, rev: override.rev || 0 };
+    } else {
+      try {
+        var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
+        pending = raw ? JSON.parse(raw) : null;
+      } catch (e) { pending = null; }
+    }
     if (!pending || !pending.id) return false;
 
     /* init() fires detectServer() (which leads here) and loadInitialState()
@@ -241,16 +264,49 @@
          a fresh/local document rather than this hosted one — clear it too
          early and a later reload would splice this doc's stashed edits into
          an unrelated blank document instead. */
+      /* A recovered draft is different: the document it belongs to is GONE
+         from the server (deleted while the app was down), so waiting for a
+         later launch would hide the work forever. Disarm and hand the restore
+         back its answer — it opens the edits as an unsaved local copy. Any
+         other failure (signed out, no answer yet, a PIN still to type) leaves
+         the override armed: finishServerDetect() calls this again once the
+         PIN dialog succeeds. The literal "404" is here because apiFetch()
+         names non-ok statuses by their number; "not-found" is what
+         saveToServer's own branch looks for. */
+      if (override && err && (err.code === "not-found" || err.code === "404")) {
+        draftServerResume = null;
+        try { override.onDone("not-found"); } catch (e2) {}
+      }
       return false;
     }
-    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+    if (override) {
+      draftServerResume = null;
+      /* Only when the lapsed-sign-in stash is about this SAME document does
+         it belong to the merge below — the draft already carries everything
+         that stash held, and a stash left over from a different document must
+         survive for its own resume. */
+      var samePending = null;
+      try {
+        var rawPending = sessionStorage.getItem(SERVER_RESUME_KEY);
+        samePending = rawPending ? JSON.parse(rawPending) : null;
+      } catch (e) { samePending = null; }
+      if (samePending && samePending.id === pending.id) {
+        try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+        clearStash();
+      }
+    } else {
+      try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+    }
 
-    var stash = readStash();
+    var stash = override || readStash();
     /* A server document saved by a client older than document ids has none.
        The stash was taken from this same document before the sign-in lapsed,
        so the id this view was already using is the right one to keep;
        failing that, one derived from the server's own document id, the same
        for everyone who opens it. */
+    /* `stash` is the override when there is one, so this is also the draft's
+       own id — the document the draft was taken from keeps its identity and
+       its history rather than deriving a second one from the server id. */
     var theirs = migrateDocument(cloneState(body.state), {
       kind: "server",
       serverId: body.id,
@@ -273,6 +329,7 @@
         updateFileChip();
         showToast("Signed back in — merged what you typed while " + (state.title || body.id) + " was reopening", "warn", true);
         reportMerge(freshResult);
+        if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
         return true;
       }
       state = theirs;
@@ -282,10 +339,14 @@
       updateIdentityChip();
       updateFileChip();
       showToast("Signed back in — reopened " + (state.title || body.id), "ok");
+      /* Only reachable with an override if the draft held nothing usable; the
+         document did reopen, so the restore is finished either way and must
+         not be left waiting for an answer that is never coming. */
+      if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
       return true;
     }
 
-    clearStash();
+    if (!override) clearStash();
     var mine = migrateRows(cloneState(stash.mine));
     if (typedDuringResume) {
       /* fold the keystrokes typed on top of the blank interim document into
@@ -293,6 +354,14 @@
          three-way merge below rather than one silently replacing the other. */
       mine = mergeStates(stateAtStart, migrateRows(cloneState(state)), mine, false).merged;
     }
+    /* The recovered version of this document, filed before it is merged into
+       whatever the server holds now. The lapsed-sign-in path does not need
+       one (the reload it came from is seconds old and the stash is still in
+       sessionStorage); a draft can be days old and is deleted from disk by
+       the first clean save after this, so without this snapshot the recovered
+       edits would exist nowhere but in the merge result. Captured
+       synchronously, like every other pushSnapshot caller (invariant #39). */
+    if (override) pushSnapshot("Before merging your recovered changes", theirs);
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
       mine,
@@ -306,8 +375,11 @@
     render();
     updateIdentityChip();
     updateFileChip();
-    showToast("Signed back in — your unsaved edits were merged back in", "ok");
+    showToast(override
+      ? "Reopened " + (state.title || body.id) + " — the changes recovered from the last session were merged back in"
+      : "Signed back in — your unsaved edits were merged back in", "ok");
     reportMerge(result);   /* leaves it dirty and queues the save, which is right */
+    if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
     return true;
   }
 

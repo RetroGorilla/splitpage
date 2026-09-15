@@ -573,8 +573,25 @@
 
     /* Fire and forget: the menu items reveal themselves if a server answers,
        and everything below works identically either way. Deliberately not
-       awaited — a slow or absent server must never delay the editor opening. */
-    detectServer();
+       awaited — a slow or absent server must never delay the editor opening.
+
+       Except in the one tab that is coming back from a crash with a draft to
+       restore. A draft of a SERVER document is merged by resumeServerDoc(),
+       which detectServer() leads to and which assigns `state` itself
+       (13-hosted.js) — so detecting the server here would race the boot load
+       below, and a fast answer with a slow load would let the seed document
+       overwrite the resumed one. The draft itself is asked for now, since
+       that is only IPC and the answer is wanted as early as possible; the
+       detect and the restore both wait for the boot body to finish
+       (20g-drafts.js). */
+    var draftTaken = null;
+    if (DESKTOP && draftRestorePending && typeof DESKTOP.takeDraft === "function") {
+      draftTaken = Promise.resolve().then(function () {
+        return DESKTOP.takeDraft();
+      }).catch(function () { return null; });
+    } else {
+      detectServer();
+    }
     /* Same reasoning as detectServer: fire and forget, and silent when there
        is no launcher to have written the file. */
     loadUpdateStatus();
@@ -645,6 +662,18 @@
          awaited: it never rejects, the key is removed only after the copy is
          confirmed, and nothing at boot depends on it finishing. */
       startHistoryMigration();
+    }).then(function () {
+      /* The crash-draft restore is part of "the boot state is ready", not
+         something that happens after it: until it settles, the document on
+         screen is not the one the user left behind. Arm before detect, and
+         detect before restoring, because a server draft is merged from inside
+         resumeServerDoc() and the restore has to be able to wait for it. */
+      if (!draftTaken) return;
+      return draftTaken.then(function (t) {
+        armServerDraftResume(t);
+        detectServer();
+        return applyTakenDraft(t);
+      });
     });
 
     var rowsEl = document.getElementById("rows");

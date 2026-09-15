@@ -35,11 +35,23 @@
        never hears about a document state whose identity is stale. */
     if (typeof syncDocIdentity === "function") syncDocIdentity();
     if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    /* Last of the three, and in this order deliberately: the crash draft is
+       written with the document's identity and its dirty state in the header,
+       so both have to be settled before it is told anything changed
+       (20g-drafts.js). It only sets a timer. */
+    if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
   }
 
   function markDirty() {
     dirty = true;
     editSeq++;
+    /* Unconditional, and NOT left to setSaveButtons() below: the line after
+       this skips that funnel while a save is in flight, so an edit typed
+       during a save would otherwise not reach the crash-draft writer until
+       saveDoc()'s finally ran — the one window where a crash is most likely
+       to cost work, since the document is large enough to still be writing.
+       noteDraftChange() is O(1) and only moves a timer (20g-drafts.js). */
+    if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
     if (!saveInFlight) setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
     /* A hosted document has no openedFile.name (openServerDoc() sets it to

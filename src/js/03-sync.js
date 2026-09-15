@@ -778,7 +778,14 @@
      *during* a save and the merged result is already on the server by the
      time we report it. Without it the report marks the document dirty and
      queues another write of identical content — and every needless rev bump
-     pushes every other viewer into a 409 and a merge they did not need. */
+     pushes every other viewer into a 409 and a merge they did not need.
+
+     `opts.noAutoSave` still marks the document dirty — the merged version on
+     screen is genuinely not what is on disk — but writes nothing. Crash-draft
+     restore (20g-drafts.js) passes it: Splitpage never writes the user's file
+     on its own (invariant #41), least of all with a merge the user has not
+     seen yet, done against a file they did not open. Their next Save writes
+     it, as it would any other unsaved change. */
   function reportMerge(result, opts) {
     opts = opts || {};
     var s = result.stats;
@@ -790,7 +797,7 @@
 
     /* nothing actually differed — don't make a ceremony of it */
     if (!bits.length && !result.conflicts.length) {
-      if (!opts.alreadySaved) { markDirty(); queueAutoSave(); }
+      if (!opts.alreadySaved) { markDirty(); if (!opts.noAutoSave) queueAutoSave(); }
       return;
     }
 
@@ -817,7 +824,7 @@
       if (el) el.classList.add("just-merged");
     });
 
-    if (!opts.alreadySaved) { markDirty(); queueAutoSave(); }
+    if (!opts.alreadySaved) { markDirty(); if (!opts.noAutoSave) queueAutoSave(); }
   }
 
   /* Reverts to the version that was live before the merge — i.e. discards the

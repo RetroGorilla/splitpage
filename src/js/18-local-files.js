@@ -188,19 +188,33 @@
      Markdown — falls through to the ordinary lossy import, unchanged.
      Whichever it was becomes the file Save writes to from here on, in its
      own format; a legacy .html converts to .md on that first Save. */
-  async function openProjectFile(file, handle, opts) {
-    opts = opts || {};
+  /* The reading half, on its own so a second caller can ask "what document is
+     in this file?" without adopting it (MARKDOWN-PARSE-RESULT). Crash-draft
+     restore (20g-drafts.js) needs exactly that: it has to compare what is on
+     disk now against the draft's base BEFORE deciding whether to adopt the
+     file, merge into it, or leave it alone entirely.
+
+       {state, kind, docIdEmbedded}   a project file, parsed
+       {error:'unreadable'}           the bytes could not be read
+       {error:'not-splitpage'}        our extension, but not our content
+       null                           not one of ours — import it instead
+
+     Every toast stays in openProjectFile() below: a restore reports its own
+     failures in its own words, and a file nobody asked to open has no
+     business putting an error toast on screen.
+
+     docIdEmbedded is read BEFORE migrateDocument(), which always leaves a
+     valid id behind — see parseMarkdownProject (20d-formats.js) for the same
+     ordering and for why a draft restore has to know the difference. */
+  async function parseProjectFileState(file) {
     var kind = fileKindFromName(file.name);
-    if (kind !== "splitpage" && kind !== "md" && kind !== "html") {
-      return loadFileIntoEditor(file, handle);
-    }
+    if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
 
     var text;
     try {
       text = await file.text();
     } catch (e) {
-      showToast("Could not read " + file.name + ".", "error");
-      return false;
+      return { error: "unreadable" };
     }
 
     if (kind === "splitpage") {
@@ -208,14 +222,14 @@
       try {
         native = parseSplitpageFile(text);
       } catch (e) {
-        showToast(file.name + " doesn't look like a Splitpage file.", "error");
-        return false;
+        return { error: "not-splitpage" };
       }
       /* migrateDocument, not bare migrateRows: a file saved before document
          ids existed would otherwise get a new random id on every open, and
          its version history would start over each time. Its id is derived
          from its own content instead (02b-doc-id.js). */
-      return adoptProjectState(migrateDocument(native, { kind: "file" }), file, handle, "splitpage", opts);
+      var nativeEmbedded = docIdEmbeddedIn(native);
+      return { state: migrateDocument(native, { kind: "file" }), kind: "splitpage", docIdEmbedded: nativeEmbedded };
     }
 
     if (kind === "html") {
@@ -225,12 +239,12 @@
       try {
         legacy = JSON.parse(dataEl.textContent);
       } catch (e) {
-        showToast(file.name + " doesn't look like a Splitpage file.", "error");
-        return false;
+        return { error: "not-splitpage" };
       }
       /* same reason as the .splitpage branch above — a legacy page carries
          no id, so it gets the same content-derived one every time it opens */
-      return adoptProjectState(migrateDocument(legacy, { kind: "file" }), file, handle, "html", opts);
+      var legacyEmbedded = docIdEmbeddedIn(legacy);
+      return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
     }
 
     var project = null;
@@ -239,10 +253,27 @@
     } catch (e) {
       project = null;
     }
-    if (!project) return loadFileIntoEditor(file, handle);
+    if (!project) return null;
     /* awaits the row-count question when the table and the record disagree */
     var reconciled = await applyMarkdownProject(project);
-    return adoptProjectState(reconciled, file, handle, "md", opts);
+    return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
+  }
+
+  async function openProjectFile(file, handle, opts) {
+    opts = opts || {};
+    var parsed = await parseProjectFileState(file);
+    /* Not one of ours (including a .md with no data block) — still worth
+       importing as text, exactly as before. */
+    if (!parsed) return loadFileIntoEditor(file, handle);
+    if (parsed.error === "unreadable") {
+      showToast("Could not read " + file.name + ".", "error");
+      return false;
+    }
+    if (parsed.error === "not-splitpage") {
+      showToast(file.name + " doesn't look like a Splitpage file.", "error");
+      return false;
+    }
+    return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
   }
 
   /* The one place a parsed project becomes THE document, whichever format
@@ -280,9 +311,15 @@
     render();
     updateIdentityChip();
     updateFileChip();
+    /* `silent` suppresses THIS toast and nothing else (DRAFT-RENDERER-API).
+       A crash-draft restore adopts the file on disk as a step on the way to
+       the document it is really about to show, and announcing "Opened X — 12
+       rows" mid-restore would describe a version of the document that was
+       already gone by the time the toast appeared. The restore says what
+       actually happened, once, when it is finished. */
     var commentNote = state.comments.length
       ? ", " + state.comments.length + " comment" + (state.comments.length === 1 ? "" : "s") : "";
-    showToast((opts.resumed ? "Resumed " : "Opened ") + (state.title || file.name) + " — " +
+    if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (state.title || file.name) + " — " +
       state.rows.length + " row" + (state.rows.length === 1 ? "" : "s") + commentNote, "ok");
 
     if (handle) rememberLastFileHandle(handle);
