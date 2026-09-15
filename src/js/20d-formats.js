@@ -288,6 +288,20 @@
        on-disk-conflict check saveDoc() runs before writing is exercised
        without a real file picker (headless can't run one). */
     save: function (opts) { return saveDoc(opts || {}); },
+    /* Autosave (14-export.js), for 28-autosave.txt. `timing` hands back the
+       live object rather than a copy on purpose: a suite shortens the pause
+       to a few milliseconds instead of sleeping through a real one. The rest
+       is read-only state to assert against, plus the two entry points the
+       File menu and the window's own blur already use. */
+    autosave: {
+      timing: function () { return autoSaveTiming; },
+      enabled: function () { return autoSaveEnabled; },
+      halt: function () { return autoSaveHalt; },
+      target: function () { return autoSaveTarget(); },
+      pending: function () { return !!(autoSaveIdleTimer || autoSaveMaxTimer); },
+      toggle: toggleAutoSave,
+      flush: flushAutoSave
+    },
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return state; },

@@ -1412,6 +1412,29 @@
   .file-chip-state { color: var(--text-faint); }
   .file-chip-state.unsaved { color: var(--accent); }
 
+  /* ---------- save-state indicator ----------
+     Beside each Save button (header and writer). Quiet on purpose: the
+     states it reports last about two seconds each with autosave on, so
+     nothing about it may pull the eye off the sentence being written —
+     no weight, no background, no animation. It reserves no width either:
+     the text changes length as it changes state, and the toolbar is a
+     right-aligned flex row, so the Save button would otherwise inch
+     sideways as you type. */
+  .save-status {
+    flex: none;
+    min-width: 92px;
+    text-align: right;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    line-height: 1.2;
+    color: var(--text-faint);
+    cursor: default;
+    white-space: nowrap;
+  }
+  .save-status[hidden] { display: none; }
+  .save-status.is-pending { color: var(--text-dim); }
+  .save-status.is-warn { color: var(--danger); }
+
   /* ---------- comments ---------- */
   .comments-badge {
     display: inline-flex;

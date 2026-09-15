@@ -636,6 +636,12 @@
       baseState = cloneState(applied.report ? loaded : state);
       render();
       updateIdentityChip();
+      /* Same reason as syncDocIdentity() below: a fresh load never goes
+         through setSaveButtons(), the funnel these two hang off, so the
+         File menu's autosave label and the save-state indicator get their
+         first values here rather than waiting for the first keystroke. */
+      updateAutoSaveMenu();
+      updateSaveStatus();
 
       if (applied.report) {
         reportMerge(applied.report);

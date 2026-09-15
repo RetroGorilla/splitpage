@@ -3,6 +3,16 @@
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
+    /* An automatic save writes exactly what a manual one writes; what it
+       must not do is talk over the typing that triggered it. So the "Saved
+       to …" toast is left to the save the user asked for, and the failures
+       that would otherwise repeat every couple of seconds — a rejected
+       write, a file changed on disk — halt autosave instead, with the
+       reason kept for the indicator beside the Save button. */
+    var auto = !!opts.auto;
+    /* Pressing Save is the user saying they have dealt with whatever stopped
+       autosave; from here the automatic writes are welcome again. */
+    if (!auto) resumeAutoSave();
     /* A Save As makes a second file. If this document's id has already been
        written somewhere (a file, a server, a draft), both files would carry
        it and share one version history, so the copy gets a new id. An id
@@ -42,7 +52,15 @@
        how you take a script home, or fork one. */
     if (onServerDoc() && !saveAs) {
       try {
-        await saveToServer();
+        /* A hosted save that did not go through (a read-only server, a
+           lapsed sign-in, a document someone deleted) would not go through
+           in two seconds either, and saveToServer has already said so once.
+           Same rule as the file path's failures below. */
+        var sentToServer = await saveToServer();
+        if (auto && sentToServer === false) {
+          haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
+                       "Press Save to try again.");
+        }
       } finally {
         saveInFlight = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
@@ -137,7 +155,13 @@
       if (reusingHandle && !opts.force) {
         var check = await checkFileConflict(targetHandle, docFileHandle.lastModified);
         if (!check.ok) {
-          showFileConflict(targetHandle.name, check.current, { kind: "project" });
+          /* Nobody asked for this write, so it does not get to throw a modal
+             over the sentence being typed. Autosave stops until a manual
+             Save, which shows the same conflict modal and offers the same
+             choices — the indicator says why in the meantime. */
+          if (auto) haltAutoSave("Autosave is paused — " + targetHandle.name +
+                                 " changed on disk since it was opened. Press Save to sort it out.");
+          else showFileConflict(targetHandle.name, check.current, { kind: "project" });
           state.rev = Math.max(0, (state.rev || 1) - 1);
           saveInFlight = false;
           setSaveButtons(dirty ? "Save •" : "Save", false);
@@ -179,7 +203,11 @@
           if (homeAtWrite && docFileHandle === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
         } catch (e) { /* not fatal — the write already succeeded */ }
         if (stillOurs && state.docId === docIdAfterSave && editSeq === seqAtSave) clearDirty();
-        showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
+        /* An automatic save says so through the indicator, not a toast (see
+           `auto` at the top): one "Saved to script.md" per pause in the
+           typing is noise sitting on top of the work. */
+        if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
+        else noteSaveStatus("Saved to " + targetHandle.name);
       } else {
         /* no File System Access API (e.g. Firefox) — a plain download is the
            best this browser can do; the user re-opens the newest copy next
@@ -199,7 +227,12 @@
       if (err && err.name === "AbortError") {
         state.rev = Math.max(0, (state.rev || 1) - 1);
       } else {
-        showToast("Could not save — " + (err && err.message ? err.message : "please try again") + ".", "error");
+        var why = err && err.message ? err.message : "please try again";
+        showToast("Could not save — " + why + ".", "error");
+        /* Toasted once, then no more: an automatic save that cannot write
+           (a locked file, a full disk, a revoked permission) would fail
+           again in two seconds, and in two after that. */
+        if (auto) haltAutoSave("Autosave is paused — the last save failed (" + why + "). Press Save to try again.");
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
@@ -300,38 +333,172 @@
     return { state: result.merged, report: result, snapshot: snap };
   }
 
-  /* serialize auto-saves triggered by comment/tag actions so two quick actions
-     (e.g. posting a comment right after resolving another) never overlap */
+  /* ================= autosave =================
+
+     Two ways in, one write path. A discrete action — posting a comment,
+     cycling a tag's status, a find-and-replace — calls queueAutoSave() and
+     the write goes out at once, because the action is over the moment it is
+     made. Typing calls scheduleAutoSave() from markDirty() (the one save
+     state funnel, invariant #20) and the write waits for a pause: a save per
+     keystroke would serialize and re-write the whole document tens of times
+     a sentence.
+
+     Both are gated the same way (autoSaveTarget below) and both go through
+     saveDoc({auto:true}), which writes exactly what a manual Save writes and
+     differs only in what it says about it: no "Saved to …" toast per pause
+     in the typing — the save-state indicator beside the Save button
+     (12-dirty-toast.js) is the feedback, and it is there for manual saves
+     too. */
+  var AUTOSAVE_KEY = "splitpage-autosave";
+  /* Quiet enough that typing never waits on a write, short enough that
+     walking away from the keyboard means the file is already current. The
+     max timer is not reset by further edits, so a long stretch of
+     uninterrupted typing still lands regularly — same shape as the crash
+     draft writer's timing (20g-drafts.js), a few times slower because this
+     one writes the user's own file. */
+  var autoSaveTiming = { idle: 2000, max: 15000 };
+  var autoSaveEnabled = readAutoSavePref();
+  var autoSaveIdleTimer = null;
+  var autoSaveMaxTimer = null;
+  /* Why autosave has stopped writing by itself, as a sentence the indicator
+     can show. Set when an automatic save fails or finds the file changed on
+     disk: retrying every two seconds would either spam the same failure or
+     re-open the same modal over the typing. A manual Save clears it — that
+     is the user saying they have dealt with it. */
+  var autoSaveHalt = "";
+
+  function readAutoSavePref() {
+    try { return localStorage.getItem(AUTOSAVE_KEY) !== "0"; } catch (e) { return true; }
+  }
+
+  /* Where an automatic save would go, or null if it would have to ask first.
+     The whole point of the gate: a save that pops the native file dialog, or
+     silently downloads a copy, must never happen because someone typed a
+     word. A hosted document always has somewhere to go, so autosave is live
+     there from the first edit. */
+  function autoSaveTarget() {
+    if (serverSessionExpired) return null;
+    if (onServerDoc()) return "server";
+    /* No file established yet — wait for an explicit Save. The dirty
+       indicator and the unload guard cover the user in the meantime; once a
+       file handle exists (from a manual Save, or from opening a project),
+       later edits save into it silently. */
+    if (!docFileHandle.handle) return null;
+    /* A legacy .html project's next save opens a picker (see saveDoc) —
+       exactly the ambush this gate exists to prevent. */
+    if (docFileHandle.kind === "html") return null;
+    return "file";
+  }
+
+  function autoSaveLive() {
+    return autoSaveEnabled && !autoSaveHalt && !!autoSaveTarget();
+  }
+
+  function setAutoSaveEnabled(on) {
+    autoSaveEnabled = !!on;
+    try { localStorage.setItem(AUTOSAVE_KEY, autoSaveEnabled ? "1" : "0"); } catch (e) {}
+    if (!autoSaveEnabled) clearAutoSaveTimers();
+    else if (dirty) scheduleAutoSave();
+    updateAutoSaveMenu();
+    updateSaveStatus();
+  }
+
+  function toggleAutoSave() {
+    setAutoSaveEnabled(!autoSaveEnabled);
+    showToast(autoSaveEnabled
+      ? "Autosave is on — edits go to the file you saved to, a moment after you stop typing."
+      : "Autosave is off — your changes are only written when you press Save.", "ok");
+  }
+
+  /* The menu entry says what is on, not what pressing it does: a checkmark
+     in a menu of verbs is read as state, and "Autosave: on" cannot be
+     misread as a command to turn it on. */
+  function updateAutoSaveMenu() {
+    var item = document.getElementById("menu-autosave");
+    if (!item) return;
+    item.textContent = "Autosave: " + (autoSaveEnabled ? "on" : "off");
+    item.setAttribute("aria-checked", autoSaveEnabled ? "true" : "false");
+    item.classList.toggle("is-on", autoSaveEnabled);
+  }
+
+  /* Called from markDirty() on every edit that changes the document, so it
+     does nothing but move two timers. */
+  function scheduleAutoSave() {
+    if (!autoSaveEnabled || autoSaveHalt) return;
+    if (!autoSaveTarget()) return;
+    if (autoSaveIdleTimer) clearTimeout(autoSaveIdleTimer);
+    autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.idle);
+    if (!autoSaveMaxTimer) autoSaveMaxTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.max);
+  }
+
+  function clearAutoSaveTimers() {
+    if (autoSaveIdleTimer) { clearTimeout(autoSaveIdleTimer); autoSaveIdleTimer = null; }
+    if (autoSaveMaxTimer) { clearTimeout(autoSaveMaxTimer); autoSaveMaxTimer = null; }
+  }
+
+  function runAutoSaveTimer() {
+    clearAutoSaveTimers();
+    /* A manual Save (or a save from an action) can land between the last
+       keystroke and this timer — there is nothing left to write then. */
+    if (!dirty) return;
+    queueAutoSave();
+  }
+
+  /* Leaving the window with work a timer has not written yet is the one
+     moment the pause-and-write rule costs something, so the pending write is
+     brought forward rather than left on its timer. Nothing is scheduled when
+     autosave is off, so this is silent there — it never writes a file the
+     user did not ask it to. */
+  function flushAutoSave() {
+    if (!autoSaveIdleTimer && !autoSaveMaxTimer) return;
+    clearAutoSaveTimers();
+    if (dirty) queueAutoSave();
+  }
+
+  /* An automatic save that failed, or that found the file changed under it,
+     stops the automatic ones until the user saves by hand — with the reason
+     kept for the indicator's tooltip rather than repeated as a toast. */
+  function haltAutoSave(reason) {
+    clearAutoSaveTimers();
+    autoSaveHalt = reason || "Autosave is paused — press Save to try again.";
+    updateSaveStatus();
+  }
+
+  function resumeAutoSave() {
+    if (!autoSaveHalt) return;
+    autoSaveHalt = "";
+    updateSaveStatus();
+  }
+
+  /* serialize auto-saves so two quick ones (e.g. posting a comment right
+     after resolving another, or a timer landing on top of either) never
+     overlap */
   var saveInFlight = false;
   var saveQueued = false;
   function queueAutoSave() {
-    /* No file established yet — writing now would mean popping the native
-       Save dialog out of nowhere, or silently downloading a fresh copy, on
-       every comment. Wait for an explicit Save; the dirty indicator and the
-       unload guard cover the user in the meantime. Once a file handle
-       exists (from a manual Save), later actions save into it silently. */
-    /* A hosted document always has somewhere to save to, so autosave is live
-       from the first edit — there is no file dialog to ambush anyone with.
-       A lapsed sign-in stops it, or every queued save would refire the same
-       failure until the tab is reloaded. */
-    if (!docFileHandle.handle && !onServerDoc()) return;
-    /* A legacy .html project's next save opens a picker (see saveDoc) —
-       exactly the ambush the gate above exists to prevent. */
-    if (docFileHandle.kind === "html") return;
-    if (serverSessionExpired) return;
+    if (!autoSaveTarget()) return;
+    if (autoSaveHalt) return;
+    /* A pending timer would fire into a document this call is already
+       writing; queueing is this function's own job from here. */
+    clearAutoSaveTimers();
     if (saveInFlight) { saveQueued = true; return; }
     saveInFlight = true;
     /* The catch matters more than it looks: without it, one rejected save
        leaves saveInFlight stuck true and every later auto-save is silently
        dropped for the rest of the session. */
     Promise.resolve()
-      .then(function () { return saveDoc(); })
+      .then(function () { return saveDoc({ auto: true }); })
       .catch(function () {})
       .then(function () {
         saveInFlight = false;
         if (saveQueued) { saveQueued = false; queueAutoSave(); }
       });
   }
+
+  window.addEventListener("blur", function () { flushAutoSave(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") flushAutoSave();
+  });
 
   function slugify(s) {
     return String(s || "splitpage")

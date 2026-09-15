@@ -403,9 +403,9 @@ were rewired to work standalone:
   multi-writer conflict/merge handling). Now, the first time you click
   **Save**, your browser's native *Save As* dialog appears — pick a spot on
   disk. Every Save after that (in Chrome/Edge/other Chromium browsers)
-  writes straight back to that same file, silently, no dialog. This also
-  means comment/tag actions can auto-save quietly in the background once
-  you've picked a file — before that first save, they don't, so nothing
+  writes straight back to that same file, silently, no dialog. Once you have
+  picked a file, edits go to it on their own — see
+  [Autosave](#autosave) — and before that first save they don't, so nothing
   ever pops the file dialog on you unprompted.
 - **Exports** (Word, Markdown, CSV, PDF, and "Save a copy" of an opened
   file) used to go through Claude's download capability. They now use a
@@ -786,6 +786,32 @@ if you never intend to read the file anywhere else.
 
 Either way the file is your script and nothing else: it carries no copy of
 the app, so it stays small and it opens in seconds.
+
+### Autosave
+
+Once your script has a file — because you saved it once, or opened one —
+Splitpage keeps that file up to date on its own: a couple of seconds after
+you stop typing, what is on screen is written back to it, with no dialog and
+no toast. Leaving the window writes whatever is still pending immediately,
+so switching to another app is as good as pressing Save. A hosted script on
+a server works the same way, with the server as its home.
+
+Before that first Save there is nothing to autosave *into*, so nothing is
+written — Splitpage never pops a file dialog, or drops a file in your
+Downloads folder, because you typed a word. Autosave also stands aside for
+work you have not looked at yet: changes recovered after a crash sit on
+screen until you press Save yourself.
+
+Beside the **Save** button is a line of small text saying where things
+stand — **Saved**, **Saving…**, **Unsaved changes**, or **Not saving** when
+something is in the way (a file that changed on disk under you, a write that
+failed, a lapsed sign-in). Hover it for the detail: which file, or what to
+do about it. The writer has the same line beside its own Save button.
+
+Turn it off with **File ▸ Autosave**, and the file is written only when you
+press Save. The setting is remembered between launches. Either way, the
+desktop app keeps its own crash-safe copy of everything typed since the last
+save — see [Desktop app](#desktop-app).
 
 ### If you edit the `.md` somewhere else
 

@@ -42,7 +42,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-The browser suite (`tests/01-core.txt` … `26-desktop-drafts.txt`, 16 retired)
+The browser suite (`tests/01-core.txt` … `28-autosave.txt`, 16 retired)
 drives headless Edge over CDP. `-Only 22` runs one suite, `-Headed` shows the
 browser. Windows-only. Predates Google Drive, Google Doc import, two-column
 Markdown export, and the update/About box — hand- and Chromium-tested only.
@@ -576,6 +576,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 50. **The 1.0.x removal in the installer waits for the old folder to
     disappear before writing** — the old uninstaller's detached `rmdir`
     runs ~2s after it exits, into the same folder.
+51. **Autosave writes only where the user has already sent this document,
+    and only work they have seen.** `autoSaveTarget()` (14-export.js) is the
+    single gate: a file handle the user picked, or the server — never a
+    picker, never a download. Anything that puts work on screen the user has
+    not reviewed (a crash-draft restore's merge, `reportMerge`'s
+    `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
+    the automatic writes again (#41). A failed or conflicted automatic save
+    halts too, rather than repeating a toast or a modal every two seconds.
 
 ---
 
@@ -599,9 +607,9 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `09-find-replace.js` | find & replace |
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
-| `12-dirty-toast.js` | dirty flag, toasts, draft-change hook |
+| `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, Google Drive files |
-| `14-export.js` | `saveDoc`, Markdown writers, zip writer, `adoptSavedCopyDocId` |
+| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
 | `17-pdf.js` | pdf, packing lists |

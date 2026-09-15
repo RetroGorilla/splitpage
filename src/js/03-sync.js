@@ -827,7 +827,7 @@
 
     /* nothing actually differed — don't make a ceremony of it */
     if (!bits.length && !result.conflicts.length) {
-      if (!opts.alreadySaved) { markDirty(); if (!opts.noAutoSave) queueAutoSave(); }
+      if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
       return;
     }
 
@@ -854,7 +854,20 @@
       if (el) el.classList.add("just-merged");
     });
 
-    if (!opts.alreadySaved) { markDirty(); if (!opts.noAutoSave) queueAutoSave(); }
+    if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
+  }
+
+  /* markDirty() arms the typing autosave (14-export.js) like any other edit,
+     which is exactly what `noAutoSave` exists to prevent — and not just for
+     this instant: the next keystroke would arm it again and write the same
+     unreviewed merge a second later. So the merge halts autosave outright,
+     and the Save the user presses when they have looked it over is what puts
+     it back to work. The indicator beside the Save button carries the reason
+     in the meantime (12-dirty-toast.js). */
+  function noteMergeAutoSave(opts) {
+    if (!opts.noAutoSave) { queueAutoSave(); return; }
+    haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
+                 "Press Save once you have looked them over.");
   }
 
   /* Reverts to the version that was live before the merge — i.e. discards the

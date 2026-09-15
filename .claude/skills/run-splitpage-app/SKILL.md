@@ -46,7 +46,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS` (suites 01–27, 16 unused) and exit 0, or lists
+Ends with `ALL PASS` (suites 01–28, 16 unused) and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -100,6 +100,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/25-history-migration.txt` | the one-time migration of the old shared `splitpage-snapshots` localStorage list into per-document history's Older bucket (`startHistoryMigration`), and the merge-undo path (`lastMergeUndo`) that rides the same store: legacy entries (including a hostile id) re-minted into Older with the legacy key removed, a repeat migration adding only what's new, a failed import or a corrupt key never deleting the legacy key, a key that changes mid-migration never left deleted unless its latest content actually made it into Older, and Older itself being shared across every document, restoring under the current document's id, and expiring as a whole 90 days after the migration |
 | `tests/26-desktop-drafts.txt` | crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and dedup, and the restore's outcomes, against `__desktopTest.setBackend()`'s fake backend and `__desktopTest.drafts` — the scheduler never writing per keystroke, an edit during a save drafted and rebased, a clean save discarding the draft, visibility-hidden flush, the disk-unchanged decision made by content not mtime, a detached copy forking its id with a history copy, the pending latch, `applyStashedWork` override isolation, server-override outcomes, sanitisation, and browser inertness |
 | `tests/27-app-data.txt` | export bundle shape (§5 #48 key walk, round trip), idempotence, merge rules for prefs/bookmarks/history, refusals (wrong format/version/truncated), legacy `snapshots` → Older, cap/ordering, and the import section of 21-desktop-shim.txt |
+| `tests/28-autosave.txt` | autosave (14-export.js) and the save-state indicator (12-dirty-toast.js): nothing written before the document has a file, one write per pause in the typing rather than one per keystroke, a window blur bringing a pending write forward, the File-menu toggle and its remembered preference, and a file changed on disk halting autosave instead of throwing a modal over the typing — driven against the same fake `FileSystemFileHandle` 19-save-conflict.txt uses |
 
 ## The server's own tests
 

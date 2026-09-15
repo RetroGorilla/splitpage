@@ -1,0 +1,120 @@
+# Autosave (14-export.js) and the save-state indicator (12-dirty-toast.js).
+#
+# Typing marks the document dirty; markDirty() moves two timers and the write
+# goes out a pause later, into the file the document already has. Same fake
+# FileSystemFileHandle as 19-save-conflict.txt — no file picker can run
+# headless — plus __splitpageFormats.autosave, whose timing object is live so
+# the pause can be shortened instead of slept through.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;window.A=F.autosave;return typeof A.target === 'function';})()
+expect true
+
+# --- before a file exists, nothing writes by itself ------------------------
+# The gate that keeps a keystroke from popping a native Save dialog.
+expect A.target() === null
+expect A.enabled() === true
+caret #rows .row .audio-cell .cell-editable
+type autosave first words
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('autosave') !== -1
+expect A.pending() === false
+expect document.getElementById('save-status').textContent === 'Unsaved changes'
+expect document.getElementById('save-status').hidden == false
+
+# --- a file makes autosave live -------------------------------------------
+eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__written = 0;window.__fakeHandle = {name:'auto.md',_mtime: window.__t0,createWritable: async function(){window.__written++;return {write: async function(b){window.__body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__md],'auto.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
+eval (function(){var f = new File([window.__md],'auto.md',{type:'text/markdown', lastModified: window.__t0});return F.openFile(f, window.__fakeHandle);})()
+wait F.docFile().kind === 'md'
+expect A.target() == file
+# an opened file is clean, and the indicator says so rather than nothing
+expect document.getElementById('save-status').textContent === 'Saved'
+
+# --- typing writes the file a pause later, with no toast ------------------
+eval (function(){A.timing().idle = 30;A.timing().max = 60;window.__written = 0;return true;})()
+caret #rows .row .audio-cell .cell-editable
+type autosaved without asking
+eval document.activeElement.blur()
+wait window.__written === 1
+expect document.getElementById('save-status').textContent === 'Saved'
+# the quiet save says it in the tooltip instead of a toast
+expect document.getElementById('save-status').title.indexOf('auto.md') !== -1
+expect Array.prototype.filter.call(document.querySelectorAll('#toast-host .toast'), function(t){return t.textContent.indexOf('Saved to') !== -1;}).length === 0
+# what landed on disk is the document, not a stale copy
+expect window.__body.indexOf('autosaved without asking') !== -1
+
+# --- one write per burst of typing, not one per keystroke -----------------
+eval (function(){A.timing().idle = 400;A.timing().max = 5000;window.__written = 0;return true;})()
+caret #rows .row .audio-cell .cell-editable
+press abcdefgh
+expect window.__written === 0
+expect A.pending() === true
+expect document.getElementById('save-status').textContent === 'Unsaved changes'
+eval document.activeElement.blur()
+wait window.__written === 1
+expect window.__written === 1
+
+# --- leaving the window brings a pending write forward --------------------
+eval (function(){A.timing().idle = 60000;A.timing().max = 60000;window.__written = 0;return true;})()
+caret #rows .row .audio-cell .cell-editable
+type flushed on the way out
+eval document.activeElement.blur()
+expect window.__written === 0
+eval (function(){window.dispatchEvent(new Event('blur'));return true;})()
+wait window.__written === 1
+
+# --- off means off --------------------------------------------------------
+eval (function(){A.timing().idle = 30;A.timing().max = 60;window.__written = 0;A.toggle();return true;})()
+expect A.enabled() === false
+expect document.getElementById('menu-autosave').textContent === 'Autosave: off'
+caret #rows .row .audio-cell .cell-editable
+type not autosaved
+eval document.activeElement.blur()
+expect A.pending() === false
+sleep 300
+expect window.__written === 0
+expect document.getElementById('save-status').textContent === 'Unsaved changes'
+expect document.getElementById('save-status').title.indexOf('Autosave is off') !== -1
+# the preference is remembered, not just held
+expect localStorage.getItem('splitpage-autosave') === '0'
+# and a manual Save still writes
+eval (function(){F.save();return true;})()
+wait window.__written === 1
+expect document.getElementById('save-status').textContent === 'Saved'
+
+eval (function(){A.toggle();return true;})()
+expect A.enabled() === true
+expect document.getElementById('menu-autosave').textContent === 'Autosave: on'
+expect localStorage.getItem('splitpage-autosave') === '1'
+
+# --- a file that changed on disk stops autosave instead of throwing a modal
+eval (function(){window.__written = 0;window.__fakeHandle._mtime = Date.now() + 500000;return true;})()
+caret #rows .row .audio-cell .cell-editable
+type typed over a changed file
+eval document.activeElement.blur()
+wait A.halt() !== ''
+expect window.__written === 0
+expect document.getElementById('file-conflict-modal').hidden
+expect document.getElementById('save-status').textContent === 'Not saving'
+expect document.getElementById('save-status').title.indexOf('auto.md') !== -1
+# halted means halted: more typing does not re-try it
+caret #rows .row .audio-cell .cell-editable
+type and more
+eval document.activeElement.blur()
+sleep 200
+expect window.__written === 0
+expect A.pending() === false
+
+# --- a manual Save is the user saying they have dealt with it -------------
+# It shows the same conflict modal the automatic save refused to pop, and
+# choosing Overwrite writes and puts autosave back to work.
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+expect A.halt() === ''
+click #file-conflict-overwrite
+wait window.__written === 1
+expect document.getElementById('file-conflict-modal').hidden
+wait document.getElementById('save-status').textContent === 'Saved'
+
+quit
