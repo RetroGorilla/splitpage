@@ -367,6 +367,10 @@
   function updateTagBadges() {
     updateProductionCount();
     updateGearCount();
+    /* The b-roll badge counts what still has to be shot rather than how many
+       items there are — a list that is entirely in the can has nothing left
+       to tell you about. Same hoisting note as updateGearCount above. */
+    updateBrollBadge();
   }
 
   /* ---- applying and editing tags ---- */

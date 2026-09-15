@@ -184,6 +184,33 @@
     });
     s.productionTags = s.productionTags.filter(function (t) { return t.name; });
 
+    /* The b-roll list (08c-broll.js). Like the production registry it is
+       real storage rather than a pure read of the script, and for one more
+       reason on top of that one: the audio reference and the location are
+       seeded from the scene and then edited, so they exist nowhere else. A
+       file saved before this existed has no list; the markers in it are
+       picked up by the first scan and matched by name from then on, so
+       there is nothing to back-fill here. */
+    if (!Array.isArray(s.brollShots)) s.brollShots = [];
+    s.brollShots = s.brollShots.filter(function (b) { return b && typeof b === "object"; });
+    s.brollShots.forEach(function (b) {
+      b.id = safeId(b.id, "bs");
+      b.name = plainText(b.name).trim().slice(0, 200);
+      b.desc = plainText(b.desc).slice(0, 2000);
+      b.status = (brollStatus(b.status) || BROLL_STATUSES[0]).id;
+      b.reshoot = b.reshoot === true;
+      b.notes = plainText(b.notes).slice(0, 2000);
+      b.audioRef = plainText(b.audioRef).slice(0, 2000);
+      b.location = plainText(b.location).trim().slice(0, 80);
+      b.owner = knownPeople[b.owner] ? b.owner : "";
+      b.origin = b.origin === "list" ? "list" : "script";
+    });
+    /* A nameless entry renders as a blank card nobody can identify. If its
+       marker is still in the script the next scan mints it again, with the
+       same id off the marker itself — so nothing live is lost by dropping
+       it here. */
+    s.brollShots = s.brollShots.filter(function (b) { return b.name; });
+
     /* Reading speed is a property of the person, not the script, but it has
        to travel with the file so the estimate means the same thing to
        whoever opens it next. Clamped to a range a human can actually read at. */
