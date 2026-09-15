@@ -365,7 +365,20 @@
     var cellEl = e.target.closest && e.target.closest(".cell-editable");
     if (!cellEl) return;
     e.preventDefault();
-    var text = (e.clipboardData || window.clipboardData).getData("text/plain");
+    var cd = e.clipboardData || window.clipboardData;
+    /* Prefer the HTML flavor, but only once it has been through
+       sanitizeHtml/walkSanitize — the same gate every other route into a
+       cell's markup goes through. That keeps a tag copied from one scene
+       (a .tag-anchor span with its data-tag-cat/data-tag-name) intact when
+       pasted into another, without reopening the door to raw HTML pasted in
+       from outside Splitpage (a foreign <script>, inline style, etc.) that
+       plain-text-only paste used to close off entirely. */
+    var html = cd.getData("text/html");
+    if (html) {
+      var clean = sanitizeHtml(html);
+      if (clean) { document.execCommand("insertHTML", false, clean); return; }
+    }
+    var text = cd.getData("text/plain");
     document.execCommand("insertText", false, text);
   }
 
