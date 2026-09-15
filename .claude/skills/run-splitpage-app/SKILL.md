@@ -33,10 +33,11 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 1095/1095 checks across 26 suites` (01–27, 16 unused) and exit 0, or lists
+Ends with `ALL PASS` (suites 01–27, 16 unused) and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
+- `-Parallel N` — how many suites run at once (default 4; each has its own ports, Edge profile and log)
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
 - `-Port` / `-CdpPort` — pin the port bases instead of auto-picking (below)
@@ -84,7 +85,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/23-doc-id-reload.txt` | document identity (02b-doc-id.js) across a real page reload: a pristine boot always mints a fresh id, and ingress decides whether anything needs merging before adopting one — `goto` wipes `window`, so this is its own suite rather than a section tacked onto 22's |
 | `tests/24-history.txt` | per-document version history (03a-history-store.js + the `03-sync.js` glue): real captures via `loadFileIntoEditor`'s foreign-file push and a fixture `.splitpage` reopen (no direct `pushSnapshot` access — see build.mjs), the pristine seed never snapshotted until it's dirtied, per-document isolation and the open history panel following the active document, the newest-50 cap and call-order sorting under a frozen clock, restore backing up first and keeping the current docId, copy idempotence, the quota-always forced restore, and a document edit landing mid-backup aborting or completing the restore correctly |
 | `tests/25-history-migration.txt` | the one-time migration of the old shared `splitpage-snapshots` localStorage list into per-document history's Older bucket (`startHistoryMigration`), and the merge-undo path (`lastMergeUndo`) that rides the same store: legacy entries (including a hostile id) re-minted into Older with the legacy key removed, a repeat migration adding only what's new, a failed import or a corrupt key never deleting the legacy key, a key that changes mid-migration never left deleted unless its latest content actually made it into Older, and Older itself being shared across every document, restoring under the current document's id, and expiring as a whole 90 days after the migration |
-| `tests/26-desktop-drafts.txt` | crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and dedup, and the restore's outcomes, against `__desktopTest.setBackend()`'s fake backend and `__desktopTest.drafts` — the scheduler never writing per keystroke, an edit during a save drafted and rebased, a clean save discarding the draft, visibility-hidden flush, the disk-unchanged decision made by content not mtime, a detached copy forking its id with a history copy, the pending latch, `applyStashedWork` override isolation, server-override outcomes, sanitisation, and browser inertness (94 checks) |
+| `tests/26-desktop-drafts.txt` | crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and dedup, and the restore's outcomes, against `__desktopTest.setBackend()`'s fake backend and `__desktopTest.drafts` — the scheduler never writing per keystroke, an edit during a save drafted and rebased, a clean save discarding the draft, visibility-hidden flush, the disk-unchanged decision made by content not mtime, a detached copy forking its id with a history copy, the pending latch, `applyStashedWork` override isolation, server-override outcomes, sanitisation, and browser inertness |
 | `tests/27-app-data.txt` | export bundle shape (§5 #48 key walk, round trip), idempotence, merge rules for prefs/bookmarks/history, refusals (wrong format/version/truncated), legacy `snapshots` → Older, cap/ordering, and the import section of 21-desktop-shim.txt |
 
 ## The server's own tests
@@ -98,7 +99,7 @@ instead. No dependencies, a few seconds, real servers on free ports:
 node tools/test-server.mjs
 ```
 
-Ends with `ALL PASS - 39/39 server checks` and exit 0. It covers the join PIN
+Ends with `ALL PASS` and exit 0. It covers the join PIN
 (open health, gated routes, wrong PIN, the rate limit, the right PIN), the CORS
 allowlist (including the literal `null` origin and static files never getting
 the headers), the 409 compare-and-set, and the launcher routes answering 404
@@ -306,8 +307,7 @@ Every launch gets its own fresh temp `SPLITPAGE_USER_DATA`, its own free
 `--remote-debugging-port`, and `SPLITPAGE_NO_UPDATE_CHECK=1`. Nothing touches
 the developer's real Splitpage profile or documents.
 
-The last full run (2026-09-15) passed 454/454 checks per target — dev and
-packaged-arm64 both ALL PASS. The suite groups run in order: boot/security,
+The suite passes on both the dev and the packaged-arm64 target. The suite groups run in order: boot/security,
 open/save/conflict/save-as/export, second instance (plain and relative-path),
 session restore, `--library`, `--host --pin` (given, auto-generated, and the
 no-`--pin` warning), update status, unsaved-changes close, close/quit
@@ -341,7 +341,7 @@ node node_modules\electron\install.js
 
 The version pin (`^44.3.0`) is unchanged. A plain `npm install` reverts to
 x64 unless `desktop/.npmrc` has `arch=arm64`. Measured dev smoke: 7m43s
-(x64 emulated) vs. 7m25s (ARM64) for the same 454 checks — the suite is
+(x64 emulated) vs. 7m25s (ARM64) for the same suite — the suite is
 wait-bound, not CPU-bound, so don't expect a dramatic speedup from the
 switch.
 
