@@ -90,7 +90,7 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  #root { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+  #root { max-width: 1800px; margin: 0 auto; padding: 28px clamp(24px, 4vw, 96px) 80px; }
 
   a { color: inherit; }
   button { font-family: var(--font-body); }
