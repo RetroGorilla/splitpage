@@ -33,7 +33,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 860/860 checks across 24 suites` and exit 0, or lists
+Ends with `ALL PASS - 998/998 checks across 25 suites` (01–26, 16 unused) and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -77,12 +77,14 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/15-tutorial.txt` | the 5-step coach-mark tour: opens from the File menu, Next/Back/Finish, Skip at several steps, a "Read more" link into Help, `#rows` byte-identical before and after, `splitpage-tour-done` set, and the card stays inside the viewport at a 375px phone width |
 | `tests/17-formats.txt` | the two project formats: `.splitpage` and `.md` round-trip the state exactly (tags, comment anchors, images, statuses, wpm, people), a hand-edited table cell wins for that cell and its tags re-attach, an added scene asks rather than guessing, a legacy `.html` still opens, the data fence never collides with content |
 | `tests/18-connect.txt` | the Servers dialog from the File menu, bookmarks persisting (and holding nothing credential-shaped), the SSH command, the join-PIN dialog's validation, `#launch=` stripped from the URL on load |
+| `tests/19-save-conflict.txt` | the on-disk conflict check for project saves (`.md`/`.splitpage`): `saveDoc()` refuses to overwrite a file that changed on disk since it was opened, the same guard `saveBackToFile()` already had for the import re-save path, driven against a fake `FileSystemFileHandle`-shaped object since no real file picker can run headless |
 | `tests/20-comment-drift.txt` | a `.cmt-anchor`'s live text drifting from `quotedText`: still jumpable with a "text changed" note and the original quote kept visible, orphaned once the span is edited down to nothing |
 | `tests/21-desktop-shim.txt` | the desktop bridge (20f-desktop.js), driven with `window.__desktopTest`'s fake backend in place of a real Electron shell: a desktop file handle round-trips non-ASCII text byte-exactly, a cancelled Save As leaves `state.rev` and the toasts alone, the on-disk-conflict guard fires when the fake file's mtime moves, and the native-menu-command dispatcher reaches the same find bar and comments panel the File menu and header button do |
 | `tests/22-doc-id.txt` | document identity (02b-doc-id.js): boot minting a valid id, the FROZEN SHA-256 vectors (HANDOFF invariant #37), a hostile or missing id replaced vs. a valid one kept, `reassignDocId`'s Save-As fork that never writes the user's file (overrides.md #1), a failed Save-As write not retargeting Save, identity surviving a document opened while the Save As dialog is up, exports carrying no id, a legacy `.splitpage`/`.md` re-deriving the same id on reopen, the `mergedDocId` truth table, `adoptRestoredState` keeping the id regardless of the snapshot, and the fake-BroadcastChannel duplicate-claim reassignment |
 | `tests/23-doc-id-reload.txt` | document identity (02b-doc-id.js) across a real page reload: a pristine boot always mints a fresh id, and ingress decides whether anything needs merging before adopting one — `goto` wipes `window`, so this is its own suite rather than a section tacked onto 22's |
 | `tests/24-history.txt` | per-document version history (03a-history-store.js + the `03-sync.js` glue): real captures via `loadFileIntoEditor`'s foreign-file push and a fixture `.splitpage` reopen (no direct `pushSnapshot` access — see build.mjs), the pristine seed never snapshotted until it's dirtied, per-document isolation and the open history panel following the active document, the newest-50 cap and call-order sorting under a frozen clock, restore backing up first and keeping the current docId, copy idempotence, the quota-always forced restore, and a document edit landing mid-backup aborting or completing the restore correctly |
 | `tests/25-history-migration.txt` | the one-time migration of the old shared `splitpage-snapshots` localStorage list into per-document history's Older bucket (`startHistoryMigration`), and the merge-undo path (`lastMergeUndo`) that rides the same store: legacy entries (including a hostile id) re-minted into Older with the legacy key removed, a repeat migration adding only what's new, a failed import or a corrupt key never deleting the legacy key, a key that changes mid-migration never left deleted unless its latest content actually made it into Older, and Older itself being shared across every document, restoring under the current document's id, and expiring as a whole 90 days after the migration |
+| `tests/26-desktop-drafts.txt` | crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and dedup, and the restore's outcomes, against `__desktopTest.setBackend()`'s fake backend and `__desktopTest.drafts` — the scheduler never writing per keystroke, an edit during a save drafted and rebased, a clean save discarding the draft, visibility-hidden flush, the disk-unchanged decision made by content not mtime, a detached copy forking its id with a history copy, the pending latch, `applyStashedWork` override isolation, server-override outcomes, sanitisation, and browser inertness (94 checks) |
 
 ## The server's own tests
 
@@ -303,8 +305,44 @@ Every launch gets its own fresh temp `SPLITPAGE_USER_DATA`, its own free
 `--remote-debugging-port`, and `SPLITPAGE_NO_UPDATE_CHECK=1`. Nothing touches
 the developer's real Splitpage profile or documents.
 
-The last full run (2026-09-14) passed 327/327 checks, 109 per target (dev + packaged-x64 + packaged-arm64
-targets).
+The last full run (2026-09-15) passed 454/454 checks per target — dev and
+packaged-arm64 both ALL PASS. The suite groups run in order: boot/security,
+open/save/conflict/save-as/export, second instance (plain and relative-path),
+session restore, `--library`, `--host --pin` (given, auto-generated, and the
+no-`--pin` warning), update status, unsaved-changes close, close/quit
+authority (with and without a user gesture), page-initiated `window.close()`,
+clean close — then the tab shell added by step L2 (tabstrip origin, Ctrl+T
+new tab, tab routing rules, close-tab clean/dirty, last-tab-closes-window /
+last-window-quits, a window with 2 dirty tabs plus another window, quit
+across two windows with dirty tabs, `--host` quit's stop-sharing prompt,
+tear-off preserving live tab state, restore at launch, v1→v2 migration and a
+corrupt-JSON fresh boot) — then document id and desktop history added by
+step M (save-in-place birthtime vs. the duplicate rule, duplicate document id
+across tabs, history round-trip and relaunch, history id validation, a
+crash-after-body relaunch adopting the orphan, a corrupt `index.json`
+rebuilt by fsck, cap-driven eviction, concurrent puts, legacy migration, the
+main-vs-renderer planner twin, a newer format going read-only) — then
+crash-safe drafts added by step N (crash recovery of an untitled document, a
+renderer crash of a dirty file tab, the file changed on disk while down, the
+file deleted while down, quit without saving discarding every draft, closing
+one tab without saving discarding only that draft, a power-cut mid-write, both
+generations corrupt going to quarantine, ENOSPC pausing writes, a forged
+fileId, and no secret ever reaching disk).
+
+**Dev Electron is native ARM64**, switched on 2026-09-15. From `desktop/`:
+
+```powershell
+Remove-Item -Recurse -Force node_modules\electron\dist
+$env:npm_config_arch = "arm64"
+$env:npm_config_platform = "win32"
+node node_modules\electron\install.js
+```
+
+The version pin (`^44.3.0`) is unchanged. A plain `npm install` reverts to
+x64 unless `desktop/.npmrc` has `arch=arm64`. Measured dev smoke: 7m43s
+(x64 emulated) vs. 7m25s (ARM64) for the same 454 checks — the suite is
+wait-bound, not CPU-bound, so don't expect a dramatic speedup from the
+switch.
 
 ### SPLITPAGE_TEST rule
 
@@ -320,8 +358,8 @@ during a run, stop and fix that before anything else.
 
 ### Gotchas worth recording
 
-- **Dev Electron is x64 under emulation on this ARM64 machine and slow.** Teardown
-  takes 10–15 s; poll for process exit rather than trusting timeouts.
+- **Teardown is slow regardless of architecture.** It takes 10–15 s; poll for
+  process exit rather than trusting timeouts.
 - **`document.visibilityState` reads "visible" even in test mode.** Check invisibility
   with `(Get-Process -Id <pid>).MainWindowHandle -eq 0` instead.
 - **A CDP `Runtime.evaluate` is not a user gesture unless `userGesture:true`.**

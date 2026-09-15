@@ -81,6 +81,39 @@ exceptions for now:
   works: it opens the Doc's .docx download in your browser, and you then open
   the downloaded file with File ▸ Open.
 
+### Tabs
+
+The desktop app opens documents in tabs across the top of the window, like a
+browser:
+
+- **Ctrl+T** opens a new tab.
+- **Ctrl+W**, or a middle-click on a tab, closes it — if it has unsaved
+  changes, Splitpage asks first.
+- **Ctrl+Tab** / **Ctrl+Shift+Tab** step to the next or previous tab.
+- Drag a tab out of the window to give it its own window, and drag it into
+  another Splitpage window to bring it back in. Drag a tab past another one
+  to reorder them.
+
+Every tab you have open comes back the next time you launch Splitpage.
+
+**Crash recovery.** If the app or your computer goes down with unsaved work
+open, nothing is lost: every tab's unsaved changes are kept on disk as you
+type, and Splitpage offers them back, tab by tab, the next time you launch
+it. That includes a document from a shared session whose server you can no
+longer reach — it comes back as an unsaved local copy, with a note naming
+the server document it came from.
+
+**Closing with unsaved work.** Closing a window or quitting the app while
+any of its tabs have unsaved changes asks once, in a single dialog listing
+every tab that would lose work, with **Review**, **Close without saving**,
+and **Cancel**.
+
+**Duplicate files.** If you open a copy of a file that's already open in
+another tab — for example, the same `.md` file synced down onto two
+machines — Splitpage notices and gives the copy its own version history,
+separate from the original's. Nothing is written to either file until you
+save.
+
 **Installing:** run `SplitpageDesktopSetup-<version>.exe`. It installs for you
 only (no administrator needed) and lets you choose the folder, and there is
 nothing else to install first. It isn't on the releases page yet — for now it
@@ -708,6 +741,20 @@ page: your script with a copy of Splitpage wrapped around it. They
 double-click it and the script is there, editable, with nothing to install
 and no account. It is a far bigger file than a `.md`, so it is for sending,
 not for working in.
+
+## Version history
+
+Splitpage keeps snapshots of your document as you work, so you can step back
+to an earlier version. Open the **Version history** panel to see the list
+and restore one.
+
+History is per document: each script keeps its own list, separate from any
+other script you have open. It's kept in the app's own storage on the
+desktop app, and in that browser's storage on the web — either way it stays
+on your machine, not in the saved file or an export. The first time
+Splitpage sees the single shared history list an older copy of the app used
+to keep, it's brought in automatically under **Older history**, where it
+stays available for 90 days before it's cleared out for good.
 
 ## Reopening a saved project
 

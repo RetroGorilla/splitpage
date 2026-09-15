@@ -85,9 +85,10 @@ against simulated transcripts and say plainly that live speech is unconfirmed.
 
 ### Run the tests first
 
-There is a real regression suite — 289 assertions across 12 suites, driving
-headless Edge over CDP. **Rebuild, then run it before and after any change to
-`src/`:**
+There is a real regression suite — **998 assertions across 25 suites**
+(`tests/01-core.txt` through `tests/26-desktop-drafts.txt`; 16 is retired and
+unused), driving headless Edge over CDP. **Rebuild, then run it before and
+after any change to `src/`:**
 
 ```bash
 node build.mjs
@@ -104,11 +105,61 @@ nothing in it covers the Google Drive file manager, Google Doc import, the
 two-column Markdown export, or the update notice and About box. Those have
 been exercised by hand and in a headless Chromium, never by the suite.
 
-`ALL PASS - 289/289` and exit 0, or it names every failing assertion and exits 1.
-`-Only 02` runs one suite, `-Headed` shows you the browser. Full command
+`ALL PASS - 998/998` and exit 0, or it names every failing assertion and exits
+1. `-Only 22` runs one suite, `-Headed` shows you the browser. Full command
 reference and the harness's own gotchas are in
 `.claude/skills/run-splitpage-app/SKILL.md` — read that before writing a new
 test, because most "failures" are the test, not the app.
+
+**Two suite runs can now share the machine.** `run-tests.ps1` mints its own
+8-hex `$RunId` and passes it to every `driver.ps1` it spawns; each spawned
+Edge profile is named `splitpage-edge-<RunId>-<guid>`, and the orphan-process
+sweep (`Clear-SplitpageEdge`, both before and after the suites run) matches
+only that prefix. Before this, a second concurrent run's sweep could kill the
+first run's live browser mid-suite (`WebSocket … Aborted`) — that failure
+mode is gone; two simultaneous `-Only` runs, or a full run alongside one,
+no longer interfere.
+
+### Testing the desktop shell
+
+`desktop/test/smoke.mjs` drives a real Electron window over CDP — this is the
+only thing that exercises `desktop/main.js`/`preload.js`; the browser suite
+above never launches Electron. **Always launch it through this script**
+(`launchApp`, which sets `SPLITPAGE_TEST=1` and a temp profile) — never the
+app directly. It currently runs **454 checks** across ~55 cases: tab shell
+lifecycle, close/quit authority, session restore, doc-id/history and
+crash-safe drafts are the bulk of the growth since phase 1. From `desktop/`:
+
+```powershell
+$env:PATH = "C:\Users\Adam\Documents\Splitpage\splitpage_local_development\.cache\node-win-x64;" + $env:PATH
+node test/smoke.mjs                          # dev + every packaged exe found in dist/
+node test/smoke.mjs --only-target dev         # dev only, fastest loop
+node test/smoke.mjs --only-target packaged-arm64
+node test/smoke.mjs --exe "<path to Splitpage.exe>"
+```
+
+**The dev Electron binary is pinned to native ARM64**, not the x64 build
+`npm install` fetches by default. `desktop/.npmrc` (`arch=arm64`) makes a
+plain `npm install` in `desktop/` fetch the right one from now on; it existed
+only as a manual post-install step before 2026-09-15. To redo it by hand (or
+to recover if the pin is ever bypassed):
+
+```powershell
+cd desktop
+Remove-Item -Recurse -Force node_modules\electron\dist
+$env:npm_config_arch = "arm64"
+$env:npm_config_platform = "win32"
+node node_modules\electron\install.js
+```
+
+The version stays `^44.3.0` — only the fetched architecture changes. Running
+dev tests under x64-emulated Electron still works (Windows emulates it
+transparently) but is measurably slower: 7m43s x64-emulated vs 7m25s native
+ARM64 for the same 454 checks, so the suite is wait-bound (CDP round trips,
+teardown polling), not CPU-bound — the native pin buys a modest, not dramatic,
+speedup. **Never run `npm run dist` / `dist:win`** outside a deliberate
+release build; it is slow, writes gigabytes to `desktop/dist/`, and is not
+part of the day-to-day test loop.
 
 The suite is verified to actually catch things: breaking the `[prop]` shortcut
 produced four precise failures. Extend it whenever you add a feature; a
@@ -723,103 +774,348 @@ application (Electron 44 + electron-builder 26). The shell is optional: the app
 still runs in a browser exactly as before. The browser suite drives headless
 Edge; `desktop/test/smoke.mjs` is what drives the real desktop window.
 
+As of the 2026-09-14 tabs build, the shell manages **multiple windows, each
+with multiple tabs**, not one window with one document. What follows describes
+that shape; §3.13 in earlier handoffs described a single-window, single-tab
+predecessor and is superseded.
+
 **Why a custom scheme.** The page loads from `splitpage://app` instead of
-`http://localhost:<port>/`. This makes the document's origin stable: `localStorage`,
-`IndexedDB`, and `FileSystemFileHandle` are all keyed by origin, and if that
-origin changed every time a port assignment changed (another instance running,
-a busy port, a user's `--port` flag), version history and resumed file handles
-would vanish between launches. `splitpage://app` never changes, so they survive
-regardless of what the server is doing underneath.
+`http://localhost:<port>/`. This makes the document's origin stable:
+`localStorage`, `IndexedDB`, and `FileSystemFileHandle` are all keyed by
+origin, and if that origin changed every time a port assignment changed
+(another instance running, a busy port, a user's `--port` flag), version
+history and resumed file handles would vanish between launches.
+`splitpage://app` never changes, so they survive regardless of what the
+server is doing underneath. **Tabs add a second privileged origin**,
+`splitpage://tabstrip`, for the title-bar strip — see below.
 
 **The bridge contract.** `desktop/preload.js` exposes `window.splitpageDesktop`
 to the page (contextIsolation, sandbox, no nodeIntegration). The preload only
 defines it when `location.origin === "splitpage://app"`, and every `ipcMain`
 handler checks again that the sender frame's URL starts with `splitpage://app/`
-(`isTrustedSender`). Two locks, because a `--tunnel` window shows another
-machine's server content at `http://localhost:<port>/` in the same window, and
-that content must never reach the file system; tunnel pages also get no
-auto-granted permissions (clipboard, microphone). The renderer never sends file
-paths to the main process (invariant #34): `main.js` keeps an id → absolute
-path registry, holding only paths the user picked in a native dialog, the OS
-handed over at launch, or persisted from the last session. Writes are atomic
-(temp file in the same folder, then rename; the temp file is removed if the
-rename fails), and `lastModified` is `Math.floor(mtimeMs)` so the on-disk
-conflict guard's `!==` matches what a browser `File` reports.
+(`isTrustedSender`, `main.js:4004`). Two locks, because a `--tunnel` window
+shows another machine's server content at `http://localhost:<port>/` in the
+same window, and that content must never reach the file system; tunnel pages
+also get no auto-granted permissions (clipboard, microphone). The renderer
+never sends file paths to the main process (invariant #34): `main.js` keeps an
+id → absolute path registry, holding only paths the user picked in a native
+dialog, the OS handed over at launch, or persisted from the last session.
+Writes are atomic (temp file in the same folder, then rename; the temp file is
+removed if the rename fails), and `lastModified` is `Math.floor(mtimeMs)` so
+the on-disk conflict guard's `!==` matches what a browser `File` reports.
 `src/js/20f-desktop.js` wraps the bridge in a `FileSystemFileHandle`-shaped
 object so `openProjectFile/saveDoc/deliverFile` run unchanged; every desktop
 branch is gated on `DESKTOP` (from 00-prelude.js) and falls through to
 unchanged browser code when it is null.
 
-**Modes and launch arguments.** `--library` forks `server/server.js` into a
-`utilityProcess` on 127.0.0.1 (first free port from 8791). `--host` binds to
-0.0.0.0 for LAN URLs. `--pin [code]` (no value generates 6 digits). `--data DIR`
-(default `%LOCALAPPDATA%\Splitpage\data`). `--port`, `--allow-origin`, `--tunnel
-user@host [--remote-port N] [--local-port N]` run ssh with `BatchMode` (key-based
-login only). Files passed as arguments (.splitpage, .md, .html, .htm, .docx, .txt,
-.csv) open; relative paths resolve against that launch's own working directory.
-Single instance: a second launch hands its files to the running app and exits.
-When the OS hands the app a file at launch, the last-file resume is skipped so
-the two can't race over which document — and which Save target — wins.
+**Windows and tabs are two registries, not one.** Every `BrowserWindow` is
+created by `createTabWindow(restoreSpec)` (`main.js:2528`) — hidden
+title bar with a `titleBarOverlay` (`TITLEBAR_H = 36`, cross-referenced in
+`tabstrip.css`), `autoHideMenuBar`, `skipTaskbar: TEST_MODE`, and a *primary*
+`webContents` that loads `splitpage://tabstrip/index.html` — the title-bar
+strip, not a document. Each tab is a `WebContentsView` created by
+`createTab(windowId, opts)` (`main.js:2868`) loading
+`splitpage://app/index.html?tab=<tabId>` with its own `preload.js`; the
+active tab's view is positioned at `{0, TITLEBAR_H, w, h−TITLEBAR_H}` and
+made visible, every other tab in that window is `setVisible(false)`. A
+`tabId`/`windowId` is 32 lowercase hex from `crypto.randomBytes(16)`,
+validated with `/^[0-9a-f]{32}$/` everywhere it crosses a trust boundary
+(invariant #42). It never changes for the tab's life — it survives tear-off
+because the `WebContentsView` itself moves to a different window rather than
+being recreated, and it survives relaunch because `desktop-state.json` v2
+persists it — and it is also the crash-draft folder name (§4). `TabRecord`
+carries `{id, windowId, view, webContentsId, source, fileId, title, dirty,
+pristine, docId, serverKey, launchIntent, ready, pendingPayload,
+reloadTimes}`; lookup indices (`webContentsIdToTabId`, `pathToTabId` keyed by
+`path.resolve()` and lowercased on win32, `serverDocIdToTabId`) are what let
+main answer "is this already open?" without asking any renderer.
 
-**Window close authority.** The main process is the authority on unsaved changes.
-It keeps the dirty flag each page reports through `setDocumentState()` (sent from
-`setSaveButtons`, the one place markDirty/clearDirty funnel through) and asks
-"You have unsaved changes" in the window's close handler, because Chromium
-ignores a page's `beforeunload` block unless the page has had user activation —
-a document made dirty with no click or keypress (a stash merged at load, a
-resumed project) would otherwise close silently. `will-prevent-unload` remains
-as the safety net for reloads. Because any window's close can still cancel a
-quit, the document server and ssh tunnel are killed in `will-quit`, never
-`before-quit`: Electron emits `before-quit` *before* it asks the windows to
-close, so killing them there meant File ▸ Exit → Stay left the app running with
-its server already gone.
+**The tab strip runs on its own origin, `splitpage://tabstrip`, with its own
+preload and its own allowlist** (invariant #43). `desktop/tabstrip-preload.js`
+only runs — and only calls `exposeInMainWorld('splitpageTabStrip', …)` —
+when `location.origin === 'splitpage://tabstrip'`, and it never exposes a
+file, draft or history method: its bridge is `windowId`, `platform`,
+`getShellState()`, `onShellStateChanged(cb)`, and `newTab`/`activateTab`/
+`closeTab`/`reorderTab`/`moveTabHere`/`tearOffToNewWindow`, each an IPC send
+checked in main by `isTrustedTabStripSender` (`main.js:4018` — sender frame
+URL starts `splitpage://tabstrip/` *and* the sender is a known window's own
+`webContents`). `TABSTRIP_ROOT` (`main.js:318`) resolves to
+`<APP_ROOT>/tabstrip` when packaged or `desktop/tabstrip/` in dev, and
+`TABSTRIP_ALLOWLIST` restricts the custom-scheme handler for that origin to
+exactly `/index.html`, `/tabstrip.js`, `/tabstrip.css` — no traversal, nothing
+else servable. `ShellState` (`{windowId, activeTabId, tabs:[{tabId, title,
+dirty, crashed, isServerDoc, pristine, fullPathForTooltip}]}`) is what
+`desktop/tabstrip/tabstrip.js` renders; `crashed` is a tab whose renderer
+died and was not reloaded (past the crash-loop budget below, or its window
+already going) — such a tab closes with **no** prompt, so its `dirty` bit is
+reported false regardless of what the page last said. Drag-and-drop between
+strips uses `dataTransfer` type `application/x-splitpage-tab` carrying
+`{tabId, sourceWindowId}` JSON; a drop on another window's strip calls
+`moveTabHere` (re-parents the view via `contentView.removeChildView`/
+`addChildView`, **no reload** — invariant #42's "undo history and unsaved
+edits live only in the live page" is what this is for), and a `dragend` with
+`dropEffect: 'none'` outside any strip calls `tearOffToNewWindow`. Middle
+click (`auxclick`, `button === 1`) closes a tab the same way Ctrl+W does.
 
-**Test mode and hooks.** `SPLITPAGE_TEST=1` marks an automated run (must never
-put anything on screen). The window is never shown or put on the taskbar, any
-dialog a test did not pre-answer through `SPLITPAGE_TEST_DIALOGS` resolves as
-Cancel instead of appearing, and an uncaught main-process error exits with its
-stack on stderr instead of raising Electron's modal error box. `SPLITPAGE_USER_DATA`
-gives each run a temp profile. `SPLITPAGE_TEST_DIALOGS` is a JSON file holding
-answers (paths, null for cancel, "confirm"/"cancel") consumed in order by
-open/save dialogs and the unsaved/stop-sharing prompts. `SPLITPAGE_NO_UPDATE_CHECK=1`
-skips the background update check. `SPLITPAGE_UPDATE_API` overrides the release
-API URL for testing.
+**Opening a document goes through one funnel, `splitpage:route-open`.**
+Given `{kind:'file', fileId}` or `{kind:'server', serverDocId}` it answers
+`'this-tab' | 'other-tab' | 'new-tab'`: an already-open tab with the same
+resolved path or server doc id is activated wherever it is (`'other-tab'`,
+or `'this-tab'` if that's the caller); otherwise a **pristine and ready**
+sender tab is reused in place (`'this-tab'`); otherwise a new tab is created
+in the sender's window with a pending payload (`'new-tab'`). The same
+`routeOpenPath`/`routeOpenServerDoc` logic serves argv, a second-instance
+hand-off, and macOS `open-file`, targeting `lastFocusedWindowId` — so
+double-clicking a file that's already open in some tab focuses that tab
+instead of opening a second copy, and dropping a file onto an idle blank tab
+reuses it instead of spawning clutter.
+
+**Close/quit authority is per tab and per window, and a quit asks at most one
+dialog** (invariant #44). `unsaved(tab) = tab.dirty || drafts.isHeld(tab.id)`
+— a tab counts as unsaved even with a *held, unrestored crash draft* and no
+`dirty` flag of its own. Closing one unsaved tab (Ctrl+W, the strip's ×,
+middle-click, or the test hook `__testRequestCloseTab`) shows the familiar
+2-button dialog (`['Leave without saving', 'Stay']`). Closing a **window** or
+quitting with two or more unsaved tabs shows **one** 3-button dialog listing
+every unsaved title (`[Review] [Close/Quit without saving] [Cancel]`) —
+scoped to that window for a window close, covering every window in
+creation order for a quit — rather than one dialog per tab. Review activates
+the first unsaved tab and cancels the close/quit. The hosting prompt (`['Stop
+sharing and close', 'Cancel']`, shown when `--library`/`--host` is active) is
+asked **at most once per quit**, in whichever of `before-quit` or the last
+remaining window's close handler runs first, gated by `hostingConfirmed`, and
+always before the unsaved-changes dialog. `before-quit` runs the hosting
+prompt, then the all-window unsaved dialog; only after both pass does it set
+`quitConfirmed`/`sessionWritesFrozen` and let the per-window close handlers
+stand down. `will-prevent-unload` remains the safety net for reloads. The
+document server and ssh tunnel are still killed in `will-quit`, never
+`before-quit`, for the same reason as before: `before-quit` fires *before*
+windows are asked to close, so killing them there let a cancelled quit leave
+the app running with its server already gone. **On discard**,
+`drafts.discardForUserDecision(tabIds, reason)` runs *before* any view is
+destroyed — the review answer is a real, named path (`reason`), not an
+afterthought. `session-end` (Windows sign-out/shutdown) sets `sessionEnding`,
+calls `drafts.markSessionEnd()`, and asks **nothing** — no dialog, no
+discard, because there is no time to ask and no user decision to honor.
+
+**Session restore at launch** reads `<userData>/desktop-state.json` v2 —
+`{version:2, windows:[{windowId, bounds, maximized, activeTabId,
+tabs:[{tabId, source, lastKnownTitle}]}]}`, array order = window order = strip
+order, no `docId` and no draft id (drafts are addressed by `tabId` alone, §4).
+A v1 file (no `version` field — the pre-tabs `{lastFilePath, windowBounds,
+windowMaximized}` shape) migrates on read into one window with one tab: a
+file source if `lastFilePath` existed, otherwise blank. Writes go through one
+serialized queue (read latest → merge → `writeFileDurableSync`, the same
+temp-fsync-rename helper `desktop/drafts.js` uses); structural changes
+(create/close/reorder/move/activate/document-source-change) write promptly,
+window-bounds changes are debounced 400 ms, a blank-source tab is written
+only if it has a draft, and nothing is written once `sessionWritesFrozen` is
+set. `hadPriorSession` (surfaced to the renderer via tab-boot-sync, below) is
+true if the state read at launch had any non-blank tab or any draft existed
+at all — that is what a "restore your session?" affordance would key off.
+
+**Every tab learns who and what it is from one synchronous IPC call at
+boot**, `splitpage:tab-boot-sync` (sendSync — deliberately synchronous so it
+resolves before the page's own boot logic runs), returning `{tabId, windowId,
+launchIntent:{type}, hadPriorSession, firstTabOfLaunch, hasDraftToRestore}`.
+`launchIntent.type` is one of `'blank' | 'open-file' | 'restore-draft' |
+'open-server'` and **carries no path and no server doc id** — invariant #34
+again, one level up: even the boot payload never puts a filesystem path in
+the renderer's hands directly; the actual bytes arrive later over
+`splitpage:open-file` as a `FileEntry` once the renderer signals
+`splitpage:renderer-ready`. This one call replaces three separate calls and
+two bridge members (`hasFileToOpen`/`getLastFile`/`setLastFile`) the
+pre-tabs shell used; those are gone from the bridge, not merely deprecated.
+
+**Renderer crash reload and the crash-loop guard.** A tab's renderer can die
+independently of its window or any other tab. Main reloads it, up to **twice
+per 60 seconds per tab** (`reloadTimes`, a sliding window on `TabRecord`); a
+tab that crashes a third time in that window is left crashed rather than
+reloaded again — it shows the strip's `crashed` mark, closes with no prompt
+(see above), and its crash-safe draft (below) stays on disk untouched for the
+next launch to recover, exactly as if the whole app had died.
+
+**Crash-safe drafts** (`desktop/drafts.js`, a plain CommonJS module with no
+Electron dependency — `desktop/test/drafts.test.mjs` exercises it directly,
+11 cases) are what makes a tab's unsaved work survive a crash the reload
+budget above gives up on. Layout under `<userData>/drafts/`:
+`<tabId>/current.draft` and `<tabId>/previous.draft` (two generations — line
+1 a `DraftHeader` JSON, line 2 the state JSON), `<tabId>/base-<sha12>.json`
+(the on-disk/server baseline a three-way merge needs), `session.json`
+tracking `{state: 'running'|'clean-exit'|'session-end'|'none', discardedTabIds}`,
+and `corrupt/<tabId>-<ts>/` for anything that fails to parse back. A write is
+`open → write → fsync → close`, then in **one synchronous tick**:
+`renameSync(current → previous)`, `renameSync(tmp → current)` — that ordering
+is why a crash mid-write can never lose both generations at once. **Hold and
+discard ordering is the load-bearing part** (invariant #40): a tab whose boot
+reported `hasDraftToRestore` is `hold()`-ed the moment main learns that, and
+`write()` for a *held* tab returns `HELD` and leaves both generations
+byte-identical — a held, unrestored draft can never be rotated out by a
+stray autosave racing the recovery prompt. `HELD` is not a disk failure
+(`status().failures` does not count it); the renderer backs off and shows a
+sticky "Crash recovery is paused — <reason>" toast rather than treating it as
+lost data. The hold is released only by `splitpage:draft-restore-done` with
+an outcome other than `'failed'`, or by an explicit user decision (Leave
+without saving, Quit without saving, closing an already-clean tab) —
+**never** by a crash, kill, renderer loss, session-end, quit, or restore on
+its own. A discard from a user decision writes a tombstone into
+`session.json.discardedTabIds` durably *before* the files are renamed to
+`.trash-*` and removed, so a lost write can never resurrect discarded work.
+**The draft header is built only by main, from an allowlist of scalar
+fields** (`buildDraftHeader`, `main.js:807`) — `seq, editSeq, title, docId,
+docIdWrittenOut, schema, origin{kind, filePath (main-resolved, never
+renderer-supplied), fileName, fileKind, importName, baseLastModified,
+baseSize, server{base, docId, rev}}, placement, state{bytes, sha256},
+base{…}` — and **never** a PIN, session token, or launch token (invariant
+#29 extended to drafts). `desktop/main.js`'s IPC surface
+(`splitpage:draft-write/discard/take`, `main → tab splitpage:draft-flush`)
+resolves `tabId` from `webContentsIdToTabId(event.sender)`, never a
+renderer-supplied id, and every handler requires `isTrustedSender`.
+
+**Desktop version-history storage** (`main.js`'s own "8b. Version history
+storage" section, `main.js:1212`) lives under `<userData>/history/`,
+mirroring the browser's IndexedDB-backed store one level down in
+`src/js/03a-history-store.js` but keyed by files instead: `docs/d-<docId>/`
+holding `index.json` (`{formatVersion:1, docId, title, lastOpenedAt, bytes,
+count, snapshots}`) and one `s-<snapId>.snap` per snapshot (a 3-line file:
+format marker, meta JSON, state JSON), plus a top-level `older/` bucket for
+the migrated legacy history (§4). **Validation**: both `docId` and snapshot
+id are checked against their regexes in the renderer *and again* in main
+before either is used to build a path, and `path.relative(root, p)` must be
+non-empty, not start with `..`, and not be absolute — invariant #38, because
+a `docId` can originate from an untrusted file's own embedded id, and a path
+built carelessly from it would give pasted or opened content filesystem
+reach the same way an unvalidated `fileId` would (invariant #34's reasoning,
+one layer further in). The Older bucket is reachable only through the
+explicit `{older: true}` flag, never by a docId collision. **fsck**:
+`ensureHistoryTable()` (`main.js:1563`) is always the *first* job the
+history write-queue runs — it adopts orphaned snapshot bodies, renames
+anything that fails to parse to `*.corrupt`, rebuilds a corrupt `index.json`
+from the bodies that still parse, and sweeps stale `.tmp-*` files older than
+10 minutes; `fsckHistoryBucket()` (`main.js:1610`) is the per-bucket routine
+it calls for each document folder and for `older/`. **The planner twin**:
+`planHistoryEviction(docs, capBytes, nowMs, opts)` (`main.js:1721`) is a
+byte-for-byte copy of the same pure function in
+`src/js/03a-history-store.js` — same eviction order (expired Older bucket →
+trim each doc to 50 → Older oldest-first → documents by `lastOpenedAt`
+ascending, oldest snapshot first, a document's newest snapshot never evicted)
+— kept in sync deliberately rather than shared, because the desktop copy
+runs in a CommonJS main process with no module boundary connecting it to the
+browser fragment; `caseHistoryPlannerTwin` in the smoke suite diffs the two
+copies so a drift is caught rather than silently shipped. A `protect` list
+(`[{docId, id}]`, from the renderer's `protectHistorySnapshot()`) rides on
+both `history-put` and `history-get` and is *remembered per sender* — not
+just honored for the one call it arrived on — because eviction is
+process-wide: a put from another tab, a `history-copy`, or the expired-Older
+sweep must all skip a snapshot some tab's restore is still reading, or a
+desktop restore from Older could evict the very snapshot it is restoring.
+
+**Duplicate document-id claims are reassigned in memory only, never written
+to disk on their own** (§4, invariant #36, and overrides.md §1). Main keeps a
+claim table (`Map<webContents.id, {docId, homeKey, seq, birthtimeMs, title,
+pendingToId}>`) populated from every `set-document-state` call. When two live
+tabs claim the same `docId`, `chooseDuplicateLoser(a, b)` picks which one gets
+reassigned: a server home always beats a file home; between two files,
+**birthtime is not trusted** — `DUP_TRUST_BIRTHTIME = false` (`main.js:473`)
+— because `atomicWrite`'s temp-then-rename moves a saved file's NTFS
+birthtime forward by roughly the elapsed save time on every save (measured
+~2.5 s drift on this machine), so saving the *original* document can make it
+look younger than an untouched copy and the birthtime rule would reassign
+the wrong tab. **This corrects an earlier, wrong belief recorded in this
+file** that NTFS "tunnelling" preserves a replaced file's birthtime across a
+temp-then-rename — it does not, at least not here, and the flag stays
+disabled with the measurement re-checked live every smoke run
+(`caseAtomicSaveKeepsBirthtime` fails the case if the live measurement and
+the flag ever disagree). With birthtime out of play, the loser is simply
+whichever tab claimed the id later (`seq`). Main computes a deterministic
+replacement id (`deriveDocId('splitpage-dup', fromId + '\n' + loser.homeKey)`,
+matching the renderer's own frozen `deriveDocId`) and sends
+`splitpage:reassign-doc-id {fromId, toId, otherTitle}` to the loser once per
+`(loser, fromId)` pair. The renderer's `reassignDocId()` sets the new id,
+copies history, shows one sticky warning toast, and — this is the
+override — **does not mark the document dirty and does not autosave**. The
+new id reaches the user's file only on their next ordinary save; Splitpage
+never rewrites a file the user did not touch.
+
+**Modes and launch arguments** are unchanged in shape from before tabs:
+`--library` forks `server/server.js` into a `utilityProcess` on 127.0.0.1
+(first free port from 8791); `--host` binds to 0.0.0.0 for LAN URLs; `--pin
+[code]` (no value generates 6 digits); `--data DIR` (default
+`%LOCALAPPDATA%\Splitpage\data`); `--port`, `--allow-origin`, `--tunnel
+user@host [--remote-port N] [--local-port N]` run ssh with `BatchMode`
+(key-based login only). Files passed as arguments (`.splitpage`, `.md`,
+`.html`, `.htm`, `.docx`, `.txt`, `.csv`) open through the same
+`routeOpenPath` funnel described above; relative paths resolve against that
+launch's own working directory. Single instance: a second launch hands its
+files to the running app (routed the same way, into whichever window was
+last focused) and exits. **PIN per tab is a carried-forward default, not yet
+built**: under `--host --pin`, a new tab asks for the PIN again unless
+"Remember on this device" was ticked; no token or PIN ever crosses IPC
+(invariant #29). True per-tab server connections are future work (§8b).
+
+**Test mode and hooks.** `SPLITPAGE_TEST=1` marks an automated run (must
+never put anything on screen). Every window is never shown or put on the
+taskbar, any dialog a test did not pre-answer through
+`SPLITPAGE_TEST_DIALOGS` resolves as Cancel instead of appearing, and an
+uncaught main-process error exits with its stack on stderr instead of
+raising Electron's modal error box. `SPLITPAGE_USER_DATA` gives each run a
+temp profile. `SPLITPAGE_TEST_DIALOGS` is a JSON file holding answers (paths,
+null for cancel, `"confirm"`/`"cancel"`/`"review"` — one shared cursor)
+consumed in order by open/save dialogs and the unsaved/stop-sharing prompts.
+`SPLITPAGE_NO_UPDATE_CHECK=1` skips the background update check.
+`SPLITPAGE_UPDATE_API` overrides the release API URL for testing. Tab-aware
+test-only bridge members: `__testRequestClose()` (closes the calling tab's
+*window*), `__testRequestQuit()`, `__testRequestCloseTab()` (runs the Ctrl+W
+path for the calling tab), and `__testShell(op, args)` — `invoke
+'splitpage:test-shell'` with ops `getShellState`, `createTab`, `activateTab`,
+`closeTab`, `reorderTab`, `moveTabToWindow` (a null `windowId` tears off to a
+new window), `listTargets`, returning the full `{windows:[{windowId,
+activeTabId, tabs:[…]}]}` shape — this is how the smoke suite drives tab
+creation, reordering and moves without simulating real mouse drags on the
+strip. `splitpage:test-dup-loser {a, b}` and `splitpage:test-history-plan`
+are further TEST_MODE-only escape hatches for the duplicate-claim and
+eviction logic above.
 
 **Closing a window from inside the page is not a user close.** A page-run
 `window.close()` never fires the `BrowserWindow`'s `'close'` event — Chromium
-settles `beforeunload` itself and, with no user activation to honour, tears the
-page down without asking the main process, so a dirty document closes with no
-prompt. A real close (the title-bar ×, Alt+F4, File ▸ Exit, which is
-`app.quit()`) does fire `'close'`, and that is where the prompt lives. Nothing
-in `src/js` calls `window.close()`; keep it that way. Tests therefore close the
-way a user does, through two hooks that exist only in test mode:
-`window.splitpageDesktop.__testRequestClose()` (the main process calls
-`win.close()`) and `__testRequestQuit()` (`app.quit()`). Preload asks the main
-process whether test mode is on (`splitpage:is-test-mode-sync`) and does not
-define either hook otherwise, and the main process registers their handlers
-only under `SPLITPAGE_TEST=1`. `caseCloseFromPageIsUnguarded` pins down the
-page-initiated behaviour so a change to it shows up.
+settles `beforeunload` itself and, with no user activation to honour, tears
+the page down without asking the main process, so a dirty document closes
+with no prompt. A real close (the title-bar ×, Alt+F4, File ▸ Exit, which is
+`app.quit()`, or the strip's own × on a tab) does fire the appropriate
+close/quit path above. Nothing in `src/js` calls `window.close()`; keep it
+that way. `caseCloseFromPageIsUnguarded` pins down the page-initiated
+behaviour so a change to it shows up.
 
-**The smoke suite.** `desktop/test/smoke.mjs`, Node built-ins only, drives the
-real window over CDP (--remote-debugging-port). Run from desktop/: `node
-test/smoke.mjs` (dev + both packaged unpacked exes if built), `--exe <path to
-Splitpage.exe>`, or `--only-target dev|packaged-x64|packaged-arm64`. Covers:
-boot + security (bridge origin, navigation/window.open blocked, allowlist and
-traversal refused, bogus file id rejected), open via argv with non-ASCII, save
-in place round trip, on-disk conflict guard, Save As and cancel, export, second
-instance (absolute and relative path), last-file resume, `--library`, `--host
---pin` (given and auto-generated), `--host` without a PIN shows the warning,
-update status, unsaved-changes close (cancel/confirm, and no-gesture close
-authority), clean close regression (exit 0, no "Object has been destroyed"),
-and every teardown fails the case if stderr shows a main-process crash.
+**The smoke suite**, `desktop/test/smoke.mjs`, is Node built-ins only and
+drives the real window(s) over CDP (`--remote-debugging-port`). It finds
+targets by kind (`findTargetsByKind`: tab-strip targets whose URL starts
+`splitpage://tabstrip/`, versus tab targets whose URL starts
+`splitpage://app/index.html` and carry a `?tab=<tabId>` query string parsed
+out for it) rather than assuming one page target as the pre-tabs suite did.
+Run from `desktop/`: `node test/smoke.mjs` (dev + every packaged exe found
+under `dist/`), `--exe <path to Splitpage.exe>`, or `--only-target
+dev|packaged-x64|packaged-arm64`. It now covers, on top of the original
+boot/security/save/export/update surface: tab creation, close, reorder,
+move-to-window and tear-off through `__testShell`; route-open dedupe
+(already-open activates instead of duplicating; pristine reuse; new-tab
+fallback); one-dialog-per-quit and the window-scoped 3-button dialog; session
+restore across a relaunch (`desktop-state.json` v2, renamed
+`caseSessionRestore` from the old `caseLastFileResume`); renderer crash
+reload and the crash-loop guard tripping into the `crashed` state; duplicate
+document-id claims across two tabs and their reassignment; and 16 crash-safe
+draft cases (single- and multi-tab, real renderer crashes via
+`crashApp`/`splitpage:test-crash-renderer`, and server documents). **454
+checks total** across ~55 cases on the dev target (§2), doubled/tripled on
+packaged runs when those exes exist in `dist/`.
 
-Gotchas worth recording: dev Electron is x64 under emulation on this ARM64
-machine and slow (teardown 10–15 s; poll for exit). `document.visibilityState`
-reads "visible" even in test mode, so invisibility is checked with `(Get-Process
--Id <pid>).MainWindowHandle -eq 0`. A CDP `Runtime.evaluate` is not a user
-gesture unless `userGesture:true`, and `beforeunload` only blocks after
-activation. Page targets are found via `/json` (type "page") — this will need a
-target filter once tabs add more pages.
+Gotchas worth recording: `document.visibilityState` reads `"visible"` even
+in test mode, so invisibility is checked with `(Get-Process -Id
+<pid>).MainWindowHandle -eq 0`. A CDP `Runtime.evaluate` is not a user
+gesture unless `userGesture: true`, and `beforeunload` only blocks after
+activation. Dev Electron now runs **native ARM64** rather than x64 under
+emulation (§2); the emulated path still works and is only modestly slower,
+so a smoke run under either binary is a valid signal — but check which one
+you're actually running before reporting a timing regression.
 
 ---
 
@@ -828,7 +1124,8 @@ target filter once tabs add more pages.
 ```jsonc
 {
   "title": "string, plain text, ≤300 chars",
-  "schema": 2,                  // SCHEMA_VERSION
+  "schema": 2,                  // SCHEMA_VERSION — unchanged; docId did NOT bump it (invariant #35)
+  "docId": "d0123…(32 hex)",    // /^d[0-9a-f]{32}$/, minted by migrateRows if missing (§3.13, §5 #35-#37)
   "rev": 0,                     // bumped per save; drives conflict detection
   "lastEditedBy": null,
   "lastEditedAt": null,
@@ -873,6 +1170,75 @@ further-along side wins, so a merge can never un-buy a prop somebody bought.
 Note `ROW_FIELDS = ["visualText","visualImage","audioText"]` — that's the list
 the merge reconciles *as content*. `status` is merged separately, by rank
 (`todo < ready < shot`), so a merge can never un-shoot a scene someone filmed.
+
+### The document id (`docId`)
+
+Added 2026-09-14 (`src/js/02b-doc-id.js`, frozen `sha256Hex`/`deriveDocId`).
+Every document carries `state.docId`, minted by `migrateRows()` when absent,
+carried through `mergeStates()` as `mergedDocId(base, mine, theirs)`, and
+derived deterministically from content for a legacy file that has none
+(`deriveDocId('splitpage-file', …)` for a file, `deriveDocId(
+'splitpage-server-doc', serverId)` for a server document with no fallback).
+It **never** appears in `src/seed-state.json` (`build.mjs`'s
+`seedCheckValue()` throws if it does), `#state-data`, or the Standalone HTML
+export (`standaloneHtmlFor()` deletes it before serialising) — a seed or
+export with a real id would give every fresh copy of the app, or every
+downloaded HTML export, the same identity. It is the join key for
+per-document version history and crash-safe drafts, and it is what lets
+Splitpage tell two tabs holding *copies of the same file* apart from two tabs
+holding the *same* file twice (§3.13's duplicate-claim reassignment). See §5
+invariants #35–#37 for exactly when it is allowed to change.
+
+### Per-document version history
+
+Replaces the old single shared snapshot list (below). Every document's
+history is now its own bucket, keyed by `docId`, capped at 50 snapshots per
+document:
+
+- **Browser**: IndexedDB database `splitpage-history` (`src/js/
+  03a-history-store.js`) — stores `docs` (one record per docId, or the
+  literal `'_older'`), `snapMeta` and `snapBody` (meta and state kept apart
+  so listing history never has to load every snapshot's full JSON), and
+  `meta`. Falls back to an in-memory store when IndexedDB is unavailable.
+- **Desktop**: files under `<userData>/history/docs/d-<docId>/` — one
+  `index.json` plus one `s-<snapId>.snap` per snapshot (§3.13 has the full
+  layout, validation and fsck story).
+- **The Older bucket**: the pre-tabs shared history (`localStorage`'s
+  `splitpage-snapshots`, previously listed below as its own key) is migrated
+  **once**, on first run of the history code, into a synthetic document
+  called Older — `startHistoryMigration()`, `docs['_older']` /
+  `older/index.json`. **The whole bucket expires 90 days after that one-time
+  migration**, not per snapshot (`HISTORY_OLDER_TTL_MS`, adopted as a default
+  in `overrides.md` §2 and worth revisiting with Adam if it ever feels too
+  short or too long). There is deliberately no "delete this document's
+  history" button yet (same override).
+- Eviction order (shared by the browser's `planHistoryEviction()` and its
+  desktop planner twin, §3.13): expired Older bucket first, then trim every
+  document to 50, then Older oldest-first, then documents by `lastOpenedAt`
+  ascending — but **a document's newest snapshot is never evicted**, so a
+  quota fight can shrink history to a thin trickle per document but never to
+  zero.
+
+### Crash-safe drafts (desktop only)
+
+`desktop/drafts.js` under `<userData>/drafts/<tabId>/` — full layout, the
+two-generation write ordering, and the hold/discard rules are in §3.13. In
+schema terms: a draft's `stateJson` is a full `state` object (so it carries
+`docId` like any other copy of the document) plus a separate `DraftHeader`
+(never the document's own fields) recording *how* to offer it back — origin
+kind, file path (main-resolved), server identity, and a base checksum for the
+three-way merge. Nothing about a draft is document schema; it is desktop
+process state that happens to hold a copy of one.
+
+### `desktop-state.json` v2 (session restore)
+
+`<userData>/desktop-state.json` — full shape and migration from v1 in §3.13.
+Holds **no document content and no docId**: just which windows exist, their
+bounds, which tabs each has open, and each tab's *source* (`{kind:'file',
+absPath}` / `{kind:'server', serverDocId}` / `{kind:'blank'}`) plus a
+`lastKnownTitle` for display before that tab's page has loaded. The actual
+document identity and content are re-derived by opening the source fresh (or
+recovered from a crash draft) — this file is a launch recipe, not a backup.
 
 ### The two file formats
 
@@ -927,11 +1293,12 @@ has.
 | Key | Purpose |
 | --- | --- |
 | `splitpage-comment-author` | your name for comments/attribution |
-| `splitpage-snapshots` | local version history (max 12, ~1.2 MB budget) |
+| `splitpage-snapshots` | **legacy, read-once.** The pre-tabs shared version-history list. `startHistoryMigration()` copies it into the Older bucket of `splitpage-history` (IndexedDB) the first time the history code runs and removes the key only after a confirmed, byte-identical re-read. Do not write to this key; it is a one-way migration source, not live storage any more. |
 | `splitpage-conflict-stash` | sessionStorage; survives a forced reload |
 | `splitpage-conflict-reloaded` | sessionStorage reload guard |
 | `splitpage-tagging-help-dismissed` | quick-reference strip dismissed |
 | `splitpage-files` (IndexedDB) | the `FileSystemFileHandle` for resume-on-launch |
+| `splitpage-history` (IndexedDB) | per-document version history, keyed by `docId` — see "Per-document version history" above |
 
 ---
 
@@ -1214,6 +1581,94 @@ has.
     launch, or the last file they had open; an unknown id is rejected. A new
     bridge method that works on a file takes an id — never add a path-taking
     convenience, not even for a test.
+35. **Every document carries `state.docId` matching `/^d[0-9a-f]{32}$/`.**
+    `migrateRows()` mints one when it is missing, and `mergeStates()` carries
+    it through `mergedDocId()`. It never appears in `src/seed-state.json`,
+    `#state-data`, or the Standalone HTML export, and `SCHEMA_VERSION` was
+    deliberately not bumped for it (§4). WHY: history, drafts and duplicate
+    detection all key on it. A missing id must fail as *unique*, never as
+    *shared* — a seed with a real id would give every fresh copy of the app
+    one identity, and a schema bump would re-run `legacyMdToHtml()` over
+    every existing file for a field addition that doesn't need it.
+36. **The id follows the Save target, not the edit.** A fork happens only on
+    Save As or publish of an id already written out, or on a detached draft
+    recovery, and history is copied only after the write succeeds. Restoring
+    a snapshot never changes the id. A server document is never re-identified
+    automatically. "Already open" (§3.13's route-open dedupe) is decided by
+    absolute path or server document id, **never** by `docId`. WHY: copies
+    legitimately share an id until main separates them — opening the same
+    file twice, or a document mid-Save-As, must not be treated as two
+    different documents. Re-identifying on open, restore or merge instead of
+    on a successful write would split or cross histories silently.
+37. **`sha256Hex` and `deriveDocId` are frozen.** WHY: a legacy file with no
+    embedded id gets one derived from its content; changing either function
+    re-identifies every legacy file, and every duplicate-replacement id
+    (§3.13), which splits history on the very next open of a file that used
+    to resolve to the same id.
+38. **Version history is addressed only by `(docId, snapshot id)`.** Both are
+    validated in the renderer and again in main; main checks the resolved
+    path stays inside the history folder, and the renderer can never name a
+    folder directly. The Older bucket is reachable only through
+    `{older: true}`, never by a `docId` collision. WHY: a `docId` can come
+    from an untrusted file's own embedded value, and a path built carelessly
+    from it would give pasted or opened content filesystem reach — the same
+    reasoning as invariant #34, one layer further in.
+39. **`pushSnapshot()` captures synchronously, and no save ever waits on
+    history.** A restore overwrites the document only after its "Before
+    restoring" backup is stored, or after an explicit second confirm. WHY:
+    eight call sites replace `state` on the very next line, so an `await`
+    before the capture would snapshot the *wrong* document. Restore
+    autosaves, so a backup held only in memory (not yet written) is lost the
+    moment the window closes.
+40. **A crash draft is deleted only when its tab becomes clean, or on an
+    explicit user decision** (Leave without saving, Quit without saving,
+    closing an already-clean tab) — **never** on a crash, kill, renderer
+    loss, session-end, quit or restore. A user-decision discard writes a
+    tombstone before anything is unlinked. WHY: drafts protect against
+    crashes, not against the user's own decision. A lost dialog, a killed
+    process, or a late write must never destroy real unsaved work — and a
+    discard that isn't durably recorded first must never let that same work
+    reappear on the next launch as if it had never been declined.
+41. **Restoring a draft never writes the user's file by itself.**
+    "Unchanged on disk" is decided by content, never by mtime. The draft
+    header — including any file path — is built only by main from
+    allowlisted scalar fields, and draft bodies are written with fsync and
+    two generations. WHY: sync clients (OneDrive, Dropbox) preserve or touch
+    mtimes arbitrarily, so mtime cannot stand in for "did this change". A
+    silent write on restore would override disk edits the user has not seen
+    yet. A renderer-supplied path or secret must never reach disk. The whole
+    design is aimed at the moment power is lost mid-edit, not at making
+    drafts a second save path.
+42. **Each tab is its own page, and the main process is the only authority
+    on tab identity, unsaved state, and what is already open** (§3.13). Tab
+    identity is a 32-hex `tabId`, stable across tear-off and relaunch, which
+    is also the draft folder name; unsaved state is
+    `TabRecord.dirty || drafts.isHeld`. Moving a tab moves its
+    `WebContentsView` and never copies it, and every `BrowserWindow` comes
+    from `createTabWindow`. WHY: undo history and unsaved edits live only in
+    the one live page — there is no safe way to duplicate that state, so
+    "moving" a tab must never mean creating a second page and discarding the
+    first. Chromium's `beforeunload` cannot be trusted without user
+    activation (invariant #33's reasoning), so main — not the page — has to
+    be the one asking.
+43. **The tab strip runs on the separate origin `splitpage://tabstrip`.** It
+    has no `splitpageDesktop` bridge and no `/api` proxy, and its IPC
+    handlers check `isTrustedTabStripSender`; `isTrustedSender` and the
+    document bridge's permission handlers accept only `splitpage://app/`.
+    WHY: the strip is chrome — UI for switching between documents — not a
+    document itself. Giving it a second, narrower origin with its own trust
+    check means a compromise of either page (through, say, a maliciously
+    crafted pasted document) cannot reach the other page's powers.
+44. **One quit asks at most one unsaved-changes dialog and one stop-sharing
+    prompt; Windows session-end asks neither and discards nothing.** Session
+    persistence stops once a quit or last-window close begins, and
+    `desktop-state.json` is written durably (temp + fsync + rename) through
+    one queue. WHY: windows close one by one during a quit, and persisting
+    session state after each individual close would erase the very restore
+    set a quit is supposed to leave behind; a dialog per tab during a quit
+    with a dozen tabs open would be unusable. A torn session file, written
+    mid-quit without the durable-write discipline, would lose every window's
+    tabs rather than just the one being closed.
 
 ---
 
@@ -1224,46 +1679,57 @@ line-number table this replaced, they do not drift as you edit.
 
 | Fragment | Lines | What is in it |
 | --- | --- | --- |
-| `00-prelude.js` | 116 | opens the IIFE, `PAGE_SHELL`, module-wide vars (incl. `docFileHandle`), last-project memory |
+| `00-prelude.js` | 153 | opens the IIFE, `PAGE_SHELL`, module-wide vars (incl. `docFileHandle`), last-project memory |
 | `01-scene-status.js` | 120 | scene status and runtime estimates |
-| `02-state.js` | 227 | `defaultState`, **`migrateRows`**, `legacyMdToHtml`, schema, `buildPublishHtml` |
-| `03-sync.js` | 573 | identity, snapshots, **`mergeStates`**, version history |
-| `04-richtext.js` | 218 | `walkSanitize`, html→markdown, video link cards |
-| `05-render.js` | 391 | `rowHtml`, `render`, field sync, rich-text commands |
-| `06-rows.js` | 216 | row add/move/**drag**, images |
-| `07-production-tags.js` | 1163 | the tag registry, people, applying tags, autocomplete, untagged mentions |
-| `08-production-panels.js` | 951 | the production and gear panels, multi-select, the breakdown |
-| `09-find-replace.js` | 243 | find & replace |
-| `10-comments.js` | 502 | comments: composer, panel, cards |
-| `11-import.js` | 381 | paste-a-script import, two-column detection, `parseMarkdownTable`, **Google Doc import** |
-| `12-dirty-toast.js` | 50 | the dirty flag and toasts |
-| `13-hosted.js` | 881 | server detection, the picker, compare-and-set save, **Google Drive files** |
-| `14-export.js` | 488 | **`saveDoc`**, the Markdown writers, binary helpers, the zip writer |
-| `15-docx.js` | 638 | .docx writing and reading, narration-only export |
-| `16-csv.js` | 117 | csv |
-| `17-pdf.js` | 528 | pdf, packing lists |
-| `18-local-files.js` | 632 | **`openProjectFile`/`adoptProjectState`**, save-back, resume-on-launch, the **File menu dispatch** |
+| `02-state.js` | 252 | `defaultState`, **`migrateRows`**, `legacyMdToHtml`, schema, `buildPublishHtml` |
+| `02b-doc-id.js` | 461 | **document id**: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId`, `migrateDocument`, `mergedDocId`, `reassignDocId`, `docHomeKey`/`syncDocIdentity`, the browser duplicate-claim BroadcastChannel — see §3.13, §4, §5 #35–#37 |
+| `03-sync.js` | 877 | identity, **`mergeStates`**, the save loop, restore/undo-merge glue into history |
+| `03a-history-store.js` | 1835 | **per-document version history**: `pushSnapshot`/`captureSnapshot`, `restoreSnapshot`, IndexedDB store + memory fallback, the Older-bucket migration, `planHistoryEviction` (mirrored line-for-line in `desktop/main.js`), `window.__historyTest` — see §3.13, §4, §5 #38–#39 |
+| `04-richtext.js` | 230 | `walkSanitize`, html→markdown, video link cards |
+| `05-render.js` | 463 | `rowHtml`, `render`, field sync, rich-text commands |
+| `06-rows.js` | 236 | row add/move/**drag**, images |
+| `07-production-tags.js` | 1222 | the tag registry, people, applying tags, autocomplete, untagged mentions |
+| `08-production-panels.js` | 962 | the production and gear panels, multi-select, the breakdown |
+| `09-find-replace.js` | 273 | find & replace |
+| `10-comments.js` | 560 | comments: composer, panel, cards |
+| `11-import.js` | 396 | paste-a-script import, two-column detection, `parseMarkdownTable`, **Google Doc import** |
+| `12-dirty-toast.js` | 102 | the dirty flag and toasts, draft-change hook |
+| `13-hosted.js` | 1292 | server detection, the picker, compare-and-set save, **Google Drive files**, `draftServerResume` |
+| `14-export.js` | 648 | **`saveDoc`**, the Markdown writers, binary helpers, the zip writer, `adoptSavedCopyDocId` |
+| `15-docx.js` | 660 | .docx writing and reading, narration-only export |
+| `16-csv.js` | 125 | csv |
+| `17-pdf.js` | 578 | pdf, packing lists |
+| `18-local-files.js` | 770 | **`openProjectFile`/`adoptProjectState`**, save-back, the **File menu dispatch** |
 | `19-writer.js` | 477 | the writer (word-processor view of the audio column) |
-| `20-teleprompter.js` | 460 | teleprompter and voice follow |
-| `20a-update.js` | 87 | the update notice and About box |
-| `20b-onboarding.js` | — | the first-run setup **wizard** (`openOnboarding`), the pristine-seed gate (`seedCheckPasses`, invariant #30) — see below |
-| `20c-help.js` | — | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
-| `20d-formats.js` | 266 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
-| `20e-connect.js` | 430 | the join-PIN dialog, server bookmarks, the SSH helper |
-| `20f-desktop.js` | 356 | **the desktop glue**, inert unless `DESKTOP` is set: the `FileSystemFileHandle`-shaped wrapper over the bridge, last-file resume, window title, native-menu dispatcher, the hosting summary, `window.__desktopTest` |
-| `21-events.js` | 1214 | all event wiring, `init()`, closes the IIFE |
+| `20-teleprompter.js` | 495 | teleprompter and voice follow |
+| `20a-update.js` | 130 | the update notice and About box |
+| `20b-onboarding.js` | 573 | the first-run setup **wizard** (`openOnboarding`), the pristine-seed gate (`seedCheckPasses`, invariant #30) — see below |
+| `20c-help.js` | 377 | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
+| `20d-formats.js` | 295 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
+| `20e-connect.js` | 552 | the join-PIN dialog, server bookmarks, the SSH helper |
+| `20f-desktop.js` | 730 | **the desktop glue**, inert unless `DESKTOP` is set: the `FileSystemFileHandle`-shaped wrapper over the bridge, `tab-boot-sync` handling, window/tab title, native-menu dispatcher, the hosting summary, `makeFakeDesktopBackend`, `window.__desktopTest` |
+| `20g-drafts.js` | 960 | **crash-safe draft renderer**: the writer/idle-flush loop, `applyTakenDraft` and its restore sequence, `sameDocContent`, `recoverDraftAsUnsavedCopy`, `window.__desktopTest.drafts` — see §3.13, §5 #40–#41 |
+| `21-events.js` | 1310 | all event wiring, `init()` (now sequencing draft restore before `detectServer()` when `draftRestorePending`), closes the IIFE |
+
+`src/js/` totals ~18,100 lines across 30 fragments.
 
 **Desktop files** (the optional Electron shell; the web app runs without them):
 
-| File | What is in it |
-| --- | --- |
-| `desktop/main.js` | Electron main process: the privileged scheme, protocol handler, file dialogs, the file id registry, server launcher, native menus, window management, unsaved-changes authority, test mode |
-| `desktop/preload.js` | preload script with contextIsolation/sandbox, origin-gated `window.splitpageDesktop` bridge |
-| `desktop/package.json` | Electron dependencies, build scripts |
-| `desktop/electron-builder.yml` | packaging config for x64 and ARM64 Windows installers and portable exes |
-| `desktop/build/installer.nsh` | electron-builder's NSIS include: adds (and on uninstall removes) the "Splitpage (shared session)" Start Menu shortcut, which runs `--host --pin` |
-| `desktop/stage.mjs` | build step: runs `build.mjs`, verifies version, stages files for packaging |
-| `desktop/test/smoke.mjs` | integration suite: drives real Electron window over CDP, covers all desktop modes and security |
+| File | Lines | What is in it |
+| --- | --- | --- |
+| `desktop/main.js` | 4985 | Electron main process: the privileged `splitpage://app` **and** `splitpage://tabstrip` scheme handlers, windows/tabs registries, tab strip IPC, route-open dedupe, close/quit lifecycle, session restore (`desktop-state.json` v2), doc-id claim table, desktop history storage + fsck + planner twin, draft header building, file dialogs, the file id registry, server launcher, native menus, test mode |
+| `desktop/preload.js` | 302 | preload for `splitpage://app`: contextIsolation/sandbox, origin-gated `window.splitpageDesktop` bridge (documents, history, drafts, tab-boot-sync) |
+| `desktop/tabstrip-preload.js` | 84 | preload for `splitpage://tabstrip` only: `window.splitpageTabStrip` bridge — no file, draft or history methods (invariant #43) |
+| `desktop/tabstrip/` | 245+276+24 | the title-bar tab strip page: `tabstrip.css`, `tabstrip.js` (renders `ShellState`, drag/drop, tear-off), `index.html` — served only under `TABSTRIP_ALLOWLIST` |
+| `desktop/drafts.js` | 984 | **crash-safe draft store**, plain CommonJS, no Electron dependency: two-generation writes, hold/discard, `session.json`, `writeFileDurableSync` — see §3.13, §5 #40–#41; exercised directly by `desktop/test/drafts.test.mjs` (11 cases) |
+| `desktop/.npmrc` | 2 | pins `npm install` in `desktop/` to fetch **native ARM64** Electron (`arch=arm64`) rather than x64 — see §2 |
+| `desktop/package.json` | — | Electron dependencies, build scripts |
+| `desktop/electron-builder.yml` | — | packaging config for x64 and ARM64 Windows installers and portable exes |
+| `desktop/build/installer.nsh` | — | electron-builder's NSIS include: adds (and on uninstall removes) the "Splitpage (shared session)" Start Menu shortcut, which runs `--host --pin` |
+| `desktop/stage.mjs` | 107 | build step: runs `build.mjs`, verifies version, stages files for packaging (now including `tabstrip/` outside the asar — see DEPLOY.md §6) |
+| `desktop/verify-dist.mjs` | 171 | post-`dist:win` check: every unpacked binary's PE machine field matches its architecture, the NSIS stub is x86 as expected, and each installer is no older than the unpacked app it was built from |
+| `desktop/test/smoke.mjs` | 4215 | integration suite: drives real Electron window(s) over CDP, covers tab shell lifecycle, close/quit authority, session restore, doc-id/history and crash-safe drafts, plus the original boot/security/save/export/update surface — see §3.13 |
+| `desktop/test/drafts.test.mjs` | 548 | unit suite for `desktop/drafts.js` alone, no Electron: 11 cases covering the write/hold/discard contract directly |
 
 **`20b-onboarding.js` stamps and checks the pristine-seed gate.**
 `build.mjs` computes `<meta name="splitpage-seed-check">` from
@@ -1610,21 +2076,48 @@ otherwise-idle app. And `.githooks/pre-commit`'s demo-state check still
 passes with the new `<meta name="splitpage-seed-check">` in `<head>`, since
 that check only ever looks at the `#state-data` line.
 
-**Desktop app (Electron 44, verified 2026-09-14):** the smoke suite drives the real window
-over CDP and covers: boot + security (bridge origin, navigation/window.open
-blocked, allowlist and traversal refused, bogus file id rejected), open via
-argv with non-ASCII, save in place round trip, on-disk conflict guard, Save As
-and cancel, export, second instance (absolute and relative path), last-file
-resume, `--library`, `--host --pin` (given and auto-generated), `--host`
-without a PIN shows the warning, update status, unsaved-changes close
-(cancel/confirm, and no-gesture close authority), clean close (exit 0, no
-"Object has been destroyed"), quit authority with no gesture, a cancelled
-quit keeping the document server alive, and what a page-initiated
-`window.close()` does. Last full run: 327/327 checks, 109 per target (dev,
-packaged x64 under emulation, packaged ARM64 native); browser suite 538/538;
-server 39/39.
+**Desktop app, tabs build (Electron 44, verified 2026-09-14, commit
+`376b35e`):** the smoke suite drives the real window(s) over CDP and covers
+everything the pre-tabs shell did — boot + security (bridge origin,
+navigation/`window.open` blocked, allowlist and traversal refused, bogus file
+id rejected), open via argv with non-ASCII, save in place round trip, on-disk
+conflict guard, Save As and cancel, export, second instance (absolute and
+relative path), `--library`, `--host --pin` (given and auto-generated),
+`--host` without a PIN shows the warning, update status, clean close (exit 0,
+no "Object has been destroyed"), and what a page-initiated `window.close()`
+does — **plus the whole tabs surface**: tab creation/close/reorder/move/
+tear-off via `__testShell`, route-open dedupe (already-open activates rather
+than duplicating, pristine-tab reuse, new-tab fallback), the window-scoped
+3-button unsaved dialog and the single hosting prompt per quit, session
+restore across a relaunch (`caseSessionRestore`, `desktop-state.json` v2),
+renderer crash reload and the crash-loop guard, duplicate document-id claims
+across two tabs and their in-memory reassignment, desktop version-history
+storage (id/path validation, the fsck, the planner-twin comparison against
+the browser's own `planHistoryEviction`), and 16 crash-safe draft cases
+(single- and multi-tab, real renderer crashes, server documents). **Final
+counts: browser suite ALL PASS — 998/998 across 25 suites (01–26, 16
+unused); server 39/39; `desktop/test/drafts.test.mjs` 11/11; desktop smoke
+ALL PASS — 454/454 on the dev target (native ARM64 Electron) and 454/454 on
+the packaged ARM64 exe; `npm run dist:win` ends with `verify-dist` 9/9.**
+Fresh installers (unsigned, version 1.0.1) sit in `desktop/dist/`.
 
 ### NOT verified — say so, don't imply otherwise
+
+- **The tabs UI has not been eyeballed by a human.** Everything above is
+  CDP-driven assertions against `__testShell`/`ShellState`/the doc-claim and
+  draft IPC — nobody has looked at the tab strip rendering. Specifically
+  unverified by eye: the window controls (minimize/maximize/close) sitting
+  correctly beside the tabs under the `titleBarOverlay`, the Alt menu bar
+  interacting sanely with `autoHideMenuBar` and the strip, a **real** mouse
+  drag-out of a tab into its own window (the smoke suite drives
+  `tearOffToNewWindow` directly, never a real `dragend`), dark mode across
+  the strip and every dialog, the packaged installer's tab behaviour by hand
+  (only the dev target and the packaged *exe launch* have been driven by
+  CDP — nobody has double-clicked the installed Start Menu shortcut since
+  tabs landed), and the Older-history panel's scroll behaviour (noted as a
+  known, unverified-by-eye issue in the phase-2 review; see §8). Follow My
+  Voice and Google Drive remain unbuilt on desktop regardless of tabs (§8,
+  unchanged from before this build).
 
 
 - **No real phone has touched the mobile interface.** Everything above ran in
@@ -1749,19 +2242,45 @@ from a Linux container:**
    against the mirror. The update path is verifiable end-to-end once a mirror
    release exists.
 
+**Done, on this branch (2026-09-14, commit `376b35e`):**
+
+(a) ~~**Tabs.**~~ Built and verified (§3.13, §7): windows/tabs registries, the
+   `splitpage://tabstrip` title-bar strip, route-open dedupe, tear-off/move/
+   reorder, per-tab and per-window close/quit authority with one dialog per
+   quit, session restore via `desktop-state.json` v2, renderer crash reload
+   with a crash-loop guard, crash-safe drafts for every unsaved tab
+   (`desktop/drafts.js`), and per-document version history keyed by a
+   document id stored inside the file (`02b-doc-id.js`), moved to IndexedDB
+   in the browser and `<userData>/history/` files on desktop. The document id
+   and per-document history apply to the browser app too, not just desktop.
+   Known minor issues left from this build, not yet fixed — small enough to
+   pick up individually, not blocking anything:
+   - Help ▸ About still uses `window.alert` (never triggered by an automated
+     test, and the one desktop dialog type test mode does not stub — see
+     invariant #33's "two things it does not cover").
+   - Desktop's `openLocalFile` swallows a read error that occurs *after* the
+     native Open dialog has already returned a path — the dialog succeeds,
+     the subsequent read fails silently.
+   - `saveDoc`'s rev-rollback-on-failure can decrement a different document's
+     rev if a different document was opened in that tab mid-save (a narrow
+     race, not reproduced, found by reading).
+   - The Older-history panel's scroll fix is unverified by eye (§7's NOT
+     verified list).
+
 **Pitched for the desktop app, next to build:**
 
-(a) **Tabs.** Agreed design: one isolated page per tab, title-bar tab strip,
-   tear-off between windows, restore all tabs at launch, crash-safe drafts for
-   every unsaved tab, per-document version history keyed by a document id
-   stored inside the file and moved to IndexedDB/userData files. Desktop only,
-   but the document id and per-document history apply to the browser app too.
-
-(b) **Per-tab server and tunnel connections.** For now tunnels stay app-wide;
-   later any tab should be able to connect to any server or tunnel, with a
+(b) **Per-tab server and tunnel connections.** For now tunnels stay app-wide,
+   and under `--host --pin` a new tab asks for the PIN again unless "Remember
+   on this device" was ticked (no token or PIN crosses IPC — invariant #29).
+   Later any tab should be able to connect to any server or tunnel, with a
    "New tab on server…" command and a connection badge on each tab. This needs
    a redesign of how connection details and server tokens are held across
-   tabs — PIN/auth code.
+   tabs — PIN/auth code. `main.js`'s doc-claim `homeKey` and
+   `serverDocIdToTabId` both currently assume one app-wide server
+   (`serverBase` is `''` in the desktop app); the plan is for `serverKey` to
+   become an opaque `connectionId + '/' + slug` once this lands, additively,
+   in both the claim table and routing (the draft header already records
+   `server.base` in anticipation of this).
 
 (c) **Follow My Voice in the desktop app.** The Web Speech API constructor
    exists in Electron, but recognition fails with a network error: Chrome and
@@ -1778,9 +2297,14 @@ from a Linux container:**
    opens the downloaded file.
 
 (e) **Pending decisions for Adam:**
-   - Do the desktop installers replace the IExpress setups and update.mjs in
-     the release recipe (and electron-updater vs a download link)?
-   - Code signing (Windows SmartScreen and macOS notarization)?
+   - **Release pipeline.** Do the desktop installers replace the IExpress
+     setups and `update.mjs` in the release recipe, run alongside them, or
+     stay a separate distribution channel — and electron-updater vs a plain
+     download link?
+   - **A 1.0.2 fix branch and VERSION bump.** The tabs build landed on
+     `Splitpage-electron` at `desktop/package.json` version 1.0.1, unchanged
+     from before it started; nothing has bumped it for this body of work yet.
+   - **Code signing** (Windows SmartScreen and macOS notarization)?
 
 **Pitched and accepted, already built:** runtime estimates, scene status, shoot
 order, find & replace, drag reorder.
