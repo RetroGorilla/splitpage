@@ -74,6 +74,13 @@ Copy this template into the right section below:
 - **Description:** The main two-column interface is too fixed-width — it should be more flexible and expand to use available space on wider windows/screens instead of staying capped.
 - **Repro / notes:** Resize the window wider and the two-column view doesn't grow to fill it.
 
+### Undo after highlighting text doesn't behave properly
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** Editing / undo / highlight
+- **Description:** Undoing after applying a highlight to text doesn't work as expected. Likely related to the broader highlight/text-modifier UX pass and the existing alt-enter undo bug — undo seems to have multiple gaps around text-formatting actions.
+- **Repro / notes:** Highlight some text, then press undo — behavior is off (exact wrong behavior not yet pinned down, needs a clean repro).
+
 ### Adjustable width for comment sidebar columns
 - **Type:** Feature
 - **Priority:** Low
