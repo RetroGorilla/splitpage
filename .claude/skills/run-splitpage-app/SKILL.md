@@ -33,7 +33,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 1085/1085 checks across 26 suites` (01–27, 16 unused) and exit 0, or lists
+Ends with `ALL PASS - 1095/1095 checks across 26 suites` (01–27, 16 unused) and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`

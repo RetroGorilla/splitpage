@@ -16,6 +16,31 @@ You can also work with other people: [host a shared session](#hosting-a-shared-s
 so others on your network open and edit the same scripts live, or
 [connect to a server](#connecting-to-a-server) someone else is hosting.
 
+## What's new in 2.0
+
+Splitpage now comes as a real Windows desktop app: its own window, tabs,
+crash-safe drafts, and per-document version history that doesn't run out of
+browser storage — see [Desktop app](#desktop-app). The browser version keeps
+working exactly as it always has.
+
+**Which installer to pick.** Most Windows PCs (Intel/AMD) want
+`SplitpageDesktopSetup-<version>-x64.exe`; Windows on ARM (Snapdragon,
+Surface Pro X and similar) wants the `-arm64.exe` build. Not sure which you
+have? Settings ▸ System ▸ About ▸ "System type".
+
+**Windows SmartScreen warning.** The installers aren't code-signed yet, so
+Windows may say it "protected your PC" — click **More info ▸ Run anyway**.
+
+**Upgrading from 1.0.** If you installed 1.0 with its setup program, the 2.0
+installer finds it, removes it, and keeps your shared-session documents; the
+browser version updates itself, nothing to do.
+
+**Moving your browser data over?** See
+[Moving from the browser app to the desktop app](#moving-from-the-browser-app-to-the-desktop-app).
+
+**Follow My Voice** isn't available in the desktop app yet — it still works
+in the browser version.
+
 ## Setting up
 
 The first time you open a fresh copy of Splitpage, a short setup wizard walks
@@ -161,10 +186,16 @@ the command line open at launch.
 
 ## Installing it
 
-**`SplitpageSetup-<version>.exe` is the whole product.** One download, one
-installer, and you are working — open a local script, or host a session other
-people on your network join. It carries its own Node runtime, so there is no
-second thing to go and install first.
+**For the desktop app** — its own window, tabs, and version history — see
+[Desktop app](#desktop-app) above; that installer
+(`SplitpageDesktopSetup-<version>-x64.exe` / `-arm64.exe`) is what's on the
+releases page now.
+
+This section covers the older, browser-based install instead: the same app,
+opened in Chrome or Edge, with a Start Menu entry and auto-updates, built as
+a self-extracting `SplitpageSetup-<version>.exe`. It still builds from
+source exactly as described below, but the 2.0.0 release no longer publishes
+it — the zip and the desktop installers above are what ship.
 
 Double-click it and a window asks where to put it:
 
@@ -184,7 +215,7 @@ administrator prompt). To choose the folder as well, override the command:
 
 ```
 node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 KB
-node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB
+node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB (deprecated, not published)
 ```
 
 **Nothing needs installing to build this.** The setup is a self-extracting
@@ -196,15 +227,27 @@ cached in `.cache/`.
 Run `--installer` on a non-Windows machine and it prepares everything and
 tells you the one command to finish on Windows.
 
-**The portable zip** is still there and still tiny. Unzip it anywhere and run
-`start.bat` or `./start.sh`; it uses a Node you already have, and without one
-it falls back to a PowerShell file server that serves the app but cannot host
-a session.
+**Deprecated as of 2.0.0.** The Electron installers in `desktop/` replace
+this recipe (`cd desktop && npm run dist:win`, see [Desktop
+app](#desktop-app) and DEPLOY.md); `--installer` still builds and is kept as
+a historical fallback, but its output isn't part of the release.
+
+**The portable zip** is still there and still tiny, and every release still
+ships it — 1.0.x installs use it to update themselves to the current
+version. Unzip it anywhere and run `start.bat` or `./start.sh`; it uses a
+Node you already have, and without one it falls back to a PowerShell file
+server that serves the app but cannot host a session.
+
+### Windows on ARM (the legacy installer)
+
+On Windows machines with ARM64 processors, the deprecated recipe above
+builds with `node package.mjs --installer --arch arm64` for an ARM64-only
+setup, or `--arch both` to bundle both architectures. The installer detects
+your machine's architecture and uses the matching runtime; for portable
+copies with both runtimes, `start.bat` picks the right one automatically.
+For the real desktop app on ARM64, see [What's new in
+2.0](#whats-new-in-20) and [Desktop app](#desktop-app) instead.
 <!-- help:skip-end -->
-
-### Windows on ARM
-
-On Windows machines with ARM64 processors, build with `node package.mjs --installer --arch arm64` for an ARM64-only setup, or `--arch both` to bundle both architectures. The installer detects your machine's architecture and uses the matching runtime; for portable copies with both runtimes, `start.bat` picks the right one automatically.
 
 ## Hosting a shared session
 
@@ -857,12 +900,15 @@ always works regardless.
 
 **Packaging**
 
-- `package.mjs` — builds the portable zip, and with `--installer` the Windows
-  setup.exe. `VERSION` is the single source of the version number.
-- `installer/` — `install.ps1` and `uninstall.ps1` (the installer proper) and
-  `icon.ico` for the shortcuts.
+- `package.mjs` — builds the portable zip; `VERSION` is the single source of
+  the version number. Its `--installer` flag builds the old IExpress
+  `SplitpageSetup-<version>.exe` and is deprecated as of 2.0.0.
+- `installer/` — `install.ps1` and `uninstall.ps1` (the legacy installer
+  proper) and `icon.ico` for its shortcuts.
 - `tools/fetch-runtime.mjs` — downloads and verifies the Node runtime that
-  ships inside the setup.exe.
+  ships inside the legacy setup.exe.
+- `desktop/` — the Electron desktop app: source, `npm run dist:win` to build
+  the per-architecture installers, and its own test suite.
 
 **Hosting for other people**
 
