@@ -367,6 +367,21 @@
     var id = extractGoogleDocId(document.getElementById("gdoc-url-input").value);
     if (!id) { showToast("That doesn't look like a Google Doc link.", "warn"); return; }
     var url = "https://docs.google.com/document/d/" + id + "/export?format=docx";
+    /* No OAuth involved either way (see the comment above this function) —
+       just a real navigation to Google's own /export endpoint. Electron's
+       renderer has no tab strip for window.open(url, "_blank") to open a
+       new one in, and no cookie jar shared with a real browser for a
+       private doc's sign-in to land in either, so this hands the URL to
+       DESKTOP.openExternal() instead: the system's default browser does the
+       download, carrying whatever Google session it already has, exactly
+       the same trick this always was. */
+    if (DESKTOP) {
+      DESKTOP.openExternal(url);
+      closeGdocModal();
+      showToast("Opening the Doc as a .docx download in your browser — once it's in your Downloads " +
+        "folder, use File ▸ Open a document… to bring it in.", "ok", true);
+      return;
+    }
     /* target=_blank rather than a same-tab anchor: a private/unshared doc
        sends back a Google sign-in page instead of a file, which would
        otherwise navigate this tab away from the script mid-edit. Sever

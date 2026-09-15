@@ -182,7 +182,7 @@
     if (catBtn) { renderTagCategories(catBtn.getAttribute("data-tag-cat")); return; }
 
     var restoreSnapBtn = e.target.closest('[data-action="restore-snapshot"]');
-    if (restoreSnapBtn) { restoreSnapshot(restoreSnapBtn.getAttribute("data-id")); return; }
+    if (restoreSnapBtn) { restoreSnapshotFromCard(restoreSnapBtn); return; }
 
     var statusBtn = e.target.closest('[data-action="cycle-status"]');
     if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
@@ -573,13 +573,37 @@
 
     /* Fire and forget: the menu items reveal themselves if a server answers,
        and everything below works identically either way. Deliberately not
-       awaited — a slow or absent server must never delay the editor opening. */
-    detectServer();
+       awaited — a slow or absent server must never delay the editor opening.
+
+       Except in the one tab that is coming back from a crash with a draft to
+       restore. A draft of a SERVER document is merged by resumeServerDoc(),
+       which detectServer() leads to and which assigns `state` itself
+       (13-hosted.js) — so detecting the server here would race the boot load
+       below, and a fast answer with a slow load would let the seed document
+       overwrite the resumed one. The draft itself is asked for now, since
+       that is only IPC and the answer is wanted as early as possible; the
+       detect and the restore both wait for the boot body to finish
+       (20g-drafts.js). */
+    var draftTaken = null;
+    if (DESKTOP && draftRestorePending && typeof DESKTOP.takeDraft === "function") {
+      draftTaken = Promise.resolve().then(function () {
+        return DESKTOP.takeDraft();
+      }).catch(function () { return null; });
+    } else {
+      detectServer();
+    }
     /* Same reasoning as detectServer: fire and forget, and silent when there
        is no launcher to have written the file. */
     loadUpdateStatus();
     var updateDismiss = document.getElementById("update-bar-dismiss");
     if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
+
+    /* Not part of loadUpdateStatus()'s fetch chain on purpose: this must show
+       on a plain file:// open and wherever update-status.json 404s, neither
+       of which ever calls back into that promise. */
+    renderDesktopAppNotice();
+    var desktopAppDismiss = document.getElementById("desktop-app-bar-dismiss");
+    if (desktopAppDismiss) desktopAppDismiss.addEventListener("click", dismissDesktopAppNotice);
     wireTouchSelection();
 
     /* On touch the ghost suggestion is a tap target (the Tab key it stands
@@ -600,7 +624,7 @@
     });
 
     state = null;
-    loadInitialState().then(function (loaded) {
+    initialStateReady = loadInitialState().then(function (loaded) {
       var applied = applyStashedWork(loaded);
       state = applied.state;
       baseState = cloneState(applied.report ? loaded : state);
@@ -618,7 +642,45 @@
          Save (see saveDoc()). Double-clicking an already-saved project's own
          .html must always show exactly that file, never get swapped out from
          under you for some *other* file this browser remembers editing. */
-      if (!applied.report && !loaded.rev && !loaded.lastEditedBy) tryResumeLastProject();
+      if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
+        /* Desktop restores whole SESSIONS (every window, every tab) in the
+           main process at launch (TAB-BOOT-SYNC / DESKTOP-STATE-V2) — this
+           page's own launchIntent already says what it's for (blank,
+           open-file, restore-draft, open-server), so there is nothing left
+           for the renderer's own "resume the last project" guess to do on
+           desktop. Only the plain browser build, which has no main process
+           to ask, still resumes from its own remembered IndexedDB handle. */
+        if (!DESKTOP) tryResumeLastProject();
+      }
+      /* Desktop's window title mirrors the document (20f-desktop.js) —
+         push an initial value now rather than waiting for the first edit,
+         since a fresh load never touches markDirty()/clearDirty() (the
+         hook inside setSaveButtons()) until one of the resume paths above
+         runs, or the reader types something. */
+      /* For the same reason, the boot document's identity is adopted here:
+         nothing on this path goes through setSaveButtons(), the funnel that
+         notices identity changes afterwards. Then the browser's duplicate
+         check opens its channel and announces this document (desktop has
+         the main process's claim table instead, and must not run both). */
+      if (typeof syncDocIdentity === "function") syncDocIdentity();
+      if (!DESKTOP) initDocIdentityChannel();
+      if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+      /* Move the old shared snapshot list into "Older history" once. Not
+         awaited: it never rejects, the key is removed only after the copy is
+         confirmed, and nothing at boot depends on it finishing. */
+      startHistoryMigration();
+    }).then(function () {
+      /* The crash-draft restore is part of "the boot state is ready", not
+         something that happens after it: until it settles, the document on
+         screen is not the one the user left behind. Arm before detect, and
+         detect before restoring, because a server draft is merged from inside
+         resumeServerDoc() and the restore has to be able to wait for it. */
+      if (!draftTaken) return;
+      return draftTaken.then(function (t) {
+        armServerDraftResume(t);
+        detectServer();
+        return applyTakenDraft(t);
+      });
     });
 
     var rowsEl = document.getElementById("rows");
@@ -780,7 +842,23 @@
     document.getElementById("server-modal").addEventListener("click", function (e) {
       if (e.target.id === "server-modal") { closeServerPicker(); return; }
       var openBtn = e.target.closest('[data-action="server-open"]');
-      if (openBtn) { openServerDoc(openBtn.getAttribute("data-id")); return; }
+      if (openBtn) {
+        var sid = openBtn.getAttribute("data-id");
+        /* Desktop routes through main first — it may already have this
+           server document open in another tab (or another window), in
+           which case that tab is activated instead of a second copy
+           opening here. this-tab means main confirmed this sender tab is
+           the right place (pristine and ready), same as opening it always
+           has. */
+        if (DESKTOP) {
+          DESKTOP.routeOpen({ kind: "server", serverDocId: sid }).then(function (r) {
+            if (r && r.where === "this-tab") openServerDoc(sid); else closeServerPicker();
+          });
+        } else {
+          openServerDoc(sid);
+        }
+        return;
+      }
       var delBtn = e.target.closest('[data-action="server-delete"]');
       if (delBtn) { armServerDelete(delBtn, delBtn.getAttribute("data-id")); return; }
     });
@@ -1201,16 +1279,34 @@
       closeWriter();
     });
 
+    /* Another tab still running a build from before per-document history can
+       write the old shared key at any time. Migrate what it wrote as soon as
+       it lands, rather than leaving it until this page next loads. */
+    window.addEventListener("storage", function (e) {
+      if (e.key === SNAPSHOT_KEY && e.newValue) startHistoryMigration();
+    });
+
     window.addEventListener("beforeunload", function (e) {
       /* never block the reload that carries a stashed merge home */
       if (dirty && !suppressUnloadWarning) { e.preventDefault(); e.returnValue = ""; }
     });
 
-    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    /* The service worker is for offline http(s) use — splitpage://app is
+       already served locally by the main process, with no network round
+       trip to cache anything against, and registering one there would just
+       be dead weight sitting on a scheme it was never meant for. */
+    if (!DESKTOP && "serviceWorker" in navigator && location.protocol !== "file:") {
       window.addEventListener("load", function () {
         navigator.serviceWorker.register("sw.js").catch(function () {});
       });
     }
+
+    /* Desktop glue (20f-desktop.js): wires the native File-menu/header
+       commands, file-open events and window-title updates into the exact
+       same code paths the in-page UI already uses. A no-op — and every
+       DESKTOP-gated branch throughout src/js along with it — whenever this
+       page is not running inside the Electron shell. */
+    if (DESKTOP && typeof initDesktop === "function") initDesktop();
   }
 
   if (document.readyState === "loading") {

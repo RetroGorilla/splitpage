@@ -33,10 +33,11 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS - 520/520 checks across 19 suite(s)` and exit 0, or lists
+Ends with `ALL PASS` (suites 01–27, 16 unused) and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
+- `-Parallel N` — how many suites run at once (default 4; each has its own ports, Edge profile and log)
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
 - `-Port` / `-CdpPort` — pin the port bases instead of auto-picking (below)
@@ -47,10 +48,11 @@ probes every port the run needs with a real socket bind and steps the base by
 100 until the whole block is free on both ranges. That means two runs on one
 machine (two worktrees, two agents) no longer collide on a fixed default port
 and fail with "static server did not come up" — pass `-Port`/`-CdpPort`
-explicitly only if you need a specific, repeatable block. This is unrelated to
-the Edge-profile sweep below — that's a separate mechanism, and two concurrent
-runs can still kill each other's live browser via the profile glob, so keep
-re-running an aborted suite with `-Only` before believing it.
+explicitly only if you need a specific, repeatable block. This is a separate
+mechanism from the Edge-profile sweep below (each run also gets its own
+run-id-scoped browser profile, so two concurrent runs no longer kill each
+other's live browser either) — see "Two `run-tests.ps1` invocations at once"
+under Gotchas.
 
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
@@ -76,7 +78,15 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/15-tutorial.txt` | the 5-step coach-mark tour: opens from the File menu, Next/Back/Finish, Skip at several steps, a "Read more" link into Help, `#rows` byte-identical before and after, `splitpage-tour-done` set, and the card stays inside the viewport at a 375px phone width |
 | `tests/17-formats.txt` | the two project formats: `.splitpage` and `.md` round-trip the state exactly (tags, comment anchors, images, statuses, wpm, people), a hand-edited table cell wins for that cell and its tags re-attach, an added scene asks rather than guessing, a legacy `.html` still opens, the data fence never collides with content |
 | `tests/18-connect.txt` | the Servers dialog from the File menu, bookmarks persisting (and holding nothing credential-shaped), the SSH command, the join-PIN dialog's validation, `#launch=` stripped from the URL on load |
+| `tests/19-save-conflict.txt` | the on-disk conflict check for project saves (`.md`/`.splitpage`): `saveDoc()` refuses to overwrite a file that changed on disk since it was opened, the same guard `saveBackToFile()` already had for the import re-save path, driven against a fake `FileSystemFileHandle`-shaped object since no real file picker can run headless |
 | `tests/20-comment-drift.txt` | a `.cmt-anchor`'s live text drifting from `quotedText`: still jumpable with a "text changed" note and the original quote kept visible, orphaned once the span is edited down to nothing |
+| `tests/21-desktop-shim.txt` | the desktop bridge (20f-desktop.js), driven with `window.__desktopTest`'s fake backend in place of a real Electron shell: a desktop file handle round-trips non-ASCII text byte-exactly, a cancelled Save As leaves `state.rev` and the toasts alone, the on-disk-conflict guard fires when the fake file's mtime moves, the native-menu-command dispatcher reaches the same find bar and comments panel the File menu and header button do, and the app-data import menu dispatcher and merge flow |
+| `tests/22-doc-id.txt` | document identity (02b-doc-id.js): boot minting a valid id, the FROZEN SHA-256 vectors (HANDOFF invariant #37), a hostile or missing id replaced vs. a valid one kept, `reassignDocId`'s Save-As fork that never writes the user's file (overrides.md #1), a failed Save-As write not retargeting Save, identity surviving a document opened while the Save As dialog is up, exports carrying no id, a legacy `.splitpage`/`.md` re-deriving the same id on reopen, the `mergedDocId` truth table, `adoptRestoredState` keeping the id regardless of the snapshot, and the fake-BroadcastChannel duplicate-claim reassignment |
+| `tests/23-doc-id-reload.txt` | document identity (02b-doc-id.js) across a real page reload: a pristine boot always mints a fresh id, and ingress decides whether anything needs merging before adopting one — `goto` wipes `window`, so this is its own suite rather than a section tacked onto 22's |
+| `tests/24-history.txt` | per-document version history (03a-history-store.js + the `03-sync.js` glue): real captures via `loadFileIntoEditor`'s foreign-file push and a fixture `.splitpage` reopen (no direct `pushSnapshot` access — see build.mjs), the pristine seed never snapshotted until it's dirtied, per-document isolation and the open history panel following the active document, the newest-50 cap and call-order sorting under a frozen clock, restore backing up first and keeping the current docId, copy idempotence, the quota-always forced restore, and a document edit landing mid-backup aborting or completing the restore correctly |
+| `tests/25-history-migration.txt` | the one-time migration of the old shared `splitpage-snapshots` localStorage list into per-document history's Older bucket (`startHistoryMigration`), and the merge-undo path (`lastMergeUndo`) that rides the same store: legacy entries (including a hostile id) re-minted into Older with the legacy key removed, a repeat migration adding only what's new, a failed import or a corrupt key never deleting the legacy key, a key that changes mid-migration never left deleted unless its latest content actually made it into Older, and Older itself being shared across every document, restoring under the current document's id, and expiring as a whole 90 days after the migration |
+| `tests/26-desktop-drafts.txt` | crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and dedup, and the restore's outcomes, against `__desktopTest.setBackend()`'s fake backend and `__desktopTest.drafts` — the scheduler never writing per keystroke, an edit during a save drafted and rebased, a clean save discarding the draft, visibility-hidden flush, the disk-unchanged decision made by content not mtime, a detached copy forking its id with a history copy, the pending latch, `applyStashedWork` override isolation, server-override outcomes, sanitisation, and browser inertness |
+| `tests/27-app-data.txt` | export bundle shape (§5 #48 key walk, round trip), idempotence, merge rules for prefs/bookmarks/history, refusals (wrong format/version/truncated), legacy `snapshots` → Older, cap/ordering, and the import section of 21-desktop-shim.txt |
 
 ## The server's own tests
 
@@ -89,7 +99,7 @@ instead. No dependencies, a few seconds, real servers on free ports:
 node tools/test-server.mjs
 ```
 
-Ends with `ALL PASS - 39/39 server checks` and exit 0. It covers the join PIN
+Ends with `ALL PASS` and exit 0. It covers the join PIN
 (open health, gated routes, wrong PIN, the rate limit, the right PIN), the CORS
 allowlist (including the literal `null` origin and static files never getting
 the headers), the 409 compare-and-set, and the launcher routes answering 404
@@ -234,15 +244,23 @@ the app.
   `[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(...))`.
 - **Harmless console noise:** a 404 for `/favicon.ico`, and service-worker
   registration failures. Don't chase them.
-- **Two suites running at once (two worktrees, two agents) will break each
-  other.** The sweep below matches the `splitpage-edge-*` profile *glob*, not
-  one run's own profile, so a second run starting up kills the first run's
-  live browser and that suite dies mid-command with
-  `The WebSocket is in an invalid state ('Aborted')` — sometimes on the first
-  command, sometimes twenty commands in. It looks exactly like a real failure
-  and is not one: 02-production and 07-untagged both "failed" this way during
-  Phase 3 and both passed 20/20 and 25/25 when re-run alone. Separate ports
-  are not enough. Before believing an aborted suite, re-run it with `-Only`.
+- **Two `run-tests.ps1` invocations at once (two worktrees, two agents) are
+  now safe.** Each invocation mints its own runId and hands it to every
+  `driver.ps1` it spawns via `-RunId`; `driver.ps1` folds that id into its
+  Edge profile directory name (`splitpage-edge-<runId>-<guid8>`), and the
+  leftover-browser sweep in both files matches only
+  `*splitpage-edge-<runId>-*` — its own run's orphans, never another run's
+  live browser. That used to be a bare `splitpage-edge-*` glob: a second run
+  starting up killed the first run's live browser and that suite died
+  mid-command with `The WebSocket is in an invalid state ('Aborted')` —
+  sometimes on the first command, sometimes twenty commands in — which looked
+  exactly like a real failure (02-production and 07-untagged both "failed"
+  this way during Phase 3 and both passed clean when re-run alone). Separate
+  ports were never enough on their own; the run-id scoping is what actually
+  fixed it. `driver.ps1` run standalone (no `-RunId` given) mints its own, so
+  it stays self-contained too. If an aborted suite still turns up, re-run it
+  with `-Only` before suspecting the app — that now points at something else,
+  since run collisions are ruled out.
 
 - **Orphaned browsers.** `Start-Process` hands back Edge's launcher, which
   spawns the real browser tree and exits, so killing it alone left a browser
@@ -268,3 +286,94 @@ the app.
   the actual scroll speed is not.
 - **Real iOS Safari and Android keyboards.** `viewport mobile` is Chromium
   emulating a phone, which is not the same as the real thing.
+
+## Desktop app (Electron)
+
+The Splitpage desktop shell (Electron 44 + electron-builder 26) has its own
+integration suite separate from the browser harness, because it drives a real
+native window rather than headless Chromium.
+
+### Smoke suite commands
+
+From `desktop/`:
+
+```bash
+node test/smoke.mjs                       # dev + both packaged exes (if they exist)
+node test/smoke.mjs --exe <path to .exe>  # one specific target
+node test/smoke.mjs --only-target dev|packaged-x64|packaged-arm64  # filter (for debugging)
+```
+
+Every launch gets its own fresh temp `SPLITPAGE_USER_DATA`, its own free
+`--remote-debugging-port`, and `SPLITPAGE_NO_UPDATE_CHECK=1`. Nothing touches
+the developer's real Splitpage profile or documents.
+
+The suite passes on both the dev and the packaged-arm64 target. The suite groups run in order: boot/security,
+open/save/conflict/save-as/export, second instance (plain and relative-path),
+session restore, `--library`, `--host --pin` (given, auto-generated, and the
+no-`--pin` warning), update status, unsaved-changes close, close/quit
+authority (with and without a user gesture), page-initiated `window.close()`,
+clean close — then the tab shell added by step L2 (tabstrip origin, Ctrl+T
+new tab, tab routing rules, close-tab clean/dirty, last-tab-closes-window /
+last-window-quits, a window with 2 dirty tabs plus another window, quit
+across two windows with dirty tabs, `--host` quit's stop-sharing prompt,
+tear-off preserving live tab state, restore at launch, v1→v2 migration and a
+corrupt-JSON fresh boot) — then document id and desktop history added by
+step M (save-in-place birthtime vs. the duplicate rule, duplicate document id
+across tabs, history round-trip and relaunch, history id validation, a
+crash-after-body relaunch adopting the orphan, a corrupt `index.json`
+rebuilt by fsck, cap-driven eviction, concurrent puts, legacy migration, the
+main-vs-renderer planner twin, a newer format going read-only) — then
+crash-safe drafts added by step N (crash recovery of an untitled document, a
+renderer crash of a dirty file tab, the file changed on disk while down, the
+file deleted while down, quit without saving discarding every draft, closing
+one tab without saving discarding only that draft, a power-cut mid-write, both
+generations corrupt going to quarantine, ENOSPC pausing writes, a forged
+fileId, and no secret ever reaching disk).
+
+**Dev Electron is native ARM64**, switched on 2026-09-15. From `desktop/`:
+
+```powershell
+Remove-Item -Recurse -Force node_modules\electron\dist
+$env:npm_config_arch = "arm64"
+$env:npm_config_platform = "win32"
+node node_modules\electron\install.js
+```
+
+The version pin (`^44.3.0`) is unchanged. A plain `npm install` reverts to
+x64 unless `desktop/.npmrc` has `arch=arm64`. Measured dev smoke: 7m43s
+(x64 emulated) vs. 7m25s (ARM64) for the same suite — the suite is
+wait-bound, not CPU-bound, so don't expect a dramatic speedup from the
+switch.
+
+### SPLITPAGE_TEST rule
+
+Every automated launch of the desktop app must set `SPLITPAGE_TEST=1` (HANDOFF
+invariant #33) — the suite's `launchApp()` already does; any ad-hoc launch must
+too. This is someone's working machine: without it, windows and error dialogs
+appear on their screen. In test mode the window never shows, a dialog not
+pre-answered through `SPLITPAGE_TEST_DIALOGS` resolves as Cancel, and a
+main-process crash prints `[splitpage-test] uncaught main-process error` to
+stderr and exits 70 — every case's teardown fails on that line. Kill whatever
+you start (`taskkill /PID <pid> /T /F`). If a window or dialog ever appears
+during a run, stop and fix that before anything else.
+
+### Gotchas worth recording
+
+- **Teardown is slow regardless of architecture.** It takes 10–15 s; poll for
+  process exit rather than trusting timeouts.
+- **`document.visibilityState` reads "visible" even in test mode.** Check invisibility
+  with `(Get-Process -Id <pid>).MainWindowHandle -eq 0` instead.
+- **A CDP `Runtime.evaluate` is not a user gesture unless `userGesture:true`.**
+  Chromium only honours a page's `beforeunload` block after user activation, so an
+  edit made through a plain evaluate leaves the page unactivated. Pass
+  `userGesture:true` when a test means "the user typed this"; leave it off when the
+  point is that the main process's own close prompt works without activation
+  (`caseCloseAuthorityNoGesture`).
+- **Never test "the user closes the window" with a page `window.close()`.** It skips
+  the `BrowserWindow` `'close'` event entirely, so a dirty document closes with no
+  prompt and the test proves nothing about a real close. Use the test-mode-only
+  `window.splitpageDesktop.__testRequestClose()` (main calls `win.close()`, like the
+  title-bar ×) or `__testRequestQuit()` (`app.quit()`, like File ▸ Exit). They don't
+  exist without `SPLITPAGE_TEST=1`.
+- **Page targets are found via `/json` (type "page").** This will need a target filter
+  once tabs add more pages (currently there is only one page per window).

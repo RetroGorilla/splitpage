@@ -1,0 +1,75 @@
+appId: com.retrogorilla.splitpage
+productName: Splitpage
+copyright: Copyright 2024-2025 RetroGorilla
+
+directories:
+  output: dist
+  buildResources: build
+
+# main.js requires ./drafts at load and both preloads by path, so all four
+# have to be inside the asar or a packaged launch crashes on startup. The tab
+# strip's own three files are NOT here — they are served from
+# resources/splitpage/tabstrip (stage.mjs stages them, extraResources below
+# ships them), because protocol.handle reads them off disk.
+files:
+  - main.js
+  - preload.js
+  - tabstrip-preload.js
+  - drafts.js
+  - package.json
+
+extraResources:
+  - from: .stage/splitpage
+    to: splitpage
+
+asar: true
+
+win:
+  # Both architectures are pinned here, not left to electron-builder's
+  # default, which is the HOST's architecture. On this Snapdragon machine
+  # that default is ARM64-only. The IExpress setups hit the same trap: 1.0.1's
+  # "x64" setup came out as an ARM64 binary that no x64 PC could start.
+  # `npm run dist:win` also passes --x64 --arm64 and then runs verify-dist.mjs,
+  # which reads each produced binary's PE machine field and fails the build on
+  # a mismatch.
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  artifactName: SplitpageDesktopSetup-${version}-${arch}.${ext}
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Splitpage
+  # Puts the main Start Menu shortcut in the same "Splitpage" subfolder that
+  # installer.nsh's customInstall macro already creates for the "(shared
+  # session)" shortcut, instead of the main one landing loose at the Start
+  # Menu root while a same-named "Splitpage" folder sits next to it holding
+  # only the second shortcut — easy to miss or mistake for a duplicate.
+  menuCategory: Splitpage
+  include: build/installer.nsh
+
+fileAssociations:
+  - ext: splitpage
+    name: Splitpage script
+    description: Splitpage script
+    role: Editor
+
+# macOS target (not built on this machine, but configured for future use)
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+
+# Linux target (not built on this machine, but configured for future use)
+linux:
+  target:
+    - AppImage
+
+publish: null

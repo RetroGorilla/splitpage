@@ -45,7 +45,12 @@ eval (function(){F.save();return true;})()
 wait !document.getElementById('file-conflict-modal').hidden
 click #file-conflict-reload
 wait document.getElementById('file-conflict-modal').hidden
-wait F.docFile().kind === 'md'
+# kind was already 'md' before the reload, so waiting on it passed at once and
+# the expect below raced the reload's async openProjectFile() — it lost under
+# CPU load. Wait on the value the reload actually changes instead (same as the
+# Overwrite block's wait below).
+wait F.docFile().lastModified === window.__t0 + 200000
+expect F.docFile().kind === 'md'
 expect F.docFile().lastModified === window.__t0 + 200000
 expect window.__written === 1
 

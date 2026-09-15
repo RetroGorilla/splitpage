@@ -2,14 +2,20 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 #   ... -Only 02            run just the suite whose filename starts with 02
-#   ... -Headed             watch it happen in a real Edge window
+#   ... -Parallel 1         one suite at a time (default is 4 lanes)
+#   ... -Headed             watch it happen in a real Edge window (forces -Parallel 1)
 #   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
 #
 # Each suite gets its own driver process, its own server port and its own
-# browser, so one wedged suite cannot take the others down with it. When
-# -Port/-CdpPort are omitted the bases are auto-picked (see below) so two
-# runs on the same machine - two worktrees, two agents - don't fight over
-# the same fixed ports.
+# browser, so one wedged suite cannot take the others down with it. Up to
+# -Parallel suites run at once; nothing is shared between them (distinct
+# ports, distinct Edge profiles, distinct log files), which is what makes
+# the lanes safe. When -Port/-CdpPort are omitted the bases are auto-picked
+# (see below) so two runs on the same machine - two worktrees, two agents -
+# don't fight over the same fixed ports. Two runs are also safe together on
+# Edge: this script mints its own runId and every driver.ps1 it spawns tags
+# its browser profile with it, so each run's leftover-browser sweep (see
+# Clear-SplitpageEdge below) only ever touches its own run.
 
 [CmdletBinding()]
 param(
@@ -17,6 +23,7 @@ param(
   [int]$Port = 0,
   [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
+  [int]$Parallel = 4,
   [switch]$Headed
 )
 
@@ -25,6 +32,8 @@ $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
+if ($Headed) { $Parallel = 1 }
+if ($Parallel -lt 1) { $Parallel = 1 }
 
 # Start-Process returns Edge's launcher, which hands off to a process tree and
 # exits - so the driver's own Stop-Process kills a corpse and leaves the real
@@ -36,26 +45,25 @@ New-Item -ItemType Directory -Force -Path $logs | Out-Null
 #
 # Matched on the profile directory, never on the process name: killing every
 # msedge.exe would take down the browser the person running the tests is
-# reading this in.
-function Clear-SplitpageEdge {
+# reading this in. And matched on a tag this run minted, not on the bare
+# "splitpage-edge-*" glob, so a second concurrent run-tests.ps1 on this
+# machine (different runId) is never swept - that used to kill a second
+# run's browser mid-suite with "The WebSocket is in an invalid state
+# ('Aborted')". With parallel lanes the same reasoning applies INSIDE a run:
+# each suite gets its own tag "<runId>s<NN>" (driver.ps1 appends "-<guid>"),
+# so the per-suite sweep below only touches that suite's browsers and never
+# a sibling lane's live one. The final sweep uses the bare runId prefix and
+# takes everything this run left behind.
+function Clear-SplitpageEdge([string]$Tag) {
   try {
     Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction Stop |
-      Where-Object { $_.CommandLine -and $_.CommandLine -like '*splitpage-edge-*' } |
+      Where-Object { $_.CommandLine -and $_.CommandLine -like "*splitpage-edge-$Tag*" } |
       ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   } catch {}
 }
 
-# Only sweep when no other suite is running on this machine. The sweep is for
-# browsers a killed run left behind; a second run-tests.ps1 (another worktree)
-# has live browsers that look identical, and killing those aborted its suites
-# with "WebSocket ... Aborted" until this guard existed.
-$otherDrivers = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*driver.ps1*' })
-if ($otherDrivers.Count -gt 0) {
-  Write-Host "another suite is running (pid $($otherDrivers[0].ProcessId)); not sweeping its browsers" -ForegroundColor DarkGray
-} else {
-  Clear-SplitpageEdge
-}
+$RunId = [guid]::NewGuid().ToString('N').Substring(0, 8)
+Clear-SplitpageEdge $RunId
 
 $files = Get-ChildItem -Path $tests -Filter '*.txt' | Sort-Object Name
 if ($Only) { $files = $files | Where-Object { $_.Name -like "$Only*" } }
@@ -108,64 +116,78 @@ if ($autoPort -or $autoCdp) {
   if ($autoCdp)  { $CdpPort = $cdpBase }
   Write-Host "auto-picked port bases: Port=$Port CdpPort=$CdpPort"
 }
+Write-Host ("running {0} suite(s), {1} at a time" -f $files.Count, $Parallel)
 
-$totalChecks = 0; $totalFail = 0; $suiteFail = 0
+# One lane record per suite. Lanes are started in file order as slots free
+# up; results are printed in the order lanes FINISH, each line prefixed with
+# the suite name so interleaving is never ambiguous.
+$lanes = @()
 $i = 0
-
 foreach ($f in $files) {
   $i++
-  $out = Join-Path $logs ($f.BaseName + '.out.txt')
-  $err = Join-Path $logs ($f.BaseName + '.err.txt')
-  Remove-Item $out, $err -ErrorAction SilentlyContinue
-
-  # Distinct ports per suite so a leftover listener from a killed run does not
-  # collide with the next one.
-  $a = @(
-    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'driver.ps1'),
-    '-Port', ($Port + $i), '-CdpPort', ($CdpPort + $i), '-Script', $f.FullName
-  )
-  if ($Headed) { $a += '-Headed' }
-
-  Write-Host ("--- {0}" -f $f.Name)
-  $p = Start-Process powershell -ArgumentList $a -RedirectStandardOutput $out `
-       -RedirectStandardError $err -PassThru -NoNewWindow
-
-  # WaitForExit() on a redirected process can hang past the child's own exit,
-  # so poll the log for the RESULT line the driver always prints last.
-  $sw = [Diagnostics.Stopwatch]::StartNew()
-  $done = $false
-  while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec) {
-    Start-Sleep -Milliseconds 500
-    if ((Test-Path $out) -and (Select-String -Path $out -Pattern '^RESULT:' -Quiet)) { $done = $true; break }
-    if ($p.HasExited -and $sw.Elapsed.TotalSeconds -gt 3) { $done = $true; break }
+  $lanes += [pscustomobject]@{
+    Index = $i; File = $f; Tag = ('{0}s{1:d2}' -f $RunId, $i)
+    Out = Join-Path $logs ($f.BaseName + '.out.txt')
+    Err = Join-Path $logs ($f.BaseName + '.err.txt')
+    Proc = $null; Watch = $null; Done = $false; DoneAt = $null; Reported = $false; TimedOut = $false
   }
-  # Give the driver a moment to reach its own finally block before killing it -
-  # it prints RESULT first and tears the browser down after.
-  if ($done -and -not $p.HasExited) {
-    $grace = [Diagnostics.Stopwatch]::StartNew()
-    while (-not $p.HasExited -and $grace.Elapsed.TotalSeconds -lt 5) { Start-Sleep -Milliseconds 200 }
-  }
-  if (-not $p.HasExited) { try { $p.Kill() } catch {} }
-  # Only sweep when no other suite is running on this machine. The sweep is for
-# browsers a killed run left behind; a second run-tests.ps1 (another worktree)
-# has live browsers that look identical, and killing those aborted its suites
-# with "WebSocket ... Aborted" until this guard existed.
-$otherDrivers = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -like '*driver.ps1*' })
-if ($otherDrivers.Count -gt 0) {
-  Write-Host "another suite is running (pid $($otherDrivers[0].ProcessId)); not sweeping its browsers" -ForegroundColor DarkGray
-} else {
-  Clear-SplitpageEdge
 }
 
-  if (-not $done) {
-    Write-Host "    TIMED OUT after ${TimeoutSec}s" -ForegroundColor Red
-    $suiteFail++
-    if (Test-Path $out) { Get-Content $out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
-    continue
+function Start-Lane($lane) {
+  Remove-Item $lane.Out, $lane.Err -ErrorAction SilentlyContinue
+  $a = @(
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'driver.ps1'),
+    '-Port', ($Port + $lane.Index), '-CdpPort', ($CdpPort + $lane.Index), '-Script', $lane.File.FullName,
+    '-RunId', $lane.Tag
+  )
+  if ($Headed) { $a += '-Headed' }
+  Write-Host ("--- {0} (started)" -f $lane.File.Name)
+  $lane.Proc = Start-Process powershell -ArgumentList $a -RedirectStandardOutput $lane.Out `
+               -RedirectStandardError $lane.Err -PassThru -NoNewWindow
+  $lane.Watch = [Diagnostics.Stopwatch]::StartNew()
+}
+
+# WaitForExit() on a redirected process can hang past the child's own exit,
+# so poll the log for the RESULT line the driver always prints last. Once it
+# is there, give the driver up to 5 s to reach its own finally block before
+# killing it - it prints RESULT first and tears the browser down after.
+function Test-LaneFinished($lane) {
+  if ($lane.Done) {
+    if ($lane.Proc.HasExited) { return $true }
+    if (((Get-Date) - $lane.DoneAt).TotalSeconds -ge 5) { try { $lane.Proc.Kill() } catch {}; return $true }
+    return $false
+  }
+  $resultSeen = (Test-Path $lane.Out) -and (Select-String -Path $lane.Out -Pattern '^RESULT:' -Quiet)
+  if ($resultSeen -or ($lane.Proc.HasExited -and $lane.Watch.Elapsed.TotalSeconds -gt 3)) {
+    $lane.Done = $true; $lane.DoneAt = Get-Date
+    return (Test-LaneFinished $lane)
+  }
+  if ($lane.Watch.Elapsed.TotalSeconds -ge $TimeoutSec) {
+    $lane.Done = $true; $lane.TimedOut = $true
+    try { $lane.Proc.Kill() } catch {}
+    return $true
+  }
+  return $false
+}
+
+$totalChecks = 0; $totalFail = 0; $suiteFail = 0
+
+function Report-Lane($lane) {
+  $name = $lane.File.Name
+  # Sweep this lane's own leftover browsers only (see Clear-SplitpageEdge).
+  Clear-SplitpageEdge $lane.Tag
+
+  if ($lane.TimedOut) {
+    Write-Host ("--- {0}: TIMED OUT after {1}s" -f $name, $TimeoutSec) -ForegroundColor Red
+    $script:suiteFail++
+    if (Test-Path $lane.Out) { Get-Content $lane.Out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
+    return
   }
 
-  $lines = Get-Content $out
+  $lines = @(Get-Content $lane.Out -ErrorAction SilentlyContinue)
+  $result = ($lines | Where-Object { $_ -match '^RESULT:' } | Select-Object -Last 1)
+  $failed = ($result -match 'FAILED') -or (-not $result)
+  Write-Host ("--- {0}" -f $name)
   foreach ($l in $lines) {
     # -cmatch, not -match: PowerShell's -match is case-insensitive, so the
     # page's own lowercase "error: ..." console noise was being reported as
@@ -174,14 +196,35 @@ if ($otherDrivers.Count -gt 0) {
     elseif ($l -cmatch '^ *(expected|actual):') { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ERROR') { Write-Host "    $l" -ForegroundColor Red }
   }
-  $result = ($lines | Where-Object { $_ -match '^RESULT:' } | Select-Object -Last 1)
   if ($result -match 'RESULT: (\d+)/(\d+)') {
-    $totalChecks += [int]$Matches[2]
-    $totalFail   += ([int]$Matches[2] - [int]$Matches[1])
+    $script:totalChecks += [int]$Matches[2]
+    $script:totalFail   += ([int]$Matches[2] - [int]$Matches[1])
   }
-  if ($result -match 'FAILED') { $suiteFail++; Write-Host "    $result" -ForegroundColor Red }
+  if (-not $result) { $result = 'RESULT: (driver exited without a RESULT line) FAILED' }
+  if ($failed) { $script:suiteFail++; Write-Host "    $result" -ForegroundColor Red }
   else { Write-Host "    $result" -ForegroundColor Green }
 }
+
+$pending = [System.Collections.Generic.Queue[object]]::new()
+foreach ($lane in $lanes) { $pending.Enqueue($lane) }
+$active = New-Object System.Collections.ArrayList
+
+while ($pending.Count -gt 0 -or $active.Count -gt 0) {
+  while ($pending.Count -gt 0 -and $active.Count -lt $Parallel) {
+    $lane = $pending.Dequeue()
+    Start-Lane $lane
+    [void]$active.Add($lane)
+  }
+  Start-Sleep -Milliseconds 500
+  foreach ($lane in @($active)) {
+    if (Test-LaneFinished $lane) {
+      Report-Lane $lane
+      $active.Remove($lane)
+    }
+  }
+}
+
+Clear-SplitpageEdge $RunId
 
 Write-Host ''
 $passed = $totalChecks - $totalFail

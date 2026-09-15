@@ -1,0 +1,49 @@
+# Document identity (02b-doc-id.js) across a reload.
+#
+# A pristine boot never carries a real identity forward — it mints a fresh
+# random id every time (02-state.js' loadInitialState). A conflict stash
+# does: it is this same document from before the reload the shell forces on
+# a 409 (03-sync.js' "survives the reload" comment), so applyStashedWork()
+# (14-export.js) copies the stash's id onto whatever this reload just booted
+# BEFORE deciding whether anything actually needs merging. Both halves are
+# driven directly through sessionStorage — nothing here can trigger a real
+# 409 headless — the same way 13-onboarding.txt drives localStorage across
+# a goto.
+#
+# A goto is a real page reload — everything on `window` is gone afterwards
+# (13-onboarding.txt's own note) — so the stash id below is a literal
+# repeated in every step, never a variable carried across a goto.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; return !!F;})()
+expect true
+
+# --- the pristine boot id differs across a goto -----------------------------
+eval (function(){window.__bootId1 = F.docId(); return window.__bootId1;})()
+expect /^d[0-9a-f]{32}$/.test(window.__bootId1)
+goto /index.html
+eval (function(){window.F = window.__splitpageFormats; return true;})()
+wait /^d[0-9a-f]{32}$/.test(F.docId())
+expect F.docId() !== window.__bootId1
+
+# --- an unchanged stash: the id is kept, no merge banner, not dirty --------
+# base and mine are the SAME pristine content, so after the reload's own
+# fresh boot lands on the exact same content too, nothing differs but the id
+# — and applyStashedWork() aligns that BEFORE the equality check.
+eval (function(){var s = F.clone(F.state()); s.docId = 'd'+'a'.repeat(32); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify({ at: new Date().toISOString(), by: 'Tester', base: s, mine: s })); return true;})()
+goto /index.html
+eval (function(){window.F = window.__splitpageFormats; return true;})()
+wait F.docId() === ('d'+'a'.repeat(32))
+expect document.getElementById('merge-banner').hidden
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+
+# --- a stash with an edited row: the banner shows, the id is still kept ----
+eval (function(){var s = F.clone(F.state()); s.docId = 'd'+'a'.repeat(32); var edited = F.clone(s); edited.rows[0].audioText = edited.rows[0].audioText + ' — edited before the reload'; sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify({ at: new Date().toISOString(), by: 'Tester', base: s, mine: edited })); return true;})()
+goto /index.html
+eval (function(){window.F = window.__splitpageFormats; return true;})()
+wait F.docId() === ('d'+'a'.repeat(32))
+wait !document.getElementById('merge-banner').hidden
+expect F.state().rows[0].audioText.indexOf('edited before the reload') !== -1
+
+quit

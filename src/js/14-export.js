@@ -3,6 +3,36 @@
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
+    /* A Save As makes a second file. If this document's id has already been
+       written somewhere (a file, a server, a draft), both files would carry
+       it and share one version history, so the copy gets a new id. An id
+       that never left the page just travels with its first save. Decided on
+       opts.saveAs, not the local `saveAs` below: a legacy .html converting to
+       .md on its first Save is the same document moving house, not a copy. */
+    var forkDocId = (opts.saveAs && docIdWrittenOut) ? mintDocId() : null;
+    /* Which document this save belongs to. Every await below (the native
+       dialog above all — main keeps serving a double-click in Explorer while
+       it is up) can end with a different document on screen, and nothing
+       that follows may re-id, retarget or mark clean THAT one on this save's
+       behalf. Same check as publishToServer's `state.docId === oldId`. */
+    var docIdAtSave = state.docId;
+    /* A fresh pick retargets Save only if the write lands. Otherwise the next
+       plain Save would quietly reuse a file that never got this document —
+       and, after a Save As whose fork was thrown away with the failed write,
+       put the already-used id into a second file (invariant #36). */
+    var prevDocFileHandle = null;
+    var retarget = null;
+    var wrote = false;
+    function retargetTo(handle, k) {
+      if (state.docId !== docIdAtSave) return;
+      prevDocFileHandle = docFileHandle;
+      retarget = { handle: handle, kind: k, lastModified: null, name: handle.name };
+      docFileHandle = retarget;
+    }
+    function undoRetarget() {
+      if (retarget && !wrote && docFileHandle === retarget) docFileHandle = prevDocFileHandle;
+      retarget = null;
+    }
     saveInFlight = true;
     setSaveButtons("Saving…", true);
 
@@ -37,12 +67,17 @@
     state.lastEditedBy = getEditorName();
     state.lastEditedAt = nowIso();
     var published = cloneState(state);
+    /* the bytes carry the fork's id; `state` adopts it only once the write
+       has succeeded (adoptSavedCopyDocId), so a cancelled dialog or a failed
+       write leaves this document's identity exactly as it was */
+    if (forkDocId) published.docId = forkDocId;
     var seqAtSave = editSeq;
     var slug = slugify(published.title);
     /* Save As always asks where to write, ignoring any file we already have.
        Plain Save reuses that file once one exists, and only asks the first
        time it has none. Either way, a fresh pick becomes the file future
-       plain Saves write to. */
+       plain Saves write to — once the write to it has succeeded
+       (retargetTo/undoRetarget above). */
     var targetHandle = saveAs ? null : docFileHandle.handle;
     /* Which serializer runs is decided by the file, not by a preference —
        and for a fresh pick that cannot be known until the picker has come
@@ -58,7 +93,32 @@
     var reusingHandle = !!targetHandle;
 
     try {
-      if (!targetHandle && window.showSaveFilePicker) {
+      /* Desktop has no File System Access API at all (it is a Chromium
+         feature, not something Electron's renderer gets for free), and a
+         native Save dialog is the whole point of running as a real app —
+         DESKTOP.saveFileDialog() is checked first so it is never shadowed
+         by the browser branch below, which stays exactly as it was for the
+         web build. A cancelled native dialog resolves null, same shape as
+         the picker's AbortError just below: restore the rev bump, no error
+         toast, nothing written. */
+      if (!targetHandle && DESKTOP) {
+        var pickedDesktop = await DESKTOP.saveFileDialog({
+          suggestedName: slug + ".md",
+          filters: [
+            { name: "Markdown script", extensions: ["md"] },
+            { name: "Splitpage script", extensions: ["splitpage"] }
+          ]
+        });
+        if (!pickedDesktop) {
+          state.rev = Math.max(0, (state.rev || 1) - 1);
+          saveInFlight = false;
+          setSaveButtons(dirty ? "Save •" : "Save", false);
+          return;
+        }
+        targetHandle = makeDesktopHandle(pickedDesktop);
+        kind = fileKindFromName(pickedDesktop.name) === "splitpage" ? "splitpage" : "md";
+        retargetTo(targetHandle, kind);
+      } else if (!targetHandle && window.showSaveFilePicker) {
         targetHandle = await window.showSaveFilePicker({
           suggestedName: slug + ".md",
           types: [
@@ -67,8 +127,7 @@
           ]
         });
         kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
-        docFileHandle = { handle: targetHandle, kind: kind, lastModified: null };
-        rememberLastFileHandle(targetHandle);
+        retargetTo(targetHandle, kind);
       }
 
       /* On-disk conflict check (HANDOFF #1, same guard as the import
@@ -93,6 +152,9 @@
       } catch (e) {
         showToast("Could not prepare the file to save.", "error");
         state.rev = Math.max(0, (state.rev || 1) - 1);
+        /* before setSaveButtons, whose identity sync would otherwise adopt
+           the never-written file as this document's home for a moment */
+        undoRetarget();
         saveInFlight = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
         return;
@@ -102,12 +164,21 @@
         var writable = await targetHandle.createWritable();
         await writable.write(body);
         await writable.close();
-        baseState = published;
+        wrote = true;
+        /* Re-checked here, after the awaits, not assumed (see docIdAtSave).
+           If another document took over, the copy is still written — the
+           user asked for it — but it stays just a file on disk. */
+        var stillOurs = state.docId === docIdAtSave;
+        var homeAtWrite = docFileHandle.handle === targetHandle ? docFileHandle : null;
+        if (stillOurs) baseState = published;
+        if (retarget && docFileHandle === retarget) rememberLastFileHandle(targetHandle);
+        adoptSavedCopyDocId(forkDocId, docIdAtSave);
+        var docIdAfterSave = state.docId;
         try {
           var afterFile = await targetHandle.getFile();
-          docFileHandle.lastModified = afterFile.lastModified;
+          if (homeAtWrite && docFileHandle === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
         } catch (e) { /* not fatal — the write already succeeded */ }
-        if (editSeq === seqAtSave) clearDirty();
+        if (stillOurs && state.docId === docIdAfterSave && editSeq === seqAtSave) clearDirty();
         showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       } else {
         /* no File System Access API (e.g. Firefox) — a plain download is the
@@ -115,8 +186,11 @@
            time. Same bytes, same extension as the in-place write above. */
         var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
         if (ok) {
-          baseState = published;
-          if (editSeq === seqAtSave) clearDirty();
+          wrote = true;
+          var downloadedOurs = state.docId === docIdAtSave;
+          if (downloadedOurs) baseState = published;
+          adoptSavedCopyDocId(forkDocId, docIdAtSave);
+          if (downloadedOurs && editSeq === seqAtSave) clearDirty();
         } else {
           state.rev = Math.max(0, (state.rev || 1) - 1);
         }
@@ -129,34 +203,93 @@
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
+      /* any failure after a fresh pick: a createWritable/write/close that
+         rejects (a OneDrive lock, Controlled Folder Access, a failed IPC
+         write). Undone before setSaveButtons syncs identity. */
+      undoRetarget();
       saveInFlight = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
     }
   }
 
+  /* The one place a Save As fork becomes this document's identity (DOCID-API).
+     Called only after the bytes are safely written, and before clearDirty(),
+     so a cancelled dialog or a failed write never leaves history copied under
+     an id no file carries. The copy just written IS the document on screen
+     from now on — plain Save writes to it — so the view follows it to the
+     new id and takes its history along.
+
+     A server document is the exception: Save As there takes a copy home
+     while the page stays on the server document (saveDoc's comment above),
+     so the page keeps the server's id; only the file carries the fork.
+
+     Marks the id as written out and re-syncs identity, fork or not, because
+     every successful save or download means this id is now on disk
+     somewhere.
+
+     `docIdAtSave` is the id the saved document had when saveDoc froze it.
+     If the page has moved on to a different document during the save's
+     awaits, that document is left exactly as it is: re-iding it would give
+     it an id its own file does not carry, and copy ITS history under the
+     id of someone else's new file. The fork's history still comes from
+     docIdAtSave — the file just written carries it, whatever is on screen. */
+  function adoptSavedCopyDocId(forkDocId, docIdAtSave) {
+    forkDocId = normalizeDocId(forkDocId);
+    var sameDocument = !!state && state.docId === docIdAtSave;
+    if (forkDocId) {
+      if (sameDocument && !onServerDoc()) state.docId = forkDocId;
+      copyDocHistorySafe(docIdAtSave, forkDocId);
+    }
+    if (!sameDocument) return;
+    docIdWrittenOut = true;
+    syncDocIdentity();
+  }
+
   /* Runs on load: if a stash survived, three-way merge it into whatever
-     version we just loaded so no local edit is lost. */
-  function applyStashedWork(loaded) {
-    var stash = readStash();
-    try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {}
-    if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null };
+     version we just loaded so no local edit is lost.
+
+     `override` is the same {base, mine} shape read from somewhere other than
+     sessionStorage — today, a crash draft taken back from disk (20g-drafts.js).
+     Everything that belongs to the sessionStorage stash is then skipped: the
+     reload guard was never set, SERVER_RESUME_KEY says nothing about a draft
+     (a draft of a server document has its own path through resumeServerDoc),
+     there is nothing to clear, and the caller has already aligned the two ids
+     itself under rules a stash does not have (the docIdEmbedded rule,
+     DRAFT-RENDERER-API). The merge below is deliberately identical for both:
+     one three-way merge, one "Before merging" snapshot, one undo point. */
+  function applyStashedWork(loaded, override) {
+    var stash = override || readStash();
+    if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
+    if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
     /* A stash left by a lapsed hosted session belongs to a document on the
        server, not to the page's own embedded one. Merging it into `loaded`
        here would splice someone's script into a blank default document —
        leave it for resumeServerDoc(), which knows which document it is. */
-    try {
-      if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null };
-    } catch (e) {}
+    if (!override) {
+      try {
+        if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null, snapshot: null };
+      } catch (e) {}
 
-    clearStash();
+      /* The stash is this same document from before the reload, so it keeps
+         its id. Without this copy the equality check just below could never
+         hold — `loaded` carries a fresh random id from migrateRows — and an
+         unchanged stash would always snapshot, merge, mark the document dirty
+         and queue a save for nothing. */
+      var stashId = normalizeDocId(stash.mine.docId);
+      if (stashId) { loaded.docId = stashId; docIdWrittenOut = true; }
+
+      clearStash();
+    }
     /* nothing changed under us after all */
-    if (JSON.stringify(stash.mine) === JSON.stringify(loaded)) return { state: loaded, report: null };
+    if (JSON.stringify(stash.mine) === JSON.stringify(loaded)) return { state: loaded, report: null, snapshot: null };
 
-    var pre = readSnapshots();
-    pushSnapshot("Before merging your unsaved changes", migrateRows(cloneState(loaded)));
-    var post = readSnapshots();
-    lastMergeUndo = post.length && post.length !== pre.length ? post[post.length - 1].id
-                  : (post.length ? post[post.length - 1].id : null);
+    /* The capture is synchronous and hands back its ticket, so the undo
+       point is known at once — no reading the store before and after to
+       guess which entry is new. Boot never awaits snap.done (state is still
+       null while this runs); undoMerge waits for its own backup instead. The
+       explicit state means the pristine-seed skip can never drop it. */
+    var snap = pushSnapshot("Before merging your unsaved changes", migrateRows(cloneState(loaded)));
+    lastMergeUndo = snap ? { id: snap.id, docId: snap.docId } : null;
 
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
@@ -164,7 +297,7 @@
       loaded,
       !!stash.imagesStripped
     );
-    return { state: result.merged, report: result };
+    return { state: result.merged, report: result, snapshot: snap };
   }
 
   /* serialize auto-saves triggered by comment/tag actions so two quick actions

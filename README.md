@@ -16,6 +16,31 @@ You can also work with other people: [host a shared session](#hosting-a-shared-s
 so others on your network open and edit the same scripts live, or
 [connect to a server](#connecting-to-a-server) someone else is hosting.
 
+## What's new in 2.0
+
+Splitpage now comes as a real Windows desktop app: its own window, tabs,
+crash-safe drafts, and per-document version history that doesn't run out of
+browser storage — see [Desktop app](#desktop-app). The browser version keeps
+working exactly as it always has.
+
+**Which installer to pick.** Most Windows PCs (Intel/AMD) want
+`SplitpageDesktopSetup-<version>-x64.exe`; Windows on ARM (Snapdragon,
+Surface Pro X and similar) wants the `-arm64.exe` build. Not sure which you
+have? Settings ▸ System ▸ About ▸ "System type".
+
+**Windows SmartScreen warning.** The installers aren't code-signed yet, so
+Windows may say it "protected your PC" — click **More info ▸ Run anyway**.
+
+**Upgrading from 1.0.** If you installed 1.0 with its setup program, the 2.0
+installer finds it, removes it, and keeps your shared-session documents; the
+browser version updates itself, nothing to do.
+
+**Moving your browser data over?** See
+[Moving from the browser app to the desktop app](#moving-from-the-browser-app-to-the-desktop-app).
+
+**Follow My Voice** isn't available in the desktop app yet — it still works
+in the browser version.
+
 ## Setting up
 
 The first time you open a fresh copy of Splitpage, a short setup wizard walks
@@ -66,12 +91,111 @@ a browser; and `--library`, which keeps documents on the server in `./data`
 instead of as files you save to disk. Without `--library` the launcher
 serves files and nothing else, so the app behaves exactly as it always has.
 
+## Desktop app
+
+Splitpage also comes as a desktop app for Windows (x64 and ARM64): the same
+app in its own window, with native menus and Open/Save dialogs, and `.splitpage`
+files open in it when you double-click them. Editing, saving and hosting a
+shared session on your network all work the same as in the browser, with two
+exceptions for now:
+
+- **Follow My Voice** isn't available in the desktop app yet. It still works in
+  Chrome or Edge, and a fix is planned.
+- **Google Drive files** can't be browsed from the desktop app, because Google's
+  sign-in only returns to a web address. **Import from Google Doc link** still
+  works: it opens the Doc's .docx download in your browser, and you then open
+  the downloaded file with File ▸ Open.
+
+### Moving from the browser app to the desktop app
+
+If you have been using the browser version and want to move to the desktop app,
+you can bring your version history, saved servers, and preferences with you:
+
+1. In the browser app, **File ▸ Export app data…** saves a `.json` file with
+   your history, servers, and settings (`splitpage-app-data-YYYYMMDD.json`).
+2. Install and launch the desktop app.
+3. In the desktop app, **File ▸ Import app data…** and pick the file you
+   exported. Everything merges into what you already have — nothing is
+   overwritten or deleted, and importing the same file twice adds nothing new.
+
+**What travels:** version history (every snapshot you've saved, per document and
+in the Older archive), saved servers (bookmarks including SSH settings), and
+preferences (whether you've seen the setup wizard, your author name, comment
+sorting preference, writer column width, and the tagging-help dismissal).
+
+**What does not travel:** server sign-in tokens or PINs, Google Drive API keys,
+and the documents themselves — those are files you already have on your
+computer.
+
+Export is currently available in the browser app only. The desktop app's history
+backend is stored as files on disk, and exporting from it is planned but not yet
+built.
+
+### Tabs
+
+The desktop app opens documents in tabs across the top of the window, like a
+browser:
+
+- **Ctrl+T** opens a new tab.
+- **Ctrl+W**, or a middle-click on a tab, closes it — if it has unsaved
+  changes, Splitpage asks first.
+- **Ctrl+Tab** / **Ctrl+Shift+Tab** step to the next or previous tab.
+- Drag a tab out of the window to give it its own window, and drag it into
+  another Splitpage window to bring it back in. Drag a tab past another one
+  to reorder them.
+
+Every tab you have open comes back the next time you launch Splitpage.
+
+**Crash recovery.** If the app or your computer goes down with unsaved work
+open, nothing is lost: every tab's unsaved changes are kept on disk as you
+type, and Splitpage offers them back, tab by tab, the next time you launch
+it. That includes a document from a shared session whose server you can no
+longer reach — it comes back as an unsaved local copy, with a note naming
+the server document it came from.
+
+**Closing with unsaved work.** Closing a window or quitting the app while
+any of its tabs have unsaved changes asks once, in a single dialog listing
+every tab that would lose work, with **Review**, **Close without saving**,
+and **Cancel**.
+
+**Duplicate files.** If you open a copy of a file that's already open in
+another tab — for example, the same `.md` file synced down onto two
+machines — Splitpage notices and gives the copy its own version history,
+separate from the original's. Nothing is written to either file until you
+save.
+
+**Installing:** run `SplitpageDesktopSetup-<version>.exe`. It installs for you
+only (no administrator needed) and lets you choose the folder, and there is
+nothing else to install first. It isn't on the releases page yet — for now it
+is built from source (see DEPLOY.md) — and it isn't code-signed yet, so Windows
+may warn before running it.
+
+The installer adds a desktop shortcut and a **Splitpage** folder in the Start
+Menu with two shortcuts:
+
+- **Splitpage** — the app on its own.
+- **Splitpage (shared session)** — starts hosting for others on your network
+  straight away, always with a join PIN. The Servers dialog opens to show the
+  addresses to open and the PIN; closing Splitpage stops sharing.
+
+**Command-line flags** match the browser launcher's: `--library`, `--host`,
+`--pin [code]`, `--data DIR`, `--port N`, `--allow-origin URL` and
+`--tunnel user@host`. The desktop app has no console window to type an SSH
+password into, so `--tunnel` needs key-based SSH login. Script files named on
+the command line open at launch.
+
 ## Installing it
 
-**`SplitpageSetup-<version>.exe` is the whole product.** One download, one
-installer, and you are working — open a local script, or host a session other
-people on your network join. It carries its own Node runtime, so there is no
-second thing to go and install first.
+**For the desktop app** — its own window, tabs, and version history — see
+[Desktop app](#desktop-app) above; that installer
+(`SplitpageDesktopSetup-<version>-x64.exe` / `-arm64.exe`) is what's on the
+releases page now.
+
+This section covers the older, browser-based install instead: the same app,
+opened in Chrome or Edge, with a Start Menu entry and auto-updates, built as
+a self-extracting `SplitpageSetup-<version>.exe`. It still builds from
+source exactly as described below, but the 2.0.0 release no longer publishes
+it — the zip and the desktop installers above are what ship.
 
 Double-click it and a window asks where to put it:
 
@@ -91,7 +215,7 @@ administrator prompt). To choose the folder as well, override the command:
 
 ```
 node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 KB
-node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB
+node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB (deprecated, not published)
 ```
 
 **Nothing needs installing to build this.** The setup is a self-extracting
@@ -103,15 +227,27 @@ cached in `.cache/`.
 Run `--installer` on a non-Windows machine and it prepares everything and
 tells you the one command to finish on Windows.
 
-**The portable zip** is still there and still tiny. Unzip it anywhere and run
-`start.bat` or `./start.sh`; it uses a Node you already have, and without one
-it falls back to a PowerShell file server that serves the app but cannot host
-a session.
+**Deprecated as of 2.0.0.** The Electron installers in `desktop/` replace
+this recipe (`cd desktop && npm run dist:win`, see [Desktop
+app](#desktop-app) and DEPLOY.md); `--installer` still builds and is kept as
+a historical fallback, but its output isn't part of the release.
+
+**The portable zip** is still there and still tiny, and every release still
+ships it — 1.0.x installs use it to update themselves to the current
+version. Unzip it anywhere and run `start.bat` or `./start.sh`; it uses a
+Node you already have, and without one it falls back to a PowerShell file
+server that serves the app but cannot host a session.
+
+### Windows on ARM (the legacy installer)
+
+On Windows machines with ARM64 processors, the deprecated recipe above
+builds with `node package.mjs --installer --arch arm64` for an ARM64-only
+setup, or `--arch both` to bundle both architectures. The installer detects
+your machine's architecture and uses the matching runtime; for portable
+copies with both runtimes, `start.bat` picks the right one automatically.
+For the real desktop app on ARM64, see [What's new in
+2.0](#whats-new-in-20) and [Desktop app](#desktop-app) instead.
 <!-- help:skip-end -->
-
-### Windows on ARM
-
-On Windows machines with ARM64 processors, build with `node package.mjs --installer --arch arm64` for an ARM64-only setup, or `--arch both` to bundle both architectures. The installer detects your machine's architecture and uses the matching runtime; for portable copies with both runtimes, `start.bat` picks the right one automatically.
 
 ## Hosting a shared session
 
@@ -674,6 +810,20 @@ double-click it and the script is there, editable, with nothing to install
 and no account. It is a far bigger file than a `.md`, so it is for sending,
 not for working in.
 
+## Version history
+
+Splitpage keeps snapshots of your document as you work, so you can step back
+to an earlier version. Open the **Version history** panel to see the list
+and restore one.
+
+History is per document: each script keeps its own list, separate from any
+other script you have open. It's kept in the app's own storage on the
+desktop app, and in that browser's storage on the web — either way it stays
+on your machine, not in the saved file or an export. The first time
+Splitpage sees the single shared history list an older copy of the app used
+to keep, it's brought in automatically under **Older history**, where it
+stays available for 90 days before it's cleared out for good.
+
 ## Reopening a saved project
 
 A file Splitpage saved is a complete project, not just text — reopen it and
@@ -750,12 +900,15 @@ always works regardless.
 
 **Packaging**
 
-- `package.mjs` — builds the portable zip, and with `--installer` the Windows
-  setup.exe. `VERSION` is the single source of the version number.
-- `installer/` — `install.ps1` and `uninstall.ps1` (the installer proper) and
-  `icon.ico` for the shortcuts.
+- `package.mjs` — builds the portable zip; `VERSION` is the single source of
+  the version number. Its `--installer` flag builds the old IExpress
+  `SplitpageSetup-<version>.exe` and is deprecated as of 2.0.0.
+- `installer/` — `install.ps1` and `uninstall.ps1` (the legacy installer
+  proper) and `icon.ico` for its shortcuts.
 - `tools/fetch-runtime.mjs` — downloads and verifies the Node runtime that
-  ships inside the setup.exe.
+  ships inside the legacy setup.exe.
+- `desktop/` — the Electron desktop app: source, `npm run dist:win` to build
+  the per-architecture installers, and its own test suite.
 
 **Hosting for other people**
 

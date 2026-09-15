@@ -1,0 +1,295 @@
+# Document identity (02b-doc-id.js): state.docId, its hashing, its ingress
+# rules, the Save As fork, the duplicate-id reassignment (orchestrator
+# overrides.md #1: it never writes the user's file) and the browser's
+# best-effort duplicate check over a fake BroadcastChannel.
+#
+# Neither file picker nor a real Electron shell can run headless, so this
+# drives window.__splitpageFormats (20d-formats.js, the same trick
+# 17-formats.txt plays) and window.__desktopTest (20f-desktop.js, the same
+# trick 21-desktop-shim.txt plays) directly.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; return !!(F && D && D.makeHandle && D.makeFakeBackend && typeof F.reassignDocId === 'function');})()
+expect true
+
+# ---- boot mints a valid id ------------------------------------------------
+expect /^d[0-9a-f]{32}$/.test(F.docId())
+expect JSON.parse(document.getElementById('state-data').textContent).docId === undefined
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+expect !F.writtenOut()
+
+# ---- SHA-256 vectors (FROZEN, HANDOFF invariant #37) ----------------------
+expect F.sha256Hex('') === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+expect F.sha256Hex('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+# golden value recorded from the implementation (step A's report)
+expect F.deriveDocId('splitpage-file','{}') === 'd2a0ba3956fe408d5a1dc4b5791283f16'
+
+# ---- a hostile or missing id is replaced; a valid one is kept -------------
+eval (function(){function h(v){var b=F.clone(F.state());b.docId=v;return F.migrate(b).docId;} window.__h1=h('../../x'); window.__h2=h(('d'+'a'.repeat(32)).toUpperCase()); window.__h3=h(42); window.__h4=h('<img>'); window.__hvKeep=h('d'+'0'.repeat(32)); return [window.__h1,window.__h2,window.__h3,window.__h4,window.__hvKeep];})()
+expect /^d[0-9a-f]{32}$/.test(window.__h1)
+expect window.__h1 !== '../../x'
+expect /^d[0-9a-f]{32}$/.test(window.__h2)
+expect /^d[0-9a-f]{32}$/.test(window.__h3)
+expect /^d[0-9a-f]{32}$/.test(window.__h4)
+expect window.__hvKeep === ('d'+'0'.repeat(32))
+
+# ---- reassignDocId (orchestrator overrides.md #1) -------------------------
+# Runs on the fresh boot doc, while it is provably not dirty, so "it never
+# writes the user's file" is actually checked, not assumed.
+eval (function(){window.__rBefore = F.state().docId; window.__rEvBefore = F.docIdEvents().length; window.__rToastBefore = document.querySelectorAll('.toast.warn.is-sticky').length; return !document.getElementById('btn-save').classList.contains('is-dirty');})()
+expect true
+
+# an invalid toId is refused
+eval (function(){window.__r1 = F.reassignDocId('not-an-id', {fromId: window.__rBefore, otherTitle: 'Other Script'}); return window.__r1;})()
+expect window.__r1 === false
+expect F.state().docId === window.__rBefore
+
+# a fromId that does not match the current id is refused
+eval (function(){window.__r2 = F.reassignDocId('d'+'5'.repeat(32), {fromId: 'd'+'6'.repeat(32), otherTitle: 'Other Script'}); return window.__r2;})()
+expect window.__r2 === false
+expect F.state().docId === window.__rBefore
+
+# toId === fromId changes nothing, so it is refused too (nothing to announce)
+eval (function(){window.__r3 = F.reassignDocId(window.__rBefore, {fromId: window.__rBefore, otherTitle: 'Other Script'}); return window.__r3;})()
+expect window.__r3 === false
+expect F.state().docId === window.__rBefore
+
+# a valid reassignment: the id changes, the copy is logged, a sticky warn
+# toast names the other document — and per the override, NONE of that writes
+# the file: no markDirty, no queueAutoSave, whatever the document kind
+eval (function(){window.__rNew = 'd'+'7'.repeat(32); window.__r4 = F.reassignDocId(window.__rNew, {fromId: window.__rBefore, otherTitle: 'Other Script'}); return window.__r4;})()
+expect window.__r4 === true
+expect F.state().docId === window.__rNew
+expect !F.writtenOut()
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+eval (function(){var evs = F.docIdEvents(); window.__rLastEv = evs[evs.length-1]; return evs.length;})()
+expect F.docIdEvents().length === window.__rEvBefore + 1
+expect window.__rLastEv.type === 'copy'
+expect window.__rLastEv.from === window.__rBefore
+expect window.__rLastEv.to === window.__rNew
+expect document.querySelectorAll('.toast.warn.is-sticky').length === window.__rToastBefore + 1
+
+# ---- Save As through the fake backend: forks only once the id is out ------
+# reassignDocId above just reset docIdWrittenOut to false, so this document's
+# id has never left the page yet — the same setup as a fresh Save As.
+eval (function(){window.fakeA = D.makeFakeBackend(); D.setBackend(window.fakeA); window.__idBeforeSaveAs = F.state().docId; return !F.writtenOut();})()
+expect true
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect F.writtenOut()
+expect F.state().docId === window.__idBeforeSaveAs
+
+# now that it HAS been written out, a second Save As forks a new id and
+# copies the history across (the docIdEvents copy entry exists)
+eval (function(){window.__evBeforeFork = F.docIdEvents().length; window.__idBeforeFork = F.state().docId; return true;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect F.state().docId !== window.__idBeforeFork
+expect /^d[0-9a-f]{32}$/.test(F.state().docId)
+expect F.writtenOut()
+eval (function(){var evs = F.docIdEvents(); window.__forkLastEv = evs[evs.length-1]; return evs.length;})()
+expect F.docIdEvents().length === window.__evBeforeFork + 1
+expect window.__forkLastEv.from === window.__idBeforeFork
+expect window.__forkLastEv.to === F.state().docId
+
+# cancelled at the native dialog: no write, so no fork and no change
+eval (function(){window.fakeB = D.makeFakeBackend(); window.fakeB._cancelNextSave = true; D.setBackend(window.fakeB); window.__idBeforeCancel = F.state().docId; window.__wroteBeforeCancel = F.writtenOut(); return true;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect F.state().docId === window.__idBeforeCancel
+expect F.writtenOut() === window.__wroteBeforeCancel
+
+# a legacy .html's first Save converts it to .md — it has to pick a fresh
+# file just like a Save As does, but it is decided on opts.saveAs (false
+# here), not on whether a fresh pick was needed, so it never forks
+eval (function(){window.fakeC = D.makeFakeBackend(); D.setBackend(window.fakeC); window.__htmlSrc = F.buildStandaloneHtml(); F.openFile(new File([window.__htmlSrc],'legacy-for-save.html')); return true;})()
+wait F.docFile().kind === 'html'
+eval (function(){window.__idBeforeConvert = F.docId(); return window.__idBeforeConvert;})()
+eval (async function(){ await F.save({}); return true; })()
+expect F.docFile().kind === 'md'
+expect F.docId() === window.__idBeforeConvert
+
+# ---- a Save As whose write fails does not retarget Save (invariant #36) ----
+# The fork is thrown away with the failed write, so the picked file must not
+# become the Save target either: otherwise the very next plain Save writes
+# the already-used id into that second file, and two files share a history.
+# The fake records every dialog pick and can refuse one write, the way a
+# OneDrive lock or Controlled Folder Access would.
+eval (function(){var f = D.makeFakeBackend(); var dlg = f.saveFileDialog; f.__picked = []; f.saveFileDialog = function(o){ return dlg.call(f, o).then(function(r){ if (r) f.__picked.push(r.id); return r; }); }; var wr = f.writeFile; f._failNextWrite = false; f.writeFile = function(id, d){ if (f._failNextWrite) { f._failNextWrite = false; return Promise.reject(new Error('EACCES: refused by the test')); } return wr.call(f, id, d); }; window.fakeF = f; D.setBackend(f); return true;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.fakeF.__picked.length === 1
+expect F.writtenOut()
+eval (function(){window.__failIdA = F.docId(); window.__failFileA = window.fakeF.__picked[0]; return window.__failFileA;})()
+expect window.fakeF._text(window.__failFileA).indexOf(window.__failIdA) !== -1
+eval (function(){ window.fakeF._failNextWrite = true; return true; })()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.fakeF.__picked.length === 2
+expect F.docId() === window.__failIdA
+expect window.fakeF._text(window.fakeF.__picked[1]) === ''
+# plain Save goes back to the file that really holds this document — no new
+# dialog, and the never-written pick still does not carry the id
+eval (async function(){ await F.save({}); return true; })()
+expect window.fakeF.__picked.length === 2
+expect window.fakeF._text(window.fakeF.__picked[1]).indexOf(window.__failIdA) === -1
+expect window.fakeF._text(window.__failFileA).indexOf(window.__failIdA) !== -1
+expect F.docId() === window.__failIdA
+
+# ---- a document opened while the Save As dialog is up keeps its identity ---
+# A double-click in Explorer reaches the running app while the native dialog
+# is open. The copy is still written with the fork, and the fork still takes
+# the saved document's history — but the document now on screen keeps its
+# own id and its own file.
+eval (function(){ window.__raceIdA = F.docId(); window.__raceIdB = 'd' + 'e'.repeat(32); window.__raceMdB = F.buildMarkdown().replace(/("docId":\s*")[^"]*(")/, '$1' + window.__raceIdB + '$2'); return window.__raceMdB.indexOf(window.__raceIdB);})()
+expect window.__raceMdB.indexOf(window.__raceIdB) !== -1
+expect window.__raceIdA !== window.__raceIdB
+eval (function(){ var f = window.fakeF; var dlg = f.saveFileDialog; window.__raceFileB = f._addFile('race-other.md', window.__raceMdB); window.__raceCopy = null; f.saveFileDialog = function(o){ f.saveFileDialog = dlg; return F.openFile(new File([window.__raceMdB], 'race-other.md'), D.makeHandle({id: window.__raceFileB, name: 'race-other.md'})).then(function(){ return dlg.call(f, o); }).then(function(r){ window.__raceCopy = r && r.id; return r; }); }; window.__raceEvBefore = F.docIdEvents().length; return true; })()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.__raceCopy !== null
+expect F.docId() === window.__raceIdB
+expect F.docFile().name === 'race-other.md'
+expect F.writtenOut()
+eval (function(){var evs = F.docIdEvents(); window.__raceLastEv = evs[evs.length-1]; return evs.length;})()
+expect F.docIdEvents().length === window.__raceEvBefore + 1
+expect window.__raceLastEv.from === window.__raceIdA
+expect window.__raceLastEv.to !== window.__raceIdB
+expect window.fakeF._text(window.__raceCopy).indexOf(window.__raceLastEv.to) !== -1
+expect window.fakeF._text(window.__raceFileB).indexOf(window.__raceIdB) !== -1
+
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+expect true
+
+# ---- typing adds no identity event -----------------------------------------
+eval (function(){window.__typeIdBefore = F.docId(); window.__typeEvBefore = F.docIdEvents().length; return true;})()
+caret #rows .row .audio-cell .cell-editable
+press A quick line of dialogue for narration.
+sleep 400
+eval document.activeElement.blur()
+sleep 200
+expect F.docId() === window.__typeIdBefore
+expect F.docIdEvents().length === window.__typeEvBefore
+
+# ---- exports never carry the document's id ---------------------------------
+# Standalone HTML, and the lossy md/csv/txt exports (03-exports.txt's own
+# createObjectURL trick) — none of these are the project formats the id
+# travels in (.splitpage / the .md data block).
+eval (function(){window.__expBlobs=[]; var r=URL.createObjectURL.bind(URL); URL.createObjectURL=function(b){window.__expBlobs.push(b);return r(b);}; var c=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);}; window.__expId = F.docId(); return 'hooked';})()
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-html"]
+sleep 1200
+eval (async function(){window.__expHtml = await window.__expBlobs[window.__expBlobs.length-1].text(); return true;})()
+expect window.__expHtml.indexOf(window.__expId) === -1
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+sleep 1200
+eval (async function(){window.__expMd = await window.__expBlobs[window.__expBlobs.length-1].text(); return true;})()
+expect window.__expMd.indexOf(window.__expId) === -1
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-csv"]
+sleep 1200
+eval (async function(){window.__expCsv = await window.__expBlobs[window.__expBlobs.length-1].text(); return true;})()
+expect window.__expCsv.indexOf(window.__expId) === -1
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-narration-txt"]
+sleep 1200
+eval (async function(){window.__expTxt = await window.__expBlobs[window.__expBlobs.length-1].text(); return true;})()
+expect window.__expTxt.indexOf(window.__expId) === -1
+
+# ---- a legacy .splitpage (no embedded id) opened twice: same derived id ---
+eval (function(){var raw = JSON.parse(F.buildSplitpage()); delete raw.docId; window.__legSp = JSON.stringify(raw); return true;})()
+eval (function(){F.openFile(new File([window.__legSp],'legacy1.splitpage')); return true;})()
+wait F.docFile().kind === 'splitpage'
+eval (function(){window.__legSpId1 = F.docId(); return window.__legSpId1;})()
+expect /^d[0-9a-f]{32}$/.test(window.__legSpId1)
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+eval (function(){F.openFile(new File([window.__legSp],'legacy2.splitpage')); return true;})()
+wait F.docFile().kind === 'splitpage'
+expect F.docId() === window.__legSpId1
+
+# a one-character change in the file gives a different derived id
+eval (function(){var raw = JSON.parse(window.__legSp); raw.title = raw.title + 'X'; window.__legSp2 = JSON.stringify(raw); return window.__legSp2 !== window.__legSp;})()
+expect true
+eval (function(){F.openFile(new File([window.__legSp2],'legacy3.splitpage')); return true;})()
+wait F.docFile().kind === 'splitpage'
+expect F.docId() !== window.__legSpId1
+expect /^d[0-9a-f]{32}$/.test(F.docId())
+
+# ---- a legacy .md (no embedded id): the id depends only on the block ------
+# docId can land as the LAST key in the pretty-printed object (migrateRows
+# adds it fresh, after every field the seed already had), so it may have no
+# trailing comma of its own — then it is the line ABOVE it that needs its
+# comma removed instead, or the JSON is left with an illegal trailing comma.
+eval (function(){var mdRaw = F.buildMarkdown(); var withTrailingComma = mdRaw.replace(/\n\s*"docId":\s*"[^"]*",/, ''); window.__legMd = (withTrailingComma !== mdRaw) ? withTrailingComma : mdRaw.replace(/,(\s*\n\s*)"docId":\s*"[^"]*"/, '$1'); return window.__legMd.indexOf('"docId"') === -1;})()
+expect true
+expect F.parseMarkdown(window.__legMd) !== null
+eval (function(){F.openFile(new File([window.__legMd],'legacy.md')); return true;})()
+wait F.docFile().kind === 'md'
+eval (function(){window.__legMdId1 = F.docId(); return window.__legMdId1;})()
+expect /^d[0-9a-f]{32}$/.test(window.__legMdId1)
+
+# editing only the human-readable table (outside the data block) keeps it
+eval (function(){window.__legMdTableEdited = window.__legMd.replace(/^(\| 01 \|.*)\| (todo|ready|shot) \|$/m, function(m, head, st){ return head + 'edited only in the table | ' + st + ' |'; }); return window.__legMdTableEdited !== window.__legMd;})()
+expect true
+eval (function(){F.openFile(new File([window.__legMdTableEdited],'legacy-table-edit.md')); return true;})()
+wait F.docFile().kind === 'md'
+expect F.docId() === window.__legMdId1
+
+# editing the data block changes it
+eval (function(){window.__legMdBlockEdited = window.__legMd.replace('"wordsPerMinute"', '"wordsPerMinuteX"'); return window.__legMdBlockEdited !== window.__legMd;})()
+expect true
+eval (function(){F.openFile(new File([window.__legMdBlockEdited],'legacy-block-edit.md')); return true;})()
+wait F.docFile().kind === 'md'
+expect F.docId() !== window.__legMdId1
+
+# ---- mergedDocId truth table (the literal at 03-sync.js:317-328) ----------
+eval (function(){window.__A='d'+'1'.repeat(32); window.__B='d'+'2'.repeat(32); window.__C='d'+'3'.repeat(32); window.__D='d'+'4'.repeat(32); return true;})()
+expect F.mergedDocId({docId:window.__A},{docId:window.__A},{docId:window.__A}) === window.__A
+expect F.mergedDocId({docId:window.__A},{docId:window.__A},{docId:window.__D}) === window.__D
+expect F.mergedDocId({docId:window.__A},{docId:window.__D},{docId:window.__A}) === window.__D
+expect F.mergedDocId(null,{docId:window.__A},{docId:window.__B}) === window.__B
+expect F.mergedDocId({docId:window.__A},{docId:window.__B},{docId:window.__C}) === window.__C
+
+# the same results through mergeStates' own literal, with rows identical on
+# both sides so only docId is in play
+eval (function(){var s = F.clone(F.state()); var mine = F.clone(s); mine.docId = window.__A; var theirs = F.clone(s); theirs.docId = window.__B; window.__mr1 = F.mergeStates(null, mine, theirs).merged.docId; return window.__mr1;})()
+expect window.__mr1 === window.__B
+eval (function(){var s = F.clone(F.state()); var base = F.clone(s); base.docId = window.__A; var mine = F.clone(s); mine.docId = window.__A; var theirs = F.clone(s); theirs.docId = window.__D; window.__mr2 = F.mergeStates(base, mine, theirs).merged.docId; return window.__mr2;})()
+expect window.__mr2 === window.__D
+
+# ---- adoptRestoredState keeps the id, whatever the snapshot carries -------
+eval (function(){window.__arBefore = F.state().docId; var snap = F.clone(F.state()); snap.docId = 'd'+'9'.repeat(32); snap.title = snap.title + ' (restored)'; window.__arResult = F.adoptRestoredState(snap); return window.__arResult.docId;})()
+expect window.__arResult.docId === window.__arBefore
+expect F.docId() === window.__arBefore
+expect F.state().title.indexOf('(restored)') !== -1
+
+# ---- decideDuplicateLoser: pure and symmetric ------------------------------
+expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'n1'},{docId:window.__A,home:'file:b.md',at:200,nonce:'n2'}).nonce === 'n2'
+expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'n1'},{docId:window.__B,home:'file:b.md',at:200,nonce:'n2'}) === null
+expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'n1'},{docId:window.__A,home:'file:a.md',at:200,nonce:'n2'}) === null
+expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'nX'},{docId:window.__A,home:'file:b.md',at:100,nonce:'nX'}) === null
+expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'aaa'},{docId:window.__A,home:'file:b.md',at:100,nonce:'bbb'}).nonce === 'bbb'
+
+# ---- the fake-channel reassignment: a duplicate claim makes this tab lose -
+eval (function(){window.__dupSrc = F.buildMarkdown(); F.openFile(new File([window.__dupSrc],'dup-test.md')); return true;})()
+wait F.docFile().kind === 'md'
+eval (function(){window.__dupId = F.docId(); window.__sentMsgs = []; window.__fakeCh = {postMessage:function(m){window.__sentMsgs.push(m);}, onmessage:null, close:function(){}}; window.__ch = F.initDocIdentityChannel(function(){return window.__fakeCh;}); return window.__ch === window.__fakeCh;})()
+expect true
+expect window.__sentMsgs.length === 1
+expect window.__sentMsgs[0].type === 'claim'
+expect window.__sentMsgs[0].docId === window.__dupId
+expect window.__sentMsgs[0].home.indexOf('file:') === 0
+eval (function(){window.__dupToastBefore = document.querySelectorAll('.toast.warn.is-sticky').length; window.__myHome = window.__sentMsgs[0].home; window.__theirAt = window.__sentMsgs[0].at - 5000; window.__fakeCh.onmessage({data:{type:'claim', docId:window.__dupId, home:'file:other-copy.md', at:window.__theirAt, nonce:'deadbeefdeadbeefdeadbeefdeadbeef', title:'Other Copy'}}); return true;})()
+expect F.docId() !== window.__dupId
+expect F.docId() === F.deriveDocId('splitpage-dup', window.__dupId + '\n' + window.__myHome)
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+expect document.querySelectorAll('.toast.warn.is-sticky').length === window.__dupToastBefore + 1
+eval (function(){var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__dupToastText = toasts[toasts.length-1].textContent; return window.__dupToastText;})()
+expect window.__dupToastText.indexOf('Other Copy') !== -1
+expect window.__sentMsgs.length === 2
+expect window.__sentMsgs[1].type === 'claim'
+expect window.__sentMsgs[1].docId === F.docId()
+
+eval (function(){ D.restoreBackend(); return true; })()
+
+quit

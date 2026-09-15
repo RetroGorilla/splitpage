@@ -1,0 +1,474 @@
+# Per-document version history (src/js/03a-history-store.js + the renderer
+# glue in 03-sync.js). Every case below starts with a fresh
+# __historyTest.resetForTest() (deletes and reopens the 'splitpage-history'
+# IndexedDB database, clears in-page pending state) but does NOT reload the
+# page — state/docId carry over between cases the same way 22-doc-id.txt's
+# reassignDocId cases do, so each case opens whatever document it needs.
+#
+# pushSnapshot/captureSnapshot are not exposed to window.* (they live inside
+# the build's one closure — see build.mjs's own note on this), so every real
+# capture below rides a genuine caller instead of calling the function
+# directly: mostly loadFileIntoEditor's "Before opening X" push (18-local-
+# files.js), reached via F.openFile() with a foreign (.txt) file, which is
+# NOT gated by F.openFile's own skipSnapshot:true (that flag only reaches
+# adoptProjectState's project-file branch, never loadFileIntoEditor). A
+# fixture project file with a specific docId is built by mutating the live
+# F.state().docId/title, serializing with F.buildSplitpage(), then
+# F.openFile()-ing that text back in — the same trick 17-formats.txt uses,
+# just with a docId we choose instead of whatever migrateRows minted.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.did = function(tag){ return 'd' + (tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag).slice(0, 32); }; return !!(F && D && H && F.openFile && H.resetForTest);})()
+expect true
+
+# openFixture(id, title): serialize the CURRENT document under a chosen id
+# and title, then reopen it as a .splitpage project — docFileHandle.kind
+# becomes 'splitpage' (never pristine again) and the id is kept verbatim
+# (migrateDocument keeps an already-valid embedded id).
+eval (function(){window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; return true;})()
+
+# pushForeign(name, expectTitle): a real "Before opening NAME" capture via
+# loadFileIntoEditor — the only pushSnapshot caller reachable with a plain
+# File and no fake handle.
+eval (function(){window.pushForeign = async function(name){ await F.openFile(new File(['Just some plain text.'], name)); return true; }; return true;})()
+
+# =============================================================================
+# backend is 'idb'; the legacy key stays null
+# =============================================================================
+eval (async function(){ await H.resetForTest(); return true; })()
+expect H.backendName() === 'idb'
+expect localStorage.getItem('splitpage-snapshots') === null
+
+# =============================================================================
+# the pristine seed is never snapshotted by an implicit push (allowSeedSkip);
+# the identical caller on the SAME document, once it is no longer pristine
+# (markDirty already ran, from that first open), captures normally. This
+# runs before this document is touched by anything else in the suite — it
+# is the one chance to observe the boot-fresh pristine document at all.
+# =============================================================================
+eval (function(){window.__pristineId = F.docId(); return window.__pristineId;})()
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+eval (async function(){ await F.openFile(new File(['Plain text, nothing fancy.'], 'note.txt')); await H.idle(); return true; })()
+wait F.docFile().kind === null
+eval (async function(){ window.__pristineRec = await H.docRecord(__pristineId); return window.__pristineRec; })()
+expect window.__pristineRec === null
+expect document.getElementById('btn-save').classList.contains('is-dirty')
+eval (async function(){ await F.openFile(new File(['Plain text again.'], 'note2.txt')); await H.idle(); return true; })()
+eval (async function(){ window.__dirtyRec = await H.docRecord(__pristineId); return window.__dirtyRec; })()
+expect window.__dirtyRec !== null
+expect window.__dirtyRec.count === 1
+
+# =============================================================================
+# capture is synchronous: the snapshot taken right before loadFileIntoEditor
+# replaces the title holds the OLD title, and the write actually lands
+# (done.stored, checked indirectly: it shows up stored, not pending).
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__syncId = await openFixture(did('c1'), 'Original Title'); return true; })()
+eval (async function(){ await pushForeign('Renamed.txt'); return true; })()
+wait F.state().title === 'Renamed'
+eval (async function(){ await H.idle(); window.__syncRaw = await H.listRaw(__syncId); return window.__syncRaw.length; })()
+expect window.__syncRaw.length === 1
+expect window.__syncRaw[0].label.indexOf('Before opening Renamed.txt') !== -1
+expect H.pending(__syncId).length === 0
+# restoring that snapshot proves its BODY held the pre-mutation title, not
+# the one the same handler set a line later
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+eval (function(){window.__syncCardId = document.querySelector('#history-list [data-action="restore-snapshot"]').getAttribute('data-id'); return window.__syncCardId;})()
+jsclick #history-list [data-action="restore-snapshot"]
+wait document.getElementById('history-panel').hidden
+wait F.state().title === 'Original Title'
+
+# =============================================================================
+# per-document isolation, and the open history panel follows the document
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__isoA = await openFixture(did('c2'), 'Doc Iso A'); await pushForeign('isoA-1.txt'); await H.idle(); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-panel').hidden
+wait document.querySelectorAll('#history-list .history-card').length === 1
+expect document.getElementById('history-list').textContent.indexOf('isoA-1.txt') !== -1
+eval (async function(){ window.__isoB = await openFixture(did('c3'), 'Doc Iso B'); return true; })()
+wait document.getElementById('history-list').textContent.indexOf('isoA-1.txt') === -1
+expect document.querySelectorAll('#history-list .history-card').length === 0
+eval (async function(){ await pushForeign('isoB-1.txt'); await H.idle(); return true; })()
+wait document.getElementById('history-list').textContent.indexOf('isoB-1.txt') !== -1
+eval (async function(){ window.__isoRecA = await H.docRecord(__isoA); window.__isoRecB = await H.docRecord(__isoB); return [window.__isoRecA.count, window.__isoRecB.count];})()
+expect window.__isoRecA.count === 1
+expect window.__isoRecB.count === 1
+jsclick #history-close
+
+# =============================================================================
+# newest 50: 55 sequential pushes on the same document keep only the newest
+# 50 (L5..L54), bodyCount 50, stored bytes equal the sum of their sizes.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__n50 = await openFixture(did('c4'), 'Newest 50'); for (var i = 0; i < 55; i++) { await pushForeign('L' + i + '.txt'); } await H.idle(); return true; })()
+eval (async function(){ window.__n50Raw = await H.listRaw(__n50); window.__n50Body = await H.bodyCount(__n50); window.__n50Rec = await H.docRecord(__n50); return [window.__n50Raw.length, window.__n50Body, window.__n50Rec.count];})()
+expect window.__n50Raw.length === 50
+expect window.__n50Body === 50
+expect window.__n50Rec.count === 50
+expect window.__n50Raw[0].label.indexOf('L5.txt') !== -1
+expect window.__n50Raw[49].label.indexOf('L54.txt') !== -1
+eval (function(){window.__n50Sum = window.__n50Raw.reduce(function(a,m){return a + (m.sizeBytes||0);}, 0); return [window.__n50Sum, window.__n50Rec.bytes];})()
+expect window.__n50Sum === window.__n50Rec.bytes
+
+# =============================================================================
+# a burst keeps call order: with the clock frozen at one instant, a run of
+# pushes still sorts (and would trim) in call order, via the monotonic
+# atMs-bump captureSnapshot documents.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__burst = await openFixture(did('c5'), 'Burst'); H.setNow(5000000); for (var i = 0; i < 6; i++) { await pushForeign('B' + i + '.txt'); } await H.idle(); H.setNow(null); return true; })()
+eval (async function(){ window.__burstRaw = await H.listRaw(__burst); return window.__burstRaw.map(function(m){return m.label;});})()
+expect window.__burstRaw.length === 6
+eval (function(){window.__burstOrdered = window.__burstRaw.every(function(m,i){return m.label.indexOf('B'+i+'.txt') !== -1;}); window.__burstStrict = window.__burstRaw.every(function(m,i){return i===0 || m.atMs > window.__burstRaw[i-1].atMs;}); return [window.__burstOrdered, window.__burstStrict];})()
+expect window.__burstOrdered
+expect window.__burstStrict
+
+# =============================================================================
+# restore records its backup first and keeps the docId
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__rsA = await openFixture(did('c6'), 'Restore Backup'); await pushForeign('rs-1.txt'); await H.idle(); window.__rsBefore = (await H.listRaw(__rsA)).length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+jsclick #history-list [data-action="restore-snapshot"]
+wait document.getElementById('history-panel').hidden
+eval (async function(){ await H.idle(); window.__rsAfter = await H.listRaw(__rsA); return window.__rsAfter.length; })()
+expect window.__rsAfter.length === window.__rsBefore + 1
+expect window.__rsAfter[window.__rsAfter.length - 1].label.indexOf('Before restoring') !== -1
+expect F.docId() === __rsA
+
+# =============================================================================
+# a copied snapshot keeps the current docId (adoptRestoredState keeps
+# state.docId, never the id embedded in the snapshot's own content)
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__cpFrom = await openFixture(did('c7'), 'Copy From'); await pushForeign('cp-1.txt'); await pushForeign('cp-2.txt'); await H.idle(); window.__cpFromRec = await H.docRecord(__cpFrom); return window.__cpFromRec.count; })()
+expect window.__cpFromRec.count === 2
+eval (function(){window.__cpTo = did('c8'); window.__cpToastBefore = document.querySelectorAll('.toast.warn.is-sticky').length; window.__cpOk = F.reassignDocId(__cpTo, {fromId: __cpFrom, otherTitle: 'Some Other Doc'}); return window.__cpOk;})()
+expect window.__cpOk === true
+expect F.docId() === __cpTo
+eval (async function(){ await H.idle(); window.__cpToRec = await H.docRecord(__cpTo); return window.__cpToRec; })()
+expect window.__cpToRec.count === 2
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 2
+jsclick #history-list [data-action="restore-snapshot"]
+wait document.getElementById('history-panel').hidden
+expect F.docId() === __cpTo
+# idempotent: copying the same pair again adds nothing — restoring just
+# above already added its own "Before restoring" backup to __cpTo, so the
+# baseline for "adds nothing" is its count right now, not the original 2
+eval (async function(){ await H.idle(); window.__cpToRecAfterRestore = await H.docRecord(__cpTo); return window.__cpToRecAfterRestore.count; })()
+expect window.__cpToRecAfterRestore.count === 3
+eval (async function(){ await openFixture(__cpFrom, 'Copy From'); window.__cpOk2 = F.reassignDocId(__cpTo, {fromId: __cpFrom, otherTitle: 'Some Other Doc'}); await H.idle(); window.__cpToRec2 = await H.docRecord(__cpTo); return [window.__cpOk2, window.__cpToRec2.count];})()
+expect window.__cpOk2 === true
+expect window.__cpToRec2.count === window.__cpToRecAfterRestore.count
+
+# =============================================================================
+# quota-always: the restore button arms with no stored backup; a second
+# click within the arm window forces the restore anyway.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__qaId = await openFixture(did('c9'), 'Quota Arm'); await pushForeign('qa-1.txt'); await H.idle(); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+# a failed backup attempt still leaves its own (pending) card in the panel,
+# newest first — so every later query targets THIS card's own data-id, not
+# whichever button happens to render first
+eval (function(){window.__qaCardId = document.querySelector('#history-list [data-action="restore-snapshot"]').getAttribute('data-id'); window.__qaBtn = function(){ return document.querySelector('#history-list [data-action="restore-snapshot"][data-id="' + window.__qaCardId + '"]'); }; return window.__qaCardId;})()
+eval (function(){H.injectFault('quota-always'); return true;})()
+eval (function(){window.__qaBtn().click(); return true;})()
+wait window.__qaBtn().classList.contains('armed')
+expect window.__qaBtn().textContent.indexOf('restore anyway') !== -1
+expect !document.getElementById('history-panel').hidden
+eval (function(){window.__qaBtn().click(); return true;})()
+wait document.getElementById('history-panel').hidden
+eval (function(){H.injectFault(null); return true;})()
+
+# =============================================================================
+# a document change during the backup wait aborts the restore with 'changed'
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__mvA = await openFixture(did('ca'), 'Moved Away'); await pushForeign('mv-1.txt'); await H.idle(); window.__mvB = did('cb'); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+eval (function(){window.__mvToastBefore = document.querySelectorAll('.toast.warn').length; H.injectFault('delay-put'); return true;})()
+jsclick #history-list [data-action="restore-snapshot"]
+eval (async function(){ await openFixture(__mvB, 'Somewhere Else'); return true; })()
+eval (function(){H.releaseDelayedPut(); return true;})()
+wait document.querySelectorAll('.toast.warn').length > window.__mvToastBefore
+eval (function(){var toasts = document.querySelectorAll('.toast.warn'); window.__mvToastText = toasts[toasts.length - 1].textContent; return window.__mvToastText;})()
+expect window.__mvToastText.indexOf('different document') !== -1
+expect F.docId() === __mvB
+expect F.state().title === 'Somewhere Else'
+
+# =============================================================================
+# an edit landing during the backup wait is captured: the retry loop
+# discards the stale backup and stores a fresh one, and the restore still
+# completes.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__edId = await openFixture(did('cc'), 'Edited During Wait'); await pushForeign('ed-1.txt'); await H.idle(); window.__edBefore = (await H.listRaw(__edId)).length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+# injectFault, the click and markDirtyForTest+release all run in ONE eval
+# (no intervening driver round-trip) so the ordering is never a race: the
+# 100ms pause gives the click's internal chain (getHistorySnapshot's async
+# IDB read, then captureSnapshot's own put call) time to actually reach and
+# block on the delay-put gate before this same eval turn goes on to bump
+# editSeq and release it — a separate round-trip per step let that ordering
+# flip on a fast run and made this case flaky.
+eval (async function(){ H.injectFault('delay-put'); document.querySelector('#history-list [data-action="restore-snapshot"]').click(); await new Promise(function(r){ setTimeout(r, 100); }); D.markDirtyForTest(); H.releaseDelayedPut(); return true; })()
+wait document.getElementById('history-panel').hidden
+eval (async function(){ await H.idle(); window.__edAfter = await H.listRaw(__edId); return window.__edAfter.length; })()
+expect window.__edAfter.length === window.__edBefore + 2
+expect F.docId() === __edId
+
+# =============================================================================
+# quota-once evicts (something else makes room) and retries — the write
+# still ends up stored.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__q1Id = await openFixture(did('cd'), 'Quota Once'); await pushForeign('q1-1.txt'); await pushForeign('q1-2.txt'); await pushForeign('q1-3.txt'); await H.idle(); window.__q1Before = await H.listRaw(__q1Id); return window.__q1Before.length; })()
+expect window.__q1Before.length === 3
+eval (function(){H.injectFault('quota-once'); return true;})()
+eval (async function(){ await pushForeign('q1-4.txt'); await H.idle(); window.__q1After = await H.listRaw(__q1Id); return window.__q1After.length; })()
+expect window.__q1After.length <= 4
+expect window.__q1After[window.__q1After.length - 1].label.indexOf('q1-4.txt') !== -1
+eval (function(){return H.injectFault(null);})()
+
+# =============================================================================
+# quota-always: up to 3 pending entries, one warn toast for the document,
+# a save through the fake desktop backend still works, and clearing the
+# fault drains the pending entries.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__pdId = await openFixture(did('ce'), 'Pending Drain'); await H.idle(); window.__pdWarnBefore = document.querySelectorAll('.toast.warn').length; return true; })()
+eval (function(){H.injectFault('quota-always'); return true;})()
+eval (async function(){ await pushForeign('pd-1.txt'); await pushForeign('pd-2.txt'); await pushForeign('pd-3.txt'); await H.idle(); return true; })()
+eval (function(){window.__pdPending = H.pending(__pdId); return window.__pdPending.length;})()
+expect window.__pdPending.length === 3
+expect document.querySelectorAll('.toast.warn').length === window.__pdWarnBefore + 1
+eval (function(){window.fakePd = D.makeFakeBackend(); window.__pdFileId = window.fakePd._addFile('pd.splitpage', F.buildSplitpage()); D.setBackend(window.fakePd); return true;})()
+eval (async function(){ var handle = D.makeHandle({id: window.__pdFileId, name: 'pd.splitpage'}); var file = await handle.getFile(); await F.openFile(file, handle); return true; })()
+wait F.docFile().kind === 'splitpage'
+# The eval awaits the whole save, so there is nothing left to wait for.
+# saveDoc bumps rev before writing and puts it back on every path that
+# does not write (cancel, on-disk conflict, serialize failure, write error),
+# so exactly +1 proves the write really landed.
+eval (async function(){ window.__pdRev = F.state().rev; await F.save(); return true; })()
+expect F.state().rev === window.__pdRev + 1
+expect document.querySelectorAll('.toast.error').length === 0
+eval (function(){D.restoreBackend(); return true;})()
+eval (async function(){ await openFixture(__pdId, 'Pending Drain'); H.injectFault(null); await H.idle(); window.__pdAfter = H.pending(__pdId); window.__pdRec = await H.docRecord(__pdId); return [window.__pdAfter.length, window.__pdRec ? window.__pdRec.count : 0];})()
+expect window.__pdAfter.length === 0
+expect window.__pdRec.count === 3
+
+# =============================================================================
+# a failed evict-and-retry is not repeated: under quota-always the first
+# capture evicts (the Older bucket goes first) and is still not stored; the
+# next capture must evict NOTHING — deleting more would buy no stored
+# snapshot. Each legacy body is padded well past this document's own size, so
+# one capture's eviction (cap = total − snapshot size) removes exactly one.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__qsId = await openFixture(did('f0'), 'Quota Stuck'); var pad = new Array(JSON.stringify(F.state()).length * 4 + 2000).join('x'); var legacy = [1, 2, 3].map(function(n){ return {id:'qsleg' + n, at:new Date(n * 1000).toISOString(), label:'Stuck legacy ' + n, by:'X', state:{rows:[{id:'r1', audioText: pad}], title:'Stuck Legacy'}}; }); localStorage.setItem('splitpage-snapshots', JSON.stringify(legacy)); await H.migrate(); window.__qsOlder0 = await H.docRecord('older'); return window.__qsOlder0 && window.__qsOlder0.count; })()
+expect window.__qsOlder0.count === 3
+eval (function(){H.injectFault('quota-always'); return true;})()
+eval (async function(){ await pushForeign('qs-1.txt'); await H.idle(); window.__qsOlder1 = (await H.listRaw('older')).map(function(m){ return m.id; }).join(','); return window.__qsOlder1; })()
+expect window.__qsOlder1 === 'qsleg2,qsleg3'
+eval (async function(){ await pushForeign('qs-2.txt'); await H.idle(); window.__qsOlder2 = (await H.listRaw('older')).map(function(m){ return m.id; }).join(','); return window.__qsOlder2; })()
+expect window.__qsOlder2 === 'qsleg2,qsleg3'
+expect H.pending(__qsId).length === 2
+eval (async function(){ H.injectFault(null); await H.idle(); window.__qsRec = await H.docRecord(__qsId); return [H.pending(__qsId).length, window.__qsRec ? window.__qsRec.count : 0]; })()
+expect H.pending(__qsId).length === 0
+expect window.__qsRec.count === 2
+
+# =============================================================================
+# restoring from Older while the quota refuses every write: the backup's
+# eviction must not delete the snapshot being restored — the OLDEST Older
+# entry, the first one eviction would otherwise take — so its card stays
+# listed and armed, and the second click still restores it.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__qoId = await openFixture(did('f1'), 'Quota Older'); var pad = new Array(JSON.stringify(F.state()).length * 4 + 2000).join('x'); var legacy = [1, 2, 3].map(function(n){ return {id:'qoleg' + n, at:new Date(n * 1000).toISOString(), label:'Older legacy ' + n, by:'X', state:{rows:[{id:'r1', audioText: pad}], title:'Older Legacy ' + n}}; }); localStorage.setItem('splitpage-snapshots', JSON.stringify(legacy)); await H.migrate(); window.__qoOlder0 = await H.docRecord('older'); return window.__qoOlder0 && window.__qoOlder0.count; })()
+expect window.__qoOlder0.count === 3
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-older-list [data-action="restore-snapshot"]').length === 3
+eval (function(){window.__qoBtn = function(){ return document.querySelector('#history-older-list [data-action="restore-snapshot"][data-id="qoleg1"]'); }; H.injectFault('quota-always'); window.__qoBtn().click(); return true;})()
+wait window.__qoBtn() && window.__qoBtn().classList.contains('armed')
+eval (async function(){ await H.idle(); window.__qoOlder1 = (await H.listRaw('older')).map(function(m){ return m.id; }).join(','); return window.__qoOlder1; })()
+expect window.__qoOlder1 === 'qoleg1,qoleg3'
+wait window.__qoBtn() && window.__qoBtn().classList.contains('armed')
+eval (function(){window.__qoBtn().click(); return true;})()
+wait document.getElementById('history-panel').hidden
+expect F.state().title === 'Older Legacy 1'
+expect F.docId() === __qoId
+eval (function(){H.injectFault(null); return true;})()
+
+# =============================================================================
+# a clock corrected backwards: 50 snapshots stamped ten hours in the future,
+# then the real clock again (setNow(null) also forgets the page's last
+# capture time, as a reload would). Every new capture must still count as
+# the newest — all 3 kept, in call order, after the future-stamped ones —
+# instead of each one's trim deleting the capture before it.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__skId = await openFixture(did('f2'), 'Clock Skew'); H.setNow(Date.now() + 10 * 60 * 60 * 1000); for (var i = 0; i < 50; i++) { await pushForeign('sk-future-' + i + '.txt'); } await H.idle(); H.setNow(null); for (var j = 0; j < 3; j++) { await pushForeign('sk-now-' + j + '.txt'); } await H.idle(); window.__skRaw = await H.listRaw(__skId); return window.__skRaw.length; })()
+expect window.__skRaw.length === 50
+eval (function(){window.__skNow = window.__skRaw.map(function(m, i){ return m.label.indexOf('sk-now-') !== -1 ? i + ':' + m.label.replace(/^.*(sk-now-\d+)\.txt.*$/, '$1') : ''; }).filter(Boolean).join(','); return window.__skNow;})()
+expect window.__skNow === '47:sk-now-0,48:sk-now-1,49:sk-now-2'
+
+# =============================================================================
+# eviction order with large (~200KB) data: URI-shaped content, under a
+# 1.5MB cap: the Older bucket goes first, then the least-recently-opened
+# document, and a document's newest snapshot is never touched.
+# =============================================================================
+eval (function(){window.__bigChunk = 'data:image/png;base64,' + new Array(14000).join('AB'); return window.__bigChunk.length;})()
+eval (async function(){ await H.resetForTest(); H.setCapOverride(1500000); var legacy = [{id:'leg1', at:new Date(1000).toISOString(), label:'Legacy 1', by:'X', state:{rows:[{id:'r1', audioText: window.__bigChunk}], title:'Legacy'}}, {id:'leg2', at:new Date(2000).toISOString(), label:'Legacy 2', by:'X', state:{rows:[{id:'r1', audioText: window.__bigChunk}], title:'Legacy'}}]; localStorage.setItem('splitpage-snapshots', JSON.stringify(legacy)); await H.migrate(); return true; })()
+eval (async function(){ window.__evOlderBefore = await H.docRecord('older'); return window.__evOlderBefore; })()
+expect window.__evOlderBefore !== null
+expect window.__evOlderBefore.count === 2
+eval (async function(){ H.setNow(1000000); window.__evA = await openFixture(did('cf'), 'Ev Doc A'); F.state().rows[0].audioText = window.__bigChunk; await pushForeign('evA-1.txt'); F.state().rows[0].audioText = window.__bigChunk; await pushForeign('evA-2.txt'); await H.idle(); return true; })()
+eval (async function(){ H.setNow(2000000); window.__evB = await openFixture(did('d0'), 'Ev Doc B'); F.state().rows[0].audioText = window.__bigChunk; await pushForeign('evB-1.txt'); F.state().rows[0].audioText = window.__bigChunk; await pushForeign('evB-2.txt'); await H.idle(); return true; })()
+eval (async function(){ window.__evRawA1 = await H.listRaw(__evA); window.__evRawB1 = await H.listRaw(__evB); window.__evOlderMid = await H.docRecord('older'); return [window.__evRawA1.length, window.__evRawB1.length, window.__evOlderMid.count]; })()
+eval (async function(){ H.setNow(3000000); F.state().rows[0].audioText = window.__bigChunk + window.__bigChunk; await pushForeign('evB-3.txt'); await H.idle(); return true; })()
+eval (async function(){ window.__evOlderAfter = await H.docRecord('older'); window.__evRawA2 = await H.listRaw(__evA); window.__evRawB2 = await H.listRaw(__evB); return [window.__evOlderAfter ? window.__evOlderAfter.count : 0, window.__evRawA2.length, window.__evRawB2.length]; })()
+expect (window.__evOlderAfter ? window.__evOlderAfter.count : 0) <= window.__evOlderMid.count
+expect window.__evRawA2[window.__evRawA2.length - 1].label.indexOf('evA-2.txt') !== -1
+expect window.__evRawB2[window.__evRawB2.length - 1].label.indexOf('evB-3.txt') !== -1
+eval (function(){H.setCapOverride(null); H.setNow(null); return true;})()
+
+# =============================================================================
+# eviction planner fixtures (a)-(f) — planHistoryEviction is PURE, exercised
+# directly with no backend at all.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); return true; })()
+
+# (a) every document trimmed to perDoc even with no cap
+eval (function(){window.__pa = H.planEviction([{docId: did('e0'), lastOpenedAt: 1, snapshots: [{id:'s1',atMs:1,sizeBytes:10},{id:'s2',atMs:2,sizeBytes:10},{id:'s3',atMs:3,sizeBytes:10},{id:'s4',atMs:4,sizeBytes:10},{id:'s5',atMs:5,sizeBytes:10}]}], Infinity, 100, {perDoc: 3}); return window.__pa;})()
+expect window.__pa.deletes.length === 2
+expect window.__pa.deletes[0].id === 's1'
+expect window.__pa.deletes[1].id === 's2'
+expect window.__pa.overCap === false
+
+# (b) an expired Older bucket is removed as a whole, even with no cap;
+# an unexpired one is kept untouched
+eval (function(){window.__pb1 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 500, snapshots: [{id:'o1',atMs:1,sizeBytes:5},{id:'o2',atMs:2,sizeBytes:5}]}], Infinity, 1000, {}); window.__pb2 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 5000, snapshots: [{id:'o1',atMs:1,sizeBytes:5},{id:'o2',atMs:2,sizeBytes:5}]}], Infinity, 1000, {}); return [window.__pb1.deletes.length, window.__pb2.deletes.length];})()
+expect window.__pb1.deletes.length === 2
+expect window.__pb2.deletes.length === 0
+
+# (c) under cap pressure, Older (unexpired) is evicted before a normal doc
+eval (function(){window.__pc = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 999999, snapshots: [{id:'o1',atMs:1,sizeBytes:50},{id:'o2',atMs:2,sizeBytes:50}]}, {docId: did('e1'), lastOpenedAt: 5, snapshots: [{id:'d1',atMs:3,sizeBytes:50},{id:'d2',atMs:4,sizeBytes:50}]}], 150, 100, {});return window.__pc;})()
+expect window.__pc.deletes.length === 1
+expect window.__pc.deletes[0].docId === '_older'
+expect window.__pc.totalAfter <= 150
+
+# (d) least-recently-opened document goes first; ties break by docId
+eval (function(){window.__pd = H.planEviction([{docId: did('e3'), lastOpenedAt: 10, snapshots: [{id:'x1',atMs:1,sizeBytes:50},{id:'x2',atMs:2,sizeBytes:50}]}, {docId: did('e2'), lastOpenedAt: 10, snapshots: [{id:'y1',atMs:1,sizeBytes:50},{id:'y2',atMs:2,sizeBytes:50}]}], 150, 100, {}); return window.__pd;})()
+expect window.__pd.deletes.length === 1
+expect window.__pd.deletes[0].docId === did('e2')
+
+# (e) a document's newest snapshot is never deleted; overCap is reported
+eval (function(){window.__pe = H.planEviction([{docId: did('e4'), lastOpenedAt: 1, snapshots: [{id:'z1',atMs:1,sizeBytes:1000}]}], 10, 100, {}); return window.__pe;})()
+expect window.__pe.deletes.length === 0
+expect window.__pe.overCap === true
+expect window.__pe.totalAfter === 1000
+
+# (f) garbage input is tolerated, never throws
+eval (function(){try { window.__pf = H.planEviction([null, {}, {docId: 42, snapshots: 'nope'}, {docId: did('e5'), snapshots: [null, {id:'ok'}, {id:'g1', atMs:'bad', sizeBytes:-5}]}], 'not a number', 'also not a number', {perDoc: -3, olderKey: 7}); window.__pfOk = true; } catch (e) { window.__pfOk = false; } return [window.__pfOk, window.__pf && window.__pf.deletes];})()
+expect window.__pfOk === true
+expect Array.isArray(window.__pf.deletes)
+
+# (g) a protected snapshot is never deleted: not as the oldest Older entry
+# under cap pressure (the next one goes instead), and not by a document's
+# oldest-first eviction, which then reports overCap rather than delete the
+# newest
+eval (function(){window.__pg1 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 999999, snapshots: [{id:'o1',atMs:1,sizeBytes:50},{id:'o2',atMs:2,sizeBytes:50}]}], 50, 100, {protect: [{docId: '_older', id: 'o1'}]}); window.__pg2 = H.planEviction([{docId: did('f3'), lastOpenedAt: 1, snapshots: [{id:'p1',atMs:1,sizeBytes:50},{id:'p2',atMs:2,sizeBytes:50},{id:'p3',atMs:3,sizeBytes:50}]}], 50, 100, {protect: [{docId: did('f3'), id: 'p1'}]}); return [window.__pg1.deletes, window.__pg2.deletes, window.__pg2.overCap];})()
+expect window.__pg1.deletes.length === 1
+expect window.__pg1.deletes[0].id === 'o2'
+expect window.__pg2.deletes.length === 1
+expect window.__pg2.deletes[0].id === 'p2'
+expect window.__pg2.overCap === true
+
+# =============================================================================
+# two same-origin instances (a hidden iframe) racing 20+20 puts on the same
+# document → 40 distinct stored bodies, byte-consistent.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__raceId = await openFixture(did('e6'), 'Race'); return true; })()
+eval (function(){window.__frame = document.createElement('iframe'); window.__frame.style.cssText = 'position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;'; window.__frame.src = '/index.html'; document.body.appendChild(window.__frame); return true;})()
+wait window.__frame.contentWindow && window.__frame.contentWindow.__historyTest && window.__frame.contentWindow.__splitpageFormats
+eval (async function(){ var fw = window.__frame.contentWindow; fw.__splitpageFormats.state().docId = window.__raceId; for (var i = 0; i < 3; i++) { await fw.__splitpageFormats.openFile(new File(['iframe seed row.'], 'seed' + i + '.txt')); } return fw.__splitpageFormats.docId(); })()
+expect window.__frame.contentWindow.__splitpageFormats.docId() === window.__raceId
+eval (async function(){ var mainPushes = []; for (var i = 0; i < 20; i++) { mainPushes.push(pushForeign('main' + i + '.txt')); } await Promise.all(mainPushes); return true; })()
+eval (async function(){ var fw = window.__frame.contentWindow; var framePushes = []; for (var i = 0; i < 20; i++) { framePushes.push(fw.__splitpageFormats.openFile(new File(['frame content ' + i], 'frame' + i + '.txt'))); } await Promise.all(framePushes); return true; })()
+eval (async function(){ await H.idle(); await window.__frame.contentWindow.__historyTest.idle(); window.__raceRaw = await H.listRaw(window.__raceId); window.__raceBody = await H.bodyCount(window.__raceId); return [window.__raceRaw.length, window.__raceBody]; })()
+expect window.__raceRaw.length >= 40
+eval (function(){var ids = {}; window.__raceRaw.forEach(function(m){ids[m.id] = (ids[m.id]||0)+1;}); window.__raceDistinct = Object.keys(ids).length; window.__raceDup = Object.keys(ids).some(function(k){return ids[k] > 1;}); return [window.__raceDistinct, window.__raceDup];})()
+expect window.__raceDup === false
+eval (async function(){ window.__raceRec = await H.docRecord(window.__raceId); window.__raceSum = window.__raceRaw.reduce(function(a,m){return a+(m.sizeBytes||0);},0); return [window.__raceRec.bytes, window.__raceSum];})()
+expect window.__raceRec.bytes === window.__raceSum
+eval (function(){document.body.removeChild(window.__frame); return true;})()
+
+# =============================================================================
+# memory backend: the subtitle names it as lasting only until this page
+# closes, and it never touches the legacy key (it takes no part in the
+# one-time migration).
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__memBe = await H.forceBackend('memory'); return window.__memBe; })()
+expect window.__memBe === 'memory'
+eval (async function(){ window.__memId = await openFixture(did('e7'), 'Memory Backend'); await pushForeign('mem-1.txt'); await H.idle(); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-panel').hidden
+wait document.getElementById('history-subtitle').textContent.indexOf('until this page closes') !== -1
+jsclick #history-close
+eval (function(){window.__memLegacy = JSON.stringify([{id:'m1', at:new Date().toISOString(), label:'Old', state:{rows:[{id:'r1',audioText:'x'}]}}]); localStorage.setItem('splitpage-snapshots', window.__memLegacy); return true;})()
+eval (async function(){ window.__memResult = await H.migrate(); return window.__memResult; })()
+expect window.__memResult.migrated === 0
+expect window.__memResult.removedKey === false
+expect localStorage.getItem('splitpage-snapshots') === window.__memLegacy
+eval (function(){localStorage.removeItem('splitpage-snapshots'); return H.forceBackend(null);})()
+
+# =============================================================================
+# copyHistory waits for an in-flight push (a delayed one is still included
+# in the copy) and is idempotent — already covered above via reassignDocId
+# ("a copied snapshot keeps the current docId"). Here: a hostile target id
+# never reaches copyHistory in the first place (reassignDocId's own guard
+# rejects a non-docId toId before any copy is attempted).
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__chFrom = await openFixture(did('e8'), 'Copy Guard'); return true; })()
+eval (function(){window.__chOlder = F.reassignDocId('_older', {fromId: __chFrom, otherTitle: 'X'}); return window.__chOlder;})()
+expect window.__chOlder === false
+expect F.docId() === __chFrom
+eval (function(){window.__chTraversal = F.reassignDocId('../x', {fromId: __chFrom, otherTitle: 'X'}); return window.__chTraversal;})()
+expect window.__chTraversal === false
+expect F.docId() === __chFrom
+# an in-flight push is still included in a copy started while it is stalled
+eval (async function(){ H.injectFault('delay-put'); pushForeign('ch-inflight.txt'); window.__chTo = did('e9'); window.__chCopyOk = F.reassignDocId(__chTo, {fromId: __chFrom, otherTitle: 'Y'}); H.releaseDelayedPut(); await H.idle(); window.__chToRec = await H.docRecord(__chTo); return [window.__chCopyOk, window.__chToRec.count]; })()
+expect window.__chCopyOk === true
+expect window.__chToRec.count === 1
+
+# =============================================================================
+# escaping (a hostile label/title never breaks the panel's markup) and a
+# stale render (switching documents mid-render never leaves the wrong
+# document's list on screen).
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__escId = await openFixture(did('ea'), '<img src=x onerror=alert(1)>&"\''); await pushForeign('<script>evil</script>.txt'); await H.idle(); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list .history-card').length === 1
+expect document.querySelectorAll('#history-list script').length === 0
+expect document.querySelectorAll('#history-list img').length === 0
+expect document.getElementById('history-list').innerHTML.indexOf('<script>evil') === -1
+expect document.getElementById('history-list').textContent.indexOf('<script>evil</script>.txt') !== -1
+jsclick #history-close
+
+eval (async function(){ window.__staleA = await openFixture(did('eb'), 'Stale A'); await pushForeign('staleA-1.txt'); await H.idle(); window.__staleB = did('ec'); return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+eval (async function(){ await openFixture(__staleB, 'Stale B'); await H.idle(); return true; })()
+wait document.getElementById('history-list').textContent.indexOf('Stale A') === -1
+wait document.getElementById('history-list').textContent.indexOf('staleA-1.txt') === -1
+expect F.docId() === __staleB
+jsclick #history-close
+
+quit

@@ -21,11 +21,37 @@
       if (disabled !== undefined) btn.disabled = disabled;
       btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
     });
+    /* Both markDirty() and clearDirty() funnel through here (invariant #20 —
+       one save state behind the two Save buttons), which makes this the one
+       place a desktop window title needs to hear about too, rather than a
+       third thing to remember to call from every mutation site. Defined in
+       20f-desktop.js; hoisted, so the fragment order doesn't matter. */
+    /* The same funnel is where a change of document identity is noticed
+       (02b-doc-id.js). Every path that makes a different document current —
+       an open, a server load, a Save As fork, a publish — ends in
+       clearDirty() or markDirty(), so checking here means no new ingress path
+       can forget to. It is a string compare when nothing changed, so typing
+       costs nothing. Before the desktop notification, so the main process
+       never hears about a document state whose identity is stale. */
+    if (typeof syncDocIdentity === "function") syncDocIdentity();
+    if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    /* Last of the three, and in this order deliberately: the crash draft is
+       written with the document's identity and its dirty state in the header,
+       so both have to be settled before it is told anything changed
+       (20g-drafts.js). It only sets a timer. */
+    if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
   }
 
   function markDirty() {
     dirty = true;
     editSeq++;
+    /* Unconditional, and NOT left to setSaveButtons() below: the line after
+       this skips that funnel while a save is in flight, so an edit typed
+       during a save would otherwise not reach the crash-draft writer until
+       saveDoc()'s finally ran — the one window where a crash is most likely
+       to cost work, since the document is large enough to still be writing.
+       noteDraftChange() is O(1) and only moves a timer (20g-drafts.js). */
+    if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
     if (!saveInFlight) setSaveButtons("Save •");
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
     /* A hosted document has no openedFile.name (openServerDoc() sets it to
@@ -46,7 +72,14 @@
 
   /* `sticky` is for the handful of messages that must not scroll past while
      you are looking the other way — a lapsed sign-in above all, since every
-     save until you act on it will fail. Sticky toasts dismiss on click. */
+     save until you act on it will fail. Sticky toasts dismiss on click.
+
+     Returns the element it appended, with its own dismiss() on it. A sticky
+     toast otherwise has no end but a click, so a caller that says something
+     is wrong has no way to take it back when it comes right: "Crash recovery
+     is paused — this disk is full" sat on screen for the rest of the session
+     after recovery resumed, contradicting the message posted next to it. No
+     existing caller reads the return value; this is a pure addition. */
   function showToast(msg, kind, sticky) {
     var host = document.getElementById("toast-host");
     var el = document.createElement("div");
@@ -63,5 +96,7 @@
     } else {
       setTimeout(dismiss, 2600);
     }
+    el.dismiss = dismiss;
     host.appendChild(el);
+    return el;
   }
