@@ -1485,7 +1485,6 @@
      keep the fixed width above. */
   #comments-panel {
     width: min(var(--comments-panel-width, 400px), 100vw);
-    position: relative;
   }
   .comments-panel-resize-handle {
     position: absolute;
