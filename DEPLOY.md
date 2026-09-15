@@ -272,8 +272,8 @@ live in the mounted volume, so they are unaffected.
 ## 6. Desktop installers (Windows)
 
 Splitpage is available as a standalone desktop application built with Electron 44
-and packaged with electron-builder 26. The Windows installers and portable executables
-are **NOT YET PART OF THE RELEASE RECIPE** — integrating them is a pending decision.
+and packaged with electron-builder 26. Starting with 2.0.0, these installers are
+part of the release recipe (§7) alongside the portable zip.
 
 ### Building the installers
 
@@ -316,13 +316,11 @@ binary that no x64 PC could start: IExpress stamps the architecture of the
 
 ### What's NOT verified
 
-- **The installers have never been published.** They land in `dist/` and are unsigned.
-  Signing (Windows SmartScreen + macOS notarization if macOS builds are added) is a
-  pending decision.
-- **Publishing them to the releases mirror.** The private main repo stays private;
-  assets would go to `RetroGorilla/splitpage-releases` like the portable zip does,
-  but the release recipe currently still uses IExpress for the old setup.exe.
-  Whether these Electron-built installers replace it or run alongside it is pending.
+- **The installers are unsigned.** They land in `dist/` unsigned; Windows SmartScreen
+  will warn on first run (click "More info" then "Run anyway"). Signing (Windows
+  SmartScreen + macOS notarization if macOS builds are added) is a pending decision.
+- **macOS/Linux builds.** Only Windows installers are built and published; the `mac`
+  and `linux` targets in `electron-builder.yml` are configured but unused so far.
 
 ### Tabs build (2026-09-14) and the ARM64 dev pin
 
@@ -338,10 +336,13 @@ build `npm install` fetches by default (`desktop/.npmrc`, `arch=arm64` — see
 HANDOFF.md §2); `desktop/test/smoke.mjs`'s dev-target runs, including the
 tabs cases, execute against that native ARM64 Electron, not under emulation.
 
-### Where they differ from the current release recipe
+### Where they differ from the old (deprecated) IExpress recipe
 
-The current `start.bat` + `package.mjs` + `installer/install.ps1` recipe ships a
-PowerShell installer wrapped in IExpress. The Electron-built installers:
+The old `start.bat` + `package.mjs --installer` + `installer/install.ps1` recipe
+shipped a PowerShell installer wrapped in IExpress; it is deprecated (see the
+header comment in `package.mjs`) but still builds, since `package.mjs` without
+`--installer` still produces the portable zip every release ships for 1.0.x
+compatibility (§7). The Electron-built installers, which 2.0.0 ships instead:
 
 - Run natively inside Electron's window frame with native title bar and menus
 - Have stable `splitpage://app` origin, so localStorage/IndexedDB/version history
@@ -355,26 +356,56 @@ PowerShell installer wrapped in IExpress. The Electron-built installers:
 
 ## 7. Publishing a release to the mirror
 
-When it's time to cut a new release for users to update to:
+When it's time to cut a new release for users to update to, build the two pieces
+separately — the portable zip from `package.mjs`, and the Electron installers
+from `desktop/`:
 
 ```bash
-node package.mjs --installer --arch both
+node package.mjs
+cd desktop && npm run dist:win
 ```
+
+`node package.mjs` (no `--installer`) writes `dist/splitpage-<version>.zip`. The
+`--installer` (IExpress) branch of `package.mjs` is deprecated — see its file
+header — and is not part of this recipe; it may still be run by hand as a
+historical fallback, but its output (`SplitpageSetup-<version>-*.exe`) is not
+published. `npm run dist:win` runs `stage.mjs`, `electron-builder`, and finishes
+with `verify-dist.mjs` (§6); do not publish if it does not print ALL PASS.
+
+The zip is still required every release, 2.0.0 included: the 1.0.x updater
+(`update.mjs`) hard-fails unless the release has an asset matching
+`/^splitpage-.*\.zip$/`, and that is how a 1.0.x install updates itself in
+place to the current browser app (see §6 and the 1.0.x removal note below).
 
 On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
 
 1. **Create a new release** with tag `v<version>` (where `<version>` matches `VERSION` in the repo).
-2. **Upload the assets:**
-   - `dist/splitpage-<version>.zip` (the portable app)
-   - `dist/SplitpageSetup-<version>-x64.exe` (installer for x64)
-   - `dist/SplitpageSetup-<version>-arm64.exe` (installer for ARM64)
+2. **Upload the assets** (names must match `desktop/electron-builder.yml`'s
+   `artifactName` exactly):
+   - `dist/splitpage-<version>.zip` (the portable app; required for 1.0.x update compatibility)
+   - `desktop/dist/SplitpageDesktopSetup-<version>-x64.exe` (Electron installer, x64)
+   - `desktop/dist/SplitpageDesktopSetup-<version>-arm64.exe` (Electron installer, ARM64)
+   - `SHA256SUMS.txt` (checksums for the three files above)
+
+   The combined two-architecture installer (`SplitpageDesktopSetup-<version>.exe`,
+   built when both archs are packaged together) is **not** published; only the
+   per-arch installers are.
 3. **Publish the release.**
+
+The Electron installers are unsigned, so Windows SmartScreen will warn on first
+run — click "More info" then "Run anyway" to proceed. This is expected until
+code signing is set up (see §6, "What's NOT verified").
+
+The 2.0.0 installer also removes a detected 1.0.x install from
+`%LOCALAPPDATA%\Programs\Splitpage` before installing, keeping the shared-session
+data folder untouched; see the `customInit` macro committed in
+`desktop/build/installer.nsh`.
 
 Existing installations will check the mirror on startup and offer the update. The `release.json` file in the repo controls the mirror URL, so if you need to change where releases come from, update that file and the next build will point there.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause |
 | --- | --- |

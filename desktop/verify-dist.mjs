@@ -76,9 +76,9 @@ const ALLOW_OTHER_ARCH = { "resources/elevate.exe": ["x86"] };
 
 /* The PE machine word, read without loading the file. Splitpage.exe is over
    200 MB, and Windows only needs the header to refuse it: "MZ" at 0, e_lfanew
-   at 0x3C, "PE\0\0" at e_lfanew, then the machine word. Same logic as
-   package.mjs's stubMachine(). Returns "x86"/"x64"/"arm64", "0x…" for an
-   unknown type, or null if the file is not a PE executable. */
+   at 0x3C, "PE\0\0" at e_lfanew, then the machine word. Returns
+   "x86"/"x64"/"arm64", "0x…" for an unknown type, or null if the file is not
+   a PE executable. */
 function peMachine(file) {
   const fd = openSync(file, "r");
   try {
@@ -124,6 +124,7 @@ for (const arch of ARCHS) {
     /* One check for the whole directory, and it fails if any single binary
        does: a summary line that said "ok" right under a mismatch would read
        as a pass to anyone skimming the build log. */
+    // TODO(U2b): SplitpageSpeech.exe IL-only allowlist once the voice engine is decided.
     let native = 0;
     const wrong = [];
     for (const file of walk(unpacked)) {

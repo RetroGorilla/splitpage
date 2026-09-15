@@ -3,6 +3,15 @@
  *
  *   node package.mjs              build dist/splitpage-<version>/ and the .zip
  *   node package.mjs --installer  ...and build SplitpageSetup-<version>.exe
+ *                                 (DEPRECATED — see below)
+ *
+ * DEPRECATED: the --installer (IExpress) branch. 2.0.0 replaces it with the
+ * Electron/electron-builder installers in desktop/ (SplitpageDesktopSetup-
+ * <version>-<arch>.exe) — see DEPLOY.md's publishing section. This branch is
+ * kept working, not deleted, because the zip it also produces (below) is
+ * still required: the 1.0.x auto-updater hard-fails unless it finds an asset
+ * matching /^splitpage-.*\.zip$/, so every release — including 2.0.0 — still
+ * ships that zip so 1.0.x installs can update themselves in place.
  *
  * The installer needs NOTHING installed to build. It is a self-extracting
  * archive made by iexpress.exe, which ships with Windows, wrapping a zip
