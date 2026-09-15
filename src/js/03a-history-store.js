@@ -750,6 +750,16 @@
         return idbReq(tx.objectStore("snapMeta").index("byDocAt").getAll(historyDocRange(bucket)));
       });
     },
+    /* Every document id this backend can enumerate, Older excluded — the
+       export read path (exportHistoryAll). null means "cannot enumerate",
+       which only the desktop backend answers. */
+    rawDocIds: function () {
+      return idbRun(["docs"], "readonly", function (tx) {
+        return idbReq(tx.objectStore("docs").getAllKeys());
+      }).then(function (keys) {
+        return (keys || []).filter(function (k) { return k !== HISTORY_OLDER_KEY; });
+      });
+    },
     rawBodyCount: function (bucket) {
       return idbRun(["snapBody"], "readonly", function (tx) {
         var s = tx.objectStore("snapBody");
@@ -1004,7 +1014,10 @@
       });
       return Promise.resolve(n);
     },
-    rawDoc: function (bucket) { return Promise.resolve(historyMem.docs[bucket] || null); }
+    rawDoc: function (bucket) { return Promise.resolve(historyMem.docs[bucket] || null); },
+    rawDocIds: function () {
+      return Promise.resolve(Object.keys(historyMem.docs).filter(function (k) { return k !== HISTORY_OLDER_KEY; }));
+    }
   };
 
   /* ---- desktop backend (HISTORY-IPC) ----
@@ -1172,7 +1185,14 @@
        Older bucket a list() reports empty — so there is nothing for this side
        to ask for. It stays a function because runHistoryMigration's expiry
        sweep and historyFinishList both probe for one. */
-    evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); }
+    evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
+
+    /* There is no IPC (yet) to enumerate every document's history from the
+       renderer — that would mean walking main's on-disk folder tree, which
+       is follow-up work (HANDOFF, "Desktop-side export"). null tells
+       exportHistoryAll() this backend cannot enumerate, so a browser-only
+       export refuses cleanly here instead of silently exporting nothing. */
+    rawDocIds: function () { return Promise.resolve(null); }
   };
 
   /* ---- backend choice (per call) ----
@@ -1581,6 +1601,132 @@
     });
   }
 
+  /* ---- export (X1: File ▸ Export app data…, browser-only) ----
+
+     The read path history never needed until now: every existing caller
+     wants one document (list/get) or a write. Export wants EVERY document's
+     history at once, which only the idb and memory backends can answer —
+     the desktop store is a folder tree main.js owns, and enumerating it
+     needs new IPC that does not exist yet (recorded as a follow-up). So
+     rawDocIds() returns null there, and exportHistoryAll() turns that into a
+     rejection with a clear code rather than silently exporting an empty
+     bundle. */
+  var HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
+
+  function historyExportError(code, message) {
+    var e = new Error(message);
+    e.code = code;
+    return e;
+  }
+
+  /* Every stored snapshot across every document plus Older, newest first,
+     tagged with where it came from (docId, or null for Older). Only metas —
+     bodies are fetched afterwards, and only for what the cap keeps, so a
+     history well past 200 MB does not read every body just to discard most
+     of them. */
+  function historyFlattenForExport(docs, olderMetas) {
+    var flat = [];
+    docs.forEach(function (d) {
+      (d.metas || []).forEach(function (m) {
+        flat.push({ docId: d.docId, id: m.id, atMs: m.atMs, sizeBytes: Number(m.sizeBytes) || 0 });
+      });
+    });
+    (olderMetas || []).forEach(function (m) {
+      flat.push({ docId: null, id: m.id, atMs: m.atMs, sizeBytes: Number(m.sizeBytes) || 0 });
+    });
+    flat.sort(function (a, b) { return (b.atMs - a.atMs) || (a.id < b.id ? 1 : -1); });
+    return flat;
+  }
+
+  /* Applies the 200 MB total cap, newest snapshots first (so what survives a
+     truncated export is always what a user would want back most), then
+     fetches only the bodies that made the cut. */
+  function historyAssembleExport(backend, docs, olderMetas) {
+    var flat = historyFlattenForExport(docs, olderMetas);
+    var total = 0, truncated = false, keep = {};
+    flat.forEach(function (f) {
+      var key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
+      if (total === 0 || total + f.sizeBytes <= HISTORY_EXPORT_CAP_BYTES) {
+        total += f.sizeBytes;
+        keep[key] = true;
+      } else {
+        truncated = true;
+      }
+    });
+    var bodyJobs = [];
+    docs.forEach(function (d) {
+      d.snapshots = [];
+      (d.metas || []).forEach(function (m) {
+        if (!keep[d.docId + "\n" + m.id]) return;
+        bodyJobs.push(backend.get(d.docId, m.id).then(function (r) {
+          if (r) d.snapshots.push({ meta: r.meta, stateJson: r.stateJson });
+        }));
+      });
+    });
+    var olderOut = [];
+    (olderMetas || []).forEach(function (m) {
+      if (!keep["_older\n" + m.id]) return;
+      bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id).then(function (r) {
+        if (r) olderOut.push({ meta: r.meta, stateJson: r.stateJson });
+      }));
+    });
+    return Promise.all(bodyJobs).then(function () {
+      function newestFirst(a, b) { return b.meta.atMs - a.meta.atMs; }
+      docs.forEach(function (d) { d.snapshots.sort(newestFirst); });
+      olderOut.sort(newestFirst);
+      return {
+        docs: docs.map(function (d) {
+          return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots };
+        }),
+        older: olderOut,
+        truncated: truncated
+      };
+    });
+  }
+
+  function historyBuildExport(backend, ids) {
+    var docJobs = ids.map(function (docId) {
+      return Promise.all([backend.rawDoc(docId), backend.rawList(docId)]).then(function (res) {
+        var rec = res[0] || null;
+        return {
+          docId: docId,
+          title: rec ? rec.title : "",
+          lastOpenedAt: rec ? rec.lastOpenedAt : 0,
+          metas: res[1] || []
+        };
+      });
+    });
+    return Promise.all(docJobs).then(function (docs) {
+      return backend.rawList(HISTORY_OLDER_KEY).then(function (olderMetas) {
+        return historyAssembleExport(backend, docs, olderMetas || []);
+      });
+    });
+  }
+
+  /* HISTORY-RENDERER-API exportHistoryAll (X1). Queued through
+     enqueueHistory, so it never reads a document mid-put — but unlike every
+     other job on that queue, this one is allowed to REJECT: a caller needs
+     to tell "no history at all" apart from "this backend cannot enumerate
+     documents" (desktop, today), and enqueueHistory's own contract of never
+     rejecting exists to protect the QUEUE, not this one read. The fallback
+     below is what turns a thrown error back into a rejection for our caller
+     while still leaving the shared chain intact for the next job. */
+  function exportHistoryAll() {
+    return enqueueHistory(function () {
+      return resolveHistoryBackend().then(function (backend) {
+        return backend.rawDocIds().then(function (ids) {
+          if (ids == null) {
+            throw historyExportError("no-enumeration",
+              "This app's history cannot be listed on this backend (desktop). Export app data from the browser build instead.");
+          }
+          return historyBuildExport(backend, ids);
+        });
+      });
+    }, function (e) {
+      return Promise.reject(e && e.code ? e : historyExportError("io", "Could not read version history for export."));
+    });
+  }
+
   /* ---- one-time migration of the shared localStorage list ---- */
 
   function historyLegacyRaw() {
@@ -1831,5 +1977,6 @@
       });
     },
     migrate: startHistoryMigration,
-    resetForTest: historyResetForTest
+    resetForTest: historyResetForTest,
+    exportAll: exportHistoryAll
   };
