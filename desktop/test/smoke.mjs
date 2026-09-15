@@ -379,6 +379,116 @@ function readSession(userDataDir) {
 }
 
 /* ----------------------------------------------------------------------
+ * 1a. Step N extras: crash-safe-draft helpers shared by the cases at the
+ *     bottom of this file. Real content changes (never window.__desktopTest's
+ *     markDirtyForTest, which sets the dirty flag with no document content
+ *     behind it) go through the SAME DOM path a person typing would: click
+ *     the real "+ Add row" button, then set one cell's text and dispatch a
+ *     real 'input' event so onRootInput -> syncFieldFromDom -> markDirty()
+ *     runs exactly as it does for a keystroke (05-render.js/21-events.js).
+ *     That is what lets a case assert the RESTORED document still holds a
+ *     specific marker string, not merely that some dirty flag survived.
+ * -------------------------------------------------------------------- */
+
+// Clicks "+ Add row", waits for the new row to render, then sets the LAST
+// visualText cell's content to `marker` and dispatches a real 'input' event
+// — a genuine content edit, indistinguishable on disk from a person typing.
+// Waits for the dirty indicator so the caller never races noteDraftChange().
+async function addMarkerRow(cdp, marker) {
+  // Counts actual editable-cell rows, never '#rows > *' — a document with
+  // ZERO rows (a freshly-created server doc, among others) still renders one
+  // empty-state placeholder child, which addRow() REPLACES rather than
+  // supplements: '#rows > *'.length can stay unchanged across the very add
+  // this is waiting for.
+  const before = await evalPage(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length");
+  await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
+  await poll(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length > " + before, 10000);
+  const expr = "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
+    "var cell = cells[cells.length - 1]; if (!cell) return false; cell.textContent = " + JSON.stringify(marker) + "; " +
+    "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()";
+  const ok = await evalPage(cdp, expr, { awaitPromise: false });
+  await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
+  return ok;
+}
+
+// DRAFT-RENDERER-API's window.__desktopTest.drafts.flushNow() — the same
+// path main's splitpage:draft-flush drives, called directly so a case never
+// has to wait out draftTiming.idle/max just to get a write on disk.
+async function flushDraft(cdp) {
+  return evalPage(cdp, "window.__desktopTest.drafts.flushNow()");
+}
+
+// TEST_MODE's splitpage:test-draft-status (DRAFT-IPC-AND-SHAPES). With no
+// tabId this asks about the CALLING page's own tab; a case driving a crashed
+// tab from a witness connection passes the crashed tab's id explicitly.
+async function draftStatusFor(cdp, tabId) {
+  return evalPage(cdp, "window.splitpageDesktop.__testDraftStatus(" + (tabId ? JSON.stringify(tabId) : "") + ")");
+}
+
+// window.__splitpageFormats.state().rows — true if any row's visualText
+// contains `marker`. Reads the document's real content, not just a dirty
+// flag, so a restore case can prove the RIGHT text came back.
+function markerExpr(marker) {
+  return "(function(){ var s = window.__splitpageFormats.state(); if (!s || !s.rows) return false; " +
+    "return s.rows.some(function(r){ return (r.visualText || '').indexOf(" + JSON.stringify(marker) + ") !== -1; }); })()";
+}
+async function markerPresent(cdp, marker) {
+  return evalPage(cdp, markerExpr(marker));
+}
+// Polls until the marker shows up (a restore is asynchronous — the merge/
+// adopt/etc. runs after takeDraft() resolves) or the timeout elapses, in
+// which case it resolves false rather than throwing (poll()'s own error
+// message would just say "false", which tells a failed assertion nothing).
+async function waitForMarker(cdp, marker, timeoutMs) {
+  return poll(cdp, markerExpr(marker), timeoutMs || 20000).catch(() => false);
+}
+
+// Same "•" convention dirtyTabForTest already polls for, exposed as a
+// one-shot read for cases that need to assert clean vs dirty after a restore.
+async function isDirty(cdp) {
+  return evalPage(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()");
+}
+
+// Polls for a .toast whose text contains `substr`, returning its full text
+// (or null on timeout) — never throws, so a case can assert absence too.
+async function toastContaining(cdp, substr, timeoutMs) {
+  return poll(cdp, "(function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) { " +
+    "if (t[i].textContent.indexOf(" + JSON.stringify(substr) + ") !== -1) return t[i].textContent; } return null; })()",
+    timeoutMs || 20000).catch(() => null);
+}
+
+// splitpage:test-crash-renderer (DRAFT-IPC-AND-SHAPES): kills this tab's
+// renderer the way a real crash does (no clean-exit reason), so main's
+// render-process-gone path runs for real. Fire-and-forget like every other
+// call that ends the very page issuing it (see fireEval's own comment) — the
+// renderer dies mid-request, so a reply can never arrive.
+function crashRenderer(cdp) {
+  return fireEval(cdp, "window.splitpageDesktop.__testCrashRenderer()", { awaitPromise: false });
+}
+
+// Recursively scans every file under `dir` for a literal substring — used by
+// caseDraftNoSecrets to prove a PIN, a server token or a launch URL never
+// reaches disk anywhere under drafts/ (DRAFT-IPC-AND-SHAPES: "The header
+// never contains a PIN, token, session info or fileId").
+function dirContainsText(dir, needle) {
+  let found = null;
+  (function walk(d) {
+    if (found) return;
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const ent of entries) {
+      if (found) return;
+      const p = path.join(d, ent.name);
+      if (ent.isDirectory()) { walk(p); continue; }
+      let text = "";
+      try { text = fs.readFileSync(p, "utf8"); } catch { continue; }
+      if (text.indexOf(needle) !== -1) { found = p; return; }
+    }
+  })(dir);
+  return found;
+}
+
+/* ----------------------------------------------------------------------
  * 1b. Step L2 extras: helpers the tab-shell cases below share. TAB-IDENTITY's
  *     tabId/windowId are 32 lowercase hex from crypto.randomBytes(16) — the
  *     v1-migration and restore-at-launch cases hand-write desktop-state.json
@@ -490,6 +600,103 @@ async function setupTwoDirtyWindows(target, opts) {
     window2Id,
     cdp1: app.cdp, cdp2, cdp3
   };
+}
+
+/* ----------------------------------------------------------------------
+ * 1c. Step M extras: DOC-CLAIMS + HISTORY-IPC helpers shared by the new
+ *     cases below. Every history call goes straight at
+ *     window.splitpageDesktop.history* (the real bridge/IPC, HISTORY-IPC)
+ *     rather than through window.__historyTest (03a-history-store.js's
+ *     backend-agnostic wrapper) — the point of these cases is proving the
+ *     real main-process implementation (desktop/main.js section 8b), not
+ *     the renderer's dispatch to it.
+ * -------------------------------------------------------------------- */
+
+// 32 lowercase hex after "d" (DOC-ID-FORMAT) — Node-side so a case can name
+// a docId before any document carrying it exists.
+function randDocId() { return "d" + crypto.randomBytes(16).toString("hex"); }
+
+// HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/ — lowercase hex keeps
+// every generated id inside that shape without thinking about it further.
+function randSnapId(prefix) {
+  return (prefix || "s") + crypto.randomBytes(6).toString("hex");
+}
+
+// A HISTORY-IPC snapshot meta with sane defaults, override anything. atMs is
+// stamped forward by main anyway when it would not sort after the bucket's
+// current newest (historyStampAfter) — callers that care about ordering
+// still pass a monotonic atMs so intent is clear from the fixture itself.
+function historyMeta(overrides) {
+  var now = Date.now();
+  return Object.assign({
+    id: randSnapId(), label: "snap", at: new Date(now).toISOString(), atMs: now,
+    by: "smoke", rows: 1, title: "Doc", sizeBytes: 0, kind: "snapshot"
+  }, overrides || null);
+}
+
+// Calls window.splitpageDesktop.<method>(...args) in the page and returns
+// its resolved value, or throws (awaitPromise already rejects evalPage's own
+// promise on an invoke rejection — exactly what HISTORY-IPC's "an invalid
+// docId/meta/body makes the invoke reject" needs a case to observe).
+async function historyCall(cdp, method, args) {
+  var argsJson = (args || []).map(function (a) { return JSON.stringify(a === undefined ? null : a); }).join(",");
+  return evalPage(cdp, "window.splitpageDesktop." + method + "(" + argsJson + ")");
+}
+
+// true if the call rejected (an invalid id, a malformed meta, …), false if
+// it resolved — never throws itself, so a validation case can assert
+// rejection without its own try/catch at every call site.
+async function historyCallRejects(cdp, method, args) {
+  try { await historyCall(cdp, method, args); return false; } catch { return true; }
+}
+
+// HISTORY-STORAGE's on-disk layout, read directly (never through IPC) so a
+// case can see what main actually wrote — the same reason readDraftDirs
+// reads DRAFT-STORE's files straight off disk instead of asking the app.
+function historyBucketDirOnDisk(userDataDir, bucket) {
+  return bucket === "_older"
+    ? path.join(userDataDir, "history", "older")
+    : path.join(userDataDir, "history", "docs", "d-" + bucket);
+}
+function historyIndexPathOnDisk(userDataDir, bucket) {
+  return path.join(historyBucketDirOnDisk(userDataDir, bucket), "index.json");
+}
+function historySnapPathOnDisk(userDataDir, bucket, snapId) {
+  return path.join(historyBucketDirOnDisk(userDataDir, bucket), "s-" + snapId + ".snap");
+}
+function readHistoryIndexOnDisk(userDataDir, bucket) {
+  try { return JSON.parse(fs.readFileSync(historyIndexPathOnDisk(userDataDir, bucket), "utf8")); }
+  catch { return null; }
+}
+// HISTORY-STORAGE's .snap format: "splitpage-snapshot 1", the meta JSON
+// (no document id in it — the folder is the document), then the state JSON
+// verbatim. Hand-written so a case can pre-seed a bucket before any launch
+// (caseHistoryCorruptIndex, caseHistoryNewerFormatReadOnly).
+function historySnapText(meta, stateJson) {
+  return "splitpage-snapshot 1\n" + JSON.stringify(meta) + "\n" + stateJson;
+}
+function writeHistorySnapOnDisk(userDataDir, bucket, meta, stateJson) {
+  var dir = historyBucketDirOnDisk(userDataDir, bucket);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(historySnapPathOnDisk(userDataDir, bucket, meta.id), historySnapText(meta, stateJson), "utf8");
+}
+function writeHistoryFormatOnDisk(userDataDir, version) {
+  var dir = path.join(userDataDir, "history");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "FORMAT"), String(version) + "\n", "utf8");
+}
+
+// Second-instance send, scoped to one userDataDir — same technique
+// caseTabRoutingRules uses locally, promoted here so the new DOC-CLAIMS case
+// can open A.md and B.md into two tabs of the SAME launch without a
+// dedicated test-shell op for "open this path".
+async function sendSecondInstanceTo(target, userDataDir, filePath) {
+  const port = await freePort();
+  const flags = [`--remote-debugging-port=${port}`];
+  const args = target.kind === "dev" ? [target.appPath, ...flags, filePath] : [...flags, filePath];
+  const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
+  const proc = spawn(target.exe, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+  await waitForExit(proc, 15000);
 }
 
 /* One spawn attempt: builds the env/flags/args for `target` against `port`
@@ -2207,9 +2414,1668 @@ async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
   }
 }
 
+/* ----------------------------------------------------------------------
+ * 5b. Step M: document id + desktop history smoke cases.
+ * -------------------------------------------------------------------- */
+
+/* caseAtomicSaveKeepsBirthtime. Measured, then held against the code.
+   chooseDuplicateLoser's win32 rule (DOC-CLAIMS) used to judge "which of two
+   identical files is the copy" on birthtime, which only works if an ordinary
+   Save-in-place — atomicWrite's write-a-temp-then-rename-over — leaves the
+   file's creation time alone. NTFS is documented to carry the destination's
+   creation time across such a rename (file tunnelling); on Windows 11 here
+   it does not, and every save moves birthtime forward by the elapsed time.
+   The rule is therefore off (DUP_TRUST_BIRTHTIME), and this case no longer
+   asserts the filesystem behaves one way — it asserts the two AGREE:
+   whatever the filesystem does to birthtime, the real chooseDuplicateLoser
+   must not be fooled by it. It fails if a save starts re-dating files on a
+   machine where the rule was turned back on, or if the rule is turned back
+   on while saves still re-date files. */
+async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
+  /* The function keeps step M's name for traceability; the reported tag says
+     what it actually asserts now, so a PASS line never reads as a claim that
+     birthtime was preserved when the measurement below says it was not. */
+  const tag = target.name + " save-in-place birthtime agrees with the duplicate rule";
+  const aPath = path.join(fixturesDir, "case-m-birthtime-a.md");
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "atomic-save-birthtime", dialogs: [aPath] });
+    await waitForRows(app.cdp, 20000);
+
+    // "open A.md": create it through the app's own Save As (guarantees a
+    // byte-exact Markdown project — a hand-written fixture risks the table
+    // and the data block's row counts disagreeing, which pops the real
+    // #md-rows-modal in-page confirm and would hang this case, invariant
+    // #33's "never trigger one" included), then treat this tab exactly as
+    // "A.md is open": the tab's docFileHandle is bound to aPath from here on,
+    // same as if the file had been opened from disk.
+    await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    let saveAsOk = false;
+    for (let i = 0; i < 30 && !saveAsOk; i++) {
+      if (fs.existsSync(aPath)) saveAsOk = true; else await sleep(250);
+    }
+    record(tag + ": setup — Save As creates A.md", saveAsOk);
+    if (!saveAsOk) return;
+    await sleep(300); // let the save fully settle (docFileHandle retargeted, clean)
+
+    const stBefore = fs.statSync(aPath);
+    const birthtimeBefore = stBefore.birthtimeMs;
+
+    await sleep(2500);
+
+    // Save in place: no saveAs, reuses the handle Save As just retargeted to.
+    await evalPage(app.cdp, "window.__splitpageFormats.save()");
+    let onDiskAfter = null;
+    for (let i = 0; i < 20 && onDiskAfter === null; i++) {
+      try { onDiskAfter = fs.readFileSync(aPath, "utf8"); } catch { await sleep(250); }
+    }
+    record(tag + ": save-in-place writes A.md again", !!onDiskAfter);
+
+    const stAfter = fs.statSync(aPath);
+    const birthtimeAfter = stAfter.birthtimeMs;
+    const preserved = birthtimeBefore === birthtimeAfter;
+
+    /* Ask the real function what it would do with two claims on one docId
+       whose birthtimes say the opposite of their seq order: file A was
+       created first and adopted the id first (seq 1) but was saved since, so
+       it now carries the LATER birthtime. Trusting birthtime here names A —
+       the document the user has been working in — as the copy. */
+    const older = { docId: "d" + "a".repeat(32), homeKey: "file:c:\\x\\a.md", seq: 1, birthtimeMs: 2_000_000 };
+    const newer = { docId: "d" + "a".repeat(32), homeKey: "file:c:\\x\\b.md", seq: 2, birthtimeMs: 1_000_000 };
+    const verdict = await evalPage(app.cdp,
+      "window.splitpageDesktop.__testDupLoser(" + JSON.stringify(older) + "," + JSON.stringify(newer) + ")");
+    const mirrored = await evalPage(app.cdp,
+      "window.splitpageDesktop.__testDupLoser(" + JSON.stringify(newer) + "," + JSON.stringify(older) + ")");
+
+    record(tag + ": save-in-place " + (preserved ? "PRESERVES" : "MOVES") +
+      " the file's birthtime on this filesystem, and chooseDuplicateLoser's rule " +
+      "is consistent with that (a rule that trusts birthtime needs it preserved)",
+      preserved || verdict === "b",
+      "before=" + birthtimeBefore + " after=" + birthtimeAfter + " loser=" + verdict);
+
+    /* Symmetry is the property that keeps BOTH tabs from re-iding, so it is
+       worth asserting on the same pair from both sides. */
+    record(tag + ": the verdict is symmetric — the same claim loses whichever way round it is asked",
+      verdict !== null && mirrored !== null && verdict !== mirrored,
+      "a,b=" + verdict + " b,a=" + mirrored);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* caseDuplicateDocIdAcrossTabs. DOC-CLAIMS end to end against a real main
+   process: two tabs open byte-identical files (one a real fs.copyFileSync of
+   the other, exactly like copying a file in Explorer), the copy is told to
+   re-id, and — orchestrator override §1 — nothing is written to disk on its
+   own. */
+async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
+  const tag = target.name + " duplicate document id across tabs (DOC-CLAIMS)";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const aPath = path.join(fixturesDir, "case-m-dup-a.md");
+  const bPath = path.join(fixturesDir, "case-m-dup-b.md");
+  let app = null;
+  let cdpB = null;
+  try {
+    app = await launchApp(target, { label: "dup-doc-id", userDataDir, dialogs: [aPath] });
+    await waitForRows(app.cdp, 20000);
+    const tabAId = await tabIdOfTarget(app.cdp);
+
+    // "save A.md through the app": Save As from the launch's own blank
+    // pristine tab, for the same "must be a byte-exact project file" reason
+    // as caseAtomicSaveKeepsBirthtime above.
+    await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    let saveAsOk = false;
+    for (let i = 0; i < 30 && !saveAsOk; i++) {
+      if (fs.existsSync(aPath)) saveAsOk = true; else await sleep(250);
+    }
+    record(tag + ": setup — Save As creates A.md", saveAsOk);
+    if (!saveAsOk) { await teardown(app, tag); rmrf(app.userDataDir); rmrf(userDataDir); return; }
+    await sleep(300);
+    const idA = await poll(app.cdp, "window.__splitpageFormats.docId()", 10000);
+
+    // The 2.5 s gap used to matter because it put the copy's birthtime
+    // outside chooseDuplicateLoser's 2 s noise window. That rule is off now
+    // (DUP_TRUST_BIRTHTIME — see caseAtomicSaveKeepsBirthtime), so the seq
+    // tie-break names B either way; the gap is kept only so the two files
+    // are unambiguously distinguishable on disk to anything reading this
+    // fixture, and so Save As has fully settled before the copy is taken.
+    await sleep(2500);
+    fs.copyFileSync(aPath, bPath);
+    const aBytesOriginal = fs.readFileSync(aPath);
+    const bBytesAfterCopy = fs.readFileSync(bPath);
+
+    // Open B.md into a new tab: tab A is no longer pristine (it has a real
+    // file), so routeOpenPath's pristine-reuse rule does not apply and this
+    // lands in a fresh tab (TAB-IDENTITY / DOCUMENT-STATE-AND-ROUTING-IPC).
+    await sendSecondInstanceTo(target, userDataDir, bPath);
+    const tabBTarget = await pollNode(async () => {
+      const { tabTargets } = await findTargetsByKind(app.port);
+      const extra = tabTargets.filter((t) => t.tabId && t.tabId !== tabAId);
+      return extra.length ? extra[0] : null;
+    }, 20000).catch(() => null);
+    record(tag + ": B.md opens into a new tab", !!tabBTarget);
+    if (!tabBTarget) { await teardown(app, tag); rmrf(app.userDataDir); rmrf(userDataDir); return; }
+    const tabBId = tabBTarget.tabId;
+    cdpB = await connectTarget(tabBTarget);
+    await waitForRows(cdpB, 20000);
+
+    // The predicted replacement id (DOC-CLAIMS' Reassignment), computed
+    // independently of the app: 'd' + sha256('splitpage-dup\n'+idA+'\n'+
+    // 'file:'+absB.toLowerCase()).slice(0,32) — byte-identical to both
+    // replacementDocId (main.js) and deriveDocId (02b-doc-id.js).
+    const homeKeyB = "file:" + path.resolve(bPath).toLowerCase();
+    const toId = "d" + crypto.createHash("sha256")
+      .update("splitpage-dup\n" + idA + "\n" + homeKeyB, "utf8").digest("hex").slice(0, 32);
+
+    // Read the pre-reassignment id only as a courtesy — per step G's own
+    // report the re-id can land inside a second, faster than a poll can
+    // catch it "still idA". The authoritative proof is the docIdEvents()
+    // copy entry checked below, not this snapshot.
+    const bIdEarly = await evalPage(cdpB, "window.__splitpageFormats.docId()").catch(() => null);
+
+    const reassigned = await poll(cdpB, "window.__splitpageFormats.docId() === " + JSON.stringify(toId), 20000).catch(() => null);
+    record(tag + ": B's docId is reassigned to the predicted replacement id", !!reassigned,
+      "idA=" + idA + " bIdEarly=" + bIdEarly + " toId=" + toId);
+
+    const idAAfter = await evalPage(app.cdp, "window.__splitpageFormats.docId()");
+    record(tag + ": A's docId is unchanged", idAAfter === idA, "idA=" + idA + " idAAfter=" + idAAfter);
+
+    const eventsB = await evalPage(cdpB, "window.__splitpageFormats.docIdEvents()");
+    const hasCopyEvent = Array.isArray(eventsB) &&
+      eventsB.some((e) => e && e.type === "copy" && e.from === idA && e.to === toId);
+    record(tag + ": B logged a history-copy event from idA to toId", hasCopyEvent, JSON.stringify(eventsB));
+
+    const writtenOut = await evalPage(cdpB, "window.__splitpageFormats.writtenOut()");
+    record(tag + ": docIdWrittenOut is false right after the reassignment (override §1 — no autosave)",
+      writtenOut === false, String(writtenOut));
+
+    const toastText = await evalPage(cdpB,
+      "(function(){ var t=document.querySelectorAll('.toast'); for (var i=0;i<t.length;i++){ " +
+      "if (t[i].textContent.indexOf('is a copy of')!==-1) return t[i].textContent; } return null; })()");
+    record(tag + ": B shows the sticky \"is a copy of\" toast", !!toastText, String(toastText));
+
+    // Override §1: reassignment never calls markDirty/queueAutoSave — B.md's
+    // bytes must be untouched on disk right after the id changed in memory.
+    record(tag + ": B.md's bytes are unchanged on disk immediately after the reassignment (no autosave)",
+      fs.readFileSync(bPath).equals(bBytesAfterCopy));
+    record(tag + ": A.md's bytes are unchanged on disk", fs.readFileSync(aPath).equals(aBytesOriginal));
+
+    // "Once a save is made through the app in B's tab, B.md contains the new
+    // id, and A.md's bytes are unchanged throughout" (override §1).
+    await evalPage(cdpB, "window.__splitpageFormats.save()");
+    let bTextAfterSave = null;
+    for (let i = 0; i < 30 && bTextAfterSave === null; i++) {
+      try {
+        const t = fs.readFileSync(bPath, "utf8");
+        if (t.indexOf(toId) !== -1) bTextAfterSave = t; else await sleep(250);
+      } catch { await sleep(250); }
+    }
+    record(tag + ": after an explicit save through B's tab, B.md contains the new id on disk", !!bTextAfterSave);
+    record(tag + ": A.md's bytes are STILL unchanged after B's save", fs.readFileSync(aPath).equals(aBytesOriginal));
+
+    // "close and reopen B → no reassignment": B is clean (just saved), so
+    // closeTab needs no dialog. Route the same path back in — a brand new
+    // tab, since the closed one's pathToTabId entry is gone.
+    await shell(app.cdp, "closeTab", { tabId: tabBId });
+    await pollNode(async () => {
+      const { tabTargets } = await findTargetsByKind(app.port);
+      return tabTargets.some((t) => t.tabId === tabBId) ? null : true;
+    }, 15000).catch(() => null);
+
+    await sendSecondInstanceTo(target, userDataDir, bPath);
+    const reopenTarget = await pollNode(async () => {
+      const { tabTargets } = await findTargetsByKind(app.port);
+      const extra = tabTargets.filter((t) => t.tabId && t.tabId !== tabAId && t.tabId !== tabBId);
+      return extra.length ? extra[0] : null;
+    }, 20000).catch(() => null);
+    record(tag + ": B.md reopens", !!reopenTarget);
+    let cdpReopen = null;
+    if (reopenTarget) {
+      cdpReopen = await connectTarget(reopenTarget);
+      await waitForRows(cdpReopen, 20000);
+      const reopenedId = await poll(cdpReopen, "window.__splitpageFormats.docId()", 15000).catch(() => null);
+      record(tag + ": reopening B.md keeps its (already reassigned) id — no further reassignment",
+        reopenedId === toId, "reopenedId=" + reopenedId + " toId=" + toId);
+      const reopenedEvents = await evalPage(cdpReopen, "window.__splitpageFormats.docIdEvents()").catch(() => null);
+      record(tag + ": no new copy event fires on reopen (its id no longer collides with A's)",
+        Array.isArray(reopenedEvents) && reopenedEvents.length === 0, JSON.stringify(reopenedEvents));
+      try { cdpReopen.close(); } catch {}
+    }
+
+    try { if (cdpB) cdpB.close(); } catch {}
+    cdpB = null;
+
+    // "quit and restore → no reassignment": a graceful teardown persists the
+    // session (both tabs), then a fresh launch on the same userDataDir
+    // restores it — B's id is already unique, so nothing re-fires.
+    await teardown(app, tag + " (pre-quit)");
+    app = null;
+
+    const appRestored = await launchApp(target, { label: "dup-doc-id-restore", userDataDir });
+    try {
+      await waitForRows(appRestored.cdp, 20000);
+      const listing = await shell(appRestored.cdp, "listTargets", {});
+      const w = listing.windows[0];
+      const restoredA = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(aPath).toLowerCase());
+      const restoredB = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(bPath).toLowerCase());
+      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB, JSON.stringify(w));
+      if (restoredA && restoredB) {
+        const cdpRA = await connectTab(appRestored, restoredA.tabId);
+        const cdpRB = await connectTab(appRestored, restoredB.tabId);
+        await waitForRows(cdpRA, 20000);
+        await waitForRows(cdpRB, 20000);
+        const idARestored = await poll(cdpRA, "window.__splitpageFormats.docId()", 15000).catch(() => null);
+        const idBRestored = await poll(cdpRB, "window.__splitpageFormats.docId()", 15000).catch(() => null);
+        record(tag + ": after quit+restore, A keeps its id", idARestored === idA, String(idARestored));
+        record(tag + ": after quit+restore, B keeps its reassigned id with no further reassignment",
+          idBRestored === toId, String(idBRestored));
+        const eventsRB = await evalPage(cdpRB, "window.__splitpageFormats.docIdEvents()").catch(() => null);
+        record(tag + ": no new copy event after quit+restore",
+          Array.isArray(eventsRB) && eventsRB.length === 0, JSON.stringify(eventsRB));
+        try { cdpRA.close(); } catch {}
+        try { cdpRB.close(); } catch {}
+      }
+    } finally {
+      await teardown(appRestored, tag + " (post-restore)");
+      rmrf(appRestored.userDataDir);
+    }
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch/import-older/usage
+   against the real main process, the on-disk layout HISTORY-STORAGE
+   documents, and that all of it survives a relaunch (not just this
+   process's in-memory historyIndexes Map). */
+async function caseHistoryRoundTripAndRelaunch(target) {
+  const tag = target.name + " history: put/list/get/copy/touch/import-older/usage + relaunch";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId();
+  const docId2 = randDocId();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-roundtrip", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const bodyA = JSON.stringify({ rows: [{ id: "r1" }], title: "First" });
+    const metaA = historyMeta({ label: "First", title: "First" });
+    const putA = await historyCall(cdp, "historyPut", [docId, metaA, bodyA]);
+    record(tag + ": first put succeeds, not a duplicate",
+      putA && putA.ok === true && putA.duplicate === false, JSON.stringify(putA));
+
+    const putADup = await historyCall(cdp, "historyPut", [docId, metaA, bodyA]);
+    record(tag + ": putting the same snapshot id again is idempotent (duplicate:true)",
+      putADup && putADup.ok === true && putADup.duplicate === true, JSON.stringify(putADup));
+
+    const bodyB = JSON.stringify({ rows: [{ id: "r1" }, { id: "r2" }], title: "Second" });
+    const metaB = historyMeta({ label: "Second", title: "Second", atMs: metaA.atMs });
+    const putB = await historyCall(cdp, "historyPut", [docId, metaB, bodyB]);
+    record(tag + ": second put succeeds", putB && putB.ok === true, JSON.stringify(putB));
+
+    const list1 = await historyCall(cdp, "historyList", [docId]);
+    record(tag + ": list returns both snapshots, newest first",
+      Array.isArray(list1.entries) && list1.entries.length === 2 &&
+      list1.entries[0].id === metaB.id && list1.entries[1].id === metaA.id, JSON.stringify(list1));
+    record(tag + ": a put stamped at/before the bucket's newest is bumped strictly after it (historyStampAfter)",
+      list1.entries[0].atMs > list1.entries[1].atMs, JSON.stringify(list1.entries.map((e) => e.atMs)));
+
+    const got = await historyCall(cdp, "historyGet", [{ docId }, metaA.id]);
+    record(tag + ": get returns the body verbatim",
+      !!got && got.stateJson === bodyA && got.meta.id === metaA.id, JSON.stringify(got && got.meta));
+    const missingGet = await historyCall(cdp, "historyGet", [{ docId }, randSnapId()]);
+    record(tag + ": get of an unknown snapshot id returns null", missingGet === null, JSON.stringify(missingGet));
+
+    const copy1 = await historyCall(cdp, "historyCopy", [docId, docId2]);
+    record(tag + ": copy copies both snapshots into a fresh document",
+      copy1 && copy1.ok === true && copy1.copied === 2, JSON.stringify(copy1));
+    const copy2 = await historyCall(cdp, "historyCopy", [docId, docId2]);
+    record(tag + ": a second copy is idempotent (0 copied, ids kept)",
+      copy2 && copy2.ok === true && copy2.copied === 0, JSON.stringify(copy2));
+    const list2 = await historyCall(cdp, "historyList", [docId2]);
+    record(tag + ": the copy's target lists both snapshots too",
+      Array.isArray(list2.entries) && list2.entries.length === 2, JSON.stringify(list2));
+
+    await historyCall(cdp, "historyTouch", [docId, "Touched Title"]);
+    const idxAfterTouch = readHistoryIndexOnDisk(userDataDir, docId);
+    record(tag + ": touch updates the on-disk index title",
+      !!idxAfterTouch && idxAfterTouch.title === "Touched Title", JSON.stringify(idxAfterTouch));
+    const untouchedDocId = randDocId();
+    await historyCall(cdp, "historyTouch", [untouchedDocId, "Should not exist"]);
+    record(tag + ": touch never creates a record for a document with no history",
+      readHistoryIndexOnDisk(userDataDir, untouchedDocId) === null, "");
+
+    const olderEntries = [
+      { meta: historyMeta({ id: randSnapId("l"), label: "legacy1" }), stateJson: JSON.stringify({ rows: [] }) },
+      { meta: historyMeta({ id: randSnapId("l"), label: "legacy2" }), stateJson: JSON.stringify({ rows: [] }) }
+    ];
+    const imp = await historyCall(cdp, "historyImportOlder", [olderEntries]);
+    record(tag + ": import-older adds both entries", imp && imp.ok === true && imp.added === 2, JSON.stringify(imp));
+    const listOlder = await historyCall(cdp, "historyList", [null]);
+    record(tag + ": list(null) reports the Older bucket",
+      Array.isArray(listOlder.older) && listOlder.older.length === 2 && typeof listOlder.olderExpiresAt === "number",
+      JSON.stringify(listOlder));
+
+    const usage = await historyCall(cdp, "historyUsage", []);
+    record(tag + ": usage reports non-zero totalBytes, docCount>=2, not read-only",
+      usage && usage.totalBytes > 0 && usage.docCount >= 2 && usage.readOnly === false, JSON.stringify(usage));
+
+    // ---- on-disk layout (HISTORY-STORAGE) ----
+    const formatText = fs.readFileSync(path.join(userDataDir, "history", "FORMAT"), "utf8").trim();
+    record(tag + ": FORMAT is \"1\" on disk", formatText === "1", formatText);
+    const idxOnDisk = readHistoryIndexOnDisk(userDataDir, docId);
+    record(tag + ": index.json has the documented shape, snapshots oldest first",
+      !!idxOnDisk && idxOnDisk.formatVersion === 1 && idxOnDisk.docId === docId &&
+      Array.isArray(idxOnDisk.snapshots) && idxOnDisk.snapshots.length === 2 &&
+      idxOnDisk.snapshots[0].id === metaA.id && idxOnDisk.snapshots[1].id === metaB.id,
+      JSON.stringify(idxOnDisk));
+    const snapText = fs.readFileSync(historySnapPathOnDisk(userDataDir, docId, metaA.id), "utf8");
+    const nl1 = snapText.indexOf("\n"), nl2 = snapText.indexOf("\n", nl1 + 1);
+    record(tag + ": a .snap file is the 3-line magic/meta/body format with the body verbatim",
+      snapText.slice(0, nl1) === "splitpage-snapshot 1" && snapText.slice(nl2 + 1) === bodyA, snapText.slice(0, nl1));
+    let metaOnDisk = null;
+    try { metaOnDisk = JSON.parse(snapText.slice(nl1 + 1, nl2)); } catch { /* recorded below */ }
+    record(tag + ": the .snap meta line carries no document id (the folder is the document)",
+      !!metaOnDisk && !("docId" in metaOnDisk), JSON.stringify(metaOnDisk));
+
+    // ---- relaunch: everything above must be ON DISK, not just this process's memory ----
+    await teardown(app, tag + " (pre-relaunch)");
+    app = null;
+    const app2 = await launchApp(target, { label: "history-roundtrip-relaunch", userDataDir });
+    try {
+      await waitForRows(app2.cdp, 20000);
+      const listAfterRelaunch = await historyCall(app2.cdp, "historyList", [docId]);
+      record(tag + ": after a relaunch, both snapshots are still listed",
+        Array.isArray(listAfterRelaunch.entries) && listAfterRelaunch.entries.length === 2, JSON.stringify(listAfterRelaunch));
+      const gotAfterRelaunch = await historyCall(app2.cdp, "historyGet", [{ docId }, metaA.id]);
+      record(tag + ": after a relaunch, get still returns the body verbatim",
+        !!gotAfterRelaunch && gotAfterRelaunch.stateJson === bodyA, "");
+    } finally {
+      await teardown(app2, tag + " (post-relaunch)");
+      rmrf(app2.userDataDir);
+    }
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryIdValidation. Every bad docId/snapshot id HISTORY-IPC's
+   handlers see must reject the invoke rather than quietly doing something
+   with it (invariant #38 — the renderer can never name a folder), a valid
+   positive control proves the validator isn't simply rejecting everything,
+   and nothing any of this touches leaks outside history/ or perturbs
+   desktop-state.json. */
+async function caseHistoryIdValidation(target) {
+  const tag = target.name + " history: id validation — nothing outside history/, desktop-state.json untouched";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-id-validation", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const goodDocId = randDocId();
+    const goodMeta = historyMeta({ label: "control" });
+    const putGood = await historyCall(cdp, "historyPut", [goodDocId, goodMeta, "{}"]);
+    record(tag + ": positive control — a valid docId/meta put succeeds", putGood && putGood.ok === true, JSON.stringify(putGood));
+    const getGoodRejects = await historyCallRejects(cdp, "historyGet", [{ docId: goodDocId }, goodMeta.id]);
+    record(tag + ": positive control — get of that real snapshot does not reject", getGoodRejects === false, "");
+
+    const stateFile = path.join(userDataDir, "desktop-state.json");
+    const stateBefore = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
+    const topLevelBefore = fs.readdirSync(userDataDir).sort();
+
+    const badDocIds = ["../x", "..", "a/b", "a\\b", "CON", goodDocId.toUpperCase(),
+      "d" + "a".repeat(31), "d" + "a".repeat(33), 42, null, "_older", ""];
+    for (const bad of badDocIds) {
+      const rejected = await historyCallRejects(cdp, "historyPut", [bad, historyMeta(), "{}"]);
+      record(tag + ": historyPut(" + JSON.stringify(bad) + ", …) rejects", rejected, "");
+    }
+    for (const bad of badDocIds) {
+      if (bad === null) continue; // historyList(null) is the documented "Older bucket only" call, not invalid
+      const rejected = await historyCallRejects(cdp, "historyList", [bad]);
+      record(tag + ": historyList(" + JSON.stringify(bad) + ") rejects", rejected, "");
+    }
+
+    const badSnapIds = ["AB-uppercase", "-leadingdash", "a b", "a/b", "..", "", "x".repeat(65), null, 42];
+    for (const bad of badSnapIds) {
+      const rejected = await historyCallRejects(cdp, "historyGet", [{ docId: goodDocId }, bad]);
+      record(tag + ": historyGet with snapshot id " + JSON.stringify(bad) + " rejects", rejected, "");
+    }
+
+    const olderBypassRejects = await historyCallRejects(cdp, "historyGet", [{ docId: "_older" }, goodMeta.id]);
+    record(tag + ": historyGet with docId '_older' (bypassing the older:true query) rejects", olderBypassRejects, "");
+
+    const stateAfter = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
+    const topLevelAfter = fs.readdirSync(userDataDir).sort();
+    record(tag + ": desktop-state.json is byte-identical after every rejected call",
+      (stateBefore === null && stateAfter === null) || (!!stateBefore && !!stateAfter && stateBefore.equals(stateAfter)),
+      "before=" + (stateBefore ? stateBefore.length : "null") + " after=" + (stateAfter ? stateAfter.length : "null"));
+    record(tag + ": nothing new appears at the top of userData (no traversal escape out of history/)",
+      JSON.stringify(topLevelBefore) === JSON.stringify(topLevelAfter),
+      JSON.stringify(topLevelBefore) + " vs " + JSON.stringify(topLevelAfter));
+
+    const historyEntries = [];
+    const historyRoot = path.join(userDataDir, "history");
+    if (fs.existsSync(historyRoot)) {
+      (function walk(dir) {
+        for (const name of fs.readdirSync(dir)) {
+          const p = path.join(dir, name);
+          historyEntries.push(path.relative(historyRoot, p));
+          if (fs.statSync(p).isDirectory()) walk(p);
+        }
+      })(historyRoot);
+    }
+    const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && e !== "FORMAT");
+    record(tag + ": history/ contains nothing named after a rejected id", suspicious.length === 0, JSON.stringify(historyEntries));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryCrashAfterBody. SPLITPAGE_TEST_HISTORY_FAULT=exit-after-body
+   kills the process between the body write and the index write — the exact
+   state a power cut mid-snapshot leaves (HISTORY-IPC / overrides §2b). A
+   relaunch's fsck must adopt the orphan. */
+async function caseHistoryCrashAfterBody(target) {
+  const tag = target.name + " history: exit-after-body fault — relaunch adopts the orphan";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId();
+  const meta = historyMeta({ label: "orphan" });
+  const body = JSON.stringify({ rows: [{ id: "r1" }], title: "Orphan" });
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "history-crash-after-body", userDataDir,
+      env: { SPLITPAGE_TEST_HISTORY_FAULT: "exit-after-body" }
+    });
+    await waitForRows(app.cdp, 20000);
+
+    // The reply never arrives — the process kills itself mid-put — so this
+    // is fire-and-forget, same reasoning as fireEval's own comment.
+    await fireEval(app.cdp,
+      "window.splitpageDesktop.historyPut(" + JSON.stringify(docId) + "," + JSON.stringify(meta) + "," + JSON.stringify(body) + ")",
+      { awaitPromise: false });
+
+    const exited = await waitForExit(app.proc, 20000);
+    record(tag + ": the process actually exits (the fault fired)", exited);
+    // Empirically, process.kill(pid,'SIGKILL') from inside a Windows process
+    // reports exit code 1 (no POSIX signals on Windows; libuv maps a
+    // self-inflicted SIGKILL to TerminateProcess(1)) — not a code this
+    // process chose, so it's pinned and explained rather than left to guess.
+    await teardown(app, tag + " (post-crash)", { expectExitCode: 1 });
+    app = null;
+
+    const orphanPath = historySnapPathOnDisk(userDataDir, docId, meta.id);
+    record(tag + ": the snapshot body reached disk before the crash", fs.existsSync(orphanPath), orphanPath);
+    const idxBeforeRelaunch = readHistoryIndexOnDisk(userDataDir, docId);
+    const orphanIndexed = !!idxBeforeRelaunch && Array.isArray(idxBeforeRelaunch.snapshots) &&
+      idxBeforeRelaunch.snapshots.some((s) => s.id === meta.id);
+    record(tag + ": …but the index does not name it yet (crashed before that write)", !orphanIndexed, JSON.stringify(idxBeforeRelaunch));
+
+    // Relaunch WITHOUT the fault env — otherwise the next put would crash again.
+    const app2 = await launchApp(target, { label: "history-crash-after-body-relaunch", userDataDir });
+    try {
+      await waitForRows(app2.cdp, 20000);
+      const list = await historyCall(app2.cdp, "historyList", [docId]);
+      record(tag + ": relaunch's fsck adopts the orphan — it is listed",
+        Array.isArray(list.entries) && list.entries.some((e) => e.id === meta.id), JSON.stringify(list));
+      const idxAfterRelaunch = readHistoryIndexOnDisk(userDataDir, docId);
+      record(tag + ": the on-disk index is rebuilt to name the adopted snapshot",
+        !!idxAfterRelaunch && idxAfterRelaunch.snapshots.some((s) => s.id === meta.id), JSON.stringify(idxAfterRelaunch));
+    } finally {
+      await teardown(app2, tag + " (post-relaunch)");
+      rmrf(app2.userDataDir);
+    }
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryCorruptIndex. A pre-seeded '{broken' index.json alongside 3
+   readable .snap bodies and 1 truncated one — the fsck (ensureHistoryTable /
+   fsckHistoryBucket) must rebuild the index from the readable bodies,
+   quarantine the truncated one as *.corrupt (never adopt it, never silently
+   drop it), and preserve the broken index as index.json.corrupt. */
+async function caseHistoryCorruptIndex(target) {
+  const tag = target.name + " history: corrupt index.json is rebuilt from the bodies (fsck)";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId();
+  const validMetas = [
+    historyMeta({ label: "v1", atMs: 1000 }),
+    historyMeta({ label: "v2", atMs: 2000 }),
+    historyMeta({ label: "v3", atMs: 3000 })
+  ];
+  const truncatedId = randSnapId();
+
+  writeHistoryFormatOnDisk(userDataDir, 1);
+  for (const m of validMetas) {
+    writeHistorySnapOnDisk(userDataDir, docId, m, JSON.stringify({ rows: [], title: m.label }));
+  }
+  const dir = historyBucketDirOnDisk(userDataDir, docId);
+  // Truncated: the magic line only, no second newline at all — unreadable as
+  // a header (readHistorySnapHeader requires one), so the fsck must
+  // quarantine it rather than adopt or silently drop it.
+  fs.writeFileSync(path.join(dir, "s-" + truncatedId + ".snap"), "splitpage-snapshot 1\n", "utf8");
+  fs.writeFileSync(path.join(dir, "index.json"), "{broken", "utf8");
+
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-corrupt-index", userDataDir });
+    await waitForRows(app.cdp, 20000);
+
+    const list = await historyCall(app.cdp, "historyList", [docId]);
+    const ids = (list.entries || []).map((e) => e.id).sort();
+    record(tag + ": the fsck adopts exactly the 3 valid snapshots",
+      ids.length === 3 && JSON.stringify(ids) === JSON.stringify(validMetas.map((m) => m.id).sort()), JSON.stringify(list));
+
+    const idxOnDisk = readHistoryIndexOnDisk(userDataDir, docId);
+    record(tag + ": index.json is rebuilt as valid JSON with all 3 snapshots",
+      !!idxOnDisk && idxOnDisk.formatVersion === 1 && idxOnDisk.snapshots.length === 3, JSON.stringify(idxOnDisk));
+    record(tag + ": the broken index.json is preserved as index.json.corrupt",
+      fs.existsSync(path.join(dir, "index.json.corrupt")));
+    record(tag + ": the truncated body is renamed *.corrupt, not adopted and not silently dropped",
+      fs.existsSync(path.join(dir, "s-" + truncatedId + ".snap.corrupt")) &&
+      !fs.existsSync(path.join(dir, "s-" + truncatedId + ".snap")));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryCapEviction. SPLITPAGE_TEST_HISTORY_CAP_BYTES lets a case reach
+   the eviction planner's cap without writing hundreds of megabytes: the
+   per-document 50-snapshot trim, and cap-driven eviction across documents by
+   lastOpenedAt ascending, a document's newest snapshot never deleted. */
+async function caseHistoryCapEviction(target) {
+  const tag = target.name + " history: cap-driven eviction + 50-per-document trim";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const CAP = 3000000;
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "history-cap-eviction", userDataDir,
+      env: { SPLITPAGE_TEST_HISTORY_CAP_BYTES: String(CAP) }
+    });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    // ---- per-document trim to HISTORY_PER_DOC (50) ----
+    const trimDocId = randDocId();
+    let firstSnapId = null, lastSnapId = null;
+    for (let i = 0; i < 55; i++) {
+      const m = historyMeta({ id: randSnapId("t"), label: "seq-" + i, atMs: 1000 + i });
+      await historyCall(cdp, "historyPut", [trimDocId, m, "{}"]);
+      if (i === 0) firstSnapId = m.id;
+      if (i === 54) lastSnapId = m.id;
+    }
+    const trimList = await historyCall(cdp, "historyList", [trimDocId]);
+    record(tag + ": 55 puts to one document trim to exactly HISTORY_PER_DOC (50)",
+      Array.isArray(trimList.entries) && trimList.entries.length === 50,
+      "count=" + (trimList.entries && trimList.entries.length));
+    const trimIds = (trimList.entries || []).map((e) => e.id);
+    record(tag + ": the oldest is evicted, the newest survives",
+      trimIds.indexOf(firstSnapId) === -1 && trimIds.indexOf(lastSnapId) !== -1, "");
+
+    // ---- cap-driven eviction across two documents ----
+    const bigBody = JSON.stringify({ blob: "x".repeat(900000) }); // ≈900 KB
+    const docOld = randDocId(), docNew = randDocId();
+    const oldSnap1 = historyMeta({ id: randSnapId("o"), atMs: 10000 });
+    const oldSnap2 = historyMeta({ id: randSnapId("o"), atMs: 10001 });
+    await historyCall(cdp, "historyPut", [docOld, oldSnap1, bigBody]);
+    await historyCall(cdp, "historyPut", [docOld, oldSnap2, bigBody]);
+    const newSnap1 = historyMeta({ id: randSnapId("n"), atMs: 20000 });
+    await historyCall(cdp, "historyPut", [docNew, newSnap1, bigBody]);
+    const newSnap2 = historyMeta({ id: randSnapId("n"), atMs: 20001 });
+    const lastCapPut = await historyCall(cdp, "historyPut", [docNew, newSnap2, bigBody]);
+
+    const usage = await historyCall(cdp, "historyUsage", []);
+    record(tag + ": usage stays at or under the TEST_MODE cap after eviction",
+      usage.totalBytes <= CAP, "totalBytes=" + usage.totalBytes + " cap=" + CAP);
+    record(tag + ": the put that crossed the cap reports it evicted something, and is no longer overCap",
+      lastCapPut.evicted > 0 && lastCapPut.overCap === false, JSON.stringify(lastCapPut));
+
+    const listOld = await historyCall(cdp, "historyList", [docOld]);
+    const listNew = await historyCall(cdp, "historyList", [docNew]);
+    record(tag + ": the document touched EARLIER (docOld) loses its oldest snapshot first, keeps its newest",
+      listOld.entries.length === 1 && listOld.entries[0].id === oldSnap2.id, JSON.stringify(listOld));
+    record(tag + ": the document touched LATER (docNew) keeps both of its snapshots",
+      listNew.entries.length === 2, JSON.stringify(listNew));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryConcurrentPuts. historyExclusive is ONE promise chain across
+   every sender — 60+10 puts and a copy, fired without awaiting each one, and
+   the same stress repeated from two different tabs (two different
+   webContents) of the same launch, proves the queue serializes across pages
+   too, not just within one. */
+async function caseHistoryConcurrentPuts(target) {
+  const tag = target.name + " history: concurrent puts + a copy are serialized correctly (one queue)";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+
+  async function stressFrom(cdps, docId, copyToId, label) {
+    const jobs = [];
+    for (let i = 0; i < 70; i++) {
+      const m = historyMeta({ id: randSnapId("c"), label: "c" + i, atMs: 100000 + i });
+      jobs.push(historyCall(cdps[i % cdps.length], "historyPut", [docId, m, "{}"]));
+    }
+    jobs.push(historyCall(cdps[0], "historyCopy", [docId, copyToId]));
+
+    const settled = await Promise.allSettled(jobs);
+    const rejected = settled.filter((r) => r.status === "rejected");
+    record(tag + " (" + label + "): none of the 70 concurrent puts + the concurrent copy reject",
+      rejected.length === 0, JSON.stringify(rejected.map((r) => String(r.reason))));
+
+    const list = await historyCall(cdps[0], "historyList", [docId]);
+    const ids = (list.entries || []).map((e) => e.id);
+    record(tag + " (" + label + "): the source document ends trimmed to exactly 50, no duplicates",
+      ids.length === 50 && new Set(ids).size === 50, "count=" + ids.length);
+
+    const copyResult = settled[settled.length - 1];
+    const copyValue = copyResult.status === "fulfilled" ? copyResult.value : null;
+    record(tag + " (" + label + "): the concurrent copy still reports ok with a sane copied count",
+      !!copyValue && copyValue.ok === true && copyValue.copied >= 0 && copyValue.copied <= 70, JSON.stringify(copyValue));
+    const listCopy = await historyCall(cdps[0], "historyList", [copyToId]);
+    record(tag + " (" + label + "): the copy's target lists exactly what the copy itself reported (self-consistent)",
+      Array.isArray(listCopy.entries) && listCopy.entries.length === (copyValue ? copyValue.copied : -1),
+      "listed=" + (listCopy.entries && listCopy.entries.length) + " copied=" + (copyValue && copyValue.copied));
+  }
+
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "history-concurrent", userDataDir });
+    await waitForRows(app.cdp, 20000);
+
+    await stressFrom([app.cdp], randDocId(), randDocId(), "one tab");
+
+    const tab2Id = await shell(app.cdp, "createTab", {});
+    cdp2 = await connectTab(app, tab2Id);
+    await waitForRows(cdp2, 20000);
+    await stressFrom([app.cdp, cdp2], randDocId(), randDocId(), "two tabs");
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryLegacyMigration. The one-time migration of the shared
+   localStorage 'splitpage-snapshots' key into the desktop Older bucket
+   (startHistoryMigration, HISTORY-STORAGE's "Legacy migration"): put-if-
+   absent, and a repeat leaves the bucket's expiresAt untouched (it was not
+   re-created). */
+async function caseHistoryLegacyMigration(target) {
+  const tag = target.name + " history: legacy localStorage migration into Older (put-if-absent, expiresAt stable)";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-legacy-migration", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const legacy = JSON.stringify([
+      { id: "legacy-a", at: new Date(1700000000000).toISOString(), label: "Legacy A", state: { rows: [{ id: "r1" }], title: "Legacy A" } },
+      { id: "legacy-b", at: new Date(1700000001000).toISOString(), label: "Legacy B", state: { rows: [{ id: "r1" }], title: "Legacy B" } }
+    ]);
+
+    async function seedLegacyKeyAndReload() {
+      await evalPage(cdp, "localStorage.setItem('splitpage-snapshots'," + JSON.stringify(legacy) + "); true");
+      await evalPage(cdp, "location.reload()", { awaitPromise: false });
+      await waitForRows(cdp, 20000);
+      await poll(cdp, "localStorage.getItem('splitpage-snapshots') === null", 20000).catch(() => null);
+      return pollNode(async () => {
+        const list = await historyCall(cdp, "historyList", [null]);
+        return Array.isArray(list.older) && list.older.length === 2 ? list : null;
+      }, 20000).catch(() => null);
+    }
+
+    const list1 = await seedLegacyKeyAndReload();
+    record(tag + ": older/index.json has both legacy entries after migration", !!list1, JSON.stringify(list1));
+    const olderIds = list1 ? (list1.older || []).map((e) => e.id).sort() : [];
+    record(tag + ": the migrated entries carry kind:'legacy' and the original ids",
+      !!list1 && list1.older.every((e) => e.kind === "legacy") && JSON.stringify(olderIds) === JSON.stringify(["legacy-a", "legacy-b"]),
+      JSON.stringify(list1 && list1.older));
+    const expiresAt1 = list1 && list1.olderExpiresAt;
+    record(tag + ": Older has an expiresAt set, in the future (90-day TTL from the migration)",
+      typeof expiresAt1 === "number" && expiresAt1 > Date.now(), String(expiresAt1));
+
+    // ---- repeat: the key reappears with the SAME two entries ----
+    const list2 = await seedLegacyKeyAndReload();
+    record(tag + ": a repeat migration stays at 2 (put-if-absent, no duplicates)", !!list2, JSON.stringify(list2));
+    record(tag + ": expiresAt is unchanged by the repeat (the bucket was not re-created)",
+      !!list2 && list2.olderExpiresAt === expiresAt1, "before=" + expiresAt1 + " after=" + (list2 && list2.olderExpiresAt));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryPlannerTwin. desktop/main.js's planHistoryEviction is meant to
+   be a line-for-line copy of src/js/03a-history-store.js's (overrides §2b);
+   the only way to keep two copies honest is to run the same fixtures through
+   both and demand the same answer, every time either one changes. */
+async function caseHistoryPlannerTwin(target) {
+  const tag = target.name + " history: caseHistoryPlannerTwin — main's planHistoryEviction matches the renderer's";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-planner-twin" });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const fixtures = [
+      // 1. nothing to do at all.
+      { docs: [], capBytes: 1000, nowMs: 1000, opts: {} },
+      // 2. one document, well under cap — nothing evicted.
+      { docs: [{ docId: "d" + "1".repeat(32), lastOpenedAt: 100, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 10 }] }],
+        capBytes: 1000, nowMs: 1000, opts: {} },
+      // 3. per-document trim: 3 snapshots, perDoc 2 — the oldest goes, the newest stays.
+      { docs: [{ docId: "d" + "2".repeat(32), lastOpenedAt: 100,
+          snapshots: [{ id: "s1", atMs: 10, sizeBytes: 5 }, { id: "s2", atMs: 20, sizeBytes: 5 }, { id: "s3", atMs: 30, sizeBytes: 5 }] }],
+        capBytes: 1000, nowMs: 1000, opts: { perDoc: 2 } },
+      // 4. cap eviction across two documents — the one with the OLDER lastOpenedAt goes first.
+      { docs: [
+          { docId: "d" + "3".repeat(32), lastOpenedAt: 100, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 60 }, { id: "s2", atMs: 20, sizeBytes: 60 }] },
+          { docId: "d" + "4".repeat(32), lastOpenedAt: 200, snapshots: [{ id: "s3", atMs: 30, sizeBytes: 60 }, { id: "s4", atMs: 40, sizeBytes: 60 }] }
+        ], capBytes: 150, nowMs: 1000, opts: {} },
+      // 5. an expired Older bucket goes as a whole, ahead of any document.
+      { docs: [
+          { docId: "_older", lastOpenedAt: 0, expiresAt: 500, snapshots: [{ id: "o1", atMs: 5, sizeBytes: 50 }, { id: "o2", atMs: 6, sizeBytes: 50 }] },
+          { docId: "d" + "5".repeat(32), lastOpenedAt: 900, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 5 }] }
+        ], capBytes: 1000000, nowMs: 1000, opts: { olderKey: "_older" } },
+      // 6. a protected snapshot is never the one an eviction removes.
+      { docs: [{ docId: "d" + "6".repeat(32), lastOpenedAt: 100,
+          snapshots: [{ id: "s1", atMs: 10, sizeBytes: 60 }, { id: "s2", atMs: 20, sizeBytes: 60 }] }],
+        capBytes: 60, nowMs: 1000, opts: { protect: [{ docId: "d" + "6".repeat(32), id: "s1" }] } }
+    ];
+
+    for (let i = 0; i < fixtures.length; i++) {
+      const f = fixtures[i];
+      const rendererResult = await evalPage(cdp,
+        "window.__historyTest.planEviction(" + JSON.stringify(f.docs) + "," + JSON.stringify(f.capBytes) + "," +
+        JSON.stringify(f.nowMs) + "," + JSON.stringify(f.opts) + ")");
+      const mainResult = await evalPage(cdp, "window.splitpageDesktop.__testHistoryPlan(" + JSON.stringify(f) + ")");
+      record(tag + ": fixture " + (i + 1) + " — main's plan matches the renderer's byte for byte",
+        JSON.stringify(rendererResult) === JSON.stringify(mainResult),
+        "renderer=" + JSON.stringify(rendererResult) + " main=" + JSON.stringify(mainResult));
+    }
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* caseHistoryNewerFormatReadOnly. A FORMAT number ahead of ours means a
+   newer build wrote this folder — history goes read-only rather than let
+   this build rewrite an index shape it does not understand (HISTORY-STORAGE). */
+async function caseHistoryNewerFormatReadOnly(target) {
+  const tag = target.name + " history: FORMAT ahead of ours goes read-only";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const docId = randDocId();
+  const seedMeta = historyMeta({ label: "pre-existing" });
+  const seedBody = JSON.stringify({ rows: [], title: "Pre-existing" });
+
+  writeHistorySnapOnDisk(userDataDir, docId, seedMeta, seedBody);
+  const dir = historyBucketDirOnDisk(userDataDir, docId);
+  fs.writeFileSync(path.join(dir, "index.json"), JSON.stringify({
+    formatVersion: 1, docId, title: "Pre-existing", lastOpenedAt: Date.now(),
+    bytes: Buffer.byteLength(seedBody, "utf8"), snapshots: [seedMeta]
+  }), "utf8");
+  writeHistoryFormatOnDisk(userDataDir, 2); // a newer build's format
+
+  const snapPath = historySnapPathOnDisk(userDataDir, docId, seedMeta.id);
+  const mtimeBefore = fs.statSync(snapPath).mtimeMs;
+  const formatPath = path.join(userDataDir, "history", "FORMAT");
+  const formatBytesBefore = fs.readFileSync(formatPath);
+
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-newer-format", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const list = await historyCall(cdp, "historyList", [docId]);
+    record(tag + ": list still works read-only — the pre-existing snapshot is there",
+      Array.isArray(list.entries) && list.entries.length === 1 && list.entries[0].id === seedMeta.id, JSON.stringify(list));
+
+    const put = await historyCall(cdp, "historyPut", [docId, historyMeta({ label: "should not land" }), "{}"]);
+    record(tag + ": put on a newer-FORMAT folder refuses with code 'read-only'",
+      put && put.ok === false && put.code === "read-only", JSON.stringify(put));
+
+    const usage = await historyCall(cdp, "historyUsage", []);
+    record(tag + ": usage reports readOnly:true", usage && usage.readOnly === true, JSON.stringify(usage));
+    record(tag + ": the pre-existing .snap file's mtime is untouched", fs.statSync(snapPath).mtimeMs === mtimeBefore, "");
+    record(tag + ": FORMAT itself is never rewritten back down to our own version",
+      fs.readFileSync(formatPath).equals(formatBytesBefore), "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
 /* "window.close() canary: grep src/js for 'window.close(' finds nothing (fs
    read in Node)." Pure source-text check — no launch, no target-dependent
    behaviour; runs once per target invocation but is cheap and idempotent. */
+/* ----------------------------------------------------------------------
+ * 5c. Step N: crash-safe drafts smoke cases (single and multi tab), against
+ *     the real main process, the real preload bridge and a real crash — see
+ *     DRAFT-STORE, DRAFT-IPC-AND-SHAPES, DRAFT-RENDERER-API and
+ *     CLOSE-QUIT-LIFECYCLE. Every content edit goes through addMarkerRow (a
+ *     real DOM edit, never markDirtyForTest) so a case can assert the exact
+ *     text that comes back, not merely that a dirty flag survived.
+ * -------------------------------------------------------------------- */
+
+/* caseDraftCrashUntitled. Marker row, flush, crash, relaunch: the document
+   is restored (title, marker row), dirty, with a recovery toast, onboarding
+   stays hidden, and the draft folder survives (nothing has been saved) until
+   Save As gives it a home, at which point invariant #40 discards it. */
+async function caseDraftCrashUntitled(target) {
+  const tag = target.name + " draft crash-recovery: untitled document";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const saveDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-save-"));
+  const savePath = path.join(saveDir, "case-n-untitled-saved.md");
+  const marker = "MARKER-UNTITLED-" + Date.now();
+  let appA = null, appB = null;
+  try {
+    appA = await launchApp(target, { label: "draft-untitled-crash-a", userDataDir });
+    await waitForRows(appA.cdp, 20000);
+    const tabId = await tabIdOfTarget(appA.cdp);
+
+    await addMarkerRow(appA.cdp, marker);
+    const write = await flushDraft(appA.cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+
+    const dirs = readDraftDirs(userDataDir);
+    record(tag + ": a draft folder for this tab exists on disk after the flush", !!dirs[tabId], JSON.stringify(Object.keys(dirs)));
+
+    const session = readSession(userDataDir);
+    record(tag + ": session.json still says 'running' (no clean exit yet)", !!session && session.state === "running", JSON.stringify(session));
+
+    const crashed = await crashApp(appA);
+    record(tag + ": crashApp actually kills the process", crashed === true);
+    appA = null;
+
+    appB = await launchApp(target, { label: "draft-untitled-crash-b", userDataDir, dialogs: [savePath] });
+    await waitForRows(appB.cdp, 20000);
+    const cdp = appB.cdp;
+
+    const gotMarker = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the marker row is restored", !!gotMarker);
+
+    const dirtyAfter = await isDirty(cdp);
+    record(tag + ": the restored document is dirty", !!dirtyAfter);
+
+    const toast = await toastContaining(cdp, "Restored your unsaved script", 15000);
+    record(tag + ": a recovery toast names the restored, never-saved document", !!toast, String(toast));
+
+    const onboardingHidden = await evalPage(cdp, "(function(){ var m = document.getElementById('onboarding-modal'); return !m || m.hidden === true; })()");
+    record(tag + ": onboarding is not shown over a crash-recovered document", !!onboardingHidden);
+
+    const dirsAfter = readDraftDirs(userDataDir);
+    record(tag + ": the draft folder is KEPT (the document is still unsaved)", !!dirsAfter[tabId], JSON.stringify(Object.keys(dirsAfter)));
+
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    const gone = await pollNode(async () => {
+      const d = readDraftDirs(userDataDir);
+      return !d[tabId] ? true : null;
+    }, 5000).catch(() => false);
+    record(tag + ": Save As removes the draft folder within ~3s (nothing left to protect once saved)",
+      gone === true, JSON.stringify(Object.keys(readDraftDirs(userDataDir))));
+  } finally {
+    if (appA) await teardown(appA, tag + " (first launch)");
+    if (appB) await teardown(appB, tag + " (second launch)");
+    rmrf(userDataDir);
+    rmrf(saveDir);
+  }
+}
+
+/* caseDraftCrashDirtyFile (F1F2-01). A RENDERER crash (not a whole-process
+   one) of a dirty file tab: the reloaded tab still holds the unsaved edit,
+   and splitpage:test-draft-status reports hasDraft:true. */
+async function caseDraftCrashDirtyFile(target, fixturesDir) {
+  const tag = target.name + " draft crash-recovery: renderer crash of a dirty file tab";
+  const filePath = writeFixture(fixturesDir, "case-n-dirty-file-" + Date.now() + ".splitpage", "Dirty File Doc", [["a", "b"]]);
+  const marker = "MARKER-DIRTYFILE-" + Date.now();
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "draft-crash-dirty-file", fixtures: [filePath] });
+    await waitForRows(app.cdp, 20000);
+    const tabId = await tabIdOfTarget(app.cdp);
+    const cdp = app.cdp;
+
+    await addMarkerRow(cdp, marker);
+    const write = await flushDraft(cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+
+    await crashRenderer(cdp);
+    await sleep(1000); // let render-process-gone's hold + reload run
+
+    const reconnected = await findPageTarget(app.port, 30000, { tabId });
+    cdp2 = new CDPConn(reconnected.webSocketDebuggerUrl);
+    await cdp2.open();
+    await waitForRows(cdp2, 20000);
+
+    const gotMarker = await waitForMarker(cdp2, marker, 20000);
+    record(tag + ": the reloaded tab still holds the unsaved edit", !!gotMarker);
+
+    const status = await draftStatusFor(cdp2);
+    record(tag + ": splitpage:test-draft-status reports hasDraft:true after the crash reload", !!status && status.hasDraft === true, JSON.stringify(status));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* caseDraftFileChangedOnDisk. The open file moved on while the app was
+   down: a real three-way merge, nothing autosaved, the file on disk left
+   exactly as the "other editor" wrote it. */
+async function caseDraftFileChangedOnDisk(target, fixturesDir) {
+  const tag = target.name + " draft crash-recovery: file changed on disk while down (merge)";
+  const fileName = "case-n-changed-" + Date.now() + ".splitpage";
+  const filePath = writeFixture(fixturesDir, fileName, "Changed On Disk Doc", [["a", "b"]]);
+  const marker = "MARKER-CHANGED-MINE-" + Date.now();
+  const diskMarker = "MARKER-CHANGED-DISK-" + Date.now();
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-file-changed-a", userDataDir, fixtures: [filePath] });
+    await waitForRows(app.cdp, 20000);
+    await addMarkerRow(app.cdp, marker);
+    const write = await flushDraft(app.cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+    await crashApp(app);
+    app = null;
+
+    // Someone else (a sync client, another editor) saved this file while
+    // the app was down — content differs from the draft's own base.
+    writeFixture(fixturesDir, fileName, "Changed On Disk Doc", [["a", "b"], [diskMarker, "x"]]);
+    const diskTextBeforeRelaunch = fs.readFileSync(filePath, "utf8");
+
+    app = await launchApp(target, { label: "draft-file-changed-b", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const gotMine = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the recovered edit is merged in", !!gotMine);
+    const gotDisk = await markerPresent(cdp, diskMarker);
+    record(tag + ": the disk's own change (the merge ancestor's counterpart) survives too", !!gotDisk);
+
+    const toast = await toastContaining(cdp, "had changed since the last session", 15000);
+    record(tag + ": a toast says the file had changed and the recovered edits were merged in", !!toast, String(toast));
+
+    const dirtyAfter = await isDirty(cdp);
+    record(tag + ": nothing has been saved yet — the merged tab stays dirty", !!dirtyAfter);
+
+    const fileUnchanged = fs.readFileSync(filePath, "utf8") === diskTextBeforeRelaunch;
+    record(tag + ": the file on disk is untouched by the restore (invariant #41)", fileUnchanged);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseDraftFileDeleted. The open file is gone at relaunch: the recovered
+   edit opens as an unsaved copy rather than being lost. */
+async function caseDraftFileDeleted(target, fixturesDir) {
+  const tag = target.name + " draft crash-recovery: file deleted while down (unsaved copy)";
+  const filePath = writeFixture(fixturesDir, "case-n-deleted-" + Date.now() + ".splitpage", "Deleted File Doc", [["a", "b"]]);
+  const marker = "MARKER-DELETED-" + Date.now();
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-file-deleted-a", userDataDir, fixtures: [filePath] });
+    await waitForRows(app.cdp, 20000);
+    await addMarkerRow(app.cdp, marker);
+    const write = await flushDraft(app.cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+    await crashApp(app);
+    app = null;
+
+    fs.unlinkSync(filePath);
+
+    app = await launchApp(target, { label: "draft-file-deleted-b", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const gotMine = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the recovered work is opened as an unsaved copy", !!gotMine);
+    const dirtyAfter = await isDirty(cdp);
+    record(tag + ": the copy is dirty (unsaved)", !!dirtyAfter);
+    const toast = await toastContaining(cdp, "isn't where it was", 15000);
+    record(tag + ": the toast says the file is gone and it's open as an unsaved copy", !!toast, String(toast));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseQuitWithoutSavingDeletesDrafts. Two dirty file tabs, one 3-button
+   quit dialog answered 'confirm' (discard): exit 0, no tab folders left,
+   session.json says 'clean-exit', both tabIds recorded as discarded — and a
+   relaunch reopens both files clean, with nothing to recover. */
+async function caseQuitWithoutSavingDeletesDrafts(target, fixturesDir) {
+  const tag = target.name + " draft: quit without saving discards every draft";
+  const aPath = writeFixture(fixturesDir, "case-n-quit-a-" + Date.now() + ".splitpage", "Quit Discard A", [["a", "b"]]);
+  const bPath = writeFixture(fixturesDir, "case-n-quit-b-" + Date.now() + ".splitpage", "Quit Discard B", [["c", "d"]]);
+  const markerA = "MARKER-QUIT-A-" + Date.now();
+  const markerB = "MARKER-QUIT-B-" + Date.now();
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let cdpB = null;
+  try {
+    app = await launchApp(target, { label: "quit-discard-drafts", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"] });
+    await waitForRows(app.cdp, 20000);
+    const tabAId = await tabIdOfTarget(app.cdp);
+
+    const listing0 = await shell(app.cdp, "listTargets", {});
+    const tabBId = listing0.windows.flatMap((w) => w.tabs.map((t) => t.tabId)).find((id) => id !== tabAId);
+    cdpB = await connectTab(app, tabBId);
+    await waitForRows(cdpB, 20000);
+
+    await addMarkerRow(app.cdp, markerA);
+    const writeA = await flushDraft(app.cdp);
+    record(tag + ": tab A's flushed write lands", !!writeA && writeA.ok === true, JSON.stringify(writeA));
+    await addMarkerRow(cdpB, markerB);
+    const writeB = await flushDraft(cdpB);
+    record(tag + ": tab B's flushed write lands", !!writeB && writeB.ok === true, JSON.stringify(writeB));
+
+    const dirsBefore = readDraftDirs(userDataDir);
+    record(tag + ": both draft folders exist before quit", !!dirsBefore[tabAId] && !!dirsBefore[tabBId], JSON.stringify(Object.keys(dirsBefore)));
+
+    // File > Exit with 2 unsaved tabs in one window -> ONE 3-button dialog;
+    // dialogs[0] = "confirm" -> discard/leave -> quit proceeds, exit 0.
+    await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": quit with 'confirm' exits the process", exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+
+    const dirsAfter = readDraftDirs(userDataDir);
+    record(tag + ": no tab folders remain after the discard", !dirsAfter[tabAId] && !dirsAfter[tabBId], JSON.stringify(Object.keys(dirsAfter)));
+
+    const session = readSession(userDataDir);
+    record(tag + ": session.json says 'clean-exit'", !!session && session.state === "clean-exit", JSON.stringify(session));
+    const discarded = (session && session.discardedTabIds) || [];
+    record(tag + ": both tabIds are recorded as discarded", discarded.indexOf(tabAId) !== -1 && discarded.indexOf(tabBId) !== -1, JSON.stringify(discarded));
+
+    // Relaunch: the files themselves are untouched, so both tabs reopen
+    // clean, with nothing to recover.
+    app = await launchApp(target, { label: "quit-discard-drafts-relaunch", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const listing1 = await pollNode(async () => {
+      const l = await shell(app.cdp, "listTargets", {});
+      const allTabs = l.windows.flatMap((w) => w.tabs);
+      return allTabs.length === 2 ? l : null;
+    }, 20000).catch(() => null);
+    record(tag + ": relaunch reopens both file tabs", !!listing1, JSON.stringify(listing1));
+    const allTabs1 = listing1 ? listing1.windows.flatMap((w) => w.tabs) : [];
+    record(tag + ": neither reopened tab is dirty (no recovery)", allTabs1.length === 2 && allTabs1.every((t) => !t.dirty), JSON.stringify(allTabs1));
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseLeaveWithoutSavingDeletesOnlyThatDraft. Tabs A and B, close-tab on A
+   with 'confirm': only A's folder disappears. Crash, relaunch: only B is
+   recovered. */
+async function caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir) {
+  const tag = target.name + " draft: closing one tab without saving discards only that draft";
+  const aPath = writeFixture(fixturesDir, "case-n-leave-a-" + Date.now() + ".splitpage", "Leave Discard A", [["a", "b"]]);
+  const bPath = writeFixture(fixturesDir, "case-n-leave-b-" + Date.now() + ".splitpage", "Leave Keep B", [["c", "d"]]);
+  const markerA = "MARKER-LEAVE-A-" + Date.now();
+  const markerB = "MARKER-LEAVE-B-" + Date.now();
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let cdpB = null;
+  try {
+    app = await launchApp(target, { label: "leave-discard-one", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"] });
+    await waitForRows(app.cdp, 20000);
+    const tabAId = await tabIdOfTarget(app.cdp);
+    const listing0 = await shell(app.cdp, "listTargets", {});
+    const tabBId = listing0.windows.flatMap((w) => w.tabs.map((t) => t.tabId)).find((id) => id !== tabAId);
+    cdpB = await connectTab(app, tabBId);
+    await waitForRows(cdpB, 20000);
+
+    await addMarkerRow(app.cdp, markerA);
+    await flushDraft(app.cdp);
+    await addMarkerRow(cdpB, markerB);
+    await flushDraft(cdpB);
+
+    const dirsBefore = readDraftDirs(userDataDir);
+    record(tag + ": both draft folders exist before closing A", !!dirsBefore[tabAId] && !!dirsBefore[tabBId], JSON.stringify(Object.keys(dirsBefore)));
+
+    // Ctrl+W on A alone: the 2-button ['Leave without saving','Stay']
+    // dialog, scoped to that one tab (CLOSE-QUIT-LIFECYCLE).
+    await fireEval(app.cdp, "window.splitpageDesktop.__testRequestCloseTab()", { awaitPromise: false });
+    const closed = await pollShellState(cdpB, (l) => {
+      const allTabs = l.windows.flatMap((w) => w.tabs.map((t) => t.tabId));
+      return allTabs.indexOf(tabAId) === -1 ? l : null;
+    }, 15000).catch(() => null);
+    record(tag + ": tab A closes", !!closed, closed ? "" : "tab A was still listed");
+
+    const dirsAfterClose = readDraftDirs(userDataDir);
+    record(tag + ": only A's draft folder is gone; B's survives", !dirsAfterClose[tabAId] && !!dirsAfterClose[tabBId], JSON.stringify(Object.keys(dirsAfterClose)));
+
+    await crashApp(app);
+    app = null;
+
+    app = await launchApp(target, { label: "leave-discard-one-relaunch", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+    const gotB = await waitForMarker(cdp, markerB, 20000);
+    record(tag + ": relaunch recovers only B's unsaved work", !!gotB);
+    const gotA = await markerPresent(cdp, markerA);
+    record(tag + ": A's discarded work never comes back", !gotA);
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseDraftCrashMidWrite. SPLITPAGE_TEST_DRAFT_KILL_BEFORE_RENAME='2': the
+   whole main process is SIGKILLed with the SECOND write's temp file written
+   but not yet renamed — a power cut mid-write. The first (fully-written)
+   generation is restored; the never-renamed second write never lands; and
+   init()'s own sweep leaves no leftover .tmp-*. */
+async function caseDraftCrashMidWrite(target) {
+  const tag = target.name + " draft: power-cut mid-write keeps the FIRST generation, no leftover .tmp-*";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const markerGen1 = "MARKER-MIDWRITE-GEN1-" + Date.now();
+  const markerGen2 = "MARKER-MIDWRITE-GEN2-" + Date.now();
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "draft-mid-write-kill", userDataDir,
+      env: { SPLITPAGE_TEST_DRAFT_KILL_BEFORE_RENAME: "2" }
+    });
+    await waitForRows(app.cdp, 20000);
+    const tabId = await tabIdOfTarget(app.cdp);
+    const cdp = app.cdp;
+
+    // Write #1: completes fully — this is the "first generation".
+    await addMarkerRow(cdp, markerGen1);
+    await flushDraft(cdp);
+
+    const tabDir = path.join(userDataDir, "drafts", tabId);
+    const gen1 = fs.existsSync(tabDir) ? fs.readdirSync(tabDir) : [];
+    record(tag + ": the first write lands normally", gen1.indexOf("current.draft") !== -1, JSON.stringify(gen1));
+
+    // Write #2: reaches the rename step and the process is SIGKILLed right
+    // there (draftTestHooksFromEnv's onKill). Fire-and-forget: no reply can
+    // ever arrive.
+    await evalPage(cdp,
+      "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
+      "var cell = cells[cells.length - 1]; cell.textContent = " + JSON.stringify(markerGen2) + "; " +
+      "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()",
+      { awaitPromise: false });
+    await fireEval(cdp, "window.__desktopTest.drafts.flushNow()", { awaitPromise: false });
+
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": the SIGKILL actually ends the process", exited === true);
+
+    app = await launchApp(target, { label: "draft-mid-write-relaunch", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp2 = app.cdp;
+
+    const gotGen1 = await waitForMarker(cdp2, markerGen1, 20000);
+    record(tag + ": the first (fully-written) generation is restored", !!gotGen1);
+    const gotGen2 = await markerPresent(cdp2, markerGen2);
+    record(tag + ": the second (mid-write, never renamed) write never lands", !gotGen2);
+
+    const tabDirAfter = path.join(userDataDir, "drafts", tabId);
+    const entries = fs.existsSync(tabDirAfter) ? fs.readdirSync(tabDirAfter) : [];
+    const leftoverTmp = entries.filter((n) => n.indexOf(".tmp-") === 0);
+    record(tag + ": no leftover .tmp-* file (init()'s own sweep)", leftoverTmp.length === 0, JSON.stringify(entries));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseDraftCorrupt. Two full generations, then BOTH garbled on disk: the
+   tab seed-boots (a fresh document, not stuck), a toast explains the
+   changes couldn't be read, and corrupt/<tabId>-<ts>/ holds both bad
+   files — the hold stays (DRAFT-STORE's 'failed' contract). */
+async function caseDraftCorrupt(target) {
+  const tag = target.name + " draft: both generations corrupt -> quarantined, seed boot, a toast";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-corrupt-a", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const tabId = await tabIdOfTarget(app.cdp);
+    const cdp = app.cdp;
+
+    // Two full writes -> both current.draft and previous.draft exist.
+    await addMarkerRow(cdp, "MARKER-CORRUPT-1");
+    await flushDraft(cdp);
+    await evalPage(cdp,
+      "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
+      "var cell = cells[cells.length - 1]; cell.textContent = 'MARKER-CORRUPT-2'; " +
+      "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()",
+      { awaitPromise: false });
+    await flushDraft(cdp);
+
+    await crashApp(app);
+    app = null;
+
+    const tabDir = path.join(userDataDir, "drafts", tabId);
+    for (const name of ["current.draft", "previous.draft"]) {
+      const p = path.join(tabDir, name);
+      if (fs.existsSync(p)) fs.writeFileSync(p, "not json at all { garbled", "utf8");
+    }
+
+    app = await launchApp(target, { label: "draft-corrupt-b", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp2 = app.cdp;
+
+    const rowsCount = await evalPage(cdp2, "document.querySelectorAll('#rows > *').length");
+    record(tag + ": the tab seed-boots a fresh document rather than staying blocked", typeof rowsCount === "number", "rows=" + rowsCount);
+
+    const toast = await toastContaining(cdp2, "couldn't be read", 15000);
+    record(tag + ": a toast says the recovered changes couldn't be read and were kept", !!toast, String(toast));
+
+    const status = await draftStatusFor(cdp2);
+    record(tag + ": the hold stays — a 'failed' restore keeps the tab counted as unsaved", !!status && status.held === true, JSON.stringify(status));
+
+    const corruptDir = path.join(userDataDir, "drafts", "corrupt");
+    const quarantined = fs.existsSync(corruptDir)
+      ? fs.readdirSync(corruptDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.indexOf(tabId) === 0)
+      : [];
+    record(tag + ": corrupt/ holds a quarantined folder for this tab", quarantined.length === 1, JSON.stringify(quarantined.map((e) => e.name)));
+    if (quarantined.length === 1) {
+      const held = fs.readdirSync(path.join(corruptDir, quarantined[0].name));
+      record(tag + ": the quarantined folder holds both bad generations",
+        held.indexOf("current.draft") !== -1 && held.indexOf("previous.draft") !== -1, JSON.stringify(held));
+    }
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseDraftDiskFull. SPLITPAGE_TEST_DRAFT_FAIL='ENOSPC:3': exactly one
+   sticky "paused — disk is full" toast (never one per refusal), then
+   "working again" once the injected failures run out. Backoff shrunk via
+   the real DRAFT-RENDERER-API setTiming test hook so this stays fast. */
+async function caseDraftDiskFull(target) {
+  const tag = target.name + " draft: ENOSPC pauses writes, exactly one sticky toast, then resumes";
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "draft-disk-full", env: { SPLITPAGE_TEST_DRAFT_FAIL: "ENOSPC:3" }
+    });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    await evalPage(cdp, "window.__desktopTest.drafts.setTiming({ backoffMin: 600, backoffMax: 1500 }); true", { awaitPromise: false });
+
+    await addMarkerRow(cdp, "MARKER-DISKFULL");
+
+    const pausedToast = await toastContaining(cdp, "Crash recovery is paused — this disk is full", 8000);
+    record(tag + ": a sticky 'paused — disk is full' toast appears", !!pausedToast, String(pausedToast));
+
+    const stickyCount = await evalPage(cdp, "document.querySelectorAll('.toast.warn.is-sticky').length");
+    record(tag + ": exactly one sticky paused toast is on screen", stickyCount === 1, "count=" + stickyCount);
+
+    const status1 = await draftStatusFor(cdp);
+    record(tag + ": at least one ENOSPC refusal was counted as a real failure", !!status1 && status1.failures >= 1, JSON.stringify(status1));
+
+    const workingToast = await toastContaining(cdp, "Crash recovery is working again", 15000);
+    record(tag + ": recovery resumes once the injected failures run out", !!workingToast, String(workingToast));
+
+    const stickyGone = await poll(cdp, "document.querySelectorAll('.toast.warn.is-sticky').length === 0", 8000).catch(() => false);
+    record(tag + ": the sticky paused toast is withdrawn once recovery resumes", !!stickyGone);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* caseDraftForgedFileId. A draft written directly (bypassing the app's own
+   writer entirely) with a fileId nothing registered: main can only build
+   filePath:null for it, and the restore opens it as an unsaved copy rather
+   than losing it, throwing or trusting the fileId as a path (invariant
+   #34). crashApp, not a normal close, because a clean close of this
+   never-dirtied-in-page tab would otherwise discardClean the very draft
+   this case forged. */
+async function caseDraftForgedFileId(target) {
+  const tag = target.name + " draft: forged fileId with no registered path opens as an untitled copy";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const marker = "MARKER-FORGED-" + Date.now();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-forged-fileid-a", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const tabId = await tabIdOfTarget(app.cdp);
+    const cdp = app.cdp;
+
+    const payload = {
+      seq: 1, editSeq: 1, title: "Forged File", docId: null, docIdWrittenOut: false,
+      schema: 2, originKind: "file", fileId: "deadbeef", fileKind: "splitpage",
+      importName: null, baseLastModified: null, baseSize: null, server: null,
+      stateJson: JSON.stringify({ title: "Forged File", rows: [{ id: "r1", visualText: marker, audioText: "", status: "todo" }] }),
+      // A non-null base: DRAFT-STORE requires one on a tab's FIRST write in
+      // this process (NEED_BASE otherwise) — real captureAndSendDraft() calls
+      // always carry one on a first write for exactly this reason.
+      baseJson: JSON.stringify({ title: "Forged File", rows: [] })
+    };
+    const write = await evalPage(cdp, "window.splitpageDesktop.writeDraft(" + JSON.stringify(payload) + ")");
+    record(tag + ": the forged write is accepted at the store level", !!write && write.ok === true, JSON.stringify(write));
+
+    const dirs = readDraftDirs(userDataDir);
+    const header = dirs[tabId] && dirs[tabId].current && dirs[tabId].current.header;
+    record(tag + ": main writes filePath:null for the unregistered fileId (invariant #34)",
+      !!header && header.origin && header.origin.kind === "file" && header.origin.filePath === null, JSON.stringify(header && header.origin));
+
+    await crashApp(app);
+    app = null;
+
+    app = await launchApp(target, { label: "draft-forged-fileid-b", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp2 = app.cdp;
+
+    const gotMarker = await waitForMarker(cdp2, marker, 20000);
+    record(tag + ": the forged draft opens as an unsaved copy rather than getting lost", !!gotMarker);
+    const dirtyAfter = await isDirty(cdp2);
+    record(tag + ": the copy is dirty", !!dirtyAfter);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseDraftNoSecrets. --host --pin 482915: no file under drafts/ contains
+   the PIN, the real join token, or 'launch='; header server.base (when
+   present) carries no userinfo ('@'). */
+async function caseDraftNoSecrets(target) {
+  const tag = target.name + " draft: no PIN, token or launch URL ever reaches disk";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  const pin = "482915";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-no-secrets", flags: ["--host", "--pin", pin], dataDir, dialogs: ["confirm"] });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const info = await poll(cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
+    const port = info && info.port;
+    record(tag + ": setup — hosting with a known port", !!port, JSON.stringify(info));
+
+    let token = null;
+    if (port) {
+      const joined = await fetchJson(`http://127.0.0.1:${port}/api/join`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin })
+      });
+      token = joined.body && joined.body.token;
+      record(tag + ": setup — a real join token was minted", !!token, JSON.stringify(joined.body));
+    }
+
+    await addMarkerRow(cdp, "MARKER-NOSECRETS");
+    const write = await flushDraft(cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+
+    const draftsRoot = path.join(app.userDataDir, "drafts");
+    const pinHit = dirContainsText(draftsRoot, pin);
+    record(tag + ": no file under drafts/ contains the PIN", !pinHit, String(pinHit));
+    const tokenHit = token ? dirContainsText(draftsRoot, token) : null;
+    record(tag + ": no file under drafts/ contains the server join token", !tokenHit, String(tokenHit));
+    const launchHit = dirContainsText(draftsRoot, "launch=");
+    record(tag + ": no file under drafts/ contains 'launch='", !launchHit, String(launchHit));
+
+    const dirs = readDraftDirs(app.userDataDir);
+    const anyTab = Object.keys(dirs)[0];
+    const header = anyTab && dirs[anyTab].current && dirs[anyTab].current.header;
+    const base = header && header.origin && header.origin.server && header.origin.server.base;
+    record(tag + ": header server.base (when present) carries no userinfo ('@')",
+      base === undefined || base === null || String(base).indexOf("@") === -1, JSON.stringify(base));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(dataDir);
+  }
+}
+
+/* caseDraftServerDocMerges and caseDraftServerGone: --library mode makes
+   this same app both the document server and a client of it, so a real
+   server document can be created, edited, crashed on and recovered against
+   the real server — no fake fetch needed. */
+async function caseDraftServerDocMerges(target) {
+  const tag = target.name + " draft: server document reachable at relaunch -> merged (no autosave)";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const myMarker = "MARKER-SERVER-MINE-" + Date.now();
+  const theirMarker = "MARKER-SERVER-THEIRS-" + Date.now();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-server-merge-a", flags: ["--library"], dataDir, userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const created = await evalPage(cdp,
+      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
+      "body: JSON.stringify({ state: { title: 'Server Merge Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
+    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
+    if (!created || !created.id) return;
+
+    const routed = await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
+    record(tag + ": setup — the tab is routed to the server document", !!routed, JSON.stringify(routed));
+    const opened = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Server Merge Doc"), 15000).catch(() => false);
+    record(tag + ": setup — the tab shows the server document", !!opened);
+
+    await addMarkerRow(cdp, myMarker);
+    const write = await flushDraft(cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+
+    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+    const port = info && info.port;
+    // Simulate another client saving a different version while this copy
+    // is down — a raw PUT, never through this tab's own document. POST
+    // /api/docs starts a fresh document at rev 1 (server/server.js), so the
+    // compare-and-set base is created.rev, not 0.
+    const serverRevAfterExternalEdit = created.rev + 1;
+    const putRes = port ? await fetchJson(`http://127.0.0.1:${port}/api/docs/${created.id}`, {
+      method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ baseRev: created.rev, state: { title: "Server Merge Doc", rows: [{ id: "x1", visualText: theirMarker, audioText: "", status: "todo" }] } })
+    }) : null;
+    record(tag + ": setup — another client saves a different version",
+      !!putRes && putRes.status === 200 && putRes.body && putRes.body.rev === serverRevAfterExternalEdit, JSON.stringify(putRes && putRes.body));
+
+    await crashApp(app);
+    app = null;
+
+    app = await launchApp(target, { label: "draft-server-merge-b", flags: ["--library"], dataDir, userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp2 = app.cdp;
+
+    const gotMine = await waitForMarker(cdp2, myMarker, 25000);
+    record(tag + ": the recovered edit survives the merge", !!gotMine);
+    const gotTheirs = await markerPresent(cdp2, theirMarker);
+    record(tag + ": the other client's edit survives the merge too", !!gotTheirs);
+    const toast = await toastContaining(cdp2, "merged back in", 15000);
+    record(tag + ": a toast says the recovered changes were merged back in", !!toast, String(toast));
+
+    await sleep(800);
+    const info2 = await evalPage(cdp2, "window.splitpageDesktop.getSessionInfo()");
+    const readBack = info2 && info2.port ? await fetchJson(`http://127.0.0.1:${info2.port}/api/docs/${created.id}`) : null;
+    record(tag + ": the merge does NOT autosave (invariant #41 / overrides §1) — the server rev is unchanged by the restore",
+      !!readBack && readBack.status === 200 && readBack.body.rev === serverRevAfterExternalEdit, JSON.stringify(readBack && readBack.body));
+    const dirtyAfter = await isDirty(cdp2);
+    record(tag + ": the merged tab stays dirty (btn-save is-dirty)", !!dirtyAfter);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(dataDir);
+    rmrf(userDataDir);
+  }
+}
+
+async function caseDraftServerGone(target) {
+  const tag = target.name + " draft: server document deleted while down -> unsaved copy";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const marker = "MARKER-SERVERGONE-" + Date.now();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "draft-server-gone-a", flags: ["--library"], dataDir, userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const created = await evalPage(cdp,
+      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
+      "body: JSON.stringify({ state: { title: 'Server Gone Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
+    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
+    if (!created || !created.id) return;
+
+    await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Server Gone Doc"), 15000).catch(() => false);
+
+    await addMarkerRow(cdp, marker);
+    const write = await flushDraft(cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+
+    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+    const port = info && info.port;
+    const del = port ? await fetchJson(`http://127.0.0.1:${port}/api/docs/${created.id}`, { method: "DELETE" }) : null;
+    record(tag + ": setup — the document is deleted from the server", !!del && del.status === 200, JSON.stringify(del));
+
+    await crashApp(app);
+    app = null;
+
+    app = await launchApp(target, { label: "draft-server-gone-b", flags: ["--library"], dataDir, userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp2 = app.cdp;
+
+    const gotMarker = await waitForMarker(cdp2, marker, 25000);
+    record(tag + ": the recovered work is opened as an unsaved copy", !!gotMarker);
+    const dirtyAfter = await isDirty(cdp2);
+    record(tag + ": the copy is dirty", !!dirtyAfter);
+    const toast = await toastContaining(cdp2, "no longer on the server", 15000);
+    record(tag + ": a toast says the document is no longer on the server", !!toast, String(toast));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(dataDir);
+    rmrf(userDataDir);
+  }
+}
+
+/* caseRendererCrashRestores (J-1). A renderer crash of a CLEAN tab must
+   never leave a hold — nothing sends draft-restore-done to release one that
+   was never taken over a draft that never existed — and closing the
+   reloaded tab must raise no unsaved-changes prompt. */
+async function caseRendererCrashRestores(target) {
+  const tag = target.name + " draft: renderer crash of a CLEAN tab reloads unheld, closes with no prompt";
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "renderer-crash-clean" });
+    await waitForRows(app.cdp, 20000);
+    const tabId = await tabIdOfTarget(app.cdp);
+    const cdp = app.cdp;
+
+    await crashRenderer(cdp);
+    await sleep(1000);
+
+    const reconnected = await findPageTarget(app.port, 30000, { tabId });
+    cdp2 = new CDPConn(reconnected.webSocketDebuggerUrl);
+    await cdp2.open();
+    await waitForRows(cdp2, 20000);
+
+    const status = await draftStatusFor(cdp2);
+    record(tag + ": a clean tab's crash never leaves a hold (nothing to protect)", !!status && status.held === false, JSON.stringify(status));
+
+    // Closing through the SAME test hook, with no dialog answers queued: a
+    // dialog would sit there auto-cancelling, which would leave the window
+    // open and the process alive — the loud way this assertion fails.
+    await fireEval(cdp2, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": closing the reloaded, still-clean tab raises no unsaved dialog (exits clean)",
+      exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* caseCleanTabsWriteNothing. 8s idle, nothing ever typed: no draft write,
+   no tab folder — the writer never runs over a clean document. */
+async function caseCleanTabsWriteNothing(target) {
+  const tag = target.name + " draft: an untouched tab writes nothing, even after idle";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "clean-tabs-write-nothing" });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    await sleep(8000); // well past draftTiming.idle/max — nothing should ever fire
+
+    const status = await draftStatusFor(cdp);
+    record(tag + ": no draft write was ever made", !!status && status.writes === 0, JSON.stringify(status));
+
+    const dirs = readDraftDirs(app.userDataDir);
+    record(tag + ": no tab folder exists under drafts/", Object.keys(dirs).length === 0, JSON.stringify(Object.keys(dirs)));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* caseTornOffDirtyTabCrashRestoresOnce. A dirty tab moved into its own
+   window, then a whole-process crash: relaunch recovers it exactly once,
+   under its original tabId — never twice, never under the wrong window. */
+async function caseTornOffDirtyTabCrashRestoresOnce(target) {
+  const tag = target.name + " draft: a torn-off dirty tab crashes and restores exactly once";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const marker = "MARKER-TORNOFF-" + Date.now();
+  let app = null;
+  let cdp2 = null;
+  try {
+    app = await launchApp(target, { label: "torn-off-dirty-crash", userDataDir });
+    await waitForRows(app.cdp, 20000);
+
+    const tab2Id = await shell(app.cdp, "createTab", {});
+    cdp2 = await connectTab(app, tab2Id);
+    await waitForRows(cdp2, 20000);
+
+    await addMarkerRow(cdp2, marker);
+    const write = await flushDraft(cdp2);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+
+    const window2Id = await shell(app.cdp, "moveTabToWindow", { tabId: tab2Id, windowId: null });
+    record(tag + ": setup — the dirty tab is torn off into a new window", !!window2Id);
+
+    await crashApp(app);
+    app = null;
+
+    app = await launchApp(target, { label: "torn-off-dirty-crash-relaunch", userDataDir });
+    await waitForRows(app.cdp, 20000);
+
+    const listing = await pollNode(async () => {
+      const l = await shell(app.cdp, "listTargets", {});
+      const allTabs = l.windows.flatMap((w) => w.tabs);
+      return allTabs.some((t) => t.dirty) ? l : null;
+    }, 20000).catch(() => null);
+    record(tag + ": relaunch recovers the torn-off tab's unsaved work", !!listing, JSON.stringify(listing));
+
+    if (listing) {
+      const allTabs = listing.windows.flatMap((w) => w.tabs);
+      const dirtyTabs = allTabs.filter((t) => t.dirty);
+      record(tag + ": exactly one tab is recovered, and it is the original tab id",
+        dirtyTabs.length === 1 && dirtyTabs[0].tabId === tab2Id, JSON.stringify(dirtyTabs));
+    }
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
 async function caseWindowCloseCanary() {
   const tag = "src/js window.close() canary";
   const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
@@ -2269,6 +4135,35 @@ async function runTargetSuite(target) {
     ["tear-off preserves live tab state", () => caseTearOffPreservesState(target)],
     ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir)],
     ["v1->v2 migration; corrupt JSON boots fresh", () => caseV1MigrationAndCorruptJson(target, fixturesDir)],
+    // --- step M: document id + desktop history ---
+    ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
+    ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
+    ["history: round trip (put/list/get/copy/touch/import-older/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
+    ["history: id validation", () => caseHistoryIdValidation(target)],
+    ["history: exit-after-body fault, relaunch adopts the orphan", () => caseHistoryCrashAfterBody(target)],
+    ["history: corrupt index.json rebuilt from bodies (fsck)", () => caseHistoryCorruptIndex(target)],
+    ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target)],
+    ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target)],
+    ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target)],
+    ["history: caseHistoryPlannerTwin (main vs renderer planEviction)", () => caseHistoryPlannerTwin(target)],
+    ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
+    // --- step N: crash-safe drafts (single and multi tab) ---
+    ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
+    ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
+    ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],
+    ["draft: file deleted while down (unsaved copy)", () => caseDraftFileDeleted(target, fixturesDir)],
+    ["draft: quit without saving discards every draft", () => caseQuitWithoutSavingDeletesDrafts(target, fixturesDir)],
+    ["draft: closing one tab without saving discards only that draft", () => caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir)],
+    ["draft: power-cut mid-write keeps the first generation", () => caseDraftCrashMidWrite(target)],
+    ["draft: both generations corrupt -> quarantined, seed boot", () => caseDraftCorrupt(target)],
+    ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],
+    ["draft: forged fileId opens as an untitled copy", () => caseDraftForgedFileId(target)],
+    ["draft: no PIN, token or launch URL ever reaches disk", () => caseDraftNoSecrets(target)],
+    ["draft: server document reachable at relaunch -> merged", () => caseDraftServerDocMerges(target)],
+    ["draft: server document deleted while down -> unsaved copy", () => caseDraftServerGone(target)],
+    ["draft: renderer crash of a clean tab (J-1)", () => caseRendererCrashRestores(target)],
+    ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target)],
+    ["draft: a torn-off dirty tab crashes and restores exactly once", () => caseTornOffDirtyTabCrashRestoresOnce(target)],
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {

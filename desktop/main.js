@@ -444,6 +444,35 @@ function homeKeyForClaim(tab) {
   return null;
 }
 
+/* OFF, and measured rather than assumed. The idea was that on win32
+   birthtime is a real creation time, so of two identical files the one that
+   came into existence later is the copy — with a 2 s window so a copy made by
+   the same operation as the original was not judged on noise.
+
+   It does not survive contact with this filesystem. atomicWrite() saves by
+   writing `.<name>.tmp-xxxx` next to the document and renaming it over the
+   original, and NTFS here does NOT carry the destination's creation time
+   across that rename (the "file tunnelling" behaviour the rule was counting
+   on): measured on Windows 11, every save-in-place moved birthtimeMs forward
+   by exactly the elapsed time (two saves 2.5 s apart moved it 2517 ms and
+   2512 ms; a plain in-place fs.writeFileSync moved it not at all). So every
+   save Splitpage makes re-dates the file.
+
+   That is not merely useless, it inverts the answer: save the ORIGINAL after
+   someone copied it and the original now looks younger than the copy, so the
+   rule would name the original as the loser and re-id the document the user
+   has been working in, leaving the untouched copy holding the id. The seq
+   tie-break below — which tab adopted the identity first — is the honest
+   answer, and it is symmetric for free.
+
+   Left as one clearly commented branch rather than deleted (overrides §2):
+   if a future measurement shows a filesystem that really does preserve it,
+   this is a one-word change. desktop/test/smoke.mjs's
+   caseAtomicSaveKeepsBirthtime re-measures on every run and fails if the two
+   ever disagree. */
+const DUP_TRUST_BIRTHTIME = false;
+const DUP_BIRTHTIME_NOISE_MS = 2000;
+
 /* Pure, and symmetric: run on either claim of a pair it must name the same
    loser, or both tabs would re-id (or neither). Returns the claim that has to
    give the id up, or null when the pair is not a duplicate at all. */
@@ -460,15 +489,10 @@ function chooseDuplicateLoser(a, b) {
      people are also editing, so the local file is the copy that gets re-id'd.
      (In practice this is a file saved down from a server document.) */
   if (aServer !== bServer) return aServer ? b : a;
-  /* Two files. On win32 birthtime is a real creation time, so the file that
-     came into existence later is the copy. The 2 s window keeps a copy made
-     by the same operation as the original (an editor's save-to-temp-and-
-     rename, an installer unpacking both) from being judged on noise. On
-     other platforms birthtimeMs is whatever the filesystem felt like
-     reporting, so it is not consulted at all. */
-  if (process.platform === "win32" &&
+  /* Two files. Birthtime is NOT consulted — see DUP_TRUST_BIRTHTIME. */
+  if (DUP_TRUST_BIRTHTIME &&
       a.birthtimeMs > 0 && b.birthtimeMs > 0 &&
-      Math.abs(a.birthtimeMs - b.birthtimeMs) > 2000) {
+      Math.abs(a.birthtimeMs - b.birthtimeMs) > DUP_BIRTHTIME_NOISE_MS) {
     return a.birthtimeMs > b.birthtimeMs ? a : b;
   }
   /* Nothing to tell them apart on disk: the tab that adopted the identity
@@ -507,8 +531,22 @@ function tabWebContentsForClaim(webContentsId) {
 function checkDuplicateDocId(senderId) {
   const mine = docClaims.get(senderId);
   if (!mine) return;
+  /* NEVER JUDGE ON EVIDENCE THAT HAS NOT ARRIVED. A claim whose stat is
+     still in flight reads as birthtimeMs 0 — so a rule that consults it
+     could name DIFFERENT losers for the same pair before and after that stat
+     lands, and both tabs would be told to re-id: both give up the shared id,
+     both show the "this file is a copy" toast, and the history under the
+     original id is copied to two derived ids and owned by neither. With
+     DUP_TRUST_BIRTHTIME off the verdict no longer depends on the stat at
+     all, so this is now insurance rather than the load-bearing guard — it
+     stays because it is what makes turning that flag back on safe, and it
+     costs one deferred check. A skipped pair is not forgotten: when the
+     other claim's stat settles it runs this check for itself, with both
+     sides evidenced, and pendingToId still keeps each loser told exactly
+     once. */
+  if (mine.statPending) return;
   for (const [otherId, theirs] of docClaims) {
-    if (otherId === senderId) continue;
+    if (otherId === senderId || theirs.statPending) continue;
     const loser = chooseDuplicateLoser(mine, theirs);
     if (!loser) continue;
     const winner = loser === mine ? theirs : mine;
@@ -551,34 +589,44 @@ function recordDocClaim(sender, tab) {
     docClaimCleanupRegistered.add(sender);
     sender.once("destroyed", () => { docClaims.delete(webContentsId); });
   }
+  const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
   const claim = {
     docId,
     homeKey,
     seq: ++docClaimSeq,
     birthtimeMs: 0,
     title: tab.title,
-    pendingToId: null
+    pendingToId: null,
+    /* True from the moment a file home is claimed until its stat answers.
+       checkDuplicateDocId refuses to judge a pair while either side is
+       pending, so a verdict is only ever computed from two fully-evidenced
+       claims (see its own comment). */
+    statPending: !!absPath
   };
   docClaims.set(webContentsId, claim);
 
-  const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
   if (!absPath) {
     checkDuplicateDocId(webContentsId);
     return;
   }
-  /* A file home is stat'ed for its creation time before the verdict, because
-     that is the only evidence that says WHICH of two identical files is the
-     copy. The await is why every use of `claim` afterwards re-checks that it
-     is still the current claim: the page can have reported three more times,
-     or closed, while the disk answered. A stat that fails simply leaves
-     birthtimeMs at 0 and the seq tie-break decides. */
+  /* A file home is still stat'ed for its creation time before the verdict,
+     even though DUP_TRUST_BIRTHTIME is off and nothing reads the answer
+     today: it is what a re-enabled rule would need, and recording it here is
+     what lets that be a one-word change. The await is why every use of
+     `claim` afterwards re-checks that it is still the current claim: the page
+     can have reported three more times, or closed, while the disk answered. A
+     stat that fails simply leaves birthtimeMs at 0. */
   fsp.stat(absPath).then(
     (stat) => {
+      claim.statPending = false;
       if (docClaims.get(webContentsId) !== claim) return;
       claim.birthtimeMs = Number(stat.birthtimeMs) || 0;
       checkDuplicateDocId(webContentsId);
     },
     () => {
+      /* The stat failed, so birthtimeMs stays 0 and the seq tie-break
+         decides — but the evidence is IN, which is what pending means. */
+      claim.statPending = false;
       if (docClaims.get(webContentsId) !== claim) return;
       checkDuplicateDocId(webContentsId);
     }
@@ -1384,9 +1432,22 @@ function historyStampAfter(m, newestAtMs) {
   return m;
 }
 
+/* A NON-POSITIVE expiresAt is "not stamped", never "expired since 1970".
+   historyNewRecord starts an Older record at 0, and a bucket the fsck rebuilt
+   from its bodies keeps that 0 when its index.json was missing or unparseable
+   — which is exactly what a crash between the migration's body writes and its
+   single index write leaves behind. Reading 0 as expired hid the whole
+   migrated history from every list, while planHistoryEviction guards its
+   expiry sweep with `expiresAt > 0` and so refused to delete it: invisible,
+   undeletable, still counted against the cap, and (because the migration
+   could never see its own entries come back) re-imported fruitlessly on every
+   launch. The two predicates have to agree; fsckHistoryBucket re-stamps a
+   rebuilt bucket so it can still expire on schedule. */
 function historyOlderExpired(rec) {
-  if (!rec || rec.expiresAt == null || !Number.isFinite(Number(rec.expiresAt))) return false;
-  return Date.now() >= Number(rec.expiresAt);
+  if (!rec || rec.expiresAt == null) return false;
+  const expiresAt = Number(rec.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return false;
+  return Date.now() >= expiresAt;
 }
 
 function historyNewRecord(bucket) {
@@ -1620,6 +1681,18 @@ async function fsckHistoryBucket(bucket) {
   rec.snapshots.sort((a, b) => (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   historyRecountBytes(rec);
 
+  /* A rebuilt Older bucket lost its migration record along with its index, so
+     nothing on disk says when its 90 days started — and an unstamped bucket
+     would live forever (planHistoryEviction only sweeps `expiresAt > 0`).
+     Restarting the clock from now is the only date there is, and it keeps
+     overrides §2's rule intact: the whole bucket expires at once, counted
+     from the migration. */
+  if (bucket === HISTORY_OLDER_KEY && rec.snapshots.length && !(Number(rec.expiresAt) > 0)) {
+    rec.migratedAt = Number(rec.migratedAt) > 0 ? Number(rec.migratedAt) : Date.now();
+    rec.expiresAt = rec.migratedAt + HISTORY_OLDER_TTL_MS;
+    changed = true;
+  }
+
   if (!rec.snapshots.length) {
     if (!historyReadOnly) await historyDropBucket(bucket);
     return;
@@ -1723,7 +1796,7 @@ async function historyEvictLocked(capBytes, protect) {
   const plan = planHistoryEviction(docs, capBytes, Date.now(), {
     perDoc: HISTORY_PER_DOC,
     olderKey: HISTORY_OLDER_KEY,
-    protect: historyProtectList(protect)
+    protect: historyAllHolds(protect)
   });
   if (historyReadOnly) {
     return { evicted: 0, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalBefore };
@@ -1753,6 +1826,31 @@ async function historyEvictLocked(capBytes, protect) {
     }
   }
   return { evicted, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalAfter };
+}
+
+/* EVERY TAB'S held snapshots, not just the caller's. Eviction is process-wide
+   — a put from any tab can delete any document's oldest snapshot, the Older
+   bucket goes first, and historyCopyLocked and the expired-Older sweep evict
+   with no caller at all — while a protect list only ever travelled with the
+   one call that carried it. So tab B's save could delete the snapshot tab A
+   was in the middle of restoring, which is the very thing override §2b's
+   protect list exists to stop. Keyed by webContents id and dropped with the
+   tab (forgetTab), so a closed or crashed tab cannot pin snapshots for the
+   rest of the run. */
+const historyHolds = new Map();   /* webContentsId -> [{docId, id}] */
+
+function historyAllHolds(protect) {
+  const out = historyProtectList(protect);
+  const seen = new Set(out.map((p) => p.docId + "\n" + p.id));
+  for (const held of historyHolds.values()) {
+    for (const p of held) {
+      const key = p.docId + "\n" + p.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }
+  }
+  return out;
 }
 
 /* The renderer's held-snapshot list, validated the same way every other id
@@ -2680,14 +2778,62 @@ function windowRecordFor(windowId) {
   return windowsById.get(windowId) || (lastFocusedWindowId ? windowsById.get(lastFocusedWindowId) : null) || firstWindowRecord();
 }
 
+/* Claims a routing key for a tab unless a DIFFERENT LIVE tab already holds
+   it. "Is this already open?" (invariant #36) is answered by the FIRST tab to
+   claim a path or a server document, and silently taking the key from a live
+   tab is what made that answer wrong: the robbed tab kept editing a document
+   routing no longer knew about, an OS-open of that file raised the thief
+   instead, and closing the thief deleted the key outright — so the next open
+   of a file that was never closed made a THIRD tab. A stale entry (the tab it
+   names is gone) is simply taken over. Returns whether the key is now this
+   tab's. */
+function claimRoutingKey(map, key, tabId) {
+  const owner = map.get(key);
+  if (owner && owner !== tabId && tabs.has(owner)) return false;
+  map.set(key, tabId);
+  return true;
+}
+
 function indexTabSource(tab) {
-  if (tab.source.kind === "file") pathToTabId.set(pathKey(tab.source.absPath), tab.id);
-  if (tab.source.kind === "server") serverDocIdToTabId.set(tab.source.serverDocId, tab.id);
+  if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
+  if (tab.source.kind === "server") claimRoutingKey(serverDocIdToTabId, tab.source.serverDocId, tab.id);
 }
 
 function unindexTabSource(tab) {
   for (const [key, id] of pathToTabId) if (id === tab.id) pathToTabId.delete(key);
   for (const [key, id] of serverDocIdToTabId) if (id === tab.id) serverDocIdToTabId.delete(key);
+}
+
+/* Sends the launch's one "could not restore" notice to `tab` and forgets it.
+   Exactly once per launch, whichever tab ends up carrying it. */
+function deliverRestoreNotice(tab) {
+  if (!pendingRestoreNotice || !tab || tab.view.webContents.isDestroyed()) return;
+  const notice = pendingRestoreNotice;
+  pendingRestoreNotice = null;
+  try { tab.view.webContents.send("splitpage:restore-notice", { skipped: notice.skipped }); }
+  catch { /* the page went away between the decision and the send */ }
+}
+
+/* The notice is addressed to one tab, and that tab can be gone before its
+   page ever reports ready: the window becomes interactive as soon as the
+   lightweight strip page loads, which is well before a document page
+   finishes booting, so its × is live and the strip is already populated from
+   main's own state. Re-address the notice instead of letting it fall on the
+   floor — it is the only time the user is told a remembered document could
+   not be restored. A tab that is already ready gets it immediately; there is
+   no second renderer-ready coming for it. */
+function retargetRestoreNotice(deadTabId, deadWindow) {
+  if (!pendingRestoreNotice || pendingRestoreNotice.tabId !== deadTabId) return;
+  let next = deadWindow && deadWindow.activeTabId ? tabs.get(deadWindow.activeTabId) : null;
+  if (!next) {
+    for (const rec of liveWindows()) {
+      next = rec.activeTabId ? tabs.get(rec.activeTabId) : null;
+      if (next) break;
+    }
+  }
+  if (!next) { pendingRestoreNotice = null; return; }
+  if (next.ready) deliverRestoreNotice(next);
+  else pendingRestoreNotice.tabId = next.id;
 }
 
 /* Drops every trace of a tab from the registries. Does NOT touch the view:
@@ -2712,6 +2858,10 @@ function forgetTab(tabId) {
       w.activeTabId = w.tabIds.length ? w.tabIds[Math.max(0, Math.min(i, w.tabIds.length - 1))] : null;
     }
   }
+  /* After the neighbour has taken over, so the notice follows the tab the
+     user is actually looking at. */
+  historyHolds.delete(tab.webContentsId);
+  retargetRestoreNotice(tabId, w);
 }
 
 /* opts: {source, launchIntent, tabId?, pendingPayload?, index?} */
@@ -2846,7 +2996,11 @@ function wireTabView(tab) {
      the page was holding is gone from memory; only its crash draft can bring
      it back, so the FIRST thing that happens is a hold — the draft on disk
      must not be rotated out by any later write until the reloaded page has
-     restored it or the user has decided (invariant #40).
+     restored it or the user has decided (invariant #40). A tab with NO draft
+     has nothing to protect and must not be held: nothing would ever release
+     it (only draft-restore-done does, and a page with no draft to restore
+     never sends one), so the tab would count as unsaved — prompting on close
+     and refusing every draft write as HELD — for the rest of the session.
 
      Then the tab is reloaded, at most CRASH_RELOAD_MAX times per
      CRASH_RELOAD_WINDOW_MS, so a page that crashes on the very content it is
@@ -2857,7 +3011,9 @@ function wireTabView(tab) {
   contents.on("render-process-gone", (_event, details) => {
     if (details && details.reason === "clean-exit") return;
     if (!tabs.has(tabId)) return;
-    if (draftStore) { try { draftStore.hold(tabId); } catch { /* store unusable */ } }
+    if (draftStore && draftsHasDraft(tabId)) {
+      try { draftStore.hold(tabId); } catch { /* store unusable */ }
+    }
 
     const now = Date.now();
     tab.reloadTimes = tab.reloadTimes.filter((t) => now - t < CRASH_RELOAD_WINDOW_MS);
@@ -2873,9 +3029,10 @@ function wireTabView(tab) {
 
     tab.reloadTimes.push(now);
     tab.crashedNotReloaded = false;
-    if (tab.source.kind === "file") tab.pendingPayload = { kind: "open-file", absPath: tab.source.absPath };
-    else if (tab.source.kind === "server") tab.pendingPayload = { kind: "open-server", serverDocId: tab.source.serverDocId };
-    else tab.pendingPayload = null;
+    /* Armed, not necessarily delivered: flushPendingPayload holds it back
+       while this tab still has a draft, so the reload restores the crash
+       draft rather than overwriting it with the file on disk. */
+    tab.pendingPayload = payloadForSource(tab.source);
     try { contents.reload(); } catch { tab.crashedNotReloaded = true; }
   });
 
@@ -2965,7 +3122,12 @@ function applyWindowTitle(w) {
   if (!w || w.win.isDestroyed()) return;
   const tab = tabs.get(w.activeTabId);
   const title = (tab && tab.title) || "Untitled";
-  const dirty = !!(tab && tab.dirty);
+  /* A tab whose renderer died past the reload budget has no page left, and
+     main itself has decided it never counts as unsaved (tabIsUnsaved,
+     settleDraftsForClose): closing it neither prompts nor discards. Leaving
+     the bullet — and setDocumentEdited — on the last dirty flag it reported
+     would promise a confirmation that will not come. */
+  const dirty = !!(tab && tab.dirty && !tab.crashedNotReloaded);
   w.win.setTitle(dirty ? `• ${title} — Splitpage` : `${title} — Splitpage`);
   if (process.platform === "darwin") w.win.setDocumentEdited(dirty);
 }
@@ -2997,7 +3159,14 @@ function shellStateForWindow(windowId) {
       return {
         tabId: id,
         title: t.title || "Untitled",
-        dirty: !!t.dirty,
+        /* The dirty dot means exactly one thing to a reader: "closing this
+           will ask you first". A tab whose renderer died past the reload
+           budget closes with no prompt at all (tabIsUnsaved excludes it), so
+           its last reported dirty flag must not keep showing the dot — and
+           `crashed` says what IS true about it instead of leaving it looking
+           like any other clean tab. */
+        dirty: !!t.dirty && !t.crashedNotReloaded,
+        crashed: !!t.crashedNotReloaded,
         isServerDoc: t.source.kind === "server",
         pristine: !!t.pristine,
         fullPathForTooltip: t.source.kind === "file" ? t.source.absPath : null
@@ -3351,11 +3520,38 @@ function focusWindow(windowId) {
   w.win.focus();
 }
 
+/* What a tab of this source has to be handed to show its document again, or
+   null for a blank one. One place, because three call sites need the same
+   answer: a tab created at launch, a tab reloaded after its renderer died,
+   and a draft tab whose restore reported it could not read the draft. */
+function payloadForSource(source) {
+  if (!source) return null;
+  if (source.kind === "file") return { kind: "open-file", absPath: source.absPath };
+  if (source.kind === "server") return { kind: "open-server", serverDocId: source.serverDocId };
+  return null;
+}
+
 /* Hands a tab whatever it was created to open, once its renderer has
-   registered its onOpenFile callback (splitpage:renderer-ready). */
-function flushPendingPayload(tab) {
+   registered its onOpenFile callback (splitpage:renderer-ready).
+
+   opts.force skips the crash-draft gate below. Only the draft-restore-done
+   handler passes it, and only for a restore that failed outright. */
+function flushPendingPayload(tab, opts) {
   const payload = tab.pendingPayload;
   if (!payload) return;
+  /* A TAB THAT IS STILL RESTORING A CRASH DRAFT IS NOT HANDED ITS DOCUMENT.
+     Both paths adopt state, and the open-file — read fresh from disk — lands
+     last: it replaced the recovered work with the last saved version of the
+     file, and the now-"clean" tab then discarded the draft that held it
+     (invariant #40). So the payload is KEPT, not delivered and not dropped,
+     and splitpage:draft-restore-done decides: dropped once the restore
+     adopted a document, flushed only when the restore reported 'failed' —
+     the corrupt/unreadable draft, which is the one case where the tab would
+     otherwise sit there empty over a file that reads perfectly well.
+     draftsHasDraft is the same predicate launchIntentFor answers
+     'restore-draft' from, so the two can never disagree about which boot
+     this is. */
+  if (!(opts && opts.force) && draftsHasDraft(tab.id)) return;
   tab.pendingPayload = null;
   if (payload.kind === "open-file") {
     deliverOpenFile(tab, payload.absPath);
@@ -3393,7 +3589,10 @@ function draftSourceFromListing(listing) {
    not been read: its draft IS that document right now. */
 function indexDraftPath(tabId, filePath) {
   if (typeof filePath !== "string" || !filePath || !path.isAbsolute(filePath)) return;
-  pathToTabId.set(pathKey(filePath), tabId);
+  /* Two drafts can name one file (the user had two copies of the same
+     document open when the app died). First claim wins, same as every other
+     source index — see claimRoutingKey. */
+  claimRoutingKey(pathToTabId, pathKey(filePath), tabId);
 }
 
 function restoreSessionAtLaunch(draftInit) {
@@ -3433,7 +3632,21 @@ function restoreSessionAtLaunch(draftInit) {
              NOT opened here — step K's draft-take reads it, compares it with
              the draft's base and decides what the tab should show. */
           const source = pt.source.kind === "blank" ? draftSourceFromListing(listing) : pt.source;
-          const tab = createTab(rec.id, { tabId: pt.tabId, source, launchIntent: { type: "restore-draft" } });
+          const tab = createTab(rec.id, {
+            tabId: pt.tabId,
+            source,
+            launchIntent: { type: "restore-draft" },
+            /* The fallback, held back by flushPendingPayload for as long as
+               the draft exists and delivered only if the restore reports
+               'failed'. Without it a draft that cannot be READ (a torn write,
+               or an antivirus/sync client holding both generations open —
+               listingFor says 'corrupt') brought the tab back as an empty
+               untitled document: nothing ever opened its file, the renderer
+               then reported no fileId, and set-document-state rewrote the
+               source to blank, so the path was dropped from desktop-state.json
+               and the document was gone from the session for good. */
+            pendingPayload: payloadForSource(source)
+          });
           if (!tab) continue;
           if (draftStore) { try { draftStore.hold(tab.id); } catch { /* store unusable */ } }
           indexDraftPath(tab.id, listing.filePath);
@@ -3491,10 +3704,13 @@ function restoreSessionAtLaunch(draftInit) {
       if (!target) continue;
       const index = listing.placement && Number.isInteger(listing.placement.index)
         ? listing.placement.index : undefined;
+      const orphanSource = draftSourceFromListing(listing);
       const tab = createTab(target.id, {
         tabId: listing.tabId,
-        source: draftSourceFromListing(listing),
+        source: orphanSource,
         launchIntent: { type: "restore-draft" },
+        /* Same fallback as the v2 draft tabs above, for the same reason. */
+        pendingPayload: payloadForSource(orphanSource),
         index
       });
       if (!tab) continue;
@@ -3885,6 +4101,34 @@ function registerIpc() {
       chosen = result.canceled || !result.filePath ? null : result.filePath;
     }
     if (!chosen) return null;
+    /* Save As onto a file ANOTHER live tab is editing is refused here, before
+       anything is written. Letting it through made two tabs live editors of
+       one document: each save overwrote the other's, each wrote its own
+       document id into the file so its version history forked, and DOC-CLAIMS
+       could not help — those are two different documents that merely landed
+       on one path, not a duplicated id. Main is the authority on what is open
+       (invariant #42), so it is the side that has to say no. A refusal reads
+       to the renderer exactly like a cancelled dialog, which is the one
+       answer every caller of this channel already handles; the reason is said
+       out loud in a native message box rather than swallowed. */
+    const holderId = pathToTabId.get(pathKey(path.resolve(chosen)));
+    const holder = holderId ? tabs.get(holderId) : null;
+    const me = tabOf(event);
+    if (holder && (!me || holder.id !== me.id)) {
+      try {
+        dialog.showMessageBoxSync(dialogParentFor(event), {
+          type: "warning",
+          buttons: ["OK"],
+          defaultId: 0,
+          cancelId: 0,
+          message: `${path.basename(chosen)} is already open in another tab.`,
+          detail: "Saving over it from here would leave two tabs editing one file, " +
+            "and each save would overwrite the other. Close that tab first, or save this " +
+            "document under a different name."
+        });
+      } catch { /* no window to parent it on: the refusal still stands */ }
+      return null;
+    }
     const id = registerPath(chosen);
     return { id, name: path.basename(chosen) };
   });
@@ -3964,8 +4208,20 @@ function registerIpc() {
     /* Holding means "this tab's crash draft must not be rotated out until
        the page has restored it or the user has decided" (invariant #40).
        Nothing can hold until step F2 creates the store. */
-    if (hasDraftToRestore && draftStore) {
-      try { draftStore.hold(tab.id); } catch { /* store not usable; F2 owns the reporting */ }
+    if (draftStore) {
+      if (hasDraftToRestore) {
+        try { draftStore.hold(tab.id); } catch { /* store not usable; F2 owns the reporting */ }
+      } else if (draftsIsHeld(tab.id)) {
+        /* Nothing to restore, so nothing to hold. A hold taken when this tab's
+           renderer died, over a draft that has since gone (the tab was clean,
+           or the user threw the draft away), would otherwise outlive the draft
+           it was protecting: nothing sends draft-restore-done on a boot with
+           no draft, so the tab would count as unsaved and refuse every draft
+           write for the rest of the session. Guarded by isHeld rather than
+           released unconditionally so a boot does not mint a store record for
+           every tab that never had a draft. */
+        try { draftStore.release(tab.id); } catch { /* store not usable */ }
+      }
     }
     event.returnValue = {
       tabId: tab.id,
@@ -4053,11 +4309,7 @@ function registerIpc() {
     flushPendingPayload(tab);
     /* The launch's one restore notice, delivered as soon as there is a page
        listening for it — sending it any earlier would simply be dropped. */
-    if (pendingRestoreNotice && pendingRestoreNotice.tabId === tab.id) {
-      const notice = pendingRestoreNotice;
-      pendingRestoreNotice = null;
-      try { tab.view.webContents.send("splitpage:restore-notice", { skipped: notice.skipped }); } catch { /* gone */ }
-    }
+    if (pendingRestoreNotice && pendingRestoreNotice.tabId === tab.id) deliverRestoreNotice(tab);
   });
 
   /* DOCUMENT-STATE-AND-ROUTING-IPC. The renderer asks "open this", main
@@ -4193,8 +4445,21 @@ function registerIpc() {
     const tab = tabOf(event);
     if (!tab || !draftStore) return;
     const outcome = payload && typeof payload.outcome === "string" ? payload.outcome : "";
-    if (outcome === "failed") return;
+    if (outcome === "failed") {
+      /* Nothing was adopted — the draft could not be read. The hold stays
+         (the unrestored work has to survive to the next launch), but the tab
+         must not be left as an empty page over a file that is perfectly
+         readable: this is the one outcome that gets the document payload
+         restoreSessionAtLaunch armed for exactly this moment. */
+      flushPendingPayload(tab, { force: true });
+      return;
+    }
     try { draftStore.release(tab.id); } catch { /* store unusable */ }
+    /* The restore adopted a document. The payload held back for it is now
+       not merely unnecessary but dangerous: delivering the file at this point
+       would replace the recovered work with the last saved version, and the
+       tab would then read as clean and discard the draft. */
+    tab.pendingPayload = null;
   });
 
   /* The reply to splitpage:draft-flush. Matched by reqId: a reply whose
@@ -4235,8 +4500,16 @@ function registerIpc() {
     /* `protect` is not in HISTORY-IPC's original argument list; orchestrator
        override §2b adds it. Without it a desktop restore from Older can evict
        the very snapshot it is restoring, because the "Before restoring"
-       backup's own write is what triggers the eviction. */
+       backup's own write is what triggers the eviction.
+
+       The list is REMEMBERED for this sender, not just used for this call:
+       the eviction that deletes tab A's snapshot is far more likely to be
+       triggered by tab B's save, a history-copy or the expired-Older sweep
+       than by A's own put. Each report replaces the last, which is what
+       protectHistorySnapshot's release() is: the page sends its current holds
+       with every put. */
     const held = historyProtectList(protect);
+    historyHolds.set(event.sender.id, held);
     return historyExclusive(() => historyPutLocked(docId, clean, stateJson, held));
   });
 
@@ -4257,6 +4530,14 @@ function registerIpc() {
     if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) {
       throw new Error("history: invalid snapshot id");
     }
+    /* A restore takes its hold and READS first; the "Before restoring" backup
+       that carries the same list on splitpage:history-put comes afterwards.
+       Recording the holds here is what protects the snapshot in between —
+       the window in which another tab's save, a copy or the expired-Older
+       sweep could evict it. The register is replaced by each report and
+       dropped with the tab, so a page that stops reporting over-protects one
+       snapshot at worst. */
+    if (Array.isArray(q.protect)) historyHolds.set(event.sender.id, historyProtectList(q.protect));
     return historyExclusive(() => readHistorySnapshotFile(bucket, snapshotId));
   });
 
@@ -4436,6 +4717,26 @@ function registerIpc() {
       requireTrusted(event);
       const f = fixture || {};
       return planHistoryEviction(f.docs, f.capBytes, f.nowMs, f.opts);
+    });
+
+    /* chooseDuplicateLoser over two claims the test invents, answering 'a',
+       'b' or null. Same shape of hook as the planner above, for the same
+       reason: caseAtomicSaveKeepsBirthtime measures what this filesystem
+       does to a saved file's birthtime, and then has to ask the real
+       function whether it would have been fooled by it. Asking the function
+       is the assertion — reading DUP_TRUST_BIRTHTIME out of the source would
+       only prove a constant's spelling. */
+    ipcMain.handle("splitpage:test-dup-loser", async (event, a, b) => {
+      requireTrusted(event);
+      const claim = (c) => ({
+        docId: String((c && c.docId) || ""),
+        homeKey: String((c && c.homeKey) || ""),
+        seq: Number((c && c.seq) || 0),
+        birthtimeMs: Number((c && c.birthtimeMs) || 0)
+      });
+      const ca = claim(a), cb = claim(b);
+      const loser = chooseDuplicateLoser(ca, cb);
+      return loser === ca ? "a" : loser === cb ? "b" : null;
     });
 
     /* The shell driver for desktop/test/smoke.mjs (SMOKE-HARNESS shell()).

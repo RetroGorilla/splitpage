@@ -59,6 +59,11 @@ eval (function(){ window.__dupFrom = F.docId(); window.__dupTo = 'd' + 'e'.repea
 expect F.docId() === window.__dupTo
 expect F.docIdEvents().filter(function(e){ return e.type === 'copy' && e.from === window.__dupFrom && e.to === window.__dupTo; }).length === 1
 expect F.writtenOut() === false
+# main is told the new id AT ONCE, even though nothing was dirtied or saved.
+# Main's claim table is keyed on the last id this tab reported: left saying
+# the old one, it would make the ORIGINAL file lose a later duplicate check
+# against this copy's stale claim and re-id the wrong document.
+expect window.fake3._lastDocState.docId === window.__dupTo
 
 # a message whose fromId is no longer this document's id (main raced a save,
 # or the page re-id'd itself first) and one carrying a malformed toId are both
@@ -67,6 +72,9 @@ eval (function(){ window.fake3._fireReassignDocId({fromId: window.__dupFrom, toI
 expect F.docId() === window.__dupTo
 eval (function(){ window.fake3._fireReassignDocId({fromId: window.__dupTo, toId: 'nope', otherTitle: 'Y'}); return F.docId(); })()
 expect F.docId() === window.__dupTo
+# a dropped message reports nothing either — the claim still names the id
+# this tab actually holds.
+expect window.fake3._lastDocState.docId === window.__dupTo
 
 # ---- native menu command 'find' reaches the same UI the File menu does ---
 expect document.getElementById('findbar').hidden

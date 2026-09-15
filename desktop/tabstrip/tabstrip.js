@@ -62,7 +62,14 @@
     el.className = "tab" + (tab.tabId === state.activeTabId ? " tab--active" : "");
     el.setAttribute("role", "tab");
     el.setAttribute("aria-selected", tab.tabId === state.activeTabId ? "true" : "false");
-    el.title = tab.fullPathForTooltip || tab.title;
+    /* A tab whose renderer died and was not reloaded has no page behind it.
+       Main already treats it as never-unsaved (it closes with no prompt), so
+       the strip must not keep showing it as an ordinary tab with unsaved
+       work — it says what actually happened instead. */
+    if (tab.crashed) el.className += " tab--crashed";
+    el.title = tab.crashed
+      ? (tab.fullPathForTooltip || tab.title) + " — this tab stopped responding and was not reloaded"
+      : (tab.fullPathForTooltip || tab.title);
     el.dataset.tabId = tab.tabId;
     el.draggable = true;
 
@@ -78,7 +85,16 @@
     titleEl.textContent = tab.title;
     el.appendChild(titleEl);
 
-    if (tab.dirty) {
+    /* main never reports dirty AND crashed together (shellStateForWindow
+       suppresses the dirty flag for a crashed tab), so these are two
+       different marks, not one overriding the other. */
+    if (tab.crashed) {
+      var broken = document.createElement("span");
+      broken.className = "tab__broken";
+      broken.textContent = "!";
+      broken.setAttribute("aria-label", "stopped responding");
+      el.appendChild(broken);
+    } else if (tab.dirty) {
       var dot = document.createElement("span");
       dot.className = "tab__dot";
       dot.setAttribute("aria-hidden", "true");

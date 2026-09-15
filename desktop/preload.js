@@ -282,6 +282,11 @@ if (location.origin === "splitpage://app") {
        case can hold it against the renderer's original
        (window.__historyTest.planEviction) and prove the two have not drifted. */
     bridge.__testHistoryPlan = (fixture) => ipcRenderer.invoke("splitpage:test-history-plan", fixture);
+    /* Runs main's real chooseDuplicateLoser (DOC-CLAIMS) over two claims the
+       test invents, so a case can prove what the duplicate rule does with a
+       given pair of birthtimes instead of reading the constant that gates
+       it. Answers 'a', 'b' or null. */
+    bridge.__testDupLoser = (a, b) => ipcRenderer.invoke("splitpage:test-dup-loser", a, b);
     /* What the draft store thinks of a tab: this one by default, or any tab
        of this run by id (a case that crashes a page has to ask about it from
        a different page). */

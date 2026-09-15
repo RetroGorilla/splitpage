@@ -72,7 +72,14 @@
 
   /* `sticky` is for the handful of messages that must not scroll past while
      you are looking the other way — a lapsed sign-in above all, since every
-     save until you act on it will fail. Sticky toasts dismiss on click. */
+     save until you act on it will fail. Sticky toasts dismiss on click.
+
+     Returns the element it appended, with its own dismiss() on it. A sticky
+     toast otherwise has no end but a click, so a caller that says something
+     is wrong has no way to take it back when it comes right: "Crash recovery
+     is paused — this disk is full" sat on screen for the rest of the session
+     after recovery resumed, contradicting the message posted next to it. No
+     existing caller reads the return value; this is a pure addition. */
   function showToast(msg, kind, sticky) {
     var host = document.getElementById("toast-host");
     var el = document.createElement("div");
@@ -89,5 +96,7 @@
     } else {
       setTimeout(dismiss, 2600);
     }
+    el.dismiss = dismiss;
     host.appendChild(el);
+    return el;
   }
