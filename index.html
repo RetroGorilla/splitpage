@@ -2593,6 +2593,12 @@
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="history">Version history…</button>
           <div class="menu-sep"></div>
+          <!-- Browser build only: takes history, bookmarks and prefs to the
+               desktop app. 20f-desktop.js's initDesktop hides the export
+               entry and unhides the import one there. -->
+          <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
+          <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
+          <div class="menu-sep"></div>
           <!-- Ctrl+F everywhere else; this entry exists because phone
                keyboards have no Ctrl -->
           <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
@@ -2746,6 +2752,7 @@
 <input type="file" id="file-input" accept="image/*" hidden>
 <input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
+<input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
@@ -6170,6 +6177,16 @@ node update.mjs           # download and verify it</code></pre>
         return idbReq(tx.objectStore("snapMeta").index("byDocAt").getAll(historyDocRange(bucket)));
       });
     },
+    /* Every document id this backend can enumerate, Older excluded — the
+       export read path (exportHistoryAll). null means "cannot enumerate",
+       which only the desktop backend answers. */
+    rawDocIds: function () {
+      return idbRun(["docs"], "readonly", function (tx) {
+        return idbReq(tx.objectStore("docs").getAllKeys());
+      }).then(function (keys) {
+        return (keys || []).filter(function (k) { return k !== HISTORY_OLDER_KEY; });
+      });
+    },
     rawBodyCount: function (bucket) {
       return idbRun(["snapBody"], "readonly", function (tx) {
         var s = tx.objectStore("snapBody");
@@ -6424,7 +6441,10 @@ node update.mjs           # download and verify it</code></pre>
       });
       return Promise.resolve(n);
     },
-    rawDoc: function (bucket) { return Promise.resolve(historyMem.docs[bucket] || null); }
+    rawDoc: function (bucket) { return Promise.resolve(historyMem.docs[bucket] || null); },
+    rawDocIds: function () {
+      return Promise.resolve(Object.keys(historyMem.docs).filter(function (k) { return k !== HISTORY_OLDER_KEY; }));
+    }
   };
 
   /* ---- desktop backend (HISTORY-IPC) ----
@@ -6592,7 +6612,14 @@ node update.mjs           # download and verify it</code></pre>
        Older bucket a list() reports empty — so there is nothing for this side
        to ask for. It stays a function because runHistoryMigration's expiry
        sweep and historyFinishList both probe for one. */
-    evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); }
+    evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
+
+    /* There is no IPC (yet) to enumerate every document's history from the
+       renderer — that would mean walking main's on-disk folder tree, which
+       is follow-up work (HANDOFF, "Desktop-side export"). null tells
+       exportHistoryAll() this backend cannot enumerate, so a browser-only
+       export refuses cleanly here instead of silently exporting nothing. */
+    rawDocIds: function () { return Promise.resolve(null); }
   };
 
   /* ---- backend choice (per call) ----
@@ -7001,6 +7028,132 @@ node update.mjs           # download and verify it</code></pre>
     });
   }
 
+  /* ---- export (X1: File ▸ Export app data…, browser-only) ----
+
+     The read path history never needed until now: every existing caller
+     wants one document (list/get) or a write. Export wants EVERY document's
+     history at once, which only the idb and memory backends can answer —
+     the desktop store is a folder tree main.js owns, and enumerating it
+     needs new IPC that does not exist yet (recorded as a follow-up). So
+     rawDocIds() returns null there, and exportHistoryAll() turns that into a
+     rejection with a clear code rather than silently exporting an empty
+     bundle. */
+  var HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
+
+  function historyExportError(code, message) {
+    var e = new Error(message);
+    e.code = code;
+    return e;
+  }
+
+  /* Every stored snapshot across every document plus Older, newest first,
+     tagged with where it came from (docId, or null for Older). Only metas —
+     bodies are fetched afterwards, and only for what the cap keeps, so a
+     history well past 200 MB does not read every body just to discard most
+     of them. */
+  function historyFlattenForExport(docs, olderMetas) {
+    var flat = [];
+    docs.forEach(function (d) {
+      (d.metas || []).forEach(function (m) {
+        flat.push({ docId: d.docId, id: m.id, atMs: m.atMs, sizeBytes: Number(m.sizeBytes) || 0 });
+      });
+    });
+    (olderMetas || []).forEach(function (m) {
+      flat.push({ docId: null, id: m.id, atMs: m.atMs, sizeBytes: Number(m.sizeBytes) || 0 });
+    });
+    flat.sort(function (a, b) { return (b.atMs - a.atMs) || (a.id < b.id ? 1 : -1); });
+    return flat;
+  }
+
+  /* Applies the 200 MB total cap, newest snapshots first (so what survives a
+     truncated export is always what a user would want back most), then
+     fetches only the bodies that made the cut. */
+  function historyAssembleExport(backend, docs, olderMetas) {
+    var flat = historyFlattenForExport(docs, olderMetas);
+    var total = 0, truncated = false, keep = {};
+    flat.forEach(function (f) {
+      var key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
+      if (total === 0 || total + f.sizeBytes <= HISTORY_EXPORT_CAP_BYTES) {
+        total += f.sizeBytes;
+        keep[key] = true;
+      } else {
+        truncated = true;
+      }
+    });
+    var bodyJobs = [];
+    docs.forEach(function (d) {
+      d.snapshots = [];
+      (d.metas || []).forEach(function (m) {
+        if (!keep[d.docId + "\n" + m.id]) return;
+        bodyJobs.push(backend.get(d.docId, m.id).then(function (r) {
+          if (r) d.snapshots.push({ meta: r.meta, stateJson: r.stateJson });
+        }));
+      });
+    });
+    var olderOut = [];
+    (olderMetas || []).forEach(function (m) {
+      if (!keep["_older\n" + m.id]) return;
+      bodyJobs.push(backend.get(HISTORY_OLDER_KEY, m.id).then(function (r) {
+        if (r) olderOut.push({ meta: r.meta, stateJson: r.stateJson });
+      }));
+    });
+    return Promise.all(bodyJobs).then(function () {
+      function newestFirst(a, b) { return b.meta.atMs - a.meta.atMs; }
+      docs.forEach(function (d) { d.snapshots.sort(newestFirst); });
+      olderOut.sort(newestFirst);
+      return {
+        docs: docs.map(function (d) {
+          return { docId: d.docId, title: d.title, lastOpenedAt: d.lastOpenedAt, snapshots: d.snapshots };
+        }),
+        older: olderOut,
+        truncated: truncated
+      };
+    });
+  }
+
+  function historyBuildExport(backend, ids) {
+    var docJobs = ids.map(function (docId) {
+      return Promise.all([backend.rawDoc(docId), backend.rawList(docId)]).then(function (res) {
+        var rec = res[0] || null;
+        return {
+          docId: docId,
+          title: rec ? rec.title : "",
+          lastOpenedAt: rec ? rec.lastOpenedAt : 0,
+          metas: res[1] || []
+        };
+      });
+    });
+    return Promise.all(docJobs).then(function (docs) {
+      return backend.rawList(HISTORY_OLDER_KEY).then(function (olderMetas) {
+        return historyAssembleExport(backend, docs, olderMetas || []);
+      });
+    });
+  }
+
+  /* HISTORY-RENDERER-API exportHistoryAll (X1). Queued through
+     enqueueHistory, so it never reads a document mid-put — but unlike every
+     other job on that queue, this one is allowed to REJECT: a caller needs
+     to tell "no history at all" apart from "this backend cannot enumerate
+     documents" (desktop, today), and enqueueHistory's own contract of never
+     rejecting exists to protect the QUEUE, not this one read. The fallback
+     below is what turns a thrown error back into a rejection for our caller
+     while still leaving the shared chain intact for the next job. */
+  function exportHistoryAll() {
+    return enqueueHistory(function () {
+      return resolveHistoryBackend().then(function (backend) {
+        return backend.rawDocIds().then(function (ids) {
+          if (ids == null) {
+            throw historyExportError("no-enumeration",
+              "This app's history cannot be listed on this backend (desktop). Export app data from the browser build instead.");
+          }
+          return historyBuildExport(backend, ids);
+        });
+      });
+    }, function (e) {
+      return Promise.reject(e && e.code ? e : historyExportError("io", "Could not read version history for export."));
+    });
+  }
+
   /* ---- one-time migration of the shared localStorage list ---- */
 
   function historyLegacyRaw() {
@@ -7251,7 +7404,8 @@ node update.mjs           # download and verify it</code></pre>
       });
     },
     migrate: startHistoryMigration,
-    resetForTest: historyResetForTest
+    resetForTest: historyResetForTest,
+    exportAll: exportHistoryAll
   };
   /* ================= sanitizing rich text ================= */
 
@@ -15767,6 +15921,8 @@ node update.mjs           # download and verify it</code></pre>
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
+    else if (action === "export-app-data") exportAppData();
+    else if (action === "import-app-data") openImportAppData();
     else if (action === "tagging-help") showTaggingHelp();
     else if (action === "about") showAbout();
   }
@@ -20400,6 +20556,187 @@ node update.mjs           # download and verify it</code></pre>
       sameDocContent: sameDocContent
     };
   }
+  /* ================= export/import: the whole app's browser data =================
+
+     File ▸ Export app data… (X1, this file) lets someone moving from the
+     browser build to the desktop app take their version history, server
+     bookmarks and preferences with them — none of which live in a document,
+     so opening a file never carries them. File ▸ Import app data… (X2, a
+     follow-up step) is the desktop-side merge; the stub at the bottom exists
+     only so today's File-menu wiring has something to call.
+
+     Export is deliberately browser-only for now (the desktop history store
+     cannot enumerate its own documents without new main-process IPC —
+     exportHistoryAll() answers that with a rejection, not an empty bundle,
+     and buildAppDataBundle() below lets that section fail on its own without
+     failing the whole export).
+
+     WHAT NEVER LEAVES: a server sign-in token, a Drive API key or client id,
+     the last-used Drive folder, a launch token, a conflict stash, or the
+     server base URL a session happened to be pointed at. None of those keys
+     are ever read by buildAppDataBundle(); assertNoSecrets() is the
+     independent second check (invariant #48) that catches it anyway if one
+     of them — or anything that merely LOOKS like a credential — ever gets
+     added into this bundle by a future edit. */
+
+  var APPDATA_FORMAT = "splitpage-app-data";
+  var APPDATA_VERSION = 1;
+  /* Same shape as 03a-history-store.js's own key-danger regex (invariant
+     #48) — deliberately broad. A bookmark's "ssh":{"userHost":...} does not
+     match any of these; if a future field ever does, that is exactly the bug
+     this check exists to catch before the file is written. */
+  var APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
+
+  function appDataReadRaw(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function appDataReadJson(key, fallback) {
+    var raw = appDataReadRaw(key);
+    if (raw == null) return fallback;
+    try {
+      var parsed = JSON.parse(raw);
+      return parsed === undefined ? fallback : parsed;
+    } catch (e) { return fallback; }
+  }
+
+  /* The version this page itself was built as (readEmbeddedVersion, from
+     20a-update.js) when there is no desktop bridge to ask. */
+  function appDataVersionString() {
+    if (DESKTOP && typeof DESKTOP.appVersion === "string" && DESKTOP.appVersion) return DESKTOP.appVersion;
+    var embedded = typeof readEmbeddedVersion === "function" ? readEmbeddedVersion() : null;
+    return embedded || "";
+  }
+
+  /* → the AppDataBundle (X1). Every section is read in its own try/catch:
+     one bad localStorage key (corrupt JSON, storage blocked) must not lose
+     every other section, and a desktop backend's history rejection must not
+     stop bookmarks or prefs from exporting. A section that failed comes back
+     null/empty rather than throwing past this function — assertNoSecrets and
+     any caller only ever see a complete, if partial, bundle. */
+  async function buildAppDataBundle() {
+    var bundle = {
+      format: APPDATA_FORMAT,
+      version: APPDATA_VERSION,
+      exportedAt: new Date().toISOString(),
+      appVersion: appDataVersionString()
+    };
+
+    try {
+      bundle.snapshots = appDataReadJson(SNAPSHOT_KEY, null);
+    } catch (e) {
+      bundle.snapshots = null;
+    }
+
+    try {
+      bundle.history = await exportHistoryAll();
+    } catch (e) {
+      bundle.history = null;
+    }
+
+    try {
+      bundle.bookmarks = appDataReadJson(SERVER_BOOKMARKS_KEY, []);
+      if (!Array.isArray(bundle.bookmarks)) bundle.bookmarks = [];
+    } catch (e) {
+      bundle.bookmarks = [];
+    }
+
+    try {
+      bundle.prefs = {
+        onboarding: appDataReadJson(ONBOARD_KEY, null),
+        tourDone: appDataReadRaw(TOUR_DONE_KEY),
+        commentAuthor: appDataReadRaw(COMMENT_NAME_KEY),
+        commentsSort: appDataReadRaw(COMMENTS_SORT_KEY),
+        writerSize: appDataReadRaw(WRITER_SIZE_KEY),
+        taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY)
+      };
+    } catch (e) {
+      bundle.prefs = {};
+    }
+
+    return bundle;
+  }
+
+  /* Invariant #48: walks every OWN key at every depth of the bundle (never
+     the string VALUES — a document's own text or a snapshot's stateJson is
+     free to contain the word "password" without tripping this) and throws
+     the moment one looks like a credential. Called before a single byte is
+     written; a throw here means nothing is saved and the caller shows the
+     error toast instead. */
+  function assertNoSecrets(value) {
+    (function walk(v) {
+      if (!v || typeof v !== "object") return;
+      if (Array.isArray(v)) {
+        for (var i = 0; i < v.length; i++) walk(v[i]);
+        return;
+      }
+      var keys = Object.keys(v);
+      for (var k = 0; k < keys.length; k++) {
+        var key = keys[k];
+        if (APPDATA_SECRET_RE.test(key)) {
+          var e = new Error("Export cancelled — the bundle contained something that looks like a " +
+            "credential (" + key + "). This is a bug; please report it.");
+          e.code = "secret";
+          e.secretKey = key;
+          throw e;
+        }
+        walk(v[key]);
+      }
+    })(value);
+  }
+
+  function appDataFilename() {
+    var d = new Date();
+    function pad(n) { return n < 10 ? "0" + n : String(n); }
+    return "splitpage-app-data-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".json";
+  }
+
+  /* File ▸ Export app data… (browser only — 20f-desktop.js's initDesktop
+     hides this entry and unhides "import-app-data" instead, X2). Gathers,
+     asserts, then hands off to deliverFile() the same way every export in
+     18-local-files.js already does (browser download, or the desktop native
+     Save dialog on the rare case this ever runs there too). */
+  async function exportAppData() {
+    showToast("Gathering your Splitpage data…");
+    /* Let the toast actually paint before the (possibly large) history read
+       below runs on this same thread. */
+    await new Promise(function (resolve) { setTimeout(resolve, 0); });
+
+    var bundle;
+    try {
+      bundle = await buildAppDataBundle();
+      assertNoSecrets(bundle);
+    } catch (e) {
+      showToast((e && e.message) || "Export cancelled — something went wrong building your app data.", "error");
+      return;
+    }
+
+    var json;
+    try {
+      json = JSON.stringify(bundle, null, 2);
+    } catch (e) {
+      showToast("Could not build the export file.", "error");
+      return;
+    }
+
+    await deliverFile(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
+  }
+
+  /* Import proper is X2's job (desktop surface): parseAppDataBundle(),
+     importAppData() and the merge-through-the-history-store's-write-path
+     rules (invariant #49) all land there. This stays a no-op stub so
+     handleFileMenuAction's "import-app-data" branch (18-local-files.js) and
+     the File-menu entry (page.html, hidden until 20f-desktop.js's
+     initDesktop unhides it) have something to call without X1 reaching into
+     desktop-only territory ahead of that step. */
+  function openImportAppData() {
+    /* no-op until X2 */
+  }
+
+  window.__appDataTest = {
+    build: buildAppDataBundle,
+    assertNoSecrets: assertNoSecrets
+  };
   /* ================= events ================= */
 
   function onRootClick(e) {

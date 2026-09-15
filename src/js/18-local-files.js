@@ -765,6 +765,8 @@
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
+    else if (action === "export-app-data") exportAppData();
+    else if (action === "import-app-data") openImportAppData();
     else if (action === "tagging-help") showTaggingHelp();
     else if (action === "about") showAbout();
   }
