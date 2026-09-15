@@ -30,6 +30,7 @@ Copy this template into the right section below:
 - **Type:** Bug
 - **Priority:** Medium
 - **Area:** Tagging / editing
+- **Status:** Appears fixed in the Electron (desktop) deployment — unconfirmed on other deployments (e.g. web). Needs a check across platforms before closing out.
 - **Description:** If the last word in a paragraph is tagged, you can't type additional text into that scene (can't place cursor after the tag / continue the paragraph). Not specific to prop tags — narrowed down to happening specifically when the tag falls on the bottom (last) row of the text cell.
 - **Repro / notes:** Tag a word on the bottom row of a text cell, then try to add more text after it — typing doesn't work. Tags elsewhere (not on the bottom row) don't have this problem. Likely related to `.tag-anchor` being `contenteditable="false"` (noted in `src/js/21-events.js` around line 334) — cursor may have nowhere to land after an atomic tag when there's no row below it to fall into.
 
@@ -61,6 +62,13 @@ Copy this template into the right section below:
 - **Description:** Highlight and other text modifiers (formatting tools) don't behave well overall — needs a general UX pass rather than one specific fix. May overlap with the dark-mode selection-visibility issue below.
 - **Repro / notes:** No single repro — general behavior/feel issue across highlight and other text-modifier controls. Worth reviewing alongside the dark-mode typing-over-selection bug.
 
+### Undo after highlighting text doesn't behave properly
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** Editing / undo / highlight
+- **Description:** Undoing after applying a highlight to text doesn't work as expected. Likely related to the broader highlight/text-modifier UX pass and the existing alt-enter undo bug — undo seems to have multiple gaps around text-formatting actions.
+- **Repro / notes:** Highlight some text, then press undo — behavior is off (exact wrong behavior not yet pinned down, needs a clean repro).
+
 <!-- add entries here -->
 
 ---
@@ -73,13 +81,6 @@ Copy this template into the right section below:
 - **Area:** UI / layout
 - **Description:** The main two-column interface is too fixed-width — it should be more flexible and expand to use available space on wider windows/screens instead of staying capped.
 - **Repro / notes:** Resize the window wider and the two-column view doesn't grow to fill it.
-
-### Undo after highlighting text doesn't behave properly
-- **Type:** Bug
-- **Priority:** Medium
-- **Area:** Editing / undo / highlight
-- **Description:** Undoing after applying a highlight to text doesn't work as expected. Likely related to the broader highlight/text-modifier UX pass and the existing alt-enter undo bug — undo seems to have multiple gaps around text-formatting actions.
-- **Repro / notes:** Highlight some text, then press undo — behavior is off (exact wrong behavior not yet pinned down, needs a clean repro).
 
 ### Comments/gear panel shrinks main script even when there's room
 - **Type:** Bug
