@@ -13,15 +13,28 @@ then test. A change made directly to `index.html` will look like it worked
 and be destroyed by the next build; the pre-commit hook refuses a commit
 where the two disagree.
 
-There is no test framework beyond this skill: a PowerShell driver that serves
-the app, launches headless Edge over the Chrome DevTools Protocol, and runs
+There is no test framework beyond this skill: a driver that serves the app,
+launches a headless browser over the Chrome DevTools Protocol, and runs
 plain-text command scripts against it.
 
-The harness itself is Windows PowerShell 5.1 + .NET (`HttpListener`,
-`ClientWebSocket`) + `msedge.exe`, so it runs on Adam's machine and nowhere
-else. Building and packaging need Node 18+, which that machine may not have —
-if `node build.mjs` cannot run, you cannot test a source change at all, and
-saying so is better than testing a stale `index.html`.
+There are **two drivers and one set of scripts**. They read the same
+`tests/*.txt`, take the same commands, and print the same lines — pick by
+where you are, never by what you are testing:
+
+| | `driver.ps1` | `driver.mjs` |
+| --- | --- | --- |
+| Runs on | Windows only | anywhere with Node 22 + a Chromium |
+| Built from | PowerShell 5.1 + .NET + `msedge.exe` | Node built-ins + Playwright's Chromium |
+| Suite runner | `run-tests.ps1` (parallel lanes) | none — one suite per invocation |
+
+`driver.ps1` is the original and still the one the full regression runs
+under. `driver.mjs` exists so a source change can be driven from the Linux
+cloud container, which has no PowerShell and no Edge — see "Driving it from
+the cloud" below.
+
+Building and packaging need Node 18+, which the Windows machine may not
+have — if `node build.mjs` cannot run there, you cannot test a source change
+at all, and saying so is better than testing a stale `index.html`.
 
 ## Run the regression suite
 
@@ -125,15 +138,84 @@ and Open from the server… both then work. Run 2026-09-10: 12/13, the one
 failure being a wrong expectation in the check itself (the server menu entries
 appear as soon as health answers, before the PIN is accepted — deliberate).
 
+## Driving it from the cloud
+
+`driver.mjs` is the same driver in Node. Use it in the Linux cloud container,
+where PowerShell and Edge do not exist:
+
+```bash
+node build.mjs
+node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
+```
+
+Flags mirror `driver.ps1`'s parameters (`--port`, `--cdp-port`, `--root`,
+`--shot-dir`, `--script`, `--headed`), and a single dash is accepted too so a
+command line copied from this file works against either driver. It finds a
+browser in this order: `--chrome`, `$SPLITPAGE_CHROME`, Playwright's Chromium
+under `$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers` in the container), Edge
+on Windows, then `chromium`/`google-chrome` on `PATH`. Running as root it adds
+`--no-sandbox` on its own, because Chromium's sandbox refuses to start there.
+`--headed` needs a display — `xvfb-run node ... --headed` in a container.
+
+Everything the suites depend on is deliberately identical: the onboarding
+suppression injected before every navigation, `text=`/`text*=` selector
+resolution, the key map, the pass/fail wording, and the `RESULT: n/m checks
+passed` line. Two quirks are ported rather than fixed, because ~120 existing
+assertions are written against them:
+
+- **A literal comparison is case-insensitive.** PowerShell prints a bool as
+  `True` and its `-eq` ignores case, which is the only reason
+  `expect ... == false` ever passed. `driver.mjs` lowercases both sides.
+- **`expect` truthiness is PowerShell's, not JavaScript's** — an empty array
+  is false, a one-element array is its element.
+
+**The `RESULT:` line is the contract, not the exit code.** Neither driver
+exits non-zero for a failed assertion; only a command that throws sets exit 1.
+`run-tests.ps1` greps for `RESULT:` for exactly this reason. Read the line.
+
+`run-tests.ps1` itself is *not* ported — there is no Linux suite runner, so
+run one suite per invocation, each with its own `--port`/`--cdp-port`.
+
+### Web fonts, and why a width assertion may differ there
+
+The container reaches `fonts.googleapis.com` only through an intercepting TLS
+proxy whose CA Playwright's Chromium does not trust, so the Google Fonts
+stylesheet fails and the app falls back to generic sans/mono. The app itself is
+fine — the font `<link>` is `media="print"` precisely so a dead stylesheet
+cannot block the scripts (see `src/page.html`) — but the metrics are wrong, so
+anything asserting a *width* can disagree with the Windows result.
+`08-writer-width.txt` and `05-mobile.txt` are the ones to distrust.
+
+To get the real fonts, pin the proxy's CA by public-key hash — this trusts
+those CAs only and leaves certificate verification on everywhere else:
+
+```bash
+cd "$(mktemp -d)" && csplit -sz -f ca- -b '%03d.pem' "${SSL_CERT_FILE:-/root/.ccr/ca-bundle.crt}" '/BEGIN CERTIFICATE/' '{*}'
+SPKI=$(for f in ca-*.pem; do
+  openssl x509 -in "$f" -noout -subject | grep -qiE 'interception|egress|proxy' || continue
+  openssl x509 -in "$f" -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl base64
+done | paste -sd, -)
+export SPLITPAGE_CHROME_ARGS="--ignore-certificate-errors-spki-list=$SPKI"
+```
+
+`SPLITPAGE_CHROME_ARGS` appends anything to the browser command line and is
+the general escape hatch for environment-specific flags. Verify it worked by
+measuring instead of trusting it: a `"Work Sans"` span and a `"NoSuchFamily"`
+span render the same width when the fonts did *not* load.
+
+A `favicon.ico` 404 in `logs` is the browser asking for a file the repo has
+never had. It means nothing, on either driver.
+
 ## Ad-hoc driving
 
 For one-off exploration, write a script and run the driver directly:
 
 ```bash
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/driver.ps1 -Script mytest.txt -Port 8795 -CdpPort 9337
+node .claude/skills/run-splitpage-app/driver.mjs --script mytest.txt --port 8795 --cdp-port 9337
 ```
 
-Always pass `-Script`. Piping to stdin works but the parent shell can sit on a
+Always pass `-Script`/`--script`. Piping to stdin works but the parent shell can sit on a
 buffered pipeline long after the driver has exited, which looks like a hang.
 
 ## Commands

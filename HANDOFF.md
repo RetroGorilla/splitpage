@@ -50,6 +50,29 @@ Full reference and gotchas: `.claude/skills/run-splitpage-app/SKILL.md`.
 `run-tests.ps1` mints its own 8-hex `$RunId` per run so two runs can share
 the machine without one's orphan-process sweep killing the other's browser.
 
+**Away from Windows**, `.claude/skills/run-splitpage-app/driver.mjs` is the
+same driver in Node — same `tests/*.txt`, same commands, same `RESULT:` line —
+so a `src/` change can be driven from the Linux cloud container, which has
+neither PowerShell nor Edge. One suite per invocation (`run-tests.ps1` is not
+ported):
+
+```bash
+node build.mjs
+node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
+```
+
+It finds Playwright's Chromium under `$PLAYWRIGHT_BROWSERS_PATH` on its own.
+Google Fonts does not load there (the proxy's CA is untrusted), so the app
+falls back to generic sans/mono and **width assertions can disagree with the
+Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Neither
+driver exits non-zero for a failed assertion; read the `RESULT:` line.
+
+What still needs the Windows machine: `desktop/test/smoke.mjs` (hardcoded
+`.exe` paths, `Win32_Process`/`MainWindowHandle` probes), `npm run dist:win`,
+`verify-dist.mjs`, and anything touching a packaged binary. `build.mjs
+--check`, `desktop/test/drafts.test.mjs` and `tools/test-server.mjs` already
+run anywhere.
+
 **Desktop shell:** `desktop/test/smoke.mjs` drives a real Electron window
 over CDP — the only thing exercising `main.js`/`preload.js`. Always launch
 through it (`launchApp`, sets `SPLITPAGE_TEST=1` + a temp profile), never the
@@ -611,6 +634,8 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `desktop/verify-dist.mjs` | post-`dist:win` check: PE machine field per binary, NSIS stub arch, installer freshness |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
+| `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
+| `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
 
 Other source: `src/page.html` (shell), `src/app.css` (visual),
 `src/seed-state.json` (demo document). `README.md` is a build input too —
