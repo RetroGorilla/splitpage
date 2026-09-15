@@ -1,0 +1,266 @@
+# Crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and
+# dedup, and the restore's outcomes — against __desktopTest.setBackend()'s
+# fake (20f-desktop.js) and __desktopTest.drafts (DRAFT-RENDERER-API), the
+# same tricks 21-desktop-shim.txt and 22-doc-id.txt play. There is no real
+# Electron here, so desktop/drafts.js itself has its own Node suite
+# (desktop/test/drafts.test.mjs) — this drives only the renderer's half of
+# the contract, exactly the shape makeFakeDesktopBackend hands it.
+#
+# Every fixture uses its own 'd'+32-hex docId (mkId below) so scenarios never
+# collide over shared per-document history or draft dedup state — draftSeq,
+# draftTiming and editSeq are the only things genuinely shared across this
+# whole file, in one page load, so later sections turn draftTiming back down
+# to something slow before anything long-lived (a restore's own dirty
+# document) could otherwise arm a stray write against whatever fake backend
+# happens to be current later on.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.mkId = function(ch){ return 'd' + String(ch).repeat(32); }; return !!(F && D && H && D.drafts && typeof D.drafts.applyForTest === 'function');})()
+expect true
+
+# =============================================================================
+# applyStashedWork's NO-OVERRIDE path (the ordinary lapsed-stash reload,
+# 21-events.js init()) still consumes a real stash — the contrast case for
+# the OVERRIDE path drafts uses, tested for real further down. Run through a
+# goto the same way 25-history-migration.txt does, and run it FIRST: a goto
+# after real DOM work reliably aborts the CDP socket (SKILL.md gotchas).
+# =============================================================================
+eval (async function(){ await H.resetForTest(); var base = F.clone(F.state()); base.docId = mkId('1'); var mine = F.clone(base); mine.rows[0].audioText = 'STASH-CONSUMED-EDIT'; sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify({ at: new Date().toISOString(), by: 'Tester', base: base, mine: mine })); return true; })()
+goto /index.html
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.mkId = function(ch){ return 'd' + String(ch).repeat(32); }; return !!(F && D);})()
+expect true
+wait F.docId() === mkId('1')
+wait !document.getElementById('merge-banner').hidden
+expect F.state().rows[0].audioText.indexOf('STASH-CONSUMED-EDIT') !== -1
+expect sessionStorage.getItem('splitpage-conflict-stash') === null
+jsclick #merge-dismiss
+wait document.getElementById('merge-banner').hidden
+
+# =============================================================================
+# THE WRITER
+# =============================================================================
+
+# ---- no write per keystroke; a burst lands at the max interval -------------
+eval (function(){window.fakeW1 = D.makeFakeBackend(); D.setBackend(window.fakeW1); D.drafts.setTiming({idle: 300, max: 800}); D.markDirtyForTest(); window.__w1SoloWrites = window.fakeW1._drafts.writes; return true;})()
+expect window.__w1SoloWrites === 0
+eval (async function(){ await D.drafts.flushNow(); window.__w1Base = window.fakeW1._drafts.current.header.editSeq; window.__w1BaseWrites = window.fakeW1._drafts.writes; var n = 0; await new Promise(function(resolve){ var iv = setInterval(function(){ D.markDirtyForTest(); n++; if (n >= 30) { clearInterval(iv); setTimeout(resolve, 1200); } }, 100); }); window.__w1N = n; window.__w1FinalWrites = window.fakeW1._drafts.writes; window.__w1FinalEditSeq = window.fakeW1._drafts.current.header.editSeq; return true; })()
+expect (window.__w1FinalWrites - window.__w1BaseWrites) >= 3
+expect (window.__w1FinalWrites - window.__w1BaseWrites) <= 5
+expect window.__w1FinalEditSeq === (window.__w1Base + window.__w1N)
+
+# ---- an edit during a slow write is drafted and rebased; a clean save discards
+eval (function(){window.fakeW2 = D.makeFakeBackend(); D.setBackend(window.fakeW2); D.drafts.setTiming({idle: 40, max: 80}); var orig = window.fakeW2.writeDraft.bind(window.fakeW2); window.__w2Log = []; window.fakeW2.writeDraft = function(p){ window.__w2Log.push(p.stateJson); return new Promise(function(res){ setTimeout(function(){ res(orig(p)); }, 400); }); }; F.state().rows[0].audioText = 'W2-EDIT-A'; D.markDirtyForTest(); return true;})()
+eval (async function(){ await new Promise(function(r){ setTimeout(r, 150); }); F.state().rows[0].audioText = 'W2-EDIT-B'; D.markDirtyForTest(); await D.drafts.flushNow(); window.__w2FinalJson = window.fakeW2._drafts.current.stateJson; return true; })()
+expect window.__w2Log.length >= 2
+expect window.__w2Log[0].indexOf('W2-EDIT-A') !== -1
+expect window.__w2FinalJson.indexOf('W2-EDIT-B') !== -1
+eval (async function(){ await F.save({saveAs: true}); window.__w2CleanOnDisk = D.drafts.status().onDisk; return true; })()
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+eval (async function(){ await D.drafts.flushNow(); window.__w2Discarded = window.fakeW2._drafts.current === null; window.__w2DiscardLog = window.fakeW2._draftLog.filter(function(e){ return e.op === 'discard'; }).length; return true; })()
+expect window.__w2Discarded
+expect window.__w2DiscardLog >= 1
+expect D.drafts.status().onDisk === false
+
+# ---- visibilitychange hidden flushes ---------------------------------------
+eval (function(){window.fakeW3 = D.makeFakeBackend(); D.setBackend(window.fakeW3); D.drafts.setTiming({idle: 60000, max: 60000}); F.state().rows[0].audioText = 'W3-VISIBILITY-EDIT'; D.markDirtyForTest(); Object.defineProperty(document, 'visibilityState', {get: function(){ return 'hidden'; }, configurable: true}); document.dispatchEvent(new Event('visibilitychange')); return true;})()
+wait window.fakeW3._drafts.writes >= 1
+expect window.fakeW3._drafts.current.stateJson.indexOf('W3-VISIBILITY-EDIT') !== -1
+eval (function(){ Object.defineProperty(document, 'visibilityState', {get: function(){ return 'visible'; }, configurable: true}); return true; })()
+
+# From here on nothing should write on its own — every remaining case drives
+# the restore side, which leaves the document dirty and would otherwise arm
+# a stray idle/max write against whatever fake happens to be current later.
+eval (function(){ D.drafts.setTiming({idle: 3600000, max: 3600000, serverWait: 20000}); return true; })()
+
+# =============================================================================
+# THE RESTORE — file origin
+# =============================================================================
+
+# ---- mtime touched, content unchanged: applied, no merge, no snapshot -----
+eval (async function(){ await H.resetForTest(); window.fakeR4 = D.makeFakeBackend(); D.setBackend(window.fakeR4); var tpl = F.clone(F.state()); tpl.docId = mkId('4'); var base = F.clone(tpl); var mine = F.clone(base); mine.rows[0].audioText = 'R4-MINE-EDIT'; window.__r4FileId = window.fakeR4._addFile('r4.splitpage', JSON.stringify(base)); window.fakeR4._touch(window.__r4FileId); window.__r4OrigBytes = window.fakeR4._text(window.__r4FileId); window.__r4File = await window.fakeR4.readFile(window.__r4FileId); window.__r4Taken = { header: { docIdWrittenOut: true, origin: { kind: 'file', fileName: 'r4.splitpage' } }, file: window.__r4File, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base) }; window.__r4Outcome = await D.drafts.applyForTest(window.__r4Taken); return true; })()
+expect window.__r4Outcome === 'applied'
+expect F.state().rows[0].audioText === 'R4-MINE-EDIT'
+expect JSON.stringify(F.state().rows.map(function(r){return r.id;})) === JSON.stringify(['r1','r2'])
+expect document.getElementById('merge-banner').hidden
+eval (async function(){ window.__r4History = await H.listRaw(F.docId()); return true; })()
+expect window.__r4History.length === 0
+expect window.fakeR4._text(window.__r4FileId) === window.__r4OrigBytes
+
+# ---- disk changed, SAME mtime as base: content decides, not mtime ---------
+# (CLAIMS CORRECTED in overview.txt: a stat match alone must never apply a
+# draft over content that actually moved.) Two rows merge cleanly (both
+# edits kept), a third is edited on both sides and becomes a conflict
+# comment holding the draft's ("my") text. Also proves the OVERRIDE half of
+# applyStashedWork: the sentinel sessionStorage keys the no-override case
+# above consumes are left byte-identical here.
+eval (async function(){ await H.resetForTest(); sessionStorage.setItem('splitpage-conflict-stash', 'SENTINEL-STASH'); sessionStorage.setItem('splitpage-conflict-reloaded', 'SENTINEL-RELOADED'); window.fakeR56 = D.makeFakeBackend(); D.setBackend(window.fakeR56); var tpl = F.clone(F.state()); tpl.docId = mkId('5'); tpl.rows.push({id: 'r3', visualText: '', visualImage: null, audioText: 'BASE R3'}); tpl.rows[0].audioText = 'BASE R1'; tpl.rows[1].audioText = 'BASE R2'; var base = F.clone(tpl); var mine = F.clone(base); mine.rows[0].audioText = 'MINE R1'; mine.rows[2].audioText = 'MINE R3'; var disk = F.clone(base); disk.rows[1].audioText = 'DISK R2'; disk.rows[2].audioText = 'DISK R3'; window.__r56FileId = window.fakeR56._addFile('r56.splitpage', JSON.stringify(base)); window.__r56T0 = (await window.fakeR56.readFile(window.__r56FileId)).lastModified; window.fakeR56._setBytesKeepMtime(window.__r56FileId, JSON.stringify(disk)); window.__r56T1 = (await window.fakeR56.readFile(window.__r56FileId)).lastModified; window.__r56DiskBytesAtRestore = window.fakeR56._text(window.__r56FileId); window.__r56File = await window.fakeR56.readFile(window.__r56FileId); window.__r56Taken = { header: { docIdWrittenOut: true, origin: { kind: 'file', fileName: 'r56.splitpage' } }, file: window.__r56File, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base) }; window.__r56Outcome = await D.drafts.applyForTest(window.__r56Taken); return true; })()
+expect window.__r56T1 === window.__r56T0
+expect window.__r56Outcome === 'merged'
+expect !document.getElementById('merge-banner').hidden
+eval (function(){ var byId = {}; F.state().rows.forEach(function(r){ byId[r.id] = r.audioText; }); window.__r56Rows = byId; return true; })()
+expect window.__r56Rows.r1 === 'MINE R1'
+expect window.__r56Rows.r2 === 'DISK R2'
+eval (function(){ window.__r56Conflict = F.state().comments.filter(function(c){ return c.kind === 'conflict' && c.rowId === 'r3'; })[0]; return window.__r56Conflict;})()
+expect !!window.__r56Conflict
+expect window.__r56Conflict.body.indexOf('MINE R3') !== -1
+expect document.getElementById('btn-save').classList.contains('is-dirty')
+eval (async function(){ window.__r56History = await H.listRaw(F.docId()); return true; })()
+expect window.__r56History.length >= 2
+expect window.__r56History[0].label === 'Before merging your unsaved changes'
+expect window.__r56History[1].label === 'Your unsaved changes, recovered'
+expect sessionStorage.getItem('splitpage-conflict-stash') === 'SENTINEL-STASH'
+expect sessionStorage.getItem('splitpage-conflict-reloaded') === 'SENTINEL-RELOADED'
+sleep 3000
+expect window.fakeR56._text(window.__r56FileId) === window.__r56DiskBytesAtRestore
+expect document.getElementById('btn-save').classList.contains('is-dirty')
+
+# lastMergeUndo.id is the FIRST snapshot ("Before merging…"), not the second
+# — undo has to land back on the disk copy, not the recovered one.
+jsclick #merge-undo
+expect document.getElementById('merge-undo').classList.contains('armed')
+jsclick #merge-undo
+wait F.state().rows[0].audioText === 'BASE R1'
+expect F.state().rows[1].audioText === 'DISK R2'
+
+# ---- legacy .md, no embedded docId, changed on disk: merged, not a copy ---
+eval (async function(){ await H.resetForTest(); window.fakeR8 = D.makeFakeBackend(); D.setBackend(window.fakeR8); var base = F.clone(F.state()); base.docId = mkId('8'); base.rows[0].audioText = 'BASE8'; var mine = F.clone(base); mine.rows[0].audioText = 'MINE8-EDIT'; var disk = F.clone(base); disk.rows[0].audioText = 'DISK8-EDIT'; var mdRaw = F.buildMarkdown(disk); var withComma = mdRaw.replace(/\n\s*"docId":\s*"[^"]*",/, ''); var legMd = (withComma !== mdRaw) ? withComma : mdRaw.replace(/,(\s*\n\s*)"docId":\s*"[^"]*"/, '$1'); window.__r8HasId = legMd.indexOf('"docId"') !== -1; window.__r8FileId = window.fakeR8._addFile('legacy8.md', legMd); window.__r8File = await window.fakeR8.readFile(window.__r8FileId); window.__r8Taken = { header: { docIdWrittenOut: true, origin: { kind: 'file', fileName: 'legacy8.md' } }, file: window.__r8File, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base) }; window.__r8Outcome = await D.drafts.applyForTest(window.__r8Taken); return true; })()
+expect !window.__r8HasId
+expect window.__r8Outcome === 'merged'
+expect F.docId() === mkId('8')
+
+# ---- missing file → untitled copy; a detached copy gets a new docId + copy event
+eval (function(){ window.__r7aEvBefore = F.docIdEvents().length; return true; })()
+eval (async function(){ await H.resetForTest(); window.fakeR7a = D.makeFakeBackend(); D.setBackend(window.fakeR7a); var base = F.clone(F.state()); base.docId = mkId('9'); var mine = F.clone(base); mine.rows[0].audioText = 'R7A-EDIT'; window.__r7aTaken = { header: { docIdWrittenOut: true, origin: { kind: 'file', fileName: 'missing9.splitpage' } }, file: null, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base) }; window.__r7aOutcome = await D.drafts.applyForTest(window.__r7aTaken); return true; })()
+expect window.__r7aOutcome === 'untitled-copy'
+expect /^d[0-9a-f]{32}$/.test(F.docId())
+expect F.docId() !== mkId('9')
+eval (function(){ var evs = F.docIdEvents(); window.__r7aLastEv = evs[evs.length - 1]; return evs.length; })()
+expect F.docIdEvents().length === window.__r7aEvBefore + 1
+expect window.__r7aLastEv.type === 'copy'
+expect window.__r7aLastEv.from === mkId('9')
+expect window.__r7aLastEv.to === F.docId()
+eval (function(){ var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__r7aToast = toasts[toasts.length - 1].textContent; return true; })()
+expect window.__r7aToast.indexOf('missing9.splitpage') !== -1
+
+# ---- both ids embedded and different: a different script → untitled copy --
+eval (async function(){ await H.resetForTest(); window.fakeR7b = D.makeFakeBackend(); D.setBackend(window.fakeR7b); var base = F.clone(F.state()); base.docId = mkId('b'); var mine = F.clone(base); mine.rows[0].audioText = 'R7B-EDIT'; var disk = F.clone(base); disk.docId = mkId('c'); disk.rows[0].audioText = 'SOMEONE ELSES SCRIPT'; window.__r7bFileId = window.fakeR7b._addFile('r7b.splitpage', JSON.stringify(disk)); window.__r7bFile = await window.fakeR7b.readFile(window.__r7bFileId); window.__r7bTaken = { header: { docIdWrittenOut: true, origin: { kind: 'file', fileName: 'r7b.splitpage' } }, file: window.__r7bFile, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base) }; window.__r7bOutcome = await D.drafts.applyForTest(window.__r7bTaken); return true; })()
+expect window.__r7bOutcome === 'untitled-copy'
+expect F.docId() !== mkId('b')
+expect F.docId() !== mkId('c')
+
+# ---- unparseable file on disk → unreadable ---------------------------------
+eval (async function(){ await H.resetForTest(); window.fakeR7c = D.makeFakeBackend(); D.setBackend(window.fakeR7c); var base = F.clone(F.state()); base.docId = mkId('7'); var mine = F.clone(base); mine.rows[0].audioText = 'R7C-EDIT'; window.__r7cFileId = window.fakeR7c._addFile('r7c.splitpage', 'not { valid json at all'); window.__r7cFile = await window.fakeR7c.readFile(window.__r7cFileId); window.__r7cTaken = { header: { docIdWrittenOut: true, origin: { kind: 'file', fileName: 'r7c.splitpage' } }, file: window.__r7cFile, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base) }; window.__r7cOutcome = await D.drafts.applyForTest(window.__r7cTaken); return true; })()
+expect window.__r7cOutcome === 'unreadable'
+
+# ---- import origin → always an unsaved copy --------------------------------
+eval (async function(){ await H.resetForTest(); window.fakeR7d = D.makeFakeBackend(); D.setBackend(window.fakeR7d); var base = F.clone(F.state()); base.docId = mkId('d'); var mine = F.clone(base); mine.rows[0].audioText = 'R7D-EDIT'; window.__r7dTaken = { header: { docIdWrittenOut: false, origin: { kind: 'import', importName: 'notes.docx' } }, file: null, fileProblem: null, stateJson: JSON.stringify(mine), baseJson: null }; window.__r7dOutcome = await D.drafts.applyForTest(window.__r7dTaken); return true; })()
+expect window.__r7dOutcome === 'untitled-copy'
+eval (function(){ var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__r7dToast = toasts[toasts.length - 1].textContent; return true; })()
+expect window.__r7dToast.indexOf('notes.docx') !== -1
+
+# ---- a draft equal to its base compares equal, ignoring rev/who/when/docId
+eval (function(){ var a = F.clone(F.state()); a.rev = 4; a.lastEditedBy = 'Someone'; a.lastEditedAt = new Date().toISOString(); a.docId = mkId('1'); var b = F.clone(a); b.rev = 9; b.lastEditedBy = 'Someone Else'; b.lastEditedAt = new Date(Date.now() + 999).toISOString(); b.docId = mkId('2'); window.__r7eEqual = D.drafts.sameDocContent(a, b); var c = F.clone(a); c.rows[0].audioText = c.rows[0].audioText + ' — changed'; window.__r7eDifferent = D.drafts.sameDocContent(a, c); return true; })()
+expect window.__r7eEqual === true
+expect window.__r7eDifferent === false
+
+# =============================================================================
+# server override: unavailable / resumed / not-found
+# =============================================================================
+
+# ---- unavailable: no server ever answered this launch (nothing mocked
+# yet), so the draft opens as an unsaved copy straight away (Adam's
+# default, overrides.md §2) ----
+eval (async function(){ await H.resetForTest(); window.fakeSrvA = D.makeFakeBackend(); D.setBackend(window.fakeSrvA); var base = F.clone(F.state()); base.docId = mkId('3'); var mine = F.clone(base); mine.rows[0].audioText = 'SRV-UNAVAIL-EDIT'; window.__srvATaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-unavailable-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvAOutcome = await D.drafts.applyForTest(window.__srvATaken); return true; })()
+expect window.__srvAOutcome === 'server-copy'
+expect F.docId() !== mkId('3')
+
+# ---- from here on the server is mocked reachable, via the real "back to
+# this copy" action (the "resumed"/"not-found" cases below re-run
+# detectServer() for real this way, rather than teaching 20g-drafts.js a
+# second server path just for a test) — so the pending-latch case below can
+# actually reach the "waiting on a server" branch instead of the
+# short-circuit above.
+eval (function(){ window.__origFetch = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); if (u.indexOf('api/health') !== -1) return Promise.resolve(new Response(JSON.stringify({ok: true, readOnly: false, authRequired: false, version: 'test'}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/me') !== -1) return Promise.resolve(new Response(JSON.stringify({}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-resumed-1') !== -1) return Promise.resolve(new Response(JSON.stringify({id: 'srv-resumed-1', rev: 5, state: {schema: 2, docId: mkId('e'), title: 'Server Doc', rows: [{id: 'r1', audioText: 'SERVER SIDE R1', visualText: '', visualImage: null}], comments: []}}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-notfound-1') !== -1) return Promise.resolve(new Response(JSON.stringify({error: 'not-found'}), {status: 404, headers: {'content-type': 'application/json'}})); return window.__origFetch(url, opts); }; D.drafts.setTiming({serverWait: 300}); return true; })()
+jsclick #btn-file
+jsclick #menu-servers
+wait !document.getElementById('connect-modal').hidden
+jsclick [data-connect-action="back"]
+wait !document.getElementById('menu-server-open').hidden
+
+# =============================================================================
+# the pending latch: a recovered SERVER draft that cannot sign in yet holds
+# draftRestorePending open indefinitely (K's own report), which is exactly
+# what makes this a reliable window to test rather than a one-tick race —
+# needs the server reachable (above) so it clears the "unreachable" fast
+# path and actually waits on draftServerSettle instead.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.fakeP10 = D.makeFakeBackend(); D.setBackend(window.fakeP10); var base = F.clone(F.state()); base.docId = mkId('a'); var mine = F.clone(base); mine.rows[0].audioText = 'P10-EDIT'; window.__p10Taken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'p10-pending-doc', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; return true; })()
+eval (function(){ window.__p10Log0 = window.fakeP10._draftLog.length; window.__p10P = D.drafts.applyForTest(window.__p10Taken); window.__p10DuringSync = D.drafts.restorePending(); return true; })()
+expect window.__p10DuringSync === true
+wait !document.getElementById('draft-pending-banner').hidden
+expect D.drafts.restorePending() === true
+eval (async function(){ window.__p10FlushResult = await D.drafts.flushNow(); return true; })()
+expect window.fakeP10._draftLog.filter(function(e){ return e.op === 'discard'; }).length === 0
+eval (async function(){ window.__p10Eligible = await window.__onboarding.eligible(); return true; })()
+expect window.__p10Eligible === false
+eval (function(){ D.markDirtyForTest(); return true; })()
+expect window.fakeP10._lastDocState
+expect window.fakeP10._lastDocState.dirty === true
+
+# ---- resumed: the override merges into what the mocked server holds -------
+eval (function(){ sessionStorage.setItem('splitpage-server-resume', JSON.stringify({id: 'unrelated-doc', rev: 1})); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify({at: new Date().toISOString(), by: 'Tester', base: null, mine: {schema: 2, docId: mkId('u'), title: 'Unrelated', rows: [{id: 'z1', audioText: 'unrelated work', visualText: '', visualImage: null}], comments: []}})); return true; })()
+eval (function(){ window.fakeSrvR = D.makeFakeBackend(); D.setBackend(window.fakeSrvR); var mine = F.clone(F.state()); mine.docId = mkId('e'); mine.rows[0].audioText = 'MINE SERVER EDIT'; window.__srvRTaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-resumed-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvRP = D.drafts.applyForTest(window.__srvRTaken); return true; })()
+jsclick #btn-file
+jsclick #menu-servers
+wait !document.getElementById('connect-modal').hidden
+jsclick [data-connect-action="back"]
+eval (async function(){ window.__srvROutcome = await window.__srvRP; return true; })()
+expect window.__srvROutcome === 'server-resumed'
+expect /^d[0-9a-f]{32}$/.test(F.docId())
+expect sessionStorage.getItem('splitpage-server-resume') === JSON.stringify({id: 'unrelated-doc', rev: 1})
+eval (function(){ window.__srvUnrelatedStash = sessionStorage.getItem('splitpage-conflict-stash'); return true; })()
+expect window.__srvUnrelatedStash.indexOf('unrelated work') !== -1
+
+# ---- not-found: the server document is gone → an unsaved copy, named -----
+jsclick #btn-file
+jsclick #menu-servers
+wait !document.getElementById('connect-modal').hidden
+jsclick [data-connect-action="back"]
+wait !document.getElementById('menu-server-open').hidden
+eval (function(){ window.fakeSrvN = D.makeFakeBackend(); D.setBackend(window.fakeSrvN); var mine = F.clone(F.state()); mine.docId = mkId('f'); mine.rows[0].audioText = 'MINE NOTFOUND EDIT'; window.__srvNTaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-notfound-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvNP = D.drafts.applyForTest(window.__srvNTaken); return true; })()
+jsclick #btn-file
+jsclick #menu-servers
+wait !document.getElementById('connect-modal').hidden
+jsclick [data-connect-action="back"]
+eval (async function(){ window.__srvNOutcome = await window.__srvNP; return true; })()
+expect window.__srvNOutcome === 'server-copy'
+expect F.docId() !== mkId('f')
+eval (function(){ var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__srvNToast = toasts[toasts.length - 1].textContent; return true; })()
+expect window.__srvNToast.indexOf('no longer on the server') !== -1
+eval (function(){ window.fetch = window.__origFetch; return true; })()
+jsclick [data-connect-action="close"]
+wait document.getElementById('connect-modal').hidden
+
+# =============================================================================
+# sanitisation of a hostile draft stateJson
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.fakeSan = D.makeFakeBackend(); D.setBackend(window.fakeSan); window.__sanHostile = JSON.stringify({schema: 2, title: '<img src=x onerror=alert(1)>', docId: '../../etc/passwd', rows: [{id: 'r1', audioText: 'SAN-EDIT', visualText: '', visualImage: null}], comments: []}); window.__sanTaken = { header: { docIdWrittenOut: true, origin: { kind: 'untitled' } }, stateJson: window.__sanHostile, baseJson: null }; window.__sanOutcome = await D.drafts.applyForTest(window.__sanTaken); return true; })()
+expect window.__sanOutcome === 'applied'
+expect /^d[0-9a-f]{32}$/.test(F.docId())
+expect F.docId() !== '../../etc/passwd'
+expect F.state().rows[0].audioText === 'SAN-EDIT'
+
+# =============================================================================
+# browser inertness: once the real (null) backend is back, nothing here does
+# anything — the same guarantee every other suite in this harness relies on
+# without ever mentioning drafts.
+# =============================================================================
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+expect true
+eval (async function(){ D.markDirtyForTest(); window.__inertFlush = await D.drafts.flushNow(); return true; })()
+expect window.__inertFlush.ok === true
+expect D.drafts.status().restorePending === false
+expect D.drafts.status().failures === 0
+
+quit
