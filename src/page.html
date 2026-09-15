@@ -151,6 +151,16 @@
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
   </div>
 
+  <!-- Browser build only: an always-available, dismissable pointer at the
+       desktop app (20a-update.js renderDesktopAppNotice). Same class shape
+       as #update-bar so it reuses those rules and stacks the same way. -->
+  <div class="update-bar" id="desktop-app-bar" hidden>
+    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
+    <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
+    <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
+  </div>
+
   <div class="tagging-help" id="tagging-help" hidden>
     <div class="tagging-help-head">
       <span class="tagging-help-title">Tagging quick reference</span>

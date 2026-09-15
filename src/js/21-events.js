@@ -597,6 +597,13 @@
     loadUpdateStatus();
     var updateDismiss = document.getElementById("update-bar-dismiss");
     if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
+
+    /* Not part of loadUpdateStatus()'s fetch chain on purpose: this must show
+       on a plain file:// open and wherever update-status.json 404s, neither
+       of which ever calls back into that promise. */
+    renderDesktopAppNotice();
+    var desktopAppDismiss = document.getElementById("desktop-app-bar-dismiss");
+    if (desktopAppDismiss) desktopAppDismiss.addEventListener("click", dismissDesktopAppNotice);
     wireTouchSelection();
 
     /* On touch the ghost suggestion is a tap target (the Tab key it stands
