@@ -136,4 +136,51 @@ expect H.backendName() === 'idb'
 eval (function(){ D.restoreBackend(); return true; })()
 expect !window.splitpageDesktop
 
+# ---- Import app data (X2/X3) writes through the desktop history bridge ----
+# __appDataTest.importText (20h-appdata.js) reaches storage only through
+# importHistoryBundle (03a-history-store.js) -> resolveHistoryBackend(),
+# which picks the desktop backend the instant DESKTOP.historyPut exists — so
+# with a fresh history-capable fake backend in place, an import must land in
+# the fake's in-memory store and never touch this page's real IndexedDB body
+# count. Deliberately never clicks '#import-app-data-input' (invariant #33) —
+# importText is called directly, the same way a real file's text would reach
+# it after FileReader.
+#
+eval (function(){window.fakeI = D.makeFakeBackend({history:true}); D.setBackend(window.fakeI); return typeof window.fakeI.historyPut === 'function' && typeof window.fakeI._historyDump === 'function';})()
+expect true
+eval (async function(){ await H.forceBackend('idb'); window.__idbBodyBefore = await H.bodyCount(null); await H.forceBackend(null); return window.__idbBodyBefore; })()
+eval (function(){ window.__impId = 'd' + 'b'.repeat(32); window.__impBundle = { format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{ docs:[{ docId: window.__impId, title:'Shim Import', snapshots:[{ meta:{ id:'simp1', label:'Shim Snap', at:new Date(1000).toISOString(), atMs:1000, by:'X', rows:1, title:'Shim Import', kind:'snapshot' }, stateJson: JSON.stringify({rows:[{id:'r1',audioText:'shim-import'}], title:'Shim Import', docId: window.__impId}) }] }], older:[] }, bookmarks:[], prefs:{} }; return window.__impBundle; })()
+eval (async function(){ window.__impResult = await window.__appDataTest.importText(JSON.stringify(window.__impBundle)); return window.__impResult; })()
+expect window.__impResult.ok === true
+expect window.__impResult.history.added === 1
+eval (function(){ window.__impDump = window.fakeI._historyDump(); return Object.keys(window.__impDump); })()
+expect window.__impDump[window.__impId].length === 1
+expect window.__impDump[window.__impId][0].stateJson.indexOf('shim-import') !== -1
+eval (async function(){ await H.forceBackend('idb'); window.__idbBodyAfter = await H.bodyCount(null); await H.forceBackend(null); return window.__idbBodyAfter; })()
+expect window.__idbBodyAfter === window.__idbBodyBefore
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
+# ---- a desktop list() that never resolves counts the doc as failed --------
+# The X2 follow-up: importHistoryBundle calls backend.list(id, {strict:true})
+# before ever writing a document's snapshots, so it can tell "no history yet"
+# apart from "could not read it" — desktopHistoryBackend.list answers null
+# (not empty) on a strict timeout, rejection, or malformed answer, and
+# importHistoryBundle treats null as "leave this document alone", counting
+# every one of its snapshots as failed rather than guessing and risking a
+# genuine local snapshot getting trimmed away. __historyTest.setDesktopTimeout
+# shortens the 30s real timeout so this does not hang the suite.
+eval (function(){window.fakeT = D.makeFakeBackend({history:true}); fakeT.historyList = function(){ return new Promise(function(){}); }; D.setBackend(fakeT); return typeof fakeT.historyPut === 'function';})()
+expect true
+eval (function(){ H.setDesktopTimeout(200); return true; })()
+eval (function(){ window.__toId = 'd' + 'c'.repeat(32); window.__toDoc = { docId: window.__toId, title: 'Timeout Doc', snapshots: [{ meta: { id:'stimeout1', label:'Timeout Snap', at:new Date(1000).toISOString(), atMs:1000, by:'X', rows:1, title:'Timeout Doc', kind:'snapshot' }, stateJson: JSON.stringify({rows:[{id:'r1',audioText:'timeout-data'}], title:'Timeout Doc', docId: window.__toId}) }] }; return window.__toDoc; })()
+eval (async function(){ window.__toResult = await H.importBundle({ docs: [window.__toDoc], older: [] }); return window.__toResult; })()
+expect window.__toResult.failed === 1
+expect window.__toResult.added === 0
+expect window.__toResult.docs === 0
+eval (function(){ window.__toDump = fakeT._historyDump(); return window.__toDump[window.__toId]; })()
+expect window.__toDump[window.__toId] === undefined
+eval (function(){ H.setDesktopTimeout(null); D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
 quit
