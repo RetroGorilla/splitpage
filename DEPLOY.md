@@ -324,6 +324,20 @@ binary that no x64 PC could start: IExpress stamps the architecture of the
   but the release recipe currently still uses IExpress for the old setup.exe.
   Whether these Electron-built installers replace it or run alongside it is pending.
 
+### Tabs build (2026-09-14) and the ARM64 dev pin
+
+Since the tabs build, the title-bar tab strip (`desktop/tabstrip/`: `index.html`,
+`tabstrip.js`, `tabstrip.css`) is a second privileged origin
+(`splitpage://tabstrip`) served from files on disk rather than from the asar —
+`electron-builder.yml`'s `extraResources` ships them to
+`resources/splitpage/tabstrip` in the packaged app, staged there by
+`stage.mjs`, and `main.js` resolves that same path (vs. `__dirname/tabstrip`
+in dev) so both layouts serve identical files under the same allowlist. This
+machine's dev Electron is pinned to a native ARM64 binary rather than the x64
+build `npm install` fetches by default (`desktop/.npmrc`, `arch=arm64` — see
+HANDOFF.md §2); `desktop/test/smoke.mjs`'s dev-target runs, including the
+tabs cases, execute against that native ARM64 Electron, not under emulation.
+
 ### Where they differ from the current release recipe
 
 The current `start.bat` + `package.mjs` + `installer/install.ps1` recipe ships a
