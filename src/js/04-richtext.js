@@ -127,6 +127,22 @@
         destParent.appendChild(tagSpan);
         return;
       }
+      /* A b-roll marker (08c-broll.js). Only the keyword itself is markup —
+         the shot's description is ordinary prose after it — so all this
+         span carries is the id that ties the line to its record. Atomic for
+         the same reason a tag is: the caret must never be able to land
+         inside the marker and type it into no longer being one. */
+      if (tag === "SPAN" && node.classList && node.classList.contains("broll-key")) {
+        var brollText = (node.textContent || "").trim();
+        if (!BROLL_MARKER_RE.test(brollText)) { walkSanitize(node, destParent); return; }
+        var brollSpan = document.createElement("span");
+        brollSpan.className = "broll-key";
+        brollSpan.setAttribute("data-broll-id", safeId(node.getAttribute("data-broll-id") || "", "bs"));
+        brollSpan.setAttribute("contenteditable", "false");
+        brollSpan.appendChild(document.createTextNode(brollText));
+        destParent.appendChild(brollSpan);
+        return;
+      }
       if (tag === "SPAN" && node.classList && node.classList.contains("cmt-anchor")) {
         var cmtId = safeId(node.getAttribute("data-cmt") || "", "c");
         var anchorSpan = document.createElement("span");

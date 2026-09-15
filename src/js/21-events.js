@@ -326,6 +326,7 @@
     if (!cellEl) return;
     if (!isScriptCell(cellEl)) return;
     maybeAutoTagShortcut(e, cellEl);
+    maybeCaptureBroll(e, cellEl);
     syncFieldFromDom(cellEl);
     keepCaretInView(cellEl);
     /* Keeps the production count/panel in sync with edits that change which
@@ -337,6 +338,11 @@
        tags back means parsing every field of every row: fine once, but not
        twice per keystroke on a long script. */
     scheduleProductionRefresh();
+    /* Deleting a marker, or typing past one, changes what the b-roll list
+       says as surely as the tag scan — and for the same reason it is
+       debounced: reading the markers back means parsing every visual field
+       in the script. */
+    scheduleBrollRefresh();
     scheduleWriterStats();
     /* Any script edit can change this, not just an edit to a visual cell:
        typing "[boom pole]" into the audio column puts a new item in the
@@ -838,6 +844,8 @@
       renderGearList();
     });
     document.getElementById("gear-quickadd-save").addEventListener("click", applyGearQuickAdd);
+
+    wireBrollPanel();
 
     document.getElementById("server-modal").addEventListener("click", function (e) {
       if (e.target.id === "server-modal") { closeServerPicker(); return; }

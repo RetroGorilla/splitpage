@@ -426,6 +426,7 @@
         comments: mergedComments,
         people: mergePeople(mine.people, theirs.people),
         productionTags: mergeProductionTags(mine.productionTags, theirs.productionTags),
+        brollShots: mergeBrollShots(mine.brollShots, theirs.brollShots),
         wordsPerMinute: theirs.wordsPerMinute || mine.wordsPerMinute || DEFAULT_WPM,
         rev: Math.max(theirs.rev || 0, mine.rev || 0) + 1,
         lastEditedBy: theirs.lastEditedBy || mine.lastEditedBy || null,
@@ -483,6 +484,35 @@
       if (tagStatusRank(t.status) > tagStatusRank(existing.status)) {
         existing.status = (tagStatus(t.status) || TAG_STATUSES[0]).id;
       }
+    });
+    return out;
+  }
+
+  /* The b-roll list merges by id, not by name — two people can legitimately
+     be tracking two different shots that read the same, and a rename on one
+     side must not fuse them. Otherwise the rules are the production
+     registry's: an empty field never overwrites a filled one, and a status
+     can only move forward, so a merge can never un-shoot something somebody
+     has already been out and shot. "Needs attention" is the one flag that
+     survives from either side — if one of them thinks it needs another look,
+     it needs another look. */
+  function mergeBrollShots(mineShots, theirShots) {
+    var out = [], byId = {};
+    (theirShots || []).forEach(function (b) {
+      if (!b || !b.id || byId[b.id]) return;
+      byId[b.id] = cloneState(b);
+      out.push(byId[b.id]);
+    });
+    (mineShots || []).forEach(function (b) {
+      if (!b || !b.id) return;
+      var existing = byId[b.id];
+      if (!existing) { byId[b.id] = cloneState(b); out.push(byId[b.id]); return; }
+      if (!existing.owner && b.owner) existing.owner = b.owner;
+      if (!existing.notes && b.notes) existing.notes = b.notes;
+      if (!existing.audioRef && b.audioRef) existing.audioRef = b.audioRef;
+      if (!existing.location && b.location) existing.location = b.location;
+      if (b.status === "shot") existing.status = "shot";
+      if (b.reshoot) existing.reshoot = true;
     });
     return out;
   }
@@ -615,7 +645,7 @@
 
   /* ---- version history panel ---- */
 
-  var SIDE_PANEL_IDS = ["comments-panel", "production-panel", "history-panel", "gear-panel"];
+  var SIDE_PANEL_IDS = ["comments-panel", "production-panel", "history-panel", "gear-panel", "broll-panel"];
 
   /* All the side panels are fixed over the same right-hand strip, so only
      one can be open at a time — opening one always closes the others first,
