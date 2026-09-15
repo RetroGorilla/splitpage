@@ -1013,6 +1013,7 @@
       if (panel.hidden) openCommentsPanel(); else closeCommentsPanel();
     });
     document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
+    initCommentsPanelResize();
     document.getElementById("comments-hide-resolved").addEventListener("change", function () { captureReplyDrafts(); renderComments(); });
     var commentsSortSelect = document.getElementById("comments-sort");
     commentsSortSelect.value = commentSortMode;

@@ -1458,6 +1458,11 @@
 
   @media (min-width: 1100px) {
     body.panel-open #root { padding-right: 420px; }
+    /* When the (resizable) comments panel specifically is open, match its
+       current width instead of the other panels' fixed 420px. */
+    body.panel-open:has(#comments-panel:not([hidden])) #root {
+      padding-right: calc(min(var(--comments-panel-width, 400px), 100vw) + 20px);
+    }
   }
   .comments-panel {
     position: fixed;
@@ -1473,6 +1478,27 @@
     transition: transform 0.18s ease;
   }
   .comments-panel[hidden] { display: none; }
+
+  /* #comments-panel alone gets a user-resizable width, driven by
+     --comments-panel-width (set from JS, persisted per viewer). Other
+     panels sharing .comments-panel (production, gear, broll, history)
+     keep the fixed width above. */
+  #comments-panel {
+    width: min(var(--comments-panel-width, 400px), 100vw);
+    position: relative;
+  }
+  .comments-panel-resize-handle {
+    position: absolute;
+    top: 0; bottom: 0; left: -4px;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 5;
+    touch-action: none;
+  }
+  .comments-panel-resize-handle:hover,
+  .comments-panel-resize-handle.is-dragging {
+    background: color-mix(in srgb, var(--visual) 25%, transparent);
+  }
   .comments-panel-head {
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 18px 12px;
@@ -2052,6 +2078,8 @@
     .stat-chips { margin-left: 0; }
 
     .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
+    /* panel is full viewport width here, so there's nothing to drag against */
+    .comments-panel-resize-handle { display: none; }
 
     /* one column of scenes; the audio cell keeps its orange accent but each
        cell also says what it is */
