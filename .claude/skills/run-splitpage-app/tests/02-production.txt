@@ -71,5 +71,19 @@ sleep 300
 expect document.querySelectorAll('.tag-entity.is-selected').length == 0
 expect document.getElementById('production-bulk').hidden
 
+# --- pasting a copied tag into a different scene keeps it a live tag -------
+# onRootPaste used to force every paste to plain text (even the app's own
+# .tag-anchor markup copied from one cell), so a tag never survived a
+# copy/paste into another scene. Simulate the clipboard the browser would
+# actually hand a paste of a tagged selection: an HTML flavor carrying the
+# tag-anchor span, same as sanitizeHtml already accepts everywhere else.
+jsclick .add-row-bar [data-action="add-row"]
+sleep 500
+eval (function(){var cell=document.querySelector('#rows .row:last-child .visual-cell .cell-editable');cell.focus();var dt=new DataTransfer();dt.setData('text/plain','duct tape');dt.setData('text/html','<span class="tag-anchor" data-tag-cat="prop" data-tag-name="duct tape">duct tape</span>');var evt=new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt});cell.dispatchEvent(evt);return true;})()
+sleep 500
+expect document.querySelector('#rows .row:last-child .visual-cell .tag-anchor[data-tag-name="duct tape"]') != null
+sleep 400
+expect document.querySelectorAll('#production-list .tag-entity').length == 4
+
 shot 02-production
 quit
