@@ -124,11 +124,17 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  #root { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+  #root { max-width: 1800px; margin: 0 auto; padding: 28px clamp(24px, 4vw, 96px) 80px; }
 
   a { color: inherit; }
   button { font-family: var(--font-body); }
-  ::selection { background: var(--visual-soft); }
+  /* Both properties, not just background: the pseudo-element's initial
+     value for `color` is not guaranteed to be the originating element's
+     own color (that's a Chromium behaviour, not a spec guarantee), so a
+     selection background alone risks pairing a browser-default text
+     colour with a background chosen for the opposite theme — exactly
+     the dark-mode "typed text disappears into the selection" report. */
+  ::selection { background: var(--visual-soft); color: var(--text); }
 
   /* ---------- header ---------- */
   .topbar {
@@ -1492,6 +1498,11 @@
 
   @media (min-width: 1100px) {
     body.panel-open #root { padding-right: 420px; }
+    /* When the (resizable) comments panel specifically is open, match its
+       current width instead of the other panels' fixed 420px. */
+    body.panel-open:has(#comments-panel:not([hidden])) #root {
+      padding-right: calc(min(var(--comments-panel-width, 400px), 100vw) + 20px);
+    }
   }
   .comments-panel {
     position: fixed;
@@ -1507,6 +1518,26 @@
     transition: transform 0.18s ease;
   }
   .comments-panel[hidden] { display: none; }
+
+  /* #comments-panel alone gets a user-resizable width, driven by
+     --comments-panel-width (set from JS, persisted per viewer). Other
+     panels sharing .comments-panel (production, gear, broll, history)
+     keep the fixed width above. */
+  #comments-panel {
+    width: min(var(--comments-panel-width, 400px), 100vw);
+  }
+  .comments-panel-resize-handle {
+    position: absolute;
+    top: 0; bottom: 0; left: -4px;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 5;
+    touch-action: none;
+  }
+  .comments-panel-resize-handle:hover,
+  .comments-panel-resize-handle.is-dragging {
+    background: color-mix(in srgb, var(--visual) 25%, transparent);
+  }
   .comments-panel-head {
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 18px 12px;
@@ -2086,6 +2117,8 @@
     .stat-chips { margin-left: 0; }
 
     .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
+    /* panel is full viewport width here, so there's nothing to drag against */
+    .comments-panel-resize-handle { display: none; }
 
     /* one column of scenes; the audio cell keeps its orange accent but each
        cell also says what it is */
@@ -3134,6 +3167,7 @@
 </div>
 
 <div class="comments-panel" id="comments-panel" hidden>
+  <div class="comments-panel-resize-handle" id="comments-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Comments</h2>
     <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close">×</button>
@@ -7836,6 +7870,22 @@ node update.mjs           # download and verify it</code></pre>
     });
   }
 
+  /* A tag/b-roll span is contenteditable="false" — an atomic unit the caret
+     skips over rather than enters. That's fine wherever something follows
+     it, but as the very last node in a cell there is nothing after it for
+     contenteditable to put the caret AT either: no click target, no
+     ArrowRight/End destination, nowhere for typing to land. A trailing
+     zero-width space is real DOM the caret can actually sit in, invisible,
+     and harmless if left in place — syncFieldFromDom strips it back out
+     before anything is saved (see there), so it never reaches stored text
+     or an export. */
+  function ensureTrailingCaretSpot(container) {
+    var last = container && container.lastChild;
+    if (last && last.nodeType === 1 && last.getAttribute && last.getAttribute("contenteditable") === "false") {
+      container.appendChild(document.createTextNode("​"));
+    }
+  }
+
   /* ================= html -> markdown (for export) ================= */
 
   function walkToMd(node) {
@@ -8019,6 +8069,7 @@ node update.mjs           # download and verify it</code></pre>
       var html = "";
       for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
       rowsEl.innerHTML = html;
+      rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
     }
 
     if (refocus) {
@@ -8067,8 +8118,12 @@ node update.mjs           # download and verify it</code></pre>
     var field = cellEl.getAttribute("data-field");
     var idx = findRowIndex(id);
     if (idx !== -1) {
-      if (state.rows[idx][field] !== cellEl.innerHTML) {
-        state.rows[idx][field] = cellEl.innerHTML;
+      /* Strips the zero-width caret spot ensureTrailingCaretSpot() may have
+         appended after a trailing tag/b-roll span — it exists only to give
+         the DOM a place to put the caret and must never reach stored text. */
+      var html = cellEl.innerHTML.indexOf("​") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/​/g, "");
+      if (state.rows[idx][field] !== html) {
+        state.rows[idx][field] = html;
         stampRow(state.rows[idx]);
         markDirty();
       }
@@ -8355,6 +8410,7 @@ node update.mjs           # download and verify it</code></pre>
   /* ================= row actions ================= */
 
   function addRow(afterId) {
+    lastSplitUndo = null;
     var row = { id: makeId(), visualText: "", visualImage: null, audioText: "",
                 status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
     if (afterId) {
@@ -8405,6 +8461,10 @@ node update.mjs           # download and verify it</code></pre>
     if (!sel.rangeCount) return null;
     var range = sel.getRangeAt(0);
     if (!cellEl.contains(range.startContainer)) return null;
+    /* captured before any mutation below — the field's whole content as it
+       stood the instant the split was requested, for undoSplitCellField */
+    var originalHtml = sanitizeHtml(cellEl.innerHTML);
+    var rowId = state.rows[idx].id;
     if (!range.collapsed) range.deleteContents();
 
     var tail = document.createRange();
@@ -8423,7 +8483,61 @@ node update.mjs           # download and verify it</code></pre>
     /* half the field's text just moved to a new row — any comment anchored
        in that half has to move with it */
     repointCommentsForRows([state.rows[idx], created]);
-    return { idx: idx, created: created, field: field };
+    return { idx: idx, created: created, field: field, rowId: rowId, originalHtml: originalHtml };
+  }
+
+  /* One-level undo for splitCellField (Alt+Enter). The DOM rebuild in
+     render() tears down the contenteditable the browser's own undo history
+     lives on, so native Ctrl+Z has nothing left to act on after a split —
+     this is the app-level replacement, scoped tightly enough that it never
+     clobbers work done after the split it remembers:
+       - any other row-structural edit (add/delete/move/another split)
+         clears it, so a stale entry can never resurrect a row a later
+         action already accounted for;
+       - undoSplitCellField itself refuses unless both halves still hold
+         exactly what the split put there, so text typed into either cell
+         afterwards is never silently discarded. */
+  var lastSplitUndo = null;
+
+  function splitCellField(cellEl) {
+    var res = splitRowFieldCore(cellEl);
+    if (!res) return;
+    lastSplitUndo = {
+      rowId: res.rowId,
+      field: res.field,
+      originalHtml: res.originalHtml,
+      createdId: res.created.id,
+      remainderHtml: state.rows[res.idx][res.field],
+      createdHtml: res.created[res.field]
+    };
+    markDirty();
+    render();
+    focusRowField(res.created.id, res.field, 0);
+  }
+
+  /* Ctrl/Cmd+Z right after Alt+Enter: puts the field back together on the
+     original row and removes the row the split created. Returns true when it
+     actually undid something, so the caller knows to swallow the keystroke
+     rather than let a native undo fight it. */
+  function undoSplitCellField() {
+    var undo = lastSplitUndo;
+    if (!undo) return false;
+    lastSplitUndo = null;
+    var rowIdx = findRowIndex(undo.rowId);
+    var createdIdx = findRowIndex(undo.createdId);
+    if (rowIdx === -1 || createdIdx === -1) return false;
+    /* either half touched since the split (typed into, tagged, formatted) —
+       undoing now would throw that edit away, so decline instead */
+    if (state.rows[rowIdx][undo.field] !== undo.remainderHtml) return false;
+    if (state.rows[createdIdx][undo.field] !== undo.createdHtml) return false;
+    var removed = state.rows.splice(createdIdx, 1)[0];
+    state.rows[rowIdx][undo.field] = undo.originalHtml;
+    stampRow(state.rows[rowIdx]);
+    repointCommentsForRows([state.rows[rowIdx], removed]);
+    markDirty();
+    render();
+    focusRowField(undo.rowId, undo.field, 0);
+    return true;
   }
 
   /* Land the caret at a plain-text offset inside a specific field of a
@@ -8436,18 +8550,6 @@ node update.mjs           # download and verify it</code></pre>
     cell.focus();
     placeCaretAtTextOffset(cell, offset || 0);
     cell.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
-  /* Alt+Enter: the split view's version of the writer's plain Enter — see
-     splitRowFieldCore. Its own shortcut rather than folding into Ctrl+Enter,
-     which already means something else here (a new, empty scene) and is
-     tested and muscle-memorised as that. */
-  function splitCellField(cellEl) {
-    var res = splitRowFieldCore(cellEl);
-    if (!res) return;
-    markDirty();
-    render();
-    focusRowField(res.created.id, res.field, 0);
   }
 
   /* ---- drag to reorder ----
@@ -8471,6 +8573,7 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function moveRowTo(id, targetId, after) {
+    lastSplitUndo = null;
     var from = findRowIndex(id);
     var to = findRowIndex(targetId);
     if (from === -1 || to === -1 || from === to) return;
@@ -8487,6 +8590,7 @@ node update.mjs           # download and verify it</code></pre>
   function deleteRow(id) {
     var idx = findRowIndex(id);
     if (idx === -1) return;
+    lastSplitUndo = null;
     state.rows.splice(idx, 1);
     markDirty();
     render();
@@ -8495,6 +8599,7 @@ node update.mjs           # download and verify it</code></pre>
   function moveRow(id, dir) {
     var idx = findRowIndex(id);
     var j = idx + dir;
+    lastSplitUndo = null;
     if (idx === -1 || j < 0 || j >= state.rows.length) return;
     var tmp = state.rows[idx];
     state.rows[idx] = state.rows[j];
@@ -9042,6 +9147,9 @@ node update.mjs           # download and verify it</code></pre>
       var landed = afterSel.getRangeAt(0).startContainer;
       var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
       if (tagEl) {
+        /* A tag typed at the very end of the cell leaves nothing after it to
+           put the caret at — see ensureTrailingCaretSpot's note. */
+        ensureTrailingCaretSpot(tagEl.parentNode);
         var out = document.createRange();
         out.setStartAfter(tagEl);
         out.collapse(true);
@@ -9173,6 +9281,7 @@ node update.mjs           # download and verify it</code></pre>
       var landed = afterSel.getRangeAt(0).startContainer;
       var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
       if (tagEl) {
+        ensureTrailingCaretSpot(tagEl.parentNode);
         var out = document.createRange();
         out.setStartAfter(tagEl);
         out.collapse(true);
@@ -9440,6 +9549,7 @@ node update.mjs           # download and verify it</code></pre>
       var landed = after.getRangeAt(0).startContainer;
       var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
       if (tagEl) {
+        ensureTrailingCaretSpot(tagEl.parentNode);
         var out = document.createRange();
         out.setStartAfter(tagEl);
         out.collapse(true);
@@ -11088,6 +11198,79 @@ node update.mjs           # download and verify it</code></pre>
     try { localStorage.setItem(COMMENTS_SORT_KEY, commentSortMode); } catch (e) {}
     captureReplyDrafts();
     renderComments();
+  }
+
+  /* ---- comments panel width (drag handle) ----
+     Per-viewer preference, like the sort mode above — not part of the
+     document, so it lives in localStorage rather than state. */
+  var COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
+  var COMMENTS_PANEL_WIDTH_DEFAULT = 400;
+  var COMMENTS_PANEL_WIDTH_MIN = 280;
+  var COMMENTS_PANEL_WIDTH_MAX = 720;
+
+  function clampCommentsPanelWidth(w) {
+    if (!isFinite(w)) return COMMENTS_PANEL_WIDTH_DEFAULT;
+    return Math.max(COMMENTS_PANEL_WIDTH_MIN, Math.min(COMMENTS_PANEL_WIDTH_MAX, Math.round(w)));
+  }
+  function readCommentsPanelWidth() {
+    try {
+      var raw = parseFloat(localStorage.getItem(COMMENTS_PANEL_WIDTH_KEY));
+      return isFinite(raw) ? clampCommentsPanelWidth(raw) : COMMENTS_PANEL_WIDTH_DEFAULT;
+    } catch (e) { return COMMENTS_PANEL_WIDTH_DEFAULT; }
+  }
+  function saveCommentsPanelWidth(w) {
+    try { localStorage.setItem(COMMENTS_PANEL_WIDTH_KEY, String(w)); } catch (e) {}
+  }
+  function applyCommentsPanelWidth(w) {
+    document.getElementById("comments-panel").style.setProperty("--comments-panel-width", w + "px");
+  }
+
+  function initCommentsPanelResize() {
+    var panel = document.getElementById("comments-panel");
+    var handle = document.getElementById("comments-panel-resize-handle");
+    if (!panel || !handle) return;
+    applyCommentsPanelWidth(readCommentsPanelWidth());
+
+    var dragging = false;
+    var startX = 0;
+    var startWidth = COMMENTS_PANEL_WIDTH_DEFAULT;
+
+    function onMove(e) {
+      if (!dragging) return;
+      var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      /* Panel is anchored to the right edge, so dragging left (negative dx)
+         widens it. */
+      var w = clampCommentsPanelWidth(startWidth + (startX - clientX));
+      applyCommentsPanelWidth(w);
+    }
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove("is-dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onUp);
+      var current = parseFloat(getComputedStyle(panel).getPropertyValue("--comments-panel-width")) || COMMENTS_PANEL_WIDTH_DEFAULT;
+      saveCommentsPanelWidth(clampCommentsPanelWidth(current));
+    }
+    function onDown(e) {
+      dragging = true;
+      startX = e.touches ? e.touches[0].clientX : e.clientX;
+      startWidth = readCommentsPanelWidth();
+      handle.classList.add("is-dragging");
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      document.addEventListener("touchmove", onMove, { passive: false });
+      document.addEventListener("touchend", onUp);
+      e.preventDefault();
+    }
+    handle.addEventListener("mousedown", onDown);
+    handle.addEventListener("touchstart", onDown, { passive: false });
+    handle.addEventListener("dblclick", function () {
+      applyCommentsPanelWidth(COMMENTS_PANEL_WIDTH_DEFAULT);
+      saveCommentsPanelWidth(COMMENTS_PANEL_WIDTH_DEFAULT);
+    });
   }
 
   function formatTimestamp(iso) {
@@ -16258,6 +16441,7 @@ node update.mjs           # download and verify it</code></pre>
       var html = "";
       for (var i = 0; i < state.rows.length; i++) html += writerBlockHtml(state.rows[i], i);
       doc.innerHTML = html;
+      doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
     }
     writerLastCell = null;
     /* a no-op if that scene is gone — the callers that know better (a split,
@@ -21714,7 +21898,20 @@ node update.mjs           # download and verify it</code></pre>
     var cellEl = e.target.closest && e.target.closest(".cell-editable");
     if (!cellEl) return;
     e.preventDefault();
-    var text = (e.clipboardData || window.clipboardData).getData("text/plain");
+    var cd = e.clipboardData || window.clipboardData;
+    /* Prefer the HTML flavor, but only once it has been through
+       sanitizeHtml/walkSanitize — the same gate every other route into a
+       cell's markup goes through. That keeps a tag copied from one scene
+       (a .tag-anchor span with its data-tag-cat/data-tag-name) intact when
+       pasted into another, without reopening the door to raw HTML pasted in
+       from outside Splitpage (a foreign <script>, inline style, etc.) that
+       plain-text-only paste used to close off entirely. */
+    var html = cd.getData("text/html");
+    if (html) {
+      var clean = sanitizeHtml(html);
+      if (clean) { document.execCommand("insertHTML", false, clean); return; }
+    }
+    var text = cd.getData("text/plain");
     document.execCommand("insertText", false, text);
   }
 
@@ -21731,6 +21928,16 @@ node update.mjs           # download and verify it</code></pre>
     }
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
+    /* Ctrl/Cmd+Z right after Alt+Enter: render() rebuilt the contenteditable
+       the split happened in, so the browser's own undo history has nothing
+       left to act on. undoSplitCellField() is the app-level replacement —
+       see its comment in 06-rows.js for why it is safe to try unconditionally
+       here (it only actually reverts when nothing has touched either half
+       since the split, and is a no-op otherwise). Only Ctrl+Z, not
+       Ctrl+Shift+Z — that is a redo request, which this never was. */
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
+      if (undoSplitCellField()) { e.preventDefault(); return; }
+    }
     /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
        The untagged-mention prompt only ever gets the key when nothing more
        explicit is in flight. */
@@ -22349,6 +22556,7 @@ node update.mjs           # download and verify it</code></pre>
       if (panel.hidden) openCommentsPanel(); else closeCommentsPanel();
     });
     document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
+    initCommentsPanelResize();
     document.getElementById("comments-hide-resolved").addEventListener("change", function () { captureReplyDrafts(); renderComments(); });
     var commentsSortSelect = document.getElementById("comments-sort");
     commentsSortSelect.value = commentSortMode;
