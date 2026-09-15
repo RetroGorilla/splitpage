@@ -159,9 +159,10 @@
   <div class="update-bar" id="update-bar" hidden>
     <span class="update-bar-icon" aria-hidden="true">⬆</span>
     <span id="update-bar-text"></span>
-    <!-- Desktop-only: 20a-update.js shows this and points it at the release
-         page (DESKTOP.openExternal) instead of the launcher's restart copy —
-         there is no in-place installer to restart in the desktop build. -->
+    <!-- 20a-update.js owns this button entirely: whether it shows at all, its
+         label, and what it does. Label and handler both change with the state
+         (Download / Install and restart / Try again / Open release page), so
+         the text here is only what it reads before that runs. -->
     <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
   </div>

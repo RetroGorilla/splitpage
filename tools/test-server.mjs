@@ -159,7 +159,13 @@ const s2 = await startServer({
   JOIN_PIN: PIN,
   ALLOW_ORIGINS: ORIGIN + ",null",
   LAUNCH_TOKEN: LAUNCH,
-  HOST: "127.0.0.1"
+  HOST: "127.0.0.1",
+  /* The update-staging route spawns update.mjs, which would otherwise ask
+     GitHub for the latest release and — on a machine with network — actually
+     download it into this checkout's .update/. Pointed at a closed port it
+     fails immediately instead, which is all the route test needs: proof that
+     the route ran the updater and reported its answer. */
+  SPLITPAGE_UPDATE_API: "http://127.0.0.1:9/never"
 });
 
 let token = null;
@@ -262,6 +268,37 @@ try {
     check("...and says whether it could register it", body && typeof body.canRegister === "boolean");
     check("...and whether it already is", body && typeof body.installed === "boolean");
   }
+  /* the staging route: the one launcher route that downloads a release */
+  {
+    const res = await fetch(s2.base + "api/launcher/update/stage", { method: "POST" });
+    eq("launcher/update/stage without the launch header is 404", res.status, 404);
+  }
+  {
+    const res = await fetch(s2.base + "api/launcher/update/stage", {
+      method: "POST", headers: { "x-splitpage-launch": "wrong" }
+    });
+    eq("launcher/update/stage with the wrong launch token is 404", res.status, 404);
+  }
+  {
+    /* POST only: staging is not something a GET (a link, a prefetch, an image
+       src) should ever be able to start. */
+    const res = await fetch(s2.base + "api/launcher/update/stage", {
+      headers: { "x-splitpage-launch": LAUNCH }
+    });
+    eq("launcher/update/stage refuses GET", res.status, 404);
+  }
+  {
+    const res = await fetch(s2.base + "api/launcher/update/stage", {
+      method: "POST", headers: { "x-splitpage-launch": LAUNCH }
+    });
+    const body = await json(res);
+    /* The updater ran and could not reach its update server. That is an
+       answer, not a server fault, so it is a 200 carrying the reason —
+       the page needs to read `error` to say which. */
+    eq("launcher/update/stage with the launch token runs the updater", res.status, 200);
+    check("...and reports the failure rather than staging", !!(body && body.ok === false));
+    check("...naming what went wrong", !!(body && body.message));
+  }
   {
     const res = await fetch(s2.base + "api/launcher/info", {
       headers: { "x-splitpage-launch": LAUNCH, "Origin": ORIGIN }
@@ -288,6 +325,11 @@ try {
     headers: { "x-splitpage-launch": LAUNCH }
   });
   eq("...and so is register", reg.status, 404);
+  const stage = await fetch(s3.base + "api/launcher/update/stage", {
+    method: "POST",
+    headers: { "x-splitpage-launch": LAUNCH }
+  });
+  eq("...and so is update/stage", stage.status, 404);
 } finally {
   s3.stop();
 }

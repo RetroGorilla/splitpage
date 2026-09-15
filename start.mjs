@@ -328,12 +328,18 @@ function writeStatus(extra) {
   try { writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2) + "\n"); } catch { /* read-only dir */ }
 }
 
-writeStatus({ pending: updater ? updater.pending() : null, justUpdated: applied });
+/* `checking` is what tells the page that the answer below is still coming.
+   Without it the page could not tell "no update" from "not looked yet": the
+   boot check is a network round trip and the page routinely finishes loading
+   first, so a fresh launch showed a stale (or blank) verdict and only picked
+   the real one up on the NEXT launch. The page polls while this is true. */
+const willCheck = !has("--no-update-check") && !!updater;
+writeStatus({ pending: updater ? updater.pending() : null, justUpdated: applied, checking: willCheck });
 
 /* Deliberately not awaited: a slow or unreachable update server must never
    delay the app opening. Whatever it finds lands in the file, and the page
-   picks it up on this load or the next one. */
-if (!has("--no-update-check") && updater) {
+   picks it up on this load — it polls while `checking` — or the next one. */
+if (willCheck) {
   (async () => {
     try {
       const res = await fetch(updater.updateApiUrl(),
@@ -345,10 +351,12 @@ if (!has("--no-update-check") && updater) {
       writeStatus({
         latest,
         updateAvailable: !!latest && updater.compareVersions(latest, current) > 0,
-        pending: updater.pending()
+        pending: updater.pending(),
+        checking: false,
+        error: undefined
       });
     } catch (err) {
-      writeStatus({ error: err.message, pending: updater.pending() });
+      writeStatus({ error: err.message, pending: updater.pending(), checking: false });
     }
   })();
 }

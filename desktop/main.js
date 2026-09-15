@@ -2310,10 +2310,25 @@ function killTunnel() {
 }
 
 /* ---------------------------------------------------------------------
- * 9. Update check. Never auto-downloads anything — the same "a file the
- *    page reads" design as start.mjs's update-status.json, just built in
- *    memory here instead of written to disk (there is no reason for a
- *    desktop build to keep a JSON file next to the app for this).
+ * 9. Updates. The same "a file the page reads" design as start.mjs's
+ *    update-status.json, just built in memory here instead of written to
+ *    disk (there is no reason for a desktop build to keep a JSON file next
+ *    to the app for this).
+ *
+ *    THE CHECK IS AUTOMATIC, THE DOWNLOAD AND INSTALL ARE NOT. Launch looks
+ *    for a newer release; nothing is fetched or run until the person clicks
+ *    Download in the update bar. That click downloads the installer for
+ *    THIS platform and architecture in-app — there is deliberately no
+ *    "here's a link, go and find the right file" step any more — and a
+ *    second click runs it.
+ *
+ *    WHAT THE RENDERER MAY SAY ABOUT ANY OF IT: "start the download" and
+ *    "run what was downloaded", and nothing else. It never supplies a URL,
+ *    a filename or a path — every one of those is chosen here, from the
+ *    release API's own answer (assets are release-controlled data, so their
+ *    names are validated before one becomes a filename), and the page is
+ *    only ever told progress and state. A renderer that could name the file
+ *    to execute would be a code-execution route wearing a friendly label.
  * --------------------------------------------------------------------- */
 
 function readAppVersion() {
@@ -2330,22 +2345,171 @@ function compareVersions(a, b) {
   return 0;
 }
 
+/* An asset name off the network becomes a filename on this disk, so it is
+   untrusted input: "../../etc/cron.d/x" or a name with a shell character in
+   it has no business reaching a path or a spawn. Only this shape does, and
+   path.basename is applied on top so nothing can be assumed about it. */
+const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
+
+/* The installer extension per platform. An asset of any other kind is not
+   something this app knows how to install, so it is never a candidate. */
+const INSTALLER_EXT = { win32: ".exe", darwin: ".dmg", linux: ".appimage" };
+
+const DEFAULT_UPDATE_API =
+  "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+
+function updateApiUrl() {
+  return process.env.SPLITPAGE_UPDATE_API || DEFAULT_UPDATE_API;
+}
+
+/* Where a download may come from. The URL always comes from the release API
+   rather than from the page, so this is a second line rather than the first —
+   but it is what stops a mistyped or tampered release body from pointing the
+   download (and therefore something this app will execute) at an arbitrary
+   host.
+
+   Two sources qualify, and nothing else: GitHub over HTTPS — where
+   api.github.com redirects release assets — and the update API's OWN origin,
+   whatever that is. The second is not a loophole but the point: update.mjs
+   is overridable precisely so a fork is not stuck fetching someone else's
+   releases and so this can be aimed at a test server, and an allowlist of
+   only github.com would have quietly made every such build un-updatable.
+   Whoever sets SPLITPAGE_UPDATE_API already chose which server to trust. */
+function isAllowedDownloadHost(urlString) {
+  let parsed;
+  try { parsed = new URL(urlString); } catch { return false; }
+  let api = null;
+  try { api = new URL(updateApiUrl()); } catch { api = null; }
+  if (api && parsed.origin === api.origin) return true;
+  if (parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  return host === "github.com"
+    || host === "api.github.com"
+    || host.endsWith(".githubusercontent.com");
+}
+
+/* The one asset of a release that installs it on THIS machine. Architecture
+   is part of the answer, not a detail: 1.0.1 shipped an "x64" setup that was
+   really an ARM64 binary, and handing an ARM64 machine the x64 installer (or
+   the reverse) is the same failure with the blame moved to the updater. A
+   name carrying this machine's arch wins; a single unambiguous candidate is
+   accepted without one (a universal build, or a one-installer release); two
+   or more that disagree are refused rather than guessed at. */
+function pickUpdateAsset(assets) {
+  const ext = INSTALLER_EXT[process.platform];
+  if (!ext) return null;
+  const candidates = (assets || []).filter((a) => {
+    const name = String((a && a.name) || "");
+    return SAFE_ASSET_NAME.test(name)
+      && name.toLowerCase().endsWith(ext)
+      && isAllowedDownloadHost(String((a && a.browser_download_url) || ""));
+  });
+  if (!candidates.length) return null;
+
+  const arch = process.arch; /* "x64" | "arm64" | ... */
+  const other = ["x64", "arm64", "ia32", "armv7l"].filter((a) => a !== arch);
+  const mentions = (name, token) => new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, "i").test(name);
+
+  const mine = candidates.filter((a) => mentions(a.name, arch));
+  if (mine.length === 1) return describeAsset(mine[0]);
+  if (mine.length > 1) return null; /* ambiguous — better to say nothing than to guess */
+
+  /* No name names this arch. Anything naming a DIFFERENT one is not ours. */
+  const neutral = candidates.filter((a) => !other.some((o) => mentions(a.name, o)));
+  if (neutral.length === 1) return describeAsset(neutral[0]);
+  return null;
+}
+
+function describeAsset(asset) {
+  return {
+    name: path.basename(String(asset.name)),
+    url: String(asset.browser_download_url),
+    size: Number.isFinite(asset.size) ? asset.size : 0
+  };
+}
+
+/* Published checksums, when the release has them. Optional on purpose: a
+   release without a SHA256SUMS asset still updates (HTTPS to GitHub is the
+   floor), but when the file IS there a mismatch stops the install — which is
+   the only way this app can tell a truncated or substituted download from a
+   good one before running it. */
+const CHECKSUMS_ASSET = /^SHA256SUMS(\.txt)?$/i;
+
+async function fetchPublishedChecksum(assets, assetName) {
+  const entry = (assets || []).find((a) => CHECKSUMS_ASSET.test(String((a && a.name) || ""))
+    && isAllowedDownloadHost(String((a && a.browser_download_url) || "")));
+  if (!entry) return null;
+  try {
+    const res = await net.fetch(entry.browser_download_url, { headers: { "User-Agent": "splitpage-desktop" } });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (text.length > 200000) return null;
+    for (const line of text.split(/\r?\n/)) {
+      /* "<hex>  <name>" — the sha256sum format, with the binary marker "*"
+         the same tool writes for a binary-mode sum. */
+      const m = /^([0-9a-f]{64})\s+\*?(.+?)\s*$/i.exec(line);
+      if (m && path.basename(m[2]) === assetName) return m[1].toLowerCase();
+    }
+  } catch { /* no checksums we can use — fall through to "none published" */ }
+  return null;
+}
+
+/* `checking: true` from the start, because the window opens before the check
+   can answer and the page cannot otherwise tell "no update" from "not looked
+   yet". Every field the page reads lives here; nothing about it is on disk. */
 let updateStatus = {
   version: readAppVersion(),
-  checkedAt: new Date().toISOString(),
+  checkedAt: null,
+  checking: !SKIP_UPDATE_CHECK,
   latest: null,
   updateAvailable: false,
   pending: null,
   justUpdated: null,
   desktop: true,
-  releaseUrl: null
+  /* Whether this release has an installer this platform/arch can run. When
+     it does the page offers Download; when it does not it falls back to the
+     release page, which is the only honest thing left to offer. */
+  canInstall: false,
+  releaseUrl: null,
+  download: { state: "idle", received: 0, total: 0, error: null }
 };
+
+/* Everything about the release the page must never see: where to download
+   from, and what was downloaded. Kept out of updateStatus so that no future
+   edit can widen the /update-status.json response into a list of URLs and
+   absolute paths. */
+let updateAsset = null;      /* {name, url, size} for this platform */
+let updateAssets = [];       /* the release's full asset list, for checksums */
+let updateFile = null;       /* absolute path of the verified installer */
+let updateDownloadPromise = null;
+
+function updateDir() {
+  return path.join(app.getPath("userData"), "updates");
+}
+
+/* Every change the page could care about, pushed rather than polled: the
+   check finishes after the page has already loaded and read the status once,
+   so without this a fresh launch showed a stale verdict until the next one. */
+function broadcastUpdateStatus() {
+  for (const tab of tabs.values()) {
+    if (!tab.view || tab.view.webContents.isDestroyed()) continue;
+    try { tab.view.webContents.send("splitpage:update-status", updateStatus); } catch { /* going away */ }
+  }
+}
+
+function setUpdateStatus(patch) {
+  updateStatus = { ...updateStatus, ...patch };
+  broadcastUpdateStatus();
+}
+
+function setDownloadState(patch) {
+  setUpdateStatus({ download: { ...updateStatus.download, ...patch } });
+}
 
 async function checkForUpdate() {
   if (SKIP_UPDATE_CHECK) return;
   const current = readAppVersion();
-  const apiUrl = process.env.SPLITPAGE_UPDATE_API
-    || "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+  const apiUrl = updateApiUrl();
   try {
     const res = await net.fetch(apiUrl, {
       headers: { "Accept": "application/vnd.github+json", "User-Agent": "splitpage-desktop" }
@@ -2353,23 +2517,180 @@ async function checkForUpdate() {
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const body = await res.json();
     const latest = String(body.tag_name || body.name || "").replace(/^v/, "").trim();
-    updateStatus = {
-      ...updateStatus,
+    const newer = !!latest && compareVersions(latest, current) > 0;
+    updateAssets = Array.isArray(body.assets) ? body.assets : [];
+    /* Only for a release that is actually newer: picking an asset for the
+       version already installed would offer a "download" that reinstalls it. */
+    updateAsset = newer ? pickUpdateAsset(updateAssets) : null;
+    setUpdateStatus({
       version: current,
       checkedAt: new Date().toISOString(),
+      checking: false,
       latest,
-      updateAvailable: !!latest && compareVersions(latest, current) > 0,
+      updateAvailable: newer,
+      canInstall: !!updateAsset,
       releaseUrl: body.html_url || null,
       error: undefined
-    };
+    });
   } catch (err) {
-    updateStatus = {
-      ...updateStatus,
+    setUpdateStatus({
       version: current,
       checkedAt: new Date().toISOString(),
+      checking: false,
       error: err.message
-    };
+    });
   }
+}
+
+/* Download the installer for this machine into userData/updates, verifying
+   size and (when the release publishes one) sha256 before it counts as
+   ready. Nothing is executed here — see runUpdateInstaller. */
+function downloadUpdate() {
+  if (updateDownloadPromise) return updateDownloadPromise;
+  if (updateStatus.download.state === "ready" && updateFile) {
+    return Promise.resolve({ ok: true, state: "ready" });
+  }
+  const asset = updateAsset;
+  if (!asset) return Promise.resolve({ ok: false, error: "no-installer" });
+  if (!isAllowedDownloadHost(asset.url)) return Promise.resolve({ ok: false, error: "bad-url" });
+
+  updateDownloadPromise = (async () => {
+    const dir = updateDir();
+    const target = path.join(dir, asset.name);
+    /* The whole folder, every time: a half-written file from an interrupted
+       run, or the installer for a version that has since been superseded, is
+       never what should be executed next. */
+    await fsp.rm(dir, { recursive: true, force: true });
+    await fsp.mkdir(dir, { recursive: true });
+    /* asset.name passed SAFE_ASSET_NAME and basename, but the path it
+       produced is still confirmed to be inside the folder it must be in. */
+    if (path.dirname(path.resolve(target)) !== path.resolve(dir)) throw new Error("bad asset name");
+
+    updateFile = null;
+    setDownloadState({ state: "downloading", received: 0, total: asset.size || 0, error: null });
+
+    const res = await net.fetch(asset.url, { headers: { "User-Agent": "splitpage-desktop" } });
+    if (!res.ok) throw new Error(`download failed: ${res.status} ${res.statusText}`);
+    const declared = Number(res.headers.get("content-length")) || asset.size || 0;
+    setDownloadState({ total: declared });
+
+    const hash = crypto.createHash("sha256");
+    const handle = await fsp.open(target, "w");
+    let received = 0;
+    let lastReport = 0;
+    try {
+      /* Streamed rather than buffered: an installer is tens of megabytes and
+         holding it in memory to write it out again costs that twice for
+         nothing. The hash is computed on the way past, so verification does
+         not mean reading the file back either.
+
+         getReader() rather than `for await (… of res.body)`: this Response
+         comes from Chromium's network stack, and async iteration over a
+         ReadableStream is a Node addition rather than part of the web stream
+         API. The reader is what both implementations have. */
+      const reader = res.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const buf = Buffer.from(value);
+        hash.update(buf);
+        await handle.write(buf);
+        received += buf.length;
+        /* Throttled: a progress event per chunk is thousands of IPC messages
+           and a page that spends the download re-rendering one line of text. */
+        const now = Date.now();
+        if (now - lastReport > 200) { lastReport = now; setDownloadState({ received }); }
+      }
+    } finally {
+      await handle.close();
+    }
+    setDownloadState({ received });
+
+    if (declared && received !== declared) {
+      throw new Error(`download is ${received} bytes, expected ${declared} — it was cut short`);
+    }
+    const digest = hash.digest("hex");
+    const published = await fetchPublishedChecksum(updateAssets, asset.name);
+    if (published && published !== digest) {
+      throw new Error("the download does not match the checksum published for it");
+    }
+
+    updateFile = target;
+    setDownloadState({ state: "ready", error: null, verified: !!published });
+    return { ok: true, state: "ready" };
+  })().catch(async (err) => {
+    updateFile = null;
+    /* A failed download must not be left on disk: it is the one file this app
+       is willing to execute, and "ready" is the only state that lets it. */
+    await fsp.rm(updateDir(), { recursive: true, force: true }).catch(() => {});
+    setDownloadState({ state: "failed", error: err.message });
+    return { ok: false, error: "download-failed", message: err.message };
+  }).finally(() => { updateDownloadPromise = null; });
+
+  return updateDownloadPromise;
+}
+
+/* THE INSTALLER STARTS ONLY IF THE QUIT ACTUALLY HAPPENS. A quit can be
+   refused — unsaved work in any tab, or the stop-sharing prompt under --host
+   (invariant #44) — and starting the installer first would leave it rewriting
+   the files of an app the user just chose to keep using. So the order is:
+   ask to quit, and spawn from 'will-quit', which Electron emits only once
+   every window has really closed. If the quit is refused, nothing was
+   started and the offer goes back up. */
+let installOnQuit = false;
+let installQuitWatcher = null;
+
+/* The spawn itself. The path is this process's own record of a file it
+   downloaded and verified — never anything the renderer said. */
+function startInstallerNow() {
+  try {
+    if (process.platform === "win32") {
+      /* Detached, with its own stdio: the installer outlives this process by
+         design, and a child sharing our handles would be killed with us.
+         An argument array with no arguments in it, so nothing is parsed. */
+      const child = spawn(updateFile, [], { detached: true, stdio: "ignore", windowsHide: false });
+      child.unref();
+    } else {
+      /* macOS .dmg and Linux .AppImage cannot install themselves: hand the
+         verified file to the OS, which mounts or opens it. Still no link and
+         no manual download — the file is already here. */
+      shell.openPath(updateFile);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: "could-not-run", message: err.message };
+  }
+}
+
+function runUpdateInstaller() {
+  if (updateStatus.download.state !== "ready" || !updateFile) {
+    return Promise.resolve({ ok: false, error: "not-downloaded" });
+  }
+  if (!fs.existsSync(updateFile)) {
+    setDownloadState({ state: "idle", received: 0, error: null });
+    updateFile = null;
+    return Promise.resolve({ ok: false, error: "not-downloaded" });
+  }
+  /* A test run must never install anything, and must never quit the machine's
+     real app to do it (invariant #33). */
+  if (TEST_MODE) return Promise.resolve({ ok: true, testMode: true });
+
+  installOnQuit = true;
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+    installQuitWatcher = done;
+    app.quit();
+    /* Still here? Then something refused the quit. Put the offer back rather
+       than leaving the page on "Starting the installer…" forever. */
+    setTimeout(() => {
+      if (settled) return;
+      installOnQuit = false;
+      installQuitWatcher = null;
+      setDownloadState({ state: "ready" });
+      done({ ok: false, error: "quit-cancelled" });
+    }, 3000);
+  });
 }
 
 /* ---------------------------------------------------------------------
@@ -4244,6 +4565,37 @@ function registerIpc() {
     if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
   });
 
+  /* ---- updates -------------------------------------------------------
+     Three calls, none of which takes an argument. That is the contract:
+     the page can ask what the situation is, ask for the download to start,
+     and ask for what was downloaded to be run — it cannot say WHAT to
+     download or WHAT to run. See section 9. */
+
+  ipcMain.handle("splitpage:update-status", async (event) => {
+    requireTrusted(event);
+    return updateStatus;
+  });
+
+  /* Re-run the check on demand, for the case the launch check found nothing
+     because the machine was offline at the time. */
+  ipcMain.handle("splitpage:update-check", async (event) => {
+    requireTrusted(event);
+    if (SKIP_UPDATE_CHECK) return updateStatus;
+    setUpdateStatus({ checking: true });
+    await checkForUpdate();
+    return updateStatus;
+  });
+
+  ipcMain.handle("splitpage:update-download", async (event) => {
+    requireTrusted(event);
+    return downloadUpdate();
+  });
+
+  ipcMain.handle("splitpage:update-install", async (event) => {
+    requireTrusted(event);
+    return runUpdateInstaller();
+  });
+
   /* The TabRecord is main's copy of what the page is showing, and it is the
      authority every close, routing and strip decision reads (invariant #42).
      It must be current the instant the page reports, which is why this is a
@@ -4978,6 +5330,18 @@ app.on("window-all-closed", () => {
    connected, and the Save the user stayed for could no longer reach the
    server. will-quit only fires once every window has actually closed. */
 app.on("will-quit", () => {
+  /* The quit was not refused, so a pending update install goes ahead now —
+     see runUpdateInstaller. First thing in the handler: the whole point is
+     that this app is really going, and the installer needs to be started
+     before this process stops being able to start anything. */
+  if (installOnQuit) {
+    installOnQuit = false;
+    const started = startInstallerNow();
+    if (installQuitWatcher) {
+      installQuitWatcher(started.ok ? { ok: true, quitting: true } : started);
+      installQuitWatcher = null;
+    }
+  }
   killDocumentServer();
   killTunnel();
   /* The app is really going, in one piece. Recording that is what lets the

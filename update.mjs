@@ -5,6 +5,7 @@
  *   node update.mjs check      only say what is available
  *   node update.mjs apply      install what was staged (the launcher does this)
  *   node update.mjs --force    stage even over files you have edited
+ *   node update.mjs --json     print one JSON line instead of prose
  *
  * HOW IT INSTALLS, AND WHY THAT WAY. Downloading is safe at any time;
  * overwriting the app while a browser has it open is not. So the two are
@@ -40,7 +41,13 @@ const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/release
 const argv = process.argv.slice(2);
 const cmd = argv.find((a) => !a.startsWith("-")) || "stage";
 const FORCE = argv.includes("--force");
-const QUIET = argv.includes("--quiet");
+/* --json makes stdout a single machine-readable line, which is what the
+   launcher's /api/launcher/update/stage route reads back: it spawns this
+   script rather than re-implementing staging inside the server, so it needs
+   an answer it can parse instead of prose meant for a terminal. It implies
+   --quiet, because a "JSON line" with progress chatter above it is neither. */
+const JSON_OUT = argv.includes("--json");
+const QUIET = argv.includes("--quiet") || JSON_OUT;
 const say = (...a) => { if (!QUIET) console.log(...a); };
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
@@ -209,15 +216,16 @@ async function stage() {
     }
   }
   if (edited.length && !FORCE) {
-    console.error(`
-  Not staging: these files differ from the ${current} release, so you have
-  edited them and the update would overwrite your changes:
-`);
-    for (const rel of edited) console.error(`    ${rel}`);
-    console.error(`
-  Move them aside and run this again, or --force to overwrite them.
-`);
-    process.exit(1);
+    /* Thrown rather than exited, so every caller learns the same thing the
+       same way: the CLI prints the list below, and --json reports it as
+       code "local-edits" with the file names attached. An exit() here could
+       only ever be a bare status code to anything that wasn't a terminal. */
+    const err = new Error(
+      `these files differ from the ${current} release, so you have edited them ` +
+      `and the update would overwrite your changes: ${edited.join(", ")}`);
+    err.code = "local-edits";
+    err.files = edited;
+    throw err;
   }
 
   rmSync(UPDATE_DIR, { recursive: true, force: true });
@@ -350,14 +358,33 @@ export function apply({ log = console.log } = {}) {
 
 /* Only when invoked directly — start.mjs imports apply() and pending(). */
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const emit = (obj) => { if (JSON_OUT) process.stdout.write(JSON.stringify(obj) + "\n"); };
   try {
-    if (cmd === "check") await check();
-    else if (cmd === "apply") {
-      const info = apply();
-      if (!info) console.log("  nothing staged to apply");
-    } else await stage();
+    if (cmd === "check") {
+      const { current, release, newer } = await check();
+      emit({ ok: true, version: current, latest: release.version, updateAvailable: newer });
+    } else if (cmd === "apply") {
+      const info = apply({ log: say });
+      if (!info && !JSON_OUT) console.log("  nothing staged to apply");
+      emit({ ok: true, applied: info });
+    } else {
+      const result = await stage();
+      emit({
+        ok: true,
+        staged: !!result.staged,
+        version: localVersion(),
+        latest: result.version,
+        pending: pending()
+      });
+    }
   } catch (err) {
-    console.error(`\n  ${err.message}\n`);
+    emit({ ok: false, error: err.code || "failed", message: err.message, files: err.files });
+    if (!JSON_OUT) {
+      console.error(`\n  ${err.message}\n`);
+      if (err.code === "local-edits") {
+        console.error(`  Move them aside and run this again, or --force to overwrite them.\n`);
+      }
+    }
     process.exit(1);
   }
 }
