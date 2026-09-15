@@ -1,0 +1,214 @@
+# File > Export app data. / Import app data. (X1/X2, src/js/20h-appdata.js),
+# plus the underlying history-store export/import path it rides
+# (exportHistoryAll/importHistoryBundle, src/js/03a-history-store.js).
+# Every case that touches history starts with a fresh
+# __historyTest.resetForTest() (deletes and reopens the 'splitpage-history'
+# IndexedDB database, clears in-page pending state) but does NOT reload the
+# page — state/docId carry over between cases the same way 24-history.txt's
+# do. Every docId fixture is 'd' + 32 hex, built with the same did() helper
+# 24/25 use.
+#
+# captureSnapshot is not exposed to window.* (it lives inside the build's one
+# closure), so a real captured snapshot rides a genuine caller — openFixture
+# (serialize the current document under a chosen id/title, reopen as a
+# .splitpage project — no implicit snapshot, per 24-history.txt's own note)
+# then pushForeign (a real "Before opening NAME" capture via a plain foreign
+# .txt open). Cases that need many synthetic history entries with specific
+# ids/timestamps go straight through __historyTest.importBundle instead —
+# that is the history-store's own import entry point, one layer below
+# __appDataTest.importText, and is exactly what 03a-history-store.js's own
+# HANDOFF calls "the X2 write path itself".
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.A = window.__appDataTest; window.did = function(tag){ return 'd' + (tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag).slice(0, 32); }; return !!(F && D && H && A && A.build && A.assertNoSecrets && A.parse && A.importText && A.summary);})()
+expect true
+
+eval (function(){window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; window.pushForeign = async function(name){ await F.openFile(new File(['Just some plain text.'], name)); return true; }; return true;})()
+
+# =============================================================================
+# 1. bundle shape: format/version/exportedAt/appVersion, plus a history entry
+# after a real captured snapshot.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c1Id = await openFixture(did('a1'), 'Case One'); await pushForeign('c1-note.txt'); await H.idle(); window.__c1Bundle = await A.build(); return window.__c1Bundle; })()
+expect window.__c1Bundle.format === 'splitpage-app-data'
+expect window.__c1Bundle.version === 1
+expect typeof window.__c1Bundle.exportedAt === 'string' && window.__c1Bundle.exportedAt.length > 0
+expect typeof window.__c1Bundle.appVersion === 'string'
+eval (function(){window.__c1Doc = window.__c1Bundle.history.docs.filter(function(d){return d.docId === __c1Id;})[0]; return window.__c1Doc;})()
+expect window.__c1Doc !== undefined
+expect window.__c1Doc.snapshots.length === 1
+expect window.__c1Doc.snapshots[0].meta.label.indexOf('c1-note.txt') !== -1
+expect typeof window.__c1Doc.snapshots[0].stateJson === 'string'
+
+# =============================================================================
+# 2. invariant #48: an explicit key walk over a real bundle matches none of
+# the secret regex as a KEY (never as a value); assertNoSecrets throws on a
+# nested credential-shaped key and does not throw on a bookmark's ssh.userHost.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c2Bundle = await A.build(); window.__c2Keys = []; (function walk(v){ if (!v || typeof v !== 'object') return; if (Array.isArray(v)) { v.forEach(walk); return; } Object.keys(v).forEach(function(k){ window.__c2Keys.push(k); walk(v[k]); }); })(window.__c2Bundle); window.__c2Bad = window.__c2Keys.filter(function(k){ return /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i.test(k); }); return window.__c2Bad; })()
+expect window.__c2Bad.length === 0
+eval (function(){ window.__c2Threw = false; window.__c2Err = null; try { A.assertNoSecrets({a:{b:{clientId:1}}}); } catch (e) { window.__c2Threw = true; window.__c2Err = e; } return window.__c2Threw; })()
+expect window.__c2Threw === true
+expect window.__c2Err.code === 'secret'
+expect window.__c2Err.secretKey === 'clientId'
+eval (function(){ window.__c2Ok = true; try { A.assertNoSecrets({bookmarks:[{id:'s1', name:'X', url:'http://x.example/', ssh:{userHost:'user@host', remotePort:8791, localPort:8791}}]}); } catch (e) { window.__c2Ok = false; } return window.__c2Ok; })()
+expect window.__c2Ok === true
+
+# =============================================================================
+# 3. round trip after resetForTest(): byte-identical stateJson bodies and
+# identical atMs, because the import lands in an EMPTY bucket (the store was
+# just wiped) — historyStampAfter only bumps atMs against a real newest.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c3Id = await openFixture(did('a2'), 'Round Trip'); await pushForeign('rt-1.txt'); await H.idle(); window.__c3Before = await A.build(); return window.__c3Before.history.docs.filter(function(d){return d.docId === __c3Id;})[0].snapshots.length; })()
+expect window.__c3Before.history.docs.filter(function(d){return d.docId === __c3Id;})[0].snapshots.length === 1
+eval (async function(){ await H.resetForTest(); window.__c3Import = await A.importText(JSON.stringify(window.__c3Before)); return window.__c3Import; })()
+expect window.__c3Import.ok === true
+expect window.__c3Import.history.added === 1
+eval (async function(){ window.__c3After = await A.build(); window.__c3DocBefore = window.__c3Before.history.docs.filter(function(d){return d.docId === __c3Id;})[0]; window.__c3DocAfter = window.__c3After.history.docs.filter(function(d){return d.docId === __c3Id;})[0]; return [window.__c3DocBefore.snapshots[0].stateJson === window.__c3DocAfter.snapshots[0].stateJson, window.__c3DocBefore.snapshots[0].meta.atMs === window.__c3DocAfter.snapshots[0].meta.atMs]; })()
+expect window.__c3DocBefore.snapshots[0].stateJson === window.__c3DocAfter.snapshots[0].stateJson
+expect window.__c3DocBefore.snapshots[0].meta.atMs === window.__c3DocAfter.snapshots[0].meta.atMs
+
+# =============================================================================
+# 4. idempotence: importing the same bundle again gives added 0, everything
+# skipped, and the stored list length is unchanged.
+# =============================================================================
+eval (async function(){ window.__c4Import2 = await A.importText(JSON.stringify(window.__c3Before)); window.__c4Raw = await H.listRaw(__c3Id); return [window.__c4Import2, window.__c4Raw.length]; })()
+expect window.__c4Import2.ok === true
+expect window.__c4Import2.history.added === 0
+expect window.__c4Import2.history.skipped >= 1
+expect window.__c4Import2.history.failed === 0
+expect window.__c4Raw.length === 1
+
+# =============================================================================
+# 5. merge-not-replace for prefs: a local commentAuthor survives untouched, a
+# cleared key (writerSize) gets filled from the bundle, and onboarding merges
+# key by key with the LOCAL value winning where both sides have it.
+# =============================================================================
+eval (async function(){ localStorage.removeItem('splitpage-writer-size'); localStorage.setItem('splitpage-comment-author', 'Local Author'); localStorage.setItem('splitpage-onboarding', JSON.stringify({v:1, local:true})); window.__c5Bundle = { format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[], prefs:{ commentAuthor:'Bundle Author', writerSize:'22', onboarding:{v:1, done:true, local:false} } }; window.__c5Result = await A.importText(JSON.stringify(window.__c5Bundle)); return window.__c5Result; })()
+expect window.__c5Result.ok === true
+expect localStorage.getItem('splitpage-comment-author') === 'Local Author'
+expect localStorage.getItem('splitpage-writer-size') === '22'
+eval (function(){ window.__c5Ob = JSON.parse(localStorage.getItem('splitpage-onboarding')); return window.__c5Ob; })()
+expect window.__c5Ob.local === true
+expect window.__c5Ob.done === true
+expect window.__c5Ob.v === 1
+
+# =============================================================================
+# 6. bookmarks: same normalised URL -> one entry, the LOCAL name kept; a
+# different URL -> two entries with unique ids; an imported id that collides
+# with an existing one gets a fresh id; only whitelisted fields are copied
+# (an extra field like evil:1 never reaches localStorage).
+# =============================================================================
+eval (function(){ localStorage.setItem('splitpage-server-bookmarks', JSON.stringify([{id:'slocal1', name:'Local Name', url:'http://existing.example/'}])); window.__c6BundleA = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[{id:'simport1', name:'Import Name', url:'http://existing.example/'}], prefs:{} }; return true; })()
+eval (async function(){ window.__c6ResultA = await A.importText(JSON.stringify(window.__c6BundleA)); window.__c6ListA = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return [window.__c6ResultA, window.__c6ListA]; })()
+expect window.__c6ResultA.bookmarks.added === 0
+expect window.__c6ResultA.bookmarks.skipped === 1
+expect window.__c6ListA.length === 1
+expect window.__c6ListA[0].name === 'Local Name'
+
+eval (function(){ window.__c6BundleB = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[{id:'simport2', name:'Different', url:'http://different2.example/'}], prefs:{} }; return true; })()
+eval (async function(){ window.__c6ResultB = await A.importText(JSON.stringify(window.__c6BundleB)); window.__c6ListB = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return [window.__c6ResultB, window.__c6ListB]; })()
+expect window.__c6ResultB.bookmarks.added === 1
+expect window.__c6ListB.length === 2
+eval (function(){ window.__c6Ids = window.__c6ListB.map(function(b){return b.id;}); window.__c6Unique = (new Set(window.__c6Ids)).size === window.__c6Ids.length; return window.__c6Unique; })()
+expect window.__c6Unique === true
+
+eval (function(){ window.__c6CollideId = window.__c6ListB[0].id; window.__c6BundleC = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[{id:window.__c6CollideId, name:'Collider', url:'http://collide.example/', evil:1}], prefs:{} }; return window.__c6CollideId; })()
+eval (async function(){ window.__c6ResultC = await A.importText(JSON.stringify(window.__c6BundleC)); window.__c6ListC = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return [window.__c6ResultC, window.__c6ListC]; })()
+expect window.__c6ResultC.bookmarks.added === 1
+expect window.__c6ListC.length === 3
+eval (function(){ window.__c6New = window.__c6ListC.filter(function(b){return b.url === 'http://collide.example/';})[0]; return window.__c6New; })()
+expect window.__c6New.id !== window.__c6CollideId
+expect window.__c6New.evil === undefined
+expect Object.keys(window.__c6New).sort().join(',') === 'id,name,url'
+eval (function(){ localStorage.removeItem('splitpage-server-bookmarks'); return true; })()
+
+# =============================================================================
+# 7. wrong format, version 99, truncated JSON, and a bundle carrying apiKey
+# are all refused (parse) — and importing the truncated one through the full
+# path leaves both history counts and the bookmarks key unchanged.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c7Id = await openFixture(did('a4'), 'Refuse Case'); await pushForeign('c7-note.txt'); await H.idle(); window.__c7CountBefore = (await H.listRaw(__c7Id)).length; localStorage.setItem('splitpage-server-bookmarks', JSON.stringify([{id:'skeep', name:'Keep', url:'http://keep.example/'}])); window.__c7BmBefore = localStorage.getItem('splitpage-server-bookmarks'); return window.__c7CountBefore; })()
+expect window.__c7CountBefore === 1
+eval (function(){ window.__c7Wrong = null; try { A.parse(JSON.stringify({format:'not-splitpage', version:1})); } catch (e) { window.__c7Wrong = e.code; } return window.__c7Wrong; })()
+expect window.__c7Wrong === 'wrong-format'
+eval (function(){ window.__c7Ver = null; try { A.parse(JSON.stringify({format:'splitpage-app-data', version:99})); } catch (e) { window.__c7Ver = e.code; } return window.__c7Ver; })()
+expect window.__c7Ver === 'newer-version'
+eval (function(){ window.__c7Trunc = null; try { A.parse('{"format":"splitpage-app-data", "vers'); } catch (e) { window.__c7Trunc = e.code; } return window.__c7Trunc; })()
+expect window.__c7Trunc === 'not-json'
+eval (function(){ window.__c7Secret = null; try { A.parse(JSON.stringify({format:'splitpage-app-data', version:1, prefs:{apiKey:'x'}})); } catch (e) { window.__c7Secret = e.code; } return window.__c7Secret; })()
+expect window.__c7Secret === 'secret'
+eval (async function(){ window.__c7Import = await A.importText('{"format":"splitpage-app-data", "vers'); window.__c7CountAfter = (await H.listRaw(__c7Id)).length; window.__c7BmAfter = localStorage.getItem('splitpage-server-bookmarks'); return [window.__c7Import, window.__c7CountAfter, window.__c7BmAfter === window.__c7BmBefore]; })()
+expect window.__c7Import.ok === false
+expect window.__c7Import.code === 'not-json'
+expect window.__c7CountAfter === 1
+expect window.__c7BmAfter === window.__c7BmBefore
+eval (function(){ localStorage.removeItem('splitpage-server-bookmarks'); return true; })()
+
+# =============================================================================
+# 8. legacy 'snapshots' land in Older, never back into localStorage —
+# 'splitpage-snapshots' itself is left exactly as this machine had it.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c8Legacy = [{id:'leg1', at:new Date(1000).toISOString(), label:'Legacy One', by:'A', state:{rows:[{id:'r1',audioText:'legacy-one'}], title:'Legacy Doc'}}]; localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__c8Legacy)); window.__c8Raw = localStorage.getItem('splitpage-snapshots'); window.__c8Bundle = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', snapshots: window.__c8Legacy, history:{docs:[],older:[]}, bookmarks:[], prefs:{} }; window.__c8Result = await A.importText(JSON.stringify(window.__c8Bundle)); window.__c8Older = await H.listRaw('older'); return [window.__c8Result, window.__c8Older.length]; })()
+expect window.__c8Result.ok === true
+expect window.__c8Result.legacy === 1
+expect window.__c8Older.length === 1
+expect localStorage.getItem('splitpage-snapshots') === window.__c8Raw
+eval (function(){ localStorage.removeItem('splitpage-snapshots'); return true; })()
+
+# =============================================================================
+# 9. cap and ordering: a document with 48 local snapshots receiving 5 OLDER
+# imports (importBundle, the history-store layer directly) keeps every local
+# snapshot, re-stamps the 2 that fit after the newest local one, and counts
+# the other 3 as capped.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c9Id = await openFixture(did('a5'), 'Cap Test'); for (var i = 0; i < 48; i++) { await pushForeign('cap-local-' + i + '.txt'); } await H.idle(); window.__c9Before = await H.listRaw(__c9Id); return window.__c9Before.length; })()
+expect window.__c9Before.length === 48
+eval (function(){ window.__c9Import = { docId: __c9Id, title: 'Cap Test', snapshots: [] }; for (var i = 0; i < 5; i++) { window.__c9Import.snapshots.push({ meta: { id: 'scapimp' + i, label: 'Old Import ' + i, at: new Date(1000 + i).toISOString(), atMs: 1000 + i, by: 'X', rows: 1, title: 'Old', kind: 'snapshot' }, stateJson: JSON.stringify({rows:[{id:'r1', audioText:'import-' + i}], title:'Old', docId: __c9Id}) }); } return window.__c9Import; })()
+eval (async function(){ window.__c9Result = await H.importBundle({ docs: [window.__c9Import], older: [] }); window.__c9After = await H.listRaw(__c9Id); return [window.__c9Result, window.__c9After.length]; })()
+expect window.__c9Result.added === 2
+expect window.__c9Result.capped === 3
+expect window.__c9After.length === 50
+eval (function(){ window.__c9LocalIds = window.__c9Before.map(function(m){return m.id;}); window.__c9LocalStillThere = window.__c9LocalIds.every(function(id){ return window.__c9After.some(function(m){return m.id === id;}); }); return window.__c9LocalStillThere; })()
+expect window.__c9LocalStillThere === true
+eval (function(){ window.__c9Newest = window.__c9After.slice().sort(function(a,b){return b.atMs-a.atMs;}).slice(0,2); window.__c9NewestAreImports = window.__c9Newest.every(function(m){ return m.id.indexOf('scapimp') === 0; }); window.__c9LocalMax = Math.max.apply(null, window.__c9Before.map(function(m){return m.atMs;})); window.__c9ImportsAfterLocal = window.__c9Newest.every(function(m){ return m.atMs > window.__c9LocalMax; }); return [window.__c9NewestAreImports, window.__c9ImportsAfterLocal]; })()
+expect window.__c9NewestAreImports === true
+expect window.__c9ImportsAfterLocal === true
+
+# =============================================================================
+# 10. bad docIds (_older, a traversal-shaped string, an uppercase id) are all
+# counted as failed — none of them ever reach a bucket.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c10Result = await H.importBundle({ docs: [ { docId: '_older', snapshots: [{meta:{id:'sbad1', label:'x', atMs:1, by:'', rows:0, title:'', kind:'snapshot'}, stateJson:'{}'}] }, { docId: '../x', snapshots: [{meta:{id:'sbad2', label:'x', atMs:1, by:'', rows:0, title:'', kind:'snapshot'}, stateJson:'{}'}] }, { docId: 'D' + 'a'.repeat(32), snapshots: [{meta:{id:'sbad3', label:'x', atMs:1, by:'', rows:0, title:'', kind:'snapshot'}, stateJson:'{}'}] } ], older: [] }); return window.__c10Result; })()
+expect window.__c10Result.failed === 3
+expect window.__c10Result.added === 0
+expect window.__c10Result.docs === 0
+
+# =============================================================================
+# 11. a batch boundary: 26 snapshots (the batch size is 25) all land in one
+# document with no local history.
+# =============================================================================
+eval (async function(){ await H.resetForTest(); window.__c11Id = await openFixture(did('a6'), 'Batch Test'); window.__c11Doc = { docId: __c11Id, title: 'Batch Test', snapshots: [] }; for (var i = 0; i < 26; i++) { window.__c11Doc.snapshots.push({ meta: { id: 'sbatch' + (i < 10 ? '0' + i : i), label: 'Batch ' + i, at: new Date(1000 + i).toISOString(), atMs: 1000 + i, by: 'X', rows: 1, title: 'Batch', kind: 'snapshot' }, stateJson: JSON.stringify({rows:[{id:'r1', audioText:'batch-' + i}], title:'Batch', docId: __c11Id}) }); } window.__c11Result = await H.importBundle({ docs: [window.__c11Doc], older: [] }); window.__c11Raw = await H.listRaw(__c11Id); return [window.__c11Result, window.__c11Raw.length]; })()
+expect window.__c11Result.added === 26
+expect window.__c11Raw.length === 26
+
+# =============================================================================
+# 12. out-of-range writerSize/commentsSort values are ignored — not written,
+# and not reported as merged.
+# =============================================================================
+eval (async function(){ localStorage.removeItem('splitpage-writer-size'); localStorage.removeItem('splitpage-comments-sort'); window.__c12Bundle = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[], prefs:{ writerSize:'999', commentsSort:'nonsense' } }; window.__c12Result = await A.importText(JSON.stringify(window.__c12Bundle)); return window.__c12Result; })()
+expect window.__c12Result.ok === true
+expect localStorage.getItem('splitpage-writer-size') === null
+expect localStorage.getItem('splitpage-comments-sort') === null
+expect window.__c12Result.prefs.indexOf('writerSize') === -1
+expect window.__c12Result.prefs.indexOf('commentsSort') === -1
+
+# =============================================================================
+# 13. summary() reflects a refused parse.
+# =============================================================================
+eval (async function(){ await A.importText('not json at all'); window.__c13Summary = A.summary(); return window.__c13Summary; })()
+expect window.__c13Summary.ok === false
+expect window.__c13Summary.code === 'not-json'
+
+quit
