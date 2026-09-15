@@ -2504,3 +2504,95 @@
 .onboard-work-panel[hidden] { display: none; }
 #onboard-install-body .btn { margin-top: 10px; }
 #onboard-install-body p.modal-hint:last-child { margin-bottom: 0; }
+
+  /* ---------- b-roll (08c-broll.js) ----------
+
+     The marker is the only thing the script itself shows: the keyword turns
+     into a small label in the display face, and the words after it stay
+     ordinary prose. Deliberately quiet — a shot list line is still a
+     direction to a camera, and the script has to keep reading like a
+     script. What's shot and what isn't lives in the panel, not here. */
+  .broll-key {
+    font-family: var(--font-display); font-size: 0.82em;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--broll); font-weight: 600;
+    margin-right: 4px; cursor: pointer;
+    border-bottom: 1px solid color-mix(in srgb, var(--broll) 45%, transparent);
+  }
+  .broll-key:hover { color: var(--text); border-bottom-color: var(--broll); }
+  .broll-badge { background: var(--broll); }
+
+  .broll-quickadd input[type="text"] {
+    flex: 1; min-width: 0;
+    font-family: var(--font-body); font-size: 13.5px;
+    padding: 8px 9px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text);
+  }
+  .broll-quickadd input[type="text"]:focus { outline: none; border-color: var(--broll); }
+  #broll-add-save {
+    flex: none;
+    font-family: var(--font-display); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: 1px solid var(--broll); background: color-mix(in srgb, var(--broll) 12%, transparent);
+    color: var(--broll);
+    border-radius: 5px; padding: 7px 12px; cursor: pointer;
+  }
+  #broll-add-save:hover { background: var(--broll); color: var(--accent-contrast); }
+
+  .broll-entity { --dot: var(--broll); }
+  .broll-entity.is-reshoot { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); }
+  .broll-desc {
+    font-size: 12.5px; color: var(--text-dim); line-height: 1.5;
+    margin-top: 6px; white-space: pre-wrap;
+  }
+  /* The line of audio this shot cuts against — seeded from the scene, then
+     the item's own. Set off the way a quotation is, because that is what it
+     is: somebody else's words, carried along for reference. */
+  .broll-ref {
+    font-size: 12.5px; font-style: italic; color: var(--text-dim); line-height: 1.45;
+    border-left: 2px solid var(--audio); padding-left: 9px; margin-top: 7px;
+    white-space: pre-wrap;
+  }
+  .broll-ref.is-empty { font-style: normal; color: var(--text-faint); border-left-color: var(--border); }
+  .broll-flagline {
+    display: flex; align-items: flex-start; gap: 7px;
+    font-size: 12.5px; color: var(--warn); line-height: 1.45; margin-top: 7px;
+  }
+  .broll-flag-mark {
+    flex: none;
+    font-family: var(--font-display); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    border-radius: 999px; padding: 2px 7px;
+  }
+  .broll-flag-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 4px; }
+  .broll-flag-hint { font-size: 11px; color: var(--text-faint); line-height: 1.4; }
+  .broll-flag-btn {
+    flex: none;
+    font-family: var(--font-display); font-size: 11px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+    border-radius: 5px; padding: 5px 9px; cursor: pointer;
+  }
+  .broll-flag-btn:hover { color: var(--text); }
+  .broll-flag-btn.is-active {
+    border-color: var(--warn); color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+  }
+  .broll-loc-chip {
+    font-family: var(--font-display); font-size: 10.5px;
+    color: var(--visual); border: 1px solid color-mix(in srgb, var(--visual) 40%, transparent);
+    border-radius: 999px; padding: 2px 8px;
+  }
+  .broll-location-input, .broll-rename-input {
+    width: 100%; font-family: var(--font-body); font-size: 13px;
+    padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text);
+  }
+  .broll-rename-input { margin-top: 7px; }
+  .broll-location-input:focus, .broll-rename-input:focus { outline: none; border-color: var(--broll); }
+  .broll-ref-input, .broll-notes-input {
+    width: 100%; font-family: var(--font-body); font-size: 13px; line-height: 1.5;
+    padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text); resize: vertical;
+  }
+  .broll-ref-input:focus, .broll-notes-input:focus { outline: none; border-color: var(--broll); }
