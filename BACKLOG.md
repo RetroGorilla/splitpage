@@ -88,6 +88,13 @@ Copy this template into the right section below:
 - **Description:** Opening the comments or gear (settings) list panel shrinks the width of the main script column, even when the window is wide enough for the panel to pop in without taking space from it.
 - **Repro / notes:** Widen the window, open the comments or gear panel — main script column narrows instead of the panel overlaying/using free space. Related to the "two-column layout should widen with window" entry above.
 
+### Slide-in animation for sidebars
+- **Type:** Feature
+- **Priority:** Low
+- **Area:** UI / polish
+- **Description:** Add a smooth slide-in/out animation when opening or closing the comments and gear (settings) sidebars, instead of an instant pop-in.
+- **Repro / notes:** N/A — polish request. Worth pairing with the layout fix above (panel shrinking the main script) since both touch the same open/close behavior.
+
 ### Adjustable width for comment sidebar columns
 - **Type:** Feature
 - **Priority:** Low
