@@ -183,4 +183,47 @@ expect window.__toDump[window.__toId] === undefined
 eval (function(){ H.setDesktopTimeout(null); D.restoreBackend(); return true; })()
 expect !window.splitpageDesktop
 
+# ---- Follow My Voice is disabled in the desktop app (Q25) -----------------
+# updateVoiceAvailability() only re-runs from openPrompter(), so re-evaluating
+# it under a swapped-in backend means closing and reopening the prompter, same
+# as any other desktop-dependent UI in this suite would have to.
+caret #rows .row .audio-cell .cell-editable
+press A line to read out loud for the voice follow test.
+sleep 300
+jsclick #btn-present
+sleep 500
+expect !document.getElementById('prompter').hidden
+# under the harness's real (non-desktop) backend, Chrome/Edge's speech
+# recognizer is present and the page is served over http://, so the browser
+# build's button is enabled here — this is the byte-for-byte-unchanged path.
+expect document.getElementById('pp-voice').disabled === false
+
+eval (function(){window.fakeV = D.makeFakeBackend(); D.setBackend(window.fakeV); return true;})()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+jsclick #btn-present
+sleep 500
+expect document.getElementById('pp-voice').disabled === true
+expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in the desktop app yet") !== -1
+
+# a start can never reach getUserMedia, even called directly with the
+# disabled attribute stripped off (as if something else had re-enabled it)
+eval (function(){ window.__gumCalls = 0; window.__gumReal = navigator.mediaDevices.getUserMedia; navigator.mediaDevices.getUserMedia = function () { window.__gumCalls++; return window.__gumReal.apply(navigator.mediaDevices, arguments); }; return true; })()
+eval (function(){ document.getElementById('pp-voice').disabled = false; return true; })()
+jsclick #pp-voice
+sleep 300
+expect window.__gumCalls === 0
+expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in the desktop app yet") !== -1
+eval (function(){ navigator.mediaDevices.getUserMedia = window.__gumReal; return true; })()
+
+# restoring the backend and reopening re-enables it in the browser build
+eval (function(){ D.restoreBackend(); return true; })()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+jsclick #btn-present
+sleep 500
+expect document.getElementById('pp-voice').disabled === false
+jsclick #pp-close
+expect !window.splitpageDesktop
+
 quit
