@@ -47,6 +47,13 @@ Copy this template into the right section below:
 - **Description:** After using the alt-enter shortcut to move text into a new cell, undo doesn't undo the change.
 - **Repro / notes:** Use alt-enter to split/move text to a new cell, then press undo — the move isn't reverted.
 
+### Typing over a selection is invisible in dark mode
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** UI / dark mode / editing
+- **Description:** In dark mode, when text is highlighted (selected) and you type to replace it, you can't see what you're typing.
+- **Repro / notes:** Switch to dark mode, select some text, start typing — the new text isn't visible (likely a text-color/highlight-color contrast issue in the selection style for dark mode).
+
 <!-- add entries here -->
 
 ---
@@ -59,6 +66,13 @@ Copy this template into the right section below:
 - **Area:** UI / layout
 - **Description:** The main two-column interface is too fixed-width — it should be more flexible and expand to use available space on wider windows/screens instead of staying capped.
 - **Repro / notes:** Resize the window wider and the two-column view doesn't grow to fill it.
+
+### Adjustable width for comment sidebar columns
+- **Type:** Feature
+- **Priority:** Low
+- **Area:** UI / comments
+- **Description:** The comment sidebar columns should be resizable/adjustable width instead of fixed.
+- **Repro / notes:** N/A — UI enhancement request.
 
 <!-- add entries here -->
 
