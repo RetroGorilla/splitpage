@@ -401,6 +401,60 @@ function installedHere(root) {
   return false;
 }
 
+/* Staging outcomes that mean this server could not run the updater at all,
+   as opposed to the updater running and reporting something about the
+   release. Only these are HTTP failures — see the route below. */
+const STAGE_INFRA_ERRORS = new Set(["updater-missing", "could-not-run", "no-answer"]);
+
+/* One staging run at a time, for the whole process. Two concurrent runs would
+   both rm -rf and rebuild the same .update/staged tree, and the loser could
+   delete files the winner had already verified — so a second caller joins the
+   run in flight instead of starting another. */
+let updateStaging = null;
+
+/* Download-and-verify the newest release into .update/, by spawning the
+   updater that already knows how (update.mjs). Nothing here installs
+   anything: staging only writes under .update/, and the swap happens at the
+   next launch, in start.mjs, when no browser has the app open. That split is
+   what keeps this route safe to expose at all — see update.mjs's header.
+   The command line is this process's own node binary and a fixed path inside
+   this installation; no part of the request reaches it. */
+function stageUpdate(root) {
+  if (updateStaging) return updateStaging;
+  const script = path.join(root, "update.mjs");
+  if (!fs.existsSync(script)) return Promise.resolve({ error: "updater-missing" });
+
+  updateStaging = new Promise((resolve) => {
+    const child = child_process.spawn(process.execPath, [script, "stage", "--json"], {
+      cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"]
+    });
+    let out = "";
+    let errOut = "";
+    child.stdout.on("data", (chunk) => { if (out.length < 64000) out += chunk; });
+    child.stderr.on("data", (chunk) => { if (errOut.length < 8000) errOut += chunk; });
+    /* A release zip over a slow link is legitimately slow; a hung one still
+       has to end. Ten minutes, then the child is killed and the caller is
+       told, rather than the request hanging until the browser gives up. */
+    const timer = setTimeout(() => { try { child.kill(); } catch (e) {} }, 600000);
+    const finish = (value) => { clearTimeout(timer); resolve(value); };
+    child.on("error", (err) => finish({ error: "could-not-run", detail: String(err && err.message) }));
+    child.on("exit", () => {
+      /* --json prints exactly one JSON line, but stdout is still a pipe that
+         anything the child's runtime writes (a Node deprecation warning) can
+         land in. Take the last line that parses, not the first or the whole. */
+      let parsed = null;
+      for (const line of out.split(/\r?\n/).reverse()) {
+        if (!line.trim()) continue;
+        try { parsed = JSON.parse(line); break; } catch (e) { /* not the answer line */ }
+      }
+      if (!parsed) return finish({ error: "no-answer", detail: (errOut || out).trim().slice(0, 500) });
+      finish(parsed);
+    });
+  }).finally(() => { updateStaging = null; });
+
+  return updateStaging;
+}
+
 function handleLauncher(req, res, parts) {
   if (!launcherAllowed(req)) return sendJson(res, 404, { error: "not-found" });
 
@@ -443,6 +497,27 @@ function handleLauncher(req, res, parts) {
         if (code === 0) resolve(sendJson(res, 200, { ok: true, root, output: output.trim() }));
         else resolve(sendJson(res, 500, { error: "install-failed", code, output: output.trim() }));
       });
+    });
+  }
+
+  /* "Download the update now", the button in the app's update bar. It answers
+     with what update.mjs decided: staged (restart to finish), already up to
+     date, or an error the page can show verbatim — notably "local-edits",
+     which means staging stopped rather than overwrite a file the user
+     changed by hand. */
+  if (parts[2] === "update" && parts[3] === "stage" && req.method === "POST") {
+    return stageUpdate(root).then((result) => {
+      if (!result) return sendJson(res, 500, { error: "no-answer" });
+      /* "The updater could not be run" is a server fault and answers 5xx.
+         "The updater ran and said no" — it is already up to date, or it
+         refused to overwrite files the user edited — is a successful request
+         with an answer in it, and answers 200: the page needs to read
+         `error` to say WHICH, and an HTTP error status reduces all of them
+         to a status code on the way through launcherFetch. */
+      if (STAGE_INFRA_ERRORS.has(result.error)) {
+        return sendJson(res, result.error === "updater-missing" ? 501 : 500, result);
+      }
+      return sendJson(res, 200, result);
     });
   }
 

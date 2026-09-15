@@ -26,7 +26,9 @@ working exactly as it always has.
 **Which installer to pick.** Most Windows PCs (Intel/AMD) want
 `SplitpageDesktopSetup-<version>-x64.exe`; Windows on ARM (Snapdragon,
 Surface Pro X and similar) wants the `-arm64.exe` build. Not sure which you
-have? Settings ▸ System ▸ About ▸ "System type".
+have? Settings ▸ System ▸ About ▸ "System type". You only have to pick once:
+from then on the app updates itself, and it picks the build matching the
+machine it is running on.
 
 **Windows SmartScreen warning.** The installers aren't code-signed yet, so
 Windows may say it "protected your PC" — click **More info ▸ Run anyway**.
@@ -361,10 +363,18 @@ node update.mjs check     # is there a newer version?
 node update.mjs           # download and verify it
 ```
 
-The launcher also checks in the background, and the app shows a bar when
-there is something waiting. Updates are fetched from a public releases mirror
-so the shipped copy can stay up to date even though the main repository is
-private.
+The launcher also checks at every launch, and the app shows a bar when there
+is something waiting — with a **Download** button, so you never have to go and
+find the right file yourself. Pressing it downloads and verifies the release
+there and then; the files are swapped in the next time you start Splitpage.
+Updates are fetched from a public releases mirror so the shipped copy can stay
+up to date even though the main repository is private.
+
+The desktop app does the same thing without a launcher: it checks at startup,
+and its Download button fetches the installer for your platform and
+architecture inside the app. When it has finished the button becomes **Install
+and restart**, which runs the installer and closes Splitpage. The release page
+only gets offered when a release has no installer your machine can run.
 
 **Updates install on restart, never while the app is open.** Downloading is
 safe at any time; swapping out `index.html` under a browser that has it open
@@ -372,7 +382,15 @@ is not. So `update.mjs` only downloads, checks every file against the new
 release's own checksums, and stages it — and `start.bat` puts it in place the
 next time you launch, before it serves anything. If an update fails halfway it
 rolls back to the copy it made, and if you have hand-edited any of the app's
-files it refuses to overwrite them until you say `--force`.
+files it refuses to overwrite them until you say `--force` (the Download
+button reports that rather than overwriting your work).
+
+The button reaches `update.mjs` through `POST /api/launcher/update/stage`,
+which exists only on a loopback bind and only with the launch token the
+launcher handed the page — the same gate as the "add me to the Start Menu"
+route, and for the same reason. Nothing over HTTP can install anything: that
+route only ever *downloads*, and the swap happens at launch, in `start.mjs`,
+when no browser has the app open.
 
 <!-- help:skip-start -->
 ## Working on the code

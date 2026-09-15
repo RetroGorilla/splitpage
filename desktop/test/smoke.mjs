@@ -1409,6 +1409,49 @@ async function startTinyUpdateServer() {
   return { server, url: `http://127.0.0.1:${port}/repos/x/releases/latest` };
 }
 
+/* The same thing, but a release that HAS an installer for this machine, plus
+   the asset itself and a SHA256SUMS for it. That is what lets the in-app
+   download be driven for real: main.js allows a download from the update
+   API's own origin precisely so a fork — or this — can serve one.
+
+   The "installer" is a few KB of deterministic bytes, never executed: this
+   case stops at "downloaded and verified". Running it is what
+   runUpdateInstaller does, and a test must never install anything. */
+async function startTinyReleaseServer() {
+  const arch = process.arch === "arm64" ? "arm64" : "x64";
+  const ext = process.platform === "win32" ? "exe" : (process.platform === "darwin" ? "dmg" : "AppImage");
+  const assetName = `SplitpageDesktopSetup-99.0.0-${arch}.${ext}`;
+  const payload = Buffer.alloc(4096, 0x5a);
+  const digest = crypto.createHash("sha256").update(payload).digest("hex");
+
+  let base = "";
+  const server = http.createServer((req, res) => {
+    if (req.url.startsWith("/asset")) {
+      res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(payload.length) });
+      res.end(payload);
+      return;
+    }
+    if (req.url.startsWith("/sums")) {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end(`${digest}  ${assetName}\n`);
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      tag_name: "v99.0.0",
+      html_url: "https://example.com/r",
+      assets: [
+        { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
+        { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
+      ]
+    }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  base = `http://127.0.0.1:${port}`;
+  return { server, url: `${base}/repos/x/releases/latest`, assetName, size: payload.length };
+}
+
 async function caseUpdateStatus(target) {
   const tag = target.name + " update status";
   const mini = await startTinyUpdateServer();
@@ -1421,15 +1464,81 @@ async function caseUpdateStatus(target) {
     record(tag + ": update-status.json reports updateAvailable:true", !!status && status.updateAvailable === true, JSON.stringify(status));
     record(tag + ": update-status.json reports the release URL", !!status && status.releaseUrl === "https://example.com/r", JSON.stringify(status));
 
-    // The renderer only reads update-status.json once, at boot (fire-and-
-    // forget in init()) — reload so it re-reads the now-updated in-memory
-    // status and the notice actually renders.
+    // main pushes every status change to the page now (splitpage:update-status),
+    // so the notice should appear WITHOUT a reload: the launch check answers
+    // after the page has already loaded and read the status once, and having
+    // to reload to see it was the bug. Assert that before reloading anything.
+    const barWithoutReload = await poll(app.cdp,
+      "(function(){ var b = document.getElementById('update-bar'); return b && b.hidden === false; })()", 15000);
+    record(tag + ": the notice appears without a reload, from main's push", !!barWithoutReload);
+
+    // It must also survive a reload, which re-reads the in-memory status.
     await app.cdp.send("Page.reload", {}).catch(() => {});
     await waitForRows(app.cdp, 20000);
     const barVisible = await poll(app.cdp, "(function(){ var b = document.getElementById('update-bar'); return b && b.hidden === false; })()", 15000);
     record(tag + ": the update notice bar appears", !!barVisible);
     const barText = await evalPage(app.cdp, "(document.getElementById('update-bar-text')||{}).textContent || ''");
     record(tag + ": the update notice mentions the new version", typeof barText === "string" && barText.indexOf("99.0.0") !== -1, barText);
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+    await new Promise((resolve) => mini.server.close(resolve));
+  }
+}
+
+/* The in-app update download: a release that HAS an installer for this
+   platform and architecture is offered as "Download" rather than a link, and
+   pressing it fetches and verifies the file inside the app.
+
+   It deliberately stops short of installing. runUpdateInstaller() spawns the
+   downloaded installer and quits the app, which a test on someone's working
+   machine must never do (invariant #33) — and it already refuses to in
+   TEST_MODE, which is the last assertion here. */
+async function caseUpdateDownload(target) {
+  const tag = target.name + " update download";
+  const mini = await startTinyReleaseServer();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "update-download", allowUpdateCheck: true, updateApi: mini.url });
+    await waitForRows(app.cdp, 20000);
+
+    const status = await poll(app.cdp,
+      "window.splitpageDesktop.getUpdateStatus().then(function(s){ return s.checking ? null : s; })", 20000);
+    record(tag + ": the launch check finds the release", !!status && status.updateAvailable === true, JSON.stringify(status));
+    record(tag + ": ...and recognises an installer for this machine",
+      !!status && status.canInstall === true, JSON.stringify(status));
+
+    // The bar offers Download, not a link out.
+    const label = await poll(app.cdp,
+      "(function(){ var b = document.getElementById('update-bar-action'); return b && !b.hidden ? b.textContent : null; })()", 15000);
+    record(tag + ": the notice offers Download", label === "Download", String(label));
+
+    const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
+    record(tag + ": the download succeeds", !!result && result.ok === true, JSON.stringify(result));
+
+    const after = await evalPage(app.cdp, "window.splitpageDesktop.getUpdateStatus()");
+    const dl = (after && after.download) || {};
+    record(tag + ": ...and reports it ready", dl.state === "ready", JSON.stringify(dl));
+    record(tag + ": ...having received the whole file", dl.received === mini.size, JSON.stringify(dl));
+    record(tag + ": ...verified against the published checksum", dl.verified === true, JSON.stringify(dl));
+
+    // The file is on disk, under this launch's own userData — nothing was
+    // written next to the app, and the page never learned the path.
+    const updatesDir = path.join(app.userDataDir, "updates");
+    const onDisk = fs.existsSync(path.join(updatesDir, mini.assetName));
+    record(tag + ": the installer is in userData/updates", onDisk, updatesDir);
+    record(tag + ": the page is never told the path",
+      !JSON.stringify(after).includes(app.userDataDir), JSON.stringify(after.download));
+
+    // The bar now offers the install, and asking for it is a no-op in a test.
+    const label2 = await poll(app.cdp,
+      "(function(){ var b = document.getElementById('update-bar-action'); return b && !b.hidden ? b.textContent : null; })()", 15000);
+    record(tag + ": the notice offers Install and restart", label2 === "Install and restart", String(label2));
+    const install = await evalPage(app.cdp, "window.splitpageDesktop.installUpdate()");
+    record(tag + ": installing is refused in test mode, not performed",
+      !!install && install.ok === true && install.testMode === true, JSON.stringify(install));
   } finally {
     if (app) {
       await teardown(app, tag);
@@ -4150,6 +4259,7 @@ async function runTargetSuite(target) {
     ["--host --pin (auto-generated)", () => caseHostModeAutoPin(target)],
     ["--host with no --pin (warning)", () => caseHostModeNoPinWarning(target)],
     ["update status", () => caseUpdateStatus(target)],
+    ["update download", () => caseUpdateDownload(target)],
     ["unsaved-changes close", () => caseUnsavedChangesClose(target)],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
     ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],

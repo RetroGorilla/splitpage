@@ -206,7 +206,14 @@ per document in `DATA_DIR`.
   answered 204 before any route runs.
 - `/api/launcher/*` is the one route that runs another program — launch
   token in the URL fragment, `HOST === "127.0.0.1"`, fixed script path. Any
-  failing check is 404, not 401 (invariant #28).
+  failing check is 404, not 401 (invariant #28). Two routes use it:
+  `register` (the Start Menu entry) and `update/stage`, which spawns
+  `update.mjs stage --json` so the update bar's Download button needs no
+  terminal. `stage` only ever DOWNLOADS into `.update/` — the swap is
+  `start.mjs`'s at the next launch, never over an app a browser has open —
+  and it is POST-only so a link or a prefetch cannot start one. An updater
+  verdict ("up to date", "you edited these files") is 200 carrying `error`;
+  only "could not run the updater at all" is 5xx.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
   `Cache-Control: no-store` on every response.
@@ -503,7 +510,13 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     is not proof — check `document.activeElement` first** (§3.12).
 28. **No HTTP endpoint spawns a process or installs files — except
     `/api/launcher/*`, loopback-only and launch-token-gated** (§3.7). A
-    missing lock answers 404, not 401.
+    missing lock answers 404, not 401. `update/stage` is the second such
+    route: it downloads and verifies a release, and still installs nothing —
+    only `start.mjs` at launch does that. In the desktop app the equivalent
+    pair is `splitpage:update-download` / `splitpage:update-install`, and
+    neither takes an argument: the renderer can ask for the update to be
+    fetched and run, but never names the URL to fetch or the file to
+    execute (main picked both from the release it checked).
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -616,7 +629,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `18-local-files.js` | `openProjectFile`/`adoptProjectState`, save-back, File menu dispatch |
 | `19-writer.js` | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | teleprompter and voice follow |
-| `20a-update.js` | update notice, About box |
+| `20a-update.js` | update notice (check, Download, Install), About box |
 | `20b-onboarding.js` | first-run wizard, pristine-seed gate (invariant #30) |
 | `20c-help.js` | in-app Help modal, coach-mark tour |
 | `20d-formats.js` | the two document formats, hand-edit reconcile |

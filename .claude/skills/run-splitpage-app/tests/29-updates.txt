@@ -1,0 +1,107 @@
+# ---------------------------------------------------------------------------
+# 29-updates.txt — the update bar (20a-update.js)
+#
+# The bar turns an update status into a line of text and one button. Both the
+# launcher (update-status.json) and the desktop app (the bridge) feed it the
+# same shape, so both are driven here through window.__updateTest.applyStatus
+# — no launcher to start, no release to publish, no network.
+#
+# What it does NOT cover: the launcher's staging route (tools/test-server.mjs)
+# and the desktop download/install itself (desktop/test/smoke.mjs). This is
+# the renderer's half only.
+# ---------------------------------------------------------------------------
+
+open /index.html
+expect document.getElementById('rows').children.length > 0
+expect !!window.__updateTest
+
+# ---- nothing to say ----------------------------------------------------
+
+# Up to date: no bar at all.
+eval window.__updateTest.applyStatus({ version: "2.0.0", latest: "2.0.0", updateAvailable: false, checking: false })
+expect window.__updateTest.bar().hidden == true
+
+# Still checking, and nothing known yet: still no bar. "Checking" is not news.
+eval window.__updateTest.applyStatus({ version: "2.0.0", latest: null, updateAvailable: false, checking: true })
+expect window.__updateTest.bar().hidden == true
+
+# ---- the launcher copy -------------------------------------------------
+
+# An update is available. Without a launcher there is nothing this page can
+# do about it, so it says so and offers no button.
+eval window.__updateTest.applyStatus({ version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false })
+expect window.__updateTest.bar().hidden == false
+expect window.__updateTest.bar().text.indexOf('2.1.0') >= 0
+expect window.__updateTest.bar().text.indexOf('2.0.0') >= 0
+expect window.__updateTest.bar().buttonHidden == true
+
+# Already staged beats merely available: one restart away, and no button —
+# there is nothing left to press.
+eval window.__updateTest.applyStatus({ version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, pending: { to: "2.1.0" } })
+expect window.__updateTest.bar().hidden == false
+expect window.__updateTest.bar().text.indexOf('restart') >= 0
+expect window.__updateTest.bar().buttonHidden == true
+
+# ---- dismiss means dismiss --------------------------------------------
+
+eval window.__updateTest.applyStatus({ version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false })
+expect window.__updateTest.bar().hidden == false
+eval window.__updateTest.dismiss()
+expect window.__updateTest.bar().hidden == true
+expect window.__updateTest.dismissed() == true
+
+# A later status must not put the bar back up on someone who closed it. This
+# is the one that matters now the page polls and the desktop app pushes, and
+# it uses pushStatus because applyStatus deliberately clears the dismissal.
+eval window.__updateTest.pushStatus({ version: "2.0.0", latest: "2.2.0", updateAvailable: true, checking: false })
+expect window.__updateTest.bar().hidden == true
+expect window.__updateTest.dismissed() == true
+
+# ---- the desktop app ---------------------------------------------------
+#
+# Same bar, different half of renderUpdateNotice: here the page can actually
+# download and install, so the button is the point. A fake backend stands in
+# for the bridge (the real one lives in Electron), and the click handlers are
+# recorded rather than run — what is being tested is that the right action is
+# offered at each state, not what main does with it.
+
+eval (function(){ window.__fakeCalls = []; var f = { isDesktop: true, downloadUpdate: function(){ window.__fakeCalls.push('download'); return new Promise(function(){}); }, installUpdate: function(){ window.__fakeCalls.push('install'); return new Promise(function(){}); }, openExternal: function(u){ window.__fakeCalls.push('external:' + u); } }; window.__desktopTest.setBackend(f); return true; })()
+
+# An installer exists for this machine: Download, in-app.
+eval window.__updateTest.applyStatus({ desktop: true, version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, canInstall: true, download: { state: "idle", received: 0, total: 0 } })
+expect window.__updateTest.bar().hidden == false
+expect window.__updateTest.bar().buttonHidden == false
+expect window.__updateTest.bar().buttonLabel == Download
+
+# Pressing it asks the bridge to download — no link is opened.
+eval window.__updateTest.clickAction()
+expect window.__fakeCalls.length == 1
+expect window.__fakeCalls[0] == download
+
+# Mid-download: progress, and no button to press twice.
+eval window.__updateTest.applyStatus({ desktop: true, version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, canInstall: true, download: { state: "downloading", received: 5242880, total: 10485760 } })
+expect window.__updateTest.bar().text.indexOf('50%') >= 0
+expect window.__updateTest.bar().buttonHidden == true
+
+# Downloaded and verified: one click from installing.
+eval window.__updateTest.applyStatus({ desktop: true, version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, canInstall: true, download: { state: "ready", received: 10485760, total: 10485760 } })
+expect window.__updateTest.bar().buttonHidden == false
+expect window.__updateTest.bar().buttonLabel == Install and restart
+eval window.__fakeCalls = []
+eval window.__updateTest.clickAction()
+expect window.__fakeCalls[0] == install
+
+# A failed download says so and offers another go, rather than going quiet.
+eval window.__updateTest.applyStatus({ desktop: true, version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, canInstall: true, download: { state: "failed", error: "connection reset", received: 0, total: 0 } })
+expect window.__updateTest.bar().text.indexOf('connection reset') >= 0
+expect window.__updateTest.bar().buttonLabel == Try again
+
+# No installer for this platform/arch in that release: the release page is the
+# only honest thing left to offer, and it is the ONLY case that opens a link.
+eval window.__updateTest.applyStatus({ desktop: true, version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, canInstall: false, releaseUrl: "https://example.test/r", download: { state: "idle", received: 0, total: 0 } })
+expect window.__updateTest.bar().buttonLabel == Open release page
+eval window.__fakeCalls = []
+eval window.__updateTest.clickAction()
+expect window.__fakeCalls[0] == external:https://example.test/r
+
+eval window.__desktopTest.restoreBackend()

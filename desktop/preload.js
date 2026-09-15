@@ -21,6 +21,7 @@ if (location.origin === "splitpage://app") {
   let restoreNoticeCallback = null;
   let reassignDocIdCallback = null;
   let draftFlushCallback = null;
+  let updateStatusCallback = null;
 
   ipcRenderer.on("splitpage:open-file", (_event, entry) => {
     if (openFileCallback) openFileCallback(reviveFileEntry(entry));
@@ -33,6 +34,13 @@ if (location.origin === "splitpage://app") {
   });
   ipcRenderer.on("splitpage:restore-notice", (_event, payload) => {
     if (restoreNoticeCallback) restoreNoticeCallback(payload);
+  });
+  /* UPDATES: main pushes the whole status object whenever it changes — the
+     launch check settling, and every step of a download. Pushed rather than
+     polled because the check finishes after this page has already loaded and
+     read the status once. */
+  ipcRenderer.on("splitpage:update-status", (_event, status) => {
+    if (updateStatusCallback) updateStatusCallback(status);
   });
   /* DOC-CLAIMS: main has decided this page's document is a copy of one open
      in another tab, and is handing it a replacement identity. The payload is
@@ -259,6 +267,32 @@ if (location.origin === "splitpage://app") {
 
     openExternal(url) {
       ipcRenderer.send("splitpage:open-external", url);
+    },
+
+    /* ---- updates (see main.js section 9) --------------------------------
+       Deliberately argument-free, all four of them. The page asks for the
+       update to be downloaded and installed; it never gets to say what is
+       downloaded or what is run — main chose the asset from the release it
+       checked, and knows the only path it is willing to execute. */
+
+    getUpdateStatus() {
+      return ipcRenderer.invoke("splitpage:update-status");
+    },
+
+    checkForUpdate() {
+      return ipcRenderer.invoke("splitpage:update-check");
+    },
+
+    downloadUpdate() {
+      return ipcRenderer.invoke("splitpage:update-download");
+    },
+
+    installUpdate() {
+      return ipcRenderer.invoke("splitpage:update-install");
+    },
+
+    onUpdateStatus(cb) {
+      updateStatusCallback = cb;
     }
   };
 
