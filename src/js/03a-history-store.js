@@ -1044,6 +1044,8 @@
      entry that can never succeed is dropped rather than held in RAM forever
      (historyStoreEntry). */
   var HISTORY_DESKTOP_TIMEOUT_MS = 30000;
+  /* test hook setDesktopTimeout(): a suite cannot wait 30 s for each case */
+  var historyDesktopTimeoutOverride = null;
 
   function historyDesktopCall(run, onTimeout, onReject) {
     return new Promise(function (resolve) {
@@ -1055,7 +1057,8 @@
         if (timer) clearTimeout(timer);
         resolve(v);
       }
-      timer = setTimeout(function () { finish(onTimeout); }, HISTORY_DESKTOP_TIMEOUT_MS);
+      timer = setTimeout(function () { finish(onTimeout); },
+        historyDesktopTimeoutOverride != null ? historyDesktopTimeoutOverride : HISTORY_DESKTOP_TIMEOUT_MS);
       var p;
       try { p = run(); } catch (e) {
         if (window.console) console.error(e);
@@ -1096,12 +1099,21 @@
       });
     },
 
-    list: function (docId) {
+    /* opts.strict (importHistoryBundle only): a timeout, a rejection or a
+       malformed answer resolves null instead of "empty". Every other caller
+       wants the panel to degrade to an empty list; the import must be able
+       to tell "this document has no history" from "could not read it",
+       because treating the second as the first would let its puts trim
+       genuine local snapshots away (invariant #49). */
+    list: function (docId, opts) {
       var empty = { entries: [], older: [], olderExpiresAt: null };
+      var failed = (opts && opts.strict) ? null : empty;
       return historyDesktopCall(function () {
         return DESKTOP.historyList(docId || null);
-      }, empty, empty).then(function (r) {
-        if (!r || typeof r !== "object") return empty;
+      }, failed, failed).then(function (r) {
+        if (!r || typeof r !== "object") return failed;
+        /* an answer with no entries array cannot say "no history" either */
+        if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
         /* Main sends metas with no document id in them (on disk the folder
            IS the document), so stamp it back on for the panel — the other
            two backends carry it on every meta they hand out. */
@@ -1727,6 +1739,226 @@
     });
   }
 
+  /* ---- import (X2: File ▸ Import app data…) ----
+
+     THE ONLY WRITE PATH for imported history (invariant #49). Everything an
+     app-data file carries — per-document snapshots, the Older bucket, the
+     legacy 'splitpage-snapshots' list (20h-appdata.js normalises that one
+     and hands it in as Older entries) — reaches storage through here and
+     through nothing else, so the rules below hold for every byte of it:
+
+       * MERGE, NEVER REPLACE. Only backend.put (put-if-absent by snapshot id)
+         and backend.importOlder (put-if-absent into Older). Nothing here
+         deletes, and nothing evicts beyond what a put already does on its
+         own (the per-document trim, the over-cap pass, the quota retry).
+       * Every id is validated again here, whatever the caller did: a docId
+         that is not canonical fails that whole document, a snapshot id that
+         does not fit HISTORY_SNAP_ID_RE or a body that is not a string fails
+         that snapshot. The file is untrusted input.
+       * historyLocal is never touched: an imported snapshot is not this
+         page's capture, so it must never become a 'pending' entry held in
+         RAM and retried.
+
+     WHY OLDEST FIRST, AND WHY SOME ARE LEFT OUT. Every put re-stamps atMs to
+     just after the newest snapshot already in its bucket (historyStampAfter,
+     and main.js's twin). Imported oldest first into a document with no local
+     history, each one is already newer than the last, so every original
+     timestamp survives. Into a document that already has NEWER local
+     snapshots, the imported ones are re-stamped after them (their `at` text
+     is kept). Re-stamped snapshots sort as the newest, so the per-document
+     trim would delete genuine local snapshots to make room for older
+     imported ones. So a document only takes the imported snapshots that
+     would rank inside its newest HISTORY_PER_DOC of local ∪ incoming by
+     their ORIGINAL times; the rest are counted as skipped (and as capped).
+
+     Batches of HISTORY_IMPORT_BATCH puts each run as ONE enqueueHistory job,
+     with a macrotask yield between jobs — a big import must not freeze
+     typing, and a capture issued meanwhile slots in between batches instead
+     of waiting behind the whole file.
+
+     → Promise<{docs, added, skipped, failed, older, capped, code?}>, never
+     rejects. docs counts documents that received at least one snapshot;
+     older counts Older entries added; code is "quota" when storage refused a
+     write — the import stops there, and everything not yet written is
+     counted as failed. */
+  var HISTORY_IMPORT_BATCH = 25;
+
+  function historyImportYield() {
+    return new Promise(function (resolve) { setTimeout(resolve, 0); });
+  }
+
+  /* The browser backends answer 'quota'; main answers 'enospc' for a full
+     disk. Both mean "stop — nothing later will fit either". */
+  function historyImportIsQuota(code) {
+    return code === "quota" || code === "enospc";
+  }
+
+  /* bundle snapshots → [{meta, stateJson}] that can be stored, one per id.
+     Unusable entries count as failed, a repeated id as skipped. */
+  function historyImportEntries(list, counts) {
+    var out = [], seen = {};
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      var meta = (s && typeof s === "object") ? sanitizeHistoryMeta(s.meta) : null;
+      if (!meta || !HISTORY_SNAP_ID_RE.test(meta.id) || typeof s.stateJson !== "string") {
+        counts.failed++;
+        return;
+      }
+      if (seen[meta.id]) { counts.skipped++; return; }
+      seen[meta.id] = true;
+      out.push({ meta: meta, stateJson: s.stateJson });
+    });
+    return out;
+  }
+
+  function historyImportByAtAscending(a, b) {
+    return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : a.meta.id > b.meta.id ? 1 : 0);
+  }
+
+  async function importHistoryBundle(bundle) {
+    var result = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0 };
+    try {
+      bundle = (bundle && typeof bundle === "object") ? bundle : {};
+      var docs = Array.isArray(bundle.docs) ? bundle.docs : [];
+      var stopped = false;
+
+      for (var d = 0; d < docs.length; d++) {
+        var doc = docs[d];
+        var snaps = (doc && typeof doc === "object" && Array.isArray(doc.snapshots)) ? doc.snapshots : [];
+        var docId = normalizeDocId(doc && doc.docId);
+        if (!docId) { result.failed += snaps.length; continue; }
+
+        var entries = historyImportEntries(snaps, result);
+        if (!entries.length) continue;
+        if (stopped) { result.failed += entries.length; continue; }
+
+        /* Read through the queue, so it sees every write issued before it.
+           strict: a desktop list that timed out or failed answers null, not
+           "empty" — null here means "could not read", never "no history". */
+        var existing = await enqueueHistory(function (id) {
+          return function () {
+            return resolveHistoryBackend().then(function (backend) { return backend.list(id, { strict: true }); })
+              .then(function (listed) {
+                return (listed && typeof listed === "object" && Array.isArray(listed.entries)) ? listed.entries : null;
+              });
+          };
+        }(docId), function () { return null; });
+        if (existing == null) {
+          /* Cannot tell what is already there — and so cannot tell what a put
+             would push out. Leave this document alone rather than guess. */
+          result.failed += entries.length;
+          continue;
+        }
+
+        var have = {};
+        existing.forEach(function (m) { if (m && typeof m.id === "string") have[m.id] = true; });
+        var fresh = entries.filter(function (e) {
+          if (have[e.meta.id]) { result.skipped++; return false; }
+          return true;
+        });
+        var pool = existing.map(function (m) {
+          return { atMs: Number(m.atMs) || 0, id: String(m.id), entry: null };
+        }).concat(fresh.map(function (e) {
+          return { atMs: e.meta.atMs, id: e.meta.id, entry: e };
+        }));
+        pool.sort(function (a, b) { return (b.atMs - a.atMs) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0); });
+        var keep = pool.slice(0, HISTORY_PER_DOC).filter(function (p) { return p.entry; }).map(function (p) { return p.entry; });
+        var capped = fresh.length - keep.length;
+        result.skipped += capped;
+        result.capped += capped;
+        keep.sort(historyImportByAtAscending);
+
+        var docAdded = 0;
+        var processed = 0;   /* entries of keep that got an answer (or were given up on) */
+        for (var start = 0; start < keep.length && !stopped; start += HISTORY_IMPORT_BATCH) {
+          if (start > 0) await historyImportYield();
+          var batch = keep.slice(start, start + HISTORY_IMPORT_BATCH);
+          /* done = puts that answered (added + skipped + failed) */
+          var progress = { done: 0, added: 0, skipped: 0, failed: 0, quota: false };
+          await enqueueHistory(function (id, batch, progress) {
+            return function () {
+              return resolveHistoryBackend().then(function (backend) {
+                function next() {
+                  if (progress.done >= batch.length) return null;
+                  var e = batch[progress.done];
+                  return Promise.resolve(backend.put(id, e.meta, e.stateJson)).then(function (r) {
+                    r = r || { stored: false, code: "io" };
+                    if (!r.stored && historyImportIsQuota(r.code)) { progress.quota = true; return null; }
+                    progress.done++;
+                    if (r.stored && r.duplicate) progress.skipped++;
+                    else if (r.stored) progress.added++;
+                    else progress.failed++;
+                    return next();
+                  });
+                }
+                return next();
+              });
+            };
+          }(docId, batch, progress), function () {
+            /* a put that threw: whatever it had not reached is not stored */
+            return null;
+          });
+          docAdded += progress.added;
+          result.added += progress.added;
+          result.skipped += progress.skipped;
+          result.failed += progress.failed;
+          if (progress.quota) {
+            /* the refused put and everything after it in this document */
+            stopped = true;
+            result.code = "quota";
+            processed += progress.done;
+            result.failed += keep.length - processed;
+            processed = keep.length;
+          } else {
+            /* a put that threw leaves the rest of its batch unanswered */
+            result.failed += batch.length - progress.done;
+            processed += batch.length;
+          }
+        }
+
+        if (docAdded) {
+          result.docs++;
+          /* A put already stamps the record's title and lastOpenedAt; the touch
+             is how a document with no local history before this import gets
+             the file's own title. A document that already had history keeps
+             its title — the local value wins — so it is touched with none.
+             backend.touch rather than historyTouchDocument(): this runs from a
+             job-issuing loop, and historyTouchDocument queues its own job. */
+          var titleForTouch = existing.length ? "" : historyClip(doc.title, 300);
+          await enqueueHistory(function (id, t) {
+            return function () {
+              return resolveHistoryBackend().then(function (backend) { return backend.touch(id, t); });
+            };
+          }(docId, titleForTouch), null);
+        }
+      }
+
+      var olderEntries = historyImportEntries(bundle.older, result);
+      if (olderEntries.length) {
+        if (stopped) {
+          result.failed += olderEntries.length;
+        } else {
+          var r = await enqueueHistory(function () {
+            return resolveHistoryBackend().then(function (backend) { return backend.importOlder(olderEntries); });
+          }, function () { return { ok: false, added: 0, code: "io" }; });
+          r = r || { ok: false, added: 0, code: "io" };
+          var added = Math.max(0, Math.min(olderEntries.length, Number(r.added) || 0));
+          result.older += added;
+          if (r.ok) {
+            result.skipped += olderEntries.length - added;
+          } else {
+            result.failed += olderEntries.length - added;
+            if (historyImportIsQuota(r.code)) result.code = "quota";
+          }
+        }
+      }
+    } catch (e) {
+      if (window.console) console.error(e);
+      if (!result.code) result.code = "io";
+    }
+    historyRenderSoon();
+    return result;
+  }
+
   /* ---- one-time migration of the shared localStorage list ---- */
 
   function historyLegacyRaw() {
@@ -1866,6 +2098,7 @@
       historyForced = null;
       historyNowOverride = null;
       historyCapOverride = null;
+      historyDesktopTimeoutOverride = null;
       historyEstimateCache = null;
       historyLastAtMs = 0;
       historyLocal = {};
@@ -1978,5 +2211,12 @@
     },
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
-    exportAll: exportHistoryAll
+    exportAll: exportHistoryAll,
+    /* ms, or null for the real 30 s — how long a desktop bridge call may hang */
+    setDesktopTimeout: function (ms) {
+      historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
+      return historyDesktopTimeoutOverride;
+    },
+    /* the X2 write path itself: bundle.history's {docs, older} shape */
+    importBundle: importHistoryBundle
   };

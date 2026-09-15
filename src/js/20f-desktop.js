@@ -234,6 +234,15 @@
     var driveItem = document.getElementById("menu-drive-open");
     if (driveItem) driveItem.hidden = true;
 
+    /* App data moves one way: exported from the browser build, imported
+       here (X1/X2, 20h-appdata.js). Export stays hidden on the desktop
+       because its history store cannot enumerate its own documents yet
+       (exportHistoryAll refuses there); import is the desktop's half. */
+    var exportAppItem = document.getElementById("menu-export-app-data");
+    if (exportAppItem) exportAppItem.hidden = true;
+    var importAppItem = document.getElementById("menu-import-app-data");
+    if (importAppItem) importAppItem.hidden = false;
+
     /* Files the OS hands us — argv at launch, a second instance, macOS
        "open-file" — open exactly the way File ▸ Open does: through
        openProjectFile(), with the same snapshot/dirty safety as any other

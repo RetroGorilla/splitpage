@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
-<meta name="splitpage-version" content="1.0.1">
+<meta name="splitpage-version" content="2.0.0">
 <!-- The pristine-seed gate (invariant #30): "<#state-data text length>-<checksum>"
      for the demo document this build shipped with, computed by build.mjs
      from src/seed-state.json. 20b-onboarding.js recomputes the same checksum
@@ -3162,7 +3162,7 @@
       <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
     </div>
     <div class="help-layout">
-      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a><ul><li><a href="#help-windows-on-arm">Windows on ARM</a></li></ul></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
+      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-from-the-browser-app-to-the-desktop-app">Moving from the browser app to the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a><ul><li><a href="#help-windows-on-arm">Windows on ARM</a></li></ul></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
       <div id="help-body"><h1 id="help-splitpage">Splitpage</h1>
 <p>Splitpage is a two-column visual/audio script editor — pictures on one side, narration on the other — with a built-in teleprompter, comments for collaborating on a draft, and a production breakdown that tracks every prop, location, VFX shot, and person mentioned in the script.</p>
 <p>Scripts save as plain Markdown (<code>.md</code>) files by default, so you can open and edit them anywhere, or as native <code>.splitpage</code> files that keep everything — tags, comments, version history — in one file. Splitpage itself runs portable straight out of a folder with nothing to install, or you can <a href="#help-installing-it">install it</a> properly, with a Start Menu entry and auto-updates.</p>
@@ -3178,6 +3178,12 @@
 <h2 id="help-desktop-app">Desktop app</h2>
 <p>Splitpage also comes as a desktop app for Windows (x64 and ARM64): the same app in its own window, with native menus and Open/Save dialogs, and <code>.splitpage</code> files open in it when you double-click them. Editing, saving and hosting a shared session on your network all work the same as in the browser, with two exceptions for now:</p>
 <ul><li><strong>Follow My Voice</strong> isn't available in the desktop app yet. It still works in Chrome or Edge, and a fix is planned.</li><li><strong>Google Drive files</strong> can't be browsed from the desktop app, because Google's sign-in only returns to a web address. <strong>Import from Google Doc link</strong> still works: it opens the Doc's .docx download in your browser, and you then open the downloaded file with File ▸ Open.</li></ul>
+<h3 id="help-moving-from-the-browser-app-to-the-desktop-app">Moving from the browser app to the desktop app</h3>
+<p>If you have been using the browser version and want to move to the desktop app, you can bring your version history, saved servers, and preferences with you:</p>
+<ol><li>In the browser app, <strong>File ▸ Export app data…</strong> saves a <code>.json</code> file with your history, servers, and settings (<code>splitpage-app-data-YYYYMMDD.json</code>).</li><li>Install and launch the desktop app.</li><li>In the desktop app, <strong>File ▸ Import app data…</strong> and pick the file you exported. Everything merges into what you already have — nothing is overwritten or deleted, and importing the same file twice adds nothing new.</li></ol>
+<p><strong>What travels:</strong> version history (every snapshot you've saved, per document and in the Older archive), saved servers (bookmarks including SSH settings), and preferences (whether you've seen the setup wizard, your author name, comment sorting preference, writer column width, and the tagging-help dismissal).</p>
+<p><strong>What does not travel:</strong> server sign-in tokens or PINs, Google Drive API keys, and the documents themselves — those are files you already have on your computer.</p>
+<p>Export is currently available in the browser app only. The desktop app's history backend is stored as files on disk, and exporting from it is planned but not yet built.</p>
 <h3 id="help-tabs">Tabs</h3>
 <p>The desktop app opens documents in tabs across the top of the window, like a browser:</p>
 <ul><li><strong>Ctrl+T</strong> opens a new tab.</li><li><strong>Ctrl+W</strong>, or a middle-click on a tab, closes it — if it has unsaved changes, Splitpage asks first.</li><li><strong>Ctrl+Tab</strong> / <strong>Ctrl+Shift+Tab</strong> step to the next or previous tab.</li><li>Drag a tab out of the window to give it its own window, and drag it into another Splitpage window to bring it back in. Drag a tab past another one to reorder them.</li></ul>
@@ -6471,6 +6477,8 @@ node update.mjs           # download and verify it</code></pre>
      entry that can never succeed is dropped rather than held in RAM forever
      (historyStoreEntry). */
   var HISTORY_DESKTOP_TIMEOUT_MS = 30000;
+  /* test hook setDesktopTimeout(): a suite cannot wait 30 s for each case */
+  var historyDesktopTimeoutOverride = null;
 
   function historyDesktopCall(run, onTimeout, onReject) {
     return new Promise(function (resolve) {
@@ -6482,7 +6490,8 @@ node update.mjs           # download and verify it</code></pre>
         if (timer) clearTimeout(timer);
         resolve(v);
       }
-      timer = setTimeout(function () { finish(onTimeout); }, HISTORY_DESKTOP_TIMEOUT_MS);
+      timer = setTimeout(function () { finish(onTimeout); },
+        historyDesktopTimeoutOverride != null ? historyDesktopTimeoutOverride : HISTORY_DESKTOP_TIMEOUT_MS);
       var p;
       try { p = run(); } catch (e) {
         if (window.console) console.error(e);
@@ -6523,12 +6532,21 @@ node update.mjs           # download and verify it</code></pre>
       });
     },
 
-    list: function (docId) {
+    /* opts.strict (importHistoryBundle only): a timeout, a rejection or a
+       malformed answer resolves null instead of "empty". Every other caller
+       wants the panel to degrade to an empty list; the import must be able
+       to tell "this document has no history" from "could not read it",
+       because treating the second as the first would let its puts trim
+       genuine local snapshots away (invariant #49). */
+    list: function (docId, opts) {
       var empty = { entries: [], older: [], olderExpiresAt: null };
+      var failed = (opts && opts.strict) ? null : empty;
       return historyDesktopCall(function () {
         return DESKTOP.historyList(docId || null);
-      }, empty, empty).then(function (r) {
-        if (!r || typeof r !== "object") return empty;
+      }, failed, failed).then(function (r) {
+        if (!r || typeof r !== "object") return failed;
+        /* an answer with no entries array cannot say "no history" either */
+        if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
         /* Main sends metas with no document id in them (on disk the folder
            IS the document), so stamp it back on for the panel — the other
            two backends carry it on every meta they hand out. */
@@ -7154,6 +7172,226 @@ node update.mjs           # download and verify it</code></pre>
     });
   }
 
+  /* ---- import (X2: File ▸ Import app data…) ----
+
+     THE ONLY WRITE PATH for imported history (invariant #49). Everything an
+     app-data file carries — per-document snapshots, the Older bucket, the
+     legacy 'splitpage-snapshots' list (20h-appdata.js normalises that one
+     and hands it in as Older entries) — reaches storage through here and
+     through nothing else, so the rules below hold for every byte of it:
+
+       * MERGE, NEVER REPLACE. Only backend.put (put-if-absent by snapshot id)
+         and backend.importOlder (put-if-absent into Older). Nothing here
+         deletes, and nothing evicts beyond what a put already does on its
+         own (the per-document trim, the over-cap pass, the quota retry).
+       * Every id is validated again here, whatever the caller did: a docId
+         that is not canonical fails that whole document, a snapshot id that
+         does not fit HISTORY_SNAP_ID_RE or a body that is not a string fails
+         that snapshot. The file is untrusted input.
+       * historyLocal is never touched: an imported snapshot is not this
+         page's capture, so it must never become a 'pending' entry held in
+         RAM and retried.
+
+     WHY OLDEST FIRST, AND WHY SOME ARE LEFT OUT. Every put re-stamps atMs to
+     just after the newest snapshot already in its bucket (historyStampAfter,
+     and main.js's twin). Imported oldest first into a document with no local
+     history, each one is already newer than the last, so every original
+     timestamp survives. Into a document that already has NEWER local
+     snapshots, the imported ones are re-stamped after them (their `at` text
+     is kept). Re-stamped snapshots sort as the newest, so the per-document
+     trim would delete genuine local snapshots to make room for older
+     imported ones. So a document only takes the imported snapshots that
+     would rank inside its newest HISTORY_PER_DOC of local ∪ incoming by
+     their ORIGINAL times; the rest are counted as skipped (and as capped).
+
+     Batches of HISTORY_IMPORT_BATCH puts each run as ONE enqueueHistory job,
+     with a macrotask yield between jobs — a big import must not freeze
+     typing, and a capture issued meanwhile slots in between batches instead
+     of waiting behind the whole file.
+
+     → Promise<{docs, added, skipped, failed, older, capped, code?}>, never
+     rejects. docs counts documents that received at least one snapshot;
+     older counts Older entries added; code is "quota" when storage refused a
+     write — the import stops there, and everything not yet written is
+     counted as failed. */
+  var HISTORY_IMPORT_BATCH = 25;
+
+  function historyImportYield() {
+    return new Promise(function (resolve) { setTimeout(resolve, 0); });
+  }
+
+  /* The browser backends answer 'quota'; main answers 'enospc' for a full
+     disk. Both mean "stop — nothing later will fit either". */
+  function historyImportIsQuota(code) {
+    return code === "quota" || code === "enospc";
+  }
+
+  /* bundle snapshots → [{meta, stateJson}] that can be stored, one per id.
+     Unusable entries count as failed, a repeated id as skipped. */
+  function historyImportEntries(list, counts) {
+    var out = [], seen = {};
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      var meta = (s && typeof s === "object") ? sanitizeHistoryMeta(s.meta) : null;
+      if (!meta || !HISTORY_SNAP_ID_RE.test(meta.id) || typeof s.stateJson !== "string") {
+        counts.failed++;
+        return;
+      }
+      if (seen[meta.id]) { counts.skipped++; return; }
+      seen[meta.id] = true;
+      out.push({ meta: meta, stateJson: s.stateJson });
+    });
+    return out;
+  }
+
+  function historyImportByAtAscending(a, b) {
+    return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : a.meta.id > b.meta.id ? 1 : 0);
+  }
+
+  async function importHistoryBundle(bundle) {
+    var result = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0 };
+    try {
+      bundle = (bundle && typeof bundle === "object") ? bundle : {};
+      var docs = Array.isArray(bundle.docs) ? bundle.docs : [];
+      var stopped = false;
+
+      for (var d = 0; d < docs.length; d++) {
+        var doc = docs[d];
+        var snaps = (doc && typeof doc === "object" && Array.isArray(doc.snapshots)) ? doc.snapshots : [];
+        var docId = normalizeDocId(doc && doc.docId);
+        if (!docId) { result.failed += snaps.length; continue; }
+
+        var entries = historyImportEntries(snaps, result);
+        if (!entries.length) continue;
+        if (stopped) { result.failed += entries.length; continue; }
+
+        /* Read through the queue, so it sees every write issued before it.
+           strict: a desktop list that timed out or failed answers null, not
+           "empty" — null here means "could not read", never "no history". */
+        var existing = await enqueueHistory(function (id) {
+          return function () {
+            return resolveHistoryBackend().then(function (backend) { return backend.list(id, { strict: true }); })
+              .then(function (listed) {
+                return (listed && typeof listed === "object" && Array.isArray(listed.entries)) ? listed.entries : null;
+              });
+          };
+        }(docId), function () { return null; });
+        if (existing == null) {
+          /* Cannot tell what is already there — and so cannot tell what a put
+             would push out. Leave this document alone rather than guess. */
+          result.failed += entries.length;
+          continue;
+        }
+
+        var have = {};
+        existing.forEach(function (m) { if (m && typeof m.id === "string") have[m.id] = true; });
+        var fresh = entries.filter(function (e) {
+          if (have[e.meta.id]) { result.skipped++; return false; }
+          return true;
+        });
+        var pool = existing.map(function (m) {
+          return { atMs: Number(m.atMs) || 0, id: String(m.id), entry: null };
+        }).concat(fresh.map(function (e) {
+          return { atMs: e.meta.atMs, id: e.meta.id, entry: e };
+        }));
+        pool.sort(function (a, b) { return (b.atMs - a.atMs) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0); });
+        var keep = pool.slice(0, HISTORY_PER_DOC).filter(function (p) { return p.entry; }).map(function (p) { return p.entry; });
+        var capped = fresh.length - keep.length;
+        result.skipped += capped;
+        result.capped += capped;
+        keep.sort(historyImportByAtAscending);
+
+        var docAdded = 0;
+        var processed = 0;   /* entries of keep that got an answer (or were given up on) */
+        for (var start = 0; start < keep.length && !stopped; start += HISTORY_IMPORT_BATCH) {
+          if (start > 0) await historyImportYield();
+          var batch = keep.slice(start, start + HISTORY_IMPORT_BATCH);
+          /* done = puts that answered (added + skipped + failed) */
+          var progress = { done: 0, added: 0, skipped: 0, failed: 0, quota: false };
+          await enqueueHistory(function (id, batch, progress) {
+            return function () {
+              return resolveHistoryBackend().then(function (backend) {
+                function next() {
+                  if (progress.done >= batch.length) return null;
+                  var e = batch[progress.done];
+                  return Promise.resolve(backend.put(id, e.meta, e.stateJson)).then(function (r) {
+                    r = r || { stored: false, code: "io" };
+                    if (!r.stored && historyImportIsQuota(r.code)) { progress.quota = true; return null; }
+                    progress.done++;
+                    if (r.stored && r.duplicate) progress.skipped++;
+                    else if (r.stored) progress.added++;
+                    else progress.failed++;
+                    return next();
+                  });
+                }
+                return next();
+              });
+            };
+          }(docId, batch, progress), function () {
+            /* a put that threw: whatever it had not reached is not stored */
+            return null;
+          });
+          docAdded += progress.added;
+          result.added += progress.added;
+          result.skipped += progress.skipped;
+          result.failed += progress.failed;
+          if (progress.quota) {
+            /* the refused put and everything after it in this document */
+            stopped = true;
+            result.code = "quota";
+            processed += progress.done;
+            result.failed += keep.length - processed;
+            processed = keep.length;
+          } else {
+            /* a put that threw leaves the rest of its batch unanswered */
+            result.failed += batch.length - progress.done;
+            processed += batch.length;
+          }
+        }
+
+        if (docAdded) {
+          result.docs++;
+          /* A put already stamps the record's title and lastOpenedAt; the touch
+             is how a document with no local history before this import gets
+             the file's own title. A document that already had history keeps
+             its title — the local value wins — so it is touched with none.
+             backend.touch rather than historyTouchDocument(): this runs from a
+             job-issuing loop, and historyTouchDocument queues its own job. */
+          var titleForTouch = existing.length ? "" : historyClip(doc.title, 300);
+          await enqueueHistory(function (id, t) {
+            return function () {
+              return resolveHistoryBackend().then(function (backend) { return backend.touch(id, t); });
+            };
+          }(docId, titleForTouch), null);
+        }
+      }
+
+      var olderEntries = historyImportEntries(bundle.older, result);
+      if (olderEntries.length) {
+        if (stopped) {
+          result.failed += olderEntries.length;
+        } else {
+          var r = await enqueueHistory(function () {
+            return resolveHistoryBackend().then(function (backend) { return backend.importOlder(olderEntries); });
+          }, function () { return { ok: false, added: 0, code: "io" }; });
+          r = r || { ok: false, added: 0, code: "io" };
+          var added = Math.max(0, Math.min(olderEntries.length, Number(r.added) || 0));
+          result.older += added;
+          if (r.ok) {
+            result.skipped += olderEntries.length - added;
+          } else {
+            result.failed += olderEntries.length - added;
+            if (historyImportIsQuota(r.code)) result.code = "quota";
+          }
+        }
+      }
+    } catch (e) {
+      if (window.console) console.error(e);
+      if (!result.code) result.code = "io";
+    }
+    historyRenderSoon();
+    return result;
+  }
+
   /* ---- one-time migration of the shared localStorage list ---- */
 
   function historyLegacyRaw() {
@@ -7293,6 +7531,7 @@ node update.mjs           # download and verify it</code></pre>
       historyForced = null;
       historyNowOverride = null;
       historyCapOverride = null;
+      historyDesktopTimeoutOverride = null;
       historyEstimateCache = null;
       historyLastAtMs = 0;
       historyLocal = {};
@@ -7405,7 +7644,14 @@ node update.mjs           # download and verify it</code></pre>
     },
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
-    exportAll: exportHistoryAll
+    exportAll: exportHistoryAll,
+    /* ms, or null for the real 30 s — how long a desktop bridge call may hang */
+    setDesktopTimeout: function (ms) {
+      historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
+      return historyDesktopTimeoutOverride;
+    },
+    /* the X2 write path itself: bundle.history's {docs, older} shape */
+    importBundle: importHistoryBundle
   };
   /* ================= sanitizing rich text ================= */
 
@@ -19102,6 +19348,15 @@ node update.mjs           # download and verify it</code></pre>
     var driveItem = document.getElementById("menu-drive-open");
     if (driveItem) driveItem.hidden = true;
 
+    /* App data moves one way: exported from the browser build, imported
+       here (X1/X2, 20h-appdata.js). Export stays hidden on the desktop
+       because its history store cannot enumerate its own documents yet
+       (exportHistoryAll refuses there); import is the desktop's half. */
+    var exportAppItem = document.getElementById("menu-export-app-data");
+    if (exportAppItem) exportAppItem.hidden = true;
+    var importAppItem = document.getElementById("menu-import-app-data");
+    if (importAppItem) importAppItem.hidden = false;
+
     /* Files the OS hands us — argv at launch, a second instance, macOS
        "open-file" — open exactly the way File ▸ Open does: through
        openProjectFile(), with the same snapshot/dirty safety as any other
@@ -20561,9 +20816,12 @@ node update.mjs           # download and verify it</code></pre>
      File ▸ Export app data… (X1, this file) lets someone moving from the
      browser build to the desktop app take their version history, server
      bookmarks and preferences with them — none of which live in a document,
-     so opening a file never carries them. File ▸ Import app data… (X2, a
-     follow-up step) is the desktop-side merge; the stub at the bottom exists
-     only so today's File-menu wiring has something to call.
+     so opening a file never carries them. File ▸ Import app data… (X2, the
+     second half of this file) is the desktop-side merge: parse and refuse
+     what did not come from this app, then MERGE, NEVER REPLACE — history
+     only through importHistoryBundle (03a-history-store.js, invariant #49),
+     bookmarks as a union where the existing entry wins, preferences only
+     where this machine has none.
 
      Export is deliberately browser-only for now (the desktop history store
      cannot enumerate its own documents without new main-process IPC —
@@ -20722,20 +20980,356 @@ node update.mjs           # download and verify it</code></pre>
     await deliverFile(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
   }
 
-  /* Import proper is X2's job (desktop surface): parseAppDataBundle(),
-     importAppData() and the merge-through-the-history-store's-write-path
-     rules (invariant #49) all land there. This stays a no-op stub so
-     handleFileMenuAction's "import-app-data" branch (18-local-files.js) and
-     the File-menu entry (page.html, hidden until 20f-desktop.js's
-     initDesktop unhides it) have something to call without X1 reaching into
-     desktop-only territory ahead of that step. */
+  /* ================= import (X2) ================= */
+
+  /* A bundle is JSON text we hold whole in memory, and V8 cannot build a
+     string much past this anyway; a bigger file is not ours. */
+  var APPDATA_MAX_TEXT = 512 * 1024 * 1024;
+
+  function appDataError(code, message) {
+    var e = new Error(message);
+    e.code = code;
+    return e;
+  }
+
+  function appDataIsPlainObject(v) {
+    return !!v && typeof v === "object" && !Array.isArray(v);
+  }
+
+  function appDataNormalizeHistory(h) {
+    if (!appDataIsPlainObject(h)) return null;
+    /* Shape only. Every id and body is validated again by
+       importHistoryBundle, which counts what it refuses — dropping a bad
+       document here would hide it from that count. */
+    return {
+      docs: (Array.isArray(h.docs) ? h.docs : []).filter(appDataIsPlainObject).map(function (d) {
+        return {
+          docId: d.docId,
+          title: typeof d.title === "string" ? d.title : "",
+          lastOpenedAt: Number(d.lastOpenedAt) || 0,
+          snapshots: Array.isArray(d.snapshots) ? d.snapshots : []
+        };
+      }),
+      older: Array.isArray(h.older) ? h.older : [],
+      truncated: !!h.truncated
+    };
+  }
+
+  function appDataNormalizePrefs(p) {
+    if (!appDataIsPlainObject(p)) return {};
+    function str(v) { return typeof v === "string" ? v : null; }
+    return {
+      onboarding: appDataIsPlainObject(p.onboarding) ? p.onboarding : null,
+      tourDone: str(p.tourDone),
+      commentAuthor: str(p.commentAuthor),
+      commentsSort: str(p.commentsSort),
+      writerSize: str(p.writerSize),
+      taggingHelpDismissed: str(p.taggingHelpDismissed)
+    };
+  }
+
+  /* text → a normalised AppDataBundle, or throws an Error whose code is
+     "not-json" | "too-large" | "wrong-format" | "newer-version" | "secret"
+     and whose message is fit for a toast. Whole-file refusals only: a
+     malformed SECTION (history not an object, bookmarks not an array) is
+     dropped and the rest still imports.
+
+     A key that looks like a credential anywhere in the file (invariant #48,
+     the same walk export runs) refuses the whole file: this app never
+     writes one, so a file carrying one was not made by this app and nothing
+     else in it can be trusted to be what it claims. */
+  function parseAppDataBundle(text) {
+    if (typeof text !== "string") {
+      throw appDataError("not-json", "That file isn't Splitpage app data (it isn't readable text).");
+    }
+    if (text.length > APPDATA_MAX_TEXT) {
+      throw appDataError("too-large", "That file is too large to be Splitpage app data (over 512 MB).");
+    }
+    var raw;
+    try { raw = JSON.parse(text); } catch (e) {
+      throw appDataError("not-json", "That file isn't Splitpage app data (it isn't valid JSON).");
+    }
+    if (!appDataIsPlainObject(raw) || raw.format !== APPDATA_FORMAT ||
+        typeof raw.version !== "number" || !isFinite(raw.version) || raw.version < 1) {
+      throw appDataError("wrong-format", "That file isn't a Splitpage app data export.");
+    }
+    if (raw.version > APPDATA_VERSION) {
+      throw appDataError("newer-version", "That app data was exported by a newer version of Splitpage. " +
+        "Update this app, then import it again.");
+    }
+    try {
+      assertNoSecrets(raw);
+    } catch (e) {
+      var refused = appDataError("secret", "Import refused — the file contains something that looks like a " +
+        "credential (" + ((e && e.secretKey) || "unknown") + "). Splitpage never exports those, so this file " +
+        "did not come from Splitpage.");
+      refused.secretKey = e && e.secretKey;
+      throw refused;
+    }
+    return {
+      format: APPDATA_FORMAT,
+      version: raw.version,
+      exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : null,
+      appVersion: typeof raw.appVersion === "string" ? raw.appVersion : "",
+      snapshots: Array.isArray(raw.snapshots) ? raw.snapshots : null,
+      history: appDataNormalizeHistory(raw.history),
+      bookmarks: (Array.isArray(raw.bookmarks) ? raw.bookmarks : []).filter(function (b) {
+        return appDataIsPlainObject(b) && typeof b.url === "string";
+      }),
+      prefs: appDataNormalizePrefs(raw.prefs)
+    };
+  }
+
+  /* Union by normalised URL. An existing bookmark always wins (its name,
+     its ssh settings, its id); an imported one whose id is already taken
+     gets a fresh one. Only the known fields are carried — {id, name, url,
+     ssh:{userHost, remotePort, localPort}} — so nothing else in the file
+     can ride into localStorage on a bookmark's back. */
+  function appDataMergeBookmarks(list) {
+    var out = { added: 0, skipped: 0, failed: 0 };
+    if (!list || !list.length) return out;
+    loadBookmarks();
+    var byUrl = {}, ids = {};
+    serverBookmarks.forEach(function (b) {
+      var u = normalizeServerBase(b.url);
+      if (u) byUrl[u] = true;
+      if (typeof b.id === "string") ids[b.id] = true;
+    });
+    var fresh = [];
+    list.forEach(function (b) {
+      var url = normalizeServerBase(b.url);
+      if (!url) { out.failed++; return; }
+      if (byUrl[url]) { out.skipped++; return; }
+      var id = (typeof b.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(b.id)) ? b.id : "";
+      while (!id || ids[id]) id = newBookmarkId();
+      var name = typeof b.name === "string" && b.name.trim() ? b.name.trim().slice(0, 200) : shortHost(url);
+      var bookmark = { id: id, name: name, url: url };
+      if (appDataIsPlainObject(b.ssh) && typeof b.ssh.userHost === "string" && b.ssh.userHost.trim()) {
+        bookmark.ssh = {
+          userHost: b.ssh.userHost.trim().slice(0, 300),
+          remotePort: connectPortOr(b.ssh.remotePort, 8791),
+          localPort: connectPortOr(b.ssh.localPort, 8791)
+        };
+      }
+      byUrl[url] = true;
+      ids[id] = true;
+      fresh.push(bookmark);
+      out.added++;
+    });
+    if (fresh.length) {
+      serverBookmarks = serverBookmarks.concat(fresh);
+      saveBookmarks();
+      try {
+        var modal = document.getElementById("connect-modal");
+        if (modal && !modal.hidden) renderConnect();
+        updateConnectMenu();
+      } catch (e) { /* a re-render is a courtesy; the list is saved */ }
+    }
+    return out;
+  }
+
+  /* Each simple preference is written ONLY when this machine has no value
+     for it at all — a local choice is never overwritten by an imported one.
+     Values are checked against the shape the app itself writes; one that
+     does not fit is ignored rather than stored for the app to choke on. */
+  function appDataPrefSpecs() {
+    return [
+      { name: "tourDone", key: TOUR_DONE_KEY,
+        valid: function (v) { return v.length > 0 && v.length <= 20; } },
+      { name: "commentAuthor", key: COMMENT_NAME_KEY,
+        valid: function (v) { return v.trim().length > 0 && v.length <= 200; } },
+      { name: "commentsSort", key: COMMENTS_SORT_KEY,
+        valid: function (v) { return v === "recent" || v === "position"; } },
+      { name: "writerSize", key: WRITER_SIZE_KEY,
+        valid: function (v) {
+          var n = /^\d{1,3}$/.test(v) ? parseInt(v, 10) : NaN;
+          return n >= WRITER_SIZE_MIN && n <= WRITER_SIZE_MAX;
+        } },
+      { name: "taggingHelpDismissed", key: TAGGING_HELP_KEY,
+        valid: function (v) { return v === "0" || v === "1"; } }
+    ];
+  }
+
+  function appDataMergePrefs(prefs) {
+    var written = [];
+    prefs = prefs || {};
+    appDataPrefSpecs().forEach(function (spec) {
+      var incoming = prefs[spec.name];
+      if (typeof incoming !== "string" || !spec.valid(incoming)) return;
+      if (appDataReadRaw(spec.key) != null) return;
+      try {
+        localStorage.setItem(spec.key, incoming);
+        written.push(spec.name);
+      } catch (e) { /* storage blocked — nothing to merge into */ }
+    });
+
+    /* Onboarding is an object, merged key by key with the LOCAL value
+       winning. Only flat values travel (the app writes v/done/skipped/at).
+       A local value that exists but is not a JSON object is left alone: it
+       is this machine's value even if the wizard reads it as absent. */
+    var inc = prefs.onboarding;
+    if (appDataIsPlainObject(inc)) {
+      var clean = {}, n = 0;
+      Object.keys(inc).forEach(function (k) {
+        var v = inc[k];
+        if (n >= 20 || k === "__proto__" || k.length > 40) return;
+        if (typeof v === "string") { clean[k] = v.slice(0, 200); n++; }
+        else if (typeof v === "boolean" || (typeof v === "number" && isFinite(v))) { clean[k] = v; n++; }
+      });
+      var rawLocal = appDataReadRaw(ONBOARD_KEY);
+      var local = rawLocal == null ? null : appDataReadJson(ONBOARD_KEY, undefined);
+      if (n && (rawLocal == null || appDataIsPlainObject(local))) {
+        var merged = {}, changed = rawLocal == null;
+        Object.keys(clean).forEach(function (k) { merged[k] = clean[k]; });
+        if (local) {
+          Object.keys(local).forEach(function (k) {
+            if (k === "__proto__") return;
+            merged[k] = local[k];
+          });
+          Object.keys(clean).forEach(function (k) {
+            if (!Object.prototype.hasOwnProperty.call(local, k)) changed = true;
+          });
+        }
+        if (changed) {
+          try {
+            localStorage.setItem(ONBOARD_KEY, JSON.stringify(merged));
+            written.push("onboarding");
+          } catch (e) {}
+        }
+      }
+    }
+
+    /* The two preferences this page holds in memory as well. */
+    try {
+      if (written.indexOf("commentsSort") !== -1) commentSortMode = readCommentSortMode();
+      if (written.indexOf("writerSize") !== -1) applyWriterSize(readWriterSize(), false);
+    } catch (e) {}
+    return written;
+  }
+
+  function appDataPlural(n, one, many) {
+    return n + " " + (n === 1 ? one : many);
+  }
+
+  var appDataLastSummary = null;
+
+  /* text → the import's summary (also kept for __appDataTest.summary()).
+     Never rejects. One toast says what arrived; a warn toast and a
+     console.warn say what did not. */
+  async function importAppData(text) {
+    var bundle;
+    try {
+      bundle = parseAppDataBundle(text);
+    } catch (e) {
+      var refused = { ok: false, code: (e && e.code) || "invalid",
+                      message: (e && e.message) || "That file could not be imported." };
+      appDataLastSummary = refused;
+      showToast(refused.message, "error");
+      return refused;
+    }
+
+    var summary = { ok: true, history: null, bookmarks: null, prefs: [], legacy: null, toast: "", warning: null };
+
+    /* The legacy shared list goes to Older, never back into localStorage
+       ('splitpage-snapshots' is left exactly as this machine had it). Same
+       content-derived ids as the one-time migration, so a list this machine
+       already migrated dedupes instead of doubling. */
+    var legacy = [];
+    if (bundle.snapshots) {
+      try { legacy = normalizeLegacySnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
+      summary.legacy = legacy.length;
+    }
+    var hist = bundle.history || { docs: [], older: [] };
+    summary.history = await importHistoryBundle({ docs: hist.docs, older: hist.older.concat(legacy) });
+
+    try {
+      summary.bookmarks = appDataMergeBookmarks(bundle.bookmarks);
+    } catch (e) {
+      if (window.console) console.error(e);
+      summary.bookmarks = { added: 0, skipped: 0, failed: bundle.bookmarks.length };
+    }
+
+    try {
+      summary.prefs = appDataMergePrefs(bundle.prefs);
+    } catch (e) {
+      if (window.console) console.error(e);
+      summary.prefs = [];
+    }
+
+    var h = summary.history;
+    var snapshots = h.added + h.older;
+    summary.toast = "Imported " + appDataPlural(snapshots, "version-history snapshot", "version-history snapshots") +
+      " across " + appDataPlural(h.docs, "document", "documents") + ", " +
+      appDataPlural(summary.bookmarks.added, "server", "servers") + " and your preferences.";
+    showToast(summary.toast, "ok");
+
+    if (h.skipped || h.failed || h.code || summary.bookmarks.skipped || summary.bookmarks.failed) {
+      if (window.console) {
+        console.warn("Import app data: not everything was imported.", {
+          history: h, bookmarks: summary.bookmarks, prefsWritten: summary.prefs
+        });
+      }
+    }
+    if (h.failed || h.code || summary.bookmarks.failed) {
+      if (h.code === "quota") {
+        summary.warning = "Import stopped — storage is full. " +
+          appDataPlural(h.failed, "snapshot was", "snapshots were") + " not imported.";
+      } else {
+        summary.warning = "Some app data could not be imported: " +
+          appDataPlural(h.failed, "snapshot", "snapshots") + ", " +
+          appDataPlural(summary.bookmarks.failed, "server", "servers") + ". Details are in the console.";
+      }
+      showToast(summary.warning, "warn", true);
+    }
+
+    appDataLastSummary = summary;
+    return summary;
+  }
+
+  /* File ▸ Import app data… (desktop — initDesktop unhides it). The page's
+     own file input, deliberately not DESKTOP.openFileDialog(): main's filter
+     lists script extensions only, and widening it would mean touching
+     main.js. Wired on first use, so nothing here runs at boot. */
+  var appDataInputWired = false;
+
   function openImportAppData() {
-    /* no-op until X2 */
+    var input = document.getElementById("import-app-data-input");
+    if (!input) return;
+    if (!appDataInputWired) {
+      appDataInputWired = true;
+      input.addEventListener("change", onImportAppDataChosen);
+    }
+    input.click();
+  }
+
+  async function onImportAppDataChosen(e) {
+    var input = e.target;
+    var file = input.files && input.files[0];
+    if (!file) { input.value = ""; return; }
+    try {
+      if (file.size > APPDATA_MAX_TEXT) {
+        showToast("That file is too large to be Splitpage app data (over 512 MB).", "error");
+        return;
+      }
+      showToast("Importing your Splitpage data…");
+      var text;
+      try { text = await file.text(); } catch (err) {
+        showToast("Could not read that file.", "error");
+        return;
+      }
+      await importAppData(text);
+    } finally {
+      /* so picking the same file again still fires 'change' */
+      input.value = "";
+    }
   }
 
   window.__appDataTest = {
     build: buildAppDataBundle,
-    assertNoSecrets: assertNoSecrets
+    assertNoSecrets: assertNoSecrets,
+    parse: parseAppDataBundle,
+    importText: importAppData,
+    summary: function () { return appDataLastSummary; }
   };
   /* ================= events ================= */
 
