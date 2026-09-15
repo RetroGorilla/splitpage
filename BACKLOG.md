@@ -88,6 +88,13 @@ Copy this template into the right section below:
 - **Description:** Opening the comments or gear (settings) list panel shrinks the width of the main script column, even when the window is wide enough for the panel to pop in without taking space from it.
 - **Repro / notes:** Widen the window, open the comments or gear panel — main script column narrows instead of the panel overlaying/using free space. Related to the "two-column layout should widen with window" entry above.
 
+### File/production/gear/title should collapse into a toolbar on scroll
+- **Type:** Feature
+- **Priority:** Medium
+- **Area:** UI / layout
+- **Description:** When scrolling down into the body of the script, the file info, production list, gear (settings), and title should collapse into a compact toolbar instead of staying at full size / scrolling away, so they stay accessible without eating vertical space.
+- **Repro / notes:** Scroll down into the script body — currently these elements don't condense into a sticky/compact toolbar.
+
 ### Slide-in animation for sidebars
 - **Type:** Feature
 - **Priority:** Low
