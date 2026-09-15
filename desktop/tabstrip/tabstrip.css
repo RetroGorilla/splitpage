@@ -163,6 +163,29 @@ body {
   opacity: 0.65;
 }
 
+/* A tab whose renderer died past the reload budget: muted, and marked with
+   something that is plainly not the unsaved dot. Closing it prompts for
+   nothing, which is precisely what the dot would have promised. */
+.tab--crashed .tab__title {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.tab__broken {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: #b4493c;
+}
+
 .tab__close {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;

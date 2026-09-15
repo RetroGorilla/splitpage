@@ -200,7 +200,18 @@
   function wireReassignDocId() {
     if (!DESKTOP || typeof DESKTOP.onReassignDocId !== "function") return;
     DESKTOP.onReassignDocId(function (msg) {
-      if (msg) reassignDocId(msg.toId, msg);
+      if (!msg) return;
+      /* REPORT THE NEW ID BACK. reassignDocId deliberately does not dirty the
+         document or save it (override §1), and nothing else on that path
+         reaches notifyDesktopDocumentState — so main's claim table went on
+         saying this tab still held the OLD id until the user next dirtied or
+         cleaned the document, which for a tab opened only to read is never.
+         A stale claim is not inert: reopening the ORIGINAL file later
+         compares it against that stale duplicate and re-ids the original, so
+         the wrong file ends up carrying "this file is a copy of …" and its
+         history forks. With the claim current the two ids simply differ and
+         no duplicate is found at all. */
+      if (reassignDocId(msg.toId, msg)) notifyDesktopDocumentState();
     });
   }
 

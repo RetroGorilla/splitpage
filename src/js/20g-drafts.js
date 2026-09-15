@@ -78,6 +78,10 @@
   var draftStopped = false;
   var draftBackoffMs = 0;
   var draftPausedReason = "";
+  /* The sticky toast currently saying WHY recovery is paused, so it can be
+     taken back down. A sticky toast has no timer — only a click removes it —
+     so without a handle the warning outlived the condition it reported. */
+  var draftPausedToast = null;
   /* The last capture that the store ACCEPTED: nothing is sent again until one
      of the three actually differs. `baseState` and the origin are in there
      because a Save As, an open or a reconnect changes what the draft is a
@@ -283,6 +287,10 @@
         draftBackoffMs = 0;
         if (draftPausedReason) {
           draftPausedReason = "";
+          /* Take the warning down BEFORE saying it is over: the "working
+             again" toast clears itself after 2.6 s, and leaving the sticky
+             "paused" one behind made that the last word on screen. */
+          clearDraftPausedToast();
           showToast("Crash recovery is working again", "ok");
         }
       } else {
@@ -342,10 +350,27 @@
     }
   }
 
+  /* Removes the sticky "paused" toast, if it is still there. Safe to call
+     when there is none, and when the user already clicked it away. */
+  function clearDraftPausedToast() {
+    var el = draftPausedToast;
+    draftPausedToast = null;
+    if (!el) return;
+    if (typeof el.dismiss === "function") el.dismiss();
+    else if (el.parentNode) el.parentNode.removeChild(el);
+  }
+
   function showDraftPaused(code) {
-    if (draftPausedReason) return;
-    draftPausedReason = draftReasonFor(code);
-    showToast("Crash recovery is paused — " + draftPausedReason, "warn", true);
+    var reason = draftReasonFor(code);
+    /* A reason that CHANGED is re-posted, not swallowed: a tab refused
+       ENOSPC and later refused HELD kept saying "this disk is full", which is
+       exactly the lie draftReasonFor's HELD case exists to avoid. Only an
+       unchanged reason is left alone, so a run of refusals does not stack a
+       toast per attempt. */
+    if (draftPausedReason === reason) return;
+    clearDraftPausedToast();
+    draftPausedReason = reason;
+    draftPausedToast = showToast("Crash recovery is paused — " + draftPausedReason, "warn", true);
   }
 
   function noteDraftWriteRefused(code) {

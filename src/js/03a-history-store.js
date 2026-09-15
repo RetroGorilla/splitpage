@@ -145,6 +145,9 @@
   var historyFault = null;
   var historyDelayGate = null;
   var historyDelayRelease = null;
+  var historyImportGate = null;
+  var historyImportRelease = null;
+  var historyImportGateHit = false;
 
   function historyQuotaError() {
     var e;
@@ -176,6 +179,34 @@
     var r = historyDelayRelease;
     historyDelayGate = null;
     historyDelayRelease = null;
+    if (r) r();
+  }
+
+  /* The same gate for importOlder, so a test can hold a migration open at the
+     exact point where it has read the legacy key but not yet confirmed it —
+     the only window in which "the key changed mid-migration" means anything.
+     Racing a real setItem() against an in-flight migrate() cannot decide that
+     window: on a fast backend the migration is already finished (and the key
+     already deleted) before the next CDP round trip lands, so the change is
+     really a change AFTER the migration, and the test reads a re-created key
+     next to removedKey === true. Re-armable, because exhausting
+     HISTORY_MIGRATION_LOOPS needs the key to change on every pass. */
+  function historyImportFaultGate() {
+    if (historyFault === "delay-import") {
+      historyImportGateHit = true;
+      if (!historyImportGate) {
+        historyImportGate = new Promise(function (resolve) { historyImportRelease = resolve; });
+      }
+      return historyImportGate;
+    }
+    return null;
+  }
+
+  function releaseDelayedImport() {
+    if (historyFault === "delay-import") historyFault = null;
+    var r = historyImportRelease;
+    historyImportGate = null;
+    historyImportRelease = null;
     if (r) r();
   }
 
@@ -635,38 +666,42 @@
        the 90 days. */
     importOlder: function (entries) {
       if (historyFault === "import-fail") return Promise.resolve({ ok: false, count: 0, added: 0, code: "io" });
-      return idbRun(["docs", "snapMeta", "snapBody"], "readwrite", function (tx) {
-        var metaStore = tx.objectStore("snapMeta");
-        var bodyStore = tx.objectStore("snapBody");
-        var docsStore = tx.objectStore("docs");
-        var added = 0, rec = null, i = 0;
-        function next() {
-          if (i >= entries.length) return null;
-          var e = entries[i++];
-          return idbReq(metaStore.get([HISTORY_OLDER_KEY, e.meta.id])).then(function (exists) {
-            if (exists) return next();
-            var m = sanitizeHistoryMeta(e.meta);
-            m.sizeBytes = historyUtf8Length(e.stateJson);
-            m.docId = HISTORY_OLDER_KEY;
-            metaStore.add(m);
-            bodyStore.add({ docId: HISTORY_OLDER_KEY, id: m.id, stateJson: e.stateJson });
-            rec.bytes = (Number(rec.bytes) || 0) + m.sizeBytes;
-            rec.count = (Number(rec.count) || 0) + 1;
-            added++;
+      /* The gate is captured at entry, so releasing it lets THIS call through
+         even when the test re-arms it in the same turn for the next loop. */
+      return Promise.resolve(historyImportFaultGate()).then(function () {
+        return idbRun(["docs", "snapMeta", "snapBody"], "readwrite", function (tx) {
+          var metaStore = tx.objectStore("snapMeta");
+          var bodyStore = tx.objectStore("snapBody");
+          var docsStore = tx.objectStore("docs");
+          var added = 0, rec = null, i = 0;
+          function next() {
+            if (i >= entries.length) return null;
+            var e = entries[i++];
+            return idbReq(metaStore.get([HISTORY_OLDER_KEY, e.meta.id])).then(function (exists) {
+              if (exists) return next();
+              var m = sanitizeHistoryMeta(e.meta);
+              m.sizeBytes = historyUtf8Length(e.stateJson);
+              m.docId = HISTORY_OLDER_KEY;
+              metaStore.add(m);
+              bodyStore.add({ docId: HISTORY_OLDER_KEY, id: m.id, stateJson: e.stateJson });
+              rec.bytes = (Number(rec.bytes) || 0) + m.sizeBytes;
+              rec.count = (Number(rec.count) || 0) + 1;
+              added++;
+              return next();
+            });
+          }
+          return idbReq(docsStore.get(HISTORY_OLDER_KEY)).then(function (r) {
+            var now = historyNow();
+            rec = r || { docId: HISTORY_OLDER_KEY, title: "", lastOpenedAt: 0, bytes: 0, count: 0,
+                         migratedAt: now, expiresAt: now + HISTORY_OLDER_TTL_MS };
             return next();
+          }).then(function () {
+            if (!added && !entries.length) return { ok: true, count: rec.count, added: 0 };
+            return idbReq(docsStore.put(rec)).then(function () { return { ok: true, count: rec.count, added: added }; });
           });
-        }
-        return idbReq(docsStore.get(HISTORY_OLDER_KEY)).then(function (r) {
-          var now = historyNow();
-          rec = r || { docId: HISTORY_OLDER_KEY, title: "", lastOpenedAt: 0, bytes: 0, count: 0,
-                       migratedAt: now, expiresAt: now + HISTORY_OLDER_TTL_MS };
-          return next();
-        }).then(function () {
-          if (!added && !entries.length) return { ok: true, count: rec.count, added: 0 };
-          return idbReq(docsStore.put(rec)).then(function () { return { ok: true, count: rec.count, added: added }; });
+        }).then(null, function (e) {
+          return { ok: false, count: 0, added: 0, code: isQuotaError(e) ? "quota" : "io" };
         });
-      }).then(null, function (e) {
-        return { ok: false, count: 0, added: 0, code: isQuotaError(e) ? "quota" : "io" };
       });
     },
 
@@ -914,23 +949,27 @@
 
     importOlder: function (entries) {
       if (historyFault === "import-fail") return Promise.resolve({ ok: false, count: 0, added: 0, code: "io" });
-      var now = historyNow();
-      var rec = historyMem.docs[HISTORY_OLDER_KEY];
-      if (!rec && !entries.length) return Promise.resolve({ ok: true, count: 0, added: 0 });
-      rec = rec || (historyMem.docs[HISTORY_OLDER_KEY] = { docId: HISTORY_OLDER_KEY, title: "", lastOpenedAt: 0, bytes: 0, count: 0,
-                                                            migratedAt: now, expiresAt: now + HISTORY_OLDER_TTL_MS });
-      var b = memBucket(HISTORY_OLDER_KEY), added = 0;
-      entries.forEach(function (e) {
-        if (b[e.meta.id]) return;
-        var m = sanitizeHistoryMeta(e.meta);
-        m.sizeBytes = historyUtf8Length(e.stateJson);
-        m.docId = HISTORY_OLDER_KEY;
-        b[m.id] = { meta: m, stateJson: e.stateJson };
-        rec.bytes += m.sizeBytes;
-        rec.count++;
-        added++;
+      /* Gated like the idb copy, so 'delay-import' means the same thing on
+         whichever backend a test happens to be running. */
+      return Promise.resolve(historyImportFaultGate()).then(function () {
+        var now = historyNow();
+        var rec = historyMem.docs[HISTORY_OLDER_KEY];
+        if (!rec && !entries.length) return { ok: true, count: 0, added: 0 };
+        rec = rec || (historyMem.docs[HISTORY_OLDER_KEY] = { docId: HISTORY_OLDER_KEY, title: "", lastOpenedAt: 0, bytes: 0, count: 0,
+                                                              migratedAt: now, expiresAt: now + HISTORY_OLDER_TTL_MS });
+        var b = memBucket(HISTORY_OLDER_KEY), added = 0;
+        entries.forEach(function (e) {
+          if (b[e.meta.id]) return;
+          var m = sanitizeHistoryMeta(e.meta);
+          m.sizeBytes = historyUtf8Length(e.stateJson);
+          m.docId = HISTORY_OLDER_KEY;
+          b[m.id] = { meta: m, stateJson: e.stateJson };
+          rec.bytes += m.sizeBytes;
+          rec.count++;
+          added++;
+        });
+        return { ok: true, count: rec.count, added: added };
       });
-      return Promise.resolve({ ok: true, count: rec.count, added: added });
     },
 
     usage: function () {
@@ -1065,8 +1104,17 @@
       });
     },
 
+    /* The held snapshots ride along on the READ as well as the write, in the
+       query object (the bridge passes it through whole). A restore takes its
+       hold and then reads — and main's eviction is process-wide, so between
+       that read and the "Before restoring" backup that follows it, a save in
+       ANOTHER tab, a history-copy or the expired-Older sweep could delete the
+       snapshot being read. Main remembers the list per page, so telling it at
+       the first call of a restore is what closes that window. */
     get: function (bucket, id) {
-      var query = bucket === HISTORY_OLDER_KEY ? { older: true } : { docId: bucket };
+      var query = bucket === HISTORY_OLDER_KEY
+        ? { older: true, protect: historyProtectedList() }
+        : { docId: bucket, protect: historyProtectedList() };
       return historyDesktopCall(function () {
         return DESKTOP.historyGet(query, id);
       }, null, null).then(function (r) {
@@ -1664,6 +1712,10 @@
   function historyResetForTest() {
     historyFault = null;
     releaseDelayedPut();
+    /* A migration still parked on the import gate would hold the queue, and
+       historyIdle() below would never settle. */
+    releaseDelayedImport();
+    historyImportGateHit = false;
     return historyIdle().then(function () {
       historyForced = null;
       historyNowOverride = null;
@@ -1722,16 +1774,18 @@
       return historyCapOverride;
     },
     /* 'idb-open-fail' | 'quota-once' | 'quota-always' | 'io-always' |
-       'delay-put' | 'import-fail' | null. Clearing a fault drains any
-       pending snapshots, the way the next successful write would. */
+       'delay-put' | 'delay-import' | 'import-fail' | null. Clearing a fault
+       drains any pending snapshots, the way the next successful write would. */
     injectFault: function (name) {
-      var known = ["idb-open-fail", "quota-once", "quota-always", "io-always", "delay-put", "import-fail"];
+      var known = ["idb-open-fail", "quota-once", "quota-always", "io-always", "delay-put", "delay-import", "import-fail"];
       if (name == null) {
         if (historyFault === "delay-put") releaseDelayedPut();
+        if (historyFault === "delay-import") releaseDelayedImport();
         historyFault = null;
         if (historyLocalEntries(null, "pending").length) retryPendingSnapshots();
         return null;
       }
+      if (name === "delay-import") historyImportGateHit = false;
       historyFault = known.indexOf(name) !== -1 ? name : null;
       /* idb-open-fail only means something to an open that has not happened
          yet, and boot has usually opened the database already. Drop the
@@ -1747,6 +1801,11 @@
       return historyFault;
     },
     releaseDelayedPut: releaseDelayedPut,
+    releaseDelayedImport: releaseDelayedImport,
+    /* true once a migration has actually stopped on the 'delay-import' gate,
+       so a test can wait for that instead of guessing at a delay. Cleared by
+       re-arming the fault. */
+    importGateHit: function () { return historyImportGateHit; },
     /* stored metas of a document (or 'older'), oldest first */
     listRaw: function (docId) {
       var bucket = historyTestBucket(docId);

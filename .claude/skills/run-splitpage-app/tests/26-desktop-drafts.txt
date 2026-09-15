@@ -68,6 +68,30 @@ wait window.fakeW3._drafts.writes >= 1
 expect window.fakeW3._drafts.current.stateJson.indexOf('W3-VISIBILITY-EDIT') !== -1
 eval (function(){ Object.defineProperty(document, 'visibilityState', {get: function(){ return 'visible'; }, configurable: true}); return true; })()
 
+# ---- the sticky "crash recovery is paused" toast is WITHDRAWN when writes
+# work again. A sticky toast has no timer of its own — only a click removes
+# it — so the 2.6 s "working again" message used to clear itself and leave
+# the red warning as the last word on screen, telling the user their typing
+# was not being protected when it was.
+eval (function(){ window.fakeW4 = D.makeFakeBackend(); D.setBackend(window.fakeW4); D.drafts.setTiming({idle: 40, max: 80, backoffMin: 1200, backoffMax: 2000}); window.__pausedToasts = function(){ return Array.prototype.filter.call(document.querySelectorAll('.toast.warn.is-sticky'), function(t){ return t.textContent.indexOf('Crash recovery is paused') !== -1; }).length; }; return window.__pausedToasts(); })()
+expect window.__pausedToasts() === 0
+# HELD deliberately, not ENOSPC: it is the refusal that is NOT a disk
+# failure (overrides §2b), so this case also proves the honest wording — and
+# it is the one code status().failures must never count, which is what lets
+# this run inside a suite that ends by asserting failures === 0.
+eval (function(){ window.fakeW4._failNextDraftWrites('HELD', 1); F.state().rows[0].audioText = 'W4-PAUSED-EDIT'; D.markDirtyForTest(); return true; })()
+wait window.__pausedToasts() === 1
+expect D.drafts.status().paused === true
+expect D.drafts.status().pausedReason.indexOf('recovered from the last session') !== -1
+expect D.drafts.status().pausedReason.indexOf('disk') === -1
+expect D.drafts.status().failures === 0
+# the backoff retry succeeds (only one write was armed to fail). backoffMin
+# is a comfortable 1.2 s above so the paused state is observable rather than
+# raced past by a retry that lands between two assertions.
+wait D.drafts.status().paused === false
+wait window.__pausedToasts() === 0
+eval (function(){ D.drafts.setTiming({backoffMin: 5000, backoffMax: 60000}); return true; })()
+
 # From here on nothing should write on its own — every remaining case drives
 # the restore side, which leaves the document dirty and would otherwise arm
 # a stray idle/max write against whatever fake happens to be current later.
@@ -181,7 +205,7 @@ expect F.docId() !== mkId('3')
 # second server path just for a test) — so the pending-latch case below can
 # actually reach the "waiting on a server" branch instead of the
 # short-circuit above.
-eval (function(){ window.__origFetch = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); if (u.indexOf('api/health') !== -1) return Promise.resolve(new Response(JSON.stringify({ok: true, readOnly: false, authRequired: false, version: 'test'}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/me') !== -1) return Promise.resolve(new Response(JSON.stringify({}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-resumed-1') !== -1) return Promise.resolve(new Response(JSON.stringify({id: 'srv-resumed-1', rev: 5, state: {schema: 2, docId: mkId('e'), title: 'Server Doc', rows: [{id: 'r1', audioText: 'SERVER SIDE R1', visualText: '', visualImage: null}], comments: []}}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-notfound-1') !== -1) return Promise.resolve(new Response(JSON.stringify({error: 'not-found'}), {status: 404, headers: {'content-type': 'application/json'}})); return window.__origFetch(url, opts); }; D.drafts.setTiming({serverWait: 300}); return true; })()
+eval (function(){ window.__origFetch = window.fetch.bind(window); window.__srvFetchLog = []; window.fetch = function(url, opts){ var u = String(url); window.__srvFetchLog.push({url: u, method: ((opts && opts.method) || 'GET').toUpperCase()}); if (u.indexOf('api/health') !== -1) return Promise.resolve(new Response(JSON.stringify({ok: true, readOnly: false, authRequired: false, version: 'test'}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/me') !== -1) return Promise.resolve(new Response(JSON.stringify({}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-resumed-1') !== -1) return Promise.resolve(new Response(JSON.stringify({id: 'srv-resumed-1', rev: 5, state: {schema: 2, docId: mkId('e'), title: 'Server Doc', rows: [{id: 'r1', audioText: 'SERVER SIDE R1', visualText: '', visualImage: null}], comments: []}}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-notfound-1') !== -1) return Promise.resolve(new Response(JSON.stringify({error: 'not-found'}), {status: 404, headers: {'content-type': 'application/json'}})); return window.__origFetch(url, opts); }; D.drafts.setTiming({serverWait: 300}); return true; })()
 jsclick #btn-file
 jsclick #menu-servers
 wait !document.getElementById('connect-modal').hidden
@@ -218,6 +242,16 @@ jsclick [data-connect-action="back"]
 eval (async function(){ window.__srvROutcome = await window.__srvRP; return true; })()
 expect window.__srvROutcome === 'server-resumed'
 expect /^d[0-9a-f]{32}$/.test(F.docId())
+# The merge is NOT published on its own (invariant #41 / overrides §1). A
+# crash restore runs at launch with nobody having touched anything, so a PUT
+# here would bump the rev for every other viewer, commit conflict comments
+# the user has never seen, and — by clearing dirty — discard the crash draft
+# holding the pre-merge version. The settle is for queueAutoSave, which is
+# not debounced: if one were coming it would already have gone out.
+eval (async function(){ await new Promise(function(r){ setTimeout(r, 800); }); return true; })()
+expect window.__srvFetchLog.filter(function(e){ return e.method === 'PUT' && e.url.indexOf('api/docs/') !== -1; }).length === 0
+# it stays dirty instead: the user's next Save publishes it
+expect document.getElementById('btn-save').classList.contains('is-dirty')
 expect sessionStorage.getItem('splitpage-server-resume') === JSON.stringify({id: 'unrelated-doc', rev: 1})
 eval (function(){ window.__srvUnrelatedStash = sessionStorage.getItem('splitpage-conflict-stash'); return true; })()
 expect window.__srvUnrelatedStash.indexOf('unrelated work') !== -1

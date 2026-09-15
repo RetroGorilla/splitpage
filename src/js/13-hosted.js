@@ -328,7 +328,9 @@
         updateIdentityChip();
         updateFileChip();
         showToast("Signed back in — merged what you typed while " + (state.title || body.id) + " was reopening", "warn", true);
-        reportMerge(freshResult);
+        /* Same rule as the main merge below: a restore driven by a crash
+           draft (override) never publishes on its own. */
+        reportMerge(freshResult, override ? { noAutoSave: true } : undefined);
         if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
         return true;
       }
@@ -354,14 +356,25 @@
          three-way merge below rather than one silently replacing the other. */
       mine = mergeStates(stateAtStart, migrateRows(cloneState(state)), mine, false).merged;
     }
-    /* The recovered version of this document, filed before it is merged into
-       whatever the server holds now. The lapsed-sign-in path does not need
-       one (the reload it came from is seconds old and the stash is still in
-       sessionStorage); a draft can be days old and is deleted from disk by
-       the first clean save after this, so without this snapshot the recovered
-       edits would exist nowhere but in the merge result. Captured
-       synchronously, like every other pushSnapshot caller (invariant #39). */
-    if (override) pushSnapshot("Before merging your recovered changes", theirs);
+    /* TWO snapshots, and they hold different things — filing only one of
+       them was the bug. This first one captures `theirs`, the version that
+       was live a moment before the merge: it is the UNDO POINT, not the
+       recovered work. The lapsed-sign-in path does not file one (the reload
+       it came from is seconds old and the stash is still in sessionStorage);
+       a draft can be days old. Captured synchronously, like every other
+       pushSnapshot caller (invariant #39). */
+    /* The ticket is KEPT: reportMerge below unhides #merge-banner, whose
+       "Undo merge" button reads lastMergeUndo — and nothing on this path
+       assigns it (the file path gets it from applyStashedWork, which this
+       merge does not go through), so the button answered "No merge snapshot
+       to undo." with the snapshot it needed sitting one line above. */
+    var undoSnap = override ? pushSnapshot("Before merging your recovered changes", theirs) : null;
+    /* And the recovered version itself, so the draft is a version in the
+       history rather than something that existed only inside this function —
+       the same pair restoreFileDraft files (20g-drafts.js). Without it the
+       pre-merge recovered document is nowhere: the draft on disk goes with
+       the first clean save after this. */
+    if (override) pushSnapshot("Your unsaved changes, recovered", mine);
     var result = mergeStates(
       stash.base ? migrateRows(cloneState(stash.base)) : null,
       mine,
@@ -371,6 +384,10 @@
     state = result.merged;
     /* if theirs won the id, the history written under mine follows it */
     noteMergedDocId(mine.docId);
+    /* state.docId, not undoSnap.docId: noteMergedDocId may have just moved
+       this document's history to the merged id, and undoMerge compares what
+       it holds against state.docId before restoring. */
+    if (undoSnap) lastMergeUndo = { id: undoSnap.id, docId: state.docId };
     baseState = cloneState(theirs);
     render();
     updateIdentityChip();
@@ -378,7 +395,18 @@
     showToast(override
       ? "Reopened " + (state.title || body.id) + " — the changes recovered from the last session were merged back in"
       : "Signed back in — your unsaved edits were merged back in", "ok");
-    reportMerge(result);   /* leaves it dirty and queues the save, which is right */
+    /* The lapsed-sign-in path (no override) keeps queueing the save: that
+       reload is seconds old, the user is sitting in front of it, and the
+       merged version is theirs. A CRASH-DRAFT restore is the opposite — it
+       runs at launch with nobody having touched anything — so it must not
+       publish a merge the user has not seen yet: the PUT would bump the rev
+       for every other viewer, commit conflict comments nobody has read, and
+       then clear dirty, which discards the crash draft that held the
+       pre-merge version. Splitpage never writes the user's document on its
+       own (invariant #41 / overrides §1); the file path has said so since
+       step K (restoreFileDraft's reportMerge(…, {noAutoSave:true})). The
+       user's next Save publishes it. */
+    reportMerge(result, override ? { noAutoSave: true } : undefined);
     if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
     return true;
   }
