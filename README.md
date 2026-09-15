@@ -81,6 +81,31 @@ exceptions for now:
   works: it opens the Doc's .docx download in your browser, and you then open
   the downloaded file with File ▸ Open.
 
+### Moving from the browser app to the desktop app
+
+If you have been using the browser version and want to move to the desktop app,
+you can bring your version history, saved servers, and preferences with you:
+
+1. In the browser app, **File ▸ Export app data…** saves a `.json` file with
+   your history, servers, and settings (`splitpage-app-data-YYYYMMDD.json`).
+2. Install and launch the desktop app.
+3. In the desktop app, **File ▸ Import app data…** and pick the file you
+   exported. Everything merges into what you already have — nothing is
+   overwritten or deleted, and importing the same file twice adds nothing new.
+
+**What travels:** version history (every snapshot you've saved, per document and
+in the Older archive), saved servers (bookmarks including SSH settings), and
+preferences (whether you've seen the setup wizard, your author name, comment
+sorting preference, writer column width, and the tagging-help dismissal).
+
+**What does not travel:** server sign-in tokens or PINs, Google Drive API keys,
+and the documents themselves — those are files you already have on your
+computer.
+
+Export is currently available in the browser app only. The desktop app's history
+backend is stored as files on disk, and exporting from it is planned but not yet
+built.
+
 ### Tabs
 
 The desktop app opens documents in tabs across the top of the window, like a

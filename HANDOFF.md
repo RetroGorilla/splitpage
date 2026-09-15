@@ -1670,6 +1670,12 @@ has.
     mid-quit without the durable-write discipline, would lose every window's
     tabs rather than just the one being closed.
 
+<!-- #45–#47: voice helper invariants, added with the V track -->
+
+48. **An exported bundle contains no key matching `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, asserted before any byte is written; an import carrying one is refused.** WHY: this file gets emailed; the assertion keeps the exclusion list true after the next key is added.
+
+49. **Import merges through the history store's public write path and never deletes; existing preferences are never overwritten; bookmarks union by URL with local winning.** WHY: `put` is where put-if-absent, stamping, trimming, quota retry and id validation live; import is the one operation a user cannot undo.
+
 ---
 
 ## 6. Map of the source
@@ -1684,7 +1690,7 @@ line-number table this replaced, they do not drift as you edit.
 | `02-state.js` | 252 | `defaultState`, **`migrateRows`**, `legacyMdToHtml`, schema, `buildPublishHtml` |
 | `02b-doc-id.js` | 461 | **document id**: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId`, `migrateDocument`, `mergedDocId`, `reassignDocId`, `docHomeKey`/`syncDocIdentity`, the browser duplicate-claim BroadcastChannel — see §3.13, §4, §5 #35–#37 |
 | `03-sync.js` | 877 | identity, **`mergeStates`**, the save loop, restore/undo-merge glue into history |
-| `03a-history-store.js` | 1835 | **per-document version history**: `pushSnapshot`/`captureSnapshot`, `restoreSnapshot`, IndexedDB store + memory fallback, the Older-bucket migration, `planHistoryEviction` (mirrored line-for-line in `desktop/main.js`), `window.__historyTest` — see §3.13, §4, §5 #38–#39 |
+| `03a-history-store.js` | 1835 | **per-document version history**: `pushSnapshot`/`captureSnapshot`, `restoreSnapshot`, IndexedDB store + memory fallback, the Older-bucket migration, `planHistoryEviction` (mirrored line-for-line in `desktop/main.js`), `exportHistoryAll` (export read path), `importHistoryBundle` (import's only write path, §5 #49), `window.__historyTest` — see §3.13, §4, §5 #38–#39, §6 X2 |
 | `04-richtext.js` | 230 | `walkSanitize`, html→markdown, video link cards |
 | `05-render.js` | 463 | `rowHtml`, `render`, field sync, rich-text commands |
 | `06-rows.js` | 236 | row add/move/**drag**, images |
@@ -1707,6 +1713,7 @@ line-number table this replaced, they do not drift as you edit.
 | `20c-help.js` | 377 | the in-app Help modal (`openHelp`) and the 5-step coach-mark tour (`startTour`) — see below |
 | `20d-formats.js` | 295 | **the two document formats**: `.splitpage`, the Markdown project writer and reader, the hand-edit reconcile, the row-count question |
 | `20e-connect.js` | 552 | the join-PIN dialog, server bookmarks, the SSH helper |
+| `20h-appdata.js` | 521 | **app-data export/import** (X1–X2): `buildAppDataBundle`, `assertNoSecrets` (§5 #48), `parseAppDataBundle`, `importAppData`, merge rules (§5 #49), `exportAppData` (browser-only), `openImportAppData`/`onImportAppDataChosen` (desktop menu handler), `window.__appDataTest` |
 | `20f-desktop.js` | 730 | **the desktop glue**, inert unless `DESKTOP` is set: the `FileSystemFileHandle`-shaped wrapper over the bridge, `tab-boot-sync` handling, window/tab title, native-menu dispatcher, the hosting summary, `makeFakeDesktopBackend`, `window.__desktopTest` |
 | `20g-drafts.js` | 960 | **crash-safe draft renderer**: the writer/idle-flush loop, `applyTakenDraft` and its restore sequence, `sameDocContent`, `recoverDraftAsUnsavedCopy`, `window.__desktopTest.drafts` — see §3.13, §5 #40–#41 |
 | `21-events.js` | 1310 | all event wiring, `init()` (now sequencing draft restore before `detectServer()` when `draftRestorePending`), closes the IIFE |
@@ -2305,6 +2312,10 @@ from a Linux container:**
      `Splitpage-electron` at `desktop/package.json` version 1.0.1, unchanged
      from before it started; nothing has bumped it for this body of work yet.
    - **Code signing** (Windows SmartScreen and macOS notarization)?
+
+**Export/import follow-ups (built but not yet complete):**
+- **Desktop-side export.** `exportHistoryAll()` rejects on the desktop backend because there is no IPC to enumerate the history folder's documents yet. Building this would mean new `main.js` IPC to walk the `<userData>/history/` tree and return docId + title + recent-date summaries so the export can enumerate them like the browser backend does.
+- **Native Import dialog.** The desktop app's File menu opens `#import-app-data-input` (the page's own file input) instead of using `DESKTOP.openFileDialog()`, because that method's filter lists script extensions only and widening it would require touching `main.js`. If a native Import dialog is desired, the main-process filter would need to add `.json` files.
 
 **Pitched and accepted, already built:** runtime estimates, scene status, shoot
 order, find & replace, drag reorder.
