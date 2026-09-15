@@ -93,7 +93,8 @@
         commentAuthor: appDataReadRaw(COMMENT_NAME_KEY),
         commentsSort: appDataReadRaw(COMMENTS_SORT_KEY),
         writerSize: appDataReadRaw(WRITER_SIZE_KEY),
-        taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY)
+        taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY),
+        autosave: appDataReadRaw(AUTOSAVE_KEY)
       };
     } catch (e) {
       bundle.prefs = {};
@@ -211,7 +212,8 @@
       commentAuthor: str(p.commentAuthor),
       commentsSort: str(p.commentsSort),
       writerSize: str(p.writerSize),
-      taggingHelpDismissed: str(p.taggingHelpDismissed)
+      taggingHelpDismissed: str(p.taggingHelpDismissed),
+      autosave: str(p.autosave)
     };
   }
 
@@ -333,6 +335,8 @@
           return n >= WRITER_SIZE_MIN && n <= WRITER_SIZE_MAX;
         } },
       { name: "taggingHelpDismissed", key: TAGGING_HELP_KEY,
+        valid: function (v) { return v === "0" || v === "1"; } },
+      { name: "autosave", key: AUTOSAVE_KEY,
         valid: function (v) { return v === "0" || v === "1"; } }
     ];
   }

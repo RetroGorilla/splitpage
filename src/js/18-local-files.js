@@ -749,6 +749,7 @@
     else if (action === "paste") openImportModal();
     else if (action === "gdoc-import") openGdocModal();
     else if (action === "save-back") saveBackToFile();
+    else if (action === "autosave") toggleAutoSave();
     else if (action === "history") openHistoryPanel();
     else if (action === "export-docx") exportAs("docx");
     else if (action === "export-md") exportAs("md");

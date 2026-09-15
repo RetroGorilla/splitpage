@@ -40,6 +40,10 @@
        so both have to be settled before it is told anything changed
        (20g-drafts.js). It only sets a timer. */
     if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
+    /* Last of all, and derived from everything above rather than set
+       alongside it: the save-state indicator (below) is the one place that
+       says, in words, whether what is on screen is on disk yet. */
+    updateSaveStatus();
   }
 
   function markDirty() {
@@ -53,6 +57,9 @@
        noteDraftChange() is O(1) and only moves a timer (20g-drafts.js). */
     if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
     if (!saveInFlight) setSaveButtons("Save •");
+    /* Only moves two timers (14-export.js), so it is safe on the keystroke
+       path; the save itself waits for a pause in the typing. */
+    scheduleAutoSave();
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
     /* A hosted document has no openedFile.name (openServerDoc() sets it to
        null on purpose — one Save button, one home for it), so the branch
@@ -67,7 +74,85 @@
 
   function clearDirty() {
     dirty = false;
+    /* Whatever a pending autosave was going to write has just been written
+       (or has just been replaced by a different document), so its timers are
+       stale either way; a halted autosave gets its second chance here for
+       the same reason. */
+    clearAutoSaveTimers();
+    resumeAutoSave();
+    /* Every successful save sets this again on its way past (noteSaveStatus,
+       below); clearing it here is what stops "Saved to the file you had open
+       an hour ago" turning up under a different document, since opening one
+       comes through here too. */
+    lastSaveDetail = "";
     setSaveButtons("Save");
+  }
+
+  /* ---- the save-state indicator ----
+
+     A line of small text beside each Save button saying whether the document
+     on screen is safely somewhere else yet: "Saved", "Saving…", "Unsaved
+     changes". It is deliberately the quietest thing in the header — with
+     autosave on, the interesting states last about two seconds, and an
+     indicator that flashed or moved would make every sentence typed into an
+     event. The detail — which file, why autosave stopped, what to press —
+     lives in its `title`, where it costs nothing until it is wanted.
+
+     Derived, never set: every caller goes through setSaveButtons(), the one
+     funnel both markDirty() and clearDirty() already share (invariant #20),
+     so a new path that changes the save state cannot forget to update it. */
+
+  /* What the last successful save did, for the tooltip — set by the quiet
+     automatic saves, which have no toast to say it instead. */
+  var lastSaveDetail = "";
+  function noteSaveStatus(detail) {
+    lastSaveDetail = detail || "";
+    updateSaveStatus();
+  }
+
+  function saveStatusView() {
+    var target = typeof autoSaveTarget === "function" ? autoSaveTarget() : null;
+    var where = target === "server" ? "the server"
+      : (docFileHandle.handle && docFileHandle.handle.name) || (openedFile && openedFile.name) || "";
+
+    if (typeof onServerDoc === "function" && onServerDoc() && serverSessionExpired) {
+      return { text: "Not saving", cls: "warn",
+               title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
+    }
+    if (saveInFlight) {
+      return { text: "Saving…", cls: "busy",
+               title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
+    }
+    if (autoSaveHalt) return { text: "Not saving", cls: "warn", title: autoSaveHalt };
+    if (!dirty) {
+      /* A document nobody has saved or changed yet — the seed, or a blank
+         start — has nothing to report, and "Saved" over a file that does not
+         exist would be a lie. */
+      if (!target && !docFileHandle.kind && !where) return null;
+      return { text: "Saved", cls: "ok",
+               title: lastSaveDetail || (where ? "Saved to " + where + "." : "Everything is saved.") };
+    }
+    if (target && autoSaveEnabled) {
+      return { text: "Unsaved changes", cls: "pending",
+               title: "Autosave will write these to " + where + " a moment after you stop typing." };
+    }
+    return { text: "Unsaved changes", cls: "pending",
+             title: target
+               ? "Autosave is off — press Save to write these to " + where + "."
+               : "Press Save to choose where this script is kept." };
+  }
+
+  function updateSaveStatus() {
+    var view = saveStatusView();
+    ["save-status", "wr-save-status"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.hidden = !view;
+      if (!view) { el.textContent = ""; el.removeAttribute("title"); return; }
+      el.textContent = view.text;
+      el.title = view.title;
+      el.className = "save-status is-" + view.cls;
+    });
   }
 
   /* `sticky` is for the handful of messages that must not scroll past while

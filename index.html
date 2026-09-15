@@ -1446,6 +1446,29 @@
   .file-chip-state { color: var(--text-faint); }
   .file-chip-state.unsaved { color: var(--accent); }
 
+  /* ---------- save-state indicator ----------
+     Beside each Save button (header and writer). Quiet on purpose: the
+     states it reports last about two seconds each with autosave on, so
+     nothing about it may pull the eye off the sentence being written —
+     no weight, no background, no animation. It reserves no width either:
+     the text changes length as it changes state, and the toolbar is a
+     right-aligned flex row, so the Save button would otherwise inch
+     sideways as you type. */
+  .save-status {
+    flex: none;
+    min-width: 92px;
+    text-align: right;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    line-height: 1.2;
+    color: var(--text-faint);
+    cursor: default;
+    white-space: nowrap;
+  }
+  .save-status[hidden] { display: none; }
+  .save-status.is-pending { color: var(--text-dim); }
+  .save-status.is-warn { color: var(--danger); }
+
   /* ---------- comments ---------- */
   .comments-badge {
     display: inline-flex;
@@ -2682,6 +2705,9 @@
           <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
+          <!-- Says what is on, not what pressing it does — updateAutoSaveMenu()
+               (14-export.js) rewrites the label on every change. -->
+          <button type="button" role="menuitemcheckbox" aria-checked="true" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing">Autosave: on</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="history">Version history…</button>
           <div class="menu-sep"></div>
@@ -2727,6 +2753,11 @@
       <button class="btn" id="btn-broll" type="button" title="B-roll: start a line in the visual column with B-roll: and it lands on this list">B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
       <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
       <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
+      <!-- Whether what is on screen is on disk yet, in words, next to the
+           button that puts it there. Filled in by updateSaveStatus()
+           (12-dirty-toast.js); `aria-live="polite"` so a screen reader hears
+           "Saved" without being interrupted mid-sentence. -->
+      <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
       <button class="btn btn-primary" id="btn-save" type="button">Save</button>
       <button class="btn btn-accent" id="btn-present" type="button">▶ Present</button>
     </div>
@@ -2944,6 +2975,7 @@
       <span id="wr-file-chip-name"></span>
       <span class="file-chip-state" id="wr-file-chip-state"></span>
     </span>
+    <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
   </div>
   <div class="writer-scroll" id="writer-scroll">
@@ -3279,7 +3311,7 @@
       <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
     </div>
     <div class="help-layout">
-      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-what-s-new-in-20">What's new in 2.0</a></li><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-from-the-browser-app-to-the-desktop-app">Moving from the browser app to the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
+      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-what-s-new-in-20">What's new in 2.0</a></li><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-from-the-browser-app-to-the-desktop-app">Moving from the browser app to the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-autosave">Autosave</a></li><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
       <div id="help-body"><h1 id="help-splitpage">Splitpage</h1>
 <p>Splitpage is a two-column visual/audio script editor — pictures on one side, narration on the other — with a built-in teleprompter, comments for collaborating on a draft, and a production breakdown that tracks every prop, location, VFX shot, and person mentioned in the script.</p>
 <p>Scripts save as plain Markdown (<code>.md</code>) files by default, so you can open and edit them anywhere, or as native <code>.splitpage</code> files that keep everything — tags, comments, version history — in one file. Splitpage itself runs portable straight out of a folder with nothing to install, or you can <a href="#help-installing-it">install it</a> properly, with a Start Menu entry and auto-updates.</p>
@@ -3417,6 +3449,11 @@ node update.mjs           # download and verify it</code></pre>
 <p>That block holds what the table cannot say: which words are tagged as props or locations, where your comments are anchored, your storyboard images, each scene's status, your crew list and your reading speed. Leave it alone and nothing is ever lost.</p>
 <p><strong>Splitpage (<code>.splitpage</code>).</strong> The same information with none of the readable table — just Splitpage's own record, and a smaller file. Pick this if you never intend to read the file anywhere else.</p>
 <p>Either way the file is your script and nothing else: it carries no copy of the app, so it stays small and it opens in seconds.</p>
+<h3 id="help-autosave">Autosave</h3>
+<p>Once your script has a file — because you saved it once, or opened one — Splitpage keeps that file up to date on its own: a couple of seconds after you stop typing, what is on screen is written back to it, with no dialog and no toast. Leaving the window writes whatever is still pending immediately, so switching to another app is as good as pressing Save. A hosted script on a server works the same way, with the server as its home.</p>
+<p>Before that first Save there is nothing to autosave <em>into</em>, so nothing is written — Splitpage never pops a file dialog, or drops a file in your Downloads folder, because you typed a word. Autosave also stands aside for work you have not looked at yet: changes recovered after a crash sit on screen until you press Save yourself.</p>
+<p>Beside the <strong>Save</strong> button is a line of small text saying where things stand — <strong>Saved</strong>, <strong>Saving…</strong>, <strong>Unsaved changes</strong>, or <strong>Not saving</strong> when something is in the way (a file that changed on disk under you, a write that failed, a lapsed sign-in). Hover it for the detail: which file, or what to do about it. The writer has the same line beside its own Save button.</p>
+<p>Turn it off with <strong>File ▸ Autosave</strong>, and the file is written only when you press Save. The setting is remembered between launches. Either way, the desktop app keeps its own crash-safe copy of everything typed since the last save — see <a href="#help-desktop-app">Desktop app</a>.</p>
 <h3 id="help-if-you-edit-the-md-somewhere-else">If you edit the <code>.md</code> somewhere else</h3>
 <p>You can. Open it in any editor, fix a line of narration in the table, save, and reopen it in Splitpage — your edit is there. Splitpage compares the table against its own record cell by cell: a cell you did not touch keeps everything it had, and a cell you rewrote is taken from your version, with any tracked prop, location, cast, gear or sound name in it tagged again automatically. The one thing it cannot rescue is a comment that pointed at exact words in a cell you rewrote — the comment stays, along with the text it quoted, but it no longer has a place to point to and shows in the panel as no longer in the script. Changing the <code># </code> heading renames the script. Adding or deleting whole scene rows is the one thing Splitpage will not guess at: it asks whether to keep its own record or rebuild the scenes from your table.</p>
 <h3 id="help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</h3>
@@ -5533,7 +5570,7 @@ node update.mjs           # download and verify it</code></pre>
 
     /* nothing actually differed — don't make a ceremony of it */
     if (!bits.length && !result.conflicts.length) {
-      if (!opts.alreadySaved) { markDirty(); if (!opts.noAutoSave) queueAutoSave(); }
+      if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
       return;
     }
 
@@ -5560,7 +5597,20 @@ node update.mjs           # download and verify it</code></pre>
       if (el) el.classList.add("just-merged");
     });
 
-    if (!opts.alreadySaved) { markDirty(); if (!opts.noAutoSave) queueAutoSave(); }
+    if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
+  }
+
+  /* markDirty() arms the typing autosave (14-export.js) like any other edit,
+     which is exactly what `noAutoSave` exists to prevent — and not just for
+     this instant: the next keystroke would arm it again and write the same
+     unreviewed merge a second later. So the merge halts autosave outright,
+     and the Save the user presses when they have looked it over is what puts
+     it back to work. The indicator beside the Save button carries the reason
+     in the meantime (12-dirty-toast.js). */
+  function noteMergeAutoSave(opts) {
+    if (!opts.noAutoSave) { queueAutoSave(); return; }
+    haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
+                 "Press Save once you have looked them over.");
   }
 
   /* Reverts to the version that was live before the merge — i.e. discards the
@@ -13013,6 +13063,10 @@ node update.mjs           # download and verify it</code></pre>
        so both have to be settled before it is told anything changed
        (20g-drafts.js). It only sets a timer. */
     if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
+    /* Last of all, and derived from everything above rather than set
+       alongside it: the save-state indicator (below) is the one place that
+       says, in words, whether what is on screen is on disk yet. */
+    updateSaveStatus();
   }
 
   function markDirty() {
@@ -13026,6 +13080,9 @@ node update.mjs           # download and verify it</code></pre>
        noteDraftChange() is O(1) and only moves a timer (20g-drafts.js). */
     if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
     if (!saveInFlight) setSaveButtons("Save •");
+    /* Only moves two timers (14-export.js), so it is safe on the keystroke
+       path; the save itself waits for a pause in the typing. */
+    scheduleAutoSave();
     if (openedFile.name) { openedFile.dirty = true; updateFileChip(); }
     /* A hosted document has no openedFile.name (openServerDoc() sets it to
        null on purpose — one Save button, one home for it), so the branch
@@ -13040,7 +13097,85 @@ node update.mjs           # download and verify it</code></pre>
 
   function clearDirty() {
     dirty = false;
+    /* Whatever a pending autosave was going to write has just been written
+       (or has just been replaced by a different document), so its timers are
+       stale either way; a halted autosave gets its second chance here for
+       the same reason. */
+    clearAutoSaveTimers();
+    resumeAutoSave();
+    /* Every successful save sets this again on its way past (noteSaveStatus,
+       below); clearing it here is what stops "Saved to the file you had open
+       an hour ago" turning up under a different document, since opening one
+       comes through here too. */
+    lastSaveDetail = "";
     setSaveButtons("Save");
+  }
+
+  /* ---- the save-state indicator ----
+
+     A line of small text beside each Save button saying whether the document
+     on screen is safely somewhere else yet: "Saved", "Saving…", "Unsaved
+     changes". It is deliberately the quietest thing in the header — with
+     autosave on, the interesting states last about two seconds, and an
+     indicator that flashed or moved would make every sentence typed into an
+     event. The detail — which file, why autosave stopped, what to press —
+     lives in its `title`, where it costs nothing until it is wanted.
+
+     Derived, never set: every caller goes through setSaveButtons(), the one
+     funnel both markDirty() and clearDirty() already share (invariant #20),
+     so a new path that changes the save state cannot forget to update it. */
+
+  /* What the last successful save did, for the tooltip — set by the quiet
+     automatic saves, which have no toast to say it instead. */
+  var lastSaveDetail = "";
+  function noteSaveStatus(detail) {
+    lastSaveDetail = detail || "";
+    updateSaveStatus();
+  }
+
+  function saveStatusView() {
+    var target = typeof autoSaveTarget === "function" ? autoSaveTarget() : null;
+    var where = target === "server" ? "the server"
+      : (docFileHandle.handle && docFileHandle.handle.name) || (openedFile && openedFile.name) || "";
+
+    if (typeof onServerDoc === "function" && onServerDoc() && serverSessionExpired) {
+      return { text: "Not saving", cls: "warn",
+               title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
+    }
+    if (saveInFlight) {
+      return { text: "Saving…", cls: "busy",
+               title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
+    }
+    if (autoSaveHalt) return { text: "Not saving", cls: "warn", title: autoSaveHalt };
+    if (!dirty) {
+      /* A document nobody has saved or changed yet — the seed, or a blank
+         start — has nothing to report, and "Saved" over a file that does not
+         exist would be a lie. */
+      if (!target && !docFileHandle.kind && !where) return null;
+      return { text: "Saved", cls: "ok",
+               title: lastSaveDetail || (where ? "Saved to " + where + "." : "Everything is saved.") };
+    }
+    if (target && autoSaveEnabled) {
+      return { text: "Unsaved changes", cls: "pending",
+               title: "Autosave will write these to " + where + " a moment after you stop typing." };
+    }
+    return { text: "Unsaved changes", cls: "pending",
+             title: target
+               ? "Autosave is off — press Save to write these to " + where + "."
+               : "Press Save to choose where this script is kept." };
+  }
+
+  function updateSaveStatus() {
+    var view = saveStatusView();
+    ["save-status", "wr-save-status"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.hidden = !view;
+      if (!view) { el.textContent = ""; el.removeAttribute("title"); return; }
+      el.textContent = view.text;
+      el.title = view.title;
+      el.className = "save-status is-" + view.cls;
+    });
   }
 
   /* `sticky` is for the handful of messages that must not scroll past while
@@ -14370,6 +14505,16 @@ node update.mjs           # download and verify it</code></pre>
   async function saveDoc(opts) {
     opts = opts || {};
     var saveAs = !!opts.saveAs;
+    /* An automatic save writes exactly what a manual one writes; what it
+       must not do is talk over the typing that triggered it. So the "Saved
+       to …" toast is left to the save the user asked for, and the failures
+       that would otherwise repeat every couple of seconds — a rejected
+       write, a file changed on disk — halt autosave instead, with the
+       reason kept for the indicator beside the Save button. */
+    var auto = !!opts.auto;
+    /* Pressing Save is the user saying they have dealt with whatever stopped
+       autosave; from here the automatic writes are welcome again. */
+    if (!auto) resumeAutoSave();
     /* A Save As makes a second file. If this document's id has already been
        written somewhere (a file, a server, a draft), both files would carry
        it and share one version history, so the copy gets a new id. An id
@@ -14409,7 +14554,15 @@ node update.mjs           # download and verify it</code></pre>
        how you take a script home, or fork one. */
     if (onServerDoc() && !saveAs) {
       try {
-        await saveToServer();
+        /* A hosted save that did not go through (a read-only server, a
+           lapsed sign-in, a document someone deleted) would not go through
+           in two seconds either, and saveToServer has already said so once.
+           Same rule as the file path's failures below. */
+        var sentToServer = await saveToServer();
+        if (auto && sentToServer === false) {
+          haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
+                       "Press Save to try again.");
+        }
       } finally {
         saveInFlight = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
@@ -14504,7 +14657,13 @@ node update.mjs           # download and verify it</code></pre>
       if (reusingHandle && !opts.force) {
         var check = await checkFileConflict(targetHandle, docFileHandle.lastModified);
         if (!check.ok) {
-          showFileConflict(targetHandle.name, check.current, { kind: "project" });
+          /* Nobody asked for this write, so it does not get to throw a modal
+             over the sentence being typed. Autosave stops until a manual
+             Save, which shows the same conflict modal and offers the same
+             choices — the indicator says why in the meantime. */
+          if (auto) haltAutoSave("Autosave is paused — " + targetHandle.name +
+                                 " changed on disk since it was opened. Press Save to sort it out.");
+          else showFileConflict(targetHandle.name, check.current, { kind: "project" });
           state.rev = Math.max(0, (state.rev || 1) - 1);
           saveInFlight = false;
           setSaveButtons(dirty ? "Save •" : "Save", false);
@@ -14546,7 +14705,11 @@ node update.mjs           # download and verify it</code></pre>
           if (homeAtWrite && docFileHandle === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
         } catch (e) { /* not fatal — the write already succeeded */ }
         if (stillOurs && state.docId === docIdAfterSave && editSeq === seqAtSave) clearDirty();
-        showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
+        /* An automatic save says so through the indicator, not a toast (see
+           `auto` at the top): one "Saved to script.md" per pause in the
+           typing is noise sitting on top of the work. */
+        if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
+        else noteSaveStatus("Saved to " + targetHandle.name);
       } else {
         /* no File System Access API (e.g. Firefox) — a plain download is the
            best this browser can do; the user re-opens the newest copy next
@@ -14566,7 +14729,12 @@ node update.mjs           # download and verify it</code></pre>
       if (err && err.name === "AbortError") {
         state.rev = Math.max(0, (state.rev || 1) - 1);
       } else {
-        showToast("Could not save — " + (err && err.message ? err.message : "please try again") + ".", "error");
+        var why = err && err.message ? err.message : "please try again";
+        showToast("Could not save — " + why + ".", "error");
+        /* Toasted once, then no more: an automatic save that cannot write
+           (a locked file, a full disk, a revoked permission) would fail
+           again in two seconds, and in two after that. */
+        if (auto) haltAutoSave("Autosave is paused — the last save failed (" + why + "). Press Save to try again.");
         state.rev = Math.max(0, (state.rev || 1) - 1);
       }
     } finally {
@@ -14667,38 +14835,172 @@ node update.mjs           # download and verify it</code></pre>
     return { state: result.merged, report: result, snapshot: snap };
   }
 
-  /* serialize auto-saves triggered by comment/tag actions so two quick actions
-     (e.g. posting a comment right after resolving another) never overlap */
+  /* ================= autosave =================
+
+     Two ways in, one write path. A discrete action — posting a comment,
+     cycling a tag's status, a find-and-replace — calls queueAutoSave() and
+     the write goes out at once, because the action is over the moment it is
+     made. Typing calls scheduleAutoSave() from markDirty() (the one save
+     state funnel, invariant #20) and the write waits for a pause: a save per
+     keystroke would serialize and re-write the whole document tens of times
+     a sentence.
+
+     Both are gated the same way (autoSaveTarget below) and both go through
+     saveDoc({auto:true}), which writes exactly what a manual Save writes and
+     differs only in what it says about it: no "Saved to …" toast per pause
+     in the typing — the save-state indicator beside the Save button
+     (12-dirty-toast.js) is the feedback, and it is there for manual saves
+     too. */
+  var AUTOSAVE_KEY = "splitpage-autosave";
+  /* Quiet enough that typing never waits on a write, short enough that
+     walking away from the keyboard means the file is already current. The
+     max timer is not reset by further edits, so a long stretch of
+     uninterrupted typing still lands regularly — same shape as the crash
+     draft writer's timing (20g-drafts.js), a few times slower because this
+     one writes the user's own file. */
+  var autoSaveTiming = { idle: 2000, max: 15000 };
+  var autoSaveEnabled = readAutoSavePref();
+  var autoSaveIdleTimer = null;
+  var autoSaveMaxTimer = null;
+  /* Why autosave has stopped writing by itself, as a sentence the indicator
+     can show. Set when an automatic save fails or finds the file changed on
+     disk: retrying every two seconds would either spam the same failure or
+     re-open the same modal over the typing. A manual Save clears it — that
+     is the user saying they have dealt with it. */
+  var autoSaveHalt = "";
+
+  function readAutoSavePref() {
+    try { return localStorage.getItem(AUTOSAVE_KEY) !== "0"; } catch (e) { return true; }
+  }
+
+  /* Where an automatic save would go, or null if it would have to ask first.
+     The whole point of the gate: a save that pops the native file dialog, or
+     silently downloads a copy, must never happen because someone typed a
+     word. A hosted document always has somewhere to go, so autosave is live
+     there from the first edit. */
+  function autoSaveTarget() {
+    if (serverSessionExpired) return null;
+    if (onServerDoc()) return "server";
+    /* No file established yet — wait for an explicit Save. The dirty
+       indicator and the unload guard cover the user in the meantime; once a
+       file handle exists (from a manual Save, or from opening a project),
+       later edits save into it silently. */
+    if (!docFileHandle.handle) return null;
+    /* A legacy .html project's next save opens a picker (see saveDoc) —
+       exactly the ambush this gate exists to prevent. */
+    if (docFileHandle.kind === "html") return null;
+    return "file";
+  }
+
+  function autoSaveLive() {
+    return autoSaveEnabled && !autoSaveHalt && !!autoSaveTarget();
+  }
+
+  function setAutoSaveEnabled(on) {
+    autoSaveEnabled = !!on;
+    try { localStorage.setItem(AUTOSAVE_KEY, autoSaveEnabled ? "1" : "0"); } catch (e) {}
+    if (!autoSaveEnabled) clearAutoSaveTimers();
+    else if (dirty) scheduleAutoSave();
+    updateAutoSaveMenu();
+    updateSaveStatus();
+  }
+
+  function toggleAutoSave() {
+    setAutoSaveEnabled(!autoSaveEnabled);
+    showToast(autoSaveEnabled
+      ? "Autosave is on — edits go to the file you saved to, a moment after you stop typing."
+      : "Autosave is off — your changes are only written when you press Save.", "ok");
+  }
+
+  /* The menu entry says what is on, not what pressing it does: a checkmark
+     in a menu of verbs is read as state, and "Autosave: on" cannot be
+     misread as a command to turn it on. */
+  function updateAutoSaveMenu() {
+    var item = document.getElementById("menu-autosave");
+    if (!item) return;
+    item.textContent = "Autosave: " + (autoSaveEnabled ? "on" : "off");
+    item.setAttribute("aria-checked", autoSaveEnabled ? "true" : "false");
+    item.classList.toggle("is-on", autoSaveEnabled);
+  }
+
+  /* Called from markDirty() on every edit that changes the document, so it
+     does nothing but move two timers. */
+  function scheduleAutoSave() {
+    if (!autoSaveEnabled || autoSaveHalt) return;
+    if (!autoSaveTarget()) return;
+    if (autoSaveIdleTimer) clearTimeout(autoSaveIdleTimer);
+    autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.idle);
+    if (!autoSaveMaxTimer) autoSaveMaxTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.max);
+  }
+
+  function clearAutoSaveTimers() {
+    if (autoSaveIdleTimer) { clearTimeout(autoSaveIdleTimer); autoSaveIdleTimer = null; }
+    if (autoSaveMaxTimer) { clearTimeout(autoSaveMaxTimer); autoSaveMaxTimer = null; }
+  }
+
+  function runAutoSaveTimer() {
+    clearAutoSaveTimers();
+    /* A manual Save (or a save from an action) can land between the last
+       keystroke and this timer — there is nothing left to write then. */
+    if (!dirty) return;
+    queueAutoSave();
+  }
+
+  /* Leaving the window with work a timer has not written yet is the one
+     moment the pause-and-write rule costs something, so the pending write is
+     brought forward rather than left on its timer. Nothing is scheduled when
+     autosave is off, so this is silent there — it never writes a file the
+     user did not ask it to. */
+  function flushAutoSave() {
+    if (!autoSaveIdleTimer && !autoSaveMaxTimer) return;
+    clearAutoSaveTimers();
+    if (dirty) queueAutoSave();
+  }
+
+  /* An automatic save that failed, or that found the file changed under it,
+     stops the automatic ones until the user saves by hand — with the reason
+     kept for the indicator's tooltip rather than repeated as a toast. */
+  function haltAutoSave(reason) {
+    clearAutoSaveTimers();
+    autoSaveHalt = reason || "Autosave is paused — press Save to try again.";
+    updateSaveStatus();
+  }
+
+  function resumeAutoSave() {
+    if (!autoSaveHalt) return;
+    autoSaveHalt = "";
+    updateSaveStatus();
+  }
+
+  /* serialize auto-saves so two quick ones (e.g. posting a comment right
+     after resolving another, or a timer landing on top of either) never
+     overlap */
   var saveInFlight = false;
   var saveQueued = false;
   function queueAutoSave() {
-    /* No file established yet — writing now would mean popping the native
-       Save dialog out of nowhere, or silently downloading a fresh copy, on
-       every comment. Wait for an explicit Save; the dirty indicator and the
-       unload guard cover the user in the meantime. Once a file handle
-       exists (from a manual Save), later actions save into it silently. */
-    /* A hosted document always has somewhere to save to, so autosave is live
-       from the first edit — there is no file dialog to ambush anyone with.
-       A lapsed sign-in stops it, or every queued save would refire the same
-       failure until the tab is reloaded. */
-    if (!docFileHandle.handle && !onServerDoc()) return;
-    /* A legacy .html project's next save opens a picker (see saveDoc) —
-       exactly the ambush the gate above exists to prevent. */
-    if (docFileHandle.kind === "html") return;
-    if (serverSessionExpired) return;
+    if (!autoSaveTarget()) return;
+    if (autoSaveHalt) return;
+    /* A pending timer would fire into a document this call is already
+       writing; queueing is this function's own job from here. */
+    clearAutoSaveTimers();
     if (saveInFlight) { saveQueued = true; return; }
     saveInFlight = true;
     /* The catch matters more than it looks: without it, one rejected save
        leaves saveInFlight stuck true and every later auto-save is silently
        dropped for the rest of the session. */
     Promise.resolve()
-      .then(function () { return saveDoc(); })
+      .then(function () { return saveDoc({ auto: true }); })
       .catch(function () {})
       .then(function () {
         saveInFlight = false;
         if (saveQueued) { saveQueued = false; queueAutoSave(); }
       });
   }
+
+  window.addEventListener("blur", function () { flushAutoSave(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") flushAutoSave();
+  });
 
   function slugify(s) {
     return String(s || "splitpage")
@@ -17127,6 +17429,7 @@ node update.mjs           # download and verify it</code></pre>
     else if (action === "paste") openImportModal();
     else if (action === "gdoc-import") openGdocModal();
     else if (action === "save-back") saveBackToFile();
+    else if (action === "autosave") toggleAutoSave();
     else if (action === "history") openHistoryPanel();
     else if (action === "export-docx") exportAs("docx");
     else if (action === "export-md") exportAs("md");
@@ -19541,6 +19844,20 @@ node update.mjs           # download and verify it</code></pre>
        on-disk-conflict check saveDoc() runs before writing is exercised
        without a real file picker (headless can't run one). */
     save: function (opts) { return saveDoc(opts || {}); },
+    /* Autosave (14-export.js), for 28-autosave.txt. `timing` hands back the
+       live object rather than a copy on purpose: a suite shortens the pause
+       to a few milliseconds instead of sleeping through a real one. The rest
+       is read-only state to assert against, plus the two entry points the
+       File menu and the window's own blur already use. */
+    autosave: {
+      timing: function () { return autoSaveTiming; },
+      enabled: function () { return autoSaveEnabled; },
+      halt: function () { return autoSaveHalt; },
+      target: function () { return autoSaveTarget(); },
+      pending: function () { return !!(autoSaveIdleTimer || autoSaveMaxTimer); },
+      toggle: toggleAutoSave,
+      flush: flushAutoSave
+    },
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return state; },
@@ -21892,7 +22209,8 @@ node update.mjs           # download and verify it</code></pre>
         commentAuthor: appDataReadRaw(COMMENT_NAME_KEY),
         commentsSort: appDataReadRaw(COMMENTS_SORT_KEY),
         writerSize: appDataReadRaw(WRITER_SIZE_KEY),
-        taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY)
+        taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY),
+        autosave: appDataReadRaw(AUTOSAVE_KEY)
       };
     } catch (e) {
       bundle.prefs = {};
@@ -22010,7 +22328,8 @@ node update.mjs           # download and verify it</code></pre>
       commentAuthor: str(p.commentAuthor),
       commentsSort: str(p.commentsSort),
       writerSize: str(p.writerSize),
-      taggingHelpDismissed: str(p.taggingHelpDismissed)
+      taggingHelpDismissed: str(p.taggingHelpDismissed),
+      autosave: str(p.autosave)
     };
   }
 
@@ -22132,6 +22451,8 @@ node update.mjs           # download and verify it</code></pre>
           return n >= WRITER_SIZE_MIN && n <= WRITER_SIZE_MAX;
         } },
       { name: "taggingHelpDismissed", key: TAGGING_HELP_KEY,
+        valid: function (v) { return v === "0" || v === "1"; } },
+      { name: "autosave", key: AUTOSAVE_KEY,
         valid: function (v) { return v === "0" || v === "1"; } }
     ];
   }
@@ -22955,6 +23276,12 @@ node update.mjs           # download and verify it</code></pre>
       baseState = cloneState(applied.report ? loaded : state);
       render();
       updateIdentityChip();
+      /* Same reason as syncDocIdentity() below: a fresh load never goes
+         through setSaveButtons(), the funnel these two hang off, so the
+         File menu's autosave label and the save-state indicator get their
+         first values here rather than waiting for the first keystroke. */
+      updateAutoSaveMenu();
+      updateSaveStatus();
 
       if (applied.report) {
         reportMerge(applied.report);

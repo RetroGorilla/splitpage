@@ -85,6 +85,9 @@
           <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
+          <!-- Says what is on, not what pressing it does — updateAutoSaveMenu()
+               (14-export.js) rewrites the label on every change. -->
+          <button type="button" role="menuitemcheckbox" aria-checked="true" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing">Autosave: on</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="history">Version history…</button>
           <div class="menu-sep"></div>
@@ -130,6 +133,11 @@
       <button class="btn" id="btn-broll" type="button" title="B-roll: start a line in the visual column with B-roll: and it lands on this list">B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
       <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
       <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
+      <!-- Whether what is on screen is on disk yet, in words, next to the
+           button that puts it there. Filled in by updateSaveStatus()
+           (12-dirty-toast.js); `aria-live="polite"` so a screen reader hears
+           "Saved" without being interrupted mid-sentence. -->
+      <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
       <button class="btn btn-primary" id="btn-save" type="button">Save</button>
       <button class="btn btn-accent" id="btn-present" type="button">▶ Present</button>
     </div>
@@ -347,6 +355,7 @@
       <span id="wr-file-chip-name"></span>
       <span class="file-chip-state" id="wr-file-chip-state"></span>
     </span>
+    <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
   </div>
   <div class="writer-scroll" id="writer-scroll">
