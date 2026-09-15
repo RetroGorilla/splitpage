@@ -452,6 +452,9 @@
       var landed = afterSel.getRangeAt(0).startContainer;
       var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
       if (tagEl) {
+        /* A tag typed at the very end of the cell leaves nothing after it to
+           put the caret at — see ensureTrailingCaretSpot's note. */
+        ensureTrailingCaretSpot(tagEl.parentNode);
         var out = document.createRange();
         out.setStartAfter(tagEl);
         out.collapse(true);
@@ -583,6 +586,7 @@
       var landed = afterSel.getRangeAt(0).startContainer;
       var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
       if (tagEl) {
+        ensureTrailingCaretSpot(tagEl.parentNode);
         var out = document.createRange();
         out.setStartAfter(tagEl);
         out.collapse(true);
@@ -850,6 +854,7 @@
       var landed = after.getRangeAt(0).startContainer;
       var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
       if (tagEl) {
+        ensureTrailingCaretSpot(tagEl.parentNode);
         var out = document.createRange();
         out.setStartAfter(tagEl);
         out.collapse(true);

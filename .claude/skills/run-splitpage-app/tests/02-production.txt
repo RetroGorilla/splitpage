@@ -85,5 +85,27 @@ expect document.querySelector('#rows .row:last-child .visual-cell .tag-anchor[da
 sleep 400
 expect document.querySelectorAll('#production-list .tag-entity').length == 4
 
+# --- caret lands after a tag that ends the cell's last row (regression) -----
+# A tag closed at the very end of a field is an atomic contenteditable="false"
+# span with nothing after it — nothing for the caret to land at, natively.
+caret #rows .row:nth-child(1) .visual-cell .cell-editable
+press  Camera on the [tripod]
+sleep 400
+expect document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .tag-anchor').length == 1
+# Force a re-render (adding a row rebuilds every cell) so this also exercises
+# the render-time fix, not just the fresh-insertion caret placement.
+jsclick #rows .row:nth-child(2) [data-action="insert-below"]
+sleep 300
+caret #rows .row:nth-child(1) .visual-cell .cell-editable
+press  and dolly
+sleep 300
+# another render rebuilds the cell straight from saved state — proves both
+# that the typed text landed after the tag, not lost or inside it, AND that
+# the caret-landing spot never leaked into what got saved
+jsclick #rows .row:nth-child(3) [data-action="insert-below"]
+sleep 300
+expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.trim().endsWith('tripod and dolly')
+expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').innerHTML.indexOf('​') == -1
+
 shot 02-production
 quit
