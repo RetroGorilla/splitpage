@@ -81,6 +81,13 @@ Copy this template into the right section below:
 - **Description:** Undoing after applying a highlight to text doesn't work as expected. Likely related to the broader highlight/text-modifier UX pass and the existing alt-enter undo bug — undo seems to have multiple gaps around text-formatting actions.
 - **Repro / notes:** Highlight some text, then press undo — behavior is off (exact wrong behavior not yet pinned down, needs a clean repro).
 
+### Comments/gear panel shrinks main script even when there's room
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** UI / layout
+- **Description:** Opening the comments or gear (settings) list panel shrinks the width of the main script column, even when the window is wide enough for the panel to pop in without taking space from it.
+- **Repro / notes:** Widen the window, open the comments or gear panel — main script column narrows instead of the panel overlaying/using free space. Related to the "two-column layout should widen with window" entry above.
+
 ### Adjustable width for comment sidebar columns
 - **Type:** Feature
 - **Priority:** Low
