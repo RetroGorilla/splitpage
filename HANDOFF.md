@@ -1676,6 +1676,8 @@ has.
 
 49. **Import merges through the history store's public write path and never deletes; existing preferences are never overwritten; bookmarks union by URL with local winning.** WHY: `put` is where put-if-absent, stamping, trimming, quota retry and id validation live; import is the one operation a user cannot undo.
 
+50. **The 1.0.x removal in the installer waits for the old folder to disappear before writing.** WHY: the old uninstaller's detached `rmdir` runs ~2 s after it exits, into the same folder.
+
 ---
 
 ## 6. Map of the source
@@ -2108,6 +2110,26 @@ ALL PASS — 454/454 on the dev target (native ARM64 Electron) and 454/454 on
 the packaged ARM64 exe; `npm run dist:win` ends with `verify-dist` 9/9.**
 Fresh installers (unsigned, version 1.0.1) sit in `desktop/dist/`.
 
+### 2.0.0 (in progress)
+
+**Built and verified live**
+
+- U1's installer removal of 1.0.x parses with `makensis 3.0.4.1`, but has **never run** on a real machine.
+- U3's desktop-app bar and X1's export: browser suite.
+- X2's import: browser suite 1085/1085 across 26 suites, including suite 27 and the desktop-shim import cases.
+- The release recipe in `DEPLOY.md`.
+- Version 2.0.0.
+
+**NOT verified**
+
+- the NSIS upgrade over a real 1.0.x install (Part D D6, including the 60-second rmdir check);
+- a clean install round trip;
+- the installers being unsigned (SmartScreen);
+- import through the real desktop history IPC (only the fake backend has been tested);
+- the native File menu having no Import item;
+- a full smoke + `dist:win` + verify-dist pass on this tree (R3 not yet run);
+- native x64 (Part D).
+
 ### NOT verified — say so, don't imply otherwise
 
 - **The tabs UI has not been eyeballed by a human.** Everything above is
@@ -2316,6 +2338,14 @@ from a Linux container:**
 **Export/import follow-ups (built but not yet complete):**
 - **Desktop-side export.** `exportHistoryAll()` rejects on the desktop backend because there is no IPC to enumerate the history folder's documents yet. Building this would mean new `main.js` IPC to walk the `<userData>/history/` tree and return docId + title + recent-date summaries so the export can enumerate them like the browser backend does.
 - **Native Import dialog.** The desktop app's File menu opens `#import-app-data-input` (the page's own file input) instead of using `DESKTOP.openFileDialog()`, because that method's filter lists script extensions only and widening it would require touching `main.js`. If a native Import dialog is desired, the main-process filter would need to add `.json` files.
+
+**Follow My Voice on desktop — paused 2026-09-15**
+
+V0 spike (gate for V1–V5) uncovered two separate problems:
+- Windows' own recogniser needs the "Online speech recognition" consent even with the offline en-US model (StartAsync → 0x80045509 without it).
+- Even with consent, a console helper sat Idle and never opened the mic. This was not yet diagnosed; message pump and package identity were the next hypotheses.
+
+Adam paused all Follow My Voice work on desktop and came back to it with fresh eyes on a later day. Partial V1 files are parked under `.cache/voice-parked/` (git-ignored) with a patch for `stage.mjs`/`.gitignore`; spike sources stay in `%TEMP%\splitpage-voice-spike\`. An opt-in local model (sherpa-onnx + streaming Zipformer 20M, 43.6 MB) is designed in the plan companion `breezy-booping-toucan-VL.md` but not approved; VL0 downloads are not yet authorised. For 2.0.0: the desktop button is disabled with an honest status — "Follow My Voice isn't available in the desktop app yet — it works in the browser version." (Q25, small change in `src/js/20-teleprompter.js` `updateVoiceAvailability()` desktop branch + a 21-desktop-shim case; browser build unchanged, runs after X3).
 
 **Pitched and accepted, already built:** runtime estimates, scene status, shoot
 order, find & replace, drag reorder.
