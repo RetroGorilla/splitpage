@@ -106,7 +106,10 @@
     /* The old save format, kept as an export only: one file that opens in
        any browser with nothing installed. PAGE_SHELL and buildPublishHtml
        exist for this and for nothing else now (HANDOFF §3.1). */
-    if (kind === "html") return { data: buildPublishHtml(JSON.stringify(migrateRows(cloneState(state)))), filename: baseName + ".html" };
+    /* standaloneHtmlFor (02b-doc-id.js) leaves the document id out: this
+       export is a copy handed to someone else, and carrying the id would make
+       it a duplicate of this document the moment both are open. */
+    if (kind === "html") return { data: standaloneHtmlFor(state), filename: baseName + ".html" };
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -185,19 +188,33 @@
      Markdown — falls through to the ordinary lossy import, unchanged.
      Whichever it was becomes the file Save writes to from here on, in its
      own format; a legacy .html converts to .md on that first Save. */
-  async function openProjectFile(file, handle, opts) {
-    opts = opts || {};
+  /* The reading half, on its own so a second caller can ask "what document is
+     in this file?" without adopting it (MARKDOWN-PARSE-RESULT). Crash-draft
+     restore (20g-drafts.js) needs exactly that: it has to compare what is on
+     disk now against the draft's base BEFORE deciding whether to adopt the
+     file, merge into it, or leave it alone entirely.
+
+       {state, kind, docIdEmbedded}   a project file, parsed
+       {error:'unreadable'}           the bytes could not be read
+       {error:'not-splitpage'}        our extension, but not our content
+       null                           not one of ours — import it instead
+
+     Every toast stays in openProjectFile() below: a restore reports its own
+     failures in its own words, and a file nobody asked to open has no
+     business putting an error toast on screen.
+
+     docIdEmbedded is read BEFORE migrateDocument(), which always leaves a
+     valid id behind — see parseMarkdownProject (20d-formats.js) for the same
+     ordering and for why a draft restore has to know the difference. */
+  async function parseProjectFileState(file) {
     var kind = fileKindFromName(file.name);
-    if (kind !== "splitpage" && kind !== "md" && kind !== "html") {
-      return loadFileIntoEditor(file, handle);
-    }
+    if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
 
     var text;
     try {
       text = await file.text();
     } catch (e) {
-      showToast("Could not read " + file.name + ".", "error");
-      return false;
+      return { error: "unreadable" };
     }
 
     if (kind === "splitpage") {
@@ -205,10 +222,14 @@
       try {
         native = parseSplitpageFile(text);
       } catch (e) {
-        showToast(file.name + " doesn't look like a Splitpage file.", "error");
-        return false;
+        return { error: "not-splitpage" };
       }
-      return adoptProjectState(migrateRows(native), file, handle, "splitpage", opts);
+      /* migrateDocument, not bare migrateRows: a file saved before document
+         ids existed would otherwise get a new random id on every open, and
+         its version history would start over each time. Its id is derived
+         from its own content instead (02b-doc-id.js). */
+      var nativeEmbedded = docIdEmbeddedIn(native);
+      return { state: migrateDocument(native, { kind: "file" }), kind: "splitpage", docIdEmbedded: nativeEmbedded };
     }
 
     if (kind === "html") {
@@ -218,10 +239,12 @@
       try {
         legacy = JSON.parse(dataEl.textContent);
       } catch (e) {
-        showToast(file.name + " doesn't look like a Splitpage file.", "error");
-        return false;
+        return { error: "not-splitpage" };
       }
-      return adoptProjectState(migrateRows(legacy), file, handle, "html", opts);
+      /* same reason as the .splitpage branch above — a legacy page carries
+         no id, so it gets the same content-derived one every time it opens */
+      var legacyEmbedded = docIdEmbeddedIn(legacy);
+      return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
     }
 
     var project = null;
@@ -230,21 +253,41 @@
     } catch (e) {
       project = null;
     }
-    if (!project) return loadFileIntoEditor(file, handle);
+    if (!project) return null;
     /* awaits the row-count question when the table and the record disagree */
     var reconciled = await applyMarkdownProject(project);
-    return adoptProjectState(reconciled, file, handle, "md", opts);
+    return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
+  }
+
+  async function openProjectFile(file, handle, opts) {
+    opts = opts || {};
+    var parsed = await parseProjectFileState(file);
+    /* Not one of ours (including a .md with no data block) — still worth
+       importing as text, exactly as before. */
+    if (!parsed) return loadFileIntoEditor(file, handle);
+    if (parsed.error === "unreadable") {
+      showToast("Could not read " + file.name + ".", "error");
+      return false;
+    }
+    if (parsed.error === "not-splitpage") {
+      showToast(file.name + " doesn't look like a Splitpage file.", "error");
+      return false;
+    }
+    return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
   }
 
   /* The one place a parsed project becomes THE document, whichever format
-     it arrived in. `newState` has already been through migrateRows(). */
+     it arrived in. `newState` has already been through migrateRows() — by
+     way of migrateDocument(), so it carries its document id. */
   function adoptProjectState(newState, file, handle, kind, opts) {
     opts = opts || {};
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
     state = newState;
     baseState = cloneState(state);
-    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null };
+    /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
+       there is no handle to ask — a plain <input type=file> open. */
+    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null, name: file.name };
     /* A hosted document and a local file are two homes for one Save button
        (§3.1). Opening a server document already clears the file side; this
        is the other half, which was missing — open a file while a hosted
@@ -259,13 +302,24 @@
        for round-trip export (a .docx/.csv/foreign .md) no longer applies */
     openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
 
+    /* This id came from a file on disk, so it has already left the page: a
+       later Save As must fork a new one rather than put this id in a second
+       file. Set before clearDirty(), whose setSaveButtons() funnel is where
+       syncDocIdentity() notices the new document. */
+    docIdWrittenOut = true;
     clearDirty();
     render();
     updateIdentityChip();
     updateFileChip();
+    /* `silent` suppresses THIS toast and nothing else (DRAFT-RENDERER-API).
+       A crash-draft restore adopts the file on disk as a step on the way to
+       the document it is really about to show, and announcing "Opened X — 12
+       rows" mid-restore would describe a version of the document that was
+       already gone by the time the toast appeared. The restore says what
+       actually happened, once, when it is finished. */
     var commentNote = state.comments.length
       ? ", " + state.comments.length + " comment" + (state.comments.length === 1 ? "" : "s") : "";
-    showToast((opts.resumed ? "Resumed " : "Opened ") + (state.title || file.name) + " — " +
+    if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (state.title || file.name) + " — " +
       state.rows.length + " row" + (state.rows.length === 1 ? "" : "s") + commentNote, "ok");
 
     if (handle) rememberLastFileHandle(handle);
@@ -371,6 +425,10 @@
     if (state.rows.length) pushSnapshot("Before opening " + file.name);
 
     newRows.forEach(stampRow);
+    /* An import keeps state.docId on purpose. Only the rows and the title
+       are replaced; the document is still the one on screen (same history,
+       same Save target for its project file), and a foreign .docx/.csv/.md
+       has no id of its own to offer anyway. */
     state.rows = newRows;
     if (newTitle) state.title = newTitle;
     else state.title = file.name.replace(/\.[^.]+$/, "");
@@ -393,6 +451,24 @@
   }
 
   async function openLocalFile() {
+    /* Desktop has a real native Open dialog — DESKTOP.openFileDialog() —
+       checked before either web fallback below, which are otherwise
+       untouched. null means the user cancelled the dialog; that is not an
+       error, so there is nothing further to do. */
+    if (DESKTOP) {
+      var entry = await DESKTOP.openFileDialog();
+      if (!entry) return;
+      /* main may already have this path open in another tab (or window) —
+         routeOpen activates that tab instead of opening a second copy here.
+         'this-tab' is main confirming the sender (this pristine, ready tab)
+         is where it belongs, same as every open always landed before tabs. */
+      var r = await DESKTOP.routeOpen({ kind: "file", fileId: entry.id });
+      if (!r || r.where !== "this-tab") return;
+      var desktopHandle = makeDesktopHandle(entry);
+      var desktopFile = await desktopHandle.getFile();
+      await openProjectFile(desktopFile, desktopHandle);
+      return;
+    }
     /* Prefer the File System Access API: it is the only path that can write the
        user's own file back in place. It is blocked in cross-origin frames, so
        fall back to a plain file input whenever it is unavailable or refused. */
@@ -434,10 +510,39 @@
     return "text/plain";
   }
 
-  /* Standard browser download: build a Blob, click a hidden <a download>,
-     revoke the object URL once the click has had a moment to be handled. */
+  /* Every export and every "save a copy" goes through here. Desktop has no
+     download tray to drop a file into — an <a download> click is inert in
+     Electron's renderer sandbox anyway (see the Artifact runtime's own note
+     on this) — so it asks the native Save dialog for a destination and
+     writes the bytes there directly. A cancelled dialog is not a failure:
+     it returns false with no toast, exactly like a cancelled browser
+     download does nothing rather than erroring. */
   async function deliverFile(filename, data, opts) {
     opts = opts || {};
+    if (DESKTOP) {
+      try {
+        var ext = (/\.([a-z0-9]+)$/i.exec(filename) || [, ""])[1].toLowerCase();
+        var picked = await DESKTOP.saveFileDialog({
+          suggestedName: filename,
+          filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]
+        });
+        if (!picked) return false;
+        var bytes;
+        if (data instanceof Blob) bytes = new Uint8Array(await data.arrayBuffer());
+        else if (data instanceof Uint8Array) bytes = data;
+        else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+        else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        else bytes = strBytes(String(data));
+        await DESKTOP.writeFile(picked.id, bytes);
+        showToast(opts.savedMsg || ("Saved " + filename), "ok");
+        return true;
+      } catch (err) {
+        showToast("Could not save the file. Please try again.", "error");
+        return false;
+      }
+    }
+    /* Standard browser download: build a Blob, click a hidden <a download>,
+       revoke the object URL once the click has had a moment to be handled. */
     try {
       var blob = data instanceof Blob ? data : new Blob([data], { type: mimeForFilename(filename) });
       var url = URL.createObjectURL(blob);
@@ -660,6 +765,8 @@
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
     else if (action === "find") openFindBar();
+    else if (action === "export-app-data") exportAppData();
+    else if (action === "import-app-data") openImportAppData();
     else if (action === "tagging-help") showTaggingHelp();
     else if (action === "about") showAbout();
   }

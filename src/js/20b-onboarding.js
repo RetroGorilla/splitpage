@@ -210,6 +210,16 @@
     if (el) el.innerHTML = html;
   }
 
+  /* The desktop app has no launcher and no /api/launcher/* routes to ask —
+     it is already the thing the launcher's Start Menu step exists to
+     produce, so the honest answer is "you already have this", not a
+     register button that would 404. */
+  function desktopInstallHtml() {
+    return '<p class="modal-hint">Splitpage is already installed as a desktop app — this is it. ' +
+      "Opening a <code>.splitpage</code> file (or a Markdown script saved from here) opens it " +
+      "with Splitpage automatically.</p>";
+  }
+
   function renderLauncherInfo(info) {
     var html = '<p class="modal-hint">Running from <code>' + escapeHtml(info.root || "") + "</code>.</p>";
     if (info.installed) {
@@ -227,6 +237,11 @@
   async function loadLauncherInfo() {
     if (launcherInfoState !== "unloaded") return;
     launcherInfoState = "loading";
+    if (DESKTOP) {
+      launcherInfoState = "done";
+      renderLauncherInfoBody(desktopInstallHtml());
+      return;
+    }
     var info = null;
     try { info = await launcherFetch("api/launcher/info"); }
     catch (e) { info = null; }
@@ -492,14 +507,38 @@
   async function onboardEligibleForAutoShow() {
     if (!seedCheckPasses()) return false;
     if (readOnboardKey()) return false;
+    /* A tab restoring a crash draft looks exactly like a first run from here:
+       the page IS the untouched seed until the draft is applied, which happens
+       after the boot load (21-events.js). Putting the welcome wizard over
+       somebody's recovered work would be the worst possible first thing to do
+       with it. draftRestorePending (20g-drafts.js) is DESKTOP.hasDraftToRestore
+       — which the desktop launch-intent gate names as well — so this line is
+       belt to that gate's braces, and is what covers it while the gate below
+       is still the older last-file one. */
+    if (DESKTOP && draftRestorePending) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
-    var handle = null;
-    try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
-    if (handle) return false;
-    /* Re-check what may have changed while the IndexedDB round trip above
-       was in flight (a file could have finished opening, or Skip/Finish
-       could have already run from a very fast manual File ▸ Setup…). */
+    /* Desktop has no per-tab equivalent of "a remembered handle exists" to
+       ask for any more (00-prelude.js's rememberLastFileHandle no longer
+       writes anything desktop-side — the main process persists open
+       documents itself, in desktop-state.json). TAB-BOOT-SYNC's fields
+       already say everything this gate needs: the wizard must appear at
+       most once per launch (firstTabOfLaunch), never over a session that
+       had anything open before (hadPriorSession), never over a tab about to
+       open a file or server document (launchIntent.type !== 'blank'), and
+       never over a tab about to restore a crash draft (hasDraftToRestore). */
+    if (DESKTOP) {
+      if (!DESKTOP.firstTabOfLaunch || DESKTOP.hadPriorSession ||
+          (DESKTOP.launchIntent && DESKTOP.launchIntent.type !== "blank") ||
+          DESKTOP.hasDraftToRestore) return false;
+    } else {
+      var handle = null;
+      try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
+      if (handle) return false;
+    }
+    /* Re-check what may have changed while the round trip above was in
+       flight (a file could have finished opening, or Skip/Finish could have
+       already run from a very fast manual File ▸ Setup…). */
     if (readOnboardKey()) return false;
     if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
     if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
@@ -523,5 +562,12 @@
     open: openOnboarding,
     close: closeOnboarding,
     seedCheckPasses: seedCheckPasses,
-    readKey: readOnboardKey
+    readKey: readOnboardKey,
+    /* → Promise<boolean>. WHY exposed: T3 (26-desktop-drafts.txt) needs to
+       prove the wizard's gate itself — not just draftRestorePending's raw
+       value — refuses to fire while a crash draft is still restoring
+       (DRAFT-RENDERER-API), the same "must not appear over a document
+       that's about to reopen" rule this gate exists for. Nothing in src/js
+       calls this. */
+    eligible: onboardEligibleForAutoShow
   };

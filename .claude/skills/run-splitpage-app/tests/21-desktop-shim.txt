@@ -1,0 +1,229 @@
+# The desktop bridge (20f-desktop.js), driven without a real Electron shell.
+#
+# There is no pre-load hook in this harness that can inject a real
+# window.splitpageDesktop before the app script runs — DESKTOP (00-prelude.js)
+# is captured once, at load, before any fragment's own top-level code runs.
+# So this drives the real code paths a different way: window.__desktopTest
+# (20f-desktop.js) swaps the module-scope DESKTOP variable for an in-memory
+# fake backend, and everything below — saveDoc, the on-disk-conflict guard,
+# the native-menu-command dispatcher — runs exactly the code that would run
+# for a real Electron main process, just talking to a fake in place of the
+# IPC bridge. Every `eval` here is one physical line — the driver splits a
+# script file on newlines, so a multi-line JS block would be read back as one
+# command per line and fail with "unknown command". DESKTOP is null again
+# (see the last line) once this suite is done, same as every other suite's boot.
+
+open
+
+eval (function(){window.D = window.__desktopTest; window.F = window.__splitpageFormats; return !!(D && D.makeHandle && D.runMenuCommand && F);})()
+expect true
+
+# ---- a desktop handle round-trips non-ASCII text byte-exactly ------------
+eval (function(){window.fake1 = D.makeFakeBackend(); D.setBackend(window.fake1); return true;})()
+eval (async function(){ var id = window.fake1._addFile('roundtrip.splitpage', ''); var handle = D.makeHandle({id: id, name: 'roundtrip.splitpage'}); var text = 'café — 日本語 😀 end'; var w = await handle.createWritable(); await w.write(text); await w.close(); var file = await handle.getFile(); var back = await file.text(); window.__rtOk = back === text; return true; })()
+expect window.__rtOk
+
+# ---- Save As, cancelled at the native dialog: no rev bump, no error ------
+eval (function(){window.fake2 = D.makeFakeBackend(); window.fake2._cancelNextSave = true; D.setBackend(window.fake2); window.__revBefore = F.state().rev; window.__errToastsBefore = document.querySelectorAll('.toast.error').length; return true;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect F.state().rev === window.__revBefore
+expect document.querySelectorAll('.toast.error').length === window.__errToastsBefore
+
+# ---- the on-disk conflict guard fires when the fake file's mtime moves ---
+eval (function(){window.fake3 = D.makeFakeBackend(); D.setBackend(window.fake3); window.__id3 = window.fake3._addFile('conflict.md', F.buildMarkdown()); return true;})()
+eval (async function(){ var handle = D.makeHandle({id: window.__id3, name: 'conflict.md'}); var file = await handle.getFile(); await F.openFile(file, handle); return true; })()
+wait F.docFile().kind === 'md'
+expect F.docFile().name === 'conflict.md'
+expect document.getElementById('file-conflict-modal').hidden
+eval (function(){ window.fake3._touch(window.__id3); return true; })()
+eval (function(){ F.save(); return true; })()
+wait !document.getElementById('file-conflict-modal').hidden
+expect document.getElementById('file-conflict-detail').textContent.indexOf('conflict.md') !== -1
+click #file-conflict-cancel
+wait document.getElementById('file-conflict-modal').hidden
+
+# ---- what main is told about this document (DOCUMENT-STATE-AND-ROUTING-IPC)
+# conflict.md above was opened through a real desktop handle, so the last
+# setDocumentState report must name this document's id and the OPAQUE file id
+# of that handle — never a path (invariant #34). Main keys its duplicate-id
+# claim table on exactly this pair.
+eval (function(){ window.__ds = window.fake3._lastDocState || {}; return Object.keys(window.__ds).join(','); })()
+expect window.__ds.docId === F.docId()
+expect window.__ds.fileId === window.__id3
+
+# ---- main's duplicate-id verdict is applied here (DOC-CLAIMS) ------------
+# Two copies of one file open side by side share one id; main picks the loser
+# and sends splitpage:reassign-doc-id. The page adopts the new id and logs the
+# history copy — and, per orchestrator override §1, writes nothing.
+eval (function(){ window.__dupFrom = F.docId(); window.__dupTo = 'd' + 'e'.repeat(32); window.fake3._fireReassignDocId({fromId: window.__dupFrom, toId: window.__dupTo, otherTitle: 'X'}); return F.docId(); })()
+expect F.docId() === window.__dupTo
+expect F.docIdEvents().filter(function(e){ return e.type === 'copy' && e.from === window.__dupFrom && e.to === window.__dupTo; }).length === 1
+expect F.writtenOut() === false
+# main is told the new id AT ONCE, even though nothing was dirtied or saved.
+# Main's claim table is keyed on the last id this tab reported: left saying
+# the old one, it would make the ORIGINAL file lose a later duplicate check
+# against this copy's stale claim and re-id the wrong document.
+expect window.fake3._lastDocState.docId === window.__dupTo
+
+# a message whose fromId is no longer this document's id (main raced a save,
+# or the page re-id'd itself first) and one carrying a malformed toId are both
+# dropped — the id on screen does not move.
+eval (function(){ window.fake3._fireReassignDocId({fromId: window.__dupFrom, toId: 'd' + 'a'.repeat(32), otherTitle: 'Y'}); return F.docId(); })()
+expect F.docId() === window.__dupTo
+eval (function(){ window.fake3._fireReassignDocId({fromId: window.__dupTo, toId: 'nope', otherTitle: 'Y'}); return F.docId(); })()
+expect F.docId() === window.__dupTo
+# a dropped message reports nothing either — the claim still names the id
+# this tab actually holds.
+expect window.fake3._lastDocState.docId === window.__dupTo
+
+# ---- native menu command 'find' reaches the same UI the File menu does ---
+expect document.getElementById('findbar').hidden
+eval (function(){ D.runMenuCommand('find'); return true; })()
+wait !document.getElementById('findbar').hidden
+jsclick #find-close
+wait document.getElementById('findbar').hidden
+
+# ---- native menu command 'toggle-comments' opens the comments panel ------
+expect document.getElementById('comments-panel').hidden
+eval (function(){ D.runMenuCommand('toggle-comments'); return true; })()
+wait !document.getElementById('comments-panel').hidden
+jsclick #comments-panel-close
+wait document.getElementById('comments-panel').hidden
+
+# ---- version history goes to the DESKTOP store, not IndexedDB ------------
+# makeFakeBackend({history:true}) adds the seven HISTORY-IPC methods
+# (20f-desktop.js), so resolveHistoryBackend (03a-history-store.js) picks the
+# desktop backend the moment DESKTOP.historyPut exists. The capture rides a
+# real caller — loadFileIntoEditor's "Before opening X" push, reached by
+# opening a plain .txt — because pushSnapshot lives inside the build's one
+# closure and is not exposed. loadFileIntoEditor KEEPS state.docId, so the
+# snapshot lands under the document that is still on screen.
+eval (function(){window.H = window.__historyTest; window.fakeH = D.makeFakeBackend({history:true}); D.setBackend(window.fakeH); return typeof window.fakeH.historyPut === 'function' && typeof window.fakeH._historyDump === 'function';})()
+expect true
+eval (function(){ D.markDirtyForTest(); window.__hDocId = F.state().docId; window.__hTitle = F.state().title; window.__hRows = F.state().rows.length; return window.__hDocId;})()
+eval (async function(){ await F.openFile(new File(['A plain paragraph of text.'], 'history-shim.txt')); await H.idle(); return true; })()
+wait F.state().title === 'history-shim'
+expect H.backendName() === 'desktop'
+eval (function(){ window.__hDump = window.fakeH._historyDump(); return Object.keys(window.__hDump); })()
+expect window.__hDump[window.__hDocId].length === 1
+expect typeof window.__hDump[window.__hDocId][0].stateJson === 'string'
+expect window.__hDump[window.__hDocId][0].stateJson.indexOf(window.__hTitle) !== -1
+# the desktop store is the ONLY place it went: no legacy localStorage key,
+# and nothing was left pending in this page
+expect localStorage.getItem('splitpage-snapshots') === null
+expect H.pending(window.__hDocId).length === 0
+
+# restoring that snapshot round-trips the title and the rows through the
+# desktop backend (list -> get -> adoptRestoredState), and stores its own
+# "Before restoring" backup there first — so the bucket holds 2 afterwards.
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+jsclick #history-list [data-action="restore-snapshot"]
+wait document.getElementById('history-panel').hidden
+wait F.state().title === window.__hTitle
+expect F.state().rows.length === window.__hRows
+expect F.state().docId === window.__hDocId
+eval (async function(){ await H.idle(); window.__hDump2 = window.fakeH._historyDump(); return window.__hDump2[window.__hDocId].length; })()
+expect window.__hDump2[window.__hDocId].length === 2
+expect localStorage.getItem('splitpage-snapshots') === null
+
+# with the bridge gone the backend falls back to IndexedDB, unchanged
+eval (async function(){ D.restoreBackend(); window.__hBackend = await H.forceBackend(null); return window.__hBackend; })()
+expect window.__hBackend === 'idb'
+expect H.backendName() === 'idb'
+
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
+# ---- Import app data (X2/X3) writes through the desktop history bridge ----
+# __appDataTest.importText (20h-appdata.js) reaches storage only through
+# importHistoryBundle (03a-history-store.js) -> resolveHistoryBackend(),
+# which picks the desktop backend the instant DESKTOP.historyPut exists — so
+# with a fresh history-capable fake backend in place, an import must land in
+# the fake's in-memory store and never touch this page's real IndexedDB body
+# count. Deliberately never clicks '#import-app-data-input' (invariant #33) —
+# importText is called directly, the same way a real file's text would reach
+# it after FileReader.
+#
+eval (function(){window.fakeI = D.makeFakeBackend({history:true}); D.setBackend(window.fakeI); return typeof window.fakeI.historyPut === 'function' && typeof window.fakeI._historyDump === 'function';})()
+expect true
+eval (async function(){ await H.forceBackend('idb'); window.__idbBodyBefore = await H.bodyCount(null); await H.forceBackend(null); return window.__idbBodyBefore; })()
+eval (function(){ window.__impId = 'd' + 'b'.repeat(32); window.__impBundle = { format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{ docs:[{ docId: window.__impId, title:'Shim Import', snapshots:[{ meta:{ id:'simp1', label:'Shim Snap', at:new Date(1000).toISOString(), atMs:1000, by:'X', rows:1, title:'Shim Import', kind:'snapshot' }, stateJson: JSON.stringify({rows:[{id:'r1',audioText:'shim-import'}], title:'Shim Import', docId: window.__impId}) }] }], older:[] }, bookmarks:[], prefs:{} }; return window.__impBundle; })()
+eval (async function(){ window.__impResult = await window.__appDataTest.importText(JSON.stringify(window.__impBundle)); return window.__impResult; })()
+expect window.__impResult.ok === true
+expect window.__impResult.history.added === 1
+eval (function(){ window.__impDump = window.fakeI._historyDump(); return Object.keys(window.__impDump); })()
+expect window.__impDump[window.__impId].length === 1
+expect window.__impDump[window.__impId][0].stateJson.indexOf('shim-import') !== -1
+eval (async function(){ await H.forceBackend('idb'); window.__idbBodyAfter = await H.bodyCount(null); await H.forceBackend(null); return window.__idbBodyAfter; })()
+expect window.__idbBodyAfter === window.__idbBodyBefore
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
+# ---- a desktop list() that never resolves counts the doc as failed --------
+# The X2 follow-up: importHistoryBundle calls backend.list(id, {strict:true})
+# before ever writing a document's snapshots, so it can tell "no history yet"
+# apart from "could not read it" — desktopHistoryBackend.list answers null
+# (not empty) on a strict timeout, rejection, or malformed answer, and
+# importHistoryBundle treats null as "leave this document alone", counting
+# every one of its snapshots as failed rather than guessing and risking a
+# genuine local snapshot getting trimmed away. __historyTest.setDesktopTimeout
+# shortens the 30s real timeout so this does not hang the suite.
+eval (function(){window.fakeT = D.makeFakeBackend({history:true}); fakeT.historyList = function(){ return new Promise(function(){}); }; D.setBackend(fakeT); return typeof fakeT.historyPut === 'function';})()
+expect true
+eval (function(){ H.setDesktopTimeout(200); return true; })()
+eval (function(){ window.__toId = 'd' + 'c'.repeat(32); window.__toDoc = { docId: window.__toId, title: 'Timeout Doc', snapshots: [{ meta: { id:'stimeout1', label:'Timeout Snap', at:new Date(1000).toISOString(), atMs:1000, by:'X', rows:1, title:'Timeout Doc', kind:'snapshot' }, stateJson: JSON.stringify({rows:[{id:'r1',audioText:'timeout-data'}], title:'Timeout Doc', docId: window.__toId}) }] }; return window.__toDoc; })()
+eval (async function(){ window.__toResult = await H.importBundle({ docs: [window.__toDoc], older: [] }); return window.__toResult; })()
+expect window.__toResult.failed === 1
+expect window.__toResult.added === 0
+expect window.__toResult.docs === 0
+eval (function(){ window.__toDump = fakeT._historyDump(); return window.__toDump[window.__toId]; })()
+expect window.__toDump[window.__toId] === undefined
+eval (function(){ H.setDesktopTimeout(null); D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
+# ---- Follow My Voice is disabled in the desktop app (Q25) -----------------
+# updateVoiceAvailability() only re-runs from openPrompter(), so re-evaluating
+# it under a swapped-in backend means closing and reopening the prompter, same
+# as any other desktop-dependent UI in this suite would have to.
+caret #rows .row .audio-cell .cell-editable
+press A line to read out loud for the voice follow test.
+sleep 300
+jsclick #btn-present
+sleep 500
+expect !document.getElementById('prompter').hidden
+# under the harness's real (non-desktop) backend, Chrome/Edge's speech
+# recognizer is present and the page is served over http://, so the browser
+# build's button is enabled here — this is the byte-for-byte-unchanged path.
+expect document.getElementById('pp-voice').disabled === false
+
+eval (function(){window.fakeV = D.makeFakeBackend(); D.setBackend(window.fakeV); return true;})()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+jsclick #btn-present
+sleep 500
+expect document.getElementById('pp-voice').disabled === true
+expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in the desktop app yet") !== -1
+
+# a start can never reach getUserMedia, even called directly with the
+# disabled attribute stripped off (as if something else had re-enabled it)
+eval (function(){ window.__gumCalls = 0; window.__gumReal = navigator.mediaDevices.getUserMedia; navigator.mediaDevices.getUserMedia = function () { window.__gumCalls++; return window.__gumReal.apply(navigator.mediaDevices, arguments); }; return true; })()
+eval (function(){ document.getElementById('pp-voice').disabled = false; return true; })()
+jsclick #pp-voice
+sleep 300
+expect window.__gumCalls === 0
+expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in the desktop app yet") !== -1
+eval (function(){ navigator.mediaDevices.getUserMedia = window.__gumReal; return true; })()
+
+# restoring the backend and reopening re-enables it in the browser build
+eval (function(){ D.restoreBackend(); return true; })()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+jsclick #btn-present
+sleep 500
+expect document.getElementById('pp-voice').disabled === false
+jsclick #pp-close
+expect !window.splitpageDesktop
+
+quit

@@ -88,6 +88,12 @@
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="history">Version history…</button>
           <div class="menu-sep"></div>
+          <!-- Browser build only: takes history, bookmarks and prefs to the
+               desktop app. 20f-desktop.js's initDesktop hides the export
+               entry and unhides the import one there. -->
+          <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
+          <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
+          <div class="menu-sep"></div>
           <!-- Ctrl+F everywhere else; this entry exists because phone
                keyboards have no Ctrl -->
           <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
@@ -144,7 +150,21 @@
   <div class="update-bar" id="update-bar" hidden>
     <span class="update-bar-icon" aria-hidden="true">⬆</span>
     <span id="update-bar-text"></span>
+    <!-- Desktop-only: 20a-update.js shows this and points it at the release
+         page (DESKTOP.openExternal) instead of the launcher's restart copy —
+         there is no in-place installer to restart in the desktop build. -->
+    <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
+  </div>
+
+  <!-- Browser build only: an always-available, dismissable pointer at the
+       desktop app (20a-update.js renderDesktopAppNotice). Same class shape
+       as #update-bar so it reuses those rules and stacks the same way. -->
+  <div class="update-bar" id="desktop-app-bar" hidden>
+    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
+    <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
+    <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
   </div>
 
   <div class="tagging-help" id="tagging-help" hidden>
@@ -179,6 +199,8 @@
       <button type="button" class="notice-close" id="resume-dismiss" aria-label="Dismiss">×</button>
     </div>
   </div>
+
+  <div id="draft-pending-banner" class="notice" hidden><span id="draft-pending-text"></span> <button type="button" id="draft-pending-copy">Open them here as an unsaved copy</button></div>
 
   <div class="notice notice-readonly" id="readonly-banner" hidden>
     <strong>Read-only view.</strong> You can read and export this script, but changes won't be saved. Ask the owner for edit access.
@@ -225,6 +247,7 @@
 <input type="file" id="file-input" accept="image/*" hidden>
 <input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
+<input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
@@ -600,8 +623,9 @@
     <h2>Version history</h2>
     <button type="button" class="modal-close" id="history-close" aria-label="Close">×</button>
   </div>
-  <div class="comments-panel-toggle">Local safety net — snapshots kept in this browser before anything destructive.</div>
+  <div class="comments-panel-toggle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</div>
   <div class="comments-list" id="history-list"></div>
+  <details id="history-older" class="history-older" hidden><summary id="history-older-summary">Older history (before per-document history)</summary><p class="modal-hint">Saved before Splitpage kept history per document, so these may belong to a different script. Restoring one replaces this document's content.</p><div id="history-older-list"></div></details><div id="history-usage" class="modal-hint" hidden></div>
 </div>
 
 <div class="comments-panel" id="comments-panel" hidden>
@@ -701,6 +725,12 @@
       key; a join PIN is kept only for as long as this tab is open unless you ask otherwise.</p>
 
     <div class="connect-current" id="connect-current"></div>
+    <!-- Desktop-only: filled in and shown by 20f-desktop.js's
+         renderDesktopShareInfo() whenever this launch is hosting others —
+         the same address/PIN/caution start.mjs used to print to a console
+         window this app doesn't have. Never touches state, localStorage or
+         anything served (invariant #29) — it lives only in this element. -->
+    <div class="connect-current" id="desktop-share-info" hidden></div>
     <div class="connect-list" id="connect-list"></div>
 
     <div class="connect-add">

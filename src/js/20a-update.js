@@ -27,7 +27,30 @@
 
   function renderUpdateNotice() {
     var bar = document.getElementById("update-bar");
+    var actionBtn = document.getElementById("update-bar-action");
     if (!bar || !updateStatus) return;
+
+    /* The desktop build never stages or auto-installs anything (see the
+       bridge contract's UPDATES section — this is a background GET and
+       nothing more), so "restart to finish installing" and "run node
+       update.mjs" are both wrong here; there is exactly one thing to say
+       and one thing to do about it. */
+    if (DESKTOP && updateStatus.desktop) {
+      if (updateStatus.updateAvailable && updateStatus.latest) {
+        document.getElementById("update-bar-text").textContent =
+          "Splitpage " + updateStatus.latest + " is available. You have " + (updateStatus.version || "?") + ".";
+        if (actionBtn) {
+          actionBtn.hidden = false;
+          actionBtn.onclick = function () { DESKTOP.openExternal(updateStatus.releaseUrl); };
+        }
+        bar.hidden = false;
+        return;
+      }
+      if (actionBtn) actionBtn.hidden = true;
+      bar.hidden = true;
+      return;
+    }
+    if (actionBtn) actionBtn.hidden = true;
 
     /* Staged and waiting beats merely available: it is one restart away and
        needs nothing from the user but closing the window. */
@@ -51,10 +74,71 @@
     if (bar) bar.hidden = true;
   }
 
+  /* ================= desktop app notice =================
+
+     A separate, always-available notice pointing browser users at the
+     desktop app — distinct from #update-bar, which only ever appears when
+     there IS an update (nothing to show the rest of the time, which is
+     exactly the population this notice targets). Unlike the update bar it
+     needs no launcher and no update-status.json, so it must not live inside
+     loadUpdateStatus()'s fetch chain: it has to show on a plain file://
+     open and wherever that file 404s. */
+
+  var DESKTOP_APP_RELEASES_URL = "https://github.com/RetroGorilla/splitpage-releases/releases/latest";
+  var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
+
+  function renderDesktopAppNotice() {
+    /* Already in the desktop app — nothing to point it at. */
+    if (DESKTOP) return;
+    try {
+      if (localStorage.getItem(DESKTOP_NOTICE_KEY) === "1") return;
+    } catch (e) { /* no storage — fall through and show it */ }
+
+    var bar = document.getElementById("desktop-app-bar");
+    if (!bar) return;
+    var textEl = document.getElementById("desktop-app-bar-text");
+    if (textEl) {
+      textEl.textContent = "The Splitpage desktop app is available — its own window, " +
+        "and a version history that never runs out of browser storage.";
+    }
+    var url = (updateStatus && updateStatus.desktopAppUrl) || DESKTOP_APP_RELEASES_URL;
+    var actionBtn = document.getElementById("desktop-app-bar-action");
+    if (actionBtn) {
+      actionBtn.onclick = function () { window.open(url, "_blank", "noopener"); };
+    }
+    bar.hidden = false;
+  }
+
+  function dismissDesktopAppNotice() {
+    var bar = document.getElementById("desktop-app-bar");
+    if (bar) bar.hidden = true;
+    try { localStorage.setItem(DESKTOP_NOTICE_KEY, "1"); } catch (e) {}
+  }
+
   function showAbout() {
     var lines = [];
     var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
     lines.push("Splitpage " + (version || "(version unknown)"));
+
+    if (DESKTOP) {
+      if (!updateStatus) {
+        lines.push("");
+        lines.push("Could not check for updates.");
+      } else if (updateStatus.updateAvailable && updateStatus.latest) {
+        lines.push("");
+        lines.push("Version " + updateStatus.latest + " is available.");
+        lines.push("Use the Download button in the update notice, or get it from " +
+          (updateStatus.releaseUrl || "the release page") + ".");
+      } else if (updateStatus.error) {
+        lines.push("");
+        lines.push("Last update check failed: " + updateStatus.error);
+      } else {
+        lines.push("");
+        lines.push("Up to date.");
+      }
+      window.alert(lines.join("\n"));
+      return;
+    }
 
     if (!updateStatus) {
       lines.push("");

@@ -184,7 +184,19 @@
   function updateVoiceAvailability() {
     var btn = document.getElementById("pp-voice");
     if (!btn) return;
-    if (!SpeechRecognitionCtor) {
+    /* The Web Speech API's constructor exists in Electron's Chromium, but
+       recognition itself fails immediately with a 'network' error — Google's
+       speech backend that powers it is not reachable from inside Electron
+       the way it is from an actual Chrome/Edge install. Desktop voice needs
+       its own recognition engine (not Google's), which is a separate,
+       currently-paused piece of work — so rather than a button that looks
+       live and then fails on click with a misleading "needs an internet
+       connection" message, it is disabled with an honest status line. This
+       arm is replaced once that engine lands. */
+    if (DESKTOP) {
+      btn.disabled = true;
+      setVoiceStatus("Follow My Voice isn't available in the desktop app yet — it works in the browser version.", "");
+    } else if (!SpeechRecognitionCtor) {
       btn.disabled = true;
       setVoiceStatus("Voice follow needs Chrome or Edge.", "");
     } else if (!window.isSecureContext) {
@@ -289,6 +301,14 @@
   }
 
   async function startVoiceFollow() {
+    /* Belt and braces: updateVoiceAvailability() already disables the button
+       on desktop, but this guard is what actually keeps a desktop start from
+       ever reaching getUserMedia or the recognizer, even if something else
+       re-enables the button. Same paused-engine reasoning as above. */
+    if (DESKTOP) {
+      setVoiceStatus("Follow My Voice isn't available in the desktop app yet — it works in the browser version.", "");
+      return;
+    }
     if (!SpeechRecognitionCtor) return;
     /* recognition.start() is async and voiceFollowActive only flips in onstart,
        so without this a second click builds a second recognizer and orphans the

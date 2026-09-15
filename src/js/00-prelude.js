@@ -14,7 +14,31 @@
      about, because this copy is taken before the DOM is live at all. */
   var PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
+  /* The Electron bridge, when this page is running inside the desktop shell.
+     desktop/preload.js (a sibling project, not part of this build) defines
+     window.splitpageDesktop ONLY on documents loaded from the privileged
+     splitpage://app origin — never on a tunnelled remote page — so its mere
+     presence here is already the security check, not just a feature test.
+     Captured once, into a plain var rather than read from window each time,
+     so every gate in src/js reads the same snapshot and a test hook
+     (20f-desktop.js's window.__desktopTest) can swap it for a fake backend
+     without touching window.splitpageDesktop itself. Everything gated on
+     DESKTOP falls through to the exact same code the browser build always
+     ran when it is null — that is the whole contract this branch exists to
+     keep (see desktop/main.js and desktop/preload.js for the other half). */
+  var DESKTOP = window.splitpageDesktop || null;
+
   var state = null;
+  /* Resolves once the boot state load in init() (21-events.js) has settled
+     `state` for the first time — the desktop-only race this exists for:
+     DESKTOP.onOpenFile() (20f-desktop.js) can fire as soon as it's
+     registered, which is well before loadInitialState()'s fetch resolves
+     when the app was launched by double-clicking a project file, and
+     without this, adoptProjectState() setting `state` to that file would
+     just get clobbered a moment later when the boot load finally resolves
+     and assigns the default/seed state over it. Stays null in the browser
+     build, where nothing reads it. */
+  var initialStateReady = null;
   var SCHEMA_VERSION = 2;
   var editSeq = 0;
   var dirty = false;
@@ -54,6 +78,15 @@
 
   async function rememberLastFileHandle(handle) {
     if (!handle) return;
+    /* Desktop persists what's open itself — the main process writes each
+       tab's document source into desktop-state.json on every source change
+       (splitpage:set-document-state) and restores whole sessions from it at
+       launch (TAB-BOOT-SYNC/DESKTOP-STATE-V2). There is nothing left for
+       this per-page, per-origin IndexedDB store to remember on desktop, and
+       (unlike splitpage://app, which is stable) it would be remembering the
+       wrong thing anyway: this file's real identity there is a path in
+       main's own registry, which this page is never handed (invariant #34). */
+    if (DESKTOP) return;
     try {
       var db = await openHandleDb();
       await new Promise(function (resolve, reject) {

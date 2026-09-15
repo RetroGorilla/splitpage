@@ -1291,6 +1291,56 @@
     cursor: pointer;
   }
   .history-card button:hover { color: var(--text); border-color: var(--visual); }
+  .history-card button.armed { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+  .history-card.is-pending { border-style: dashed; }
+  .history-card.is-writing { opacity: 0.6; }
+  .history-card-badge {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .history-card-doc {
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-bottom: 3px;
+  }
+
+  .history-older { flex: none; padding: 10px 12px; border-top: 1px solid var(--border); }
+  .history-older > summary {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .history-older .modal-hint { margin: 8px 0; }
+  /* WHY: #history-panel is a fixed, full-height flex column that cannot
+     scroll itself. Migrated legacy snapshots (up to 12 cards, ~100px each)
+     used to make an open Older section a flex:none block taller than the
+     window: it squeezed #history-list (a flex:1 scroller whose basis is 0)
+     down to nothing and pushed its own lower Restore buttons off-screen
+     where nothing could reach them. Open, it now shrinks and scrolls on its
+     own, capped so this document's snapshots keep most of the room. Only the
+     [open] state gets this, so a closed summary is never squeezed; the
+     global [hidden] rule still wins because nothing here sets display. */
+  .history-older[open] { flex: 0 1 auto; min-height: 0; max-height: 45%; overflow-y: auto; }
+  /* WHY: keep the collapse control in view while the Older cards scroll. */
+  .history-older[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-block: 2px; }
+  /* WHY: whatever the Older section does, this document's own list keeps
+     room for about one card instead of collapsing to 0px. */
+  #history-panel #history-list { min-height: 96px; }
+  #history-usage { flex: none; padding: 8px 12px; border-top: 1px solid var(--border); margin: 0; }
 
   .comment-card.is-conflict { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
   .conflict-flag {
@@ -2147,6 +2197,17 @@
   font-size: 13px;
 }
 .update-bar-icon { color: #1B7A68; font-size: 14px; }
+.update-bar-action {
+  border: 1px solid #1B7A68;
+  background: none;
+  color: #1B7A68;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-bar-action:hover { background: #1B7A68; color: #fff; }
 .update-bar-dismiss {
   margin-left: auto;
   border: 0;
@@ -2391,6 +2452,24 @@
   border-radius: var(--radius-sm);
   padding: 10px 12px; margin: 0;
   white-space: pre-wrap; word-break: break-all;
+}
+
+/* ---- desktop hosting summary (20f-desktop.js's renderDesktopShareInfo) ----
+   What start.mjs used to print to a console window this app doesn't have. */
+.connect-share-url {
+  font-family: var(--font-display); font-size: 13px;
+  color: var(--text); padding: 3px 0;
+}
+.connect-share-pin {
+  font-size: 13px; color: var(--text-dim); margin-top: 8px;
+}
+.connect-share-pin strong {
+  font-family: var(--font-display); font-size: 22px; letter-spacing: .08em;
+  color: var(--text); margin-left: 6px;
+}
+.connect-share-nopin {
+  color: var(--danger); background: var(--danger-soft);
+  border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 8px;
 }
 @media (max-width: 640px) {
   .connect-field { align-items: flex-start; flex-direction: column; gap: 4px; }

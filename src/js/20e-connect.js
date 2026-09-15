@@ -194,6 +194,10 @@
     setConnectError("");
     modal.hidden = false;
     renderConnect();
+    /* Desktop's own "who's connected to me" summary — defined in
+       20f-desktop.js, a no-op (and the element it would fill stays hidden)
+       whenever DESKTOP is null, i.e. the whole web build. */
+    if (typeof renderDesktopShareInfo === "function") renderDesktopShareInfo();
   }
 
   function closeServersDialog() {
