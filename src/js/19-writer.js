@@ -78,6 +78,7 @@
       var html = "";
       for (var i = 0; i < state.rows.length; i++) html += writerBlockHtml(state.rows[i], i);
       doc.innerHTML = html;
+      doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
     }
     writerLastCell = null;
     /* a no-op if that scene is gone — the callers that know better (a split,

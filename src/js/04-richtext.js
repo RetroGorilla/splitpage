@@ -175,6 +175,22 @@
     });
   }
 
+  /* A tag/b-roll span is contenteditable="false" — an atomic unit the caret
+     skips over rather than enters. That's fine wherever something follows
+     it, but as the very last node in a cell there is nothing after it for
+     contenteditable to put the caret AT either: no click target, no
+     ArrowRight/End destination, nowhere for typing to land. A trailing
+     zero-width space is real DOM the caret can actually sit in, invisible,
+     and harmless if left in place — syncFieldFromDom strips it back out
+     before anything is saved (see there), so it never reaches stored text
+     or an export. */
+  function ensureTrailingCaretSpot(container) {
+    var last = container && container.lastChild;
+    if (last && last.nodeType === 1 && last.getAttribute && last.getAttribute("contenteditable") === "false") {
+      container.appendChild(document.createTextNode("​"));
+    }
+  }
+
   /* ================= html -> markdown (for export) ================= */
 
   function walkToMd(node) {
