@@ -54,6 +54,13 @@ Copy this template into the right section below:
 - **Description:** In dark mode, when text is highlighted (selected) and you type to replace it, you can't see what you're typing.
 - **Repro / notes:** Switch to dark mode, select some text, start typing — the new text isn't visible (likely a text-color/highlight-color contrast issue in the selection style for dark mode).
 
+### Highlight/text modifiers need a UX pass
+- **Type:** Bug
+- **Priority:** Medium
+- **Area:** UI / editing
+- **Description:** Highlight and other text modifiers (formatting tools) don't behave well overall — needs a general UX pass rather than one specific fix. May overlap with the dark-mode selection-visibility issue below.
+- **Repro / notes:** No single repro — general behavior/feel issue across highlight and other text-modifier controls. Worth reviewing alongside the dark-mode typing-over-selection bug.
+
 <!-- add entries here -->
 
 ---
