@@ -94,7 +94,13 @@
 
   a { color: inherit; }
   button { font-family: var(--font-body); }
-  ::selection { background: var(--visual-soft); }
+  /* Both properties, not just background: the pseudo-element's initial
+     value for `color` is not guaranteed to be the originating element's
+     own color (that's a Chromium behaviour, not a spec guarantee), so a
+     selection background alone risks pairing a browser-default text
+     colour with a background chosen for the opposite theme — exactly
+     the dark-mode "typed text disappears into the selection" report. */
+  ::selection { background: var(--visual-soft); color: var(--text); }
 
   /* ---------- header ---------- */
   .topbar {
