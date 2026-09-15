@@ -21,6 +21,19 @@ expect document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .c
 expect document.activeElement.getAttribute('data-field') == audioText
 expect document.activeElement.closest('.row') === document.querySelectorAll('#rows .row')[1]
 
+# --- Ctrl+Z right after Alt+Enter undoes the split (regression) -------------
+key ctrl KeyZ
+sleep 500
+expect document.querySelectorAll('#rows .row').length == 2
+expect document.querySelectorAll('#rows .row')[0].querySelector('.audio-cell .cell-editable').textContent.indexOf('Today I want') > 0
+expect document.activeElement.getAttribute('data-field') == audioText
+expect document.activeElement.closest('.row') === document.querySelectorAll('#rows .row')[0]
+# redo the same split so the sections below see the state they expect
+eval (function(){var c=document.querySelector('#rows .row .audio-cell .cell-editable');var t=c.firstChild;var i=t.nodeValue.indexOf('Today');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return i;})()
+key alt Enter
+sleep 500
+expect document.querySelectorAll('#rows .row').length == 3
+
 # --- Alt+Enter on the VISUAL column: the audio column stays put -------------
 eval (function(){var c=document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable');c.focus();var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
 press  A wide shot too.

@@ -395,6 +395,16 @@
     }
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
+    /* Ctrl/Cmd+Z right after Alt+Enter: render() rebuilt the contenteditable
+       the split happened in, so the browser's own undo history has nothing
+       left to act on. undoSplitCellField() is the app-level replacement —
+       see its comment in 06-rows.js for why it is safe to try unconditionally
+       here (it only actually reverts when nothing has touched either half
+       since the split, and is a no-op otherwise). Only Ctrl+Z, not
+       Ctrl+Shift+Z — that is a redo request, which this never was. */
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
+      if (undoSplitCellField()) { e.preventDefault(); return; }
+    }
     /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
        The untagged-mention prompt only ever gets the key when nothing more
        explicit is in flight. */
