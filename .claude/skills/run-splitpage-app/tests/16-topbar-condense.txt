@@ -1,0 +1,50 @@
+# The condensing header (20i-topbar.js), on a script long enough to condense.
+#
+# Condensing takes the header's brand line and subtitle out of the flow, which
+# shortens the page above the reader, which the browser pays for out of the
+# scroll offset - so the trigger moves the thing that triggers it. Condensing
+# too close to the top therefore drops the offset back under the leave
+# threshold, the header expands, the offset comes back, and the two states beat
+# against each other. What it looked like: the page yanked to the top the first
+# time you scrolled past the header, with the header flickering.
+#
+# Flips are counted per settled frame, not per scroll position - a state that
+# flips and flips back between two samples is exactly what this is looking for.
+# One transition is one flip, so a full scroll down and back is two.
+#
+# 30-topbar-short-script.txt is the other half: a script too short to condense.
+
+open
+
+# --- at rest at the top it is not condensed ----------------------------------
+eval (async function(){window.scrollTo(0,0);for(var i=0;i<8;i++)await new Promise(function(r){requestAnimationFrame(r)});return true;})()
+expect document.querySelector('.topbar').classList.contains('is-condensed') == false
+
+# --- scrolling just past the header does not yank the page to the top --------
+# 70px used to be past the enter threshold, and condensing there cost ~90px of
+# offset the page could not give back: the reader was thrown to 0 and the
+# header expanded again. The offset must survive, whichever state it settles in.
+eval (async function(){var t=document.querySelector('.topbar');window.scrollTo(0,70);for(var i=0;i<20;i++)await new Promise(function(r){requestAnimationFrame(r)});var last=t.classList.contains('is-condensed');var flips=0;for(var j=0;j<30;j++){await new Promise(function(r){requestAnimationFrame(r)});var c=t.classList.contains('is-condensed');if(c!==last)flips++;last=c;}window.__topbarNearTop={y:Math.round(window.scrollY),flips:flips};return window.__topbarNearTop.y+'/'+flips;})()
+expect window.__topbarNearTop.y > 40
+expect window.__topbarNearTop.flips == 0
+
+# --- it does condense, once there is real distance under the header ----------
+eval (async function(){window.scrollTo(0,document.documentElement.scrollHeight);for(var i=0;i<20;i++)await new Promise(function(r){requestAnimationFrame(r)});return true;})()
+expect document.querySelector('.topbar').classList.contains('is-condensed') == true
+expect getComputedStyle(document.querySelector('.topbar .brand-row')).display == none
+expect document.querySelector('#btn-write').offsetParent !== null
+
+# --- and the condensed offset clears the leave threshold ---------------------
+# The regression in one number: settle condensed and the offset must still be
+# above the 24px leave threshold, or the next frame expands and the loop is on.
+expect window.scrollY > 24
+
+# --- back at the top it expands ----------------------------------------------
+eval (async function(){window.scrollTo(0,0);for(var i=0;i<20;i++)await new Promise(function(r){requestAnimationFrame(r)});return true;})()
+expect document.querySelector('.topbar').classList.contains('is-condensed') == false
+
+# --- a full scroll down and back flips the state exactly twice ---------------
+# Sampled every frame throughout, so a flip and a flip back inside one step is
+# counted rather than hidden by the settle.
+eval (async function(){var t=document.querySelector('.topbar');var max=document.documentElement.scrollHeight-window.innerHeight;var flips=0,last=t.classList.contains('is-condensed');async function at(y){window.scrollTo(0,y);for(var i=0;i<6;i++){await new Promise(function(r){requestAnimationFrame(r)});var c=t.classList.contains('is-condensed');if(c!==last)flips++;last=c;}}for(var y=0;y<=max;y+=20)await at(y);for(var y2=max;y2>=0;y2-=20)await at(y2);window.__topbarFlips=flips;return flips;})()
+expect window.__topbarFlips == 2

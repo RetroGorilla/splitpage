@@ -1,0 +1,37 @@
+# The condensing header (20i-topbar.js) on a script only a little taller than
+# the window - its own suite because it needs its own device metrics, which the
+# driver will only take before the page loads.
+#
+# This is the length the jitter was reported at. Condensing costs the page ~90px
+# of height, so on a script with less than that much scroll range to spare there
+# is no scroll position at which the condensed state settles: every offset the
+# condensed page can hold is under the leave threshold, so it expands, which
+# gives the offset back, which condenses it again, for as long as you keep
+# scrolling. The header must stay expanded instead - a script this short was
+# never going to scroll far enough to want a toolbar.
+#
+# 1280x960 puts the seed script ~120px taller than the window. If the seed
+# changes shape enough to move that, the first check here fails rather than the
+# suite quietly testing nothing.
+
+# `open` navigates before the metrics can be set, so set them and load again -
+# the header measures itself at load.
+open
+viewport 1280 960
+goto /index.html
+
+wait document.querySelectorAll('#rows .row').length > 0
+# the length this suite is about: scrollable, but by less than the header sheds
+eval 'scroll range '+(document.documentElement.scrollHeight-window.innerHeight)
+expect document.documentElement.scrollHeight - window.innerHeight > 40
+expect document.documentElement.scrollHeight - window.innerHeight < 160
+
+# --- scrolling the whole range never condenses, and never beats --------------
+eval (async function(){var t=document.querySelector('.topbar');var max=document.documentElement.scrollHeight-window.innerHeight;var flips=0,last=t.classList.contains('is-condensed'),everCondensed=last;async function at(y){window.scrollTo(0,y);for(var i=0;i<6;i++){await new Promise(function(r){requestAnimationFrame(r)});var c=t.classList.contains('is-condensed');if(c)everCondensed=true;if(c!==last)flips++;last=c;}}for(var y=0;y<=max+60;y+=10)await at(y);for(var y2=max+60;y2>=0;y2-=10)await at(y2);window.__shortScript={flips:flips,everCondensed:everCondensed};return flips+'/'+everCondensed;})()
+expect window.__shortScript.flips == 0
+expect window.__shortScript.everCondensed == false
+
+# --- and the reader keeps the offset they scrolled to ------------------------
+eval (async function(){window.scrollTo(0,document.documentElement.scrollHeight);for(var i=0;i<20;i++)await new Promise(function(r){requestAnimationFrame(r)});return Math.round(window.scrollY);})()
+expect window.scrollY > 40
+expect document.querySelector('.topbar').classList.contains('is-condensed') == false
