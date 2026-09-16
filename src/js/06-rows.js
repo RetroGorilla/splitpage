@@ -1,6 +1,7 @@
   /* ================= row actions ================= */
 
   function addRow(afterId) {
+    lastSplitUndo = null;
     var row = { id: makeId(), visualText: "", visualImage: null, audioText: "",
                 status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
     if (afterId) {
@@ -51,6 +52,10 @@
     if (!sel.rangeCount) return null;
     var range = sel.getRangeAt(0);
     if (!cellEl.contains(range.startContainer)) return null;
+    /* captured before any mutation below — the field's whole content as it
+       stood the instant the split was requested, for undoSplitCellField */
+    var originalHtml = sanitizeHtml(cellEl.innerHTML);
+    var rowId = state.rows[idx].id;
     if (!range.collapsed) range.deleteContents();
 
     var tail = document.createRange();
@@ -69,7 +74,61 @@
     /* half the field's text just moved to a new row — any comment anchored
        in that half has to move with it */
     repointCommentsForRows([state.rows[idx], created]);
-    return { idx: idx, created: created, field: field };
+    return { idx: idx, created: created, field: field, rowId: rowId, originalHtml: originalHtml };
+  }
+
+  /* One-level undo for splitCellField (Alt+Enter). The DOM rebuild in
+     render() tears down the contenteditable the browser's own undo history
+     lives on, so native Ctrl+Z has nothing left to act on after a split —
+     this is the app-level replacement, scoped tightly enough that it never
+     clobbers work done after the split it remembers:
+       - any other row-structural edit (add/delete/move/another split)
+         clears it, so a stale entry can never resurrect a row a later
+         action already accounted for;
+       - undoSplitCellField itself refuses unless both halves still hold
+         exactly what the split put there, so text typed into either cell
+         afterwards is never silently discarded. */
+  var lastSplitUndo = null;
+
+  function splitCellField(cellEl) {
+    var res = splitRowFieldCore(cellEl);
+    if (!res) return;
+    lastSplitUndo = {
+      rowId: res.rowId,
+      field: res.field,
+      originalHtml: res.originalHtml,
+      createdId: res.created.id,
+      remainderHtml: state.rows[res.idx][res.field],
+      createdHtml: res.created[res.field]
+    };
+    markDirty();
+    render();
+    focusRowField(res.created.id, res.field, 0);
+  }
+
+  /* Ctrl/Cmd+Z right after Alt+Enter: puts the field back together on the
+     original row and removes the row the split created. Returns true when it
+     actually undid something, so the caller knows to swallow the keystroke
+     rather than let a native undo fight it. */
+  function undoSplitCellField() {
+    var undo = lastSplitUndo;
+    if (!undo) return false;
+    lastSplitUndo = null;
+    var rowIdx = findRowIndex(undo.rowId);
+    var createdIdx = findRowIndex(undo.createdId);
+    if (rowIdx === -1 || createdIdx === -1) return false;
+    /* either half touched since the split (typed into, tagged, formatted) —
+       undoing now would throw that edit away, so decline instead */
+    if (state.rows[rowIdx][undo.field] !== undo.remainderHtml) return false;
+    if (state.rows[createdIdx][undo.field] !== undo.createdHtml) return false;
+    var removed = state.rows.splice(createdIdx, 1)[0];
+    state.rows[rowIdx][undo.field] = undo.originalHtml;
+    stampRow(state.rows[rowIdx]);
+    repointCommentsForRows([state.rows[rowIdx], removed]);
+    markDirty();
+    render();
+    focusRowField(undo.rowId, undo.field, 0);
+    return true;
   }
 
   /* Land the caret at a plain-text offset inside a specific field of a
@@ -82,18 +141,6 @@
     cell.focus();
     placeCaretAtTextOffset(cell, offset || 0);
     cell.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
-  /* Alt+Enter: the split view's version of the writer's plain Enter — see
-     splitRowFieldCore. Its own shortcut rather than folding into Ctrl+Enter,
-     which already means something else here (a new, empty scene) and is
-     tested and muscle-memorised as that. */
-  function splitCellField(cellEl) {
-    var res = splitRowFieldCore(cellEl);
-    if (!res) return;
-    markDirty();
-    render();
-    focusRowField(res.created.id, res.field, 0);
   }
 
   /* ---- drag to reorder ----
@@ -117,6 +164,7 @@
   }
 
   function moveRowTo(id, targetId, after) {
+    lastSplitUndo = null;
     var from = findRowIndex(id);
     var to = findRowIndex(targetId);
     if (from === -1 || to === -1 || from === to) return;
@@ -133,6 +181,7 @@
   function deleteRow(id) {
     var idx = findRowIndex(id);
     if (idx === -1) return;
+    lastSplitUndo = null;
     state.rows.splice(idx, 1);
     markDirty();
     render();
@@ -141,6 +190,7 @@
   function moveRow(id, dir) {
     var idx = findRowIndex(id);
     var j = idx + dir;
+    lastSplitUndo = null;
     if (idx === -1 || j < 0 || j >= state.rows.length) return;
     var tmp = state.rows[idx];
     state.rows[idx] = state.rows[j];
