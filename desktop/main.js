@@ -2942,6 +2942,17 @@ function createTabWindow(restoreSpec) {
     persistShellState();
   });
 
+  /* Entering and leaving fullscreen changes the content height the same way
+     a resize does, but the platforms do not agree on firing 'resize' for it
+     (macOS in particular animates into place and can settle without one).
+     Laying out on the transition itself keeps the active view sized to the
+     strip below/above it either way. */
+  win.on("enter-full-screen", () => layoutWindow(windowId));
+  win.on("leave-full-screen", () => {
+    layoutWindow(windowId);
+    scheduleBoundsSave(windowId);
+  });
+
   /* --- unsaved changes: THE MAIN PROCESS IS THE SOLE AUTHORITY, not the
      page's own beforeunload handler (src/js/21-events.js). Chromium only
      honours a beforeunload block after the page has had USER ACTIVATION —
@@ -3465,8 +3476,10 @@ function scheduleBoundsSave(windowId) {
   w.boundsSaveTimer = setTimeout(() => {
     if (!w.win || w.win.isDestroyed()) return;
     w.maximized = w.win.isMaximized();
-    /* a maximized window keeps the restored bounds it had before */
-    if (!w.maximized) w.bounds = w.win.getBounds();
+    /* a maximized window keeps the restored bounds it had before, and so
+       does a fullscreen one: getBounds() there is the whole screen, which
+       would come back as the window's "restored" size next launch */
+    if (!w.maximized && !w.win.isFullScreen()) w.bounds = w.win.getBounds();
     persistShellState();
   }, 400);
 }

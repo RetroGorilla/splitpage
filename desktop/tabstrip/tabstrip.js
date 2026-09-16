@@ -259,14 +259,44 @@
   function applyTitlebarInset() {
     var overlay = navigator.windowControlsOverlay;
     if (!overlay || !overlay.getTitlebarAreaRect) return;
+    /* Fullscreen hides the OS caption buttons: the overlay reports
+       visible:false and an all-zero rect. Returning early there left the
+       windowed inset (150px on Windows) reserved on a strip that now has
+       nothing to avoid, and — because the stale value is only corrected by
+       the NEXT geometrychange — the strip came back from fullscreen still
+       padded for a window of the wrong width, with the tabs squeezed. No
+       buttons means no inset. */
+    if (overlay.visible === false) {
+      document.documentElement.style.setProperty("--titlebar-inset", "0px");
+      return;
+    }
     var rect = overlay.getTitlebarAreaRect();
     if (!rect || !rect.width) return;
     var inset = Math.max(0, window.innerWidth - (rect.x + rect.width));
     document.documentElement.style.setProperty("--titlebar-inset", inset + "px");
   }
 
+  /* The inset is a difference between two numbers that do not land in the
+     same frame: geometrychange can arrive while window.innerWidth still
+     reports the size the window is leaving (the fullscreen width, on the
+     way back to a window), which measures an inset hundreds of pixels too
+     wide. Settling for a frame past the last event — resize included,
+     since a fullscreen exit is also a resize — measures both from the same
+     layout. */
+  var insetFrame = 0;
+  function scheduleTitlebarInset() {
+    if (insetFrame) cancelAnimationFrame(insetFrame);
+    insetFrame = requestAnimationFrame(function () {
+      insetFrame = requestAnimationFrame(function () {
+        insetFrame = 0;
+        applyTitlebarInset();
+      });
+    });
+  }
+
   if (navigator.windowControlsOverlay) {
-    navigator.windowControlsOverlay.addEventListener("geometrychange", applyTitlebarInset);
+    navigator.windowControlsOverlay.addEventListener("geometrychange", scheduleTitlebarInset);
+    window.addEventListener("resize", scheduleTitlebarInset);
     applyTitlebarInset();
   } else if (bridge.platform === "win32") {
     document.documentElement.style.setProperty("--titlebar-inset", "150px");
