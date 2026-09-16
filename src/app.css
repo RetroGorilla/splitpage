@@ -1353,21 +1353,82 @@
   }
 
   /* ---------- file menu + open-document chip ---------- */
+  /* The File menu is a LEFT DRAWER, not a dropdown: it carries forty-odd
+     entries and a dropdown that long runs off the bottom of the window on
+     any normal laptop. Full height, its own scroll, a backdrop to click
+     away — the markup and the ids are unchanged, only where it sits. */
   .menu-wrap { position: relative; }
+  .menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 159;
+    background: rgba(0, 0, 0, 0.32);
+    animation: menu-fade-in 120ms ease-out;
+  }
+  .menu-backdrop[hidden] { display: none; }
   .menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
     z-index: 160;
-    min-width: 208px;
+    width: 288px;
+    max-width: 86vw;
+    display: flex;
+    flex-direction: column;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: none;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
     box-shadow: var(--shadow);
-    padding: 5px;
+    padding: 0;
+    animation: menu-slide-in 140ms ease-out;
   }
   .menu[hidden] { display: none; }
-  .menu button {
+  @keyframes menu-slide-in { from { transform: translateX(-100%); } to { transform: none; } }
+  @keyframes menu-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .menu, .menu-backdrop { animation: none; }
+  }
+  /* stays put while the entries scroll under it */
+  .menu-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 10px 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .menu-title {
+    font-family: var(--font-display);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+  .menu-close {
+    flex: none;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--text-faint);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 8px;
+    cursor: pointer;
+  }
+  .menu-close:hover { background: var(--surface-2); color: var(--text); }
+  .menu-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .menu-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 5px;
+    padding-bottom: calc(5px + env(safe-area-inset-bottom));
+  }
+  .menu-body button {
     display: block;
     width: 100%;
     text-align: left;
@@ -1380,9 +1441,9 @@
     padding: 8px 10px;
     cursor: pointer;
   }
-  .menu button:hover:not(:disabled) { background: var(--surface-2); }
-  .menu button:disabled { color: var(--text-faint); cursor: default; }
-  .menu button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .menu-body button:hover:not(:disabled) { background: var(--surface-2); }
+  .menu-body button:disabled { color: var(--text-faint); cursor: default; }
+  .menu-body button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .menu-sep { height: 1px; background: var(--border); margin: 5px 2px; }
   .menu-label {
     font-family: var(--font-display);
@@ -2159,9 +2220,11 @@
     .prompter-bar .div-sep { display: none; }
     .prompter-bar button { padding: 10px 12px; }
 
-    /* the File menu opens from a button at the LEFT edge; right-aligning it
-       to that button would push it off screen */
-    .menu-wrap .menu { left: 0; right: auto; max-width: calc(100vw - 24px); }
+    /* the drawer takes most of a phone screen, but never all of it — a strip
+       of backdrop stays tappable so it can be dismissed without hunting for
+       the × */
+    .menu-wrap .menu { width: 300px; max-width: calc(100vw - 48px); }
+    .menu-body button { padding: 11px 12px; }
 
     .add-row-btn { width: 100%; padding: 13px 0; }
 

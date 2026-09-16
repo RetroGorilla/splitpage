@@ -730,12 +730,27 @@
     await exportAs("packing-" + catId);
   }
 
+  /* The menu is a left drawer (see .menu in app.css), so opening it also
+     raises a backdrop over the page. Both halves live here so every caller
+     that already said toggleFileMenu(false) still closes the whole thing. */
   function toggleFileMenu(force) {
     var menu = document.getElementById("file-menu");
     var btn = document.getElementById("btn-file");
+    var backdrop = document.getElementById("file-menu-backdrop");
     var open = force === undefined ? menu.hidden : force;
     menu.hidden = !open;
+    if (backdrop) backdrop.hidden = !open;
     btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      /* the drawer is tall and scrolls; a reopen should start at the top
+         rather than wherever the last visit left it */
+      var body = menu.querySelector(".menu-body");
+      if (body) body.scrollTop = 0;
+    } else if (menu.contains(document.activeElement)) {
+      /* closing with the focus still inside would leave it on a hidden
+         element, which strands the keyboard on nothing */
+      btn.focus();
+    }
   }
 
   function handleFileMenuAction(action) {
