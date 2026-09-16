@@ -148,6 +148,16 @@ browser:
 
 Every tab you have open comes back the next time you launch Splitpage.
 
+**A new tab starts on a choice, not on a document.** It asks for one of two
+things — **New script**, which is a genuinely empty script (one blank scene,
+no tags, no comments, nothing carried over), or **Open a file**, which is the
+same picker as File ▸ Open a document…. The same page shows in the browser
+app on a fresh copy nothing has been opened or saved into. It never appears
+over a document: not one you opened, not a shared session's, and not one
+coming back from a crash. If you would rather look at the example script that
+ships with Splitpage, the link at the bottom of the page dismisses it (so does
+Esc).
+
 **Crash recovery.** If the app or your computer goes down with unsaved work
 open, nothing is lost: every tab's unsaved changes are kept on disk as you
 type, and Splitpage offers them back, tab by tab, the next time you launch

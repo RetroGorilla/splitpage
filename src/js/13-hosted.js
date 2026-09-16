@@ -562,6 +562,7 @@
        so an id-less server document derives one from its server id */
     state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
     baseState = cloneState(state);
+    if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
     serverDoc = { id: body.id, rev: body.rev || 0 };
     docIdWrittenOut = true;
     /* a hosted document and a local file are different homes for the same

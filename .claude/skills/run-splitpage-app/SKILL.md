@@ -46,7 +46,7 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS` (suites 01–29, 16 unused) and exit 0, or lists
+Ends with `ALL PASS` (suites 01–30, 16 unused) and exit 0, or lists
 every failing assertion and exits 1. Options:
 
 - `-Only 02` — run just the suite whose filename starts with `02`
@@ -101,6 +101,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/26-desktop-drafts.txt` | crash-safe drafts, renderer half (20g-drafts.js): the writer's timing and dedup, and the restore's outcomes, against `__desktopTest.setBackend()`'s fake backend and `__desktopTest.drafts` — the scheduler never writing per keystroke, an edit during a save drafted and rebased, a clean save discarding the draft, visibility-hidden flush, the disk-unchanged decision made by content not mtime, a detached copy forking its id with a history copy, the pending latch, `applyStashedWork` override isolation, server-override outcomes, sanitisation, and browser inertness |
 | `tests/27-app-data.txt` | export bundle shape (§5 #48 key walk, round trip), idempotence, merge rules for prefs/bookmarks/history, refusals (wrong format/version/truncated), legacy `snapshots` → Older, cap/ordering, and the import section of 21-desktop-shim.txt |
 | `tests/29-updates.txt` | the update bar (20a-update.js), fed a status through `window.__updateTest`: nothing shown when up to date or merely checking, the launcher copy's text and its staged-and-waiting line, dismiss staying dismissed when a later status arrives, and the desktop app's four states — Download (which calls the bridge, not a link), progress with no second button, Install and restart, Try again after a failure, and the release-page fallback for a release with no installer for this machine |
+| `tests/30-new-tab.txt` | the New Tab page (20j-newtab.js), opted into with `?newtab=1`: it showing itself over the pristine demo and not over a document, Esc leaving the demo untouched, "New script" giving a genuinely empty document (one blank scene, no tags/comments/b-roll/people, its own fresh docId), "Open a file" running the real picker path against the desktop fake backend (a cancelled picker leaves the page up, a picked file loads into the tab and closes it), and the harness suppression every other suite depends on |
 | `tests/28-autosave.txt` | autosave (14-export.js) and the save-state indicator (12-dirty-toast.js): nothing written before the document has a file, one write per pause in the typing rather than one per keystroke, a window blur bringing a pending write forward, the File-menu toggle and its remembered preference, and a file changed on disk halting autosave instead of throwing a modal over the typing — driven against the same fake `FileSystemFileHandle` 19-save-conflict.txt uses |
 
 ## The server's own tests

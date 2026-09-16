@@ -637,6 +637,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
+| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices |
 | `21-events.js` | all event wiring, `init()`, closes the IIFE |
 
 **Desktop files** (optional; the web app runs without them):
