@@ -41,6 +41,26 @@ win:
   icon: build/icon.ico
 
 nsis:
+  # The app payload ships as a ZIP rather than 7z, and differential packaging
+  # is off because it forces 7z back on regardless of useZip (NsisTarget.js:78
+  # picks the format from `!isBuildDifferentialAware && options.useZip`).
+  #
+  # 7-Zip applies an architecture-specific BCJ filter to executables, and the
+  # differential path builds the archive non-solid (dictSize 1, solid false),
+  # so that filter lands on each PE file individually. Whatever unpacks the
+  # payload inside NSIS cannot decode the ARM64 variant: the 2.0.1 ARM64 setup
+  # extracted every .pak, .dat, .bin and .html correctly, silently dropped all
+  # seven top-level binaries including Splitpage.exe, then wrote the shortcuts
+  # and the uninstaller and exited 0. What the user sees is Windows hunting for
+  # a Splitpage.exe that was never written. The x64 setup was unaffected on the
+  # same machine in the same minute — its BCJ filter is old and understood
+  # everywhere.
+  #
+  # Differential packaging costs us nothing here: blockmaps are not published
+  # assets (DEPLOY.md §7 ships the zip, two setups and SHA256SUMS) and the
+  # updater downloads whole installers.
+  differentialPackage: false
+  useZip: true
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
