@@ -128,6 +128,7 @@
       var html = "";
       for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
       rowsEl.innerHTML = html;
+      rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
     }
 
     if (refocus) {
@@ -176,8 +177,12 @@
     var field = cellEl.getAttribute("data-field");
     var idx = findRowIndex(id);
     if (idx !== -1) {
-      if (state.rows[idx][field] !== cellEl.innerHTML) {
-        state.rows[idx][field] = cellEl.innerHTML;
+      /* Strips the zero-width caret spot ensureTrailingCaretSpot() may have
+         appended after a trailing tag/b-roll span — it exists only to give
+         the DOM a place to put the caret and must never reach stored text. */
+      var html = cellEl.innerHTML.indexOf("​") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/​/g, "");
+      if (state.rows[idx][field] !== html) {
+        state.rows[idx][field] = html;
         stampRow(state.rows[idx]);
         markDirty();
       }
