@@ -2820,6 +2820,51 @@
     .comments-panel { transition: none; }
     .comments-panel[hidden] { transform: translateX(0); }
   }
+
+  /* ---------- the New Tab page (20j-newtab.js) ----------
+
+     Opaque and full-page on purpose: a translucent backdrop over the demo
+     document would read as "a dialog over this script" when the point is
+     that no script is open yet. z-index 130 puts it above the topbar (120)
+     and below the side panels (140), the modals (150) and the tour (160),
+     so the first-run wizard still appears over it and nothing here can
+     cover a dialog. */
+  .newtab-page {
+    position: fixed; inset: 0; z-index: 130;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .newtab-inner { width: 100%; max-width: 620px; }
+  .newtab-title {
+    font-family: var(--font-display); font-size: 18px; letter-spacing: 0.02em;
+    margin: 0 0 4px;
+  }
+  .newtab-sub { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
+  .newtab-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .newtab-card {
+    display: flex; flex-direction: column; gap: 4px;
+    text-align: left; padding: 16px 18px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text);
+    cursor: pointer;
+  }
+  .newtab-card:hover { border-color: var(--visual); }
+  .newtab-card strong { font-size: 15px; }
+  .newtab-card span { font-size: 12.5px; color: var(--text-dim); }
+  .newtab-card-mark {
+    font-family: var(--font-display); font-size: 20px; line-height: 1;
+    color: var(--visual); margin-bottom: 6px;
+  }
+  .newtab-hint { margin: 16px 0 0; font-size: 12.5px; color: var(--text-dim); }
+  .newtab-hint a { color: inherit; }
+
+  /* One column on a phone: two cards side by side at 375px leave neither
+     wide enough for its own sentence. */
+  @media (max-width: 560px) {
+    .newtab-cards { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -3525,6 +3570,7 @@
 <p>The desktop app opens documents in tabs across the top of the window, like a browser:</p>
 <ul><li><strong>Ctrl+T</strong> opens a new tab.</li><li><strong>Ctrl+W</strong>, or a middle-click on a tab, closes it — if it has unsaved changes, Splitpage asks first.</li><li><strong>Ctrl+Tab</strong> / <strong>Ctrl+Shift+Tab</strong> step to the next or previous tab.</li><li>Drag a tab out of the window to give it its own window, and drag it into another Splitpage window to bring it back in. Drag a tab past another one to reorder them.</li></ul>
 <p>Every tab you have open comes back the next time you launch Splitpage.</p>
+<p><strong>A new tab starts on a choice, not on a document.</strong> It asks for one of two things — <strong>New script</strong>, which is a genuinely empty script (one blank scene, no tags, no comments, nothing carried over), or <strong>Open a file</strong>, which is the same picker as File ▸ Open a document…. The same page shows in the browser app on a fresh copy nothing has been opened or saved into. It never appears over a document: not one you opened, not a shared session's, and not one coming back from a crash. If you would rather look at the example script that ships with Splitpage, the link at the bottom of the page dismisses it (so does Esc).</p>
 <p><strong>Crash recovery.</strong> If the app or your computer goes down with unsaved work open, nothing is lost: every tab's unsaved changes are kept on disk as you type, and Splitpage offers them back, tab by tab, the next time you launch it. That includes a document from a shared session whose server you can no longer reach — it comes back as an unsaved local copy, with a note naming the server document it came from.</p>
 <p><strong>Closing with unsaved work.</strong> Closing a window or quitting the app while any of its tabs have unsaved changes asks once, in a single dialog listing every tab that would lose work, with <strong>Review</strong>, <strong>Close without saving</strong>, and <strong>Cancel</strong>.</p>
 <p><strong>Duplicate files.</strong> If you open a copy of a file that's already open in another tab — for example, the same <code>.md</code> file synced down onto two machines — Splitpage notices and gives the copy its own version history, separate from the original's. Nothing is written to either file until you save.</p>
@@ -3792,6 +3838,35 @@ node update.mjs           # download and verify it</code></pre>
         <button type="button" class="btn" data-connect-action="close">Close</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ===== the New Tab page (20j-newtab.js) =====
+     What a new desktop tab (and a fresh copy in the browser) lands on
+     instead of the seeded demo: the two things a new tab is for. Not a
+     modal — an opaque full-page layer under the modals, so the first-run
+     wizard still shows over it. Showing it changes no state; only "New
+     script" replaces the document. -->
+<div class="newtab-page" id="newtab-page" hidden>
+  <div class="newtab-inner" role="group" aria-labelledby="newtab-title">
+    <h2 class="newtab-title" id="newtab-title">New script, or open one</h2>
+    <p class="newtab-sub">Nothing is open in this tab yet.</p>
+    <div class="newtab-cards">
+      <button type="button" class="newtab-card" data-newtab-action="new">
+        <span class="newtab-card-mark" aria-hidden="true">+</span>
+        <strong>New script</strong>
+        <span>An empty script — one blank scene, and nothing else.</span>
+      </button>
+      <button type="button" class="newtab-card" data-newtab-action="open">
+        <span class="newtab-card-mark" aria-hidden="true">&#8594;</span>
+        <strong>Open a file</strong>
+        <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
+      </button>
+    </div>
+    <p class="newtab-hint">
+      <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
+      — or press Esc.
+    </p>
   </div>
 </div>
 
@@ -14145,6 +14220,7 @@ node update.mjs           # download and verify it</code></pre>
        so an id-less server document derives one from its server id */
     state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
     baseState = cloneState(state);
+    if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
     serverDoc = { id: body.id, rev: body.rev || 0 };
     docIdWrittenOut = true;
     /* a hosted document and a local file are different homes for the same
@@ -17334,6 +17410,10 @@ node update.mjs           # download and verify it</code></pre>
      way of migrateDocument(), so it carries its document id. */
   function adoptProjectState(newState, file, handle, kind, opts) {
     opts = opts || {};
+    /* A document arriving in this tab is the New Tab page's whole purpose,
+       however it got here — the page's own Open button, the desktop shell
+       routing an open into this tab, a drop. (20j-newtab.js) */
+    if (typeof closeNewTabPage === "function") closeNewTabPage();
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
     state = newState;
@@ -17498,6 +17578,7 @@ node update.mjs           # download and verify it</code></pre>
 
     markDirty();
     openedFile.dirty = false;
+    if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
     render();
     updateFileChip();
     showToast("Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s"), "ok");
@@ -23368,6 +23449,193 @@ node update.mjs           # download and verify it</code></pre>
      the state once at boot rather than waiting for the first scroll. */
   applyCondensedState();
 })();
+  /* ================= the New Tab page =================
+
+     A new desktop tab (and a fresh copy of the app in the browser) used to
+     land on the seeded demo document, so the first thing anyone did was
+     clear out somebody else's example script or go hunting through the File
+     drawer for Open. This page puts the only two things a new tab is
+     actually for one click away: an empty script, or the file picker.
+
+     WHAT IT IS NOT: a modal. It is an opaque full-page layer at z-index
+     130 — above the topbar (120), below the side panels (140), the modals
+     (150) and the tour (160) — so the first-run wizard still shows over it
+     on a genuinely first run, and so nothing here can swallow a dialog.
+
+     WHAT IT DOES NOT TOUCH: the document. Showing the page changes no
+     state at all; the demo is still underneath, which is why "Look at the
+     example script instead" (and Esc) can simply dismiss it. Only the
+     "New script" button replaces the document, and it replaces it with a
+     genuinely empty one — one blank scene, no tags, no comments, no
+     b-roll, a fresh identity — not a filtered copy of the seed.
+
+     Recently-opened documents as a third column (the issue's open
+     question) are deliberately not here: nothing in the app keeps a recent
+     list today — the browser remembers one handle and the desktop main
+     process tracks open tabs, neither of which is a recents list — so that
+     column is a feature of its own rather than a detail of this page.
+
+     Like 20b/20c/20e this fragment wires itself directly rather than
+     through init(): #newtab-page is in the DOM by the time this classic
+     script runs. */
+
+  var newTabPageShown = false;
+
+  function newTabPageEl() { return document.getElementById("newtab-page"); }
+
+  /* The test harness turns the page off the same way it turns the first-run
+     wizard off, and for the same reason: every existing suite boots on the
+     pristine demo and clicks into it, and a full-page layer over that would
+     break all of them. Both drivers set the flag before any page script
+     runs unless the suite asked for the page with ?newtab=1. */
+  function newTabSuppressed() {
+    return window.__splitpageNoNewTab === true;
+  }
+
+  function openNewTabPage() {
+    var el = newTabPageEl();
+    if (!el || newTabPageShown) return;
+    newTabPageShown = true;
+    el.hidden = false;
+    document.addEventListener("keydown", onNewTabKeydown, true);
+    var first = el.querySelector('[data-newtab-action="new"]');
+    if (first) first.focus();
+  }
+
+  function closeNewTabPage() {
+    var el = newTabPageEl();
+    if (!newTabPageShown) return;
+    newTabPageShown = false;
+    if (el) el.hidden = true;
+    document.removeEventListener("keydown", onNewTabKeydown, true);
+  }
+
+  function onNewTabKeydown(e) {
+    if (e.key !== "Escape") return;
+    e.stopPropagation();
+    e.preventDefault();
+    closeNewTabPage();
+  }
+
+  /* ---- "New script": a genuinely empty document ----
+
+     migrateRows fills in every list the document carries (comments,
+     productionTags, people, brollShots, wordsPerMinute) and mints a fresh
+     docId, so building the blank from its two required fields is enough —
+     and is the only way to be sure nothing of the seed survives.
+
+     Not dirty, and editSeq untouched: an empty document nobody has typed
+     into yet is exactly what isPristineSeedDocument() (03a-history-store.js)
+     means by pristine, which is what lets the desktop shell keep routing an
+     open into this tab and keep closing it without a prompt. */
+  function blankDocumentState() {
+    return migrateRows({
+      title: "Untitled Script",
+      rows: [{ id: makeId("r"), visualText: "", visualImage: null, audioText: "" }]
+    });
+  }
+
+  function startBlankScript() {
+    /* Clicked before loadInitialState() resolved: assigning `state` now
+       would just be overwritten when the boot load lands (the same race
+       20f-desktop.js's open handlers wait out). */
+    if (!state && initialStateReady) return initialStateReady.then(startBlankScript);
+    state = blankDocumentState();
+    baseState = cloneState(state);
+    /* A blank document's id has never left this page, so a first Save can
+       take it with it rather than forking a new one (02b-doc-id.js). */
+    docIdWrittenOut = false;
+    resetProductionPanelState();
+    render();
+    updateFileChip();
+    updateIdentityChip();
+    updateSaveStatus();
+    if (typeof syncDocIdentity === "function") syncDocIdentity();
+    if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    closeNewTabPage();
+    return Promise.resolve(true);
+  }
+
+  /* ---- "Open a file" ----
+     Exactly the File ▸ Open a document… path, picker and all. A cancelled
+     picker leaves the page up (nothing happened); an open that main routed
+     into some OTHER tab leaves this one on the New Tab page too, which is
+     what that tab now is. */
+  async function newTabOpenFile() {
+    await openLocalFile();
+    if (openedFile.name || docFileHandle.kind) closeNewTabPage();
+  }
+
+  (function wireNewTabPage() {
+    var el = newTabPageEl();
+    if (!el) return;
+    el.addEventListener("click", function (e) {
+      var target = e.target.closest("[data-newtab-action]");
+      if (!target) return;
+      e.preventDefault();
+      var action = target.getAttribute("data-newtab-action");
+      if (action === "new") startBlankScript();
+      else if (action === "open") newTabOpenFile();
+      else if (action === "dismiss") closeNewTabPage();
+    });
+  })();
+
+  /* ---- deciding whether to show it, at boot ----
+
+     The same "must never appear over a document that is about to open"
+     rule the first-run wizard's gate follows (20b-onboarding.js), minus
+     its once-per-launch conditions: a new tab is a new tab every time.
+
+       - the pristine-seed gate (invariant #30) — the document on screen is
+         the shipped demo and nothing else;
+       - no hosted document, and no file adopted this load;
+       - desktop: the tab's own launchIntent says 'blank' and there is no
+         crash draft coming (TAB-BOOT-SYNC);
+       - browser: no remembered file handle, which is the one thing
+         tryResumeLastProject() (21-events.js) may still be about to reopen
+         or offer to reopen. */
+  async function newTabEligibleForAutoShow() {
+    if (newTabSuppressed()) return false;
+    if (!seedCheckPasses()) return false;
+    if (DESKTOP && typeof draftRestorePending !== "undefined" && draftRestorePending) return false;
+    if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
+    if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
+    if (DESKTOP) {
+      if ((DESKTOP.launchIntent && DESKTOP.launchIntent.type !== "blank") ||
+          DESKTOP.hasDraftToRestore) return false;
+    } else {
+      var handle = null;
+      try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
+      if (handle) return false;
+    }
+    /* Re-check what the round trip above gave a file time to change. */
+    if (typeof serverDoc !== "undefined" && serverDoc && serverDoc.id) return false;
+    if (typeof docFileHandle !== "undefined" && docFileHandle && docFileHandle.kind) return false;
+    if (openedFile.name) return false;
+    return true;
+  }
+
+  async function maybeAutoShowNewTabPage() {
+    var eligible = false;
+    try { eligible = await newTabEligibleForAutoShow(); } catch (e) { eligible = false; }
+    if (eligible) openNewTabPage();
+  }
+
+  maybeAutoShowNewTabPage();
+
+  /* ---- test hook ----
+     Same trick as window.__onboarding: the gate and the blank document are
+     what a headless suite has to drive, and neither has a UI affordance
+     that can be clicked into existence on demand. Nothing in the app reads
+     this. */
+  window.__newTab = {
+    open: openNewTabPage,
+    close: closeNewTabPage,
+    isOpen: function () { return newTabPageShown; },
+    eligible: newTabEligibleForAutoShow,
+    blank: startBlankScript,
+    blankState: blankDocumentState
+  };
   /* ================= events ================= */
 
   function onRootClick(e) {

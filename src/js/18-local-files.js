@@ -281,6 +281,10 @@
      way of migrateDocument(), so it carries its document id. */
   function adoptProjectState(newState, file, handle, kind, opts) {
     opts = opts || {};
+    /* A document arriving in this tab is the New Tab page's whole purpose,
+       however it got here — the page's own Open button, the desktop shell
+       routing an open into this tab, a drop. (20j-newtab.js) */
+    if (typeof closeNewTabPage === "function") closeNewTabPage();
     if (!opts.skipSnapshot && state && state.rows.length) pushSnapshot("Before opening " + file.name);
 
     state = newState;
@@ -445,6 +449,7 @@
 
     markDirty();
     openedFile.dirty = false;
+    if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
     render();
     updateFileChip();
     showToast("Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s"), "ok");

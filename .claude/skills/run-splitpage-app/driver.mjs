@@ -233,6 +233,10 @@ async function connectCdp() {
   // page script runs, unless the script asked for the wizard with ?wizard=1
   // (13-onboarding.txt does). Runs again on every navigation, so a suite
   // that removes the key and reloads without ?wizard=1 still gets no wizard.
+  // The New Tab page (20j-newtab.js) shows itself over the same pristine
+  // demo, for the same reason and with the same effect on every suite that
+  // clicks into it — off unless the script asked for it with ?newtab=1
+  // (30-new-tab.txt does).
   await send("Page.addScriptToEvaluateOnNewDocument", {
     source: `
 if (!/[?&]wizard=1(&|$)/.test(location.search)) {
@@ -242,6 +246,7 @@ if (!/[?&]wizard=1(&|$)/.test(location.search)) {
     }
   } catch (e) {}
 }
+if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = true; }
 `,
   });
   await send("Log.enable");

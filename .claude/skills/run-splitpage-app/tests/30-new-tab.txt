@@ -1,0 +1,102 @@
+# The New Tab page (src/js/20j-newtab.js): what a blank tab lands on instead
+# of the seeded demo. The page showing itself over a pristine copy and not
+# over a document, the two choices ("New script" giving a genuinely empty
+# document, "Open a file" loading the picked file into this tab), Esc
+# leaving the demo alone underneath, and the harness suppression every other
+# suite depends on.
+#
+# ?newtab=1 is the opt-in, exactly like ?wizard=1 for the first-run wizard:
+# both drivers turn this page off for every other suite before any page
+# script runs.
+
+# --- the harness suppression every other suite depends on -----------------
+# First, before any DOM churn: without ?newtab=1 both drivers turn the page
+# off before any page script runs, which is what keeps suites 01-29 booting
+# straight into the demo document they all click into.
+open /index.html
+wait document.getElementById('rows').children.length > 1
+expect window.__splitpageNoNewTab == true
+expect document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length > 1
+
+goto /index.html?newtab=1
+
+# --- it shows on its own over the pristine demo ----------------------------
+wait document.getElementById('newtab-page').hidden == false
+expect window.__newTab.isOpen() == true
+# actually laid out, not just unhidden behind something
+expect document.getElementById('newtab-page').getBoundingClientRect().width > 0
+expect document.querySelector('#newtab-page .newtab-card').offsetParent !== null
+# above the topbar (120), below the panels (140) / modals (150) / tour (160),
+# so the first-run wizard still opens over it
+expect getComputedStyle(document.getElementById('newtab-page')).zIndex == 130
+
+# --- showing it changes nothing: the demo is still there behind it ---------
+eval (function(){window.__rowsBefore = document.getElementById('rows').innerHTML; return window.__rowsBefore.length > 0;})()
+expect document.querySelectorAll('#rows .row').length > 1
+
+# --- Esc dismisses to the example script, which is untouched --------------
+key Escape
+expect document.getElementById('newtab-page').hidden == true
+expect window.__newTab.isOpen() == false
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- the blank document is genuinely empty --------------------------------
+eval (function(){window.__b = window.__newTab.blankState(); return !!window.__b;})()
+expect window.__b.rows.length == 1
+expect window.__b.rows[0].visualText.length == 0
+expect window.__b.rows[0].audioText.length == 0
+expect window.__b.title == Untitled Script
+expect window.__b.comments.length == 0
+expect window.__b.productionTags.length == 0
+expect window.__b.brollShots.length == 0
+expect window.__b.people.length == 0
+# a fresh identity of its own, never the seed's and never a shared one
+expect /^d[0-9a-f]{32}$/.test(window.__b.docId) == true
+expect window.__newTab.blankState().docId !== window.__b.docId
+
+# --- "New script" replaces the document with it and closes the page -------
+eval window.__newTab.open()
+expect document.getElementById('newtab-page').hidden == false
+click [data-newtab-action="new"]
+wait document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length == 1
+expect document.querySelector('#rows .visual-cell .cell-editable').textContent.length == 0
+expect document.querySelector('#rows .audio-cell .cell-editable').textContent.length == 0
+expect document.getElementById('doc-title').value == Untitled Script
+# nothing carried over: no tracked items, no gear, no b-roll, no comments
+expect document.getElementById('production-badge').hidden == true
+expect document.getElementById('gear-badge').hidden == true
+expect document.getElementById('broll-badge').hidden == true
+expect document.getElementById('comments-badge').hidden == true
+
+# --- the gate: never over a document -------------------------------------
+# the page is eligible again on a pristine copy...
+goto /index.html?newtab=1
+wait document.getElementById('newtab-page').hidden == false
+# ...but not once this tab has a file open. The desktop fake backend
+# (__desktopTest) is the only way to drive a "picker" headlessly, and it is
+# also the branch a real new tab takes.
+eval (function(){ var b = window.__desktopTest.makeFakeBackend(); window.__fake = b; window.__desktopTest.setBackend(b); window.__fileId = b._addFile('picked.md', '# Picked' + String.fromCharCode(10,10) + 'A line of narration.' + String.fromCharCode(10)); return !!window.__fileId; })()
+
+# a cancelled picker is not a failure and leaves the page up
+click [data-newtab-action="open"]
+sleep 400
+expect document.getElementById('newtab-page').hidden == false
+
+# now the picker returns the file: it loads into this tab and the page goes
+eval (function(){ var id = window.__fileId; window.__fake.openFileDialog = function () { return Promise.resolve({ id: id, name: 'picked.md' }); }; return true; })()
+click [data-newtab-action="open"]
+wait document.getElementById('newtab-page').hidden == true
+wait document.getElementById('file-chip-name').textContent.indexOf('picked.md') !== -1
+
+# with a document open, the gate refuses to show the page again
+eval (async function(){ window.__elig = await window.__newTab.eligible(); return true; })()
+wait window.__elig === false
+
+# (the suppression check is at the top of this suite, before any DOM churn:
+# a goto after this much of it aborts the CDP socket — see the driver
+# gotchas in SKILL.md)
+eval window.__desktopTest.restoreBackend()
+
+quit

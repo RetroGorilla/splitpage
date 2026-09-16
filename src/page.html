@@ -837,6 +837,35 @@
   </div>
 </div>
 
+<!-- ===== the New Tab page (20j-newtab.js) =====
+     What a new desktop tab (and a fresh copy in the browser) lands on
+     instead of the seeded demo: the two things a new tab is for. Not a
+     modal — an opaque full-page layer under the modals, so the first-run
+     wizard still shows over it. Showing it changes no state; only "New
+     script" replaces the document. -->
+<div class="newtab-page" id="newtab-page" hidden>
+  <div class="newtab-inner" role="group" aria-labelledby="newtab-title">
+    <h2 class="newtab-title" id="newtab-title">New script, or open one</h2>
+    <p class="newtab-sub">Nothing is open in this tab yet.</p>
+    <div class="newtab-cards">
+      <button type="button" class="newtab-card" data-newtab-action="new">
+        <span class="newtab-card-mark" aria-hidden="true">+</span>
+        <strong>New script</strong>
+        <span>An empty script — one blank scene, and nothing else.</span>
+      </button>
+      <button type="button" class="newtab-card" data-newtab-action="open">
+        <span class="newtab-card-mark" aria-hidden="true">&#8594;</span>
+        <strong>Open a file</strong>
+        <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
+      </button>
+    </div>
+    <p class="newtab-hint">
+      <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
+      — or press Esc.
+    </p>
+  </div>
+</div>
+
 <!-- ===== first-run setup wizard (20b-onboarding.js) =====
      Shown once, only over a pristine copy of the app (invariant #30). File ▸
      "Set up Splitpage…" reopens it without touching the key that keeps it
