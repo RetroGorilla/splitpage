@@ -695,7 +695,16 @@ picking up any work on this branch.
 
 ## 8. Where to pick up
 
-What to work on next, in what order, and the pending decisions for Adam are
+**Bugs and features live in GitHub Issues** —
+https://github.com/RetroGorilla/splitpage/issues. That is the tracker: open
+one before starting work, close it with the commit that fixes it
+(`Fixes #12` in the message), and don't keep a second list in a Markdown
+file. Labels: `bug` / `enhancement` for the kind, `area:*` (editor,
+desktop, installer, server, export, ui) for where it lives,
+`needs-decision` for anything waiting on Adam, `blocked` for work that
+can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
+
+Longer-range sequencing and the pending decisions for Adam are
 tracked in the plan file, not here:
 `C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Follow My Voice on
 desktop is paused pending a fresh look (parked files under
