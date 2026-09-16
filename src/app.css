@@ -2715,3 +2715,74 @@
     background: var(--bg); color: var(--text); resize: vertical;
   }
   .broll-ref-input:focus, .broll-notes-input:focus { outline: none; border-color: var(--broll); }
+
+  /* ---------- condensing header (BACKLOG: collapse into a toolbar on scroll)
+     The page itself scrolls (there is no inner scroll container), so the
+     header sticks to the viewport and sheds its decorative rows once the
+     script body starts passing underneath: the brand line and the subtitle
+     go, the title drops to a size that sits on one line with the buttons.
+     What stays is everything you reach for mid-write — title, file chip,
+     Production / Gear / B-roll / Comments / Write, Save, Present.
+
+     z-index 120 is deliberately below the side panels (140), the tour
+     overlay (160) and the modals (150/200): condensing must never put the
+     header on top of something the user opened. The background is opaque
+     because rows scroll under it. */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    background: var(--bg);
+    transition: padding-bottom 0.18s ease, box-shadow 0.18s ease;
+  }
+  .topbar.is-condensed {
+    align-items: center;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 0 var(--border), 0 8px 18px rgba(0, 0, 0, 0.06);
+  }
+  .topbar.is-condensed .brand-row,
+  .topbar.is-condensed .subtitle { display: none; }
+  .topbar.is-condensed .doc-title {
+    font-size: 17px;
+    font-weight: 700;
+    max-width: 34vw;
+    text-overflow: ellipsis;
+  }
+  /* The title input and the chips share a row once the brand line is gone. */
+  .topbar.is-condensed > div:first-child {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+  .topbar.is-condensed .identity-chip,
+  .topbar.is-condensed .file-chip,
+  .topbar.is-condensed .stat-chips { margin: 0; }
+
+  /* A viewer who asked for less motion gets the condensed layout with no
+     transition — the point is the space it saves, not the movement. */
+  @media (prefers-reduced-motion: reduce) {
+    .topbar { transition: none; }
+  }
+
+  /* ---------- sidebar slide-in (BACKLOG: slide-in animation for sidebars)
+     .comments-panel already carried `transition: transform`, but it could
+     never run: [hidden] sets display:none, and a display change is not a
+     transitionable state on its own. `allow-discrete` plus @starting-style
+     is what makes the discrete display flip participate, so the panel
+     slides in from the right edge on open and back out on close. Browsers
+     without @starting-style ignore both blocks and keep today's instant
+     pop-in — no fallback needed, nothing breaks. */
+  .comments-panel {
+    transition: transform 0.18s ease, overlay 0.18s allow-discrete,
+                display 0.18s allow-discrete;
+  }
+  .comments-panel[hidden] { transform: translateX(100%); }
+  @starting-style {
+    .comments-panel:not([hidden]) { transform: translateX(100%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .comments-panel { transition: none; }
+    .comments-panel[hidden] { transform: translateX(0); }
+  }
