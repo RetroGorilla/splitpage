@@ -1,0 +1,21 @@
+name: Feature
+description: Something Splitpage should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What it should do
+      description: The behaviour from the user's side, not the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What is awkward or impossible today without it.
+  - type: textarea
+    id: done
+    attributes:
+      label: Done looks like
+      description: How we will know it works — the check a test or a manual run should make. Optional.
