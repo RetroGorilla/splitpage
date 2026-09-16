@@ -304,6 +304,17 @@ function registerPath(absPath) {
    Changing one without the other clips the strip or leaves a gap. */
 const TITLEBAR_H = 36;
 
+/* The floor the OS is allowed to shrink a window to. Windows snap layouts
+   hand a window a fixed slot — half of a 1366-wide laptop screen is 683px,
+   a quarter of a 1080-tall screen is 540px — and the OS silently refuses
+   the snap when either is below the window's minimum, which is what a
+   900x600 floor did. The document CSS reflows all the way down to its
+   480px breakpoint and the tab strip stays usable next to the caption
+   buttons at that width, so the floor is set where the layout actually
+   gives out rather than where a desktop window "should" start. */
+const MIN_WINDOW_W = 480;
+const MIN_WINDOW_H = 400;
+
 /* DOC-ID-FORMAT. A document's own id — minted in the renderer, carried inside
    the document, and the same 33 characters everywhere (history's and drafts'
    looser patterns were dropped for it). Declared once here because more than
@@ -2861,8 +2872,8 @@ function createTabWindow(restoreSpec) {
     height: saved ? saved.height : 900,
     x: saved ? saved.x : (typeof spec.x === "number" ? spec.x : undefined),
     y: saved ? saved.y : (typeof spec.y === "number" ? spec.y : undefined),
-    minWidth: 900,
-    minHeight: 600,
+    minWidth: MIN_WINDOW_W,
+    minHeight: MIN_WINDOW_H,
     backgroundColor: backgroundColorForTheme(),
     show: false,
     /* test runs stay invisible: see TEST_MODE */
@@ -3059,8 +3070,8 @@ function createTunnelWindow() {
     height: saved ? saved.height : 900,
     x: saved ? saved.x : undefined,
     y: saved ? saved.y : undefined,
-    minWidth: 900,
-    minHeight: 600,
+    minWidth: MIN_WINDOW_W,
+    minHeight: MIN_WINDOW_H,
     backgroundColor: backgroundColorForTheme(),
     show: false,
     skipTaskbar: TEST_MODE,
