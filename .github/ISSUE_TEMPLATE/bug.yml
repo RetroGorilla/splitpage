@@ -1,0 +1,23 @@
+name: Bug
+description: Something in Splitpage behaves wrongly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you expected, what you got instead. Exact details matter — the sequence of keys, which panel, which build.
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Where
+      description: Browser app, desktop app (version), or hosted server — and the version from VERSION or Help ▸ About.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes for whoever picks this up
+      description: Suspected source file, related invariant in HANDOFF.md, or a test suite that should have caught it. Optional.
