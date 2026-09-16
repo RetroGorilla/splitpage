@@ -20,9 +20,9 @@ expect document.querySelector('#help-modal .modal-panel').offsetParent !== null
 expect document.querySelectorAll('#help-toc a').length > 10
 expect (function(){var a=[].slice.call(document.querySelectorAll('#help-toc a'));return a.every(function(l){return !!document.getElementById(l.getAttribute('href').slice(1));});})()
 
-# --- a numbered list split by blank lines (README's "Running it" steps) still
-#     renders as one <ol>, not several restarting at 1 ------------------------
-expect (function(){var h=document.getElementById('help-running-it');var el=h.nextElementSibling;while(el&&el.tagName!=='OL'){el=el.nextElementSibling;}return !!el && el.querySelectorAll(':scope > li').length >= 3;})()
+# --- a numbered list split by blank lines (README's "Moving from the browser
+#     app" steps) still renders as one <ol>, not several restarting at 1 ------
+expect (function(){var h=document.getElementById('help-moving-from-the-browser-app-to-the-desktop-app');var el=h.nextElementSibling;while(el&&el.tagName!=='OL'){el=el.nextElementSibling;}return !!el && el.querySelectorAll(':scope > li').length >= 3;})()
 
 # --- Esc closes --------------------------------------------------------------
 key Escape
