@@ -459,7 +459,7 @@
       addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
       return;
     }
-    if (e.key === "Enter") { e.preventDefault(); document.execCommand("insertHTML", false, "<br>"); syncFieldFromDom(cellEl); return; }
+    if (e.key === "Enter") { e.preventDefault(); insertLineBreak(cellEl); syncFieldFromDom(cellEl); return; }
     if (mod && (e.key === "b" || e.key === "B")) { e.preventDefault(); document.execCommand("bold"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
     else if (mod && (e.key === "i" || e.key === "I")) { e.preventDefault(); document.execCommand("italic"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
     else if (mod && (e.key === "u" || e.key === "U")) { e.preventDefault(); document.execCommand("underline"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }

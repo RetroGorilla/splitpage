@@ -191,6 +191,47 @@
 
   /* ================= rich text commands ================= */
 
+  /* Is there anything after `node` that gives the last line a box to sit in?
+     A zero-width caret spot does not count — it is ensureTrailingCaretSpot()'s
+     scaffolding, and syncFieldFromDom() strips it back out again. */
+  function hasRenderedContentAfter(cellEl, node) {
+    var r = document.createRange();
+    r.setStartAfter(node);
+    r.setEnd(cellEl, cellEl.childNodes.length);
+    var frag = r.cloneContents();
+    if (frag.querySelector("br, img, span, a, strong, em, u, s, mark")) return true;
+    return frag.textContent.replace(/\u200B/g, "").length > 0;
+  }
+
+  /* A line break inside a cell, the way the browser's own Enter does it.
+     This used to be insertHTML("<br>"), which inserts exactly one <br> — and
+     a <br> at the very END of a block renders no line at all, so a break
+     typed at the end of a scene looked like nothing happened, the next
+     character landed BEFORE the <br> on the same line, and once a trailing
+     <br> was there every later Enter in that cell was a complete no-op.
+     insertLineBreak adds the second, sentinel <br> that gives the new last
+     line a box, and consumes it again as soon as you type. */
+  function insertLineBreak(cellEl) {
+    try {
+      if (document.execCommand("insertLineBreak")) return;
+    } catch (err) {}
+    /* Manual fallback for anything that does not implement the command. */
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    var range = sel.getRangeAt(0);
+    if (!cellEl.contains(range.startContainer)) return;
+    range.deleteContents();
+    var br = document.createElement("br");
+    range.insertNode(br);
+    if (!hasRenderedContentAfter(cellEl, br)) {
+      br.parentNode.insertBefore(document.createElement("br"), br.nextSibling);
+    }
+    range.setStartAfter(br);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   function isSelectionInsideTag(root, tagName) {
     var sel = window.getSelection();
     if (!sel.rangeCount) return false;
