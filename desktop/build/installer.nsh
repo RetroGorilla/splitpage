@@ -170,3 +170,105 @@
   RMDir "$SMPROGRAMS\Splitpage"
   DetailPrint "Removed Splitpage (shared session) shortcut"
 !macroend
+
+; --- Running-app check (replaces electron-builder's default) ---------------
+;
+; CHECK_APP_RUNNING (allowOnlyOneInstallerInstance.nsh) picks one of two
+; implementations, and they do not agree. The tasklist branch matches the app
+; by executable name and excludes the calling process:
+;
+;   taskkill /IM "Splitpage.exe" /FI "PID ne $pid" /FI "USERNAME eq %USERNAME%"
+;
+; The PowerShell branch — the one that runs on any machine with a working
+; Get-CimInstance, i.e. effectively all of them — matches by INSTALL-DIRECTORY
+; PREFIX and drops the PID exclusion entirely:
+;
+;   Get-CimInstance Win32_Process |
+;     ? { $_.Path -and $_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase') } |
+;     % { Stop-Process -Id $_.ProcessId }
+;
+; Two consequences, both of which end with Setup disappearing after the user
+; clicks OK on "Splitpage is running":
+;
+;   1. Nothing excludes the caller, so a Setup run from inside $INSTDIR stops
+;      itself.
+;   2. A path prefix is not a process identity, and FIND_PROCESS uses the same
+;      filter. Anything still running under $INSTDIR keeps the retry loop
+;      finding "the app", so after two passes the loop reaches
+;      "$(appCannotBeClosed)" — a MessageBox whose silent default is IDCANCEL,
+;      and Cancel is a bare `Quit`. The window closes with no explanation and
+;      no install.
+;
+; Matching by executable name avoids both. Splitpage.exe covers the main
+; process and every Electron child (they share the exe), while Setup is
+; SplitpageDesktopSetup-<version>-<arch>.exe and the uninstaller is
+; Un_A.exe/old-uninstaller.exe, so this can never match the process running
+; it. $CmdPath is set by CHECK_APP_RUNNING before it inserts this macro.
+;
+; Kept deliberately close to the original's shape: OK/Cancel first, a polite
+; taskkill, then a forced one, then escalate to the user.
+
+!macro splitpageFindApp _RET
+  nsExec::Exec `"$CmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+  Pop ${_RET}
+!macroend
+
+!macro customCheckAppRunning
+  Push $R0
+  Push $R1
+
+  !insertmacro splitpageFindApp $R0
+  ${if} $R0 == 0
+    ${if} ${isUpdated}
+      ; An update restarts the app itself; give it a moment to go on its own.
+      Sleep 1000
+      Goto spDoStopProcess
+    ${endIf}
+
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK spDoStopProcess
+    Quit
+
+    spDoStopProcess:
+      DetailPrint "$(appClosing)"
+      nsExec::Exec `"$CmdPath" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"`
+      Pop $R0
+      ; Give the close handlers a chance before anything is forced.
+      Sleep 300
+      StrCpy $R1 0
+
+    spLoop:
+      IntOp $R1 $R1 + 1
+
+      !insertmacro splitpageFindApp $R0
+      ${if} $R0 != 0
+        Goto spNotRunning
+      ${endIf}
+
+      Sleep 1000
+      nsExec::Exec `"$CmdPath" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"`
+      Pop $R0
+      Sleep 500
+
+      !insertmacro splitpageFindApp $R0
+      ${if} $R0 != 0
+        Goto spNotRunning
+      ${endIf}
+
+      ; Still there after a forced kill: elevated, or not ours to stop.
+      ${if} $R1 >= 3
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY spRetry
+        Quit
+        spRetry:
+          StrCpy $R1 0
+      ${endIf}
+
+      DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
+      Sleep 1000
+      Goto spLoop
+
+    spNotRunning:
+  ${endIf}
+
+  Pop $R1
+  Pop $R0
+!macroend
