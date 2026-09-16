@@ -413,6 +413,11 @@
        and each write rotates one generation. desktop/drafts.js is the real
        thing and has its own Node test suite; this exists so the browser suite
        can drive 20g-drafts.js without Electron. */
+    /* RECENTS-IPC's list, in memory: what _setRecents() put there, and what
+       recentsOpen() has been asked for. */
+    var recents = [];
+    var recentsOpened = [];
+
     var draftStore = { floor: -Infinity, current: null, previous: null, base: null, writes: 0, failures: 0 };
     var draftLog = [];
     var draftTaken = null;
@@ -485,6 +490,29 @@
          bridge, e.g. that a tab still mid crash-draft-restore reports itself
          dirty (26-desktop-drafts.txt). Nothing in src/js reads this back. */
       setDocumentState: function (s) { this._lastDocState = s; },
+      /* ---- RECENTS-IPC, faked (the New Tab page's third column) ----
+         The real list lives in main's desktop-state.json; this one lives in
+         an array a test fills with _setRecents(). openRecent answers the
+         same {ok, where} / {ok:false, code} shapes main does, and records
+         what it was asked to open so a suite can prove the click reached
+         the bridge rather than the browser's own IndexedDB list. */
+      recentsList: function () { return Promise.resolve(recents.slice()); },
+      recentsOpen: function (id) {
+        recentsOpened.push(id);
+        var entry = null;
+        for (var i = 0; i < recents.length; i++) if (recents[i].id === id) entry = recents[i];
+        if (!entry) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+        if (entry.missing) {
+          recents = recents.filter(function (r) { return r.id !== id; });
+          return Promise.resolve({ ok: false, code: "MISSING", name: entry.name });
+        }
+        return Promise.resolve({ ok: true, where: "this-tab" });
+      },
+      recentsForget: function (id) {
+        recents = id == null ? [] : recents.filter(function (r) { return r.id !== id; });
+        return Promise.resolve({ ok: true });
+      },
+
       getSessionInfo: function () {
         return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
       },
@@ -558,6 +586,10 @@
         if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
       },
       _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
+      /* The recently-edited list a test wants the page to see, and the ids
+         recentsOpen() has been handed. */
+      _setRecents: function (list) { recents = (list || []).slice(); },
+      _recentsOpened: function () { return recentsOpened.slice(); },
       _fireOpenServerDoc: function (payload) { if (openServerDocHandler) openServerDocHandler(payload); },
       /* Stands in for main's duplicate-id verdict (DOC-CLAIMS): a suite can
          hand the page the exact {fromId, toId, otherTitle} message a real

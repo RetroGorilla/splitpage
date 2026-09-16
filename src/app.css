@@ -2802,13 +2802,19 @@
     padding: 24px;
     overflow-y: auto;
   }
-  .newtab-inner { width: 100%; max-width: 620px; }
+  .newtab-inner { width: 100%; max-width: 940px; }
   .newtab-title {
     font-family: var(--font-display); font-size: 18px; letter-spacing: 0.02em;
     margin: 0 0 4px;
   }
   .newtab-sub { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
-  .newtab-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* Three columns when there is a recents list, two when there isn't —
+     auto-fit does that on its own, so the hidden column costs no layout and
+     needs no second rule. Everything drops to one column on a phone. */
+  .newtab-cards {
+    display: grid; gap: 12px; align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
   .newtab-card {
     display: flex; flex-direction: column; gap: 4px;
     text-align: left; padding: 16px 18px;
@@ -2831,3 +2837,56 @@
   @media (max-width: 560px) {
     .newtab-cards { grid-template-columns: 1fr; }
   }
+
+
+  /* The recently-edited column. It reads as a list rather than a third
+     card: the two cards are things to do, and this is a set of documents,
+     so giving it the same weight would make the page look like three equal
+     choices when one of them can be twelve. */
+  .newtab-recents { min-width: 0; }
+  .newtab-recents-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 6px;
+  }
+  .newtab-recents-title {
+    font-family: var(--font-display); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-faint); margin: 0;
+  }
+  .newtab-recents-clear {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font: inherit; font-size: 12px; color: var(--text-dim);
+    text-decoration: underline;
+  }
+  .newtab-recents-clear:hover { color: var(--text); }
+  .newtab-recents-list { list-style: none; margin: 0; padding: 0; }
+  .newtab-recent {
+    display: flex; align-items: stretch; gap: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .newtab-recent:last-child { border-bottom: 0; }
+  .newtab-recent-open {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 1px;
+    text-align: left; padding: 8px 6px;
+    background: none; border: 0; cursor: pointer; color: var(--text);
+    font: inherit;
+  }
+  .newtab-recent-open:hover { background: var(--surface-2); }
+  .newtab-recent-title {
+    font-size: 13.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .newtab-recent-sub {
+    font-size: 11.5px; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* A file that has moved or been deleted is still listed — clicking it is
+     how you find out, and the click removes it — but it does not pretend to
+     be as openable as the rest. */
+  .newtab-recent.is-missing .newtab-recent-title { color: var(--text-faint); text-decoration: line-through; }
+  .newtab-recent-forget {
+    background: none; border: 0; cursor: pointer;
+    color: var(--text-faint); font-size: 15px; line-height: 1;
+    padding: 0 8px;
+  }
+  .newtab-recent-forget:hover { color: var(--danger); }

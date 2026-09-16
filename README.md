@@ -148,15 +148,29 @@ browser:
 
 Every tab you have open comes back the next time you launch Splitpage.
 
-**A new tab starts on a choice, not on a document.** It asks for one of two
+**A new tab starts on a choice, not on a document.** It offers three
 things — **New script**, which is a genuinely empty script (one blank scene,
-no tags, no comments, nothing carried over), or **Open a file**, which is the
-same picker as File ▸ Open a document…. The same page shows in the browser
+no tags, no comments, nothing carried over); **Open a file**, which is the
+same picker as File ▸ Open a document…; and **Recently edited**, the last
+dozen projects you had open, newest first. The same page shows in the browser
 app on a fresh copy nothing has been opened or saved into. It never appears
 over a document: not one you opened, not a shared session's, and not one
 coming back from a crash. If you would rather look at the example script that
 ships with Splitpage, the link at the bottom of the page dismisses it (so does
 Esc).
+
+**The recently-edited list** fills itself as you open and save projects, and
+holds the last 12. Clicking one opens it — in this tab, or, if it is already
+open somewhere, by jumping to the tab that has it. The × beside an entry
+forgets it and **Clear** forgets the lot. A file that has been moved or
+deleted is shown struck through and marked *missing*; clicking it says so and
+takes it off the list.
+
+In the browser app the list is per browser profile, and Chrome and Edge ask
+for permission once per file the first time you reopen it after a restart —
+the click is what grants it. In the desktop app the list is the app's own and
+survives reinstalls of the browser entirely. Either way it never leaves your
+machine: it isn't in the app-data export, and a shared session can't read it.
 
 **Crash recovery.** If the app or your computer goes down with unsaved work
 open, nothing is lost: every tab's unsaved changes are kept on disk as you

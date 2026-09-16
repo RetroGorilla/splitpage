@@ -1,0 +1,111 @@
+# The New Tab page's third column: recently edited projects
+# (src/js/20j-newtab.js, with the browser store in 00-prelude.js and the
+# desktop half faked through __desktopTest).
+#
+# Two stores lie behind one column, so both are driven here. The browser
+# half uses REAL FileSystemFileHandles from the origin-private file system —
+# no picker can run headless, but an OPFS handle is a real handle with a
+# real isSameEntry(), which is what the store's identity rests on. The
+# desktop half is the fake backend's recentsList/recentsOpen/recentsForget,
+# standing in for main's desktop-state.json list.
+#
+# NOT COVERED, and not coverable here: the permission re-grant a real
+# picker-derived handle needs on a new launch (queryPermission 'prompt' ->
+# requestPermission). Headless has nobody to answer the prompt. The code
+# path either side of it is driven below.
+
+open /index.html?newtab=1
+wait document.getElementById('newtab-page').hidden == false
+
+# --- nothing yet: no column at all, rather than an empty box -------------
+eval (async function(){ await window.__newTab.forgetAll(); return true; })()
+wait document.getElementById('newtab-recents').hidden == true
+
+# --- the browser store: a real handle goes on the list -------------------
+eval (async function(){ var root = await navigator.storage.getDirectory(); var h = await root.getFileHandle('recent-one.md', {create: true}); var w = await h.createWritable(); await w.write('# Recent one' + String.fromCharCode(10,10) + 'A line of narration.' + String.fromCharCode(10)); await w.close(); window.__h1 = h; return true; })()
+eval (async function(){ await window.__newTab.remember(window.__h1, {name: 'recent-one.md', title: 'Recent one'}); await window.__newTab.refreshRecents(); return true; })()
+wait document.getElementById('newtab-recents').hidden == false
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 1
+expect document.querySelector('.newtab-recent-title').textContent == Recent one
+expect document.querySelector('.newtab-recent-sub').textContent.indexOf('recent-one.md') === 0
+expect document.querySelector('.newtab-recent-sub').textContent.indexOf('just now') !== -1
+
+# --- the same file twice is one entry, not two (isSameEntry, not the name)
+eval (async function(){ var root = await navigator.storage.getDirectory(); var again = await root.getFileHandle('recent-one.md'); await window.__newTab.remember(again, {name: 'recent-one.md', title: 'Recent one, retitled'}); await window.__newTab.refreshRecents(); return true; })()
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 1
+expect document.querySelector('.newtab-recent-title').textContent == Recent one, retitled
+
+# --- a second file, newest first ----------------------------------------
+eval (async function(){ var root = await navigator.storage.getDirectory(); var h = await root.getFileHandle('recent-two.md', {create: true}); var w = await h.createWritable(); await w.write('# Recent two' + String.fromCharCode(10,10) + 'Another line.' + String.fromCharCode(10)); await w.close(); window.__h2 = h; await window.__newTab.remember(h, {name: 'recent-two.md', title: 'Recent two'}); await window.__newTab.refreshRecents(); return true; })()
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
+expect document.querySelectorAll('.newtab-recent-title')[0].textContent == Recent two
+
+# --- the cap: the oldest entries fall off the end ------------------------
+eval (async function(){ var root = await navigator.storage.getDirectory(); for (var i = 0; i < 13; i++) { var h = await root.getFileHandle('cap-' + i + '.md', {create: true}); var w = await h.createWritable(); await w.write('# Cap ' + i); await w.close(); await window.__newTab.remember(h, {name: 'cap-' + i + '.md', title: 'Cap ' + i}); } await window.__newTab.refreshRecents(); return true; })()
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 12
+expect document.querySelectorAll('.newtab-recent-title')[0].textContent == Cap 12
+
+# --- forgetting one entry, and then the lot -----------------------------
+eval (async function(){ window.__before = (await window.__newTab.recents()).length; return true; })()
+click #newtab-recents-list .newtab-recent .newtab-recent-forget
+wait document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 11
+eval (async function(){ window.__after = (await window.__newTab.recents()).length; return true; })()
+expect window.__after === window.__before - 1
+click [data-newtab-action="forget-all"]
+wait document.getElementById('newtab-recents').hidden == true
+eval (async function(){ window.__cleared = (await window.__newTab.recents()).length; return true; })()
+expect window.__cleared == 0
+
+# --- clicking an entry opens that file into this tab ---------------------
+eval (async function(){ await window.__newTab.remember(window.__h2, {name: 'recent-two.md', title: 'Recent two'}); await window.__newTab.refreshRecents(); return true; })()
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 1
+click .newtab-recent-open
+wait document.getElementById('file-chip-name').textContent.indexOf('recent-two.md') !== -1
+# opening a document is what the page is for, so the page goes with it
+expect document.getElementById('newtab-page').hidden == true
+expect document.getElementById('rows').textContent.indexOf('Another line.') !== -1
+
+# --- an entry whose file has gone is dropped, with a word about it -------
+eval (async function(){ var root = await navigator.storage.getDirectory(); var h = await root.getFileHandle('doomed.md', {create: true}); var w = await h.createWritable(); await w.write('# Doomed'); await w.close(); await window.__newTab.remember(h, {name: 'doomed.md', title: 'Doomed'}); await root.removeEntry('doomed.md'); window.__newTab.open(); await window.__newTab.refreshRecents(); return true; })()
+eval (function(){ var t = document.querySelectorAll('.newtab-recent-title'); for (var i = 0; i < t.length; i++) if (t[i].textContent === 'Doomed') { t[i].closest('.newtab-recent-open').click(); return true; } return false; })()
+wait document.getElementById('toast-host').textContent.indexOf('moved or been deleted') !== -1
+# the entry going from the list is the last thing that click does, so this
+# is also how the next section knows the click has finished — a click that
+# lands while another is still in flight is ignored on purpose
+wait document.getElementById('newtab-recents-list').textContent.indexOf('Doomed') === -1
+eval (async function(){ window.__names = (await window.__newTab.recents()).map(function(r){ return r.title; }).join(','); return true; })()
+expect window.__names.indexOf('Doomed') === -1
+
+# --- the desktop half: main's own list, over the bridge ------------------
+# The same column, fed by RECENTS-IPC instead of IndexedDB. The fake
+# backend stands in for desktop-state.json.
+eval (function(){ var b = window.__desktopTest.makeFakeBackend(); window.__fake = b; window.__desktopTest.setBackend(b); b._setRecents([{id: 'aa11', name: 'shoot-day-2.md', title: 'Shoot day 2', at: Date.now() - 120000, missing: false}, {id: 'bb22', name: 'gone.splitpage', title: 'Gone', at: Date.now() - 86400000, missing: true}]); return true; })()
+eval (async function(){ window.__newTab.open(); await window.__newTab.refreshRecents(); return true; })()
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
+expect document.querySelectorAll('.newtab-recent-title')[0].textContent == Shoot day 2
+expect document.querySelectorAll('.newtab-recent-sub')[0].textContent.indexOf('2 min ago') !== -1
+# the entries carry no path — only an opaque id, a basename and a title
+eval (async function(){ window.__keys = Object.keys((await window.__newTab.recents())[0]).sort().join(','); return true; })()
+expect window.__keys == at,id,missing,name,title
+# a missing file is listed, marked, and not pretending to be openable
+expect document.querySelectorAll('.newtab-recent')[1].className.indexOf('is-missing') !== -1
+
+# clicking one hands its id to the bridge, and nothing else
+jsclick .newtab-recent-open
+# a bare word is not a JS literal, and `wait` evaluates its argument as one
+# expression (unlike `expect`, which compares against a literal) — hence the
+# quotes
+wait window.__fake._recentsOpened().join(',') === 'aa11'
+
+# a missing one says so and comes off the list main keeps
+eval (function(){ document.querySelectorAll('.newtab-recent-open')[1].click(); return true; })()
+wait document.getElementById('toast-host').textContent.indexOf('moved or been deleted') !== -1
+wait document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 1
+
+# Clear goes to the bridge too, never to the browser's own store
+eval document.getElementById('newtab-page').hidden == false
+click [data-newtab-action="forget-all"]
+wait document.getElementById('newtab-recents').hidden == true
+eval window.__desktopTest.restoreBackend()
+
+quit

@@ -858,7 +858,21 @@
         <strong>Open a file</strong>
         <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
       </button>
+
+      <!-- The third column: recently edited projects. Hidden until there is
+           something in it — on a first run there is nothing to have been
+           recent, and the two cards then share the width. Filled by
+           20j-newtab.js from IndexedDB (browser) or from main's own list
+           over RECENTS-IPC (desktop). -->
+      <section class="newtab-recents" id="newtab-recents" hidden>
+        <div class="newtab-recents-head">
+          <h3 class="newtab-recents-title">Recently edited</h3>
+          <button type="button" class="newtab-recents-clear" data-newtab-action="forget-all">Clear</button>
+        </div>
+        <ul class="newtab-recents-list" id="newtab-recents-list"></ul>
+      </section>
     </div>
+
     <p class="newtab-hint">
       <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
       — or press Esc.

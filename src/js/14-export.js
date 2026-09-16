@@ -196,6 +196,12 @@
         var homeAtWrite = docFileHandle.handle === targetHandle ? docFileHandle : null;
         if (stillOurs) baseState = published;
         if (retarget && docFileHandle === retarget) rememberLastFileHandle(targetHandle);
+        /* "Recently edited", so every successful write refreshes the entry —
+           including a Save As copy, which is a project on disk the moment it
+           is written. rememberRecentFile throttles itself so autosave does
+           not turn this into one IndexedDB transaction per pause in the
+           typing (00-prelude.js). */
+        rememberRecentFile(targetHandle, { name: targetHandle.name, title: state.title });
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         var docIdAfterSave = state.docId;
         try {

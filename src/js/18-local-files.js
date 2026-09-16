@@ -327,6 +327,10 @@
       state.rows.length + " row" + (state.rows.length === 1 ? "" : "s") + commentNote, "ok");
 
     if (handle) rememberLastFileHandle(handle);
+    /* The New Tab page's third column (00-prelude.js's recents store). A
+       project you just opened is the most recent thing you were in, so it
+       goes on the list here rather than waiting for the first save. */
+    if (handle) rememberRecentFile(handle, { name: file.name, title: state.title });
     return true;
   }
 

@@ -65,12 +65,23 @@
      nicety: every call here is wrapped so a browser without IndexedDB, or one
      that refuses it (some file:// contexts), just silently gets none of this. */
   var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
+  /* The recently-edited list lives in the same database, one store along
+     (see "the recents list" below). Version 2 is what adds it; a profile
+     that already has version 1 keeps its remembered handle and simply gains
+     the new store, which is why the upgrade below creates each store only
+     if it is missing rather than assuming a fresh database. */
+  var RECENTS_STORE = "recents";
+  var HANDLE_DB_VERSION = 2;
 
   function openHandleDb() {
     return new Promise(function (resolve, reject) {
       if (!("indexedDB" in window)) { reject(new Error("no-indexeddb")); return; }
-      var req = indexedDB.open(LAST_FILE_DB, 1);
-      req.onupgradeneeded = function () { req.result.createObjectStore(LAST_FILE_STORE); };
+      var req = indexedDB.open(LAST_FILE_DB, HANDLE_DB_VERSION);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(LAST_FILE_STORE)) db.createObjectStore(LAST_FILE_STORE);
+        if (!db.objectStoreNames.contains(RECENTS_STORE)) db.createObjectStore(RECENTS_STORE, { keyPath: "key" });
+      };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
     });
@@ -108,6 +119,114 @@
       });
     } catch (e) { return null; }
   }
+  /* ---- the recently-edited list (browser half) ----
+
+     What the New Tab page's third column reads (20j-newtab.js). Same
+     database as the single remembered handle above and the same bargain: a
+     structured-cloned FileSystemFileHandle is the only thing that can
+     reopen a file without a picker, so the list holds handles, and every
+     call is wrapped so a browser without IndexedDB just gets an empty list.
+
+     DESKTOP does not come here at all. A desktop file's real identity is a
+     path in the main process's registry that this page is never handed
+     (invariant #34), so an entry written here could name a file but never
+     reopen one; desktop keeps its own list in desktop-state.json and hands
+     it over as opaque ids (RECENTS-IPC, desktop/main.js).
+
+     PRIVACY: this is a record of what someone has been working on, so it
+     stays out of the app-data export (§5 #48) and out of anything a shared
+     session can read. Nothing in 20h-appdata.js walks this store, and the
+     only way to it is the four functions below.
+
+     Entries are {key, handle, name, title, at}. `key` is a random id rather
+     than the file's name: two projects in different folders can share a
+     name, and a handle has no path to key on. Identity is the handle's own
+     isSameEntry(), which is why recording is a read-compare-write rather
+     than a put. */
+  var RECENTS_CAP = 12;
+  /* Autosave writes every pause in the typing. Rewriting the list on each
+     one would be an IndexedDB transaction per pause to change a timestamp
+     nothing displays to the second, so an entry refreshes at most this
+     often (a title change always writes). */
+  var RECENTS_REFRESH_MS = 60000;
+
+  function recentsTx(mode) {
+    return openHandleDb().then(function (db) {
+      return db.transaction(RECENTS_STORE, mode).objectStore(RECENTS_STORE);
+    });
+  }
+
+  function recentsRequest(req) {
+    return new Promise(function (resolve, reject) {
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  /* → [{key, handle, name, title, at}], newest first, capped. */
+  async function listRecentFiles() {
+    if (DESKTOP) return [];
+    try {
+      var store = await recentsTx("readonly");
+      var all = await recentsRequest(store.getAll());
+      if (!Array.isArray(all)) return [];
+      return all
+        .filter(function (e) { return e && e.handle && e.key; })
+        .sort(function (a, b) { return (b.at || 0) - (a.at || 0); })
+        .slice(0, RECENTS_CAP);
+    } catch (e) { return []; }
+  }
+
+  /* Records (or refreshes) one file. `info` carries what the column shows:
+     {name, title}. Never throws — a list that failed to record is a nicety
+     lost, not a save lost, and every caller is on a save or open path that
+     must not fail because of it. */
+  async function rememberRecentFile(handle, info) {
+    if (DESKTOP || !handle) return;
+    info = info || {};
+    try {
+      var existing = await listRecentFiles();
+      var now = Date.now();
+      var match = null;
+      for (var i = 0; i < existing.length; i++) {
+        var same = false;
+        try { same = await existing[i].handle.isSameEntry(handle); } catch (e) { same = false; }
+        if (same) { match = existing[i]; break; }
+      }
+      var title = typeof info.title === "string" ? info.title.slice(0, 300) : "";
+      var name = (info.name || handle.name || "").slice(0, 300);
+      if (match && match.title === title && now - (match.at || 0) < RECENTS_REFRESH_MS) return;
+      var entry = {
+        key: match ? match.key : "rc" + Math.random().toString(36).slice(2, 9) + now.toString(36),
+        handle: handle,
+        name: name,
+        title: title,
+        at: now
+      };
+      var store = await recentsTx("readwrite");
+      store.put(entry);
+      /* The cap is applied on write rather than on read so the store cannot
+         grow without bound in a profile nobody ever opens the page in. */
+      var keep = existing.filter(function (e) { return e.key !== entry.key; });
+      for (var j = RECENTS_CAP - 1; j < keep.length; j++) store.delete(keep[j].key);
+    } catch (e) { /* remembering is a nicety, not a requirement */ }
+  }
+
+  async function forgetRecentFile(key) {
+    if (!key) return;
+    try {
+      var store = await recentsTx("readwrite");
+      store.delete(key);
+    } catch (e) {}
+  }
+
+  async function clearRecentFiles() {
+    try {
+      var store = await recentsTx("readwrite");
+      store.clear();
+    } catch (e) {}
+  }
+
   var pendingImageRowId = null;
   var savedRange = null;
   var savedRangeCell = null;

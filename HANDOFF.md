@@ -637,14 +637,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
-| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices |
+| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the recently-edited column (both stores) |
 | `21-events.js` | all event wiring, `init()`, closes the IIFE |
 
 **Desktop files** (optional; the web app runs without them):
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, doc-id claim table, history storage + fsck + planner twin, draft headers, file dialogs, server launcher, native menus, test mode |
+| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, doc-id claim table, history storage + fsck + planner twin, draft headers, recently-edited list (RECENTS-LIST/RECENTS-IPC, in desktop-state.json), file dialogs, server launcher, native menus, test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |

@@ -2836,13 +2836,19 @@
     padding: 24px;
     overflow-y: auto;
   }
-  .newtab-inner { width: 100%; max-width: 620px; }
+  .newtab-inner { width: 100%; max-width: 940px; }
   .newtab-title {
     font-family: var(--font-display); font-size: 18px; letter-spacing: 0.02em;
     margin: 0 0 4px;
   }
   .newtab-sub { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
-  .newtab-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* Three columns when there is a recents list, two when there isn't —
+     auto-fit does that on its own, so the hidden column costs no layout and
+     needs no second rule. Everything drops to one column on a phone. */
+  .newtab-cards {
+    display: grid; gap: 12px; align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
   .newtab-card {
     display: flex; flex-direction: column; gap: 4px;
     text-align: left; padding: 16px 18px;
@@ -2865,6 +2871,59 @@
   @media (max-width: 560px) {
     .newtab-cards { grid-template-columns: 1fr; }
   }
+
+
+  /* The recently-edited column. It reads as a list rather than a third
+     card: the two cards are things to do, and this is a set of documents,
+     so giving it the same weight would make the page look like three equal
+     choices when one of them can be twelve. */
+  .newtab-recents { min-width: 0; }
+  .newtab-recents-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 6px;
+  }
+  .newtab-recents-title {
+    font-family: var(--font-display); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-faint); margin: 0;
+  }
+  .newtab-recents-clear {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font: inherit; font-size: 12px; color: var(--text-dim);
+    text-decoration: underline;
+  }
+  .newtab-recents-clear:hover { color: var(--text); }
+  .newtab-recents-list { list-style: none; margin: 0; padding: 0; }
+  .newtab-recent {
+    display: flex; align-items: stretch; gap: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .newtab-recent:last-child { border-bottom: 0; }
+  .newtab-recent-open {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 1px;
+    text-align: left; padding: 8px 6px;
+    background: none; border: 0; cursor: pointer; color: var(--text);
+    font: inherit;
+  }
+  .newtab-recent-open:hover { background: var(--surface-2); }
+  .newtab-recent-title {
+    font-size: 13.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .newtab-recent-sub {
+    font-size: 11.5px; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* A file that has moved or been deleted is still listed — clicking it is
+     how you find out, and the click removes it — but it does not pretend to
+     be as openable as the rest. */
+  .newtab-recent.is-missing .newtab-recent-title { color: var(--text-faint); text-decoration: line-through; }
+  .newtab-recent-forget {
+    background: none; border: 0; cursor: pointer;
+    color: var(--text-faint); font-size: 15px; line-height: 1;
+    padding: 0 8px;
+  }
+  .newtab-recent-forget:hover { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -3570,7 +3629,9 @@
 <p>The desktop app opens documents in tabs across the top of the window, like a browser:</p>
 <ul><li><strong>Ctrl+T</strong> opens a new tab.</li><li><strong>Ctrl+W</strong>, or a middle-click on a tab, closes it — if it has unsaved changes, Splitpage asks first.</li><li><strong>Ctrl+Tab</strong> / <strong>Ctrl+Shift+Tab</strong> step to the next or previous tab.</li><li>Drag a tab out of the window to give it its own window, and drag it into another Splitpage window to bring it back in. Drag a tab past another one to reorder them.</li></ul>
 <p>Every tab you have open comes back the next time you launch Splitpage.</p>
-<p><strong>A new tab starts on a choice, not on a document.</strong> It asks for one of two things — <strong>New script</strong>, which is a genuinely empty script (one blank scene, no tags, no comments, nothing carried over), or <strong>Open a file</strong>, which is the same picker as File ▸ Open a document…. The same page shows in the browser app on a fresh copy nothing has been opened or saved into. It never appears over a document: not one you opened, not a shared session's, and not one coming back from a crash. If you would rather look at the example script that ships with Splitpage, the link at the bottom of the page dismisses it (so does Esc).</p>
+<p><strong>A new tab starts on a choice, not on a document.</strong> It offers three things — <strong>New script</strong>, which is a genuinely empty script (one blank scene, no tags, no comments, nothing carried over); <strong>Open a file</strong>, which is the same picker as File ▸ Open a document…; and <strong>Recently edited</strong>, the last dozen projects you had open, newest first. The same page shows in the browser app on a fresh copy nothing has been opened or saved into. It never appears over a document: not one you opened, not a shared session's, and not one coming back from a crash. If you would rather look at the example script that ships with Splitpage, the link at the bottom of the page dismisses it (so does Esc).</p>
+<p><strong>The recently-edited list</strong> fills itself as you open and save projects, and holds the last 12. Clicking one opens it — in this tab, or, if it is already open somewhere, by jumping to the tab that has it. The × beside an entry forgets it and <strong>Clear</strong> forgets the lot. A file that has been moved or deleted is shown struck through and marked <em>missing</em>; clicking it says so and takes it off the list.</p>
+<p>In the browser app the list is per browser profile, and Chrome and Edge ask for permission once per file the first time you reopen it after a restart — the click is what grants it. In the desktop app the list is the app's own and survives reinstalls of the browser entirely. Either way it never leaves your machine: it isn't in the app-data export, and a shared session can't read it.</p>
 <p><strong>Crash recovery.</strong> If the app or your computer goes down with unsaved work open, nothing is lost: every tab's unsaved changes are kept on disk as you type, and Splitpage offers them back, tab by tab, the next time you launch it. That includes a document from a shared session whose server you can no longer reach — it comes back as an unsaved local copy, with a note naming the server document it came from.</p>
 <p><strong>Closing with unsaved work.</strong> Closing a window or quitting the app while any of its tabs have unsaved changes asks once, in a single dialog listing every tab that would lose work, with <strong>Review</strong>, <strong>Close without saving</strong>, and <strong>Cancel</strong>.</p>
 <p><strong>Duplicate files.</strong> If you open a copy of a file that's already open in another tab — for example, the same <code>.md</code> file synced down onto two machines — Splitpage notices and gives the copy its own version history, separate from the original's. Nothing is written to either file until you save.</p>
@@ -3862,7 +3923,21 @@ node update.mjs           # download and verify it</code></pre>
         <strong>Open a file</strong>
         <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
       </button>
+
+      <!-- The third column: recently edited projects. Hidden until there is
+           something in it — on a first run there is nothing to have been
+           recent, and the two cards then share the width. Filled by
+           20j-newtab.js from IndexedDB (browser) or from main's own list
+           over RECENTS-IPC (desktop). -->
+      <section class="newtab-recents" id="newtab-recents" hidden>
+        <div class="newtab-recents-head">
+          <h3 class="newtab-recents-title">Recently edited</h3>
+          <button type="button" class="newtab-recents-clear" data-newtab-action="forget-all">Clear</button>
+        </div>
+        <ul class="newtab-recents-list" id="newtab-recents-list"></ul>
+      </section>
     </div>
+
     <p class="newtab-hint">
       <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
       — or press Esc.
@@ -4053,12 +4128,23 @@ node update.mjs           # download and verify it</code></pre>
      nicety: every call here is wrapped so a browser without IndexedDB, or one
      that refuses it (some file:// contexts), just silently gets none of this. */
   var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
+  /* The recently-edited list lives in the same database, one store along
+     (see "the recents list" below). Version 2 is what adds it; a profile
+     that already has version 1 keeps its remembered handle and simply gains
+     the new store, which is why the upgrade below creates each store only
+     if it is missing rather than assuming a fresh database. */
+  var RECENTS_STORE = "recents";
+  var HANDLE_DB_VERSION = 2;
 
   function openHandleDb() {
     return new Promise(function (resolve, reject) {
       if (!("indexedDB" in window)) { reject(new Error("no-indexeddb")); return; }
-      var req = indexedDB.open(LAST_FILE_DB, 1);
-      req.onupgradeneeded = function () { req.result.createObjectStore(LAST_FILE_STORE); };
+      var req = indexedDB.open(LAST_FILE_DB, HANDLE_DB_VERSION);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(LAST_FILE_STORE)) db.createObjectStore(LAST_FILE_STORE);
+        if (!db.objectStoreNames.contains(RECENTS_STORE)) db.createObjectStore(RECENTS_STORE, { keyPath: "key" });
+      };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
     });
@@ -4096,6 +4182,114 @@ node update.mjs           # download and verify it</code></pre>
       });
     } catch (e) { return null; }
   }
+  /* ---- the recently-edited list (browser half) ----
+
+     What the New Tab page's third column reads (20j-newtab.js). Same
+     database as the single remembered handle above and the same bargain: a
+     structured-cloned FileSystemFileHandle is the only thing that can
+     reopen a file without a picker, so the list holds handles, and every
+     call is wrapped so a browser without IndexedDB just gets an empty list.
+
+     DESKTOP does not come here at all. A desktop file's real identity is a
+     path in the main process's registry that this page is never handed
+     (invariant #34), so an entry written here could name a file but never
+     reopen one; desktop keeps its own list in desktop-state.json and hands
+     it over as opaque ids (RECENTS-IPC, desktop/main.js).
+
+     PRIVACY: this is a record of what someone has been working on, so it
+     stays out of the app-data export (§5 #48) and out of anything a shared
+     session can read. Nothing in 20h-appdata.js walks this store, and the
+     only way to it is the four functions below.
+
+     Entries are {key, handle, name, title, at}. `key` is a random id rather
+     than the file's name: two projects in different folders can share a
+     name, and a handle has no path to key on. Identity is the handle's own
+     isSameEntry(), which is why recording is a read-compare-write rather
+     than a put. */
+  var RECENTS_CAP = 12;
+  /* Autosave writes every pause in the typing. Rewriting the list on each
+     one would be an IndexedDB transaction per pause to change a timestamp
+     nothing displays to the second, so an entry refreshes at most this
+     often (a title change always writes). */
+  var RECENTS_REFRESH_MS = 60000;
+
+  function recentsTx(mode) {
+    return openHandleDb().then(function (db) {
+      return db.transaction(RECENTS_STORE, mode).objectStore(RECENTS_STORE);
+    });
+  }
+
+  function recentsRequest(req) {
+    return new Promise(function (resolve, reject) {
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+
+  /* → [{key, handle, name, title, at}], newest first, capped. */
+  async function listRecentFiles() {
+    if (DESKTOP) return [];
+    try {
+      var store = await recentsTx("readonly");
+      var all = await recentsRequest(store.getAll());
+      if (!Array.isArray(all)) return [];
+      return all
+        .filter(function (e) { return e && e.handle && e.key; })
+        .sort(function (a, b) { return (b.at || 0) - (a.at || 0); })
+        .slice(0, RECENTS_CAP);
+    } catch (e) { return []; }
+  }
+
+  /* Records (or refreshes) one file. `info` carries what the column shows:
+     {name, title}. Never throws — a list that failed to record is a nicety
+     lost, not a save lost, and every caller is on a save or open path that
+     must not fail because of it. */
+  async function rememberRecentFile(handle, info) {
+    if (DESKTOP || !handle) return;
+    info = info || {};
+    try {
+      var existing = await listRecentFiles();
+      var now = Date.now();
+      var match = null;
+      for (var i = 0; i < existing.length; i++) {
+        var same = false;
+        try { same = await existing[i].handle.isSameEntry(handle); } catch (e) { same = false; }
+        if (same) { match = existing[i]; break; }
+      }
+      var title = typeof info.title === "string" ? info.title.slice(0, 300) : "";
+      var name = (info.name || handle.name || "").slice(0, 300);
+      if (match && match.title === title && now - (match.at || 0) < RECENTS_REFRESH_MS) return;
+      var entry = {
+        key: match ? match.key : "rc" + Math.random().toString(36).slice(2, 9) + now.toString(36),
+        handle: handle,
+        name: name,
+        title: title,
+        at: now
+      };
+      var store = await recentsTx("readwrite");
+      store.put(entry);
+      /* The cap is applied on write rather than on read so the store cannot
+         grow without bound in a profile nobody ever opens the page in. */
+      var keep = existing.filter(function (e) { return e.key !== entry.key; });
+      for (var j = RECENTS_CAP - 1; j < keep.length; j++) store.delete(keep[j].key);
+    } catch (e) { /* remembering is a nicety, not a requirement */ }
+  }
+
+  async function forgetRecentFile(key) {
+    if (!key) return;
+    try {
+      var store = await recentsTx("readwrite");
+      store.delete(key);
+    } catch (e) {}
+  }
+
+  async function clearRecentFiles() {
+    try {
+      var store = await recentsTx("readwrite");
+      store.clear();
+    } catch (e) {}
+  }
+
   var pendingImageRowId = null;
   var savedRange = null;
   var savedRangeCell = null;
@@ -15147,6 +15341,12 @@ node update.mjs           # download and verify it</code></pre>
         var homeAtWrite = docFileHandle.handle === targetHandle ? docFileHandle : null;
         if (stillOurs) baseState = published;
         if (retarget && docFileHandle === retarget) rememberLastFileHandle(targetHandle);
+        /* "Recently edited", so every successful write refreshes the entry —
+           including a Save As copy, which is a project on disk the moment it
+           is written. rememberRecentFile throttles itself so autosave does
+           not turn this into one IndexedDB transaction per pause in the
+           typing (00-prelude.js). */
+        rememberRecentFile(targetHandle, { name: targetHandle.name, title: state.title });
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         var docIdAfterSave = state.docId;
         try {
@@ -17456,6 +17656,10 @@ node update.mjs           # download and verify it</code></pre>
       state.rows.length + " row" + (state.rows.length === 1 ? "" : "s") + commentNote, "ok");
 
     if (handle) rememberLastFileHandle(handle);
+    /* The New Tab page's third column (00-prelude.js's recents store). A
+       project you just opened is the most recent thing you were in, so it
+       goes on the list here rather than waiting for the first save. */
+    if (handle) rememberRecentFile(handle, { name: file.name, title: state.title });
     return true;
   }
 
@@ -21592,6 +21796,11 @@ node update.mjs           # download and verify it</code></pre>
        and each write rotates one generation. desktop/drafts.js is the real
        thing and has its own Node test suite; this exists so the browser suite
        can drive 20g-drafts.js without Electron. */
+    /* RECENTS-IPC's list, in memory: what _setRecents() put there, and what
+       recentsOpen() has been asked for. */
+    var recents = [];
+    var recentsOpened = [];
+
     var draftStore = { floor: -Infinity, current: null, previous: null, base: null, writes: 0, failures: 0 };
     var draftLog = [];
     var draftTaken = null;
@@ -21664,6 +21873,29 @@ node update.mjs           # download and verify it</code></pre>
          bridge, e.g. that a tab still mid crash-draft-restore reports itself
          dirty (26-desktop-drafts.txt). Nothing in src/js reads this back. */
       setDocumentState: function (s) { this._lastDocState = s; },
+      /* ---- RECENTS-IPC, faked (the New Tab page's third column) ----
+         The real list lives in main's desktop-state.json; this one lives in
+         an array a test fills with _setRecents(). openRecent answers the
+         same {ok, where} / {ok:false, code} shapes main does, and records
+         what it was asked to open so a suite can prove the click reached
+         the bridge rather than the browser's own IndexedDB list. */
+      recentsList: function () { return Promise.resolve(recents.slice()); },
+      recentsOpen: function (id) {
+        recentsOpened.push(id);
+        var entry = null;
+        for (var i = 0; i < recents.length; i++) if (recents[i].id === id) entry = recents[i];
+        if (!entry) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+        if (entry.missing) {
+          recents = recents.filter(function (r) { return r.id !== id; });
+          return Promise.resolve({ ok: false, code: "MISSING", name: entry.name });
+        }
+        return Promise.resolve({ ok: true, where: "this-tab" });
+      },
+      recentsForget: function (id) {
+        recents = id == null ? [] : recents.filter(function (r) { return r.id !== id; });
+        return Promise.resolve({ ok: true });
+      },
+
       getSessionInfo: function () {
         return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
       },
@@ -21737,6 +21969,10 @@ node update.mjs           # download and verify it</code></pre>
         if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
       },
       _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
+      /* The recently-edited list a test wants the page to see, and the ids
+         recentsOpen() has been handed. */
+      _setRecents: function (list) { recents = (list || []).slice(); },
+      _recentsOpened: function () { return recentsOpened.slice(); },
       _fireOpenServerDoc: function (payload) { if (openServerDocHandler) openServerDocHandler(payload); },
       /* Stands in for main's duplicate-id verdict (DOC-CLAIMS): a suite can
          hand the page the exact {fromId, toId, otherTitle} message a real
@@ -23469,11 +23705,15 @@ node update.mjs           # download and verify it</code></pre>
      genuinely empty one — one blank scene, no tags, no comments, no
      b-roll, a fresh identity — not a filtered copy of the seed.
 
-     Recently-opened documents as a third column (the issue's open
-     question) are deliberately not here: nothing in the app keeps a recent
-     list today — the browser remembers one handle and the desktop main
-     process tracks open tabs, neither of which is a recents list — so that
-     column is a feature of its own rather than a detail of this page.
+     The third column is the recently-edited list. Two stores lie behind it,
+     because the two builds remember a file in two incompatible ways: the
+     browser keeps structured-cloned FileSystemFileHandles in its own
+     IndexedDB store (00-prelude.js), and desktop keeps paths in
+     desktop-state.json and hands this page opaque ids (RECENTS-IPC,
+     desktop/main.js), because a path is main's to hold and never this
+     page's (invariant #34). recentEntries() below is the one place that
+     difference lives; everything past it works on {id, name, title, at,
+     missing} whichever build it is running in.
 
      Like 20b/20c/20e this fragment wires itself directly rather than
      through init(): #newtab-page is in the DOM by the time this classic
@@ -23497,9 +23737,167 @@ node update.mjs           # download and verify it</code></pre>
     if (!el || newTabPageShown) return;
     newTabPageShown = true;
     el.hidden = false;
+    refreshRecents();
     document.addEventListener("keydown", onNewTabKeydown, true);
     var first = el.querySelector('[data-newtab-action="new"]');
     if (first) first.focus();
+  }
+
+  /* ---- the recently-edited column ----
+
+     Nothing here is cached: the page reads the list each time it opens, so
+     a tab that has been sitting on it for an hour is not offering a list
+     from an hour ago. */
+  var recentHandles = {};   /* browser only: id -> FileSystemFileHandle */
+  var recentsBusy = false;
+
+  function desktopRecents() {
+    return DESKTOP && typeof DESKTOP.recentsList === "function" ? DESKTOP : null;
+  }
+
+  async function recentEntries() {
+    var bridge = desktopRecents();
+    if (bridge) {
+      try {
+        var list = await bridge.recentsList();
+        return (Array.isArray(list) ? list : []).filter(function (e) { return e && e.id; });
+      } catch (e) { return []; }
+    }
+    recentHandles = {};
+    var rows = await listRecentFiles();
+    return rows.map(function (r) {
+      recentHandles[r.key] = r.handle;
+      return { id: r.key, name: r.name, title: r.title, at: r.at, missing: false };
+    });
+  }
+
+  /* "3 minutes ago" is more use than a timestamp on a list this short, and
+     the exact minute of an edit is not what anyone is scanning for. */
+  function recentWhen(at) {
+    var ms = Date.now() - (at || 0);
+    if (!at || ms < 0) return "";
+    var mins = Math.floor(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + " min ago";
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + " hour" + (hours === 1 ? "" : "s") + " ago";
+    var days = Math.floor(hours / 24);
+    if (days < 30) return days + " day" + (days === 1 ? "" : "s") + " ago";
+    return "a while ago";
+  }
+
+  function renderRecents(entries) {
+    var col = document.getElementById("newtab-recents");
+    var list = document.getElementById("newtab-recents-list");
+    if (!col || !list) return;
+    /* An empty list is no column at all rather than an empty box captioned
+       "Recent" — on a first run there is nothing to have been recent. */
+    if (!entries.length) { col.hidden = true; return; }
+    col.hidden = false;
+    var html = "";
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var label = e.title || e.name || "Untitled";
+      var when = recentWhen(e.at);
+      html +=
+        '<li class="newtab-recent' + (e.missing ? " is-missing" : "") + '">' +
+          '<button type="button" class="newtab-recent-open" data-newtab-action="recent" data-recent-id="' +
+            escapeHtml(e.id) + '"' + (e.missing ? ' title="This file has moved or been deleted"' : "") + '>' +
+            '<span class="newtab-recent-title">' + escapeHtml(label) + '</span>' +
+            '<span class="newtab-recent-sub">' + escapeHtml(e.name || "") +
+              (when ? " · " + escapeHtml(when) : "") +
+              (e.missing ? " · missing" : "") + '</span>' +
+          '</button>' +
+          '<button type="button" class="newtab-recent-forget" data-newtab-action="forget" data-recent-id="' +
+            escapeHtml(e.id) + '" title="Forget ' + escapeHtml(e.name || label) +
+            '" aria-label="Forget ' + escapeHtml(e.name || label) + '">×</button>' +
+        '</li>';
+    }
+    list.innerHTML = html;
+  }
+
+  async function refreshRecents() {
+    var entries = [];
+    try { entries = await recentEntries(); } catch (e) { entries = []; }
+    renderRecents(entries);
+  }
+
+  /* One click, whichever build. Desktop hands the id back to main, which
+     routes it exactly as it routes a file the OS handed it — so a document
+     already open in another tab activates that tab instead of opening a
+     second copy. The browser reopens its own handle, which may need the
+     permission prompt this click is allowed to raise. */
+  async function openRecent(id) {
+    if (recentsBusy) return;
+    recentsBusy = true;
+    try {
+      var bridge = desktopRecents();
+      if (bridge) {
+        var r = null;
+        try { r = await bridge.recentsOpen(id); } catch (e) { r = null; }
+        if (!r || !r.ok) {
+          showToast(r && r.code === "MISSING"
+            ? ((r.name || "That file") + " has moved or been deleted.")
+            : "Could not open that document.", "warn");
+          await refreshRecents();
+          return;
+        }
+        /* main answers where it landed; 'this-tab' arrives back here as an
+           open-file event, which closes the page on its own
+           (adoptProjectState). Anything else means another tab has it. */
+        if (r.where !== "this-tab") closeNewTabPage();
+        return;
+      }
+      var handle = recentHandles[id];
+      if (!handle) { await refreshRecents(); return; }
+      var perm = "denied";
+      try {
+        /* A handle with no permission API needs no permission — that is a
+           handle this page can already read (an origin-private one, or the
+           desktop shim's, whose queryPermission is a constant "granted"
+           anyway). Only a picker-derived handle has a grant that can lapse
+           between launches. */
+        if (typeof handle.queryPermission !== "function") perm = "granted";
+        else {
+          perm = await handle.queryPermission({ mode: "readwrite" });
+          /* The click is the user gesture this needs — the same re-grant the
+             resume banner asks for (18-local-files.js). */
+          if (perm !== "granted" && typeof handle.requestPermission === "function") {
+            perm = await handle.requestPermission({ mode: "readwrite" });
+          }
+        }
+      } catch (e) { perm = "denied"; }
+      if (perm !== "granted") {
+        showToast("Splitpage needs permission to reopen that file.", "warn");
+        return;
+      }
+      try {
+        await openProjectFile(await handle.getFile(), handle);
+      } catch (e) {
+        /* Moved, renamed, deleted, or on a drive that is not connected. An
+           entry that cannot be opened is dropped rather than left on the
+           list offering the same failure again. */
+        showToast((handle.name || "That file") + " has moved or been deleted.", "warn");
+        await forgetRecentFile(id);
+        await refreshRecents();
+      }
+    } finally {
+      recentsBusy = false;
+    }
+  }
+
+  async function forgetRecent(id) {
+    var bridge = desktopRecents();
+    if (bridge) { try { await bridge.recentsForget(id); } catch (e) {} }
+    else await forgetRecentFile(id);
+    await refreshRecents();
+  }
+
+  async function forgetAllRecents() {
+    var bridge = desktopRecents();
+    if (bridge) { try { await bridge.recentsForget(null); } catch (e) {} }
+    else await clearRecentFiles();
+    await refreshRecents();
   }
 
   function closeNewTabPage() {
@@ -23577,6 +23975,9 @@ node update.mjs           # download and verify it</code></pre>
       if (action === "new") startBlankScript();
       else if (action === "open") newTabOpenFile();
       else if (action === "dismiss") closeNewTabPage();
+      else if (action === "recent") openRecent(target.getAttribute("data-recent-id"));
+      else if (action === "forget") forgetRecent(target.getAttribute("data-recent-id"));
+      else if (action === "forget-all") forgetAllRecents();
     });
   })();
 
@@ -23634,7 +24035,14 @@ node update.mjs           # download and verify it</code></pre>
     isOpen: function () { return newTabPageShown; },
     eligible: newTabEligibleForAutoShow,
     blank: startBlankScript,
-    blankState: blankDocumentState
+    blankState: blankDocumentState,
+    /* The recents column, which has two stores behind it and a permission
+       prompt no headless browser can answer: a suite drives the list itself
+       rather than the click that fills it. */
+    recents: recentEntries,
+    refreshRecents: refreshRecents,
+    remember: function (handle, info) { return rememberRecentFile(handle, info); },
+    forgetAll: forgetAllRecents
   };
   /* ================= events ================= */
 

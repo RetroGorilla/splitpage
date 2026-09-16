@@ -18,11 +18,15 @@
      genuinely empty one — one blank scene, no tags, no comments, no
      b-roll, a fresh identity — not a filtered copy of the seed.
 
-     Recently-opened documents as a third column (the issue's open
-     question) are deliberately not here: nothing in the app keeps a recent
-     list today — the browser remembers one handle and the desktop main
-     process tracks open tabs, neither of which is a recents list — so that
-     column is a feature of its own rather than a detail of this page.
+     The third column is the recently-edited list. Two stores lie behind it,
+     because the two builds remember a file in two incompatible ways: the
+     browser keeps structured-cloned FileSystemFileHandles in its own
+     IndexedDB store (00-prelude.js), and desktop keeps paths in
+     desktop-state.json and hands this page opaque ids (RECENTS-IPC,
+     desktop/main.js), because a path is main's to hold and never this
+     page's (invariant #34). recentEntries() below is the one place that
+     difference lives; everything past it works on {id, name, title, at,
+     missing} whichever build it is running in.
 
      Like 20b/20c/20e this fragment wires itself directly rather than
      through init(): #newtab-page is in the DOM by the time this classic
@@ -46,9 +50,167 @@
     if (!el || newTabPageShown) return;
     newTabPageShown = true;
     el.hidden = false;
+    refreshRecents();
     document.addEventListener("keydown", onNewTabKeydown, true);
     var first = el.querySelector('[data-newtab-action="new"]');
     if (first) first.focus();
+  }
+
+  /* ---- the recently-edited column ----
+
+     Nothing here is cached: the page reads the list each time it opens, so
+     a tab that has been sitting on it for an hour is not offering a list
+     from an hour ago. */
+  var recentHandles = {};   /* browser only: id -> FileSystemFileHandle */
+  var recentsBusy = false;
+
+  function desktopRecents() {
+    return DESKTOP && typeof DESKTOP.recentsList === "function" ? DESKTOP : null;
+  }
+
+  async function recentEntries() {
+    var bridge = desktopRecents();
+    if (bridge) {
+      try {
+        var list = await bridge.recentsList();
+        return (Array.isArray(list) ? list : []).filter(function (e) { return e && e.id; });
+      } catch (e) { return []; }
+    }
+    recentHandles = {};
+    var rows = await listRecentFiles();
+    return rows.map(function (r) {
+      recentHandles[r.key] = r.handle;
+      return { id: r.key, name: r.name, title: r.title, at: r.at, missing: false };
+    });
+  }
+
+  /* "3 minutes ago" is more use than a timestamp on a list this short, and
+     the exact minute of an edit is not what anyone is scanning for. */
+  function recentWhen(at) {
+    var ms = Date.now() - (at || 0);
+    if (!at || ms < 0) return "";
+    var mins = Math.floor(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + " min ago";
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + " hour" + (hours === 1 ? "" : "s") + " ago";
+    var days = Math.floor(hours / 24);
+    if (days < 30) return days + " day" + (days === 1 ? "" : "s") + " ago";
+    return "a while ago";
+  }
+
+  function renderRecents(entries) {
+    var col = document.getElementById("newtab-recents");
+    var list = document.getElementById("newtab-recents-list");
+    if (!col || !list) return;
+    /* An empty list is no column at all rather than an empty box captioned
+       "Recent" — on a first run there is nothing to have been recent. */
+    if (!entries.length) { col.hidden = true; return; }
+    col.hidden = false;
+    var html = "";
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var label = e.title || e.name || "Untitled";
+      var when = recentWhen(e.at);
+      html +=
+        '<li class="newtab-recent' + (e.missing ? " is-missing" : "") + '">' +
+          '<button type="button" class="newtab-recent-open" data-newtab-action="recent" data-recent-id="' +
+            escapeHtml(e.id) + '"' + (e.missing ? ' title="This file has moved or been deleted"' : "") + '>' +
+            '<span class="newtab-recent-title">' + escapeHtml(label) + '</span>' +
+            '<span class="newtab-recent-sub">' + escapeHtml(e.name || "") +
+              (when ? " · " + escapeHtml(when) : "") +
+              (e.missing ? " · missing" : "") + '</span>' +
+          '</button>' +
+          '<button type="button" class="newtab-recent-forget" data-newtab-action="forget" data-recent-id="' +
+            escapeHtml(e.id) + '" title="Forget ' + escapeHtml(e.name || label) +
+            '" aria-label="Forget ' + escapeHtml(e.name || label) + '">×</button>' +
+        '</li>';
+    }
+    list.innerHTML = html;
+  }
+
+  async function refreshRecents() {
+    var entries = [];
+    try { entries = await recentEntries(); } catch (e) { entries = []; }
+    renderRecents(entries);
+  }
+
+  /* One click, whichever build. Desktop hands the id back to main, which
+     routes it exactly as it routes a file the OS handed it — so a document
+     already open in another tab activates that tab instead of opening a
+     second copy. The browser reopens its own handle, which may need the
+     permission prompt this click is allowed to raise. */
+  async function openRecent(id) {
+    if (recentsBusy) return;
+    recentsBusy = true;
+    try {
+      var bridge = desktopRecents();
+      if (bridge) {
+        var r = null;
+        try { r = await bridge.recentsOpen(id); } catch (e) { r = null; }
+        if (!r || !r.ok) {
+          showToast(r && r.code === "MISSING"
+            ? ((r.name || "That file") + " has moved or been deleted.")
+            : "Could not open that document.", "warn");
+          await refreshRecents();
+          return;
+        }
+        /* main answers where it landed; 'this-tab' arrives back here as an
+           open-file event, which closes the page on its own
+           (adoptProjectState). Anything else means another tab has it. */
+        if (r.where !== "this-tab") closeNewTabPage();
+        return;
+      }
+      var handle = recentHandles[id];
+      if (!handle) { await refreshRecents(); return; }
+      var perm = "denied";
+      try {
+        /* A handle with no permission API needs no permission — that is a
+           handle this page can already read (an origin-private one, or the
+           desktop shim's, whose queryPermission is a constant "granted"
+           anyway). Only a picker-derived handle has a grant that can lapse
+           between launches. */
+        if (typeof handle.queryPermission !== "function") perm = "granted";
+        else {
+          perm = await handle.queryPermission({ mode: "readwrite" });
+          /* The click is the user gesture this needs — the same re-grant the
+             resume banner asks for (18-local-files.js). */
+          if (perm !== "granted" && typeof handle.requestPermission === "function") {
+            perm = await handle.requestPermission({ mode: "readwrite" });
+          }
+        }
+      } catch (e) { perm = "denied"; }
+      if (perm !== "granted") {
+        showToast("Splitpage needs permission to reopen that file.", "warn");
+        return;
+      }
+      try {
+        await openProjectFile(await handle.getFile(), handle);
+      } catch (e) {
+        /* Moved, renamed, deleted, or on a drive that is not connected. An
+           entry that cannot be opened is dropped rather than left on the
+           list offering the same failure again. */
+        showToast((handle.name || "That file") + " has moved or been deleted.", "warn");
+        await forgetRecentFile(id);
+        await refreshRecents();
+      }
+    } finally {
+      recentsBusy = false;
+    }
+  }
+
+  async function forgetRecent(id) {
+    var bridge = desktopRecents();
+    if (bridge) { try { await bridge.recentsForget(id); } catch (e) {} }
+    else await forgetRecentFile(id);
+    await refreshRecents();
+  }
+
+  async function forgetAllRecents() {
+    var bridge = desktopRecents();
+    if (bridge) { try { await bridge.recentsForget(null); } catch (e) {} }
+    else await clearRecentFiles();
+    await refreshRecents();
   }
 
   function closeNewTabPage() {
@@ -126,6 +288,9 @@
       if (action === "new") startBlankScript();
       else if (action === "open") newTabOpenFile();
       else if (action === "dismiss") closeNewTabPage();
+      else if (action === "recent") openRecent(target.getAttribute("data-recent-id"));
+      else if (action === "forget") forgetRecent(target.getAttribute("data-recent-id"));
+      else if (action === "forget-all") forgetAllRecents();
     });
   })();
 
@@ -183,5 +348,12 @@
     isOpen: function () { return newTabPageShown; },
     eligible: newTabEligibleForAutoShow,
     blank: startBlankScript,
-    blankState: blankDocumentState
+    blankState: blankDocumentState,
+    /* The recents column, which has two stores behind it and a permission
+       prompt no headless browser can answer: a suite drives the list itself
+       rather than the click that fills it. */
+    recents: recentEntries,
+    refreshRecents: refreshRecents,
+    remember: function (handle, info) { return rememberRecentFile(handle, info); },
+    forgetAll: forgetAllRecents
   };

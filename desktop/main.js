@@ -950,6 +950,98 @@ function normalizeTabSource(src) {
   return { kind: "blank" };
 }
 
+/* ---- RECENTS-LIST: recently edited documents -------------------------
+   The desktop half of the New Tab page's third column (src/js/20j-newtab.js;
+   the browser half is its own IndexedDB store in src/js/00-prelude.js).
+
+   It lives here, in desktop-state.json, for the same reason the tab session
+   does: a path is main's to hold and never the page's (invariant #34). Each
+   entry carries an `id` minted once and persisted with it, and that id —
+   never the path — is what crosses to the renderer and comes back on a
+   click. Nothing the page can send names a file.
+
+   `at` is when the document was last opened or edited, which is what
+   "recently edited" means here: set-document-state reports on every save
+   and every dirty flip, and recordRecentDocument throttles the writes. */
+const RECENTS_CAP = 12;
+const RECENTS_REFRESH_MS = 60000;
+
+function normalizeRecents(raw) {
+  const out = [];
+  const seenPaths = new Set();
+  const seenIds = new Set();
+  for (const r of Array.isArray(raw) ? raw : []) {
+    if (!r || typeof r !== "object") continue;
+    if (typeof r.absPath !== "string" || !r.absPath || !path.isAbsolute(r.absPath)) continue;
+    const key = pathKey(r.absPath);
+    if (seenPaths.has(key)) continue; /* one entry per file, newest wins */
+    seenPaths.add(key);
+    let id = typeof r.id === "string" && /^[0-9a-f]{32}$/.test(r.id) && !seenIds.has(r.id)
+      ? r.id : crypto.randomBytes(16).toString("hex");
+    seenIds.add(id);
+    out.push({
+      id,
+      absPath: r.absPath,
+      title: typeof r.title === "string" ? r.title.slice(0, LAST_KNOWN_TITLE_MAX) : "",
+      at: Number.isFinite(r.at) ? r.at : 0
+    });
+  }
+  out.sort((a, b) => b.at - a.at);
+  return out.slice(0, RECENTS_CAP);
+}
+
+/* Called from splitpage:set-document-state, the one place main learns that
+   a tab is holding a given file with a given title. Never awaited: losing
+   an entry off this list is a nicety lost, not a document. */
+function recordRecentDocument(absPath, title) {
+  if (typeof absPath !== "string" || !absPath) return;
+  const key = pathKey(absPath);
+  const now = Date.now();
+  writeDesktopStateV2((state) => {
+    const list = normalizeRecents(state.recents);
+    const existing = list.find((r) => pathKey(r.absPath) === key);
+    /* A report that changes nothing a human would see does not earn a disk
+       write — the renderer reports on every dirty flip. */
+    if (existing && existing.title === (title || "") && now - existing.at < RECENTS_REFRESH_MS) return false;
+    const kept = list.filter((r) => pathKey(r.absPath) !== key);
+    kept.unshift({
+      id: existing ? existing.id : crypto.randomBytes(16).toString("hex"),
+      absPath: path.resolve(absPath),
+      title: typeof title === "string" ? title : "",
+      at: now
+    });
+    state.recents = kept.slice(0, RECENTS_CAP);
+    return state;
+  });
+}
+
+/* What crosses to the renderer: no paths, and `missing` answered here so a
+   file that has been moved or deleted can be shown as such rather than
+   only failing on the click. */
+function recentsForRenderer() {
+  return normalizeRecents(readDesktopStateV2().recents).map((r) => ({
+    id: r.id,
+    name: path.basename(r.absPath),
+    title: r.title,
+    at: r.at,
+    missing: !fileExists(r.absPath)
+  }));
+}
+
+function fileExists(absPath) {
+  try { return fs.statSync(absPath).isFile(); } catch { return false; }
+}
+
+function forgetRecentDocument(id) {
+  writeDesktopStateV2((state) => {
+    const list = normalizeRecents(state.recents);
+    const next = id == null ? [] : list.filter((r) => r.id !== id);
+    if (next.length === list.length && id != null) return false;
+    state.recents = next;
+    return state;
+  });
+}
+
 function blankDesktopWindow(extra) {
   const tabId = mintTabOrWindowId();
   return {
@@ -963,7 +1055,7 @@ function blankDesktopWindow(extra) {
 }
 
 function freshDesktopState() {
-  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()] };
+  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()], recents: [] };
 }
 
 /* v1 was {lastFilePath?, windowBounds?, windowMaximized?} with no version
@@ -981,7 +1073,11 @@ function migrateDesktopStateV1(v1) {
       maximized: v1.windowMaximized === true,
       activeTabId: tabId,
       tabs: [{ tabId, source, lastKnownTitle: "" }]
-    }]
+    }],
+    /* v1 knew one last file and nothing about when it was edited. Seeding
+       the list with it would date it to this launch, which is a lie about
+       every other file; the list simply starts empty and fills up. */
+    recents: []
   };
 }
 
@@ -1018,8 +1114,13 @@ function normalizeDesktopStateV2(raw) {
       tabs
     });
   }
-  if (!windows.length) return freshDesktopState();
-  return { version: DESKTOP_STATE_VERSION, windows };
+  const recents = normalizeRecents(raw && raw.recents);
+  if (!windows.length) {
+    const fresh = freshDesktopState();
+    fresh.recents = recents; /* a corrupt window list must not cost the list */
+    return fresh;
+  }
+  return { version: DESKTOP_STATE_VERSION, windows, recents };
 }
 
 /* A v1 file, a missing file or a corrupt one has no ids on disk, so each
@@ -1159,7 +1260,15 @@ function shellStateAsV2() {
 function persistShellState() {
   if (sessionWritesFrozen || sessionRestoreInProgress) return Promise.resolve(false);
   if (!windowsById.size) return Promise.resolve(false);
-  return writeDesktopStateV2(() => shellStateAsV2());
+  /* The shell IS the session, so it replaces windows wholesale — but the
+     recently-edited list is not part of the shell and would be erased by
+     that replacement. It is carried over from the state this mutator was
+     handed (RECENTS-LIST). */
+  return writeDesktopStateV2((current) => {
+    const next = shellStateAsV2();
+    next.recents = normalizeRecents(current && current.recents);
+    return next;
+  });
 }
 
 /* ---------------------------------------------------------------------
@@ -4642,6 +4751,12 @@ function registerIpc() {
       indexTabSource(tab);
     }
 
+    /* RECENTS-LIST: this is the one place main learns "that tab is holding
+       this file, and it is called this" — which is exactly an entry in the
+       recently-edited list. It throttles its own writes, and it runs before
+       persistShellState() so the two never race over the same file. */
+    if (absPath) recordRecentDocument(absPath, tab.title);
+
     const w = windowsById.get(tab.windowId);
     if (w) {
       /* Only the ACTIVE tab names the OS window: a background tab going
@@ -4691,6 +4806,43 @@ function registerIpc() {
       return { where: result.where };
     }
     throw new Error("route-open: unknown kind");
+  });
+
+  /* ---- RECENTS-IPC: the recently-edited list -------------------------
+     Three calls, and none of them lets the page name a file. `list` answers
+     opaque ids with a basename and a title to show; `open` takes one of
+     those ids back and routes it exactly as an OS-handed file is routed
+     (routeOpenPath — this tab if it is pristine, the tab that already has
+     it, otherwise a new one); `forget` drops one entry, or the lot when it
+     is given nothing. An id main does not recognise is answered, never
+     thrown on: the list the page is holding can be one launch out of date. */
+  ipcMain.handle("splitpage:recents-list", async (event) => {
+    requireTrusted(event);
+    return recentsForRenderer();
+  });
+
+  ipcMain.handle("splitpage:recents-open", async (event, id) => {
+    requireTrusted(event);
+    const tab = tabOf(event);
+    if (!tab) throw new Error("unknown tab");
+    const entry = normalizeRecents(readDesktopStateV2().recents).find((r) => r.id === id);
+    if (!entry) return { ok: false, code: "UNKNOWN" };
+    if (!fileExists(entry.absPath)) {
+      /* Moved, deleted, or on a drive that is not connected. The entry goes
+         — an list that keeps offering a file it cannot open is worse than a
+         shorter one — and the page says so. */
+      forgetRecentDocument(entry.id);
+      return { ok: false, code: "MISSING", name: path.basename(entry.absPath) };
+    }
+    const result = routeOpenPath(entry.absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
+    if (!result) return { ok: false, code: "UNREADABLE", name: path.basename(entry.absPath) };
+    return { ok: true, where: result.where };
+  });
+
+  ipcMain.handle("splitpage:recents-forget", async (event, id) => {
+    requireTrusted(event);
+    forgetRecentDocument(typeof id === "string" && id ? id : null);
+    return { ok: true };
   });
 
   /* ---- crash drafts (DRAFT-IPC-AND-SHAPES) ---------------------------

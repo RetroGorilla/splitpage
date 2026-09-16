@@ -261,6 +261,23 @@ if (location.origin === "splitpage://app") {
       return ipcRenderer.invoke("splitpage:history-usage");
     },
 
+    /* ---- RECENTS-IPC: the recently-edited list -------------------------
+       The list main keeps in desktop-state.json, for the New Tab page's
+       third column. Entries cross as {id, name, title, at, missing} — an
+       opaque id and a basename, never a path (invariant #34) — and an id is
+       the only thing `open` and `forget` accept back. */
+    recentsList() {
+      return ipcRenderer.invoke("splitpage:recents-list");
+    },
+
+    recentsOpen(id) {
+      return ipcRenderer.invoke("splitpage:recents-open", id);
+    },
+
+    recentsForget(id) {
+      return ipcRenderer.invoke("splitpage:recents-forget", id == null ? null : id);
+    },
+
     getSessionInfo() {
       return ipcRenderer.invoke("splitpage:get-session-info");
     },
