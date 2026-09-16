@@ -1,0 +1,98 @@
+# A b-roll marker and a production tag are contenteditable="false" spans, so
+# clicking one lands the caret INSIDE it — a browser has nowhere else to put
+# a click on those words — and from there Backspace did nothing at all: the
+# key was aimed at something that refuses to take it. Click the "B-roll:"
+# marker, press Backspace, press it again, marker still there.
+#
+# This checks the whole thing goes on one keystroke, from inside the span and
+# from either side of it, and that the <br> in front of a marker line survives
+# (the browser's own Backspace took it too, joining the shot onto the line
+# above).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# --- a marker on its own line, deleted from a click inside it ---------------
+caret .cell-editable[data-field="visualText"] start
+key ctrl KeyA
+key Backspace
+type Host on camera.
+key shift Enter
+press B-roll:
+type  wide shot
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .broll-key').length == 1
+eval document.activeElement.blur()
+sleep 300
+
+click .broll-key
+sleep 200
+key Backspace
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .broll-key').length == 0
+# the line break the marker opened is still there, and so are its words
+expect document.querySelector('.cell-editable[data-field="visualText"]').innerHTML.indexOf('<br>') !== -1
+expect document.querySelector('.cell-editable[data-field="visualText"]').textContent.indexOf('wide shot') !== -1
+
+# the caret is left somewhere real, so the next thing typed lands in the cell
+type back
+sleep 300
+expect document.querySelector('.cell-editable[data-field="visualText"]').textContent.indexOf('back') !== -1
+
+# --- the same from the caret sitting just after the marker ------------------
+caret .cell-editable[data-field="visualText"] start
+key ctrl KeyA
+key Backspace
+type Prose line.
+key shift Enter
+press B-roll:
+type  crane shot
+sleep 500
+eval (function(){var c=document.querySelector('.cell-editable[data-field="visualText"]');var sp=c.querySelector('.broll-key');var r=document.createRange();r.setStartAfter(sp);r.collapse(true);c.focus();var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+key Backspace
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .broll-key').length == 0
+expect document.querySelector('.cell-editable[data-field="visualText"]').innerHTML.indexOf('<br>') !== -1
+expect document.querySelector('.cell-editable[data-field="visualText"]').textContent.indexOf('crane shot') !== -1
+
+# --- Delete, from the caret sitting just before the marker ------------------
+caret .cell-editable[data-field="visualText"] start
+key ctrl KeyA
+key Backspace
+press B-roll:
+type  reverse angle
+sleep 500
+key Home
+key Delete
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .broll-key').length == 0
+expect document.querySelector('.cell-editable[data-field="visualText"]').textContent.indexOf('reverse angle') !== -1
+
+# --- a marker that is the last thing in the cell (trailing caret spot) ------
+caret .cell-editable[data-field="visualText"] start
+key ctrl KeyA
+key Backspace
+press B-roll:
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .broll-key').length == 1
+key End
+key Backspace
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .broll-key').length == 0
+
+# --- a production tag is the same atomic span, and goes the same way --------
+caret .cell-editable[data-field="visualText"] start
+key ctrl KeyA
+key Backspace
+press We need [gaffer tape] here
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .tag-anchor').length == 1
+eval document.activeElement.blur()
+sleep 300
+click .tag-anchor
+sleep 200
+key Backspace
+sleep 500
+expect document.querySelectorAll('.cell-editable[data-field="visualText"] .tag-anchor').length == 0
+expect document.querySelector('.cell-editable[data-field="visualText"]').textContent.indexOf('We need') !== -1
+expect document.querySelector('.cell-editable[data-field="visualText"]').textContent.indexOf('here') !== -1

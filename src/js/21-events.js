@@ -388,6 +388,79 @@
     document.execCommand("insertText", false, text);
   }
 
+  /* ---- Backspace and Delete aimed at an atomic span ----
+
+     A tag anchor and a b-roll marker are contenteditable="false" spans, so
+     clicking one puts the caret INSIDE it — the browser has nowhere else to
+     put a click that landed on those words — and from in there every
+     editing key is aimed at something that refuses to take it. Backspace
+     did nothing whatsoever: click the "B-roll:" marker, press Backspace,
+     press it again, and the marker is still sitting there. The span is
+     atomic, so the only reading a Backspace or Delete aimed at one can have
+     is "take the whole thing away", which is what this does.
+
+     It also takes the caret sitting just after (Backspace) or just before
+     (Delete) a span, which a browser does handle on its own — but handles
+     by swallowing the <br> in front of the marker along with it, joining
+     the shot's line onto the one above. Doing the removal ourselves leaves
+     the line where it was written. */
+  function atomicSpanIn(cellEl, node) {
+    var el = node && node.nodeType === 3 ? node.parentNode : node;
+    if (!el || !el.closest || !cellEl.contains(el)) return null;
+    var span = el.closest('[contenteditable="false"]');
+    return span && cellEl.contains(span) ? span : null;
+  }
+
+  function atomicSpanBeside(cellEl, range, key) {
+    var n = range.startContainer, off = range.startOffset, cand = null;
+    if (key === "Backspace") {
+      if (n.nodeType === 3) cand = off === 0 ? n.previousSibling : null;
+      else cand = off > 0 ? n.childNodes[off - 1] : null;
+    } else {
+      if (n.nodeType === 3) cand = off === (n.nodeValue || "").length ? n.nextSibling : null;
+      else cand = n.childNodes[off] || null;
+    }
+    /* The zero-width space ensureTrailingCaretSpot leaves after a trailing
+       span is the caret's only seat there, so step over it rather than
+       spending the keystroke deleting something invisible. */
+    while (cand && cand.nodeType === 3 && /^[\u200b]*$/.test(cand.nodeValue || "")) {
+      cand = key === "Backspace" ? cand.previousSibling : cand.nextSibling;
+    }
+    if (!cand || cand.nodeType !== 1) return null;
+    return cand.getAttribute && cand.getAttribute("contenteditable") === "false" &&
+      cellEl.contains(cand) ? cand : null;
+  }
+
+  function deleteAtomicSpan(cellEl, e) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return false;
+    var range = sel.getRangeAt(0);
+    if (!cellEl.contains(range.startContainer)) return false;
+    var span = atomicSpanIn(cellEl, range.commonAncestorContainer);
+    if (!span && range.collapsed) span = atomicSpanBeside(cellEl, range, e.key);
+    if (!span) return false;
+
+    var parent = span.parentNode, after = span.nextSibling;
+    parent.removeChild(span);
+    var out = document.createRange();
+    if (after) out.setStartBefore(after);
+    else { out.selectNodeContents(parent); out.collapse(false); }
+    out.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(out);
+
+    /* Nothing typed, so no input event: everything onRootInput would have
+       done for an ordinary deletion has to be done here. */
+    hideTagGhost();
+    syncFieldFromDom(cellEl);
+    scheduleProductionRefresh();
+    scheduleBrollRefresh();
+    scheduleWriterStats();
+    untaggedMutedFor = null;
+    scheduleUntaggedScan();
+    return true;
+  }
+
   function onRootKeydown(e) {
     if (e.target.matches && e.target.matches(".link-popover input")) {
       if (e.key === "Enter") { e.preventDefault(); confirmLink(e.target.closest(".field-wrap")); }
@@ -430,6 +503,9 @@
     if (e.key === "Escape" && untaggedSuggestion) {
       untaggedMutedFor = cellEl;
       hideUntaggedPrompt();
+    }
+    if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (deleteAtomicSpan(cellEl, e)) { e.preventDefault(); return; }
     }
     var mod = e.ctrlKey || e.metaKey;
     /* Alt+Enter: split the field being written in — the split view's version
