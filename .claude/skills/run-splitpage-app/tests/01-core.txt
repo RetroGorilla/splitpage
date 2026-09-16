@@ -67,4 +67,27 @@ expect document.getElementById('menu-server-open').getBoundingClientRect().heigh
 jsclick #btn-file
 sleep 200
 
+# --- Enter / Shift+Enter at the end of a scene -------------------------------
+# A <br> inserted at the very end of a block renders no line on its own, so
+# insertHTML("<br>") made a break typed at the end of a scene look like
+# nothing happened: the field did not grow, the next character landed BEFORE
+# the <br>, and once a trailing <br> existed every later Enter was a no-op.
+# insertLineBreak() adds the sentinel <br> that gives the new last line a box.
+caret .cell-editable[data-field="audioText"]
+eval window.__h0 = document.activeElement.getBoundingClientRect().height
+press AAA
+key shift Enter
+expect document.activeElement.getBoundingClientRect().height > window.__h0
+press BBB
+expect document.activeElement.innerHTML.indexOf('AAA<br>BBB') !== -1
+# a second break, on a field that now already ends in one, still breaks
+key Enter
+key Enter
+press CCC
+expect document.activeElement.innerHTML.indexOf('AAA<br>BBB<br><br>CCC') !== -1
+# and it survives the focusout sanitiser
+eval document.activeElement.blur()
+sleep 100
+expect document.querySelector('.cell-editable[data-field="audioText"]').innerHTML.indexOf('AAA<br>BBB<br><br>CCC') !== -1
+
 quit
