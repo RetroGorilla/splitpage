@@ -1098,6 +1098,15 @@
       var item = e.target.closest("[data-file-action]");
       if (item && !item.disabled) handleFileMenuAction(item.getAttribute("data-file-action"));
     });
+    document.getElementById("file-menu-close").addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleFileMenu(false);
+    });
+    /* the backdrop lives inside .menu-wrap, so the outside-click rule below
+       never sees it — clicking away is this listener's job */
+    document.getElementById("file-menu-backdrop").addEventListener("click", function () {
+      toggleFileMenu(false);
+    });
     document.addEventListener("click", function (e) {
       if (!e.target.closest(".menu-wrap")) toggleFileMenu(false);
     });
