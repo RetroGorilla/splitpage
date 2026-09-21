@@ -732,6 +732,18 @@
     margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
   }
   .import-replace-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
+  /* the per-import "what to look for" choices (renderImportScanOptions) */
+  .import-scan-group { margin-top: 12px; }
+  .import-scan-title {
+    font-family: var(--font-display); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-faint); margin-bottom: 7px;
+  }
+  .import-scan-toggle {
+    display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 7px;
+    font-size: 13px; color: var(--text-dim); cursor: pointer; padding: 2px 0;
+  }
+  .import-scan-toggle input { margin: 0; }
+  .import-scan-hint { grid-column: 2; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
   .modal-footer-actions { display: flex; gap: 8px; }
 
   /* ---------- production tags ---------- */
@@ -3233,6 +3245,14 @@
       </div>
     </div>
     <div class="modal-preview" id="import-preview">Paste some text to see a preview.</div>
+    <!-- "What should Splitpage look for in this script?" — one checkbox per
+         entry in IMPORT_SCANS (11-import.js), built there rather than written
+         out here, so a second kind of tag to detect on the way in is an entry
+         in that list and nothing else. -->
+    <div class="import-scan-group" role="group" aria-labelledby="import-scan-title">
+      <div class="import-scan-title" id="import-scan-title">What should Splitpage look for in this script?</div>
+      <div id="import-scan-options"></div>
+    </div>
     <div class="modal-footer">
       <label class="import-replace-toggle"><input type="checkbox" id="import-replace"> Replace existing rows</label>
       <div class="modal-footer-actions">
@@ -3819,6 +3839,7 @@ node update.mjs           # download and verify it</code></pre>
 <ul><li><strong>File ▸ Open a document…</strong>, then pick the <code>.md</code> or <code>.splitpage</code> file. Useful when you're already in the app and want to switch projects.</li><li><strong>Double-click a saved Standalone HTML file.</strong> It opens straight into that project — that is what being self-contained means.</li></ul>
 <p>That same menu still opens <code>.docx</code>/<code>.txt</code>/<code>.csv</code>, and Markdown that isn't one of Splitpage's own, as plain script text — but a file like that carries no project of its own, so <strong>opening one starts a new document</strong>: a new script with an empty breakdown, no cast list, no b-roll and no comments, and a Save button that points nowhere yet. Nothing of the document you had open comes with it.</p>
 <p>If what you actually have is a <strong>revised draft of the script you're already working on</strong>, use <strong>File ▸ Paste a script…</strong> instead. That modal replaces (or appends to) the scenes and keeps the document you're in — its breakdown statuses, owners and notes, its cast list, its b-roll list and its comments all stay where they are. It takes a <code>.docx</code>, <code>.md</code>, <code>.txt</code> or <code>.csv</code> file through <strong>Choose a file…</strong> as well as pasted text.</p>
+<p>That modal also asks <strong>what Splitpage should look for in the script</strong>. The one thing it looks for today is B-roll: with <strong>Look for B-roll lines and track them</strong> ticked, every line starting <code>B-roll:</code> in the Visual column comes in as a real marker on the b-roll list, so it keeps its status, notes and owner when you later reword the line — and the import tells you how many it found. Untick it and the text is left exactly as you pasted it. Your answer is remembered, so if you import drafts all day you are only asked once.</p>
 <h3 id="help-older-html-projects">Older <code>.html</code> projects</h3>
 <p>Splitpage used to save every project as a page like the standalone export above. Those files still open exactly as they always did — there is nothing to convert by hand. The first time you Save one, though, Splitpage asks where to keep it as a <code>.md</code> instead and tells you why; from then on it is an ordinary Markdown project. Your original <code>.html</code> file is left where it is, untouched.</p>
 <h2 id="help-resuming-your-last-project-on-launch">Resuming your last project on launch</h2>
@@ -12263,6 +12284,18 @@ node update.mjs           # download and verify it</code></pre>
     return rowId + " " + ordinal;
   }
 
+  /* Rows an import was asked NOT to scan (11-import.js). Browser state, never
+     the document's: the answer was about that import, and an import that says
+     no has to leave the text exactly as it was handed over — including
+     against this pass, which would otherwise rewrite it a moment later. Ids
+     of replaced rows are left behind here; they are a session's worth of
+     strings and can never match a row again. */
+  var brollAnchorDeclined = Object.create(null);
+
+  function declineBrollAnchoring(rows) {
+    (rows || []).forEach(function (row) { brollAnchorDeclined[row.id] = true; });
+  }
+
   /* `rows` is which rows to rewrite; the plan is always read from the whole
      document, so a line brought into a script that already tracks a shot of
      the same name cannot walk off with that shot's record. Callers that
@@ -12273,6 +12306,7 @@ node update.mjs           # download and verify it</code></pre>
     var plan = brollAnchorPlan();
     var total = 0;
     rows.forEach(function (row) {
+      if (brollAnchorDeclined[row.id]) return;
       var body = inertBody(row.visualText);
       var ordinal = -1, n = 0;
       brollFieldLines(body).forEach(function (line) {
@@ -14179,6 +14213,100 @@ node update.mjs           # download and verify it</code></pre>
     });
   }
 
+  /* ---- what Import can be asked to look for ----
+
+     Detection is not the missing piece — brollInField already reads every
+     "B-roll:" line out of a field, and the untagged-mentions machinery
+     already finds plain-text mentions of registry items. What was missing is
+     permission: applying what was found means rewriting the text somebody has
+     just handed over, and doing that silently is the wrong default. So the
+     dialog asks, once, and remembers the answer.
+
+     One entry per kind, and the dialog builds its own checkbox from each of
+     them (renderImportScanOptions), so a second kind — untagged mentions of
+     things already in the breakdown, locations, gear — is an entry here plus a
+     scan function, not a redesign of the question.
+
+     `apply` is handed the rows that have just landed in state.rows — they have
+     to be there already, because a scan reconciles what it finds against the
+     whole document rather than against those rows in isolation — and returns
+     how many it changed. `decline` gets the same rows when the answer is no,
+     and is where a scan makes sure nothing else quietly does the work for it
+     afterwards. */
+  var IMPORT_SCANS = [
+    {
+      id: "broll",
+      label: "Look for B-roll lines and track them",
+      hint: "A line starting “B-roll:” becomes a shot on the b-roll list, and keeps its status when the line is reworded.",
+      apply: function (rows) { return anchorBrollInRows(rows); },
+      decline: function (rows) { declineBrollAnchoring(rows); },
+      found: function (n) {
+        return n + " B-roll line" + (n === 1 ? "" : "s") + " found and tracked.";
+      }
+    }
+  ];
+
+  var IMPORT_SCAN_KEY = "splitpage-import-scans";
+
+  /* Per device, like the comments sort order and the writer's text size: this
+     is about how somebody imports, not about the document, so it has no
+     business in state. Anything not written down yet reads as on — an
+     unanswered question should leave the b-roll list working rather than
+     second-class (#21) — and a no, once given, keeps. */
+  function importScanPrefs() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(IMPORT_SCAN_KEY) || "{}"); } catch (e) { saved = null; }
+    return saved && typeof saved === "object" ? saved : {};
+  }
+
+  function importScanEnabled(id) {
+    return importScanPrefs()[id] !== false;
+  }
+
+  function importScanBox(id) {
+    return document.querySelector('[data-import-scan="' + cssAttr(id) + '"]');
+  }
+
+  function renderImportScanOptions() {
+    var host = document.getElementById("import-scan-options");
+    if (!host) return;
+    host.innerHTML = IMPORT_SCANS.map(function (scan) {
+      return '<label class="import-scan-toggle">' +
+        '<input type="checkbox" data-import-scan="' + escapeHtml(scan.id) + '"' +
+          (importScanEnabled(scan.id) ? ' checked' : '') + '>' +
+        '<span>' + escapeHtml(scan.label) + '</span>' +
+        '<span class="import-scan-hint">' + escapeHtml(scan.hint) + '</span>' +
+      '</label>';
+    }).join("");
+  }
+
+  function saveImportScanPrefs() {
+    var saved = {};
+    IMPORT_SCANS.forEach(function (scan) {
+      var box = importScanBox(scan.id);
+      saved[scan.id] = box ? !!box.checked : importScanEnabled(scan.id);
+    });
+    try { localStorage.setItem(IMPORT_SCAN_KEY, JSON.stringify(saved)); } catch (e) {}
+  }
+
+  /* Runs the scans that are on over the rows that just arrived, and returns
+     what to add to the import's own toast — the result reported where the
+     import is reported, rather than as a second notification. */
+  function runImportScans(rows) {
+    var notes = [];
+    IMPORT_SCANS.forEach(function (scan) {
+      var box = importScanBox(scan.id);
+      if (box ? !box.checked : !importScanEnabled(scan.id)) {
+        if (scan.decline) scan.decline(rows);
+        return;
+      }
+      var n = scan.apply(rows);
+      if (n) notes.push(scan.found(n));
+    });
+    saveImportScanPrefs();
+    return notes.join(" ");
+  }
+
   /* --- modal wiring --- */
 
   function getImportMode() {
@@ -14256,6 +14384,9 @@ node update.mjs           # download and verify it</code></pre>
     pendingFileName = "";
     var paragraphRadio = document.querySelector('input[name="import-split"][value="paragraph"]');
     if (paragraphRadio) paragraphRadio.checked = true;
+    /* Rebuilt every time it opens, so the boxes show the remembered answer
+       rather than whatever the last import happened to leave ticked. */
+    renderImportScanOptions();
     updateImportPreview();
     document.getElementById("import-modal").hidden = false;
     document.getElementById("import-textarea").focus();
@@ -14335,10 +14466,15 @@ node update.mjs           # download and verify it</code></pre>
     newRows.forEach(stampRow);
     if (replace && state.rows.length) pushSnapshot("Before replacing rows on import");
     state.rows = replace ? newRows : state.rows.concat(newRows);
+    /* After the rows are in state.rows and before the render: a scan
+       reconciles what it finds against the whole document (see IMPORT_SCANS),
+       and whatever it rewrites is what this render is about to draw. */
+    var found = runImportScans(newRows);
     markDirty();
     render();
     closeImportModal();
-    showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + ".", "ok");
+    showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + "." +
+      (found ? " " + found : ""), "ok");
   }
 
   /* ================= Google Doc import =================

@@ -1,0 +1,92 @@
+# Import ▸ "What should Splitpage look for in this script?" (issue #22).
+#
+# Anchoring an imported script's B-roll lines is the fix for #21, and doing
+# it silently would be rewriting text somebody has just handed over — so the
+# Import dialog asks. On by default, reported in the import's own toast,
+# remembered between imports, and declinable: a no leaves the text exactly as
+# it was pasted, including against the anchoring pass that would otherwise
+# get to it a moment later.
+#
+# The choices are built from IMPORT_SCANS (11-import.js), not written into
+# page.html, which is what lets a second kind of tag join the same question.
+# From outside the app's IIFE that list is not reachable, so what this can
+# check is the shape: a labelled group, one data-driven [data-import-scan]
+# box per kind, each with its own hint.
+
+open
+
+# --- the dialog asks, and the box is on by default -----------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+sleep 200
+expect document.querySelectorAll('#import-scan-options [data-import-scan]').length == 1
+expect document.querySelector('#import-scan-options [data-import-scan="broll"]').checked
+expect document.getElementById('import-scan-title').textContent.indexOf('look for') !== -1
+# built from the registry, hint and all, rather than hand-written markup
+expect document.querySelectorAll('#import-scan-options .import-scan-hint').length == 1
+expect document.querySelector('#import-scan-options .import-scan-toggle').textContent.indexOf('B-roll') !== -1
+
+# --- with it on, the lines come in anchored and the import says so -------
+eval (function(){var t=document.getElementById('import-textarea');t.value='Visual\tAudio\nB-roll: gulls over the harbour\tThe town wakes up slowly.\nB-roll: nets coming in\tNobody here is new to this.';t.dispatchEvent(new Event('input',{bubbles:true}));return t.value.length;})()
+wait document.querySelector('input[name="import-split"][value="twocolumn"]').checked
+jsclick #import-confirm
+sleep 400
+expect document.querySelectorAll('#rows .row').length == 4
+# anchored by the import itself, not by a later pass: no blur, no waiting
+expect document.querySelectorAll('#rows .broll-key').length == 2
+expect Array.prototype.slice.call(document.querySelectorAll('.toast')).pop().textContent.indexOf('2 B-roll lines found and tracked') !== -1
+expect Array.prototype.slice.call(document.querySelectorAll('.toast')).pop().textContent.indexOf('Imported 2 rows') !== -1
+
+# --- the answer is remembered ---------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+sleep 200
+expect document.querySelector('#import-scan-options [data-import-scan="broll"]').checked
+expect JSON.parse(localStorage.getItem('splitpage-import-scans')).broll === true
+
+# --- declined: the text stays exactly as it was pasted -------------------
+eval (function(){document.querySelector('#import-scan-options [data-import-scan="broll"]').checked=false;var t=document.getElementById('import-textarea');t.value='Visual\tAudio\nB-roll: declined gulls\tSame town, later.';t.dispatchEvent(new Event('input',{bubbles:true}));return t.value.length;})()
+wait document.querySelector('input[name="import-split"][value="twocolumn"]').checked
+jsclick #import-confirm
+sleep 400
+expect document.querySelectorAll('#rows .row').length == 5
+expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
+expect document.querySelector('#rows .row:nth-child(5) .visual-cell .cell-editable').textContent == B-roll: declined gulls
+# nothing about the decline is reported as a find
+expect Array.prototype.slice.call(document.querySelectorAll('.toast')).pop().textContent.indexOf('B-roll line') === -1
+
+# and it STAYS that way: the #21 pass runs on every render and on leaving a
+# field, and it has to keep its hands off an import that said no. A real
+# click blurs, which is exactly what anchors an unanchored line otherwise.
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+click #doc-title
+sleep 1200
+expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
+expect document.querySelector('#rows .row:nth-child(5) .visual-cell .cell-editable').textContent == B-roll: declined gulls
+
+# the panel still counts it, exactly as it does today — declining changes the
+# script, not the list: 2 anchored plus this one
+jsclick #btn-broll
+sleep 600
+expect document.querySelectorAll('#broll-list .tag-entity').length == 3
+expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 1
+
+# --- the no is remembered too, and is changeable --------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+sleep 200
+expect JSON.parse(localStorage.getItem('splitpage-import-scans')).broll === false
+expect document.querySelector('#import-scan-options [data-import-scan="broll"]').checked === false
+eval (function(){document.querySelector('#import-scan-options [data-import-scan="broll"]').checked=true;var t=document.getElementById('import-textarea');t.value='Visual\tAudio\nB-roll: back on again\tAnd again.';t.dispatchEvent(new Event('input',{bubbles:true}));return t.value.length;})()
+wait document.querySelector('input[name="import-split"][value="twocolumn"]').checked
+jsclick #import-confirm
+sleep 400
+expect document.querySelectorAll('#rows .row:nth-child(6) .visual-cell .broll-key').length == 1
+expect JSON.parse(localStorage.getItem('splitpage-import-scans')).broll === true
+# the line declined earlier is still left alone — the answer was about that
+# import, not a standing rule over the whole document
+expect document.querySelectorAll('#rows .row:nth-child(5) .visual-cell .broll-key').length == 0
+
+shot 46-import-tag-prompt
+
+quit
