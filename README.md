@@ -959,6 +959,10 @@ always works regardless.
   proper) and `icon.ico` for its shortcuts.
 - `tools/fetch-runtime.mjs` — downloads and verifies the Node runtime that
   ships inside the legacy setup.exe.
+- `tools/make-icon.mjs` — rasterises `icon.svg` into the Windows `icon.ico`
+  that the shortcuts, the NSIS installer and the packaged app use. Run it
+  after editing `icon.svg`; `--check` says whether the two `.ico` copies
+  (`installer/` and `desktop/build/`) are still in step.
 - `desktop/` — the Electron desktop app: source, `npm run dist:win` to build
   the per-architecture installers, and its own test suite.
 
