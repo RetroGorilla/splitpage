@@ -698,7 +698,15 @@
     <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close">×</button>
   </div>
   <div class="comments-panel-toggle">
-    <label><input type="checkbox" id="comments-hide-resolved"> Hide resolved</label>
+    <div class="comment-filter-seg group-seg" id="comments-filter-seg" role="radiogroup" aria-label="Filter comments">
+      <button type="button" data-filter="open" role="radio" aria-checked="true">Open<span class="filter-count" id="comments-filter-count-open">0</span></button>
+      <button type="button" data-filter="resolved" role="radio" aria-checked="false">Resolved<span class="filter-count" id="comments-filter-count-resolved">0</span></button>
+      <button type="button" data-filter="all" role="radio" aria-checked="false">All<span class="filter-count" id="comments-filter-count-all">0</span></button>
+    </div>
+    <span class="comments-sort-wrap">
+      <label for="comments-assignee-filter">Assigned</label>
+      <select id="comments-assignee-filter" aria-label="Filter by assignee"></select>
+    </span>
     <span class="comments-sort-wrap">
       <label for="comments-sort">Sort</label>
       <select id="comments-sort" aria-label="Sort comments">

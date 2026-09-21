@@ -234,8 +234,9 @@
         '<w:r><w:t>Comments</w:t></w:r></w:p>';
       comments.forEach(function (c) {
         body += '<w:p><w:pPr><w:spacing w:before="200" w:after="20"/></w:pPr>' +
-          '<w:r><w:rPr><w:b/><w:color w:val="8A6D3B"/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location) +
-          (c.resolved ? ' (resolved)' : '') + '</w:t></w:r>' +
+          '<w:r><w:rPr><w:b/><w:color w:val="8A6D3B"/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location +
+          (c.resolved ? ' (resolved' + (c.resolvedBy ? ' by ' + c.resolvedBy : '') + ')' : '') +
+          (c.assignee ? ' [assigned to ' + c.assignee + ']' : '')) + '</w:t></w:r>' +
           '<w:r><w:rPr><w:i/><w:color w:val="7A7364"/></w:rPr><w:t xml:space="preserve">' +
           xmlEscape('  —  ' + c.author + (c.when ? ', ' + c.when : '')) + '</w:t></w:r></w:p>';
         if (c.quoted) {
