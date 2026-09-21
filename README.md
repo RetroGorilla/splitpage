@@ -311,6 +311,19 @@ The code is remembered for as long as the other person's browser tab is open,
 unless they tick "remember on this device". Restarting your session invalidates
 every code you handed out.
 
+### Seeing who else is in the document
+
+In a hosted session the header shows coloured initials for the other people in
+the document, and a dot in the gutter of the scene each of them is working in —
+on the field itself when it is the field you are in, which is the one clash the
+merge cannot resolve quietly. Hovering names them. Names come from the name your
+comments are signed with; anyone who has not set one shows as **Guest**.
+
+It updates every couple of seconds, goes away when someone closes their tab or
+leaves it alone for a few minutes, and is never part of the document: it is not
+saved, not in the version history, and not on the server's disk. A document you
+are editing on your own sends nothing at all.
+
 ### Letting someone comment without letting them edit
 
 ```

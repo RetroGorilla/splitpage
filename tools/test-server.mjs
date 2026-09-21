@@ -604,6 +604,140 @@ try {
   s6.stop();
 }
 
+/* ---------- presence (issue #28) ----------
+ *
+ * A heartbeat and a listing in one round trip, in memory, behind the same
+ * gate. The TTL is dialled down here so the "a tab that went away stops being
+ * shown" half can be watched rather than assumed.
+ */
+
+const s7 = await startServer({
+  JOIN_PIN: PIN,
+  REVIEW_PIN,
+  REVIEW_KEY,
+  HOST: "127.0.0.1",
+  PRESENCE_TTL_MS: "400"
+});
+
+try {
+  const join = async (payload) => json(await fetch(s7.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }));
+  const editToken = (await join({ pin: PIN })).token;
+  const reviewToken = (await join({ pin: REVIEW_PIN })).token;
+
+  const beat = (token, body) => fetch(s7.base + "api/presence", {
+    method: "POST",
+    headers: Object.assign({ "Content-Type": "application/json" },
+      token ? { "x-splitpage-token": token } : {}),
+    body: JSON.stringify(body)
+  });
+
+  {
+    const res = await beat(null, { docId: "shared-doc", id: "p1" });
+    const body = await json(res);
+    eq("presence without a token is 401", res.status, 401);
+    eq("...saying pin-required, like every other route", body && body.error, "pin-required");
+  }
+  {
+    const res = await beat(editToken, { docId: "../etc", id: "p1" });
+    eq("a document id that is not one is refused", res.status, 400);
+  }
+  {
+    const res = await beat(editToken, { docId: "shared-doc", id: "" });
+    eq("a client with no id of its own is refused", res.status, 400);
+  }
+  {
+    const res = await beat(editToken, { docId: "shared-doc", id: "p1", name: "Priya Malhotra", rowId: "r2", field: "audioText" });
+    const body = await json(res);
+    eq("the first person in a document is 200", res.status, 200);
+    eq("...and is told about nobody, because they are alone", (body.here || []).length, 0);
+  }
+  {
+    const body = await json(await beat(reviewToken, { docId: "shared-doc", id: "p2", name: "", rowId: "r2", field: "audioText" }));
+    eq("a second person is told about the first", (body.here || []).length, 1);
+    eq("...by name", body.here[0].name, "Priya Malhotra");
+    eq("...and where they are", body.here[0].rowId + "/" + body.here[0].field, "r2/audioText");
+    check("...and never about themselves", !body.here.some((p) => p.id === "p2"));
+  }
+  {
+    /* A review viewer (#30) is someone else in the document like anybody
+       else — and an anonymous one carries no name, which is what makes the
+       other end say "Guest". */
+    const body = await json(await beat(editToken, { docId: "shared-doc", id: "p1", name: "Priya Malhotra", rowId: "r1", field: "visualText" }));
+    eq("an editor is told about the review viewer", (body.here || []).length, 1);
+    eq("...with no name to show", body.here[0].name, "");
+  }
+  {
+    const body = await json(await beat(editToken, { docId: "other-doc", id: "p1" }));
+    eq("presence is per document", (body.here || []).length, 0);
+  }
+  {
+    const body = await json(await beat(editToken, { docId: "shared-doc", id: "p3", field: "nonsense", rowId: "r1" }));
+    check("a field that is not a field is dropped rather than echoed",
+      body.here.every((p) => p.field !== "nonsense"));
+  }
+  {
+    /* The beacon a closing tab sends: sendBeacon cannot set a header, so the
+       token comes in the body, and text/plain is what a beacon may use. */
+    const res = await fetch(s7.base + "api/presence", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ docId: "shared-doc", id: "p2", gone: true, token: reviewToken })
+    });
+    eq("a leaving beacon with the token in its body is accepted", res.status, 200);
+    const body = await json(await beat(editToken, { docId: "shared-doc", id: "p1" }));
+    check("...and that tab is gone at once", !body.here.some((p) => p.id === "p2"), JSON.stringify(body));
+  }
+  {
+    const res = await fetch(s7.base + "api/presence", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ docId: "shared-doc", id: "p9", gone: true, token: "not-a-token" })
+    });
+    eq("a beacon carrying a wrong token is refused", res.status, 401);
+  }
+  {
+    /* p3 is still there from above and nothing has beaten since. */
+    await new Promise((r) => setTimeout(r, 600));
+    const body = await json(await beat(editToken, { docId: "shared-doc", id: "p1" }));
+    eq("a tab that stopped beating expires", (body.here || []).length, 0);
+  }
+  {
+    /* Presence is not part of the document and must never become part of
+       one: a document that was beaten about all this time is byte for byte
+       what the editor last saved. */
+    const created = await json(await fetch(s7.base + "api/docs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
+      body: JSON.stringify({ state: { title: "Presence test", rows: [], comments: [] } })
+    }));
+    await beat(editToken, { docId: created.id, id: "p1", name: "Priya Malhotra", rowId: "r1", field: "audioText" });
+    const doc = await json(await fetch(s7.base + "api/docs/" + created.id, { headers: { "x-splitpage-token": editToken } }));
+    eq("presence never bumps a document's rev", doc.rev, created.rev);
+    check("...and never appears in its state",
+      JSON.stringify(doc.state).indexOf("presence") === -1 && JSON.stringify(doc.state).indexOf("Priya") === -1,
+      JSON.stringify(doc.state));
+  }
+} finally {
+  s7.stop();
+}
+
+/* An open server (no PIN at all) has no gate to pass, and presence works
+   there like everything else does. */
+const s8 = await startServer({ HOST: "127.0.0.1" });
+try {
+  const res = await fetch(s8.base + "api/presence", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ docId: "open-doc", id: "p1", name: "Sam" })
+  });
+  eq("presence on a server with no PIN needs no token", res.status, 200);
+} finally {
+  s8.stop();
+}
+
 console.log("");
 if (failures.length) {
   console.log("FAILED " + failures.length + " of " + (passed + failures.length) + " checks:");

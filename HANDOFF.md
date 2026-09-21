@@ -214,6 +214,20 @@ per document in `DATA_DIR`.
   and it is POST-only so a link or a prefetch cannot start one. An updater
   verdict ("up to date", "you edited these files") is 200 carrying `error`;
   only "could not run the updater at all" is 5xx.
+- `REVIEW_PIN`/`REVIEW_KEY` are a second credential minting a second token
+  with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
+  role is read from the token on every request (`roleOf`), so it survives a
+  reconnect and cannot be asserted by a client; a review PUT is accepted only
+  when the state it carries differs from the stored one by added comments,
+  appended replies and the `.cmt-anchor` spans of those new comments —
+  anything else is 403 `review-only`, and an existing comment may not change
+  at all (there is no identity here to judge "mine" by). `GET /api/share`
+  hands an editor the review LINK's key, never the PIN.
+- `POST /api/presence` (#28) is a heartbeat and a listing in one round trip,
+  in memory only, capped and swept per request, TTL 15s. It is behind the
+  same gate but carries its own copy of it, because a closing tab's
+  `sendBeacon` cannot set the token header. Presence is never part of a
+  document and never touches one.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
   `Cache-Control: no-store` on every response.
@@ -622,7 +636,8 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection, picker, compare-and-set save, Google Drive files, "Publish & copy a link" + `?doc=` (issue #19) |
+| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19) |
+| `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |

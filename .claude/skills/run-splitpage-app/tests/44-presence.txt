@@ -1,0 +1,147 @@
+# Presence (issue #28): who else is in this hosted document, and where.
+#
+# What is NOT here: the wire. /api/presence — the gate, the listing, the
+# leaving beacon, the expiry — lives in `node tools/test-server.mjs`, because
+# this harness serves static files and cannot start server.js. Everything
+# below is what the page does with an answer, fed in through
+# window.__presenceTest.apply() exactly as the server would have sent it.
+
+open /index.html
+sleep 600
+expect document.querySelectorAll('#rows .row').length == 2
+
+# --- nothing is sent for a document that is nobody's session ---------------
+# No hosted document means no server to tell, so the beat does not even ask.
+expect window.__presenceTest.wanted() === false
+eval window.__t0 = window.__presenceTest.sends()
+eval window.__presenceTest.beat()
+sleep 300
+expect window.__presenceTest.sends() === window.__t0
+expect document.getElementById('presence-bar').hidden === true
+
+# --- hosted, and someone else is in scene 2 --------------------------------
+eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
+sleep 200
+expect window.__presenceTest.wanted() === true
+eval window.__presenceTest.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'audioText'}])
+sleep 200
+expect document.getElementById('presence-bar').hidden === false
+expect document.querySelectorAll('#presence-bar .presence-chip').length == 1
+# initials, not a full name: this sits in a header beside the title
+expect document.querySelector('#presence-bar .presence-chip').textContent == PM
+# hovering names them
+expect document.querySelector('#presence-bar .presence-chip').title.indexOf('Priya Malhotra') === 0
+
+# --- and a matching dot in the gutter of the scene they are in -------------
+expect document.querySelectorAll('.presence-mark').length == 1
+expect document.querySelector('#rows .row[data-id="r2"] .gutter .presence-mark') !== null
+expect document.querySelector('#rows .row[data-id="r1"] .presence-mark') === null
+expect document.querySelector('.presence-mark').title.indexOf('is in this scene') !== -1
+# the same colour in both places, and it is theirs rather than a shared one
+expect document.querySelector('.presence-mark').style.getPropertyValue('--presence') === document.querySelector('#presence-bar .presence-chip').style.getPropertyValue('--presence')
+shot 44-presence-gutter
+
+# --- anonymous is Guest, with a colour of its own --------------------------
+eval window.__presenceTest.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'audioText'},{id:'p3',name:'',rowId:'r1',field:'visualText'}])
+sleep 200
+expect document.querySelectorAll('#presence-bar .presence-chip').length == 2
+expect document.querySelectorAll('#presence-bar .presence-chip')[1].textContent == GU
+expect document.querySelectorAll('#presence-bar .presence-chip')[1].title.indexOf('Guest') === 0
+expect window.__presenceTest.color({id:'p3',name:''}) !== window.__presenceTest.color({id:'p4',name:''})
+# the colour follows the name, so one person looks the same in every window
+expect window.__presenceTest.color({id:'aaa',name:'Priya Malhotra'}) === window.__presenceTest.color({id:'zzz',name:'Priya Malhotra'})
+
+# --- in the same field as you, the dot moves onto that field ---------------
+# This is the case the merge cannot resolve silently, so it is the one worth
+# seeing before either of you types. Where the caret is comes from
+# activeElement, not from a focus event: headless never fires one for .focus()
+# on a page that has not had window focus, and this has to work there too.
+caret #rows .row[data-id="r2"] .audio-cell .cell-editable
+sleep 300
+expect window.__presenceTest.where().rowId == r2
+expect window.__presenceTest.where().field == audioText
+eval window.__presenceTest.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'audioText'}])
+sleep 200
+expect document.querySelectorAll('.presence-mark.is-field').length == 1
+expect document.querySelector('#rows .row[data-id="r2"] .audio-cell .field-wrap > .presence-mark.is-field') !== null
+expect document.querySelector('.presence-mark').title.indexOf('is in this field') !== -1
+# ...and never INSIDE the field: DOM in there is read back as part of the script
+expect document.querySelectorAll('.cell-editable .presence-mark').length == 0
+shot 44-presence-field
+
+# --- the same person in the other column is a gutter dot again -------------
+eval window.__presenceTest.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'visualText'}])
+sleep 200
+expect document.querySelectorAll('.presence-mark.is-field').length == 0
+expect document.querySelector('#rows .row[data-id="r2"] .gutter .presence-mark') !== null
+
+# --- none of it touches the document --------------------------------------
+# The marks are real DOM inside #rows, so this is the assertion that matters:
+# a render must be able to throw them away and put them back, and what gets
+# saved must never have seen them.
+eval window.__t1 = JSON.stringify(window.__hostedTest.docState ? 0 : 0)
+expect document.querySelectorAll('#rows .presence-mark').length == 1
+eval (function(){var c=document.querySelector('#rows .row[data-id="r1"] .visual-cell .cell-editable');window.__html=c.innerHTML;return 1;})()
+expect window.__html.indexOf('presence') === -1
+# a full re-render keeps them, because they are painted from the last answer
+eval document.activeElement.blur()
+eval window.__presenceTest.setWhere({rowId:null,field:null})
+eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
+sleep 300
+expect document.querySelectorAll('#rows .presence-mark').length == 1
+expect document.querySelector('#rows .row[data-id="r1"] .visual-cell .cell-editable').innerHTML === window.__html
+
+# --- a mark is not a control ----------------------------------------------
+# It sits inside #rows, where a click would otherwise reach the row's own
+# delegated handlers.
+expect getComputedStyle(document.querySelector('#rows .presence-mark')).pointerEvents == none
+
+# --- nobody there is nothing shown ---------------------------------------
+eval window.__presenceTest.apply([])
+sleep 200
+expect document.getElementById('presence-bar').hidden === true
+expect document.querySelectorAll('.presence-mark').length == 0
+
+# --- a few minutes idle and this tab stops announcing itself --------------
+eval window.__presenceTest.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'audioText'}])
+sleep 200
+expect document.querySelectorAll('#presence-bar .presence-chip').length == 1
+eval window.__presenceTest.goIdle()
+expect window.__presenceTest.wanted() === false
+eval window.__t2 = window.__presenceTest.sends()
+eval window.__presenceTest.beat()
+sleep 300
+expect window.__presenceTest.sends() === window.__t2
+# ...and what was on screen goes away rather than going stale
+expect document.getElementById('presence-bar').hidden === true
+expect document.querySelectorAll('.presence-mark').length == 0
+
+# --- what a beat carries -------------------------------------------------
+# The author-name preference, the scene and field, and nothing about the
+# document itself.
+eval (function(){localStorage.setItem('splitpage-comment-author','Sam Okafor');return 1;})()
+# nothing in the script is focused, so the caret has nothing to say about where
+# this tab is and the last place stands — which is what setWhere sets here
+eval document.activeElement.blur()
+eval window.__presenceTest.setWhere({rowId:'r1',field:'visualText'})
+eval JSON.stringify(window.__presenceTest.payload(false))
+expect window.__presenceTest.payload(false).name == Sam Okafor
+expect window.__presenceTest.payload(false).docId == shared-doc
+expect window.__presenceTest.payload(false).rowId == r1
+expect window.__presenceTest.payload(false).field == visualText
+expect Object.keys(window.__presenceTest.payload(false)).sort().join(',') == docId,field,gone,id,name,rowId
+# a client id of its own, per tab, and not in localStorage where it would
+# outlive the tab
+expect window.__presenceTest.id().length > 8
+expect localStorage.getItem('splitpage-presence-id') === null
+expect sessionStorage.getItem('splitpage-presence-id') === window.__presenceTest.id()
+
+# --- back to a local document: presence stops dead ------------------------
+eval window.__hostedTest.setSession({role:'edit',docId:null})
+sleep 200
+expect window.__presenceTest.wanted() === false
+eval window.__t3 = window.__presenceTest.sends()
+eval window.__presenceTest.beat()
+sleep 300
+expect window.__presenceTest.sends() === window.__t3
+expect document.getElementById('presence-bar').hidden === true

@@ -116,6 +116,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/45-broll-anchoring.txt` | b-roll anchoring (issue #21): a `B-roll:` line getting a real `.broll-key` span however it arrived, not only when it was typed — a two-column import's Visual lines anchored with one id per line (never two lines sharing one), a clipboard paste left alone while the caret is still in the field and anchored the moment it is left, nothing still flagged `markerless` in the panel afterwards, and the consequence the issue measured: a status set on an imported line surviving a rewording of that line instead of orphaning its record |
 | `tests/46-import-tag-prompt.txt` | the Import dialog's "What should Splitpage look for in this script?" choices (issue #22), built from `IMPORT_SCANS` rather than written into `page.html`: on by default and the imported lines arriving already anchored (no blur, no later pass), the count reported in the import's own toast, the answer remembered in `localStorage` both ways, and a declined import left byte-identical — including against the #21 anchoring pass, which has to keep its hands off it while the b-roll panel still counts it as it always did |
 | `tests/43-review-mode.txt` | a review session (issue #30), driven through `window.__hostedTest.setSession()` since the harness cannot start a real server: the `#review=` key read out of the address and taken off it, a review key alone restricting nothing until a server says the role is review, the "Viewing · comments only" badge, every field non-editable with a Comment-only toolbar (and still focusable, so text can be selected to comment on), no status/reorder/insert/delete/image controls, typing and Ctrl+Enter doing nothing, a control left in the page shell (Add row) refused by the click guard with a toast rather than by CSS alone, no writer, no Replace, the body class being a symptom the role survives being stripped of, comment cards offering Reply but not Resolve/Delete, the same session as an editor getting everything back, the review link offered to a host and not to a reviewer, and a local document in the same tab staying editable |
+| `tests/44-presence.txt` | presence (issue #28), fed answers through `window.__presenceTest.apply()` since the harness cannot start a real server: nothing sent at all for a local document or an idle tab, coloured initials in the header naming each person on hover, a matching gutter dot on the scene they are in, the dot moving onto the field itself when it is the field you are in (and never INSIDE the `.cell-editable`, where it would be read back as script), "Guest" plus a stable colour for anyone anonymous, the colour following the name so one person looks the same in every window, a full re-render repainting the marks and leaving the row HTML byte-identical, marks taking no clicks, and what a beat actually carries — the author-name preference, the scene and field, and a per-tab id in sessionStorage |
 
 ## The server's own tests
 
@@ -131,9 +132,13 @@ node tools/test-server.mjs
 Ends with `ALL PASS` and exit 0. It covers the join PIN
 (open health, gated routes, wrong PIN, the rate limit, the right PIN), the CORS
 allowlist (including the literal `null` origin and static files never getting
-the headers), the 409 compare-and-set, and the launcher routes answering 404
-without the launch token and under `--host` **with** it. Run it after any
-change to `server/server.js`.
+the headers), the 409 compare-and-set, the launcher routes answering 404
+without the launch token and under `--host` **with** it, the review credential
+(#30: both roles, the link key, `/api/share`, and one PUT per kind of change a
+review session may and may not make), and presence (#28: the gate, the
+listing, the leaving beacon's body-carried token, expiry under a dialled-down
+`PRESENCE_TTL_MS`, and nothing of it ever reaching a stored document). Run it
+after any change to `server/server.js`.
 
 ### The join PIN end to end (a real server, by hand)
 
