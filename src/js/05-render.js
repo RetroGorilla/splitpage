@@ -199,6 +199,10 @@
        frame, and nothing is wrong in the meantime beyond a missing
        underline. */
     scheduleUntaggedScan();
+    /* The gutter and field marks live outside the document (13a-presence.js)
+       and have just been thrown away with the rest of #rows, so they are put
+       back from the last answer rather than waiting for the next beat. */
+    paintPresence();
   }
 
   /* ================= field sync ================= */
