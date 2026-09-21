@@ -1,0 +1,91 @@
+# Auto-scroll while a scene is dragged to the top/bottom edge of the window
+# (issue #23): the window-level dragover listener + the updateDragScroll/
+# dragScrollStep loop in 06-rows.js.
+#
+# Real native HTML5 drag-and-drop cannot be produced by a synthetic pointer
+# over CDP (there is no OS-level drag session to drive), so this drives the
+# same DOM events a real grip drag fires: `mousedown` on the grip (arms
+# `draggable`, see onRootMouseDown), `dragstart` on the row (sets dragRowId,
+# see onRootDragStart), then `dragover` events built with a real
+# DataTransfer, exactly like onRootDragOver/the new window listener consume.
+# A pointer held still inside the hot zone is the whole point of the feature
+# (dragover only fires while the pointer moves in most engines), so most of
+# this dispatches ONE dragover and then waits — any further scrolling or
+# drop-marker movement has to come from the rAF loop, not from more events.
+
+open
+viewport 1000 480
+goto /index.html
+sleep 500
+
+eval (function(){window.__mkDT=function(){try{return new DataTransfer();}catch(e){return {dropEffect:"none",effectAllowed:"uninitialized",setData:function(){},getData:function(){return "";},files:[],types:[]};}};window.__mkDrag=function(type,x,y,dt){var ev;try{ev=new DragEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,dataTransfer:dt});}catch(e){ev=new Event(type,{bubbles:true,cancelable:true});try{Object.defineProperty(ev,"dataTransfer",{value:dt});}catch(e2){}}try{Object.defineProperty(ev,"clientX",{value:x,configurable:true});}catch(e3){}try{Object.defineProperty(ev,"clientY",{value:y,configurable:true});}catch(e4){}return ev;};return true;})()
+
+# --- seed enough scenes to overflow a short viewport ------------------------
+eval (function(){for(var i=0;i<40;i++){document.querySelector(".add-row-btn").click();}return document.querySelectorAll("#rows .row").length;})()
+sleep 300
+expect document.querySelectorAll('#rows .row').length >= 40
+expect document.documentElement.scrollHeight > innerHeight
+
+# --- a dragover in the hot zone with no scene picked up (dragRowId unset —
+#     e.g. an image file dragged in from outside) must never move the page --
+eval (function(){window.scrollTo(0,0);return window.scrollY;})()
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,innerHeight-10,window.__mkDT()));return true;})()
+sleep 400
+expect window.scrollY === 0
+
+# --- pick up a scene by its grip (mousedown arms draggable, dragstart sets
+#     dragRowId — the same two steps a real drag performs) ------------------
+eval (function(){var row=document.querySelectorAll("#rows .row")[3];var grip=row.querySelector('[data-action="drag-grip"]');grip.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true}));window.__dt=window.__mkDT();row.dispatchEvent(window.__mkDrag("dragstart",50,100,window.__dt));window.__dragRow=row;return {draggable:row.getAttribute("draggable"),dragging:row.classList.contains("is-dragging")};})()
+expect window.__dragRow.classList.contains('is-dragging')
+expect window.__dragRow.getAttribute('draggable')
+
+# --- holding near the BOTTOM edge scrolls the script down, driven by the
+#     rAF loop from a single event (the pointer never moves again) ----------
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,innerHeight-10,window.__dt));return true;})()
+wait window.scrollY > 0
+# the drop marker follows the page as it moves under the still pointer —
+# elementFromPoint re-run every frame, not just on the one dispatched event
+wait document.querySelectorAll('#rows .row.drop-before, #rows .row.drop-after').length > 0
+
+# --- leaving the zone (pointer now over the middle of the viewport) stops
+#     the scroll immediately, with no further drift ------------------------
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,Math.floor(innerHeight/2),window.__dt));window.__scrollAtStop=window.scrollY;return window.__scrollAtStop;})()
+sleep 500
+expect window.scrollY === window.__scrollAtStop
+
+# --- resume scrolling, then dragend stops it immediately and clears the
+#     drag state (draggable, .is-dragging, the drop markers) ---------------
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,innerHeight-10,window.__dt));return true;})()
+wait window.scrollY > window.__scrollAtStop
+eval (function(){window.__dragRow.dispatchEvent(window.__mkDrag("dragend",50,innerHeight-10,window.__dt));window.__scrollAtDragend=window.scrollY;return window.__scrollAtDragend;})()
+expect !window.__dragRow.getAttribute('draggable')
+expect !document.querySelector('#rows .row.is-dragging')
+expect !document.querySelector('#rows .row.drop-before, #rows .row.drop-after')
+sleep 500
+expect window.scrollY === window.__scrollAtDragend
+
+# --- and nothing starts scrolling again once the drag is over --------------
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,innerHeight-10,window.__dt));return true;})()
+sleep 400
+expect window.scrollY === window.__scrollAtDragend
+
+# --- symmetric check: holding near the TOP edge scrolls the script up ------
+eval (function(){window.scrollTo(0,4000);return window.scrollY;})()
+wait window.scrollY > 0
+eval (function(){var row=document.querySelectorAll("#rows .row")[10];var grip=row.querySelector('[data-action="drag-grip"]');grip.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true}));window.__dt2=window.__mkDT();row.dispatchEvent(window.__mkDrag("dragstart",50,100,window.__dt2));window.__dragRow2=row;window.__scrollBeforeTop=window.scrollY;return window.__scrollBeforeTop;})()
+# the top hot zone is measured from the VIEWPORT edge, not from #rows — the
+# sticky header sits above #rows in the DOM, so this also proves the listener
+# isn't scoped to #rows (a pointer over the header would never reach it there)
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,10,window.__dt2));return true;})()
+wait window.scrollY < window.__scrollBeforeTop
+
+# --- and dropping (not just dragend) also stops it -------------------------
+eval (function(){document.body.dispatchEvent(window.__mkDrag("dragover",50,Math.floor(innerHeight/2),window.__dt2));window.__scrollAtStop2=window.scrollY;return window.__scrollAtStop2;})()
+sleep 400
+expect window.scrollY === window.__scrollAtStop2
+eval (function(){window.__dragRow2.dispatchEvent(window.__mkDrag("dragend",50,Math.floor(innerHeight/2),window.__dt2));return true;})()
+expect !document.querySelector('#rows .row.is-dragging')
+sleep 300
+expect window.scrollY === window.__scrollAtStop2
+
+quit
