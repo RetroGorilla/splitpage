@@ -493,6 +493,18 @@
     return rowId + " " + ordinal;
   }
 
+  /* Rows an import was asked NOT to scan (11-import.js). Browser state, never
+     the document's: the answer was about that import, and an import that says
+     no has to leave the text exactly as it was handed over — including
+     against this pass, which would otherwise rewrite it a moment later. Ids
+     of replaced rows are left behind here; they are a session's worth of
+     strings and can never match a row again. */
+  var brollAnchorDeclined = Object.create(null);
+
+  function declineBrollAnchoring(rows) {
+    (rows || []).forEach(function (row) { brollAnchorDeclined[row.id] = true; });
+  }
+
   /* `rows` is which rows to rewrite; the plan is always read from the whole
      document, so a line brought into a script that already tracks a shot of
      the same name cannot walk off with that shot's record. Callers that
@@ -503,6 +515,7 @@
     var plan = brollAnchorPlan();
     var total = 0;
     rows.forEach(function (row) {
+      if (brollAnchorDeclined[row.id]) return;
       var body = inertBody(row.visualText);
       var ordinal = -1, n = 0;
       brollFieldLines(body).forEach(function (line) {
