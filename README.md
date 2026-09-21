@@ -762,16 +762,28 @@ everything else is exactly the same.
 
 ## Two shapes of Markdown export
 
-**File ▸ Export a copy** has two Markdown options. **Markdown (.md)** lists
-the script scene by scene — a `## Scene 01` heading, then the Visual notes,
-then the Audio, stacked. **Markdown, two columns (.md)** lays the same
-script out as a table instead, one row per scene with a Visual column next
-to an Audio column — the way the split view itself looks, and the way a
+**File ▸ Export a copy** has two Markdown options. **Markdown (.md)** reads
+like a script rather than a filled-in form: a `### Scene 01` heading, then
+the visual direction as an italic lead-in ahead of whatever's spoken, with
+nothing printed for a field that has nothing to say. A picture is referenced
+from a sibling `images/` folder instead of pasted inline as base64 — once a
+script has any pictures, this export becomes a small `.zip` so the folder
+actually travels with the `.md`. **Markdown, two columns (.md)** lays the
+same script out as a table instead, one row per scene with a Visual column
+next to an Audio column — the way the split view itself looks, and the way a
 GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side
 by side rather than stacked. It's also exactly the shape **Paste a
 script…** already reads back in "Two columns" mode, so a two-column
-Markdown export round-trips back into Splitpage with the split intact.
+Markdown export round-trips back into Splitpage with the split intact, and
+it keeps embedding pictures inline so the single `.md` file stays complete
+on its own.
 Both carry the production breakdown and comments the same way.
+
+**File ▸ Export a copy ▸ Word (.docx)** carries the same polish: named
+paragraph, character and table styles, a document theme font, scene numbers
+in their own column, page numbers in the footer, and a production-breakdown
+table whose columns size themselves to what's actually in them instead of a
+fixed guess.
 
 Neither is the same thing as **Save**. These are copies for reading and
 sharing: they carry the words, not the tagging, the comment anchors, the
