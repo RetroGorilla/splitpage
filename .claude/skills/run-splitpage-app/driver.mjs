@@ -371,16 +371,64 @@ function resolveSel(sel) {
   return `document.querySelector('${s}')`;
 }
 
+// A box measured once and trusted can already be stale by the time the two
+// Input.dispatchMouseEvent round trips actually reach Chromium. Confirmed
+// cause (issue #31): a header button sits inside `.topbar`, which is
+// `position: sticky` and condenses on scroll (src/js/20i-topbar.js) through
+// a scroll listener that is deliberately rAF-coalesced, i.e. asynchronous.
+// Calling `scrollIntoView` on an element that is already fully visible is
+// its own trap on a sticky ancestor: Chromium computes the scroll target
+// from the element's un-stuck static position, so "already visible" gets
+// scrolled anyway — which is exactly the kind of scroll that flips
+// `.is-condensed` a frame later and moves the button. Measured live: a
+// pixel that was the button a moment before (`elementFromPoint` returning
+// it, topbar condensed, scrollY 86) had the topbar decondensed and scrollY
+// reset to 0 by the time the click's own box came back, moving the button
+// out from under the coordinates already queued for dispatch. Fixed here by
+// (1) not scrolling at all when the element is already fully in the
+// viewport, (2) waiting two animation frames for any pending layout class
+// toggle to land before trusting a measurement, and (3) confirming with
+// `elementFromPoint` that the point about to be dispatched is really the
+// element (or a descendant of it), retrying a few times before giving up.
+// This also covers a panel that is mid open-transition (comments-panel's
+// 0.18s transform) and briefly reports zero size.
+async function measureForClick(e, sel) {
+  const attempts = 6;
+  let box = null;
+  for (let i = 1; i <= attempts; i++) {
+    box = await js(`
+(() => { const el = ${e}; if (!el) return null;
+  const r0 = el.getBoundingClientRect();
+  const inView = r0.top >= 0 && r0.left >= 0 && r0.bottom <= window.innerHeight && r0.right <= window.innerWidth;
+  if (!inView) el.scrollIntoView({block:'center'});
+  const r = el.getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  const top = document.elementFromPoint(x, y);
+  const hit = !!(top && (top === el || el.contains(top)));
+  const topDesc = top ? (top.id ? '#' + top.id
+    : (top.tagName || '').toLowerCase() + (typeof top.className === 'string' && top.className.trim()
+        ? '.' + top.className.trim().replace(/\\s+/g, '.') : '')) : null;
+  return {x, y, w: r.width, h: r.height, hit, topDesc}; })()
+`);
+    if (!box) throw new Error(`no element for: ${sel}`);
+    if (box.w > 0 && box.h > 0 && box.hit) {
+      if (i > 1) log(`click ${sel}: layout settled on attempt ${i}`);
+      return box;
+    }
+    if (i === attempts) break;
+    // Let a pending requestAnimationFrame (the condensing topbar, a CSS
+    // transition finishing) land before measuring again.
+    await js(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+    await sleep(30 * i);
+  }
+  if (box.w <= 0 || box.h <= 0) throw new Error(`element has zero size: ${sel}`);
+  log(`click ${sel}: elementFromPoint at ${Math.trunc(box.x)},${Math.trunc(box.y)} still hits ${box.topDesc || "nothing"}, not ${sel} or a descendant, after ${attempts} attempts — dispatching anyway`);
+  return box;
+}
+
 async function clickEl(sel) {
   const e = resolveSel(sel);
-  const box = await js(`
-(() => { const el = ${e}; if (!el) return null;
-  el.scrollIntoView({block:'center'});
-  const r = el.getBoundingClientRect();
-  return {x: r.left + r.width/2, y: r.top + r.height/2, w: r.width, h: r.height}; })()
-`);
-  if (!box) throw new Error(`no element for: ${sel}`);
-  if (box.w <= 0 || box.h <= 0) throw new Error(`element has zero size: ${sel}`);
+  const box = await measureForClick(e, sel);
   for (const type of ["mousePressed", "mouseReleased"]) {
     await send("Input.dispatchMouseEvent", {
       type, x: Math.trunc(box.x), y: Math.trunc(box.y), button: "left", clickCount: 1,
