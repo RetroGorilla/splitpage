@@ -190,11 +190,15 @@ function sameToken(given, token) {
 /* "edit", "review", or null for a caller carrying neither token. The role is
    read from the token on every request, so it cannot be stale and cannot be
    asserted by the client. */
-function roleOf(req) {
-  const given = String(req.headers["x-splitpage-token"] || "");
-  if (sameToken(given, SESSION_TOKEN)) return "edit";
-  if (REVIEW_ACTIVE && sameToken(given, REVIEW_TOKEN)) return "review";
+function roleOfToken(given) {
+  const token = String(given == null ? "" : given);
+  if (sameToken(token, SESSION_TOKEN)) return "edit";
+  if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return "review";
   return null;
+}
+
+function roleOf(req) {
+  return roleOfToken(req.headers["x-splitpage-token"] || "");
 }
 
 /* Echoed only for an origin that was explicitly allowed, never `*`, and never
@@ -557,6 +561,51 @@ function handleLauncher(req, res, parts) {
   return sendJson(res, 404, { error: "not-found" });
 }
 
+/* ---------- who else is here ----------
+ *
+ * A heartbeat and a listing in one round trip: a client posts where it is,
+ * and is told where everybody else is. That is the whole of it.
+ *
+ * IN MEMORY, AND NOWHERE ELSE. Presence is not part of a document and must
+ * never become part of one: this map is the only place it lives, nothing
+ * reads it on the way to writeDoc(), and it holds seconds of state — a
+ * restart forgets everyone, which is correct, because everyone would
+ * reconnect within one beat anyway. It is capped in both directions so a
+ * client that invents document ids or client ids cannot grow it without
+ * bound, and swept on every request rather than on a timer, because there is
+ * nothing to sweep when nobody is asking.
+ *
+ * TTL is a few beats, not minutes: it is what makes a closed tab disappear
+ * when its "I'm gone" beacon never arrives.
+ */
+/* Overridable only so a test can watch an entry expire without waiting out a
+   real one (tools/test-server.mjs); nothing that ships sets it. */
+const PRESENCE_TTL_MS = Number(process.env.PRESENCE_TTL_MS || 15000);
+const PRESENCE_MAX_PER_DOC = 50;
+const PRESENCE_MAX_DOCS = 200;
+const presenceByDoc = new Map();   /* docId -> Map(clientId -> {name, rowId, field, at}) */
+
+function sweepPresence(now) {
+  for (const [docId, people] of presenceByDoc) {
+    for (const [id, who] of people) {
+      if (now - who.at > PRESENCE_TTL_MS) people.delete(id);
+    }
+    if (!people.size) presenceByDoc.delete(docId);
+  }
+}
+
+/* Every string that comes back out of here is shown by another person's
+   browser, so it is bounded and whitelisted on the way in. The name is the
+   one free-text field and is only ever rendered as text. */
+function presenceWord(value, max) {
+  return String(value == null ? "" : value).replace(/[ -]/g, "").trim().slice(0, max);
+}
+
+function presenceHandle(value) {
+  const v = String(value == null ? "" : value);
+  return /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : "";
+}
+
 /* ---------- what a review session may write ----------
  *
  * Enforcement here is a COMPARISON, not a list of permitted operations: the
@@ -858,6 +907,64 @@ async function handleApi(req, res, url) {
      people, and none of this is reachable by anyone but the launcher that
      started this process. See invariant #28. */
   if (parts[1] === "launcher") return handleLauncher(req, res, parts);
+
+  /* Presence, before the gate only because it carries its own copy of it.
+     One case forces that: the "I'm gone" beacon a closing tab sends.
+     navigator.sendBeacon cannot set a header, so there the token arrives in
+     the body instead — the same credential in a different envelope, for the
+     one route that touches nothing but the in-memory map above. No token is
+     still no presence, in either envelope.
+
+     Both roles are here: a review viewer (#30) is someone else in the
+     document and shows up like anybody else. */
+  if (parts[1] === "presence" && req.method === "POST") {
+    const body = await readBody(req);
+    const role = JOIN_PIN
+      ? (roleOf(req) || roleOfToken(body && body.token))
+      : "edit";
+    if (!role) return sendJson(res, 401, { error: "pin-required" });
+
+    const docId = body && body.docId;
+    const me = presenceHandle(body && body.id);
+    if (!isValidId(docId) || !me) return sendJson(res, 400, { error: "bad-presence" });
+
+    const now = Date.now();
+    sweepPresence(now);
+    let people = presenceByDoc.get(docId);
+    if (body && body.gone) {
+      /* A tab that is going away. Answering with the listing would be
+         pointless — it is not there to read it. */
+      if (people) {
+        people.delete(me);
+        if (!people.size) presenceByDoc.delete(docId);
+      }
+      return sendJson(res, 200, { ok: true });
+    }
+    if (!people) {
+      if (presenceByDoc.size >= PRESENCE_MAX_DOCS) return sendJson(res, 200, { here: [] });
+      people = new Map();
+      presenceByDoc.set(docId, people);
+    }
+    if (people.size >= PRESENCE_MAX_PER_DOC && !people.has(me)) {
+      return sendJson(res, 200, { here: [] });
+    }
+    people.set(me, {
+      name: presenceWord(body && body.name, 40),
+      /* A row id is a document's own id for a scene, and it ends up in
+         another browser's attribute selector — whitelisted, not sanitised,
+         same reasoning as a document id. */
+      rowId: presenceHandle(body && body.rowId),
+      field: ["visualText", "audioText", "visualImage", "title"].indexOf(String(body && body.field)) === -1
+        ? "" : String(body.field),
+      at: now
+    });
+    const here = [];
+    for (const [id, who] of people) {
+      if (id === me) continue;
+      here.push({ id, name: who.name, rowId: who.rowId, field: who.field });
+    }
+    return sendJson(res, 200, { here });
+  }
 
   /* The gate. Everything below needs the token once a PIN is set — including
      /api/me, which is a name and an email address.
