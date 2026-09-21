@@ -329,9 +329,14 @@
 </div>
 
 <div class="prompter" id="prompter" hidden>
-  <div class="prompter-scroll" id="prompter-scroll">
+  <div class="prompter-viewport">
+    <div class="prompter-scroll" id="prompter-scroll">
+      <div id="prompter-content"></div>
+    </div>
+    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
+         Mirror/Flip transform, and the reading line has to stay put and
+         right-side-up while only the text behind it flips. -->
     <div class="prompter-guide"></div>
-    <div id="prompter-content"></div>
   </div>
   <div class="prompter-bar">
     <button id="pp-voice" type="button">Follow My Voice</button>
@@ -347,7 +352,8 @@
       <input id="pp-size" type="range" min="24" max="84" value="42">
     </div>
     <button id="pp-skip-shot" type="button" title="Leave out the scenes already marked Shot">Skip shot</button>
-    <button id="pp-mirror" type="button">Mirror</button>
+    <button id="pp-mirror" type="button" title="Flip left-right — for a glass beam-splitter in front of the lens (M)">Mirror</button>
+    <button id="pp-flip" type="button" title="Flip upside-down — for a monitor mounted inverted (F)">Flip</button>
     <button id="pp-fullscreen" type="button">Fullscreen</button>
     <div class="spacer"></div>
     <button id="pp-close" class="close-btn" type="button">Close (Esc)</button>

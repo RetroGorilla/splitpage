@@ -103,6 +103,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/29-updates.txt` | the update bar (20a-update.js), fed a status through `window.__updateTest`: nothing shown when up to date or merely checking, the launcher copy's text and its staged-and-waiting line, dismiss staying dismissed when a later status arrives, and the desktop app's four states — Download (which calls the bridge, not a link), progress with no second button, Install and restart, Try again after a failure, and the release-page fallback for a release with no installer for this machine |
 | `tests/30-new-tab.txt` | the New Tab page (20j-newtab.js), opted into with `?newtab=1`: it showing itself over the pristine demo and not over a document, Esc leaving the demo untouched, "New script" giving a genuinely empty document (one blank scene, no tags/comments/b-roll/people, its own fresh docId), "Open a file" running the real picker path against the desktop fake backend (a cancelled picker leaves the page up, a picked file loads into the tab and closes it), and the harness suppression every other suite depends on |
 | `tests/28-autosave.txt` | autosave (14-export.js) and the save-state indicator (12-dirty-toast.js): nothing written before the document has a file, one write per pause in the typing rather than one per keystroke, a window blur bringing a pending write forward, the File-menu toggle and its remembered preference, and a file changed on disk halting autosave instead of throwing a modal over the typing — driven against the same fake `FileSystemFileHandle` 19-save-conflict.txt uses |
+| `tests/32-prompter-mirror.txt` | teleprompter Mirror/Flip (issue #27): both off by default, each toggling its own class on `#prompter-scroll` independently, both together for the full 180°, `M`/`F` while the prompter is open (and doing nothing once it's closed), the reading line and control bar never being descendants of the transformed element, the setting surviving a `goto` reload (per-device localStorage, not the document), and none of it tripping the save-state indicator |
 
 ## The server's own tests
 
@@ -236,7 +237,7 @@ buffered pipeline long after the driver has exited, which looks like a hang.
 | `caret <sel> [start]` | focus a contenteditable **and place the caret** |
 | `press <text>` | per-character key events |
 | `type <text>` | one `insertText` for the whole string |
-| `key [mods] <Name>` | `Enter Tab Escape Backspace Delete Home End ArrowUp ArrowDown KeyA KeyB KeyI KeyU KeyZ KeyF`, mods `ctrl shift alt` |
+| `key [mods] <Name>` | `Enter Tab Escape Backspace Delete Home End ArrowUp ArrowDown KeyA KeyB KeyI KeyU KeyZ KeyF KeyM`, mods `ctrl shift alt` |
 | `viewport <w> <h> [mobile]` / `viewport reset` | device metrics; `mobile` also enables touch |
 | `count <sel>` / `text <sel>` / `sel <sel>` | inspect |
 | `shot <name>` | screenshot to `%TEMP%\splitpage-shots\<name>.png` |

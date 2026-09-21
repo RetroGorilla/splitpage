@@ -1830,8 +1830,13 @@
     flex-direction: column;
   }
   .prompter[hidden] { display: none; }
+  /* Sized exactly as #prompter-scroll used to be (the flex:1 slice above the
+     control bar) — .prompter-guide is positioned against this box instead of
+     the scroller itself so Mirror/Flip transforming the scroller never
+     touches it. */
+  .prompter-viewport { position: relative; flex: 1; min-height: 0; }
   .prompter-scroll {
-    flex: 1;
+    position: absolute; inset: 0;
     overflow-y: auto;
     scrollbar-width: none;
     padding: 46vh 8vw;
@@ -1840,6 +1845,8 @@
   }
   .prompter-scroll::-webkit-scrollbar { display: none; }
   .prompter-scroll.mirror { transform: scaleX(-1); }
+  .prompter-scroll.flip { transform: scaleY(-1); }
+  .prompter-scroll.mirror.flip { transform: scale(-1, -1); }
   .prompter-line {
     font-family: var(--font-body);
     font-weight: 700;
@@ -3161,9 +3168,14 @@
 </div>
 
 <div class="prompter" id="prompter" hidden>
-  <div class="prompter-scroll" id="prompter-scroll">
+  <div class="prompter-viewport">
+    <div class="prompter-scroll" id="prompter-scroll">
+      <div id="prompter-content"></div>
+    </div>
+    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
+         Mirror/Flip transform, and the reading line has to stay put and
+         right-side-up while only the text behind it flips. -->
     <div class="prompter-guide"></div>
-    <div id="prompter-content"></div>
   </div>
   <div class="prompter-bar">
     <button id="pp-voice" type="button">Follow My Voice</button>
@@ -3179,7 +3191,8 @@
       <input id="pp-size" type="range" min="24" max="84" value="42">
     </div>
     <button id="pp-skip-shot" type="button" title="Leave out the scenes already marked Shot">Skip shot</button>
-    <button id="pp-mirror" type="button">Mirror</button>
+    <button id="pp-mirror" type="button" title="Flip left-right — for a glass beam-splitter in front of the lens (M)">Mirror</button>
+    <button id="pp-flip" type="button" title="Flip upside-down — for a monitor mounted inverted (F)">Flip</button>
     <button id="pp-fullscreen" type="button">Fullscreen</button>
     <div class="spacer"></div>
     <button id="pp-close" class="close-btn" type="button">Close (Esc)</button>
@@ -18516,6 +18529,54 @@ node update.mjs           # download and verify it</code></pre>
     }
   }
 
+  /* ---------- mirror / flip ----------
+
+     Which way a rig needs the picture turned is about the hardware sitting
+     in front of the lens, not the script on screen — a beam-splitter glass
+     (Mirror) or a monitor bolted in upside-down (Flip). So, like the
+     writer's remembered text size, it lives in localStorage keyed to this
+     device rather than travelling with the document: opening someone else's
+     script on your rig should keep reading through *your* glass correctly,
+     and opening your own script on a plain monitor shouldn't come out
+     mirrored. Both flags only ever toggle a transform on #prompter-scroll
+     (app.css) — the reading line and the controls are deliberately outside
+     that element (see .prompter-viewport in page.html) so they never flip,
+     and scrollTop keeps working in ordinary DOM space regardless: the
+     transform only changes how that same scroll position is painted. */
+  var PROMPTER_MIRROR_KEY = "splitpage-prompter-mirror";
+  var PROMPTER_FLIP_KEY = "splitpage-prompter-flip";
+
+  function readPrompterOrientationFlag(key) {
+    try { return localStorage.getItem(key) === "1"; } catch (e) { return false; }
+  }
+  function writePrompterOrientationFlag(key, on) {
+    try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) {}
+  }
+
+  var prompterMirror = readPrompterOrientationFlag(PROMPTER_MIRROR_KEY);
+  var prompterFlip = readPrompterOrientationFlag(PROMPTER_FLIP_KEY);
+
+  function applyPrompterOrientation() {
+    var scroller = document.getElementById("prompter-scroll");
+    scroller.classList.toggle("mirror", prompterMirror);
+    scroller.classList.toggle("flip", prompterFlip);
+    document.getElementById("pp-mirror").classList.toggle("is-active", prompterMirror);
+    document.getElementById("pp-flip").classList.toggle("is-active", prompterFlip);
+  }
+
+  /* Deliberately not markDirty() — a rig preference, not a change to the
+     document (issue #27). */
+  function setPrompterMirror(on) {
+    prompterMirror = on;
+    writePrompterOrientationFlag(PROMPTER_MIRROR_KEY, on);
+    applyPrompterOrientation();
+  }
+  function setPrompterFlip(on) {
+    prompterFlip = on;
+    writePrompterOrientationFlag(PROMPTER_FLIP_KEY, on);
+    applyPrompterOrientation();
+  }
+
   function openPrompter() {
     buildPrompterContent();
     var el = document.getElementById("prompter");
@@ -18524,6 +18585,7 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("prompter-scroll").scrollTop = 0;
     setPrompterPlaying(false);
     applyPrompterSize();
+    applyPrompterOrientation();
     updateVoiceAvailability();
     acquireWakeLock();
   }
@@ -24867,9 +24929,11 @@ node update.mjs           # download and verify it</code></pre>
       document.getElementById("prompter-scroll").scrollTop = 0;
       updateVoiceAvailability();
     });
-    document.getElementById("pp-mirror").addEventListener("click", function (e) {
-      document.getElementById("prompter-scroll").classList.toggle("mirror");
-      e.target.classList.toggle("is-active");
+    document.getElementById("pp-mirror").addEventListener("click", function () {
+      setPrompterMirror(!prompterMirror);
+    });
+    document.getElementById("pp-flip").addEventListener("click", function () {
+      setPrompterFlip(!prompterFlip);
     });
     document.getElementById("pp-fullscreen").addEventListener("click", function () {
       var el = document.getElementById("prompter");
@@ -24883,6 +24947,8 @@ node update.mjs           # download and verify it</code></pre>
       else if (e.key === " ") { e.preventDefault(); setPrompterPlaying(!prompterPlaying); }
       else if (e.key === "ArrowUp") { prompterSpeed = Math.min(160, prompterSpeed + 6); document.getElementById("pp-speed").value = prompterSpeed; }
       else if (e.key === "ArrowDown") { prompterSpeed = Math.max(10, prompterSpeed - 6); document.getElementById("pp-speed").value = prompterSpeed; }
+      else if (e.key === "m" || e.key === "M") { setPrompterMirror(!prompterMirror); }
+      else if (e.key === "f" || e.key === "F") { setPrompterFlip(!prompterFlip); }
     });
 
     /* ---- the writer ---- */

@@ -1796,8 +1796,13 @@
     flex-direction: column;
   }
   .prompter[hidden] { display: none; }
+  /* Sized exactly as #prompter-scroll used to be (the flex:1 slice above the
+     control bar) — .prompter-guide is positioned against this box instead of
+     the scroller itself so Mirror/Flip transforming the scroller never
+     touches it. */
+  .prompter-viewport { position: relative; flex: 1; min-height: 0; }
   .prompter-scroll {
-    flex: 1;
+    position: absolute; inset: 0;
     overflow-y: auto;
     scrollbar-width: none;
     padding: 46vh 8vw;
@@ -1806,6 +1811,8 @@
   }
   .prompter-scroll::-webkit-scrollbar { display: none; }
   .prompter-scroll.mirror { transform: scaleX(-1); }
+  .prompter-scroll.flip { transform: scaleY(-1); }
+  .prompter-scroll.mirror.flip { transform: scale(-1, -1); }
   .prompter-line {
     font-family: var(--font-body);
     font-weight: 700;
