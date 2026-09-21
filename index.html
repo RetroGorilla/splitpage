@@ -11589,6 +11589,7 @@ node update.mjs           # download and verify it</code></pre>
      end of the cell. The first line is the item's name — what the list and
      the printed sheet show — and the rest is its description. */
   function brollFieldLines(body) {
+    hoistNestedBrs(body);
     var kids = Array.prototype.slice.call(body.childNodes);
     var lines = [], start = 0;
     kids.forEach(function (n, i) {
@@ -11599,6 +11600,40 @@ node update.mjs           # download and verify it</code></pre>
     });
     lines.push({ nodes: kids.slice(start), br: null });
     return lines;
+  }
+
+  /* "Flat run of inline nodes separated by <br>" is a claim about the
+     FIELD, not about execCommand: a real Enter pressed while the caret is
+     still inside a run of bold (or italic, underline…) leaves the browser's
+     own <br> a CHILD of that formatting element, not of the field — brollAtLineStart()
+     rightly treats that as a line start (see its own comment), but this
+     function only ever looked at the field's own direct children, so a
+     marker on that second line was invisible to it: not merely markerless,
+     gone, as if the line never existed. Splitting the formatting element in
+     two around the <br> — the same shape a plain Enter with no formatting
+     active already produces — restores the invariant instead of asking
+     every caller to know about the exception. Runs on the disposable body
+     inertBody() just parsed, so mutating it in place costs nothing and
+     touches nothing live. */
+  function hoistNestedBrs(body) {
+    var guard = 0;
+    while (guard++ < 1000) {
+      var brs = body.getElementsByTagName("br");
+      var br = null;
+      for (var i = 0; i < brs.length; i++) {
+        if (brs[i].parentNode !== body) { br = brs[i]; break; }
+      }
+      if (!br) return;
+      var parent = br.parentNode;
+      var grand = parent.parentNode;
+      if (!grand) return;
+      var tail = parent.cloneNode(false); // same tag AND attributes, no children
+      while (br.nextSibling) tail.appendChild(br.nextSibling);
+      parent.removeChild(br);
+      var ref = parent.nextSibling;
+      grand.insertBefore(br, ref);
+      if (tail.childNodes.length) grand.insertBefore(tail, ref);
+    }
   }
 
   function brollLineText(nodes) {
@@ -11812,14 +11847,28 @@ node update.mjs           # download and verify it</code></pre>
      escape hatch for anyone who meant to write that literally. */
   function brollAtLineStart(node) {
     /* A text node that begins the field, or that follows a <br>, IS the
-       start of a line; anything else (text after a tag, inside a link, in
-       a bold run) is mid-line by definition. */
+       start of a line — bold, italic, underline and the rest are styling,
+       not position, so a line can start INSIDE one of those same as in
+       plain text. What is mid-line by definition is text after a tag or
+       inside a link: isInsideTagOrLink() is the guard for that, checked
+       separately by the caller, so this only has to walk up through plain
+       inline formatting to find out whether anything with content sits
+       before the caret. */
     if (node.nodeType !== 3) return false;
-    var parent = node.parentNode;
-    if (!parent || !parent.classList || !parent.classList.contains("cell-editable")) return false;
-    var prev = node.previousSibling;
-    while (prev && prev.nodeType === 3 && !(prev.nodeValue || "").trim()) prev = prev.previousSibling;
-    return !prev || (prev.nodeType === 1 && prev.tagName === "BR");
+    var cell = node.parentNode && node.parentNode.closest
+      ? node.parentNode.closest(".cell-editable") : null;
+    if (!cell) return false;
+
+    var n = node;
+    while (true) {
+      var prev = n.previousSibling;
+      while (prev && prev.nodeType === 3 && !(prev.nodeValue || "").trim()) prev = prev.previousSibling;
+      if (prev) return prev.nodeType === 1 && prev.tagName === "BR";
+      var parent = n.parentNode;
+      if (parent === cell) return true;
+      if (!parent || parent.nodeType !== 1) return false;
+      n = parent;
+    }
   }
 
   function maybeCaptureBroll(e, cellEl) {
