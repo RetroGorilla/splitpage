@@ -3752,7 +3752,8 @@ node update.mjs           # download and verify it</code></pre>
 <ul><li><strong>Completing a tag:</strong> phone keyboards have no <kbd>Tab</kbd>, so while the dim completion is showing, <strong>tap it</strong> to accept.</li><li><strong>Find &amp; replace</strong> is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).</li><li><strong>Selecting several breakdown items:</strong> <strong>long-press</strong> a card to start, then tap cards to add or drop them. The <strong>×</strong> in the bar clears the selection.</li><li><strong>Reordering scenes:</strong> the ↑ / ↓ buttons (drag needs a mouse).</li><li><strong>New scene:</strong> the <strong>+</strong> button on any scene, or <strong>+ Add row</strong> at the bottom.</li><li><strong>Splitting a scene at the caret (Alt+Enter)</strong> is a keyboard shortcut with no phone keyboard to trigger it from — add the scene with <strong>+</strong> and move the text over by hand.</li><li>In the teleprompter the screen <strong>stays awake</strong> while you read (on browsers that support it) and releases when you close it.</li><li><strong>The writer</strong> works the same, with the scene number and its visual on a thin line above each paragraph instead of out in the margin — a phone has no margin to put them in.</li></ul>
 <p>Typing shortcuts (<code>[prop]</code> <code>{kitchen}</code> <code>~vfx~</code> <code>&lt;gear&gt;</code>), comments, status, exports, the <strong>Gear</strong> screen and its packing lists, the server features — everything else is exactly the same.</p>
 <h2 id="help-two-shapes-of-markdown-export">Two shapes of Markdown export</h2>
-<p><strong>File ▸ Export a copy</strong> has two Markdown options. <strong>Markdown (.md)</strong> lists the script scene by scene — a <code>## Scene 01</code> heading, then the Visual notes, then the Audio, stacked. <strong>Markdown, two columns (.md)</strong> lays the same script out as a table instead, one row per scene with a Visual column next to an Audio column — the way the split view itself looks, and the way a GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side by side rather than stacked. It's also exactly the shape <strong>Paste a script…</strong> already reads back in "Two columns" mode, so a two-column Markdown export round-trips back into Splitpage with the split intact. Both carry the production breakdown and comments the same way.</p>
+<p><strong>File ▸ Export a copy</strong> has two Markdown options. <strong>Markdown (.md)</strong> reads like a script rather than a filled-in form: a <code>### Scene 01</code> heading, then the visual direction as an italic lead-in ahead of whatever's spoken, with nothing printed for a field that has nothing to say. A picture is referenced from a sibling <code>images/</code> folder instead of pasted inline as base64 — once a script has any pictures, this export becomes a small <code>.zip</code> so the folder actually travels with the <code>.md</code>. <strong>Markdown, two columns (.md)</strong> lays the same script out as a table instead, one row per scene with a Visual column next to an Audio column — the way the split view itself looks, and the way a GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side by side rather than stacked. It's also exactly the shape <strong>Paste a script…</strong> already reads back in "Two columns" mode, so a two-column Markdown export round-trips back into Splitpage with the split intact, and it keeps embedding pictures inline so the single <code>.md</code> file stays complete on its own. Both carry the production breakdown and comments the same way.</p>
+<p><strong>File ▸ Export a copy ▸ Word (.docx)</strong> carries the same polish: named paragraph, character and table styles, a document theme font, scene numbers in their own column, page numbers in the footer, and a production-breakdown table whose columns size themselves to what's actually in them instead of a fixed guess.</p>
 <p>Neither is the same thing as <strong>Save</strong>. These are copies for reading and sharing: they carry the words, not the tagging, the comment anchors, the images or the scene statuses. Saving as <code>.md</code> writes the same two-column table <em>plus</em> Splitpage's own record of the script underneath it, so nothing is lost — see <a href="#help-saving-your-script">Saving your script</a>.</p>
 <h2 id="help-importing-a-google-doc">Importing a Google Doc</h2>
 <p><strong>File ▸ Import from Google Doc link…</strong> takes a Google Docs share link (or just the document's ID) instead of a file. Splitpage has no server and no Google sign-in of its own, so it can't read the Doc directly — instead it opens Google's own Word (.docx) export of it in a new tab, which downloads straight to your computer using whatever Google account you're signed in to in that tab. Once the download lands, bring it in the same way as any other Word file: <strong>File ▸ Open a document…</strong>. If the doc isn't shared "Anyone with the link," make sure the browser tab that opens is signed in to an account that can see it, or the download will be a Google sign-in page instead of a document.</p>
@@ -16052,30 +16053,85 @@ node update.mjs           # download and verify it</code></pre>
     }
   }
 
+  /* The file extension a data: URI's own mime says it is — used to name the
+     sibling image files toMarkdownDoc() references instead of embedding
+     (below), so a re-encoded PNG doesn't end up on disk claiming to be a
+     .jpg. Defaults to jpg: every image this app writes out itself is a
+     JPEG (toJpegDataUrl, 15-docx.js); only a foreign import could carry
+     something else. */
+  function dataUrlImageExt(dataUrl) {
+    var m = /^data:image\/([a-z0-9.+-]+)/i.exec(dataUrl || "");
+    var t = m ? m[1].toLowerCase() : "jpeg";
+    if (t === "jpeg") return "jpg";
+    if (t === "svg+xml") return "svg";
+    return t;
+  }
+
+  /* Where a scene's picture lives once it's a sibling file rather than a
+     base64 blob sitting in the text — shared by toMarkdownDoc() (which
+     writes the reference) and markdownExportImages() (which writes the
+     bytes), so the two can never point at different names. */
+  function markdownImagePath(row, i) {
+    return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(row.visualImage);
+  }
+
+  /* Every image the plain Markdown export needs to carry alongside it, as
+     real files rather than base64 text — dataUrlToBytes lives in
+     15-docx.js but every fragment shares one closure (build.mjs inlines
+     them into a single script), so it's already in scope here. */
+  function markdownExportImages() {
+    var out = [];
+    state.rows.forEach(function (row, i) {
+      if (!row.visualImage) return;
+      try {
+        out.push({ path: markdownImagePath(row, i), bytes: dataUrlToBytes(row.visualImage) });
+      } catch (e) { /* unreadable image data — the export just won't carry this one's picture */ }
+    });
+    return out;
+  }
+
+  /* The plain "Markdown" export: a document meant to be read, not a filled-
+     in form. Visual and Audio used to each get their own bold label on its
+     own line, with an italic placeholder when a field was empty — this
+     reads instead like a script, with the visual direction as an inline
+     lead-in ahead of whatever is actually spoken, and nothing printed for a
+     field that has nothing to say. Pictures are referenced from a sibling
+     images/ folder (buildFileData, 18-local-files.js, bundles both into a
+     zip when there is at least one) rather than pasted inline as base64 —
+     the embedded 2 MB a phone photo becomes made this file unreadable as
+     text and enormous for what it is. */
   function toMarkdownDoc() {
     var lines = [];
     lines.push("# " + (state.title || "Untitled Script"));
     lines.push("");
     if (!state.rows.length) {
       lines.push("_No rows yet._");
+      lines.push("");
+    } else {
+      lines.push("_" + state.rows.length + " scene" + (state.rows.length === 1 ? "" : "s") +
+                 " · est. " + formatDuration(totalSeconds()) + " running time_");
+      lines.push("");
     }
     state.rows.forEach(function (row, i) {
-      lines.push("## Scene " + pad2(i + 1));
-      lines.push("");
-      lines.push("**Visual**");
+      lines.push("### Scene " + pad2(i + 1));
       lines.push("");
       if (row.visualImage) {
-        lines.push("![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")");
+        lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
         lines.push("");
       }
       var vmd = htmlToMarkdown(row.visualText);
-      lines.push(vmd ? vmd : "_(no visual notes)_");
-      lines.push("");
-      lines.push("**Audio**");
-      lines.push("");
+      if (vmd) {
+        lines.push("*Visual —* " + vmd);
+        lines.push("");
+      }
       var amd = htmlToMarkdown(row.audioText);
-      lines.push(amd ? amd : "_(no dialogue)_");
-      lines.push("");
+      if (amd) {
+        lines.push(amd);
+        lines.push("");
+      } else if (!vmd && !row.visualImage) {
+        lines.push("_(blank scene)_");
+        lines.push("");
+      }
       lines.push("---");
       lines.push("");
     });
@@ -16339,6 +16395,33 @@ node update.mjs           # download and verify it</code></pre>
     return { w: w, h: h, ratio: h / w };
   }
 
+  /* Column widths that actually fit what's in them, instead of a fixed guess
+     — a Notes column full of real prose gets more room than a two-word
+     Status column, whatever the content looks like this run. `mins` is a
+     floor in the SAME character-count units as `longest`, not a twip width —
+     mixing the two would make the floor win every time, since a sane twip
+     minimum (hundreds) always dwarfs a column's actual character count.
+     Each column's weight is its longest cell (header included, so a header
+     alone always fits), clamped so one very long outlier can't starve every
+     other column; widths are then totalWidth split proportionally to those
+     weights, with the rounding remainder folded into the last column so the
+     grid always sums to exactly totalWidth. */
+  function fitColumnWidths(totalWidth, minChars, headers, rowsCells) {
+    var weights = headers.map(function (h, i) {
+      var longest = String(h).length;
+      rowsCells.forEach(function (r) {
+        var len = String(r[i] == null ? "" : r[i]).length;
+        if (len > longest) longest = len;
+      });
+      return Math.max(minChars[i], Math.min(40, longest));
+    });
+    var sum = weights.reduce(function (a, b) { return a + b; }, 0);
+    var widths = weights.map(function (w) { return Math.floor(totalWidth * w / sum); });
+    var used = widths.reduce(function (a, b) { return a + b; }, 0);
+    widths[widths.length - 1] += totalWidth - used;
+    return widths;
+  }
+
   function docxRunsXml(html, rels) {
     var runs = htmlToRuns(html);
     if (!runs.length) return '<w:p/>';
@@ -16385,8 +16468,42 @@ node update.mjs           # download and verify it</code></pre>
       '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + runXml + '</w:r></w:p>';
   }
 
+  /* One <w:tblPr> shape shared by both tables in the script export: a named
+     table style carries the header shading and row banding (styles.xml),
+     tblLook turns those conditional formats on for THIS table, and the
+     explicit borders stay as direct formatting so the hairline rule still
+     shows in viewers that ignore table styles entirely (older LibreOffice,
+     some online renderers). */
+  var TABLE_PR = '<w:tblStyle w:val="SplitpageTable"/>' +
+    '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' +
+    '<w:tblBorders>' +
+    ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
+      return '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="D9D5CC"/>';
+    }).join("") + '</w:tblBorders>';
+
+  /* A narrow centered cell for the scene-number column — its own small
+     builder rather than a new docxCellXml() parameter, since every other
+     caller of docxCellXml wants the plain left-aligned shape. */
+  function docxNumberCellXml(text, widthDxa, isHeader) {
+    var rPr = isHeader
+      ? '<w:b/><w:caps/><w:sz w:val="18"/>'
+      : '<w:b/><w:color w:val="8A6D3B"/>';
+    return '<w:tc><w:tcPr><w:tcW w:w="' + widthDxa + '" w:type="dxa"/><w:vAlign w:val="center"/>' +
+      '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
+      '<w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tcMar></w:tcPr>' +
+      '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr>' + rPr +
+      '</w:rPr><w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p></w:tc>';
+  }
+
   function buildDocx() {
-    var COL = 4675; /* twentieths of a point — two even columns inside 1" margins */
+    /* twentieths of a point, inside 1080-twip margins on a Letter page
+       (12240 wide) — 10080 usable, split into a narrow scene-number column
+       and two even Visual/Audio columns so scene numbering has somewhere to
+       live without turning the two-column shape into a three-column one the
+       importer would have to unlearn (mapTableColumns treats an unmatched
+       extra column as exactly this: a scene-number column to ignore). */
+    var COL_NO = 700;
+    var COL = (10080 - COL_NO) / 2;
     var media = [];
     var links = [];
     var rels = {
@@ -16401,18 +16518,18 @@ node update.mjs           # download and verify it</code></pre>
     };
 
     var body = "";
-    body += '<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:after="240"/></w:pPr>' +
-      '<w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr>' +
-      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
+    body += '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
+      '<w:r><w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
 
     var rowsXml = "";
     /* header row */
     rowsXml += '<w:tr><w:trPr><w:tblHeader/></w:trPr>' +
+      docxNumberCellXml("No.", COL_NO, true) +
       docxCellXml('<w:p><w:r><w:rPr><w:b/><w:caps/><w:sz w:val="18"/></w:rPr><w:t>Visual</w:t></w:r></w:p>', COL) +
       docxCellXml('<w:p><w:r><w:rPr><w:b/><w:caps/><w:sz w:val="18"/></w:rPr><w:t>Audio</w:t></w:r></w:p>', COL) +
       '</w:tr>';
 
-    state.rows.forEach(function (row) {
+    state.rows.forEach(function (row, idx) {
       var visual = "";
       if (row.visualImage) {
         try {
@@ -16434,52 +16551,54 @@ node update.mjs           # download and verify it</code></pre>
         } catch (e) { /* unreadable image — skip it rather than break the export */ }
       }
       visual += docxRunsXml(row.visualText, rels);
-      rowsXml += '<w:tr>' + docxCellXml(visual, COL) + docxCellXml(docxRunsXml(row.audioText, rels), COL) + '</w:tr>';
+      rowsXml += '<w:tr>' + docxNumberCellXml(pad2(idx + 1), COL_NO, false) +
+        docxCellXml(visual, COL) + docxCellXml(docxRunsXml(row.audioText, rels), COL) + '</w:tr>';
     });
 
-    /* (declared before the tables that use it) */
-    var borders = '<w:tblBorders>' +
-      ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
-        return '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="D9D5CC"/>';
-      }).join("") + '</w:tblBorders>';
-
-    body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + borders + '</w:tblPr>' +
-      '<w:tblGrid><w:gridCol w:w="' + COL + '"/><w:gridCol w:w="' + COL + '"/></w:tblGrid>' +
+    body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + TABLE_PR + '</w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="' + COL_NO + '"/><w:gridCol w:w="' + COL + '"/><w:gridCol w:w="' + COL + '"/></w:tblGrid>' +
       rowsXml + '</w:tbl>';
 
     var breakdown = breakdownRows();
     if (breakdown.length) {
-      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
-        '<w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>Production breakdown</w:t></w:r></w:p>';
+      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
+        '<w:r><w:t>Production breakdown</w:t></w:r></w:p>';
 
-      var bCols = [1300, 2200, 1100, 1300, 800, 1200, 1500];
+      var bHeaders = ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"];
+      /* floors in characters, not twips — see fitColumnWidths above */
+      var bMins = [10, 10, 8, 10, 6, 8, 10];
+      var bCellRows = breakdown.map(function (r) {
+        return [r.categoryLabel, r.name, r.statusLabel, r.owner, String(r.mentions), r.scenes.join(", "), r.notes];
+      });
+      /* columns sized to what's actually in them (fitColumnWidths above),
+         not a fixed guess a long Notes column would just wrap badly under */
+      var bCols = fitColumnWidths(10080, bMins, bHeaders, bCellRows);
+
       var bRows = '<w:tr><w:trPr><w:tblHeader/></w:trPr>' +
-        ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"].map(function (h, i) {
+        bHeaders.map(function (h, i) {
           return docxCellXml('<w:p><w:r><w:rPr><w:b/><w:caps/><w:sz w:val="18"/></w:rPr>' +
             '<w:t>' + h + '</w:t></w:r></w:p>', bCols[i]);
         }).join("") + '</w:tr>';
 
-      breakdown.forEach(function (r) {
-        var cells = [r.categoryLabel, r.name, r.statusLabel, r.owner, String(r.mentions),
-                     r.scenes.join(", "), r.notes];
+      bCellRows.forEach(function (cells) {
         bRows += '<w:tr>' + cells.map(function (text, i) {
           return docxCellXml('<w:p><w:r><w:t xml:space="preserve">' + xmlEscape(text) +
             '</w:t></w:r></w:p>', bCols[i]);
         }).join("") + '</w:tr>';
       });
 
-      body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + borders + '</w:tblPr>' +
+      body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + TABLE_PR + '</w:tblPr>' +
         '<w:tblGrid>' + bCols.map(function (w) { return '<w:gridCol w:w="' + w + '"/>'; }).join("") + '</w:tblGrid>' +
         bRows + '</w:tbl>';
     }
 
     var comments = commentEntries();
     if (comments.length) {
-      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
-        '<w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>Comments</w:t></w:r></w:p>';
+      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
+        '<w:r><w:t>Comments</w:t></w:r></w:p>';
       comments.forEach(function (c) {
         body += '<w:p><w:pPr><w:spacing w:before="200" w:after="20"/></w:pPr>' +
-          '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location) +
+          '<w:r><w:rPr><w:b/><w:color w:val="8A6D3B"/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location) +
           (c.resolved ? ' (resolved)' : '') + '</w:t></w:r>' +
           '<w:r><w:rPr><w:i/><w:color w:val="7A7364"/></w:rPr><w:t xml:space="preserve">' +
           xmlEscape('  —  ' + c.author + (c.when ? ', ' + c.when : '')) + '</w:t></w:r></w:p>';
@@ -16499,13 +16618,133 @@ node update.mjs           # download and verify it</code></pre>
     return packDocx(body, links, media);
   }
 
-  /* Everything below the body: page setup, relationships, styles and the
-     zip itself — identical for any .docx this file produces, so the
-     narration export builds its own body and hands it to the same packer
-     rather than growing a second copy of the boilerplate. */
+  /* Everything below the body: page setup, theme, styles, footer,
+     relationships and the zip itself — identical for any .docx this file
+     produces, so the narration export builds its own body and hands it to
+     the same packer rather than growing a second copy of the boilerplate. */
+
+  /* A minimal but schema-complete DrawingML theme — the "document theme
+     font" Word actually reads styles.xml's asciiTheme/hAnsiTheme references
+     against. Calibri/Calibri Light are Word's own long-standing defaults, so
+     every Windows and Mac install already has them; only the color scheme
+     is Splitpage's own. fmtScheme's four lists are fixed-size in the OOXML
+     schema (3 entries each) but nothing here ever draws a themed shape, so
+     each entry is the simplest legal one rather than a copy of Word's own
+     gradients. */
+  var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Splitpage">' +
+    '<a:themeElements>' +
+    '<a:clrScheme name="Splitpage">' +
+    '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>' +
+    '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>' +
+    '<a:dk2><a:srgbClr val="3B3527"/></a:dk2>' +
+    '<a:lt2><a:srgbClr val="F4F1EA"/></a:lt2>' +
+    '<a:accent1><a:srgbClr val="8A6D3B"/></a:accent1>' +
+    '<a:accent2><a:srgbClr val="6E7B6B"/></a:accent2>' +
+    '<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>' +
+    '<a:accent4><a:srgbClr val="C9A15A"/></a:accent4>' +
+    '<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>' +
+    '<a:accent6><a:srgbClr val="70AD47"/></a:accent6>' +
+    '<a:hlink><a:srgbClr val="1155CC"/></a:hlink>' +
+    '<a:folHlink><a:srgbClr val="7A4FA0"/></a:folHlink>' +
+    '</a:clrScheme>' +
+    '<a:fontScheme name="Splitpage">' +
+    '<a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
+    '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>' +
+    '</a:fontScheme>' +
+    '<a:fmtScheme name="Splitpage">' +
+    '<a:fillStyleLst>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '</a:fillStyleLst>' +
+    '<a:lnStyleLst>' +
+    '<a:ln w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+    '<a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+    '<a:ln w="19050" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+    '</a:lnStyleLst>' +
+    '<a:effectStyleLst>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '</a:effectStyleLst>' +
+    '<a:bgFillStyleLst>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '</a:bgFillStyleLst>' +
+    '</a:fmtScheme>' +
+    '</a:themeElements>' +
+    '</a:theme>';
+
+  /* Page numbers in the footer (Done bullet): a standard PAGE field, plus
+     the title so a printed or scattered page still says what it's from. A
+     hairline top border stands in for the rule a running footer usually
+     sits under. */
+  function footerXml() {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="D9D5CC"/></w:pBdr>' +
+      '<w:tabs><w:tab w:val="right" w:pos="10080"/></w:tabs>' +
+      '<w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr></w:pPr>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr>' +
+      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:tab/></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:t>1</w:t></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>' +
+      '</w:p></w:ftr>';
+  }
+
+  /* Named paragraph, character and table styles — a document theme font
+     (via the theme part above), a table style carrying the header shading
+     and row banding, and colors that come from the theme's own scheme
+     rather than hard-coded hex wherever a style needs one. */
+  var STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults>' +
+    '<w:rPrDefault><w:rPr>' +
+    '<w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/>' +
+    '<w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="2B2B22"/>' +
+    '</w:rPr></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="288" w:lineRule="auto"/></w:pPr></w:pPrDefault>' +
+    '</w:docDefaults>' +
+    '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/>' +
+      '<w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="8" w:color="D9D5CC"/></w:pBdr>' +
+      '<w:spacing w:after="240"/></w:pPr>' +
+      '<w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi" w:cstheme="majorHAnsi"/>' +
+      '<w:b/><w:color w:val="2B2B22"/><w:sz w:val="40"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>' +
+      '<w:pPr><w:outlineLvl w:val="0"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
+      '<w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi" w:cstheme="majorHAnsi"/>' +
+      '<w:b/><w:caps/><w:color w:val="8A6D3B"/><w:sz w:val="26"/></w:rPr></w:style>' +
+    '<w:style w:type="table" w:styleId="SplitpageTable"><w:name w:val="Splitpage Table"/>' +
+      '<w:basedOn w:val="TableNormal"/>' +
+      '<w:tblPr>' +
+      '<w:tblBorders>' +
+      ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
+        return '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="D9D5CC"/>';
+      }).join("") +
+      '</w:tblBorders>' +
+      '<w:tblCellMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
+      '<w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar>' +
+      '</w:tblPr>' +
+      '<w:tblStylePr w:type="firstRow">' +
+      '<w:rPr><w:b/><w:caps/><w:color w:val="3B3527"/></w:rPr>' +
+      '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="EDE9DF"/></w:tcPr>' +
+      '</w:tblStylePr>' +
+      '<w:tblStylePr w:type="band1Horz">' +
+      '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F7F5EF"/></w:tcPr>' +
+      '</w:tblStylePr>' +
+      '</w:style>' +
+    '</w:styles>';
+
   function packDocx(body, links, media) {
-    body += '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>' +
-      '<w:pgMar w:top="1440" w:right="1080" w:bottom="1440" w:left="1080"/></w:sectPr>';
+    body += '<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter1"/>' +
+      '<w:pgSz w:w="12240" w:h="15840"/>' +
+      '<w:pgMar w:top="1440" w:right="1080" w:bottom="1440" w:left="1080" w:footer="720"/></w:sectPr>';
 
     var documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
@@ -16517,7 +16756,9 @@ node update.mjs           # download and verify it</code></pre>
 
     var relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '<Relationship Id="rIdTheme1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>' +
+      '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>';
     links.forEach(function (href, idx) {
       relsXml += '<Relationship Id="rIdL' + (idx + 1) + '"' +
         ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"' +
@@ -16539,6 +16780,8 @@ node update.mjs           # download and verify it</code></pre>
         '<Default Extension="jpeg" ContentType="image/jpeg"/>' +
         '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
         '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+        '<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+        '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
         '</Types>') },
       { name: "_rels/.rels", data: strBytes(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -16546,16 +16789,9 @@ node update.mjs           # download and verify it</code></pre>
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
         '</Relationships>') },
       { name: "word/document.xml", data: strBytes(documentXml) },
-      { name: "word/styles.xml", data: strBytes(
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/>' +
-          '<w:pPr><w:spacing w:after="240"/></w:pPr>' +
-          '<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>' +
-        '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>' +
-          '<w:pPr><w:outlineLvl w:val="0"/><w:spacing w:before="240" w:after="120"/></w:pPr>' +
-          '<w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>' +
-        '</w:styles>') },
+      { name: "word/styles.xml", data: strBytes(STYLES_XML) },
+      { name: "word/theme/theme1.xml", data: strBytes(THEME_XML) },
+      { name: "word/footer1.xml", data: strBytes(footerXml()) },
       { name: "word/_rels/document.xml.rels", data: strBytes(relsXml) }
     ];
     media.forEach(function (bytes, idx) {
@@ -16599,9 +16835,8 @@ node update.mjs           # download and verify it</code></pre>
     var links = [];
     var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
 
-    var body = '<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:after="240"/></w:pPr>' +
-      '<w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr>' +
-      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
+    var body = '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
+      '<w:r><w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
 
     narrationRows().forEach(function (row) {
       /* docxRunsXml() opens its own <w:p>, so paragraph properties have to
@@ -17759,8 +17994,14 @@ node update.mjs           # download and verify it</code></pre>
     saveBack.textContent = openedFile.inPlace ? "Save to " + openedFile.name : "Save a new copy of " + openedFile.name;
   }
 
-  /* Build the bytes for a given format. Returns {data, filename}. */
-  async function buildFileData(kind, baseName) {
+  /* Build the bytes for a given format. Returns {data, filename}.
+     opts.allowImageBundle lets a plain Markdown export ship as a small zip
+     instead of a lone .md when it needs to carry pictures (see the "md"
+     branch below) — on for the actual Export menu, off for saveBackToFile's
+     reuse of this same function, which writes back into a file whose name
+     and extension are already fixed and must stay a text file in place. */
+  async function buildFileData(kind, baseName, opts) {
+    opts = opts || {};
     if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
     if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
     if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
@@ -17781,6 +18022,22 @@ node update.mjs           # download and verify it</code></pre>
        export is a copy handed to someone else, and carrying the id would make
        it a duplicate of this document the moment both are open. */
     if (kind === "html") return { data: standaloneHtmlFor(state), filename: baseName + ".html" };
+    if (kind === "md" && opts.allowImageBundle) {
+      /* A script with no pictures stays a single plain-text .md, same as
+         always. One with pictures ships as a small zip instead — the .md
+         referencing images/scene-NN.ext (toMarkdownDoc, 14-export.js)
+         alongside the actual files — rather than ballooning the text file
+         with base64 the way the old export did. Gated on allowImageBundle:
+         saveBackToFile() reuses this same branch to rewrite an already-open
+         file in place, and that file's name and extension are fixed — it
+         must stay the plain-text .md it already is. */
+      var images = markdownExportImages();
+      if (images.length) {
+        var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
+        images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
+        return { data: zipWrite(entries), filename: baseName + " (with images).zip" };
+      }
+    }
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -18231,6 +18488,7 @@ node update.mjs           # download and verify it</code></pre>
     if (ext === "pdf") return "application/pdf";
     if (ext === "html") return "text/html";
     if (ext === "splitpage") return "application/json";
+    if (ext === "zip") return "application/zip";
     return "text/plain";
   }
 
@@ -18424,7 +18682,7 @@ node update.mjs           # download and verify it</code></pre>
     var base = openedFile.name ? openedFile.name.replace(/\.[^.]+$/, "") : slugify(state.title);
     var built;
     try {
-      built = await buildFileData(kind, base);
+      built = await buildFileData(kind, base, { allowImageBundle: true });
     } catch (e) {
       showToast("Could not build the " + kind.toUpperCase() + " file.", "error");
       return;
