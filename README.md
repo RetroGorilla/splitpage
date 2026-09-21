@@ -156,6 +156,17 @@ coming back from a crash. If you would rather look at the example script that
 ships with Splitpage, the link at the bottom of the page dismisses it (so does
 Esc).
 
+**Recent** is the third column, in the desktop app. It lists the last 20
+documents you had open, most recent first, by title and file name; clicking
+one reopens it in that tab with no picker in the way. If a file has been
+moved or deleted since, clicking it says so instead of failing quietly, and
+the **×** beside any entry takes it off the list — **Clear recent** takes
+them all off. The list is kept with the rest of the desktop app's session
+state on your own machine: it is not in a saved script, not in an export
+(including **Export app data**), and nobody in a shared session can see it.
+The browser app does not have this column — a browser can only reopen a file
+it still holds permission for, so it remembers the last one and no more.
+
 **Crash recovery.** If the app or your computer goes down with unsaved work
 open, nothing is lost: every tab's unsaved changes are kept on disk as you
 type, and Splitpage offers them back, tab by tab, the next time you launch
@@ -862,6 +873,30 @@ double-click it and the script is there, editable, with nothing to install
 and no account. It is a far bigger file than a `.md`, so it is for sending,
 not for working in.
 
+It is a **copy**, though, and that is deliberate: it carries no link back
+here, it never connects anywhere, and whatever they type stays in their
+file. If you want their edits to come back, send a link instead.
+
+### Sending a link, so their edits come back
+
+**File ▸ Publish & copy a link** puts this script on the server you are
+connected to and copies the address of it to your clipboard. Everyone who
+opens that link is editing the *same* document — the same shared script the
+rest of "Working together" describes, with saves merged rather than
+overwriting each other — rather than their own fork of it.
+
+- It needs a server to publish to. With none connected it says so and opens
+  **Servers…** rather than doing anything; see "Working together" for the
+  two ways to run one (an ad-hoc session from your own machine, or a
+  permanent deployment).
+- If the script is already on the server, it saves first, so the link never
+  points at a version older than what is on your screen.
+- The toast that confirms the copy also says what the person opening it will
+  be asked for: the join PIN, a sign-in, or nothing at all.
+- The link is just the server's address with `?doc=` and the document's id
+  on it. Opening one goes straight to that document, asking for the PIN
+  first if the server wants one.
+
 ## Version history
 
 Splitpage keeps snapshots of your document as you work, so you can step back
@@ -886,8 +921,19 @@ you get everything back: scenes, comments, tags, images, title. Two ways:
 - **Double-click a saved Standalone HTML file.** It opens straight into that
   project — that is what being self-contained means.
 
-That same menu still imports `.docx`/`.txt`/`.csv`, and Markdown that isn't
-one of Splitpage's own, as plain script text, same as before.
+That same menu still opens `.docx`/`.txt`/`.csv`, and Markdown that isn't one
+of Splitpage's own, as plain script text — but a file like that carries no
+project of its own, so **opening one starts a new document**: a new script
+with an empty breakdown, no cast list, no b-roll and no comments, and a Save
+button that points nowhere yet. Nothing of the document you had open comes
+with it.
+
+If what you actually have is a **revised draft of the script you're already
+working on**, use **File ▸ Paste a script…** instead. That modal replaces (or
+appends to) the scenes and keeps the document you're in — its breakdown
+statuses, owners and notes, its cast list, its b-roll list and its comments
+all stay where they are. It takes a `.docx`, `.md`, `.txt` or `.csv` file
+through **Choose a file…** as well as pasted text.
 
 ### Older `.html` projects
 

@@ -1,0 +1,97 @@
+# "Publish & copy a link" (issue #19): the File menu's one entry that hands
+# someone a LIVE document rather than a dead copy.
+#
+# What is NOT here: a real publish. This harness serves static files and
+# cannot start server.js, the same limitation 18-connect.txt records — the
+# round trip against a real server is the by-hand recipe in SKILL.md, and
+# the API half it rides on is covered by `node tools/test-server.mjs`. What
+# IS here is everything that does not need one: the entry and its state, the
+# refusal-and-redirect when no server is connected, the address it builds,
+# what it says about getting in, and the ?doc= parameter at the other end.
+
+# --- the other end of the link: ?doc= ------------------------------------
+# First, before any DOM churn — it needs its own page load, and a goto after
+# much of this suite aborts the CDP socket (see the driver gotchas).
+# The id is read once on the way up and taken straight back out of the
+# address bar, so a reload is an ordinary reload rather than a second open.
+open /index.html?doc=shared-abc123
+wait document.querySelectorAll('#rows .row').length > 0
+expect window.__shareTest.sharedDocId() == shared-abc123
+expect location.search.indexOf('doc=') === -1
+expect location.href.indexOf('doc=') === -1
+# ...and with no server to ask, nothing was opened: the document on screen is
+# still this copy's own, not a half-loaded hosted one
+expect window.__splitpageFormats.state().docId !== null
+expect document.getElementById('file-chip').hidden == true
+
+goto /index.html
+eval (function(){ window.S = window.__shareTest; window.F0 = window.__splitpageFormats; return !!(S && S.url && S.note && F0); })()
+expect true
+
+# --- the entry sits with the exports, always shown ------------------------
+# Always shown on purpose: it is how someone with no server yet finds out
+# that sharing a live document is possible at all.
+jsclick #btn-file
+expect !document.getElementById('file-menu').hidden
+expect document.getElementById('menu-share-link') !== null
+expect document.getElementById('menu-share-link').hidden == false
+expect document.getElementById('menu-share-link').disabled == false
+# it is in the export group, after the standalone HTML export it contrasts with
+expect document.getElementById('menu-share-link').previousElementSibling.className.indexOf('menu-label') !== -1
+expect document.getElementById('menu-share-link').title.indexOf('same document') !== -1
+jsclick #file-menu-close
+
+# --- the address it builds -------------------------------------------------
+# serverBase is empty here (nothing connected), so the link is this page's own
+# address with ?doc= on it — which is exactly what a page served BY the
+# document server produces.
+eval (function(){ window.__u = S.url('abc123'); return window.__u; })()
+expect window.__u.indexOf('/index.html?doc=abc123') !== -1
+expect window.__u.indexOf('http') === 0
+# an id needing escaping is escaped, never pasted in raw
+eval (function(){ return S.url('a b&c=d'); })()
+expect S.url('a b&c=d').indexOf('doc=a%20b%26c%3Dd') !== -1
+# a ?doc= already in the bar is replaced, not appended to
+expect (S.url('two').match(/doc=/g) || []).length == 1
+
+# --- what it says about getting in ----------------------------------------
+eval (function(){ S.mode().authRequired = false; S.setIdentity(null); return S.note(); })()
+expect S.note().indexOf('Anyone who can reach that address') !== -1
+eval (function(){ S.mode().authRequired = true; return S.note(); })()
+expect S.note().indexOf('join PIN') !== -1
+eval (function(){ S.mode().authRequired = false; S.setIdentity({email: 'a@b.test', name: 'A'}); return S.note(); })()
+expect S.note().indexOf('sign in') !== -1
+eval (function(){ S.setIdentity(null); return true; })()
+
+# --- with no server it says so and opens Servers…, and publishes nothing --
+expect document.getElementById('connect-modal').hidden == true
+eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; S.mode().available = false; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="share-link"]
+wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
+eval (function(){ var t = document.querySelectorAll('.toast.warn'); window.__noServerText = t[t.length - 1].textContent; return window.__noServerText; })()
+expect window.__noServerText.indexOf('needs a Splitpage server') !== -1
+wait document.getElementById('connect-modal').hidden == false
+jsclick #connect-modal [data-connect-action="close"]
+wait document.getElementById('connect-modal').hidden == true
+
+# --- a read-only server disables it, with the reason in the tooltip -------
+eval (function(){ S.mode().available = true; S.mode().readOnly = true; S.updateMenu(); return true; })()
+expect document.getElementById('menu-share-link').disabled == true
+expect document.getElementById('menu-share-link').title.indexOf('read-only') !== -1
+eval (async function(){ window.__roToastsBefore = document.querySelectorAll('.toast.warn').length; window.__roResult = await S.publishAndCopy(); return window.__roResult; })()
+expect window.__roResult == false
+eval (function(){ S.mode().readOnly = false; S.mode().available = false; S.updateMenu(); return true; })()
+expect document.getElementById('menu-share-link').disabled == false
+
+# --- the standalone HTML export is untouched: still a dead copy -----------
+# The decision this issue settled was that the export stays inert. It still
+# carries no document id, so opening it never collides with this document.
+eval (function(){ window.__html = F0.buildStandaloneHtml(); return window.__html.length > 0; })()
+expect window.__html.indexOf(F0.docId()) === -1
+# (the string "doc=" DOES appear in the export — it carries a copy of the app,
+# and that is the source of serverDocShareUrl itself. What matters is that no
+# id and no server address is baked into the DOCUMENT it carries.)
+expect window.__html.indexOf('"docId"') === -1
+
+quit

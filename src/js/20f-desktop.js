@@ -399,6 +399,7 @@
      assertions. */
   function makeFakeDesktopBackend(opts) {
     var files = {};
+    var recents = [];
     var nextId = 1;
     var openHandler = null;
     var menuHandler = null;
@@ -473,7 +474,29 @@
          _routeAnswer at something else first — the single-tab shape every
          existing caller (openLocalFile, the server picker) already expects. */
       routeOpen: function (p) {
+        /* A file id main no longer knows is the "moved or deleted since"
+           case the recents column has to cope with (issue #15) — the real
+           handler throws ENOENT for it, so the fake does too. */
+        if (p && p.kind === "file" && this._routeMissing) return Promise.reject(new Error("ENOENT: file is not readable"));
         return Promise.resolve(this._routeAnswer || { where: "this-tab" });
+      },
+
+      /* ---- recent documents (DESKTOP-RECENTS) ----
+         The real list lives in the main process's desktop-state.json; this
+         is the same three calls over an in-memory array, so a browser suite
+         can drive the New Tab page's third column. Each entry is
+         {fileId, name, title, at} — never a path, exactly as the bridge
+         hands them over. */
+      listRecents: function () { return Promise.resolve(recents.map(function (r) { return { fileId: r.fileId, name: r.name, title: r.title, at: r.at }; })); },
+      removeRecent: function (fileId) {
+        recents = recents.filter(function (r) { return r.fileId !== fileId; });
+        return this.listRecents();
+      },
+      clearRecents: function () { recents = []; return this.listRecents(); },
+      _addRecent: function (fileId, name, title, at) {
+        recents = recents.filter(function (r) { return r.fileId !== fileId; });
+        recents.unshift({ fileId: fileId, name: name, title: title || "", at: at || Date.now() });
+        return fileId;
       },
       onOpenFile: function (cb) { openHandler = cb; },
       onOpenServerDoc: function (cb) { openServerDocHandler = cb; },

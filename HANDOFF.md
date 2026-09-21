@@ -621,7 +621,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection, picker, compare-and-set save, Google Drive files |
+| `13-hosted.js` | server detection, picker, compare-and-set save, Google Drive files, "Publish & copy a link" + `?doc=` (issue #19) |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
@@ -637,14 +637,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
-| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices |
+| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `21-events.js` | all event wiring, `init()`, closes the IIFE |
 
 **Desktop files** (optional; the web app runs without them):
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, doc-id claim table, history storage + fsck + planner twin, draft headers, file dialogs, server launcher, native menus, test mode |
+| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, history storage + fsck + planner twin, draft headers, file dialogs, server launcher, native menus, test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
@@ -715,11 +715,54 @@ desktop is paused pending a fresh look (parked files under
 opt-in local model, not yet approved). Google Drive via loopback OAuth and
 per-tab server/tunnel connections are pitched but unbuilt.
 
-**Noticed, deliberately not changed:** opening a `.docx`/`.md`/`.txt`/`.csv`
-replaces `state.rows` and the title but leaves `productionTags`, `people`,
-and `comments` from the previous document in place (`openAnyLocalFile`) —
-useful when pasting a revised draft of the *same* project. Ask Adam before
-changing either way.
+**Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
+starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)
+now builds a fresh state through `migrateRows()`, so the document gets a new
+`docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
+and both Save targets (`docFileHandle`, `serverDoc`) are cleared. It used to
+replace only `state.rows` and the title and keep the rest, which meant an
+unrelated Word file inherited the last script's breakdown, cast list and
+review comments, and Save still pointed at the previous project's file.
+
+"Draft 2 of the same script" — the workflow that behaviour was useful for —
+is the **Paste/Import modal** (`openImportModal`, `src/js/11-import.js`),
+which is unchanged in what it keeps and now takes a picked `.docx`/`.md`/
+`.txt`/`.csv` as well as pasted text. A `.docx` or `.csv` picked there
+bypasses the textarea (`pendingFileRows`) so its columns and formatting
+survive.
+
+The one caller that is NOT an open keeps the document: `reloadFileFromDisk()`
+passes `{reload: true}`, because re-reading the same `.docx` after it changed
+under us is the same document with newer bytes.
+
+**Recent documents (issue #15), contract DESKTOP-RECENTS.** Desktop only.
+`recents: [{absPath, title, at}]` sits beside `windows` in
+`desktop-state.json`, most recent first, capped at 20 and de-duplicated by
+path on read. `recentDocuments` in `desktop/main.js` is the authority once
+the process is up (`loadRecentsAtLaunch` at `whenReady`, and
+`shellStateAsV2()` carries it into every session write, because that object
+REPLACES the file). It is recorded on `deliverOpenFile` and refreshed on
+every `set-document-state` report of a file tab, and only a real change
+writes. Three IPC calls — `recents-list` / `recents-remove` /
+`recents-clear` — all app-wide, all answering with the list as it stands
+after. The renderer never sees a path (invariant #34): an entry is
+`{fileId, name, title, at}`, and the `fileId` is the same opaque key
+`routeOpen({kind:'file', fileId})` takes. It is deliberately NOT in the
+app-data bundle (§5 #48) and must not be put in a draft header or anything
+a shared session can read — it is a record of what someone has been working
+on. The column itself is in `src/js/20j-newtab.js`.
+
+**A share link (issue #19).** The standalone HTML export stays a dead copy
+by design — `standaloneHtmlFor` still strips `docId`, and nothing in the
+export connects anywhere. What was added is the delivery half:
+`publishAndCopyShareLink()` (`src/js/13-hosted.js`) publishes to the
+connected server (saving first if the document is already hosted), copies
+`<server>/?doc=<id>`, and names what the recipient will be asked for. With
+no server it refuses and opens **Servers…** instead. The other end is
+`readSharedDocParam()`, which reads `?doc=` once at boot, strips it from the
+bar, and opens that document after the server has answered — but only if
+`resumeServerDoc()` did not already claim the page, since a crash draft or a
+lapsed sign-in is unsaved work that must not be replaced.
 
 ---
 

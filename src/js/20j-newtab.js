@@ -18,11 +18,19 @@
      genuinely empty one — one blank scene, no tags, no comments, no
      b-roll, a fresh identity — not a filtered copy of the seed.
 
-     Recently-opened documents as a third column (the issue's open
-     question) are deliberately not here: nothing in the app keeps a recent
-     list today — the browser remembers one handle and the desktop main
-     process tracks open tabs, neither of which is a recents list — so that
-     column is a feature of its own rather than a detail of this page.
+     THE THIRD COLUMN (issue #15) is recently-opened documents, and it is
+     DESKTOP ONLY. The list is kept by the main process in
+     desktop-state.json (contract DESKTOP-RECENTS) because that is the only
+     side that can hold a durable reference to a file: the browser build
+     remembers exactly one handle, and can only reopen one it still has
+     permission for. So in the browser this column stays hidden and the
+     page keeps its two cards.
+
+     Nothing about the list reaches this page but what it needs to draw it
+     and click it: an opaque fileId, the file's basename, the title the
+     document last reported, and when. Never a path (invariant #34), and it
+     is deliberately not in the app-data export either (§5 #48) — it is a
+     record of what someone has been working on.
 
      Like 20b/20c/20e this fragment wires itself directly rather than
      through init(): #newtab-page is in the DOM by the time this classic
@@ -49,6 +57,11 @@
     document.addEventListener("keydown", onNewTabKeydown, true);
     var first = el.querySelector('[data-newtab-action="new"]');
     if (first) first.focus();
+    /* Asked for every time the page is shown rather than cached: another
+       tab (or another window) may have opened something since, and main is
+       the only authority on the list. Not awaited — the two cards must not
+       wait on IPC to become clickable. */
+    refreshRecents();
   }
 
   function closeNewTabPage() {
@@ -115,6 +128,108 @@
     if (openedFile.name || docFileHandle.kind) closeNewTabPage();
   }
 
+  /* ---- the recent-documents column (DESKTOP-RECENTS) ---- */
+
+  function recentsSupported() {
+    return !!(DESKTOP && typeof DESKTOP.listRecents === "function");
+  }
+
+  function formatRecentWhen(at) {
+    if (!at) return "";
+    var days = Math.floor((Date.now() - at) / 86400000);
+    if (days <= 0) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 7) return days + " days ago";
+    return new Date(at).toLocaleDateString();
+  }
+
+  function renderRecents(entries) {
+    var col = document.getElementById("newtab-recents");
+    var list = document.getElementById("newtab-recents-list");
+    var cards = document.querySelector("#newtab-page .newtab-cards");
+    var inner = document.querySelector("#newtab-page .newtab-inner");
+    if (!col || !list) return;
+    /* The column itself stays once it is up, empty list and all: "Recent
+       (nothing yet)" is a truthful answer, and a column that appears and
+       disappears under the pointer as the last entry is forgotten is not. */
+    col.hidden = false;
+    if (cards) cards.classList.add("has-recents");
+    if (inner) inner.classList.add("has-recents");
+    var clear = document.getElementById("newtab-recents-clear");
+    if (clear) clear.hidden = !entries.length;
+    if (!entries.length) {
+      list.innerHTML = '<div class="newtab-recents-empty">Nothing yet — what you open shows up here.</div>';
+      return;
+    }
+    list.innerHTML = entries.map(function (r) {
+      var when = formatRecentWhen(r.at);
+      var title = r.title || r.name;
+      return '<div class="newtab-recent">' +
+        '<button type="button" class="newtab-recent-open" data-newtab-action="open-recent" ' +
+          'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
+          '<span class="newtab-recent-title">' + escapeHtml(title) + '</span>' +
+          '<span class="newtab-recent-name">' + escapeHtml(r.name) + (when ? " · " + escapeHtml(when) : "") + '</span>' +
+        '</button>' +
+        '<button type="button" class="newtab-recent-forget" data-newtab-action="forget-recent" ' +
+          'data-file-id="' + escapeHtml(r.fileId) + '" title="Forget this one" ' +
+          'aria-label="Forget ' + escapeHtml(title) + '">\u00d7</button>' +
+      '</div>';
+    }).join("");
+  }
+
+  async function refreshRecents() {
+    if (!recentsSupported()) return;
+    var entries = [];
+    try { entries = await DESKTOP.listRecents(); } catch (e) { return; }
+    renderRecents(Array.isArray(entries) ? entries : []);
+  }
+
+  /* A click on a card is the same open File ▸ Open a document… performs,
+     minus the picker: main already holds the path behind this fileId and
+     still decides where it lands. A file that has been moved or deleted
+     since is the case the issue calls out — routeOpen rejects, and the
+     entry says so and offers to forget itself rather than failing
+     silently. */
+  async function openRecent(fileId) {
+    if (!fileId || !recentsSupported()) return;
+    var entry = null;
+    try {
+      var r = await DESKTOP.routeOpen({ kind: "file", fileId: fileId });
+      if (!r || r.where !== "this-tab") {
+        /* It went to the tab that already had it, or to a new one. This tab
+           is still a new tab; leave the page up, same as the picker path. */
+        refreshRecents();
+        return;
+      }
+      entry = await DESKTOP.readFile(fileId);
+    } catch (e) {
+      showToast("That file isn't there any more — it may have been moved or deleted. " +
+        "Use × to take it off this list.", "warn");
+      refreshRecents();
+      return;
+    }
+    var handle = makeDesktopHandle(entry);           /* 20f-desktop.js */
+    await openProjectFile(await handle.getFile(), handle);  /* 18-local-files.js */
+  }
+
+  async function forgetRecent(fileId) {
+    /* DESKTOP can go away under a rendered column — __desktopTest's
+       restoreBackend() does exactly that at the end of a suite — so every
+       one of these re-checks the bridge rather than trusting the button's
+       existence. */
+    if (!fileId || !recentsSupported() || typeof DESKTOP.removeRecent !== "function") return;
+    var entries = [];
+    try { entries = await DESKTOP.removeRecent(fileId); } catch (e) { return; }
+    renderRecents(Array.isArray(entries) ? entries : []);
+  }
+
+  async function clearRecents() {
+    if (!recentsSupported() || typeof DESKTOP.clearRecents !== "function") return;
+    var entries = [];
+    try { entries = await DESKTOP.clearRecents(); } catch (e) { return; }
+    renderRecents(Array.isArray(entries) ? entries : []);
+  }
+
   (function wireNewTabPage() {
     var el = newTabPageEl();
     if (!el) return;
@@ -126,6 +241,9 @@
       if (action === "new") startBlankScript();
       else if (action === "open") newTabOpenFile();
       else if (action === "dismiss") closeNewTabPage();
+      else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
+      else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
+      else if (action === "clear-recents") clearRecents();
     });
   })();
 
@@ -183,5 +301,9 @@
     isOpen: function () { return newTabPageShown; },
     eligible: newTabEligibleForAutoShow,
     blank: startBlankScript,
-    blankState: blankDocumentState
+    blankState: blankDocumentState,
+    /* The recents column (issue #15). Desktop-only and driven by IPC, so a
+       browser suite reaches it through __desktopTest's fake backend. */
+    refreshRecents: refreshRecents,
+    openRecent: openRecent
   };
