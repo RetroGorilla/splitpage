@@ -27,11 +27,17 @@
  *      packs each installer from the unpacked directory of the same
  *      architecture in the same run; an installer older than the exe would
  *      be a leftover from an earlier build, verified against the wrong thing.
+ *   5. The installer's payload actually extracts, and every top-level PE
+ *      binary the unpacked app has comes back out at the same size. The
+ *      2.0.1 ARM64 setup passed every check above — Splitpage.exe and its
+ *      neighbours were exactly the right architecture *in the unpacked
+ *      directory* — and still silently dropped all seven of them (fbd1db2)
+ *      because NSIS's own extraction of the compressed payload botched them.
+ *      Checks 1, 2 and 4 only prove the source of that payload was right;
+ *      this pulls the payload back out of the actual setup.exe with a real
+ *      archive tool and diffs it (verify-dist-payload.mjs).
  * With both architectures it also checks the combined installer's stub is
  * x86, the only stub that starts everywhere.
- *
- * WHAT IT DOES NOT DO: open the installer's compressed payload. The payload
- * is proven through the unpacked app it is built from (checks 1, 2 and 4).
  *
  * Usage (from desktop/):
  *   node verify-dist.mjs [--arch x64|arm64|both] [--dist <dir>] [--version <v>]
@@ -42,6 +48,7 @@
 import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { join, dirname, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyInstallerPayload } from "./verify-dist-payload.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -152,6 +159,21 @@ for (const arch of ARCHS) {
       const fresh = statSync(setup).mtimeMs + 2000 >= statSync(appExe).mtimeMs;
       check(fresh, `${arch}: installer is from the same build as ${UNPACKED[arch]}`,
         fresh ? "" : "installer is older than Splitpage.exe — a leftover from an earlier build");
+    }
+
+    /* The check fbd1db2 said was worth closing separately: really extract the
+       payload out of the built setup.exe (not just trust the unpacked directory
+       it was built from) and diff its top-level PE files. This is what would
+       have failed on the 2.0.1 ARM64 build. */
+    if (existsSync(appExe)) {
+      try {
+        const { problems, checked } = await verifyInstallerPayload(setup, unpacked, arch);
+        check(problems.length === 0,
+          `${arch}: installer payload actually extracts with every top-level PE binary intact`,
+          problems.length ? problems.join("; ") : `${checked} checked`);
+      } catch (e) {
+        check(false, `${arch}: installer payload actually extracts with every top-level PE binary intact`, e.message);
+      }
     }
   }
 }
