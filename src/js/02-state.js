@@ -138,6 +138,22 @@
       c.author = plainName(c.author);
       if (!c.updatedAt) c.updatedAt = c.createdAt || null;
       if (c.kind !== "conflict") c.kind = "anchor";
+      /* resolvedBy/resolvedAt/assignee (#29). Free text, like author and
+         updatedBy — there are no accounts here, nothing to verify against.
+         Unresolving always clears both resolve fields, which is also what
+         keeps a hand-edited file or an old merge from ever showing a
+         resolver next to a comment that isn't actually resolved. A comment
+         saved before this existed just has neither field, which reads the
+         same way as "resolved, but nobody recorded who". */
+      if (!c.resolved) {
+        c.resolvedBy = null;
+        c.resolvedAt = null;
+      } else {
+        var resolvedByClean = c.resolvedBy ? plainText(c.resolvedBy).trim().slice(0, 80) : "";
+        c.resolvedBy = resolvedByClean || null;
+        c.resolvedAt = (c.resolvedBy && typeof c.resolvedAt === "string" && c.resolvedAt) ? c.resolvedAt : null;
+      }
+      c.assignee = c.assignee ? plainText(c.assignee).trim().slice(0, 80) : "";
     });
 
     /* The production registry — see the comment above productionEntries()

@@ -22,6 +22,9 @@
     var toggleResolveBtn = e.target.closest('[data-action="toggle-resolve"]');
     if (toggleResolveBtn) { toggleResolve(toggleResolveBtn.getAttribute("data-id")); return; }
 
+    var commentFilterBtn = e.target.closest("#comments-filter-seg [data-filter]");
+    if (commentFilterBtn) { setCommentFilterMode(commentFilterBtn.getAttribute("data-filter")); return; }
+
     var toggleReplyBtn = e.target.closest('[data-action="toggle-reply"]');
     if (toggleReplyBtn) { toggleReplyComposer(toggleReplyBtn.getAttribute("data-id")); return; }
 
@@ -1042,7 +1045,12 @@
     });
     document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
     initCommentsPanelResize();
-    document.getElementById("comments-hide-resolved").addEventListener("change", function () { captureReplyDrafts(); renderComments(); });
+    document.getElementById("comments-panel").addEventListener("change", function (e) {
+      if (e.target.id === "comments-assignee-filter") { setCommentAssigneeFilter(e.target.value); return; }
+      if (e.target.classList.contains("comment-assignee-select")) {
+        setCommentAssignee(e.target.getAttribute("data-id"), e.target.value);
+      }
+    });
     var commentsSortSelect = document.getElementById("comments-sort");
     commentsSortSelect.value = commentSortMode;
     commentsSortSelect.addEventListener("change", function (e) {
