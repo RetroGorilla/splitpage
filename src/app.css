@@ -2661,6 +2661,15 @@
   .broll-key:hover { color: var(--text); border-bottom-color: var(--broll); }
   .broll-badge { background: var(--broll); }
 
+  /* An item whose line still has no marker of its own (brollEntryFrom's
+     `markerless`). Shaped like the orphan badge it sits beside, but in the
+     b-roll colour rather than the danger one: nothing is broken yet. */
+  .broll-loose-badge {
+    font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--broll); background: color-mix(in srgb, var(--broll) 14%, transparent); border-radius: 999px;
+    padding: 2px 8px; white-space: nowrap; flex: none;
+  }
+
   .broll-quickadd input[type="text"] {
     flex: 1; min-width: 0;
     font-family: var(--font-body); font-size: 13.5px;
