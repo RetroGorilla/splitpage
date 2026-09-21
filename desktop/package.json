@@ -12,7 +12,8 @@
     "dist": "node stage.mjs && electron-builder --config electron-builder.yml",
     "dist:win": "node stage.mjs && electron-builder --config electron-builder.yml --win --x64 --arm64 && node verify-dist.mjs --arch both",
     "verify-dist": "node verify-dist.mjs --arch both",
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs && node test/tabstrip-width.mjs",
+    "test:tabstrip-width": "node test/tabstrip-width.mjs"
   },
   "devDependencies": {
     "electron": "^44.3.0",
