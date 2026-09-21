@@ -1,0 +1,115 @@
+# Teleprompter Mirror/Flip (issue #27): a glass beam-splitter needs the text
+# flipped left-right, a monitor mounted upside-down needs it flipped
+# top-bottom, and some rigs need both at once. Both toggles live in
+# localStorage (per device, like the writer's remembered text size — see
+# 11-comments-sort-persist.txt for the same pattern) rather than the
+# document, and must never trip the dirty/save-state indicator.
+
+open
+
+click text*=PRESENT
+sleep 800
+expect !document.getElementById('prompter').hidden
+
+# --- off by default (a fresh profile has nothing in localStorage yet) ------
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('pp-mirror').classList.contains('is-active')
+expect !document.getElementById('pp-flip').classList.contains('is-active')
+
+# --- the reading line and the control bar are not descendants of the
+#     element Mirror/Flip transform, so they never flip themselves ----------
+expect !document.getElementById('prompter-scroll').contains(document.querySelector('.prompter-guide'))
+expect !document.getElementById('prompter-scroll').contains(document.querySelector('.prompter-bar'))
+expect document.querySelector('.prompter-guide') !== null
+expect document.querySelector('.prompter-bar') !== null
+
+# --- a rig preference, not an edit to the script — nothing marks it dirty --
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+
+# --- Mirror toggles on its own (scaleX(-1)), Flip stays off ----------------
+jsclick #pp-mirror
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect document.getElementById('pp-mirror').classList.contains('is-active')
+expect getComputedStyle(document.getElementById('prompter-scroll')).transform.indexOf('-1, 0, 0, 1') !== -1
+
+jsclick #pp-mirror
+sleep 200
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect !document.getElementById('pp-mirror').classList.contains('is-active')
+
+# --- Flip toggles on its own (scaleY(-1)), Mirror stays off ----------------
+jsclick #pp-flip
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('pp-flip').classList.contains('is-active')
+expect getComputedStyle(document.getElementById('prompter-scroll')).transform.indexOf('1, 0, 0, -1') !== -1
+
+jsclick #pp-flip
+sleep 200
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('pp-flip').classList.contains('is-active')
+
+# --- both together give the full 180 (scale(-1,-1)) -------------------------
+jsclick #pp-mirror
+jsclick #pp-flip
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+expect document.getElementById('pp-mirror').classList.contains('is-active')
+expect document.getElementById('pp-flip').classList.contains('is-active')
+expect getComputedStyle(document.getElementById('prompter-scroll')).transform.indexOf('-1, 0, 0, -1') !== -1
+
+# still readable elsewhere: the reading line/bar remain untouched, and still
+# nothing has dirtied the document
+expect getComputedStyle(document.querySelector('.prompter-bar')).transform == none
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+
+# back to a known (off/off) state before driving the rest from the keyboard
+jsclick #pp-mirror
+jsclick #pp-flip
+sleep 200
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+# --- keyboard shortcuts, only while the prompter is open --------------------
+key KeyM
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('pp-mirror').classList.contains('is-active')
+
+key KeyF
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+expect document.getElementById('pp-flip').classList.contains('is-active')
+
+# both settings are already in localStorage, per device, keyed apart from
+# every document-specific key
+expect localStorage.getItem('splitpage-prompter-mirror') == 1
+expect localStorage.getItem('splitpage-prompter-flip') == 1
+
+# the shortcuts do nothing once the prompter is closed
+jsclick #pp-close
+sleep 400
+expect document.getElementById('prompter').hidden
+key KeyM
+key KeyF
+expect localStorage.getItem('splitpage-prompter-mirror') == 1
+expect localStorage.getItem('splitpage-prompter-flip') == 1
+
+# --- survives a reload: remembered per device, not baked into the document -
+goto /index.html
+sleep 900
+click text*=PRESENT
+sleep 800
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+expect document.getElementById('pp-mirror').classList.contains('is-active')
+expect document.getElementById('pp-flip').classList.contains('is-active')
+
+quit

@@ -360,6 +360,7 @@ $KeyMap = @{
   End       = @{ key = 'End';       code = 'End';       vk = 35 }
   KeyZ      = @{ key = 'z';         code = 'KeyZ';      vk = 90 }
   KeyF      = @{ key = 'f';         code = 'KeyF';      vk = 70 }
+  KeyM      = @{ key = 'm';         code = 'KeyM';      vk = 77 }
   # the rich-text shortcuts, which are otherwise only reachable by calling
   # execCommand directly - which tests the browser, not Splitpage's handler
   KeyA      = @{ key = 'a';         code = 'KeyA';      vk = 65 }

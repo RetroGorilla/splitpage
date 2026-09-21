@@ -440,6 +440,7 @@ const KEY_MAP = {
   end:       { key: "End",       code: "End",       vk: 35 },
   keyz:      { key: "z",         code: "KeyZ",      vk: 90 },
   keyf:      { key: "f",         code: "KeyF",      vk: 70 },
+  keym:      { key: "m",         code: "KeyM",      vk: 77 },
   // the rich-text shortcuts, which are otherwise only reachable by calling
   // execCommand directly — which tests the browser, not Splitpage's handler
   keya:      { key: "a",         code: "KeyA",      vk: 65 },
@@ -447,7 +448,7 @@ const KEY_MAP = {
   keyi:      { key: "i",         code: "KeyI",      vk: 73 },
   keyu:      { key: "u",         code: "KeyU",      vk: 85 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, Delete, Home, End, KeyZ, KeyF, KeyA, KeyB, KeyI, KeyU";
+const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU";
 
 async function pressKey(name, mods = "") {
   // PowerShell hashtable lookup is case-insensitive; the suites write `key Tab`
