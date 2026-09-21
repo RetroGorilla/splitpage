@@ -157,6 +157,25 @@ if (location.origin === "splitpage://app") {
       return ipcRenderer.invoke("splitpage:route-open", payload);
     },
 
+    /* Recent documents (DESKTOP-RECENTS), the New Tab page's third column.
+       Desktop only — the browser build has no equivalent and shows no
+       column. Each entry is {fileId, name, title, at}: an opaque id, the
+       file's basename and the title the document last reported, never a
+       path. `fileId` is what routeOpen({kind:'file', fileId}) takes, so a
+       click reopens with no picker. All three resolve to the list as it
+       stands afterwards, so the page never has to re-ask. */
+    listRecents() {
+      return ipcRenderer.invoke("splitpage:recents-list");
+    },
+
+    removeRecent(fileId) {
+      return ipcRenderer.invoke("splitpage:recents-remove", fileId);
+    },
+
+    clearRecents() {
+      return ipcRenderer.invoke("splitpage:recents-clear");
+    },
+
     onOpenServerDoc(cb) {
       openServerDocCallback = cb;
     },

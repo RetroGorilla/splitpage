@@ -1175,6 +1175,10 @@
     var importPreviewDebounce = null;
     document.getElementById("import-textarea").addEventListener("input", function (e) {
       var value = e.target.value;
+      /* Not debounced: a picked .docx/.csv and typed text are alternative
+         sources for one Import button, and the preview must stop offering
+         the file the moment the first character lands. */
+      if (value) clearPendingFileRows();
       clearTimeout(importPreviewDebounce);
       importPreviewDebounce = setTimeout(function () {
         maybeAutoDetectTwoColumn(value);

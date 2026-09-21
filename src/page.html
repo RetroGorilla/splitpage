@@ -122,6 +122,16 @@
           <!-- the old save format, now an export: one self-contained page for
                sending a script to someone with nothing installed -->
           <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
+          <!-- The live counterpart of the export above, and deliberately
+               next to it (issue #19): every other entry in this group hands
+               someone a DEAD COPY whose edits never come back, and this is
+               the one that doesn't. It publishes to the connected server and
+               copies the address of that one shared document. Always shown —
+               with no server it says so and opens Servers… rather than doing
+               nothing. 13-hosted.js. -->
+          <div class="menu-sep"></div>
+          <div class="menu-label">Share a live copy</div>
+          <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
           <div class="menu-sep"></div>
           <div class="menu-label">Export the narration</div>
           <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
@@ -267,7 +277,7 @@
 </div>
 
 <input type="file" id="file-input" accept="image/*" hidden>
-<input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
+<input type="file" id="import-file-input" accept=".txt,.md,.markdown,.docx,.csv,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 <input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
@@ -285,7 +295,7 @@
       <h2 id="import-title">Import a script</h2>
       <button type="button" class="modal-close" id="import-close" aria-label="Close">×</button>
     </div>
-    <p class="modal-hint">Paste a script below, or choose a .txt or .md file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns.</p>
+    <p class="modal-hint">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
     <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
       <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
@@ -864,6 +874,16 @@
         <strong>Open a file</strong>
         <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
       </button>
+      <!-- The third column (issue #15). DESKTOP ONLY: the list lives in the
+           main process (desktop-state.json, contract DESKTOP-RECENTS), and
+           the browser build has no equivalent, so this stays hidden there
+           and #newtab-cards keeps its two columns. -->
+      <div class="newtab-col newtab-recents" id="newtab-recents" hidden>
+        <span class="newtab-card-mark" aria-hidden="true">&#8635;</span>
+        <strong>Recent</strong>
+        <div class="newtab-recents-list" id="newtab-recents-list"></div>
+        <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
+      </div>
     </div>
     <p class="newtab-hint">
       <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>

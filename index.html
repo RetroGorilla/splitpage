@@ -2867,10 +2867,75 @@
   .newtab-hint { margin: 16px 0 0; font-size: 12.5px; color: var(--text-dim); }
   .newtab-hint a { color: inherit; }
 
+  /* ---- the recent-documents column (issue #15, desktop only) ----
+
+     A column, not a card: it holds a list rather than being one button, so
+     it shares the framing and the mark with .newtab-card and none of its
+     click behaviour. #newtab-cards only widens to three columns once the
+     column is actually shown (.has-recents), so the browser build's page
+     is untouched. */
+  .newtab-cards.has-recents { grid-template-columns: 1fr 1fr 1fr; }
+  .newtab-inner.has-recents { max-width: 880px; }
+  .newtab-col {
+    display: flex; flex-direction: column; gap: 4px;
+    text-align: left; padding: 16px 18px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text);
+  }
+  .newtab-col strong { font-size: 15px; }
+  .newtab-recents-list {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-top: 6px;
+    /* Capped at 20 entries by main, which is taller than a short window —
+       scroll the list rather than the page under a full-screen layer. */
+    max-height: 220px; overflow-y: auto;
+  }
+  .newtab-recent { display: flex; align-items: center; gap: 4px; }
+  .newtab-recent-open {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-direction: column; gap: 1px;
+    text-align: left; padding: 5px 6px;
+    border: 0; border-radius: 6px; background: none; color: inherit;
+    cursor: pointer;
+  }
+  .newtab-recent-open:hover { background: var(--bg); }
+  .newtab-recent-title {
+    font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .newtab-recent-name {
+    font-size: 11.5px; color: var(--text-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .newtab-recent-forget {
+    flex: 0 0 auto;
+    border: 0; background: none; color: var(--text-dim);
+    font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+    cursor: pointer;
+  }
+  .newtab-recent-forget:hover { color: var(--text); background: var(--bg); }
+  .newtab-recents-empty { font-size: 12.5px; color: var(--text-dim); padding: 5px 6px; }
+  .newtab-recents-clear {
+    align-self: flex-start; margin-top: 8px;
+    border: 0; background: none; color: var(--text-dim);
+    font-size: 12px; padding: 2px 0; cursor: pointer;
+    text-decoration: underline;
+  }
+  .newtab-recents-clear:hover { color: var(--text); }
+
   /* One column on a phone: two cards side by side at 375px leave neither
-     wide enough for its own sentence. */
+     wide enough for its own sentence. The recents column folds in with
+     them — it is desktop-only, but a small desktop window hits this too. */
   @media (max-width: 560px) {
-    .newtab-cards { grid-template-columns: 1fr; }
+    .newtab-cards, .newtab-cards.has-recents { grid-template-columns: 1fr; }
+  }
+  /* Three across needs room the two cards never did. The column drops
+     below the two cards and spans them; its list is capped so the × stays
+     beside the file name instead of drifting to the far edge. */
+  @media (max-width: 860px) and (min-width: 561px) {
+    .newtab-cards.has-recents { grid-template-columns: 1fr 1fr; }
+    .newtab-cards.has-recents .newtab-recents { grid-column: 1 / -1; }
+    .newtab-cards.has-recents .newtab-recents-list { max-width: 420px; }
   }
 </style>
 </head>
@@ -2961,6 +3026,16 @@
           <!-- the old save format, now an export: one self-contained page for
                sending a script to someone with nothing installed -->
           <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
+          <!-- The live counterpart of the export above, and deliberately
+               next to it (issue #19): every other entry in this group hands
+               someone a DEAD COPY whose edits never come back, and this is
+               the one that doesn't. It publishes to the connected server and
+               copies the address of that one shared document. Always shown —
+               with no server it says so and opens Servers… rather than doing
+               nothing. 13-hosted.js. -->
+          <div class="menu-sep"></div>
+          <div class="menu-label">Share a live copy</div>
+          <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
           <div class="menu-sep"></div>
           <div class="menu-label">Export the narration</div>
           <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
@@ -3106,7 +3181,7 @@
 </div>
 
 <input type="file" id="file-input" accept="image/*" hidden>
-<input type="file" id="import-file-input" accept=".txt,.md,text/plain,text/markdown" hidden>
+<input type="file" id="import-file-input" accept=".txt,.md,.markdown,.docx,.csv,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 <input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
@@ -3124,7 +3199,7 @@
       <h2 id="import-title">Import a script</h2>
       <button type="button" class="modal-close" id="import-close" aria-label="Close">×</button>
     </div>
-    <p class="modal-hint">Paste a script below, or choose a .txt or .md file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns.</p>
+    <p class="modal-hint">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
     <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
       <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
@@ -3550,7 +3625,7 @@
       <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
     </div>
     <div class="help-layout">
-      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-what-s-new-in-20">What's new in 2.0</a></li><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-between-the-browser-app-and-the-desktop-app">Moving between the browser app and the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-autosave">Autosave</a></li><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
+      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-what-s-new-in-20">What's new in 2.0</a></li><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-between-the-browser-app-and-the-desktop-app">Moving between the browser app and the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-autosave">Autosave</a></li><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li><li><a href="#help-sending-a-link-so-their-edits-come-back">Sending a link, so their edits come back</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
       <div id="help-body"><h1 id="help-splitpage">Splitpage</h1>
 <p>Splitpage is a two-column visual/audio script editor — pictures on one side, narration on the other — with a built-in teleprompter, comments for collaborating on a draft, and a production breakdown that tracks every prop, location, VFX shot, and person mentioned in the script.</p>
 <p>Scripts save as plain Markdown (<code>.md</code>) files by default, so you can open and edit them anywhere, or as native <code>.splitpage</code> files that keep everything — tags, comments, version history — in one file. Splitpage itself runs portable straight out of a folder with nothing to install, or you can <a href="#help-installing-it">install it</a> properly, with a Start Menu entry and auto-updates.</p>
@@ -3583,6 +3658,7 @@
 <ul><li><strong>Ctrl+T</strong> opens a new tab.</li><li><strong>Ctrl+W</strong>, or a middle-click on a tab, closes it — if it has unsaved changes, Splitpage asks first.</li><li><strong>Ctrl+Tab</strong> / <strong>Ctrl+Shift+Tab</strong> step to the next or previous tab.</li><li>Drag a tab out of the window to give it its own window, and drag it into another Splitpage window to bring it back in. Drag a tab past another one to reorder them.</li></ul>
 <p>Every tab you have open comes back the next time you launch Splitpage.</p>
 <p><strong>A new tab starts on a choice, not on a document.</strong> It asks for one of two things — <strong>New script</strong>, which is a genuinely empty script (one blank scene, no tags, no comments, nothing carried over), or <strong>Open a file</strong>, which is the same picker as File ▸ Open a document…. The same page shows in the browser app on a fresh copy nothing has been opened or saved into. It never appears over a document: not one you opened, not a shared session's, and not one coming back from a crash. If you would rather look at the example script that ships with Splitpage, the link at the bottom of the page dismisses it (so does Esc).</p>
+<p><strong>Recent</strong> is the third column, in the desktop app. It lists the last 20 documents you had open, most recent first, by title and file name; clicking one reopens it in that tab with no picker in the way. If a file has been moved or deleted since, clicking it says so instead of failing quietly, and the <strong>×</strong> beside any entry takes it off the list — <strong>Clear recent</strong> takes them all off. The list is kept with the rest of the desktop app's session state on your own machine: it is not in a saved script, not in an export (including <strong>Export app data</strong>), and nobody in a shared session can see it. The browser app does not have this column — a browser can only reopen a file it still holds permission for, so it remembers the last one and no more.</p>
 <p><strong>Crash recovery.</strong> If the app or your computer goes down with unsaved work open, nothing is lost: every tab's unsaved changes are kept on disk as you type, and Splitpage offers them back, tab by tab, the next time you launch it. That includes a document from a shared session whose server you can no longer reach — it comes back as an unsaved local copy, with a note naming the server document it came from.</p>
 <p><strong>Closing with unsaved work.</strong> Closing a window or quitting the app while any of its tabs have unsaved changes asks once, in a single dialog listing every tab that would lose work, with <strong>Review</strong>, <strong>Close without saving</strong>, and <strong>Cancel</strong>.</p>
 <p><strong>Duplicate files.</strong> If you open a copy of a file that's already open in another tab — for example, the same <code>.md</code> file synced down onto two machines — Splitpage notices and gives the copy its own version history, separate from the original's. Nothing is written to either file until you save.</p>
@@ -3699,13 +3775,18 @@ node update.mjs           # download and verify it</code></pre>
 <p>You can. Open it in any editor, fix a line of narration in the table, save, and reopen it in Splitpage — your edit is there. Splitpage compares the table against its own record cell by cell: a cell you did not touch keeps everything it had, and a cell you rewrote is taken from your version, with any tracked prop, location, cast, gear or sound name in it tagged again automatically. The one thing it cannot rescue is a comment that pointed at exact words in a cell you rewrote — the comment stays, along with the text it quoted, but it no longer has a place to point to and shows in the panel as no longer in the script. Changing the <code># </code> heading renames the script. Adding or deleting whole scene rows is the one thing Splitpage will not guess at: it asks whether to keep its own record or rebuild the scenes from your table.</p>
 <h3 id="help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</h3>
 <p><strong>File ▸ Export a copy ▸ Standalone HTML (.html)</strong> writes one self-contained page: your script with a copy of Splitpage wrapped around it. They double-click it and the script is there, editable, with nothing to install and no account. It is a far bigger file than a <code>.md</code>, so it is for sending, not for working in.</p>
+<p>It is a <strong>copy</strong>, though, and that is deliberate: it carries no link back here, it never connects anywhere, and whatever they type stays in their file. If you want their edits to come back, send a link instead.</p>
+<h3 id="help-sending-a-link-so-their-edits-come-back">Sending a link, so their edits come back</h3>
+<p><strong>File ▸ Publish &amp; copy a link</strong> puts this script on the server you are connected to and copies the address of it to your clipboard. Everyone who opens that link is editing the <em>same</em> document — the same shared script the rest of "Working together" describes, with saves merged rather than overwriting each other — rather than their own fork of it.</p>
+<ul><li>It needs a server to publish to. With none connected it says so and opens <strong>Servers…</strong> rather than doing anything; see "Working together" for the two ways to run one (an ad-hoc session from your own machine, or a permanent deployment).</li><li>If the script is already on the server, it saves first, so the link never points at a version older than what is on your screen.</li><li>The toast that confirms the copy also says what the person opening it will be asked for: the join PIN, a sign-in, or nothing at all.</li><li>The link is just the server's address with <code>?doc=</code> and the document's id on it. Opening one goes straight to that document, asking for the PIN first if the server wants one.</li></ul>
 <h2 id="help-version-history">Version history</h2>
 <p>Splitpage keeps snapshots of your document as you work, so you can step back to an earlier version. Open the <strong>Version history</strong> panel to see the list and restore one.</p>
 <p>History is per document: each script keeps its own list, separate from any other script you have open. It's kept in the app's own storage on the desktop app, and in that browser's storage on the web — either way it stays on your machine, not in the saved file or an export. The first time Splitpage sees the single shared history list an older copy of the app used to keep, it's brought in automatically under <strong>Older history</strong>, where it stays available for 90 days before it's cleared out for good.</p>
 <h2 id="help-reopening-a-saved-project">Reopening a saved project</h2>
 <p>A file Splitpage saved is a complete project, not just text — reopen it and you get everything back: scenes, comments, tags, images, title. Two ways:</p>
 <ul><li><strong>File ▸ Open a document…</strong>, then pick the <code>.md</code> or <code>.splitpage</code> file. Useful when you're already in the app and want to switch projects.</li><li><strong>Double-click a saved Standalone HTML file.</strong> It opens straight into that project — that is what being self-contained means.</li></ul>
-<p>That same menu still imports <code>.docx</code>/<code>.txt</code>/<code>.csv</code>, and Markdown that isn't one of Splitpage's own, as plain script text, same as before.</p>
+<p>That same menu still opens <code>.docx</code>/<code>.txt</code>/<code>.csv</code>, and Markdown that isn't one of Splitpage's own, as plain script text — but a file like that carries no project of its own, so <strong>opening one starts a new document</strong>: a new script with an empty breakdown, no cast list, no b-roll and no comments, and a Save button that points nowhere yet. Nothing of the document you had open comes with it.</p>
+<p>If what you actually have is a <strong>revised draft of the script you're already working on</strong>, use <strong>File ▸ Paste a script…</strong> instead. That modal replaces (or appends to) the scenes and keeps the document you're in — its breakdown statuses, owners and notes, its cast list, its b-roll list and its comments all stay where they are. It takes a <code>.docx</code>, <code>.md</code>, <code>.txt</code> or <code>.csv</code> file through <strong>Choose a file…</strong> as well as pasted text.</p>
 <h3 id="help-older-html-projects">Older <code>.html</code> projects</h3>
 <p>Splitpage used to save every project as a page like the standalone export above. Those files still open exactly as they always did — there is nothing to convert by hand. The first time you Save one, though, Splitpage asks where to keep it as a <code>.md</code> instead and tells you why; from then on it is an ordinary Markdown project. Your original <code>.html</code> file is left where it is, untouched.</p>
 <h2 id="help-resuming-your-last-project-on-launch">Resuming your last project on launch</h2>
@@ -3874,6 +3955,16 @@ node update.mjs           # download and verify it</code></pre>
         <strong>Open a file</strong>
         <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
       </button>
+      <!-- The third column (issue #15). DESKTOP ONLY: the list lives in the
+           main process (desktop-state.json, contract DESKTOP-RECENTS), and
+           the browser build has no equivalent, so this stays hidden there
+           and #newtab-cards keeps its two columns. -->
+      <div class="newtab-col newtab-recents" id="newtab-recents" hidden>
+        <span class="newtab-card-mark" aria-hidden="true">&#8635;</span>
+        <strong>Recent</strong>
+        <div class="newtab-recents-list" id="newtab-recents-list"></div>
+        <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
+      </div>
     </div>
     <p class="newtab-hint">
       <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
@@ -13539,6 +13630,13 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function updateImportPreview() {
+    var el0 = document.getElementById("import-preview");
+    if (pendingFileRows) {
+      var n0 = pendingFileRows.length;
+      el0.textContent = pendingFileName + " — this will create " + n0 + " row" + (n0 === 1 ? "" : "s") +
+        ", columns and formatting kept. Type below to use pasted text instead.";
+      return;
+    }
     var text = document.getElementById("import-textarea").value;
     var mode = getImportMode();
     var rows = parseImportRows(text, mode);
@@ -13558,10 +13656,39 @@ node update.mjs           # download and verify it</code></pre>
     }
   }
 
+  /* ---- a picked file as the source, instead of the textarea ----
+
+     This modal is the "draft 2 of the same script" path (issue #7): it
+     replaces or appends rows and keeps everything the document knows about
+     them — the breakdown's statuses, owners and notes, the cast list, the
+     b-roll list and the comments — where File ▸ Open now starts a new
+     document. That workflow used to be reachable only by pasting, which
+     ruled out a .docx (a zip) and cost a .csv its columns; the picker below
+     makes it reachable for all four foreign formats.
+
+     A .docx and a .csv are tables, not text. Rendering one back into the
+     textarea so the split modes could re-read it would throw away the
+     column split and the formatting the importers already recovered, so
+     those two bypass the textarea: the rows they produce are held here and
+     the Import button uses them as-is. Typing in the textarea drops them —
+     the textarea and a picked table are two sources for one button, never
+     both at once. */
+  var pendingFileRows = null;
+  var pendingFileName = "";
+
+  function clearPendingFileRows() {
+    if (!pendingFileRows) return;
+    pendingFileRows = null;
+    pendingFileName = "";
+    updateImportPreview();
+  }
+
   function openImportModal() {
     document.getElementById("import-textarea").value = "";
     document.getElementById("import-replace").checked = false;
     importModeTouched = false;
+    pendingFileRows = null;
+    pendingFileName = "";
     var paragraphRadio = document.querySelector('input[name="import-split"][value="paragraph"]');
     if (paragraphRadio) paragraphRadio.checked = true;
     updateImportPreview();
@@ -13573,31 +13700,73 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("import-modal").hidden = true;
   }
 
-  function handleImportFile(file) {
+  async function handleImportFile(file) {
     if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      var text = String(reader.result || "");
-      document.getElementById("import-textarea").value = text;
-      maybeAutoDetectTwoColumn(text);
+    var kind = fileKindFromName(file.name); /* 18-local-files.js */
+    if (kind === "splitpage" || kind === "html") {
+      showToast("That is a Splitpage project — open it with File ▸ Open a document…", "warn");
+      return;
+    }
+    if (kind === "docx" || kind === "csv") {
+      var rows;
+      try {
+        if (kind === "csv") {
+          rows = csvToRows(await file.text());
+        } else {
+          var parsed = await docxToRows(file);
+          rows = parsed.rows;
+          /* a Word file with no table, exactly as File ▸ Open reads one */
+          if ((!rows || !rows.length) && parsed.looseText) {
+            rows = normalizeImportedRows(parseImportRows(parsed.looseText,
+              detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph"));
+          }
+        }
+      } catch (err) {
+        showToast(importFileErrorMessage(err), "error");
+        return;
+      }
+      if (!rows || !rows.length) { showToast("No script rows found in that file.", "warn"); return; }
+      pendingFileRows = rows;
+      pendingFileName = file.name;
+      document.getElementById("import-textarea").value = "";
       updateImportPreview();
-    };
-    reader.onerror = function () {
+      return;
+    }
+    /* .md, .txt and anything else readable: the textarea path, unchanged. */
+    var text;
+    try {
+      text = await file.text();
+    } catch (err) {
       showToast("Could not read that file.", "error");
-    };
-    reader.readAsText(file);
+      return;
+    }
+    pendingFileRows = null;
+    pendingFileName = "";
+    document.getElementById("import-textarea").value = text;
+    maybeAutoDetectTwoColumn(text);
+    updateImportPreview();
+  }
+
+  function importFileErrorMessage(err) {
+    if (err && err.message === "no-decompression-stream") return "This browser can't unzip .docx files — try Chrome or Edge.";
+    if (err && (err.message === "not-a-zip" || err.message === "no-document-xml")) return "That doesn't look like a Word document.";
+    return "Could not read that file.";
   }
 
   function confirmImport() {
-    var text = document.getElementById("import-textarea").value;
-    var mode = getImportMode();
-    var rows = parseImportRows(text, mode);
-    if (!rows.length) {
-      showToast("Paste or choose some text first.", "warn");
-      return;
+    var newRows;
+    if (pendingFileRows) {
+      newRows = pendingFileRows;
+    } else {
+      var text = document.getElementById("import-textarea").value;
+      var rows = parseImportRows(text, getImportMode());
+      if (!rows.length) {
+        showToast("Paste or choose some text first.", "warn");
+        return;
+      }
+      newRows = normalizeImportedRows(rows);
     }
     var replace = document.getElementById("import-replace").checked;
-    var newRows = normalizeImportedRows(rows);
     newRows.forEach(stampRow);
     if (replace && state.rows.length) pushSnapshot("Before replacing rows on import");
     state.rows = replace ? newRows : state.rows.concat(newRows);
@@ -14305,6 +14474,10 @@ node update.mjs           # download and verify it</code></pre>
     }
     serverMode.checked = true;
     updateConnectMenu();
+    /* Also on the no-server path: the share entry's enabled state and its
+       tooltip are derived here rather than trusted from the markup, so the
+       two can never drift apart (issue #19). */
+    updateServerMenu();
     if (!serverMode.available) {
       if (serverBase) {
         showToast("Could not reach " + serverBase + " — use File ▸ Servers… to pick another, " +
@@ -14342,7 +14515,12 @@ node update.mjs           # download and verify it</code></pre>
     } catch (e) { /* identity is a nicety, not a requirement */ }
 
     updateServerMenu();
-    resumeServerDoc();
+    /* The link's document is opened only if nothing else claimed this page:
+       resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
+       both are unsaved work that must not be replaced (issue #19). */
+    resumeServerDoc().then(function (resumed) {
+      if (!resumed) openSharedDocFromLink();
+    }, function () { openSharedDocFromLink(); });
   }
 
   function updateServerMenu() {
@@ -14354,6 +14532,19 @@ node update.mjs           # download and verify it</code></pre>
     if (sep) sep.hidden = !serverMode.available;
     var newBtn = document.getElementById("menu-server-new");
     if (newBtn) newBtn.disabled = serverMode.readOnly;
+    /* The share entry is never hidden — it is how someone with no server yet
+       finds out that sharing a live document is possible at all, and it says
+       so and opens the Servers dialog rather than doing nothing. Read-only is
+       the one state where pressing it could not work, so it is disabled with
+       the reason in its tooltip. */
+    var shareBtn = document.getElementById("menu-share-link");
+    if (shareBtn) {
+      shareBtn.disabled = serverMode.available && serverMode.readOnly;
+      shareBtn.title = shareBtn.disabled
+        ? "This server is published read-only — nothing new can be put on it."
+        : "Puts this script on the connected server and copies a link to it. " +
+          "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
+    }
   }
 
   /* ---- the picker ---- */
@@ -14437,8 +14628,11 @@ node update.mjs           # download and verify it</code></pre>
       " scene" + (state.rows.length === 1 ? "" : "s"), "ok");
   }
 
+  /* → true once the document is on the server. The boolean is what
+     publishAndCopyShareLink() (issue #19) needs: a link must never be
+     copied for a publish that did not happen. */
   async function publishToServer() {
-    if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return; }
+    if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
     var published = cloneState(state);
     /* Publishing makes a second home for this script. If its id already
        lives somewhere else (a file on disk, another server document), the
@@ -14450,7 +14644,7 @@ node update.mjs           # download and verify it</code></pre>
     var body;
     try {
       body = await apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
-    } catch (err) { handleApiError(err, "Could not put that on the server"); return; }
+    } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
     docFileHandle = { handle: null, kind: null };
@@ -14464,7 +14658,156 @@ node update.mjs           # download and verify it</code></pre>
     clearDirty();
     updateFileChip();
     showToast("Published to the server as “" + (state.title || body.id) + "” — collaborators can open it now", "ok");
+    return true;
   }
+
+  /* ---- "Publish and copy a link" (issue #19) ----
+
+     The standalone HTML export stays what it has always been: a DEAD COPY.
+     It carries no document id, it never connects anywhere, and the
+     recipient's edits stay in their file. Shapes that would have made it a
+     live client of a server — an exported page phoning home to a URL baked
+     into it, or a centrally hosted Splitpage — were considered and are not
+     being built (issue #19, and the note on standaloneHtmlFor in
+     02b-doc-id.js, which still holds).
+
+     What IS being built is the delivery half, because hosted mode already
+     is the collaboration: one shared document, rev-based conflict
+     detection, a three-way merge and attribution. What was missing was a
+     way to hand someone the address of it. So this publishes to the server
+     this copy is connected to and puts the open-URL on the clipboard —
+     a link, not a file.
+
+     It never connects anywhere on its own and never publishes silently:
+     with no server it says so and opens the Servers dialog instead, and the
+     toast names what the recipient will be asked for (a join PIN, an Access
+     sign-in, or nothing at all) before they get there. */
+
+  /* serverBase is "" when this page was served BY the document server, in
+     which case the address to share is this page's own. Built through the
+     URL parser so a "?doc=" already in the bar, a fragment, or a path that
+     is not the root all resolve the way a browser would. */
+  function serverDocShareUrl(id) {
+    try {
+      return new URL("?doc=" + encodeURIComponent(id), serverBase || location.href).href;
+    } catch (e) {
+      return (serverBase || "") + "?doc=" + encodeURIComponent(id);
+    }
+  }
+
+  /* What the person opening the link will be asked for. Said out loud next
+     to the link, because "just open this" and "open this, and you will need
+     the six-digit code I am about to send you" are different messages. */
+  function shareAccessNote() {
+    if (serverMode.authRequired) return "They'll need the join PIN to open it.";
+    if (serverIdentity && serverIdentity.email) return "They'll need to sign in the same way you did.";
+    return "Anyone who can reach that address can open it.";
+  }
+
+  function copyShareText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return copyShareTextFallback(text); });
+    }
+    return Promise.resolve(copyShareTextFallback(text));
+  }
+
+  /* An insecure origin, or a browser that refuses the async API without a
+     permission: the old selection trick still works there. */
+  function copyShareTextFallback(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "readonly");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      ta.remove();
+      return !!ok;
+    } catch (e) { return false; }
+  }
+
+  async function publishAndCopyShareLink() {
+    if (!serverMode.available) {
+      showToast("A share link needs a Splitpage server to publish to. " +
+        "Pick or add one under Servers…, then try again.", "warn");
+      if (typeof openServersDialog === "function") openServersDialog(); /* 20e-connect.js */
+      return false;
+    }
+    if (serverMode.readOnly) {
+      showToast("This server is published read-only — nothing new can be put on it.", "warn");
+      return false;
+    }
+    /* Already hosted: the document has an address, and the only thing that
+       could be wrong with the link is that it points at a version older
+       than what is on screen. Save first, then share. A save that fails has
+       already said why (saveToServer / handleApiError), and a link to a
+       stale version is worse than none. */
+    if (onServerDoc()) {
+      if (dirty && !(await saveToServer())) return false;
+    } else if (!(await publishToServer()) || !onServerDoc()) {
+      return false;
+    }
+    var url = serverDocShareUrl(serverDoc.id);
+    var copied = await copyShareText(url);
+    showToast(copied
+      ? "Link copied — " + shareAccessNote()
+      : "Published. Could not reach the clipboard, so here is the link: " + url,
+      copied ? "ok" : "warn", !copied);
+    return true;
+  }
+
+  /* ---- opening a shared link: ?doc=<id> ----
+
+     The other end of the link above. Runs after the server has answered and
+     after any PIN dialog, so a link opened cold asks for the code first and
+     then lands on the document — rather than failing with a 401 and leaving
+     the person looking at a blank script.
+
+     A crash draft or a lapsed-sign-in resume wins: both are unsaved work
+     belonging to a document that was already open here, and a link in the
+     address bar must not throw them away. The parameter is stripped either
+     way, so a reload is an ordinary reload of whatever is on screen. */
+  function readSharedDocParam() {
+    var id = "";
+    try { id = new URLSearchParams(location.search).get("doc") || ""; } catch (e) { id = ""; }
+    if (!id) return "";
+    try {
+      var url = new URL(location.href);
+      url.searchParams.delete("doc");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch (e) { /* the id is already in hand; the bar keeping it is cosmetic */ }
+    return id;
+  }
+
+  var sharedDocId = readSharedDocParam();
+
+  async function openSharedDocFromLink() {
+    if (!sharedDocId) return false;
+    var id = sharedDocId;
+    sharedDocId = "";
+    if (onServerDoc()) return false;   /* a resume already took this page somewhere */
+    await openServerDoc(id);
+    return true;
+  }
+
+  /* ---- test hook ----
+     Same trick as window.__newTab / window.__updateTest: the share action's
+     two pure pieces (the URL it builds and the sentence it says about
+     getting in) and the mode flags they read are what a headless suite has
+     to drive, and neither has a UI affordance that can be clicked into
+     existence without a real document server behind it. Nothing in the app
+     reads this. */
+  window.__shareTest = {
+    url: serverDocShareUrl,
+    note: shareAccessNote,
+    publishAndCopy: publishAndCopyShareLink,
+    mode: function () { return serverMode; },
+    updateMenu: updateServerMenu,
+    sharedDocId: function () { return sharedDocId; },
+    setIdentity: function (who) { serverIdentity = who; }
+  };
 
   async function armServerDelete(btn, id) {
     if (btn.getAttribute("data-armed") === "1") {
@@ -17715,7 +18058,12 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("resume-banner").hidden = true;
   }
 
-  async function loadFileIntoEditor(file, handle) {
+  /* `opts.reload` marks the one caller that is NOT an open: reloadFileFromDisk()
+     re-reading the very file this document is already round-tripping, because
+     it changed under us. That is the same document with newer bytes, so it
+     keeps its id and its record — see the OPEN = A NEW DOCUMENT note below. */
+  async function loadFileIntoEditor(file, handle, opts) {
+    opts = opts || {};
     var kind = fileKindFromName(file.name);
     /* The two project formats never belong here: openProjectFile reads them
        properly and only ever hands this function a foreign document (that
@@ -17754,16 +18102,53 @@ node update.mjs           # download and verify it</code></pre>
     if (!newRows || !newRows.length) { showToast("No script rows found in that file.", "warn"); return; }
 
     /* opening a document replaces the whole script — keep a way back */
-    if (state.rows.length) pushSnapshot("Before opening " + file.name);
+    if (!opts.reload && state.rows.length) pushSnapshot("Before opening " + file.name);
 
     newRows.forEach(stampRow);
-    /* An import keeps state.docId on purpose. Only the rows and the title
-       are replaced; the document is still the one on screen (same history,
-       same Save target for its project file), and a foreign .docx/.csv/.md
-       has no id of its own to offer anyway. */
-    state.rows = newRows;
-    if (newTitle) state.title = newTitle;
-    else state.title = file.name.replace(/\.[^.]+$/, "");
+    /* OPEN = A NEW DOCUMENT (issue #7). This used to replace only
+       `state.rows` and the title and keep everything else, so an unrelated
+       .docx inherited the previous script's production tags, cast list,
+       b-roll list and review comments — a breakdown of text that never
+       mentioned any of them — and Save still pointed at the previous
+       project's file.
+
+       A foreign .docx/.md/.txt/.csv carries no record of its own, so there
+       is nothing here that belongs to the document being opened: the only
+       honest reading of "open this file" is a new document. Building it
+       through migrateRows() from its two required fields is the same
+       construction blankDocumentState() (20j-newtab.js) uses, and the only
+       way to be sure nothing of the old document survives — it mints a
+       fresh docId and fills in every list empty.
+
+       "Draft 2 of the same script" is still a real workflow and is still
+       supported; it is the Paste/Import modal (openImportModal,
+       11-import.js), which keeps the breakdown, the people, the b-roll and
+       the comments and now takes a file as well as pasted text. */
+    var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
+    if (opts.reload) {
+      /* Not an open: the same document, re-read from the same file. Only
+         the rows and the title come back — the breakdown, the cast, the
+         b-roll and the comments are this document's own and were never in
+         the .docx to begin with. */
+      state.rows = newRows;
+      state.title = openedTitle;
+    } else {
+      state = migrateRows({ title: openedTitle, rows: newRows });
+      baseState = cloneState(state);
+      /* The two homes of the Save button (§3.1). Neither belongs to this
+         document: the project file and the hosted document both belonged to
+         whatever was on screen a moment ago, and saving into either of them
+         would overwrite an unrelated script. */
+      docFileHandle = { handle: null, kind: null };
+      serverDoc = { id: null, rev: 0 };
+      /* The breakdown panel's open card, rename box and group mode belong to
+         the document that just went away — same reason adoptProjectState()
+         resets them. */
+      resetProductionPanelState();
+      /* This id was minted here and has never left the page, so a first Save
+         can take it with it rather than forking a new one (02b-doc-id.js). */
+      docIdWrittenOut = false;
+    }
 
     openedFile.name = file.name;
     openedFile.handle = handle || null;
@@ -17779,8 +18164,14 @@ node update.mjs           # download and verify it</code></pre>
     openedFile.dirty = false;
     if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
     render();
+    updateIdentityChip();
     updateFileChip();
-    showToast("Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s"), "ok");
+    if (typeof syncDocIdentity === "function") syncDocIdentity();
+    if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    showToast(opts.reload
+      ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
+      : "Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") +
+        " — as a new document", "ok");
   }
 
   async function openLocalFile() {
@@ -18009,7 +18400,7 @@ node update.mjs           # download and verify it</code></pre>
     if (!openedFile.handle) return;
     try {
       pushSnapshot("Before reloading " + openedFile.name + " from disk");
-      await loadFileIntoEditor(await openedFile.handle.getFile(), openedFile.handle);
+      await loadFileIntoEditor(await openedFile.handle.getFile(), openedFile.handle, { reload: true });
     } catch (e) {
       showToast("Could not re-read that file.", "error");
     }
@@ -18113,6 +18504,7 @@ node update.mjs           # download and verify it</code></pre>
     else if (action === "drive-open") openDriveModal();
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
+    else if (action === "share-link") publishAndCopyShareLink();
     else if (action === "find") openFindBar();
     else if (action === "export-app-data") exportAppData();
     else if (action === "import-app-data") openImportAppData();
@@ -20850,6 +21242,11 @@ node update.mjs           # download and verify it</code></pre>
        saveDoc() (14-export.js) has something to compare against, exactly
        the way a real handle from showOpenFilePicker would. */
     openFile: function (file, handle) { return openProjectFile(file, handle || null, { skipSnapshot: true }); },
+    /* The Paste/Import modal's file picker (handleImportFile, 11-import.js).
+       Headless cannot run a real <input type=file>, and this is the half of
+       issue #7 that keeps the document — so it needs driving directly, the
+       same way openFile above stands in for File ▸ Open. */
+    importFile: function (file) { return handleImportFile(file); },
     /* Drives Save the same way the header/File-menu buttons do, so the
        on-disk-conflict check saveDoc() runs before writing is exercised
        without a real file picker (headless can't run one). */
@@ -21826,6 +22223,7 @@ node update.mjs           # download and verify it</code></pre>
      assertions. */
   function makeFakeDesktopBackend(opts) {
     var files = {};
+    var recents = [];
     var nextId = 1;
     var openHandler = null;
     var menuHandler = null;
@@ -21900,7 +22298,29 @@ node update.mjs           # download and verify it</code></pre>
          _routeAnswer at something else first — the single-tab shape every
          existing caller (openLocalFile, the server picker) already expects. */
       routeOpen: function (p) {
+        /* A file id main no longer knows is the "moved or deleted since"
+           case the recents column has to cope with (issue #15) — the real
+           handler throws ENOENT for it, so the fake does too. */
+        if (p && p.kind === "file" && this._routeMissing) return Promise.reject(new Error("ENOENT: file is not readable"));
         return Promise.resolve(this._routeAnswer || { where: "this-tab" });
+      },
+
+      /* ---- recent documents (DESKTOP-RECENTS) ----
+         The real list lives in the main process's desktop-state.json; this
+         is the same three calls over an in-memory array, so a browser suite
+         can drive the New Tab page's third column. Each entry is
+         {fileId, name, title, at} — never a path, exactly as the bridge
+         hands them over. */
+      listRecents: function () { return Promise.resolve(recents.map(function (r) { return { fileId: r.fileId, name: r.name, title: r.title, at: r.at }; })); },
+      removeRecent: function (fileId) {
+        recents = recents.filter(function (r) { return r.fileId !== fileId; });
+        return this.listRecents();
+      },
+      clearRecents: function () { recents = []; return this.listRecents(); },
+      _addRecent: function (fileId, name, title, at) {
+        recents = recents.filter(function (r) { return r.fileId !== fileId; });
+        recents.unshift({ fileId: fileId, name: name, title: title || "", at: at || Date.now() });
+        return fileId;
       },
       onOpenFile: function (cb) { openHandler = cb; },
       onOpenServerDoc: function (cb) { openServerDocHandler = cb; },
@@ -23743,11 +24163,19 @@ node update.mjs           # download and verify it</code></pre>
      genuinely empty one — one blank scene, no tags, no comments, no
      b-roll, a fresh identity — not a filtered copy of the seed.
 
-     Recently-opened documents as a third column (the issue's open
-     question) are deliberately not here: nothing in the app keeps a recent
-     list today — the browser remembers one handle and the desktop main
-     process tracks open tabs, neither of which is a recents list — so that
-     column is a feature of its own rather than a detail of this page.
+     THE THIRD COLUMN (issue #15) is recently-opened documents, and it is
+     DESKTOP ONLY. The list is kept by the main process in
+     desktop-state.json (contract DESKTOP-RECENTS) because that is the only
+     side that can hold a durable reference to a file: the browser build
+     remembers exactly one handle, and can only reopen one it still has
+     permission for. So in the browser this column stays hidden and the
+     page keeps its two cards.
+
+     Nothing about the list reaches this page but what it needs to draw it
+     and click it: an opaque fileId, the file's basename, the title the
+     document last reported, and when. Never a path (invariant #34), and it
+     is deliberately not in the app-data export either (§5 #48) — it is a
+     record of what someone has been working on.
 
      Like 20b/20c/20e this fragment wires itself directly rather than
      through init(): #newtab-page is in the DOM by the time this classic
@@ -23774,6 +24202,11 @@ node update.mjs           # download and verify it</code></pre>
     document.addEventListener("keydown", onNewTabKeydown, true);
     var first = el.querySelector('[data-newtab-action="new"]');
     if (first) first.focus();
+    /* Asked for every time the page is shown rather than cached: another
+       tab (or another window) may have opened something since, and main is
+       the only authority on the list. Not awaited — the two cards must not
+       wait on IPC to become clickable. */
+    refreshRecents();
   }
 
   function closeNewTabPage() {
@@ -23840,6 +24273,108 @@ node update.mjs           # download and verify it</code></pre>
     if (openedFile.name || docFileHandle.kind) closeNewTabPage();
   }
 
+  /* ---- the recent-documents column (DESKTOP-RECENTS) ---- */
+
+  function recentsSupported() {
+    return !!(DESKTOP && typeof DESKTOP.listRecents === "function");
+  }
+
+  function formatRecentWhen(at) {
+    if (!at) return "";
+    var days = Math.floor((Date.now() - at) / 86400000);
+    if (days <= 0) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 7) return days + " days ago";
+    return new Date(at).toLocaleDateString();
+  }
+
+  function renderRecents(entries) {
+    var col = document.getElementById("newtab-recents");
+    var list = document.getElementById("newtab-recents-list");
+    var cards = document.querySelector("#newtab-page .newtab-cards");
+    var inner = document.querySelector("#newtab-page .newtab-inner");
+    if (!col || !list) return;
+    /* The column itself stays once it is up, empty list and all: "Recent
+       (nothing yet)" is a truthful answer, and a column that appears and
+       disappears under the pointer as the last entry is forgotten is not. */
+    col.hidden = false;
+    if (cards) cards.classList.add("has-recents");
+    if (inner) inner.classList.add("has-recents");
+    var clear = document.getElementById("newtab-recents-clear");
+    if (clear) clear.hidden = !entries.length;
+    if (!entries.length) {
+      list.innerHTML = '<div class="newtab-recents-empty">Nothing yet — what you open shows up here.</div>';
+      return;
+    }
+    list.innerHTML = entries.map(function (r) {
+      var when = formatRecentWhen(r.at);
+      var title = r.title || r.name;
+      return '<div class="newtab-recent">' +
+        '<button type="button" class="newtab-recent-open" data-newtab-action="open-recent" ' +
+          'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
+          '<span class="newtab-recent-title">' + escapeHtml(title) + '</span>' +
+          '<span class="newtab-recent-name">' + escapeHtml(r.name) + (when ? " · " + escapeHtml(when) : "") + '</span>' +
+        '</button>' +
+        '<button type="button" class="newtab-recent-forget" data-newtab-action="forget-recent" ' +
+          'data-file-id="' + escapeHtml(r.fileId) + '" title="Forget this one" ' +
+          'aria-label="Forget ' + escapeHtml(title) + '">\u00d7</button>' +
+      '</div>';
+    }).join("");
+  }
+
+  async function refreshRecents() {
+    if (!recentsSupported()) return;
+    var entries = [];
+    try { entries = await DESKTOP.listRecents(); } catch (e) { return; }
+    renderRecents(Array.isArray(entries) ? entries : []);
+  }
+
+  /* A click on a card is the same open File ▸ Open a document… performs,
+     minus the picker: main already holds the path behind this fileId and
+     still decides where it lands. A file that has been moved or deleted
+     since is the case the issue calls out — routeOpen rejects, and the
+     entry says so and offers to forget itself rather than failing
+     silently. */
+  async function openRecent(fileId) {
+    if (!fileId || !recentsSupported()) return;
+    var entry = null;
+    try {
+      var r = await DESKTOP.routeOpen({ kind: "file", fileId: fileId });
+      if (!r || r.where !== "this-tab") {
+        /* It went to the tab that already had it, or to a new one. This tab
+           is still a new tab; leave the page up, same as the picker path. */
+        refreshRecents();
+        return;
+      }
+      entry = await DESKTOP.readFile(fileId);
+    } catch (e) {
+      showToast("That file isn't there any more — it may have been moved or deleted. " +
+        "Use × to take it off this list.", "warn");
+      refreshRecents();
+      return;
+    }
+    var handle = makeDesktopHandle(entry);           /* 20f-desktop.js */
+    await openProjectFile(await handle.getFile(), handle);  /* 18-local-files.js */
+  }
+
+  async function forgetRecent(fileId) {
+    /* DESKTOP can go away under a rendered column — __desktopTest's
+       restoreBackend() does exactly that at the end of a suite — so every
+       one of these re-checks the bridge rather than trusting the button's
+       existence. */
+    if (!fileId || !recentsSupported() || typeof DESKTOP.removeRecent !== "function") return;
+    var entries = [];
+    try { entries = await DESKTOP.removeRecent(fileId); } catch (e) { return; }
+    renderRecents(Array.isArray(entries) ? entries : []);
+  }
+
+  async function clearRecents() {
+    if (!recentsSupported() || typeof DESKTOP.clearRecents !== "function") return;
+    var entries = [];
+    try { entries = await DESKTOP.clearRecents(); } catch (e) { return; }
+    renderRecents(Array.isArray(entries) ? entries : []);
+  }
+
   (function wireNewTabPage() {
     var el = newTabPageEl();
     if (!el) return;
@@ -23851,6 +24386,9 @@ node update.mjs           # download and verify it</code></pre>
       if (action === "new") startBlankScript();
       else if (action === "open") newTabOpenFile();
       else if (action === "dismiss") closeNewTabPage();
+      else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
+      else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
+      else if (action === "clear-recents") clearRecents();
     });
   })();
 
@@ -23908,7 +24446,11 @@ node update.mjs           # download and verify it</code></pre>
     isOpen: function () { return newTabPageShown; },
     eligible: newTabEligibleForAutoShow,
     blank: startBlankScript,
-    blankState: blankDocumentState
+    blankState: blankDocumentState,
+    /* The recents column (issue #15). Desktop-only and driven by IPC, so a
+       browser suite reaches it through __desktopTest's fake backend. */
+    refreshRecents: refreshRecents,
+    openRecent: openRecent
   };
   /* ================= events ================= */
 
@@ -25087,6 +25629,10 @@ node update.mjs           # download and verify it</code></pre>
     var importPreviewDebounce = null;
     document.getElementById("import-textarea").addEventListener("input", function (e) {
       var value = e.target.value;
+      /* Not debounced: a picked .docx/.csv and typed text are alternative
+         sources for one Import button, and the preview must stop offering
+         the file the moment the first character lands. */
+      if (value) clearPendingFileRows();
       clearTimeout(importPreviewDebounce);
       importPreviewDebounce = setTimeout(function () {
         maybeAutoDetectTwoColumn(value);

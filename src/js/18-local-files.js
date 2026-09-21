@@ -387,7 +387,12 @@
     document.getElementById("resume-banner").hidden = true;
   }
 
-  async function loadFileIntoEditor(file, handle) {
+  /* `opts.reload` marks the one caller that is NOT an open: reloadFileFromDisk()
+     re-reading the very file this document is already round-tripping, because
+     it changed under us. That is the same document with newer bytes, so it
+     keeps its id and its record — see the OPEN = A NEW DOCUMENT note below. */
+  async function loadFileIntoEditor(file, handle, opts) {
+    opts = opts || {};
     var kind = fileKindFromName(file.name);
     /* The two project formats never belong here: openProjectFile reads them
        properly and only ever hands this function a foreign document (that
@@ -426,16 +431,53 @@
     if (!newRows || !newRows.length) { showToast("No script rows found in that file.", "warn"); return; }
 
     /* opening a document replaces the whole script — keep a way back */
-    if (state.rows.length) pushSnapshot("Before opening " + file.name);
+    if (!opts.reload && state.rows.length) pushSnapshot("Before opening " + file.name);
 
     newRows.forEach(stampRow);
-    /* An import keeps state.docId on purpose. Only the rows and the title
-       are replaced; the document is still the one on screen (same history,
-       same Save target for its project file), and a foreign .docx/.csv/.md
-       has no id of its own to offer anyway. */
-    state.rows = newRows;
-    if (newTitle) state.title = newTitle;
-    else state.title = file.name.replace(/\.[^.]+$/, "");
+    /* OPEN = A NEW DOCUMENT (issue #7). This used to replace only
+       `state.rows` and the title and keep everything else, so an unrelated
+       .docx inherited the previous script's production tags, cast list,
+       b-roll list and review comments — a breakdown of text that never
+       mentioned any of them — and Save still pointed at the previous
+       project's file.
+
+       A foreign .docx/.md/.txt/.csv carries no record of its own, so there
+       is nothing here that belongs to the document being opened: the only
+       honest reading of "open this file" is a new document. Building it
+       through migrateRows() from its two required fields is the same
+       construction blankDocumentState() (20j-newtab.js) uses, and the only
+       way to be sure nothing of the old document survives — it mints a
+       fresh docId and fills in every list empty.
+
+       "Draft 2 of the same script" is still a real workflow and is still
+       supported; it is the Paste/Import modal (openImportModal,
+       11-import.js), which keeps the breakdown, the people, the b-roll and
+       the comments and now takes a file as well as pasted text. */
+    var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
+    if (opts.reload) {
+      /* Not an open: the same document, re-read from the same file. Only
+         the rows and the title come back — the breakdown, the cast, the
+         b-roll and the comments are this document's own and were never in
+         the .docx to begin with. */
+      state.rows = newRows;
+      state.title = openedTitle;
+    } else {
+      state = migrateRows({ title: openedTitle, rows: newRows });
+      baseState = cloneState(state);
+      /* The two homes of the Save button (§3.1). Neither belongs to this
+         document: the project file and the hosted document both belonged to
+         whatever was on screen a moment ago, and saving into either of them
+         would overwrite an unrelated script. */
+      docFileHandle = { handle: null, kind: null };
+      serverDoc = { id: null, rev: 0 };
+      /* The breakdown panel's open card, rename box and group mode belong to
+         the document that just went away — same reason adoptProjectState()
+         resets them. */
+      resetProductionPanelState();
+      /* This id was minted here and has never left the page, so a first Save
+         can take it with it rather than forking a new one (02b-doc-id.js). */
+      docIdWrittenOut = false;
+    }
 
     openedFile.name = file.name;
     openedFile.handle = handle || null;
@@ -451,8 +493,14 @@
     openedFile.dirty = false;
     if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
     render();
+    updateIdentityChip();
     updateFileChip();
-    showToast("Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s"), "ok");
+    if (typeof syncDocIdentity === "function") syncDocIdentity();
+    if (DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    showToast(opts.reload
+      ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
+      : "Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") +
+        " — as a new document", "ok");
   }
 
   async function openLocalFile() {
@@ -681,7 +729,7 @@
     if (!openedFile.handle) return;
     try {
       pushSnapshot("Before reloading " + openedFile.name + " from disk");
-      await loadFileIntoEditor(await openedFile.handle.getFile(), openedFile.handle);
+      await loadFileIntoEditor(await openedFile.handle.getFile(), openedFile.handle, { reload: true });
     } catch (e) {
       showToast("Could not re-read that file.", "error");
     }
@@ -785,6 +833,7 @@
     else if (action === "drive-open") openDriveModal();
     else if (action === "server-open") openServerPicker();
     else if (action === "server-publish") publishToServer();
+    else if (action === "share-link") publishAndCopyShareLink();
     else if (action === "find") openFindBar();
     else if (action === "export-app-data") exportAppData();
     else if (action === "import-app-data") openImportAppData();

@@ -107,6 +107,9 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/32-prompter-mirror.txt` | teleprompter Mirror/Flip (issue #27): both off by default, each toggling its own class on `#prompter-scroll` independently, both together for the full 180°, `M`/`F` while the prompter is open (and doing nothing once it's closed), the reading line and control bar never being descendants of the transformed element, the setting surviving a `goto` reload (per-device localStorage, not the document), and none of it tripping the save-state indicator |
 | `tests/33-drag-autoscroll.txt` | auto-scroll while a scene is dragged to the top/bottom edge of the window (21-events.js's window-level `dragover` listener + 06-rows.js's `updateDragScroll`/`dragScrollStep`): scrolling starts from a single `dragover` and keeps going from its own `requestAnimationFrame` loop with the pointer held still, the drop marker tracks via `elementFromPoint` as the page moves under it, leaving the hot zone stops it with no drift, `dragend` stops it and clears `draggable`/`.is-dragging`/the drop markers, nothing scrolls once the drag is over, the top zone works even though the sticky header (not `#rows`) is what a pointer near the top is actually over, and a `dragover` in the zone with no scene armed (dragRowId unset, as for an incoming file drag) never moves the page — driven with synthetic `mousedown`/`dragstart`/`dragover`/`dragend` events since a real native drag session cannot be produced over CDP |
 | `tests/34-desktop-app-data-export.txt` | File ▸ Export app data… driven on the desktop path (20h-appdata.js's X1, 03a-history-store.js's `desktopHistoryBackend`/`exportHistoryAll`, `DESKTOP.historyListDocs`): two documents' history seeded directly against `__desktopTest`'s history-capable fake backend (not through an open document, so enumeration is genuinely exercised), the same §5 #48 key walk 27-app-data.txt's own case 2 runs, bundle shape matching the browser build's, a full round trip through the real import path into a fresh fake backend, and the File-menu Export/Import entries both visible once `initDesktop()` runs against the fake |
+| `tests/35-open-new-document.txt` | File ▸ Open of a foreign `.docx`/`.md`/`.txt`/`.csv` starting a NEW document (issue #7): a populated project adopted from a `.splitpage` fixture, then a plain `.txt` opened over it — a fresh `docId`, empty `productionTags`/`people`/`brollShots`/`comments`, both Save homes cleared, `docIdWrittenOut` back to false, no panel badges carried over; a foreign `.md` taking its `#` heading as the title; and the other half of the decision — File ▸ Paste a script… replacing the rows while keeping the document, its id and its whole record, driven both by pasted text and by a picked `.csv` whose two columns survive the modal's `pendingFileRows` bypass |
+| `tests/36-newtab-recents.txt` | the New Tab page's recent-documents column (issue #15, `20j-newtab.js`), opted into with `?newtab=1`: hidden entirely in the browser build, shown and widened to three columns once a desktop bridge is there, drawn most-recent-first from `listRecents()` with the title and the file name and no path anywhere in it, a click reopening through the same `routeOpen` File ▸ Open uses, a rejected `routeOpen` (the moved-or-deleted file) saying so and leaving the entry to be forgotten, per-entry × and Clear recent both reaching the backend, and the list never appearing in the app-data bundle (§5 #48) — all against `__desktopTest`'s fake backend |
+| `tests/37-share-link.txt` | File ▸ "Publish & copy a link" (issue #19, `13-hosted.js`): the entry sitting with the exports and always shown, the `?doc=` link it builds (escaped, this page's own address when nothing is connected, replacing an existing `?doc=` rather than appending), the three things it says about getting in (open, join PIN, Access sign-in), the no-server path refusing and opening Servers… instead of publishing, a read-only server disabling it with the reason in its tooltip, `?doc=` being read once at boot and taken straight out of the address bar, and the standalone HTML export still carrying no document id. A real publish needs a real server — see "A share link end to end" below |
 
 ## The server's own tests
 
@@ -144,6 +147,30 @@ and no token stored; `4821` closes it and puts a 64-character token in
 and Open from the server… both then work. Run 2026-09-10: 12/13, the one
 failure being a wrong expectation in the check itself (the server menu entries
 appear as soon as health answers, before the PIN is accepted — deliberate).
+
+### A share link end to end (a real server, by hand)
+
+Same split as the join PIN above: this suite has no server and
+`tools/test-server.mjs` has no browser. To drive the whole of issue #19,
+serve `index.html` from a real document server and point the driver at it
+with an absolute URL:
+
+```bash
+mkdir -p /tmp/sp-static /tmp/sp-data && cp index.html /tmp/sp-static/
+PORT=8890 HOST=127.0.0.1 DATA_DIR=/tmp/sp-data STATIC_DIR=/tmp/sp-static \
+  node server/server.js &
+```
+
+Then a script that does `goto http://127.0.0.1:8890/index.html`, waits for
+`window.__shareTest.mode().available`, calls
+`window.__shareTest.publishAndCopy()` and reads `/api/docs` back. Run
+2026-09-21 against this build: the publish lands one document, the toast
+reads "Link copied — Anyone who can reach that address can open it.", and
+the URL is `http://127.0.0.1:8890/index.html?doc=<id>`. A second script
+opening that URL lands on the document ("On the server", the published
+title), takes `?doc=` out of the address bar, and an edit saved from there
+goes into the SAME document — rev 2, still one document on the server, not a
+fork.
 
 ## Driving it from the cloud
 
