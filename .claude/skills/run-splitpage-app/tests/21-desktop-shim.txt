@@ -96,8 +96,9 @@ wait document.getElementById('comments-panel').hidden
 # desktop backend the moment DESKTOP.historyPut exists. The capture rides a
 # real caller — loadFileIntoEditor's "Before opening X" push, reached by
 # opening a plain .txt — because pushSnapshot lives inside the build's one
-# closure and is not exposed. loadFileIntoEditor KEEPS state.docId, so the
-# snapshot lands under the document that is still on screen.
+# closure and is not exposed. Opening a foreign file now starts a NEW
+# document (issue #7), so the snapshot lands under the document that was on
+# screen when it was taken, and the one that replaces it has a new id.
 eval (function(){window.H = window.__historyTest; window.fakeH = D.makeFakeBackend({history:true}); D.setBackend(window.fakeH); return typeof window.fakeH.historyPut === 'function' && typeof window.fakeH._historyDump === 'function';})()
 expect true
 eval (function(){ D.markDirtyForTest(); window.__hDocId = F.state().docId; window.__hTitle = F.state().title; window.__hRows = F.state().rows.length; return window.__hDocId;})()
@@ -112,20 +113,45 @@ expect window.__hDump[window.__hDocId][0].stateJson.indexOf(window.__hTitle) !==
 # and nothing was left pending in this page
 expect localStorage.getItem('splitpage-snapshots') === null
 expect H.pending(window.__hDocId).length === 0
+# the document that replaced it is a different one, with nothing of the old
+# one's breakdown, cast, b-roll or comments (issue #7)
+expect F.state().docId !== window.__hDocId
+expect /^d[0-9a-f]{32}$/.test(F.state().docId) === true
+expect F.state().comments.length === 0
+expect F.state().productionTags.length === 0
+expect F.state().brollShots.length === 0
+expect F.state().people.length === 0
+expect F.docFile().kind === null
+expect window.fakeH._lastDocState.docId === F.state().docId
 
-# restoring that snapshot round-trips the title and the rows through the
-# desktop backend (list -> get -> adoptRestoredState), and stores its own
-# "Before restoring" backup there first — so the bucket holds 2 afterwards.
+# restoring a snapshot round-trips the title and the rows through the desktop
+# backend (list -> get -> adoptRestoredState), and stores its own "Before
+# restoring" backup there first — so the bucket holds 2 afterwards. The
+# history panel only ever lists the document on screen, so the snapshot to
+# restore is captured here the way a revised draft is brought in: File ▸
+# Paste a script…, replacing the rows. That path deliberately KEEPS the
+# document and its id (issue #7), which is what makes its "Before replacing
+# rows on import" push land in this document's bucket.
+eval (function(){ window.__rDocId = F.state().docId; window.__rTitle = F.state().title; window.__rRows = F.state().rows.length; return window.__rDocId; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+wait document.getElementById('import-modal').hidden === false
+eval (function(){ var t = document.getElementById('import-textarea'); t.value = 'Replacement scene one.' + String.fromCharCode(10,10) + 'Replacement scene two.'; t.dispatchEvent(new Event('input', {bubbles: true})); document.getElementById('import-replace').checked = true; return true; })()
+jsclick #import-confirm
+wait document.getElementById('import-modal').hidden
+expect F.state().docId === window.__rDocId
+expect F.state().rows.length === 2
+eval (async function(){ await H.idle(); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
 jsclick #history-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden
-wait F.state().title === window.__hTitle
-expect F.state().rows.length === window.__hRows
-expect F.state().docId === window.__hDocId
-eval (async function(){ await H.idle(); window.__hDump2 = window.fakeH._historyDump(); return window.__hDump2[window.__hDocId].length; })()
-expect window.__hDump2[window.__hDocId].length === 2
+wait F.state().title === window.__rTitle
+expect F.state().rows.length === window.__rRows
+expect F.state().docId === window.__rDocId
+eval (async function(){ await H.idle(); window.__hDump2 = window.fakeH._historyDump(); return window.__hDump2[window.__rDocId].length; })()
+expect window.__hDump2[window.__rDocId].length === 2
 expect localStorage.getItem('splitpage-snapshots') === null
 
 # with the bridge gone the backend falls back to IndexedDB, unchanged

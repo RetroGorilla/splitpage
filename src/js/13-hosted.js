@@ -448,6 +448,10 @@
     }
     serverMode.checked = true;
     updateConnectMenu();
+    /* Also on the no-server path: the share entry's enabled state and its
+       tooltip are derived here rather than trusted from the markup, so the
+       two can never drift apart (issue #19). */
+    updateServerMenu();
     if (!serverMode.available) {
       if (serverBase) {
         showToast("Could not reach " + serverBase + " — use File ▸ Servers… to pick another, " +
@@ -485,7 +489,12 @@
     } catch (e) { /* identity is a nicety, not a requirement */ }
 
     updateServerMenu();
-    resumeServerDoc();
+    /* The link's document is opened only if nothing else claimed this page:
+       resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
+       both are unsaved work that must not be replaced (issue #19). */
+    resumeServerDoc().then(function (resumed) {
+      if (!resumed) openSharedDocFromLink();
+    }, function () { openSharedDocFromLink(); });
   }
 
   function updateServerMenu() {
@@ -497,6 +506,19 @@
     if (sep) sep.hidden = !serverMode.available;
     var newBtn = document.getElementById("menu-server-new");
     if (newBtn) newBtn.disabled = serverMode.readOnly;
+    /* The share entry is never hidden — it is how someone with no server yet
+       finds out that sharing a live document is possible at all, and it says
+       so and opens the Servers dialog rather than doing nothing. Read-only is
+       the one state where pressing it could not work, so it is disabled with
+       the reason in its tooltip. */
+    var shareBtn = document.getElementById("menu-share-link");
+    if (shareBtn) {
+      shareBtn.disabled = serverMode.available && serverMode.readOnly;
+      shareBtn.title = shareBtn.disabled
+        ? "This server is published read-only — nothing new can be put on it."
+        : "Puts this script on the connected server and copies a link to it. " +
+          "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
+    }
   }
 
   /* ---- the picker ---- */
@@ -580,8 +602,11 @@
       " scene" + (state.rows.length === 1 ? "" : "s"), "ok");
   }
 
+  /* → true once the document is on the server. The boolean is what
+     publishAndCopyShareLink() (issue #19) needs: a link must never be
+     copied for a publish that did not happen. */
   async function publishToServer() {
-    if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return; }
+    if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
     var published = cloneState(state);
     /* Publishing makes a second home for this script. If its id already
        lives somewhere else (a file on disk, another server document), the
@@ -593,7 +618,7 @@
     var body;
     try {
       body = await apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
-    } catch (err) { handleApiError(err, "Could not put that on the server"); return; }
+    } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
     docFileHandle = { handle: null, kind: null };
@@ -607,7 +632,156 @@
     clearDirty();
     updateFileChip();
     showToast("Published to the server as “" + (state.title || body.id) + "” — collaborators can open it now", "ok");
+    return true;
   }
+
+  /* ---- "Publish and copy a link" (issue #19) ----
+
+     The standalone HTML export stays what it has always been: a DEAD COPY.
+     It carries no document id, it never connects anywhere, and the
+     recipient's edits stay in their file. Shapes that would have made it a
+     live client of a server — an exported page phoning home to a URL baked
+     into it, or a centrally hosted Splitpage — were considered and are not
+     being built (issue #19, and the note on standaloneHtmlFor in
+     02b-doc-id.js, which still holds).
+
+     What IS being built is the delivery half, because hosted mode already
+     is the collaboration: one shared document, rev-based conflict
+     detection, a three-way merge and attribution. What was missing was a
+     way to hand someone the address of it. So this publishes to the server
+     this copy is connected to and puts the open-URL on the clipboard —
+     a link, not a file.
+
+     It never connects anywhere on its own and never publishes silently:
+     with no server it says so and opens the Servers dialog instead, and the
+     toast names what the recipient will be asked for (a join PIN, an Access
+     sign-in, or nothing at all) before they get there. */
+
+  /* serverBase is "" when this page was served BY the document server, in
+     which case the address to share is this page's own. Built through the
+     URL parser so a "?doc=" already in the bar, a fragment, or a path that
+     is not the root all resolve the way a browser would. */
+  function serverDocShareUrl(id) {
+    try {
+      return new URL("?doc=" + encodeURIComponent(id), serverBase || location.href).href;
+    } catch (e) {
+      return (serverBase || "") + "?doc=" + encodeURIComponent(id);
+    }
+  }
+
+  /* What the person opening the link will be asked for. Said out loud next
+     to the link, because "just open this" and "open this, and you will need
+     the six-digit code I am about to send you" are different messages. */
+  function shareAccessNote() {
+    if (serverMode.authRequired) return "They'll need the join PIN to open it.";
+    if (serverIdentity && serverIdentity.email) return "They'll need to sign in the same way you did.";
+    return "Anyone who can reach that address can open it.";
+  }
+
+  function copyShareText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return copyShareTextFallback(text); });
+    }
+    return Promise.resolve(copyShareTextFallback(text));
+  }
+
+  /* An insecure origin, or a browser that refuses the async API without a
+     permission: the old selection trick still works there. */
+  function copyShareTextFallback(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "readonly");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      ta.remove();
+      return !!ok;
+    } catch (e) { return false; }
+  }
+
+  async function publishAndCopyShareLink() {
+    if (!serverMode.available) {
+      showToast("A share link needs a Splitpage server to publish to. " +
+        "Pick or add one under Servers…, then try again.", "warn");
+      if (typeof openServersDialog === "function") openServersDialog(); /* 20e-connect.js */
+      return false;
+    }
+    if (serverMode.readOnly) {
+      showToast("This server is published read-only — nothing new can be put on it.", "warn");
+      return false;
+    }
+    /* Already hosted: the document has an address, and the only thing that
+       could be wrong with the link is that it points at a version older
+       than what is on screen. Save first, then share. A save that fails has
+       already said why (saveToServer / handleApiError), and a link to a
+       stale version is worse than none. */
+    if (onServerDoc()) {
+      if (dirty && !(await saveToServer())) return false;
+    } else if (!(await publishToServer()) || !onServerDoc()) {
+      return false;
+    }
+    var url = serverDocShareUrl(serverDoc.id);
+    var copied = await copyShareText(url);
+    showToast(copied
+      ? "Link copied — " + shareAccessNote()
+      : "Published. Could not reach the clipboard, so here is the link: " + url,
+      copied ? "ok" : "warn", !copied);
+    return true;
+  }
+
+  /* ---- opening a shared link: ?doc=<id> ----
+
+     The other end of the link above. Runs after the server has answered and
+     after any PIN dialog, so a link opened cold asks for the code first and
+     then lands on the document — rather than failing with a 401 and leaving
+     the person looking at a blank script.
+
+     A crash draft or a lapsed-sign-in resume wins: both are unsaved work
+     belonging to a document that was already open here, and a link in the
+     address bar must not throw them away. The parameter is stripped either
+     way, so a reload is an ordinary reload of whatever is on screen. */
+  function readSharedDocParam() {
+    var id = "";
+    try { id = new URLSearchParams(location.search).get("doc") || ""; } catch (e) { id = ""; }
+    if (!id) return "";
+    try {
+      var url = new URL(location.href);
+      url.searchParams.delete("doc");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch (e) { /* the id is already in hand; the bar keeping it is cosmetic */ }
+    return id;
+  }
+
+  var sharedDocId = readSharedDocParam();
+
+  async function openSharedDocFromLink() {
+    if (!sharedDocId) return false;
+    var id = sharedDocId;
+    sharedDocId = "";
+    if (onServerDoc()) return false;   /* a resume already took this page somewhere */
+    await openServerDoc(id);
+    return true;
+  }
+
+  /* ---- test hook ----
+     Same trick as window.__newTab / window.__updateTest: the share action's
+     two pure pieces (the URL it builds and the sentence it says about
+     getting in) and the mode flags they read are what a headless suite has
+     to drive, and neither has a UI affordance that can be clicked into
+     existence without a real document server behind it. Nothing in the app
+     reads this. */
+  window.__shareTest = {
+    url: serverDocShareUrl,
+    note: shareAccessNote,
+    publishAndCopy: publishAndCopyShareLink,
+    mode: function () { return serverMode; },
+    updateMenu: updateServerMenu,
+    sharedDocId: function () { return sharedDocId; },
+    setIdentity: function (who) { serverIdentity = who; }
+  };
 
   async function armServerDelete(btn, id) {
     if (btn.getAttribute("data-armed") === "1") {

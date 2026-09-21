@@ -284,6 +284,11 @@
        saveDoc() (14-export.js) has something to compare against, exactly
        the way a real handle from showOpenFilePicker would. */
     openFile: function (file, handle) { return openProjectFile(file, handle || null, { skipSnapshot: true }); },
+    /* The Paste/Import modal's file picker (handleImportFile, 11-import.js).
+       Headless cannot run a real <input type=file>, and this is the half of
+       issue #7 that keeps the document — so it needs driving directly, the
+       same way openFile above stands in for File ▸ Open. */
+    importFile: function (file) { return handleImportFile(file); },
     /* Drives Save the same way the header/File-menu buttons do, so the
        on-disk-conflict check saveDoc() runs before writing is exercised
        without a real file picker (headless can't run one). */

@@ -265,6 +265,13 @@
   }
 
   function updateImportPreview() {
+    var el0 = document.getElementById("import-preview");
+    if (pendingFileRows) {
+      var n0 = pendingFileRows.length;
+      el0.textContent = pendingFileName + " — this will create " + n0 + " row" + (n0 === 1 ? "" : "s") +
+        ", columns and formatting kept. Type below to use pasted text instead.";
+      return;
+    }
     var text = document.getElementById("import-textarea").value;
     var mode = getImportMode();
     var rows = parseImportRows(text, mode);
@@ -284,10 +291,39 @@
     }
   }
 
+  /* ---- a picked file as the source, instead of the textarea ----
+
+     This modal is the "draft 2 of the same script" path (issue #7): it
+     replaces or appends rows and keeps everything the document knows about
+     them — the breakdown's statuses, owners and notes, the cast list, the
+     b-roll list and the comments — where File ▸ Open now starts a new
+     document. That workflow used to be reachable only by pasting, which
+     ruled out a .docx (a zip) and cost a .csv its columns; the picker below
+     makes it reachable for all four foreign formats.
+
+     A .docx and a .csv are tables, not text. Rendering one back into the
+     textarea so the split modes could re-read it would throw away the
+     column split and the formatting the importers already recovered, so
+     those two bypass the textarea: the rows they produce are held here and
+     the Import button uses them as-is. Typing in the textarea drops them —
+     the textarea and a picked table are two sources for one button, never
+     both at once. */
+  var pendingFileRows = null;
+  var pendingFileName = "";
+
+  function clearPendingFileRows() {
+    if (!pendingFileRows) return;
+    pendingFileRows = null;
+    pendingFileName = "";
+    updateImportPreview();
+  }
+
   function openImportModal() {
     document.getElementById("import-textarea").value = "";
     document.getElementById("import-replace").checked = false;
     importModeTouched = false;
+    pendingFileRows = null;
+    pendingFileName = "";
     var paragraphRadio = document.querySelector('input[name="import-split"][value="paragraph"]');
     if (paragraphRadio) paragraphRadio.checked = true;
     updateImportPreview();
@@ -299,31 +335,73 @@
     document.getElementById("import-modal").hidden = true;
   }
 
-  function handleImportFile(file) {
+  async function handleImportFile(file) {
     if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      var text = String(reader.result || "");
-      document.getElementById("import-textarea").value = text;
-      maybeAutoDetectTwoColumn(text);
+    var kind = fileKindFromName(file.name); /* 18-local-files.js */
+    if (kind === "splitpage" || kind === "html") {
+      showToast("That is a Splitpage project — open it with File ▸ Open a document…", "warn");
+      return;
+    }
+    if (kind === "docx" || kind === "csv") {
+      var rows;
+      try {
+        if (kind === "csv") {
+          rows = csvToRows(await file.text());
+        } else {
+          var parsed = await docxToRows(file);
+          rows = parsed.rows;
+          /* a Word file with no table, exactly as File ▸ Open reads one */
+          if ((!rows || !rows.length) && parsed.looseText) {
+            rows = normalizeImportedRows(parseImportRows(parsed.looseText,
+              detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph"));
+          }
+        }
+      } catch (err) {
+        showToast(importFileErrorMessage(err), "error");
+        return;
+      }
+      if (!rows || !rows.length) { showToast("No script rows found in that file.", "warn"); return; }
+      pendingFileRows = rows;
+      pendingFileName = file.name;
+      document.getElementById("import-textarea").value = "";
       updateImportPreview();
-    };
-    reader.onerror = function () {
+      return;
+    }
+    /* .md, .txt and anything else readable: the textarea path, unchanged. */
+    var text;
+    try {
+      text = await file.text();
+    } catch (err) {
       showToast("Could not read that file.", "error");
-    };
-    reader.readAsText(file);
+      return;
+    }
+    pendingFileRows = null;
+    pendingFileName = "";
+    document.getElementById("import-textarea").value = text;
+    maybeAutoDetectTwoColumn(text);
+    updateImportPreview();
+  }
+
+  function importFileErrorMessage(err) {
+    if (err && err.message === "no-decompression-stream") return "This browser can't unzip .docx files — try Chrome or Edge.";
+    if (err && (err.message === "not-a-zip" || err.message === "no-document-xml")) return "That doesn't look like a Word document.";
+    return "Could not read that file.";
   }
 
   function confirmImport() {
-    var text = document.getElementById("import-textarea").value;
-    var mode = getImportMode();
-    var rows = parseImportRows(text, mode);
-    if (!rows.length) {
-      showToast("Paste or choose some text first.", "warn");
-      return;
+    var newRows;
+    if (pendingFileRows) {
+      newRows = pendingFileRows;
+    } else {
+      var text = document.getElementById("import-textarea").value;
+      var rows = parseImportRows(text, getImportMode());
+      if (!rows.length) {
+        showToast("Paste or choose some text first.", "warn");
+        return;
+      }
+      newRows = normalizeImportedRows(rows);
     }
     var replace = document.getElementById("import-replace").checked;
-    var newRows = normalizeImportedRows(rows);
     newRows.forEach(stampRow);
     if (replace && state.rows.length) pushSnapshot("Before replacing rows on import");
     state.rows = replace ? newRows : state.rows.concat(newRows);

@@ -903,6 +903,12 @@ function requestDraftFlush(tab, budgetMs) {
 const DESKTOP_STATE_VERSION = 2;
 const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
 const LAST_KNOWN_TITLE_MAX = 300;
+/* DESKTOP-RECENTS' cap. Declared up here with the other state-file bounds
+   rather than down in section 5b, for the same reason DRAFT_NAME_MAX is its
+   own constant: normalizeRecentsList() is part of the v2 reader a few lines
+   below, and a `const` it reads must not be one still in its temporal dead
+   zone. */
+const RECENTS_MAX = 20;
 
 function stateFilePath() { return path.join(app.getPath("userData"), "desktop-state.json"); }
 
@@ -974,7 +980,7 @@ function blankDesktopWindow(extra) {
 }
 
 function freshDesktopState() {
-  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()] };
+  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()], recents: [] };
 }
 
 /* v1 was {lastFilePath?, windowBounds?, windowMaximized?} with no version
@@ -992,8 +998,35 @@ function migrateDesktopStateV1(v1) {
       maximized: v1.windowMaximized === true,
       activeTabId: tabId,
       tabs: [{ tabId, source, lastKnownTitle: "" }]
-    }]
+    }],
+    /* v1 never kept a recents list. The one file it did remember is
+       restored as the tab above, and it becomes a recent entry the moment
+       that tab reports its document. */
+    recents: []
   };
+}
+
+/* The recents list's own whitelist (DESKTOP-RECENTS): an absolute path, a
+   displayable title and when it was last in front. A relative path, a
+   duplicate of a file already listed, and anything past the cap are all
+   dropped here, so a hand-edited or an older file can never widen it. */
+function normalizeRecentsList(raw) {
+  const out = [];
+  const seen = new Set();
+  for (const r of Array.isArray(raw) ? raw : []) {
+    if (!r || typeof r !== "object") continue;
+    if (typeof r.absPath !== "string" || !r.absPath || !path.isAbsolute(r.absPath)) continue;
+    const key = pathKey(r.absPath);
+    if (seen.has(key)) continue; /* one entry per file, the most recent one */
+    seen.add(key);
+    out.push({
+      absPath: r.absPath,
+      title: typeof r.title === "string" ? r.title.slice(0, LAST_KNOWN_TITLE_MAX) : "",
+      at: typeof r.at === "number" && Number.isFinite(r.at) ? r.at : 0
+    });
+    if (out.length >= RECENTS_MAX) break;
+  }
+  return out;
 }
 
 /* Whitelists every field, so nothing the contract does not name (a stray
@@ -1029,8 +1062,13 @@ function normalizeDesktopStateV2(raw) {
       tabs
     });
   }
-  if (!windows.length) return freshDesktopState();
-  return { version: DESKTOP_STATE_VERSION, windows };
+  const recents = normalizeRecentsList(raw && raw.recents);
+  if (!windows.length) {
+    const fresh = freshDesktopState();
+    fresh.recents = recents;
+    return fresh;
+  }
+  return { version: DESKTOP_STATE_VERSION, windows, recents };
 }
 
 /* A v1 file, a missing file or a corrupt one has no ids on disk, so each
@@ -1115,6 +1153,129 @@ function drainDesktopStateQueue() {
   }
 }
 
+/* ---------------------------------------------------------------------
+ * 5b. RECENT DOCUMENTS (contract DESKTOP-RECENTS) — the New Tab page's
+ *     third column.
+ *
+ *     Shape, in desktop-state.json beside `windows`:
+ *       recents: [{absPath, title, at}]   most recent first, at most 20
+ *
+ *     DESKTOP ONLY. The browser build keeps its single remembered file
+ *     handle and gets no column: the two builds share nothing else, and a
+ *     browser copy can only reopen a handle it still holds permission for.
+ *
+ *     WHAT AN ENTRY IS. A path, the title the document last reported, and
+ *     when it was last in front. The renderer never sees the path
+ *     (invariant #34) — listRecents() hands it the basename plus an opaque
+ *     fileId, which is exactly what routeOpen({kind:'file', fileId}) takes,
+ *     so a click reopens without a picker and lands wherever main decides.
+ *
+ *     WHAT IT MUST NEVER LEAK. This is a record of what someone has been
+ *     working on. It lives only here: the app-data export
+ *     (buildAppDataBundle, src/js/20h-appdata.js) reads an allowlist of
+ *     localStorage keys and the history store and never asks main for this,
+ *     and nothing a shared/hosted session can reach goes near it. Do not
+ *     add it to a draft header, a bundle or anything the page can publish.
+ *
+ *     WHY IN MEMORY. set-document-state fires on every keystroke that
+ *     changes dirtiness, and touching the file that often would be absurd.
+ *     recentDocuments is the authority while the process runs; a write only
+ *     happens when the list actually changed, and shellStateAsV2() carries
+ *     it along with every other session write.
+ * --------------------------------------------------------------------- */
+
+let recentDocuments = [];
+
+/* Registry ids are minted per registration (registerPath), so listing the
+   recents repeatedly would grow fileRegistry without bound. One id per path,
+   reused for the life of the process. */
+const recentFileIdByPath = new Map();
+function fileIdForPath(absPath) {
+  const key = pathKey(absPath);
+  const existing = recentFileIdByPath.get(key);
+  if (existing && fileRegistry.get(existing) === absPath) return existing;
+  const id = registerPath(absPath);
+  recentFileIdByPath.set(key, id);
+  return id;
+}
+
+function loadRecentsAtLaunch() {
+  /* readDesktopStateV2 has already normalized, capped and de-duplicated. */
+  recentDocuments = readDesktopStateV2().recents || [];
+}
+
+/* Writes the list on its own, for the two cases that are not part of a
+   session change (remove one, clear all) and for a launch-time restore that
+   persistShellState() would refuse while it runs. */
+function persistRecents() {
+  const snapshot = recentDocuments.map((r) => ({ ...r }));
+  return writeDesktopStateV2((current) => { current.recents = snapshot; return current; });
+}
+
+/* Called wherever a tab's document IS a file: the open that delivered it and
+   every document-state report after it, so the title stays current. Returns
+   true when something actually changed, which is the only time a caller
+   needs to write. */
+function noteRecentDocument(absPath, title) {
+  if (typeof absPath !== "string" || !absPath) return false;
+  const key = pathKey(absPath);
+  const name = typeof title === "string" ? title.slice(0, LAST_KNOWN_TITLE_MAX) : "";
+  const at = Date.now();
+  const existingIndex = recentDocuments.findIndex((r) => pathKey(r.absPath) === key);
+  if (existingIndex === 0) {
+    /* Already in front. Only a title change is worth a write — otherwise
+       every keystroke's report would rewrite the file for a new timestamp. */
+    const head = recentDocuments[0];
+    head.at = at;
+    if (!name || head.title === name) return false;
+    head.title = name;
+    return true;
+  }
+  const previous = existingIndex === -1 ? null : recentDocuments.splice(existingIndex, 1)[0];
+  recentDocuments.unshift({
+    absPath,
+    /* A file delivered before its page has reported a title has none yet;
+       keep the one we knew rather than blanking the card. */
+    title: name || (previous ? previous.title : ""),
+    at
+  });
+  if (recentDocuments.length > RECENTS_MAX) recentDocuments.length = RECENTS_MAX;
+  return true;
+}
+
+function noteRecentDocumentAndPersist(absPath, title) {
+  if (!noteRecentDocument(absPath, title)) return;
+  /* persistShellState() is the normal writer and carries recents with it;
+     it declines while a launch restore is running or the session is frozen,
+     and this list still has to survive those. */
+  if (sessionWritesFrozen || sessionRestoreInProgress || !windowsById.size) persistRecents();
+  else persistShellState();
+}
+
+/* An entry is named back to main by the same opaque fileId it was listed
+   with — the renderer has nothing else, and that is the point. An id main
+   no longer recognises (a stale list, a relaunch) removes nothing and says
+   so rather than throwing. */
+function removeRecentDocumentByFileId(fileId) {
+  const absPath = typeof fileId === "string" ? fileRegistry.get(fileId) : null;
+  if (!absPath) return false;
+  const key = pathKey(absPath);
+  const before = recentDocuments.length;
+  recentDocuments = recentDocuments.filter((r) => pathKey(r.absPath) !== key);
+  return recentDocuments.length !== before;
+}
+
+/* What the renderer is allowed to see: a name, a title, when, and an opaque
+   id to reopen (or forget) by. Never a path — invariant #34. */
+function recentsForRenderer() {
+  return recentDocuments.map((r) => ({
+    fileId: fileIdForPath(r.absPath),
+    name: path.basename(r.absPath),
+    title: r.title || "",
+    at: r.at || 0
+  }));
+}
+
 /* The single-window callers' view: windows[0]. */
 function primaryDesktopWindow(state) { return state.windows[0]; }
 
@@ -1155,7 +1316,10 @@ function shellStateAsV2() {
       tabs: rows
     });
   }
-  return { version: DESKTOP_STATE_VERSION, windows };
+  /* The live recents ride along, because this object REPLACES the file
+     (normalizeDesktopStateV2 whitelists, so anything not named here is
+     dropped). recentDocuments is the authority once the process is up. */
+  return { version: DESKTOP_STATE_VERSION, windows, recents: recentDocuments };
 }
 
 /* One call for every structural change (create, close, reorder, move,
@@ -3544,6 +3708,10 @@ function deliverOpenFile(tab, absPath) {
     if (tab.view.webContents.isDestroyed()) return;
     tab.fileId = id;
     tab.view.webContents.send("splitpage:open-file", entry);
+    /* DESKTOP-RECENTS: recorded on delivery rather than on the decision, so
+       a file that vanished between the two never reaches the list. The
+       title arrives later, with the page's first document-state report. */
+    noteRecentDocumentAndPersist(absPath, tab.title || "");
   }).catch(() => { /* file vanished between the decision and the read */ });
 }
 
@@ -4517,6 +4685,33 @@ function registerIpc() {
     }
   });
 
+  /* ---- recent documents (DESKTOP-RECENTS) ---------------------------
+
+     Three calls, all scoped to the whole app rather than to the sender's
+     tab: the list is the user's, not a tab's. Nothing here takes or
+     returns a path (invariant #34) — an entry is named by the same opaque
+     fileId it was listed with, and reopening one goes through the ordinary
+     route-open above, so main still decides where it lands. */
+  ipcMain.handle("splitpage:recents-list", async (event) => {
+    requireTrusted(event);
+    return recentsForRenderer();
+  });
+
+  ipcMain.handle("splitpage:recents-remove", async (event, fileId) => {
+    requireTrusted(event);
+    if (removeRecentDocumentByFileId(fileId)) await persistRecents();
+    return recentsForRenderer();
+  });
+
+  ipcMain.handle("splitpage:recents-clear", async (event) => {
+    requireTrusted(event);
+    if (recentDocuments.length) {
+      recentDocuments = [];
+      await persistRecents();
+    }
+    return recentsForRenderer();
+  });
+
   /* splitpage:get-last-file / splitpage:set-last-file removed in F3: each
      tab now learns what to open through TAB-BOOT-SYNC at load (launchIntent),
      and a document source change reaches main through
@@ -4670,6 +4865,13 @@ function registerIpc() {
       else if (hasFileId && hasServerKey) tab.source = { kind: "blank" };
       indexTabSource(tab);
     }
+
+    /* DESKTOP-RECENTS. Every report of a tab that IS a file, so the recent
+       card carries the title the document actually has now — a rename lands
+       here, and so does the first title a freshly opened file reports. Only
+       a real change writes (noteRecentDocument returns false otherwise), so
+       this is not a write per keystroke. */
+    if (tab.source.kind === "file") noteRecentDocument(tab.source.absPath, tab.title);
 
     const w = windowsById.get(tab.windowId);
     if (w) {
@@ -5230,6 +5432,10 @@ app.setAppUserModelId("com.retrogorilla.splitpage");
 
 app.whenReady().then(async () => {
   sweepDesktopStateTempFiles();
+  /* DESKTOP-RECENTS: read once, before anything can write. From here on
+     recentDocuments is the authority — shellStateAsV2() writes it back with
+     every session change, so a read after this point would be stale. */
+  loadRecentsAtLaunch();
   /* Before any window exists: the first tab's boot sync asks hasDraft() as
      soon as its page loads, and init() is also what reads last session's
      state and finishes any discard whose delete did not complete. */

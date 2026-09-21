@@ -1,0 +1,103 @@
+# Opening a foreign document starts a NEW document (issue #7).
+#
+# loadFileIntoEditor (src/js/18-local-files.js) used to replace only
+# state.rows and the title, keeping productionTags, people, brollShots and
+# comments — and keeping the Save target — so an unrelated .docx/.md/.txt/.csv
+# inherited the previous script's production breakdown, cast list and review
+# comments, and Save still wrote to the previous project's file.
+#
+# Decision: File ▸ Open of a foreign file is a new document. The "revised
+# draft of the same script" workflow it used to serve is File ▸ Paste a
+# script…, which is unchanged in what it keeps and now takes a picked file
+# as well as pasted text. Both halves are asserted here.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; return !!F;})()
+expect true
+
+# --- a project with every list populated, adopted from a .splitpage file ---
+# The seed has one comment and nothing else, so the starting document is
+# built here: a tag, a person owning it, a b-roll shot and the seed comment.
+eval (function(){ var s = F.clone(F.state()); s.people = [{id:'p1', name:'Ada'}]; s.productionTags = [{cat:'gear', name:'Tripod', status:'todo', owner:'p1', notes:'from the old script'}]; s.brollShots = [{id:'bs1', name:'City skyline', origin:'list'}]; window.__seeded = F.buildSplitpage(s); return window.__seeded.length > 0; })()
+eval (async function(){ await F.openFile(new File([window.__seeded], 'old-project.splitpage')); return true; })()
+wait F.docFile().kind === 'splitpage'
+expect F.state().productionTags.length == 1
+expect F.state().people.length == 1
+expect F.state().brollShots.length == 1
+expect F.state().comments.length == 1
+eval (function(){ window.__oldId = F.state().docId; window.__oldRows = F.state().rows.length; return window.__oldId; })()
+expect /^d[0-9a-f]{32}$/.test(window.__oldId) == true
+
+# --- opening a plain .txt leaves none of it behind ------------------------
+eval (async function(){ await F.openFile(new File(['A line of narration.' + String.fromCharCode(10,10) + 'And another one.'], 'stranger.txt')); return true; })()
+wait F.state().title === 'stranger'
+expect F.state().rows.length == 2
+# a document of its own: a new id, and nothing of the last one's record
+expect F.state().docId !== window.__oldId
+expect /^d[0-9a-f]{32}$/.test(F.state().docId) == true
+expect F.state().productionTags.length == 0
+expect F.state().people.length == 0
+expect F.state().brollShots.length == 0
+expect F.state().comments.length == 0
+# and neither home of the Save button still points at the old project
+expect F.docFile().kind === null
+expect F.docFile().name === null
+# the new id has never left this page, so a first Save can take it with it
+expect F.writtenOut() == false
+# the panels agree with the document: no badges carried over
+expect document.getElementById('production-badge').hidden == true
+expect document.getElementById('broll-badge').hidden == true
+expect document.getElementById('comments-badge').hidden == true
+# the chip names the foreign file it is round-tripping, not the old project
+expect document.getElementById('file-chip-name').textContent == stranger.txt
+
+# --- a .md with no data block is foreign too, and takes its # heading -----
+eval (async function(){ await F.openFile(new File(['# Borrowed Heading' + String.fromCharCode(10,10) + 'One paragraph.'], 'plain.md')); return true; })()
+wait F.state().title === 'Borrowed Heading'
+expect F.state().docId !== window.__oldId
+expect F.state().comments.length == 0
+
+# --- Paste a script… is the other half: same document, everything kept ----
+# Back to the populated project first, so there is something to keep.
+eval (async function(){ await F.openFile(new File([window.__seeded], 'old-project.splitpage')); return true; })()
+wait F.docFile().kind === 'splitpage'
+eval (function(){ window.__keepId = F.state().docId; return window.__keepId; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+wait document.getElementById('import-modal').hidden == false
+eval (function(){ var t = document.getElementById('import-textarea'); t.value = 'Draft two, scene one.' + String.fromCharCode(10,10) + 'Draft two, scene two.'; t.dispatchEvent(new Event('input', {bubbles: true})); document.getElementById('import-replace').checked = true; return true; })()
+jsclick #import-confirm
+wait document.getElementById('import-modal').hidden
+expect F.state().rows.length == 2
+# the document, its id and its whole record are untouched
+expect F.state().docId === window.__keepId
+expect F.state().productionTags.length == 1
+expect F.state().people.length == 1
+expect F.state().brollShots.length == 1
+expect F.state().comments.length == 1
+# and Save still points at the project file it came from
+expect F.docFile().kind === 'splitpage'
+
+# --- the modal takes a file, not just a paste ----------------------------
+# A .csv is a table: it bypasses the textarea so its two columns survive
+# (pendingFileRows, 11-import.js).
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+wait document.getElementById('import-modal').hidden == false
+eval (function(){ var csv = 'Scene,Visual,Audio' + String.fromCharCode(10) + '1,Wide shot,Line one' + String.fromCharCode(10) + '2,Close up,Line two' + String.fromCharCode(10); window.__csvFile = new File([csv], 'draft.csv'); return true; })()
+eval (async function(){ await F.importFile(window.__csvFile); return true; })()
+wait document.getElementById('import-preview').textContent.indexOf('draft.csv') !== -1
+eval (function(){ document.getElementById('import-replace').checked = true; return true; })()
+jsclick #import-confirm
+wait document.getElementById('import-modal').hidden
+expect F.state().rows.length == 2
+# both columns came through, which a paste of the same file could not do
+expect document.querySelectorAll('#rows .visual-cell .cell-editable')[0].textContent == Wide shot
+expect document.querySelectorAll('#rows .audio-cell .cell-editable')[0].textContent == Line one
+# still the same document, with its record intact
+expect F.state().docId === window.__keepId
+expect F.state().productionTags.length == 1
+expect F.state().comments.length == 1
+
+quit
