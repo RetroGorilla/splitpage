@@ -7,6 +7,7 @@
  *   node start.mjs --no-open    don't launch a browser
  *   node start.mjs --data DIR   where --library keeps documents
  *   node start.mjs --pin        require a join PIN (generated and printed)
+ *   node start.mjs --review-pin a second code that can only read and comment
  *   node start.mjs --tunnel me@host   reach someone else's server over SSH
  *   node start.mjs --no-update-check   skip the background update check
  *
@@ -65,6 +66,11 @@ Sharing:
                                 value, one is generated and printed. The code
                                 travels in the clear over plain HTTP: fine on
                                 your own network, not on a public one.
+  --review-pin [5678]           a SECOND code that opens the documents to be
+                                read and commented on and nothing else. With
+                                no value, one is generated and printed.
+  --share-readonly              shorthand for --review-pin with no value; with
+                                --host and no --pin, generates both codes.
   --allow-origin <origin>       let a copy of Splitpage served from somewhere
                                 else talk to this server (repeatable; use
                                 "null" for a copy opened straight off disk)
@@ -116,6 +122,32 @@ if (has("--pin")) {
   const given = valueOf("--pin", "");
   joinPin = (given && !given.startsWith("--")) ? given.trim() : generatePin();
 }
+
+/* ---------- the review credential ----------
+ *
+ * A second code for people who should read the script and leave notes on it
+ * and nothing else — the server enforces that, not the page (see
+ * server.js's "what a review session may write"). Plus a key, minted per
+ * launch, that a review LINK carries in its fragment so the address can
+ * simply be sent: the fragment never reaches a server and no proxy logs it,
+ * and passing the link on does not pass the spoken code on. Both are gone
+ * the moment this window closes, exactly like the join PIN.
+ *
+ * A review code without a join PIN would lock nothing (with no PIN, everyone
+ * who can reach the address is already an editor), so asking for one asks
+ * for both.
+ */
+let reviewPin = "";
+if (has("--review-pin") || has("--share-readonly")) {
+  const given = valueOf("--review-pin", "");
+  reviewPin = (given && !given.startsWith("--")) ? given.trim() : generatePin();
+  if (!joinPin) joinPin = generatePin();
+  if (reviewPin === joinPin) {
+    console.error("--review-pin and --pin must be different codes.");
+    process.exit(1);
+  }
+}
+const reviewKey = reviewPin ? randomBytes(16).toString("hex") : "";
 
 /* Repeatable, unlike everything else here: a portable copy on disk and a
    colleague's hosted copy are two different origins and both may need to
@@ -391,6 +423,11 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
        server.js has always done — passing them unconditionally keeps the two
        processes' idea of the rules in one place. */
     JOIN_PIN: joinPin,
+    /* Both empty unless asked for, and both ignored by server.js without a
+       JOIN_PIN — same "the two processes agree about the rules" reasoning
+       as passing JOIN_PIN unconditionally. */
+    REVIEW_PIN: reviewPin,
+    REVIEW_KEY: reviewKey,
     ALLOW_ORIGINS: ALLOW_ORIGINS.join(","),
     LAUNCH_TOKEN: launchToken
   }
@@ -467,6 +504,32 @@ ${line}
   fine on your own network, not on a public one or over the internet. For
   the internet, put Splitpage behind Cloudflare Access (see DEPLOY.md).
   Close this window to stop sharing.`);
+    if (reviewPin) {
+      /* The review address is the ordinary one with the link key in its
+         fragment — the part of a URL a browser keeps to itself. Whoever
+         opens it joins as a reviewer with nothing to type; whoever was read
+         the code instead types it into the same dialog the join PIN uses. */
+      console.log(`
+  To let someone READ and COMMENT but not edit, send them one of these
+  instead:
+`);
+      if (addresses.length) {
+        for (const address of addresses) console.log(`      http://${address}:${port}/#review=${reviewKey}`);
+      } else {
+        console.log("      (no network address found — are you connected?)");
+      }
+      console.log(`
+  or give them the address above and this code:
+
+${line}
+  |      REVIEW PIN   ${reviewPin}${" ".repeat(Math.max(1, 11 - reviewPin.length))}|
+${line}
+
+  They can read the script, run the teleprompter, export it and leave
+  comments; the server refuses every other change, so it does not matter
+  what their copy of the app lets them click. Restarting this window
+  invalidates the link and both codes.`);
+    }
   } else {
     console.log(`
   Anyone who can reach that address can read and edit these scripts —
@@ -479,6 +542,11 @@ ${line}
 if (joinPin && !HOSTING) {
   console.log(`  This copy asks for a join PIN: ${joinPin}
 `);
+  if (reviewPin) {
+    console.log(`  Read and comment only: ${url}#review=${reviewKey}
+  (or the address above with the code ${reviewPin})
+`);
+  }
 }
 
 console.log(`

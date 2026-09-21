@@ -52,6 +52,15 @@
         <span id="file-chip-name"></span>
         <span class="file-chip-state" id="file-chip-state"></span>
       </div>
+      <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
+           joined with the review credential and a hosted document is open:
+           the fields are not editable and the server would refuse the save
+           anyway, so say which before anyone types. -->
+      <div class="review-chip" id="review-chip" hidden
+           title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
+        <span class="review-chip-icon" aria-hidden="true">👁</span>
+        <span>Viewing · comments only</span>
+      </div>
       <span class="stat-chips">
         <button type="button" class="stat-chip" id="runtime-chip"
                 title="Estimated read time for the Audio column — click to set your reading speed">
@@ -811,6 +820,12 @@
          window this app doesn't have. Never touches state, localStorage or
          anything served (invariant #29) — it lives only in this element. -->
     <div class="connect-current" id="desktop-share-info" hidden></div>
+    <!-- The read-and-comment-only address for this session, filled in by
+         20e-connect.js's renderReviewLink() when the launch was given a
+         review credential (--review-pin / --share-readonly) and this browser
+         is an editor here. The key it carries belongs to this launch and is
+         never stored anywhere. -->
+    <div class="connect-current" id="connect-review" hidden></div>
     <div class="connect-list" id="connect-list"></div>
 
     <div class="connect-add">

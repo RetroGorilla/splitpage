@@ -1,6 +1,35 @@
   /* ================= events ================= */
 
+  /* Everything a review session (13-hosted.js) may still do from the click
+     delegation below. An ALLOW-list rather than a list of things to block,
+     because this handler serves the script, the comments panel, the comment
+     composer, the history panel and all three production panels: a new
+     action added to any of them has to be considered here before a reviewer
+     can reach it, which is the right way round for something the server is
+     going to refuse anyway. Everything on it either navigates (jumping to a
+     tag, a scene, a comment) or is part of writing a comment or a reply,
+     including the reply composer's own link popover. */
+  var REVIEW_SAFE_ACTIONS = {
+    "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
+    "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
+    "jump-tag": 1, "jump-row": 1, "writer-jump": 1,
+    "tag-expand": 1, "broll-expand": 1, "broll-jump": 1, "bulk-clear": 1
+  };
+
   function onRootClick(e) {
+    if (reviewMode()) {
+      var tbReview = e.target.closest(".mini-toolbar button[data-cmd]");
+      var actionEl = e.target.closest("[data-action]");
+      /* A click on nothing in particular — the comment card's own "jump to
+         this text", a selection gesture, plain padding — carries no action
+         and changes nothing, so it is left alone. */
+      if (tbReview ? tbReview.getAttribute("data-cmd") !== "comment"
+                   : (actionEl && !REVIEW_SAFE_ACTIONS[actionEl.getAttribute("data-action")])) {
+        reviewBlocked();
+        return;
+      }
+    }
+
     var addBtn = e.target.closest('[data-action="add-row"]');
     if (addBtn) { addRow(null); return; }
 
@@ -409,6 +438,12 @@
     }
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
+    /* A review session's script cells are not editable, but they are still
+       .cell-editable and still take focus — that is how a reader selects the
+       words to comment on — so every shortcut below would otherwise still
+       fire on them. A comment's own composer and a reply's are untouched:
+       they are not script cells. */
+    if (reviewMode() && isScriptCell(cellEl)) return;
     /* Ctrl/Cmd+Z right after Alt+Enter: render() rebuilt the contenteditable
        the split happened in, so the browser's own undo history has nothing
        left to act on. undoSplitCellField() is the app-level replacement —
@@ -1329,6 +1364,9 @@
 
     document.getElementById("btn-write").addEventListener("click", function () {
       if (!state) { showToast("Still loading…", "warn"); return; }
+      /* The writer is a writing surface end to end — its paragraphs ARE the
+         row fields — so a review session does not get one. */
+      if (reviewBlocked()) return;
       openWriter();
     });
 

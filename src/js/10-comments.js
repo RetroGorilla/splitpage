@@ -774,11 +774,20 @@
           '</select>' +
         '</div>' +
         '<div class="comment-actions">' +
-          '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Resolve") + '</button>' +
+          /* A review session may add to a thread and nothing else. Resolving
+             and deleting are changes to a comment that is already stored,
+             which the server refuses from a review token (server.js's
+             "what a review session may write") — it cannot tell whose
+             comment this is, because `author` is a name somebody typed, so
+             it allows additions only. */
+          (reviewMode() ? '' :
+            '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
+              (c.resolved ? "Unresolve" : "Resolve") + '</button>') +
           (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
-          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
-            '" data-action="delete-comment" data-id="' + c.id + '">' +
-            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
+          (reviewMode() ? '' :
+            '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+              '" data-action="delete-comment" data-id="' + c.id + '">' +
+              (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>') +
         '</div>' +
       '</div>'
     );
@@ -799,11 +808,15 @@
         '<div class="comment-quote">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
         '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : c.body) + '</div>' +
         '<div class="comment-actions">' +
-          '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
-          '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
-          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
-            '" data-action="delete-comment" data-id="' + c.id + '">' +
-            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
+          /* All three write the document: "Use my version" puts text back
+             into a row, and the other two change a stored comment. */
+          (reviewMode() ? '' :
+            '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
+            '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
+              (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
+            '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+              '" data-action="delete-comment" data-id="' + c.id + '">' +
+              (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>') +
         '</div>' +
       '</div>'
     );

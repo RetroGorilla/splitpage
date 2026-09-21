@@ -201,6 +201,7 @@
   }
 
   function replaceCurrent() {
+    if (reviewBlocked()) return;   /* find still works; replacing is an edit */
     var needle = findNeedle();
     if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
     var m = findMatches[findIndex];
@@ -219,6 +220,7 @@
   }
 
   function replaceAll() {
+    if (reviewBlocked()) return;
     var needle = findNeedle();
     if (!needle) return;
     var replacement = document.getElementById("replace-input").value || "";
