@@ -153,6 +153,13 @@
     updateScriptStats();
     updateCommentsCount();
     updateTagBadges();
+    /* Every route that puts new content into the document ends here — an
+       import, a file opened, a version restored, a merge landing — and any
+       of them can carry B-roll lines that never went through the typing
+       path and so have no marker of their own. The refresh's own debounce
+       is where they get one (see maybeAnchorBroll); scheduling rather than
+       calling keeps it off this frame and out of the way of a caret. */
+    scheduleBrollRefresh();
     renderProduction();
     captureReplyDrafts();
     renderComments();

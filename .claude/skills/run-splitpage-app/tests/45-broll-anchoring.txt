@@ -1,0 +1,108 @@
+# B-roll anchoring (issue #21): a "B-roll:" line is a marker however it got
+# into the script, not only when it was typed. maybeCaptureBroll() is the
+# only writer of a .broll-key span and it fires on a live keystroke, so an
+# imported or pasted line counted on the badge but carried no id — and an
+# id is the only thing that survives a rewording. This drives the two
+# routes the issue measured (import, paste) and then the consequence that
+# made it matter: a status set on an imported line, then the line reworded.
+
+open
+
+# --- 1) import: two-column text with B-roll lines in the Visual column ----
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+sleep 200
+expect document.getElementById('import-modal').hidden == false
+
+eval (function(){var t=document.getElementById('import-textarea');t.value='Visual\tAudio\nB-roll: gulls over the harbour\tThe town wakes up slowly.\nB-roll: nets coming in\tNobody here is new to this.';t.dispatchEvent(new Event('input',{bubbles:true}));return t.value.length;})()
+# the tab-delimited two-column shape is detected for us, same as a real paste
+wait document.querySelector('input[name="import-split"][value="twocolumn"]').checked
+expect document.getElementById('import-preview').textContent.indexOf('2 rows') !== -1
+
+jsclick #import-confirm
+sleep 300
+expect document.querySelectorAll('#rows .row').length == 4
+
+# Before this fix the imported lines produced ZERO chips, forever. The pass
+# runs off scheduleBrollRefresh's debounce, so give it the poll rather than
+# a fixed sleep.
+wait document.querySelectorAll('#rows .broll-key').length === 2
+expect document.querySelectorAll('#rows .row:nth-child(3) .visual-cell .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-child(3) .visual-cell .broll-key').textContent == B-roll:
+expect document.querySelector('#rows .row:nth-child(3) .visual-cell .broll-key').getAttribute('contenteditable') == false
+# one id per LINE, and two lines never share one
+eval (function(){var k=document.querySelectorAll('#rows .broll-key');window.__ids=[k[0].getAttribute('data-broll-id'),k[1].getAttribute('data-broll-id')];return window.__ids.join(' / ');})()
+expect window.__ids[0] && window.__ids[1] && window.__ids[0] !== window.__ids[1]
+expect /^bs/.test(window.__ids[0])
+# the words either side of the marker are untouched
+expect document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable').textContent.indexOf('gulls over the harbour') !== -1
+expect document.querySelector('#rows .row:nth-child(4) .visual-cell .cell-editable').textContent.indexOf('nets coming in') !== -1
+
+# --- 2) paste: the same line arriving through the clipboard ---------------
+# A real paste event through the app's own onRootPaste, not a programmatic
+# innerHTML set, so this is the route the issue measured. While the caret is
+# still in the field nothing is rewritten — anchoring never fights a live
+# edit — and leaving the field is what anchors it.
+#
+# Leaving it has to be a REAL click, not activeElement.blur(): an unfocused
+# headless window moves activeElement without firing focus/blur at all, so
+# blur() leaves the app's focusout handler (and every sanitiser hanging off
+# it) unrun. Same reason the skill's gotchas list `jsclick` as not blurring.
+caret #rows .row:nth-child(1) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: pasted puffins');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
+sleep 700
+expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.indexOf('pasted puffins') !== -1
+expect document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .broll-key').length == 0
+
+click #doc-title
+wait document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .broll-key').length === 1
+expect !!document.querySelector('#rows .row:nth-child(1) .visual-cell .broll-key').getAttribute('data-broll-id')
+expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.indexOf('pasted puffins') !== -1
+
+# three lines, three items, and none of them still flagged as unanchored
+jsclick #btn-broll
+sleep 500
+expect document.querySelectorAll('#broll-list .tag-entity').length == 3
+expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 0
+
+# --- 3) the consequence: a status set on an imported line survives a -----
+# --- rewording of that line ----------------------------------------------
+# Unanchored, this was the failure the issue measured: the reworded line
+# came back as a new NOT SHOT item and the old record was orphaned as
+# "not in script".
+eval (function(){var h=Array.prototype.filter.call(document.querySelectorAll('#broll-list .tag-entity'),function(e){return e.textContent.indexOf('gulls over the harbour')!==-1;})[0];window.__gullsId=h.getAttribute('data-id');h.querySelector('[data-action="broll-status-toggle"]').click();return window.__gullsId;})()
+sleep 300
+eval (function(){var e=document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"]');return e.querySelector('[data-action="broll-status-toggle"]').textContent;})()
+expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').textContent == Shot
+
+caret #rows .row:nth-child(3) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return c.textContent;})()
+press  at dawn
+click #doc-title
+sleep 900
+
+# same record, same id, still Shot — and nothing orphaned beside it
+expect document.querySelectorAll('#broll-list .tag-entity').length == 3
+expect document.querySelectorAll('#broll-list .tag-orphan-badge').length == 0
+expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"] .tag-entity-name').textContent.indexOf('at dawn') !== -1
+expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').textContent == Shot
+
+# --- 4) while a line is still unanchored, the panel says so --------------
+# brollEntryFrom() has always computed `markerless` for exactly this state
+# and nothing ever read it. The window is real but short: the pass only
+# touches a field nobody is editing, so keeping the caret in the cell keeps
+# the line unanchored — jsclick deliberately, since it never moves focus.
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: unanchored for now');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
+wait document.querySelectorAll('#broll-list .tag-entity').length === 4
+expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length == 0
+expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 1
+
+# and the flag clears itself the moment the field is left
+click #doc-title
+wait document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length === 1
+wait document.querySelectorAll('#broll-list .broll-loose-badge').length === 0
+
+shot 45-broll-anchoring
+
+quit
