@@ -1233,9 +1233,11 @@
       document.getElementById("prompter-scroll").scrollTop = 0;
       updateVoiceAvailability();
     });
-    document.getElementById("pp-mirror").addEventListener("click", function (e) {
-      document.getElementById("prompter-scroll").classList.toggle("mirror");
-      e.target.classList.toggle("is-active");
+    document.getElementById("pp-mirror").addEventListener("click", function () {
+      setPrompterMirror(!prompterMirror);
+    });
+    document.getElementById("pp-flip").addEventListener("click", function () {
+      setPrompterFlip(!prompterFlip);
     });
     document.getElementById("pp-fullscreen").addEventListener("click", function () {
       var el = document.getElementById("prompter");
@@ -1249,6 +1251,8 @@
       else if (e.key === " ") { e.preventDefault(); setPrompterPlaying(!prompterPlaying); }
       else if (e.key === "ArrowUp") { prompterSpeed = Math.min(160, prompterSpeed + 6); document.getElementById("pp-speed").value = prompterSpeed; }
       else if (e.key === "ArrowDown") { prompterSpeed = Math.max(10, prompterSpeed - 6); document.getElementById("pp-speed").value = prompterSpeed; }
+      else if (e.key === "m" || e.key === "M") { setPrompterMirror(!prompterMirror); }
+      else if (e.key === "f" || e.key === "F") { setPrompterFlip(!prompterFlip); }
     });
 
     /* ---- the writer ---- */
