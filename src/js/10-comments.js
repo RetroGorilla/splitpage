@@ -43,6 +43,184 @@
     renderComments();
   }
 
+  /* ---- filter (Open / Resolved / All, and who it's assigned to) ----
+
+     A reader preference like the sort mode above, not part of the document
+     — same reasoning, same storage. This replaces the old "Hide resolved"
+     checkbox, which (unlike the sort mode) was never itself persisted: it
+     reset to unchecked — meaning "show everything" — on every reload.
+     COMMENTS_FILTER_LEGACY_KEY costs nothing to check and means a saved
+     preference from an interim build, if one ever existed, still carries
+     over rather than silently resetting to the new default. */
+  var COMMENTS_FILTER_KEY = "splitpage-comments-filter";
+  var COMMENTS_FILTER_LEGACY_KEY = "splitpage-comments-hide-resolved";
+  var COMMENT_FILTER_MODES = { open: true, resolved: true, all: true };
+
+  function readCommentFilter() {
+    try {
+      var raw = localStorage.getItem(COMMENTS_FILTER_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return {
+            mode: COMMENT_FILTER_MODES[parsed.mode] ? parsed.mode : "open",
+            assignee: typeof parsed.assignee === "string" ? parsed.assignee : ""
+          };
+        }
+      }
+      var legacy = localStorage.getItem(COMMENTS_FILTER_LEGACY_KEY);
+      if (legacy != null) return { mode: legacy === "true" ? "open" : "all", assignee: "" };
+    } catch (e) {}
+    return { mode: "open", assignee: "" };
+  }
+  var commentFilter = readCommentFilter();
+  function saveCommentFilter() {
+    try { localStorage.setItem(COMMENTS_FILTER_KEY, JSON.stringify(commentFilter)); } catch (e) {}
+  }
+  function setCommentFilterMode(mode) {
+    commentFilter.mode = COMMENT_FILTER_MODES[mode] ? mode : "open";
+    saveCommentFilter();
+    captureReplyDrafts();
+    renderComments();
+  }
+  function setCommentAssigneeFilter(value) {
+    commentFilter.assignee = value || "";
+    saveCommentFilter();
+    captureReplyDrafts();
+    renderComments();
+  }
+  function commentMatchesFilterMode(c, mode) {
+    if (mode === "resolved") return !!c.resolved;
+    if (mode === "all") return true;
+    return !c.resolved; /* "open" */
+  }
+  function commentMatchesAssigneeFilter(c, assignee) {
+    if (!assignee) return true;
+    if (assignee === "__unassigned__") return !c.assignee;
+    if (assignee === "me") {
+      var me = normalizeTagName(getSavedAuthorName());
+      return !!me && normalizeTagName(c.assignee || "") === me;
+    }
+    return normalizeTagName(c.assignee || "") === normalizeTagName(assignee);
+  }
+
+  /* ---- assignment ----
+
+     Not an identity system — same as comment authors and the production
+     crew list, this is just a name someone typed. The picker offers
+     everyone already in the production breakdown plus anyone who has ever
+     posted a comment or reply, so "assign to the editor" works whether or
+     not the editor has a crew-list entry yet. */
+  function commentAssigneeCandidates() {
+    var seen = {}, out = [];
+    function add(name) {
+      var clean = plainText(name || "").trim();
+      if (!clean || clean === "Anonymous") return;
+      var norm = normalizeTagName(clean);
+      if (seen[norm]) return;
+      seen[norm] = true;
+      out.push(clean);
+    }
+    (state.people || []).forEach(function (p) { add(p.name); });
+    (state.comments || []).forEach(function (c) {
+      add(c.author);
+      (c.replies || []).forEach(function (r) { add(r.author); });
+    });
+    out.sort(function (a, b) { return a.localeCompare(b); });
+    return out;
+  }
+
+  function setCommentAssignee(id, name) {
+    var idx = findCommentIndex(id);
+    if (idx === -1) return;
+    state.comments[idx].assignee = plainText(name || "").trim().slice(0, 80);
+    state.comments[idx].updatedAt = nowIso();
+    markDirty();
+    render();
+    queueAutoSave();
+  }
+
+  function commentAssigneeOptionsHtml(current) {
+    var candidates = commentAssigneeCandidates();
+    var found = false;
+    var html = '<option value=""' + (current ? "" : " selected") + '>Unassigned</option>';
+    candidates.forEach(function (name) {
+      var sel = normalizeTagName(name) === normalizeTagName(current || "");
+      if (sel) found = true;
+      html += '<option value="' + escapeHtml(name) + '"' + (sel ? " selected" : "") + '>' + escapeHtml(name) + '</option>';
+    });
+    /* A current assignee that fell out of the candidate list (the only
+       commenter with that name was deleted from state.people, say) still
+       has to be shown, not silently swapped for "Unassigned" the moment
+       the panel re-renders. */
+    if (current && !found) {
+      html += '<option value="' + escapeHtml(current) + '" selected>' + escapeHtml(current) + '</option>';
+    }
+    return html;
+  }
+
+  /* Rebuilds the filter bar's active state, counts, and the assignee
+     dropdown's options — called once per renderComments(), before the list
+     itself, since the counts always describe the CURRENT document, not the
+     currently-visible slice of it. Open/Resolved/All counts are scoped to
+     the current assignee filter, and the assignee dropdown's own counts are
+     scoped to the current Open/Resolved/All tab — each narrows the other,
+     the way a faceted filter normally does. */
+  function renderCommentFilterBar() {
+    if (!state) return;
+    var seg = document.getElementById("comments-filter-seg");
+    if (seg) {
+      var modeCounts = { open: 0, resolved: 0, all: 0 };
+      state.comments.forEach(function (c) {
+        if (!commentMatchesAssigneeFilter(c, commentFilter.assignee)) return;
+        modeCounts.all++;
+        modeCounts[c.resolved ? "resolved" : "open"]++;
+      });
+      ["open", "resolved", "all"].forEach(function (mode) {
+        var btn = seg.querySelector('[data-filter="' + mode + '"]');
+        if (!btn) return;
+        var on = commentFilter.mode === mode;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-checked", on ? "true" : "false");
+        var countEl = btn.querySelector(".filter-count");
+        if (countEl) countEl.textContent = String(modeCounts[mode]);
+      });
+    }
+
+    var select = document.getElementById("comments-assignee-filter");
+    if (!select) return;
+    var mode = commentFilter.mode;
+    function countFor(matcher) {
+      var n = 0;
+      state.comments.forEach(function (c) { if (commentMatchesFilterMode(c, mode) && matcher(c)) n++; });
+      return n;
+    }
+    var meNorm = normalizeTagName(getSavedAuthorName());
+    var candidates = commentAssigneeCandidates();
+    var current = commentFilter.assignee;
+    var currentIsSpecial = current === "" || current === "me" || current === "__unassigned__";
+    var currentFound = false;
+    var html = '<option value="">Everyone (' + countFor(function () { return true; }) + ')</option>' +
+      '<option value="me">Assigned to me (' + (meNorm ? countFor(function (c) { return normalizeTagName(c.assignee || "") === meNorm; }) : 0) + ')</option>' +
+      '<option value="__unassigned__">Unassigned (' + countFor(function (c) { return !c.assignee; }) + ')</option>' +
+      candidates.map(function (name) {
+        if (!currentIsSpecial && normalizeTagName(name) === normalizeTagName(current)) currentFound = true;
+        var norm = normalizeTagName(name);
+        return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + ' (' +
+          countFor(function (c) { return normalizeTagName(c.assignee || "") === norm; }) + ')</option>';
+      }).join("");
+    /* A stored filter naming someone who has since dropped out of the
+       candidate list (their one comment was deleted, say) still has to
+       stay selected and keep filtering by that name, not silently widen
+       back to "Everyone" out from under whoever set it on another device. */
+    if (!currentIsSpecial && current && !currentFound) {
+      html += '<option value="' + escapeHtml(current) + '">' + escapeHtml(current) + ' (' +
+        countFor(function (c) { return normalizeTagName(c.assignee || "") === normalizeTagName(current); }) + ')</option>';
+    }
+    select.innerHTML = html;
+    select.value = current;
+  }
+
   /* ---- comments panel width (drag handle) ----
      Per-viewer preference, like the sort mode above — not part of the
      document, so it lives in localStorage rather than state. */
@@ -129,6 +307,31 @@
     } catch (e) { return ""; }
   }
 
+  /* "Resolved by Adam · 2 days ago" wants a relative phrase, not a clock
+     time — formatTimestamp's "3:04 PM" reads fine for something posted
+     today, but is meaningless once the document has sat resolved for a
+     while. Rounds to the coarsest unit that isn't zero; negative deltas
+     (clock skew between two people's machines) read as "just now" rather
+     than a confusing negative count. */
+  function formatRelativeTime(iso) {
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      var sec = Math.round((Date.now() - d.getTime()) / 1000);
+      if (sec < 60) return "just now";
+      var min = Math.round(sec / 60);
+      if (min < 60) return min + (min === 1 ? " minute ago" : " minutes ago");
+      var hr = Math.round(min / 60);
+      if (hr < 24) return hr + (hr === 1 ? " hour ago" : " hours ago");
+      var day = Math.round(hr / 24);
+      if (day < 30) return day + (day === 1 ? " day ago" : " days ago");
+      var mon = Math.round(day / 30);
+      if (mon < 12) return mon + (mon === 1 ? " month ago" : " months ago");
+      var yr = Math.round(mon / 12);
+      return yr + (yr === 1 ? " year ago" : " years ago");
+    } catch (e) { return ""; }
+  }
+
   function findAnchorLocationLabel(rowId, field) {
     if (field === "title") return "Document title";
     var idx = findRowIndex(rowId);
@@ -190,6 +393,8 @@
         body: htmlToPlainText(c.body),
         quoted: c.quotedText || "",
         resolved: !!c.resolved,
+        resolvedBy: c.resolved ? (c.resolvedBy || "") : "",
+        assignee: c.assignee || "",
         when: formatTimestampAbsolute(c.createdAt),
         replies: (c.replies || []).map(function (rp) {
           return {
@@ -307,6 +512,9 @@
       author: author,
       body: bodyHtml,
       resolved: false,
+      resolvedBy: null,
+      resolvedAt: null,
+      assignee: "",
       createdAt: nowIso(),
       updatedAt: nowIso(),
       kind: "anchor",
@@ -345,8 +553,11 @@
   function toggleResolve(id) {
     var idx = findCommentIndex(id);
     if (idx === -1) return;
-    state.comments[idx].resolved = !state.comments[idx].resolved;
-    state.comments[idx].updatedAt = nowIso();
+    var c = state.comments[idx];
+    c.resolved = !c.resolved;
+    c.updatedAt = nowIso();
+    if (c.resolved) { c.resolvedBy = getEditorName(); c.resolvedAt = c.updatedAt; }
+    else { c.resolvedBy = null; c.resolvedAt = null; }
     markDirty();
     render();
     queueAutoSave();
@@ -449,8 +660,16 @@
   }
 
   function jumpToComment(cmtId) {
-    var hideResolvedBox = document.getElementById("comments-hide-resolved");
-    if (hideResolvedBox.checked) { hideResolvedBox.checked = false; captureReplyDrafts(); renderComments(); }
+    var idx = findCommentIndex(cmtId);
+    var target = idx === -1 ? null : state.comments[idx];
+    if (target && (!commentMatchesFilterMode(target, commentFilter.mode) ||
+        !commentMatchesAssigneeFilter(target, commentFilter.assignee))) {
+      commentFilter.mode = "all";
+      commentFilter.assignee = "";
+      saveCommentFilter();
+      captureReplyDrafts();
+      renderComments();
+    }
     openCommentsPanel();
     setTimeout(function () {
       var card = document.querySelector('.comment-card[data-id="' + safeId(cmtId, "c") + '"]');
@@ -490,6 +709,17 @@
     );
   }
 
+  /* "Resolved by Adam · 2 days ago" — blank the instant a comment is
+     unresolved (toggleResolve/migrateRows both clear resolvedBy/resolvedAt
+     together), so this never shows stale attribution for an open thread.
+     A comment resolved before this feature existed has resolved=true but
+     no resolvedBy, which just falls back to a bare "Resolved". */
+  function commentResolvedNoteHtml(c) {
+    if (!c.resolved || !c.resolvedBy) return "";
+    return '<div class="comment-resolved-note">Resolved by ' + escapeHtml(c.resolvedBy) +
+      (c.resolvedAt ? ' · ' + escapeHtml(formatRelativeTime(c.resolvedAt)) : '') + '</div>';
+  }
+
   function commentCardHtml(c) {
     if (c.kind === "conflict") return conflictCardHtml(c);
     /* Orphaned: the span is gone, or emptied out by editing until nothing is
@@ -521,6 +751,7 @@
           '<span class="comment-author">' + escapeHtml(c.author) + '</span>' +
           '<span class="comment-time">' + formatTimestamp(c.createdAt) + '</span>' +
         '</div>' +
+        commentResolvedNoteHtml(c) +
         '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
         (orphaned ?
           '<div class="comment-quote orphaned">“' + escapeHtml(c.quotedText) + '”' +
@@ -536,6 +767,12 @@
         '<div class="comment-body">' + c.body + '</div>' +
         repliesHtml +
         (expandedReplyIds[c.id] ? replyComposerHtml(c.id) : "") +
+        '<div class="comment-assign-row">' +
+          '<label for="comment-assignee-' + c.id + '">Assign</label>' +
+          '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to">' +
+            commentAssigneeOptionsHtml(c.assignee) +
+          '</select>' +
+        '</div>' +
         '<div class="comment-actions">' +
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Resolve") + '</button>' +
           (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
@@ -557,6 +794,7 @@
           '<span class="comment-author">' + escapeHtml(c.author) + '</span>' +
           '<span class="comment-time">' + formatTimestamp(c.createdAt) + '</span>' +
         '</div>' +
+        commentResolvedNoteHtml(c) +
         '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
         '<div class="comment-quote">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
         '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : c.body) + '</div>' +
@@ -620,13 +858,15 @@
     if (!state) return;
     var listEl = document.getElementById("comments-list");
     if (!listEl) return;
-    var hideResolved = document.getElementById("comments-hide-resolved").checked;
-    var items = state.comments.filter(function (c) { return !hideResolved || !c.resolved; });
+    renderCommentFilterBar();
+    var items = state.comments.filter(function (c) {
+      return commentMatchesFilterMode(c, commentFilter.mode) && commentMatchesAssigneeFilter(c, commentFilter.assignee);
+    });
     items = items.slice().sort(commentSortMode === "recent"
       ? function (a, b) { return commentLastActivity(b).localeCompare(commentLastActivity(a)); }
       : commentPositionCompare);
     if (!items.length) {
-      listEl.innerHTML = '<div class="comments-empty">' + (state.comments.length ? "No comments to show." : "No comments yet. Select text in a row and click 💬 Comment to leave one.") + '</div>';
+      listEl.innerHTML = '<div class="comments-empty">' + (state.comments.length ? "No comments match this filter." : "No comments yet. Select text in a row and click 💬 Comment to leave one.") + '</div>';
       return;
     }
     listEl.innerHTML = items.map(commentCardHtml).join("");

@@ -1,0 +1,175 @@
+# #29: who resolved a thread and when, an "assign to" chip per thread, and
+# a filter bar (Open / Resolved / All, "assigned to me", "assigned to a
+# person") with counts on each. Also: the filter is a per-device
+# localStorage preference that never dirties the document, an old comment
+# with none of the new fields keeps working, and resolvedBy/resolvedAt/
+# assignee survive a save/reload round trip in both project formats.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;var sortAll=function(v){if(Array.isArray(v))return v.map(sortAll);if(v&&typeof v==='object'){var o={};Object.keys(v).sort().forEach(function(k){o[k]=sortAll(v[k]);});return o;}return v;};window.__norm=function(s){var c=F.migrate(F.clone(s));delete c.rev;delete c.lastEditedAt;delete c.lastEditedBy;delete c.docId;return JSON.stringify(sortAll(c));};return 'hooked';})()
+
+# --- the pristine seed's one comment has none of the new fields at all ------
+click text*=COMMENTS
+sleep 500
+expect document.querySelectorAll('.comment-card').length == 1
+expect F.state().comments[0].resolvedBy === null
+expect F.state().comments[0].resolvedAt === null
+expect F.state().comments[0].assignee === ''
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+
+# --- default filter is Open, with counts, replacing "hide resolved" --------
+expect document.querySelector('#comments-filter-seg [data-filter="open"]').classList.contains('is-active')
+expect document.getElementById('comments-filter-count-open').textContent == 1
+expect document.getElementById('comments-filter-count-resolved').textContent == 0
+expect document.getElementById('comments-filter-count-all').textContent == 1
+
+# --- filter state persists per device, and touching it never dirties -------
+click #comments-filter-seg [data-filter="resolved"]
+sleep 300
+expect document.querySelector('.comments-empty') !== null
+eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='__unassigned__';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+goto /index.html
+sleep 900
+click text*=COMMENTS
+sleep 500
+expect document.querySelector('#comments-filter-seg [data-filter="resolved"]').classList.contains('is-active')
+expect document.getElementById('comments-assignee-filter').value == __unassigned__
+
+# goto wipes window — every suite that reloads re-hooks afterward (22-doc-id.txt et al.)
+eval (function(){window.F=window.__splitpageFormats;var sortAll=function(v){if(Array.isArray(v))return v.map(sortAll);if(v&&typeof v==='object'){var o={};Object.keys(v).sort().forEach(function(k){o[k]=sortAll(v[k]);});return o;}return v;};window.__norm=function(s){var c=F.migrate(F.clone(s));delete c.rev;delete c.lastEditedAt;delete c.lastEditedBy;delete c.docId;return JSON.stringify(sortAll(c));};return 'hooked';})()
+
+# --- back to Open, and Everyone, for the rest of the suite ------------------
+click #comments-filter-seg [data-filter="open"]
+sleep 300
+eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+expect document.querySelectorAll('.comment-card').length == 1
+
+# --- the assign picker offers people from the production breakdown too, ----
+# --- not just commenters — and escapes what it shows -----------------------
+eval (function(){F.state().people.push({id:'ptest-esc', name:'Riley & Co'});return true;})()
+click text*=COMMENTS
+sleep 300
+click text*=COMMENTS
+sleep 400
+expect document.querySelector('.comment-assignee-select').innerHTML.indexOf('Riley &amp; Co') !== -1
+expect document.querySelector('.comment-assignee-select').innerHTML.indexOf('Riley & Co<') === -1
+
+# --- leave a second comment (author "Jordan") on row 1 ----------------------
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
+sleep 300
+jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 500
+eval (function(){document.getElementById('comment-name').value='Jordan';var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Row1 note.');return b.textContent;})()
+jsclick #comment-post
+sleep 600
+expect document.querySelectorAll('.comment-card').length == 2
+expect document.getElementById('btn-save').classList.contains('is-dirty')
+
+# --- and a third (author "Sam") on row 2 -------------------------------------
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return t.nodeValue.slice(0,3);})()
+sleep 300
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 500
+eval (function(){document.getElementById('comment-name').value='Sam';var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Row2 note.');return b.textContent;})()
+jsclick #comment-post
+sleep 600
+expect document.querySelectorAll('.comment-card').length == 3
+eval (function(){window.__c2id=F.state().comments.find(function(c){return c.body.indexOf('Row1 note.')!==-1;}).id;window.__c3id=F.state().comments.find(function(c){return c.body.indexOf('Row2 note.')!==-1;}).id;return [window.__c2id,window.__c3id];})()
+
+# --- candidates are people already in the breakdown PLUS anyone who has -----
+# --- commented -- Priya (the seed's author), Jordan, Sam and Riley & Co ----
+expect document.querySelector('.comment-card[data-id="c1"] .comment-assignee-select').textContent.indexOf('Priya (reviewer)') !== -1
+expect document.querySelector('.comment-card[data-id="c1"] .comment-assignee-select').textContent.indexOf('Jordan') !== -1
+expect document.querySelector('.comment-card[data-id="c1"] .comment-assignee-select').textContent.indexOf('Sam') !== -1
+expect document.querySelector('.comment-card[data-id="c1"] .comment-assignee-select').textContent.indexOf('Riley & Co') !== -1
+
+# --- assign c1 to Jordan; the card and the state both carry it -------------
+eval (function(){var s=document.querySelector('.comment-assignee-select[data-id="c1"]');s.value='Jordan';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 400
+expect F.state().comments.find(function(c){return c.id==='c1';}).assignee == Jordan
+expect document.querySelector('.comment-assignee-select[data-id="c1"]').value == Jordan
+expect document.getElementById('comments-assignee-filter').innerHTML.indexOf('Jordan (1)') !== -1
+
+# --- the assignee filter narrows the list, with its own count --------------
+eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='Jordan';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card').getAttribute('data-id') == c1
+
+# --- self-assign Sam's own comment, then "assigned to me" (the last saved --
+# --- author name, "Sam") finds exactly it -----------------------------------
+eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+eval (function(){var s=document.querySelector('.comment-assignee-select[data-id="'+window.__c3id+'"]');s.value='Sam';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 400
+eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='me';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card').getAttribute('data-id') === window.__c3id
+eval (function(){var s=document.getElementById('comments-assignee-filter');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));return s.value;})()
+sleep 300
+expect document.querySelectorAll('.comment-card').length == 3
+
+# --- resolving c1 (posted by Priya, resolved by Sam — the current viewer) --
+# --- records who and when, and the Open/Resolved/All tabs react ------------
+jsclick .comment-card[data-id="c1"] [data-action="toggle-resolve"]
+sleep 400
+expect F.state().comments.find(function(c){return c.id==='c1';}).resolved === true
+expect F.state().comments.find(function(c){return c.id==='c1';}).resolvedBy == Sam
+expect document.querySelector('.comment-card[data-id="c1"]') === null
+expect document.getElementById('comments-filter-count-open').textContent == 2
+expect document.getElementById('comments-filter-count-resolved').textContent == 1
+expect document.getElementById('comments-filter-count-all').textContent == 3
+
+click #comments-filter-seg [data-filter="resolved"]
+sleep 300
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card[data-id="c1"]').classList.contains('is-resolved')
+expect document.querySelector('.comment-card[data-id="c1"] .comment-resolved-note').textContent.indexOf('Resolved by Sam') !== -1
+expect document.querySelector('.comment-card[data-id="c1"] .comment-resolved-note').textContent.indexOf('just now') !== -1
+
+# --- unresolving clears both fields, and the card leaves the Resolved tab --
+jsclick .comment-card[data-id="c1"] [data-action="toggle-resolve"]
+sleep 400
+expect F.state().comments.find(function(c){return c.id==='c1';}).resolved === false
+expect F.state().comments.find(function(c){return c.id==='c1';}).resolvedBy === null
+expect F.state().comments.find(function(c){return c.id==='c1';}).resolvedAt === null
+expect document.querySelector('.comment-card[data-id="c1"]') === null
+
+click #comments-filter-seg [data-filter="all"]
+sleep 300
+expect document.querySelectorAll('.comment-card').length == 3
+expect document.querySelector('.comment-card[data-id="c1"] .comment-resolved-note') === null
+
+# --- resolve Jordan's own comment (still by Sam, the current viewer) for ---
+# --- the round-trip check below, so a real resolvedBy/resolvedAt survives --
+eval (function(){document.querySelector('[data-action="toggle-resolve"][data-id="'+window.__c2id+'"]').click();return true;})()
+sleep 400
+expect F.state().comments.find(function(c){return c.id===window.__c2id;}).resolvedBy == Sam
+
+# --- .splitpage and .md round-trip resolvedBy/resolvedAt/assignee exactly --
+eval (function(){window.__base=__norm(F.state());window.__id=F.docId();return window.__base.length;})()
+
+eval (function(){window.__sp=F.buildSplitpage();return window.__sp.length;})()
+eval (function(){F.openFile(new File([window.__sp],'round.splitpage'));return true;})()
+wait F.docFile().kind === 'splitpage'
+expect __norm(F.state()) === window.__base
+expect F.docId() === window.__id
+expect F.state().comments.find(function(c){return c.id===window.__c2id;}).resolvedBy == Sam
+expect F.state().comments.find(function(c){return c.id==='c1';}).assignee == Jordan
+
+eval (function(){window.__md=F.buildMarkdown();return window.__md.length;})()
+eval (function(){F.openFile(new File([window.__md],'round.md'));return true;})()
+wait F.docFile().kind === 'md'
+expect __norm(F.state()) === window.__base
+expect F.docId() === window.__id
+expect F.state().comments.find(function(c){return c.id===window.__c2id;}).resolvedBy == Sam
+expect F.state().comments.find(function(c){return c.id==='c1';}).assignee == Jordan
+
+quit

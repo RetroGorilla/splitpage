@@ -645,6 +645,15 @@ sits where the thing it's about sits — with **Most recent** alongside it for
 coming back after a while and wanting to see what actually moved, replies
 included, wherever in the script they landed.
 
+Resolving a thread records who closed it and when ("Resolved by Adam · 2
+days ago"); unresolving clears that note. **Assign** on a card hands the
+thread to anyone already in the Production breakdown, or anyone who has
+commented. The **Open / Resolved / All** bar at the top filters the list —
+Open is the old "Hide resolved" behaviour under a new name — and its
+**Assigned** dropdown narrows further to "assigned to me" or to any one
+person, each with its own count. The filter is remembered on this device
+only; it never touches the saved document.
+
 **Find and replace.** <kbd>Ctrl</kbd>+<kbd>F</kbd>. Enter and
 Shift+Enter step through matches; **Aa** toggles case-sensitivity.
 Formatting, links and comment anchors survive a replace untouched. Text

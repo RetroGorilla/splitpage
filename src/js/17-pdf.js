@@ -321,7 +321,9 @@
       }
 
       comments.forEach(function (c) {
-        var headerLines = pdfWrapRuns([{ text: c.location + (c.resolved ? " (resolved)" : "") +
+        var headerLines = pdfWrapRuns([{ text: c.location +
+          (c.resolved ? " (resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")" : "") +
+          (c.assignee ? " [assigned to " + c.assignee + "]" : "") +
           "  —  " + c.author + (c.when ? ", " + c.when : ""), b: true }], FULLW, SIZE);
         var quoteLines = c.quoted ? pdfWrapRuns(linesToRuns("“" + c.quoted + "”"), FULLW - 12, SIZE) : [];
         var bodyLines = pdfWrapRuns(linesToRuns(c.body || "(empty)"), FULLW - 12, SIZE);
