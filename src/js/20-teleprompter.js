@@ -116,6 +116,54 @@
     }
   }
 
+  /* ---------- mirror / flip ----------
+
+     Which way a rig needs the picture turned is about the hardware sitting
+     in front of the lens, not the script on screen — a beam-splitter glass
+     (Mirror) or a monitor bolted in upside-down (Flip). So, like the
+     writer's remembered text size, it lives in localStorage keyed to this
+     device rather than travelling with the document: opening someone else's
+     script on your rig should keep reading through *your* glass correctly,
+     and opening your own script on a plain monitor shouldn't come out
+     mirrored. Both flags only ever toggle a transform on #prompter-scroll
+     (app.css) — the reading line and the controls are deliberately outside
+     that element (see .prompter-viewport in page.html) so they never flip,
+     and scrollTop keeps working in ordinary DOM space regardless: the
+     transform only changes how that same scroll position is painted. */
+  var PROMPTER_MIRROR_KEY = "splitpage-prompter-mirror";
+  var PROMPTER_FLIP_KEY = "splitpage-prompter-flip";
+
+  function readPrompterOrientationFlag(key) {
+    try { return localStorage.getItem(key) === "1"; } catch (e) { return false; }
+  }
+  function writePrompterOrientationFlag(key, on) {
+    try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) {}
+  }
+
+  var prompterMirror = readPrompterOrientationFlag(PROMPTER_MIRROR_KEY);
+  var prompterFlip = readPrompterOrientationFlag(PROMPTER_FLIP_KEY);
+
+  function applyPrompterOrientation() {
+    var scroller = document.getElementById("prompter-scroll");
+    scroller.classList.toggle("mirror", prompterMirror);
+    scroller.classList.toggle("flip", prompterFlip);
+    document.getElementById("pp-mirror").classList.toggle("is-active", prompterMirror);
+    document.getElementById("pp-flip").classList.toggle("is-active", prompterFlip);
+  }
+
+  /* Deliberately not markDirty() — a rig preference, not a change to the
+     document (issue #27). */
+  function setPrompterMirror(on) {
+    prompterMirror = on;
+    writePrompterOrientationFlag(PROMPTER_MIRROR_KEY, on);
+    applyPrompterOrientation();
+  }
+  function setPrompterFlip(on) {
+    prompterFlip = on;
+    writePrompterOrientationFlag(PROMPTER_FLIP_KEY, on);
+    applyPrompterOrientation();
+  }
+
   function openPrompter() {
     buildPrompterContent();
     var el = document.getElementById("prompter");
@@ -124,6 +172,7 @@
     document.getElementById("prompter-scroll").scrollTop = 0;
     setPrompterPlaying(false);
     applyPrompterSize();
+    applyPrompterOrientation();
     updateVoiceAvailability();
     acquireWakeLock();
   }
