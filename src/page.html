@@ -307,6 +307,14 @@
       </div>
     </div>
     <div class="modal-preview" id="import-preview">Paste some text to see a preview.</div>
+    <!-- "What should Splitpage look for in this script?" — one checkbox per
+         entry in IMPORT_SCANS (11-import.js), built there rather than written
+         out here, so a second kind of tag to detect on the way in is an entry
+         in that list and nothing else. -->
+    <div class="import-scan-group" role="group" aria-labelledby="import-scan-title">
+      <div class="import-scan-title" id="import-scan-title">What should Splitpage look for in this script?</div>
+      <div id="import-scan-options"></div>
+    </div>
     <div class="modal-footer">
       <label class="import-replace-toggle"><input type="checkbox" id="import-replace"> Replace existing rows</label>
       <div class="modal-footer-actions">

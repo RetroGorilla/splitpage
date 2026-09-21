@@ -249,6 +249,100 @@
     });
   }
 
+  /* ---- what Import can be asked to look for ----
+
+     Detection is not the missing piece — brollInField already reads every
+     "B-roll:" line out of a field, and the untagged-mentions machinery
+     already finds plain-text mentions of registry items. What was missing is
+     permission: applying what was found means rewriting the text somebody has
+     just handed over, and doing that silently is the wrong default. So the
+     dialog asks, once, and remembers the answer.
+
+     One entry per kind, and the dialog builds its own checkbox from each of
+     them (renderImportScanOptions), so a second kind — untagged mentions of
+     things already in the breakdown, locations, gear — is an entry here plus a
+     scan function, not a redesign of the question.
+
+     `apply` is handed the rows that have just landed in state.rows — they have
+     to be there already, because a scan reconciles what it finds against the
+     whole document rather than against those rows in isolation — and returns
+     how many it changed. `decline` gets the same rows when the answer is no,
+     and is where a scan makes sure nothing else quietly does the work for it
+     afterwards. */
+  var IMPORT_SCANS = [
+    {
+      id: "broll",
+      label: "Look for B-roll lines and track them",
+      hint: "A line starting “B-roll:” becomes a shot on the b-roll list, and keeps its status when the line is reworded.",
+      apply: function (rows) { return anchorBrollInRows(rows); },
+      decline: function (rows) { declineBrollAnchoring(rows); },
+      found: function (n) {
+        return n + " B-roll line" + (n === 1 ? "" : "s") + " found and tracked.";
+      }
+    }
+  ];
+
+  var IMPORT_SCAN_KEY = "splitpage-import-scans";
+
+  /* Per device, like the comments sort order and the writer's text size: this
+     is about how somebody imports, not about the document, so it has no
+     business in state. Anything not written down yet reads as on — an
+     unanswered question should leave the b-roll list working rather than
+     second-class (#21) — and a no, once given, keeps. */
+  function importScanPrefs() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(IMPORT_SCAN_KEY) || "{}"); } catch (e) { saved = null; }
+    return saved && typeof saved === "object" ? saved : {};
+  }
+
+  function importScanEnabled(id) {
+    return importScanPrefs()[id] !== false;
+  }
+
+  function importScanBox(id) {
+    return document.querySelector('[data-import-scan="' + cssAttr(id) + '"]');
+  }
+
+  function renderImportScanOptions() {
+    var host = document.getElementById("import-scan-options");
+    if (!host) return;
+    host.innerHTML = IMPORT_SCANS.map(function (scan) {
+      return '<label class="import-scan-toggle">' +
+        '<input type="checkbox" data-import-scan="' + escapeHtml(scan.id) + '"' +
+          (importScanEnabled(scan.id) ? ' checked' : '') + '>' +
+        '<span>' + escapeHtml(scan.label) + '</span>' +
+        '<span class="import-scan-hint">' + escapeHtml(scan.hint) + '</span>' +
+      '</label>';
+    }).join("");
+  }
+
+  function saveImportScanPrefs() {
+    var saved = {};
+    IMPORT_SCANS.forEach(function (scan) {
+      var box = importScanBox(scan.id);
+      saved[scan.id] = box ? !!box.checked : importScanEnabled(scan.id);
+    });
+    try { localStorage.setItem(IMPORT_SCAN_KEY, JSON.stringify(saved)); } catch (e) {}
+  }
+
+  /* Runs the scans that are on over the rows that just arrived, and returns
+     what to add to the import's own toast — the result reported where the
+     import is reported, rather than as a second notification. */
+  function runImportScans(rows) {
+    var notes = [];
+    IMPORT_SCANS.forEach(function (scan) {
+      var box = importScanBox(scan.id);
+      if (box ? !box.checked : !importScanEnabled(scan.id)) {
+        if (scan.decline) scan.decline(rows);
+        return;
+      }
+      var n = scan.apply(rows);
+      if (n) notes.push(scan.found(n));
+    });
+    saveImportScanPrefs();
+    return notes.join(" ");
+  }
+
   /* --- modal wiring --- */
 
   function getImportMode() {
@@ -326,6 +420,9 @@
     pendingFileName = "";
     var paragraphRadio = document.querySelector('input[name="import-split"][value="paragraph"]');
     if (paragraphRadio) paragraphRadio.checked = true;
+    /* Rebuilt every time it opens, so the boxes show the remembered answer
+       rather than whatever the last import happened to leave ticked. */
+    renderImportScanOptions();
     updateImportPreview();
     document.getElementById("import-modal").hidden = false;
     document.getElementById("import-textarea").focus();
@@ -405,10 +502,15 @@
     newRows.forEach(stampRow);
     if (replace && state.rows.length) pushSnapshot("Before replacing rows on import");
     state.rows = replace ? newRows : state.rows.concat(newRows);
+    /* After the rows are in state.rows and before the render: a scan
+       reconciles what it finds against the whole document (see IMPORT_SCANS),
+       and whatever it rewrites is what this render is about to draw. */
+    var found = runImportScans(newRows);
     markDirty();
     render();
     closeImportModal();
-    showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + ".", "ok");
+    showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + "." +
+      (found ? " " + found : ""), "ok");
   }
 
   /* ================= Google Doc import =================

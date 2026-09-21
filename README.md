@@ -958,6 +958,15 @@ statuses, owners and notes, its cast list, its b-roll list and its comments
 all stay where they are. It takes a `.docx`, `.md`, `.txt` or `.csv` file
 through **Choose a file…** as well as pasted text.
 
+That modal also asks **what Splitpage should look for in the script**. The
+one thing it looks for today is B-roll: with **Look for B-roll lines and
+track them** ticked, every line starting `B-roll:` in the Visual column
+comes in as a real marker on the b-roll list, so it keeps its status, notes
+and owner when you later reword the line — and the import tells you how many
+it found. Untick it and the text is left exactly as you pasted it. Your
+answer is remembered, so if you import drafts all day you are only asked
+once.
+
 ### Older `.html` projects
 
 Splitpage used to save every project as a page like the standalone export
