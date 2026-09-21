@@ -111,14 +111,17 @@
   /* Its own fetch rather than apiFetch(): this is the one call that has to
      tell a wrong code from a missing one from too many tries, and apiFetch
      deliberately flattens all of that into "pin". */
-  async function joinServer(base, pin) {
+  /* `key` is the review link's own credential (13-hosted.js's readReviewKey):
+     the same door, opened by a link rather than by something typed. The
+     server decides which role either one buys — this only carries it. */
+  async function joinServer(base, pin, key) {
     var url = (base ? String(base).replace(/\/+$/, "") + "/" : "") + "api/join";
     var res;
     try {
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ pin: String(pin || "") }),
+        body: JSON.stringify(key ? { key: String(key) } : { pin: String(pin || "") }),
         credentials: base ? "omit" : "same-origin",
         cache: "no-store"
       });
@@ -127,7 +130,7 @@
     }
     var body = null;
     try { body = await res.json(); } catch (e) { /* not JSON at all */ }
-    if (res.ok && body && body.token) return { ok: true, token: body.token };
+    if (res.ok && body && body.token) return { ok: true, token: body.token, role: body.role || "edit" };
     if (res.status === 429) return { ok: false, error: "too-many-attempts" };
     if (res.status === 404 || !body) return { ok: false, error: "not-splitpage" };
     return { ok: false, error: (body && body.error) || ("HTTP " + res.status) };
@@ -175,7 +178,11 @@
     var base = pinRequest.base;
     setServerToken(result.token, remember);
     closePinDialog();
-    showToast("Joined" + (base ? " " + shortHost(base) : "") + ".", "ok");
+    /* Which code was typed decides what the session is, and the server has
+       just said which — worth saying out loud, so nobody discovers it by
+       finding they cannot type. */
+    showToast("Joined" + (base ? " " + shortHost(base) : "") +
+      (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
     if (done) { done(); return; }
     /* No caller waiting: this was a code asked for mid-flight, so pick the
        detection back up where it stopped. */
@@ -194,6 +201,7 @@
     setConnectError("");
     modal.hidden = false;
     renderConnect();
+    renderReviewLink();
     /* Desktop's own "who's connected to me" summary — defined in
        20f-desktop.js, a no-op (and the element it would fill stays hidden)
        whenever DESKTOP is null, i.e. the whole web build. */
@@ -210,6 +218,33 @@
     if (!el) return;
     el.textContent = message || "";
     el.hidden = !message;
+  }
+
+  /* ---- the review link ----
+
+     Offered beside the addresses because that is what it is: another address
+     for this same session, one that opens it to be read and commented on and
+     nothing else. Hidden unless this launch actually has a review credential
+     and this browser is an editor here — a reviewer has nothing to hand on.
+     Async and last, so a server that is slow to answer never holds up the
+     dialog itself. */
+  var reviewLinkUrl = "";
+
+  async function renderReviewLink() {
+    var box = document.getElementById("connect-review");
+    if (!box) return;
+    reviewLinkUrl = await fetchReviewLink();
+    if (!reviewLinkUrl) { box.hidden = true; box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="connect-add-title">Share it to read and comment</div>' +
+      '<p class="modal-hint">Whoever opens this can read the script, present it and export it, ' +
+      'and leave comments — the server refuses every other change, whatever their copy of ' +
+      'Splitpage lets them click.</p>' +
+      '<div class="connect-share-url">' + escapeHtml(reviewLinkUrl) + '</div>' +
+      '<div class="modal-row">' +
+        '<span class="modal-hint">Restarting the session invalidates it, like the PIN.</span>' +
+        '<button type="button" class="btn" data-connect-action="review-copy">Copy review link</button>' +
+      '</div>';
+    box.hidden = false;
   }
 
   function renderConnect() {
@@ -341,12 +376,22 @@
   async function useServer(bookmark) {
     setServerBase(bookmark.url);
     serverDoc = { id: null, rev: 0 };
-    serverMode = { available: false, readOnly: false, checked: false, authRequired: false, version: null };
+    /* The role belongs to the server that granted it, like the token: what
+       the new one says about this browser is not known until it answers. */
+    serverRole = "";
+    serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
+                   reviewAvailable: false, version: null };
     updateConnectMenu();
     renderConnect();
     await detectServer();
+    /* Whatever is on screen is nobody's hosted document now, so it is not a
+       review of one either — rebuild it as the ordinary editable document it
+       has become. */
+    applyReviewMode();
+    if (state) render();
     updateFileChip();
     renderConnect();
+    renderReviewLink();
     if (serverMode.available && !(serverMode.authRequired && !serverToken)) {
       showToast("Now using " + (bookmark.name || shortHost(bookmark.url)) +
         " — open a document from the File menu.", "ok");
@@ -392,11 +437,15 @@
     setServerBase("");
     clearServerToken();
     serverDoc = { id: null, rev: 0 };
-    serverMode = { available: false, readOnly: false, checked: false, authRequired: false, version: null };
+    serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
+                   reviewAvailable: false, version: null };
     updateConnectMenu();
     await detectServer();
+    applyReviewMode();
+    if (state) render();
     updateFileChip();
     renderConnect();
+    renderReviewLink();
     showToast("Back to this copy of Splitpage.", "ok");
   }
 
@@ -421,14 +470,13 @@
     document.getElementById("connect-ssh-out").hidden = false;
   }
 
-  async function copySshCommand() {
-    if (!sshShownFor) return;
-    var b = bookmarkById(sshShownFor);
-    if (!b) return;
-    var text = sshCommandFor(b);
+  /* navigator.clipboard needs a secure origin, and a shared session on a LAN
+     is plain HTTP — so the old textarea trick is the path that actually runs
+     most of the time here, not the fallback it looks like. */
+  async function copyPlainText(text, okMsg, failMsg) {
     try {
       await navigator.clipboard.writeText(text);
-      showToast("Command copied.", "ok");
+      showToast(okMsg, "ok");
       return;
     } catch (e) { /* no permission, or an insecure origin — fall back */ }
     try {
@@ -441,10 +489,24 @@
       ta.select();
       document.execCommand("copy");
       ta.remove();
-      showToast("Command copied.", "ok");
+      showToast(okMsg, "ok");
     } catch (err) {
-      showToast("Could not copy — select the command and copy it by hand.", "warn");
+      showToast(failMsg, "warn");
     }
+  }
+
+  async function copySshCommand() {
+    if (!sshShownFor) return;
+    var b = bookmarkById(sshShownFor);
+    if (!b) return;
+    await copyPlainText(sshCommandFor(b), "Command copied.",
+      "Could not copy — select the command and copy it by hand.");
+  }
+
+  async function copyReviewLink() {
+    if (!reviewLinkUrl) return;
+    await copyPlainText(reviewLinkUrl, "Review link copied — anyone who opens it can comment, not edit.",
+      "Could not copy — select the address and copy it by hand.");
   }
 
   /* A .cmd rather than a .bat only because that is what Windows has called
@@ -528,6 +590,7 @@
         else if (action === "ssh-show") showSshFor(id);
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
+        else if (action === "review-copy") copyReviewLink();
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");

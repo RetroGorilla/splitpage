@@ -200,8 +200,8 @@ Menu with two shortcuts:
   addresses to open and the PIN; closing Splitpage stops sharing.
 
 **Command-line flags** match the browser launcher's: `--library`, `--host`,
-`--pin [code]`, `--data DIR`, `--port N`, `--allow-origin URL` and
-`--tunnel user@host`. The desktop app has no console window to type an SSH
+`--pin [code]`, `--review-pin [code]`, `--share-readonly`, `--data DIR`,
+`--port N`, `--allow-origin URL` and `--tunnel user@host`. The desktop app has no console window to type an SSH
 password into, so `--tunnel` needs key-based SSH login. Script files named on
 the command line open at launch.
 
@@ -310,6 +310,27 @@ for Cloudflare Access on the internet.
 The code is remembered for as long as the other person's browser tab is open,
 unless they tick "remember on this device". Restarting your session invalidates
 every code you handed out.
+
+### Letting someone comment without letting them edit
+
+```
+node start.mjs --host --pin --review-pin
+```
+
+The launcher prints a second address — the same one with `#review=…` on the end
+— and a second six-digit code beside it. Either one opens the document to be
+**read and commented on**: the script renders, the teleprompter and every export
+work, comments and replies can be added, and nothing else can change. Fields are
+not editable, the header says *Viewing · comments only*, and **File ▸ Servers…**
+has a **Copy review link** button for handing the address on. `--share-readonly`
+is the same thing with both codes generated for you.
+
+The refusal is your computer's, not the page's: the server compares what a
+review session sends against what it has stored and accepts only added comments
+and replies, so it does not matter what the other person's copy of Splitpage
+lets them click, or what they type into their browser's console. They cannot
+resolve or delete anyone's comments either. Restarting your session invalidates
+the review link and both codes.
 
 ## Connecting to a server
 

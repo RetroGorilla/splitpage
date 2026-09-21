@@ -1,0 +1,182 @@
+# A review session (issue #30): the editor with the writing taken out of it.
+#
+# What is NOT here: whether the SERVER actually refuses a review client's
+# document writes. That is the half that matters and it lives in
+# `node tools/test-server.mjs` — this harness serves static files and cannot
+# start server.js with an environment. Everything below is the other half:
+# what the page does with the role the server hands it, driven through
+# window.__hostedTest.setSession(), which says exactly what /api/health,
+# /api/join and /api/me would have said and nothing more.
+#
+# The review key has to be in the address at LOAD time (the app reads the
+# fragment once, on the way up), so it goes on `open` itself.
+
+open /index.html#review=abc123def456
+sleep 600
+expect document.querySelectorAll('#rows .row').length == 2
+
+# --- the review link's key is read, kept for this tab, and taken out of the URL
+# Same rule as the launcher's key: a screenshot, a bookmark or a pasted link
+# must not carry it, and it must not outlive the launch that minted it.
+expect location.hash === ''
+expect location.href.indexOf('review=') === -1
+expect sessionStorage.getItem('splitpage-review-key') == abc123def456
+expect localStorage.getItem('splitpage-review-key') === null
+
+# --- a key on its own restricts nothing --------------------------------------
+# Nothing is hosted here. The role only ever comes from the server, so until
+# one says "review" this is an ordinary local document, fully editable.
+expect window.__hostedTest.reviewMode() === false
+expect document.body.classList.contains('is-review') === false
+expect document.getElementById('review-chip').hidden === true
+expect document.querySelectorAll('#rows .cell-editable[contenteditable="true"]').length == 4
+
+# --- the server says this session is a review session ------------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 300
+expect window.__hostedTest.reviewMode() === true
+expect document.body.classList.contains('is-review')
+
+# --- and the editor says so, rather than silently dropping edits ------------
+expect document.getElementById('review-chip').hidden === false
+expect document.getElementById('review-chip').offsetParent !== null
+expect document.getElementById('review-chip').textContent.indexOf('comments only') !== -1
+expect document.getElementById('doc-title').readOnly === true
+
+# --- every script field is non-editable ------------------------------------
+expect document.querySelectorAll('#rows .cell-editable').length == 4
+expect document.querySelectorAll('#rows .cell-editable[contenteditable="false"]').length == 4
+expect document.querySelectorAll('#rows .cell-editable[contenteditable="true"]').length == 0
+
+# --- status, reorder, insert/delete and the image controls are not rendered -
+expect document.querySelectorAll('#rows .gutter-btn').length == 0
+expect document.querySelectorAll('#rows [data-action="cycle-status"]').length == 0
+expect document.querySelectorAll('#rows [data-action="drag-grip"]').length == 0
+expect document.querySelectorAll('#rows [data-action="image-add"]').length == 0
+expect document.querySelectorAll('#rows [data-action="image-remove"]').length == 0
+# ...while the scene number, its duration and its status colour still show:
+# this is a reader's view of the script, not a stripped-down one
+expect document.querySelectorAll('#rows .row-num').length == 2
+expect document.querySelectorAll('#rows .status-dot').length == 2
+
+# --- the one thing left in a field's toolbar is Comment ---------------------
+expect document.querySelectorAll('#rows .mini-toolbar button').length == 4
+expect document.querySelectorAll('#rows .mini-toolbar button[data-cmd="comment"]').length == 4
+expect document.querySelectorAll('#rows .mini-toolbar button[data-cmd="bold"]').length == 0
+expect document.querySelectorAll('#rows .mini-toolbar button[data-cmd="tag"]').length == 0
+
+# --- a field still takes focus, which is how the words to comment on get
+# selected — contenteditable is gone, so a tabindex is what gives it back
+expect document.querySelector('#rows .cell-editable').getAttribute('tabindex') == 0
+expect (function(){var c=document.querySelector('#rows .cell-editable');c.focus();return document.activeElement===c;})()
+expect getComputedStyle(document.querySelector('#rows .mini-toolbar')).display == flex
+shot 43-review-fields
+
+# --- and typing into it does nothing --------------------------------------
+eval window.__t0 = document.getElementById('rows').innerHTML
+press hello
+sleep 200
+expect document.getElementById('rows').innerHTML === window.__t0
+# Ctrl+Enter is "start the next scene" — not from here
+key ctrl Enter
+sleep 200
+expect document.querySelectorAll('#rows .row').length == 2
+
+# --- a control left in the page shell is refused by the guard, not by CSS ---
+# The Add row bar is hidden rather than removed, so clicking it is the way to
+# prove the click delegation itself refuses a write (and says why) instead of
+# relying on nobody being able to reach the button.
+expect document.querySelector('.add-row-bar').offsetParent === null
+jsclick .add-row-bar [data-action="add-row"]
+sleep 300
+expect document.querySelectorAll('#rows .row').length == 2
+expect document.getElementById('toast-host').textContent.indexOf('Viewing only') !== -1
+
+# --- the writer is a writing surface end to end, so it is not offered -------
+expect document.getElementById('btn-write').offsetParent === null
+jsclick #btn-write
+sleep 300
+expect document.getElementById('writer').hidden
+
+# --- find still works; replacing does not ----------------------------------
+expect document.getElementById('find-replace').offsetParent === null
+expect document.getElementById('find-replace-all').offsetParent === null
+
+# --- the body class is a symptom, not the source ---------------------------
+# Taking it off is exactly the "flip it in local state" move the role must
+# survive: the fields are built from what the SERVER said, and the click
+# guard asks the same question, so nothing comes back.
+eval (function(){document.body.classList.remove('is-review');return 1;})()
+expect window.__hostedTest.reviewMode() === true
+expect document.querySelectorAll('#rows .cell-editable[contenteditable="true"]').length == 0
+jsclick .add-row-bar [data-action="add-row"]
+sleep 300
+expect document.querySelectorAll('#rows .row').length == 2
+# nor does writing a token into storage promote anybody
+eval (function(){localStorage.setItem('splitpage-server-token','f'.repeat(64));return 1;})()
+expect window.__hostedTest.role() == review
+
+# --- comments: a reviewer may add to a thread and nothing else -------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 200
+jsclick #btn-comments
+sleep 400
+expect document.querySelectorAll('#comments-list .comment-card').length == 1
+expect document.querySelectorAll('#comments-list [data-action="toggle-resolve"]').length == 0
+expect document.querySelectorAll('#comments-list [data-action="delete-comment"]').length == 0
+expect document.querySelectorAll('#comments-list [data-action="toggle-reply"]').length == 1
+jsclick #comments-list [data-action="toggle-reply"]
+sleep 300
+expect document.querySelectorAll('#comments-list .reply-composer').length == 1
+# the reply's own field is editable — it is not part of the script
+expect document.querySelector('#comments-list .reply-composer .cell-editable').getAttribute('contenteditable') == true
+shot 43-review-comments
+jsclick #comments-panel-close
+sleep 200
+
+# --- the same session as an editor: everything is back ---------------------
+eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
+sleep 300
+expect window.__hostedTest.reviewMode() === false
+expect document.body.classList.contains('is-review') === false
+expect document.getElementById('review-chip').hidden === true
+expect document.querySelectorAll('#rows .cell-editable[contenteditable="true"]').length == 4
+expect document.querySelectorAll('#rows .gutter-btn').length == 8
+expect document.querySelectorAll('#rows .mini-toolbar button[data-cmd="tag"]').length == 4
+expect document.getElementById('doc-title').readOnly === false
+
+# --- the review link, offered to the host and to nobody else ---------------
+# /api/share is the only place the link's key comes from, and there is no
+# server here — so it is stubbed at the fetch, which is exactly the boundary
+# the page has to get right.
+eval (function(){var real=window.fetch;window.fetch=function(u,o){if(String(u).indexOf('api/share')!==-1){return Promise.resolve(new Response(JSON.stringify({reviewAvailable:true,reviewKey:'k1k2k3'}),{status:200,headers:{'content-type':'application/json'}}));}return real(u,o);};return 1;})()
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="servers"]
+wait !document.getElementById('connect-review').hidden
+expect document.getElementById('connect-review').textContent.indexOf('read and comment') !== -1
+expect document.querySelector('#connect-review .connect-share-url').textContent.indexOf('#review=k1k2k3') !== -1
+expect document.querySelectorAll('#connect-review [data-connect-action="review-copy"]').length == 1
+shot 43-review-link
+jsclick #connect-modal [data-connect-action="close"]
+sleep 200
+
+# --- a reviewer has nothing to hand on, so they are not offered it ---------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 200
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="servers"]
+sleep 500
+expect document.getElementById('connect-review').hidden === true
+jsclick #connect-modal [data-connect-action="close"]
+sleep 200
+
+# --- a local document is not somebody else's session ----------------------
+# The role belongs to the server; this tab can still have a file of its own,
+# and it is not read-only just because a hosted document was.
+eval window.__hostedTest.setSession({role:'review',docId:null})
+sleep 300
+expect window.__hostedTest.reviewMode() === false
+expect document.body.classList.contains('is-review') === false
+expect document.querySelectorAll('#rows .cell-editable[contenteditable="true"]').length == 4

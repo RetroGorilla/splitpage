@@ -218,6 +218,22 @@ if (argHas(rawArgv, "--pin")) {
   JOIN_PIN = (given && !given.startsWith("--")) ? given.trim() : String(crypto.randomInt(0, 1000000)).padStart(6, "0");
 }
 
+/* The comment-only credential, exactly as start.mjs mints it: a second code,
+   plus a per-launch key that a review LINK carries in its fragment. Asking
+   for one asks for a join PIN too — with no PIN there is nothing to be a
+   second, lesser key to. server.js enforces what it allows; this only
+   carries it across, and the renderer only ever learns it through the
+   session-info reply the Servers dialog already reads (invariant #34: no
+   new power on the bridge, one more field on an answer it already gets). */
+let REVIEW_PIN = "";
+if (argHas(rawArgv, "--review-pin") || argHas(rawArgv, "--share-readonly")) {
+  const given = argValueOf(rawArgv, "--review-pin", "");
+  REVIEW_PIN = (given && !given.startsWith("--")) ? given.trim() : String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+  if (!JOIN_PIN) JOIN_PIN = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+  if (REVIEW_PIN === JOIN_PIN) REVIEW_PIN = "";   /* server.js would ignore it anyway */
+}
+const REVIEW_KEY = REVIEW_PIN ? crypto.randomBytes(16).toString("hex") : "";
+
 const TUNNEL_TARGET = argHas(rawArgv, "--tunnel") ? argValueOf(rawArgv, "--tunnel", "") : null;
 const TUNNEL_REMOTE_PORT = Number(argValueOf(rawArgv, "--remote-port", 8791));
 const TUNNEL_LOCAL_PORT = Number(argValueOf(rawArgv, "--local-port", String(TUNNEL_REMOTE_PORT)));
@@ -2395,6 +2411,8 @@ async function startDocumentServer() {
       DATA_DIR,
       NO_API: "0",
       JOIN_PIN,
+      REVIEW_PIN,
+      REVIEW_KEY,
       ALLOW_ORIGINS: ALLOW_ORIGINS.join(","),
       /* The Start-Menu launcher's loopback-only install routes have no
          meaning inside the desktop app — there is no Start Menu entry for
@@ -4728,6 +4746,13 @@ function registerIpc() {
         ? lanAddresses().map((addr) => `http://${addr}:${documentServerPort}/`)
         : [],
       pin: JOIN_PIN || "",
+      reviewPin: REVIEW_PIN || "",
+      /* The same addresses with this launch's review key in the fragment —
+         built here rather than in the page so the key never has to be a
+         field of its own on the way over. */
+      reviewUrls: HOSTING && documentServerPort && REVIEW_KEY
+        ? lanAddresses().map((addr) => `http://${addr}:${documentServerPort}/#review=${REVIEW_KEY}`)
+        : [],
       testDialogsSeen: TEST_MODE ? testDialogsSeen : undefined
     };
   });
