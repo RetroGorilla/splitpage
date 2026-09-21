@@ -1,0 +1,136 @@
+# File > Export app data.. driven on the DESKTOP path (src/js/20h-appdata.js's
+# X1, src/js/03a-history-store.js's desktopHistoryBackend and exportHistoryAll)
+# — the desktop-side counterpart to 27-app-data.txt, which only ever exercises
+# the browser/IndexedDB path. Everything here runs against
+# window.__desktopTest's fake backend (20f-desktop.js), history-capable
+# (makeFakeBackend({history:true})), exactly as 21-desktop-shim.txt's import
+# cases already do for X2. Every eval is one line — this driver reads a
+# script one command per line, same as 27-app-data.txt's own multi-statement
+# evals.
+#
+# Two documents' history are seeded directly through the fake backend's own
+# historyPut/historyImportOlder — not through openFixture/pushForeign — on
+# purpose: exportHistoryAll() has to enumerate every document the STORE
+# knows about via DESKTOP.historyListDocs(), not just whatever happens to be
+# open in this tab, and seeding two undisplayed documents is what actually
+# exercises that enumeration.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.A = window.__appDataTest; window.did = function(tag){ return 'd' + (tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag).slice(0, 32); }; return !!(F && D && H && A && A.build && A.assertNoSecrets && A.parse && A.importText && D.makeFakeBackend && D.setBackend && D.initDesktop);})()
+expect true
+
+# =============================================================================
+# 1. Seed a fake desktop backend with two documents' history, an Older
+# snapshot, a bookmark and a preference, then boot the desktop glue against
+# it — this is the first point at which initDesktop() ever runs against a
+# non-null DESKTOP in this suite, so it is also where the menu-visibility
+# switch (X1 now unhidden, X2 still unhidden) is actually exercised.
+# =============================================================================
+eval (function(){ window.__d1 = did('e1'); window.__d2 = did('e2'); return [window.__d1, window.__d2]; })()
+
+eval (async function(){ window.fakeE = D.makeFakeBackend({history: true}); D.setBackend(window.fakeE); await window.fakeE.historyPut(window.__d1, {id: 'sexp1', label: 'Doc1 Snap A', at: new Date(2000).toISOString(), atMs: 2000, by: 'Alice', rows: 2, title: 'Export Doc One', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'doc1-a'}], title: 'Export Doc One', docId: window.__d1})); await window.fakeE.historyPut(window.__d1, {id: 'sexp2', label: 'Doc1 Snap B', at: new Date(3000).toISOString(), atMs: 3000, by: 'Alice', rows: 2, title: 'Export Doc One', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'doc1-b'}], title: 'Export Doc One', docId: window.__d1})); await window.fakeE.historyPut(window.__d2, {id: 'sexp3', label: 'Doc2 Snap A', at: new Date(2500).toISOString(), atMs: 2500, by: 'Bob', rows: 1, title: 'Export Doc Two', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'doc2-a'}], title: 'Export Doc Two', docId: window.__d2})); await window.fakeE.historyImportOlder([{ meta: {id: 'sexpolder1', label: 'Older One', at: new Date(1000).toISOString(), atMs: 1000, by: '', rows: 1, title: '', kind: 'snapshot'}, stateJson: JSON.stringify({rows: [{id: 'r1', audioText: 'older-one'}], title: 'Older Doc'}) }]); localStorage.setItem('splitpage-server-bookmarks', JSON.stringify([{id: 'sexpbm1', name: 'Export Server', url: 'http://export.example/'}])); localStorage.setItem('splitpage-comment-author', 'Export Author'); D.initDesktop(); return true; })()
+expect true
+
+wait !document.getElementById('menu-export-app-data').hidden
+expect !document.getElementById('menu-import-app-data').hidden
+
+# =============================================================================
+# 2. Build the export bundle (A.build(), same entry point exportAppData()
+# uses) against the desktop backend and check its shape: same format/version/
+# exportedAt/appVersion fields as the browser build, both seeded documents
+# enumerated with their titles and snapshot bodies, the Older bucket, the
+# bookmark and the preference.
+# =============================================================================
+eval (async function(){ window.__expBundle = await A.build(); return window.__expBundle; })()
+expect window.__expBundle.format === 'splitpage-app-data'
+expect window.__expBundle.version === 1
+expect typeof window.__expBundle.exportedAt === 'string' && window.__expBundle.exportedAt.length > 0
+expect typeof window.__expBundle.appVersion === 'string'
+expect window.__expBundle.history !== null
+expect window.__expBundle.history.docs.length === 2
+
+eval (function(){ window.__expDoc1 = window.__expBundle.history.docs.filter(function(d){return d.docId === window.__d1;})[0]; return window.__expDoc1; })()
+expect window.__expDoc1 !== undefined
+expect window.__expDoc1.title === 'Export Doc One'
+expect window.__expDoc1.snapshots.length === 2
+eval (function(){ window.__expIds1 = window.__expDoc1.snapshots.map(function(s){return s.meta.id;}).sort(); return window.__expIds1; })()
+expect window.__expIds1.join(',') === 'sexp1,sexp2'
+
+eval (function(){ window.__expDoc2 = window.__expBundle.history.docs.filter(function(d){return d.docId === window.__d2;})[0]; return window.__expDoc2; })()
+expect window.__expDoc2 !== undefined
+expect window.__expDoc2.title === 'Export Doc Two'
+expect window.__expDoc2.snapshots.length === 1
+expect window.__expDoc2.snapshots[0].meta.id === 'sexp3'
+expect window.__expDoc2.snapshots[0].stateJson.indexOf('doc2-a') !== -1
+
+expect window.__expBundle.history.older.length === 1
+expect window.__expBundle.history.older[0].meta.id === 'sexpolder1'
+expect window.__expBundle.bookmarks.length === 1
+expect window.__expBundle.bookmarks[0].url === 'http://export.example/'
+expect window.__expBundle.prefs.commentAuthor === 'Export Author'
+
+# =============================================================================
+# 3. invariant #48: the same explicit key walk 27-app-data.txt's own case 2
+# runs, over a bundle that actually came from the desktop path this time —
+# and assertNoSecrets() itself does not throw on it.
+# =============================================================================
+eval (function(){ window.__ekKeys = []; (function walk(v){ if (!v || typeof v !== 'object') return; if (Array.isArray(v)) { v.forEach(walk); return; } Object.keys(v).forEach(function(k){ window.__ekKeys.push(k); walk(v[k]); }); })(window.__expBundle); window.__ekBad = window.__ekKeys.filter(function(k){ return /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i.test(k); }); return window.__ekBad; })()
+expect window.__ekBad.length === 0
+eval (function(){ window.__ekThrew = false; try { A.assertNoSecrets(window.__expBundle); } catch (e) { window.__ekThrew = true; } return window.__ekThrew; })()
+expect window.__ekThrew === false
+
+# =============================================================================
+# 4. round trip: a FRESH fake desktop backend (nothing in it) plus cleared
+# bookmarks/prefs, then import the bundle straight back through the real X2
+# path (A.importText). Every document, snapshot body, the Older entry and
+# the bookmark come back; the preference is filled in because this machine
+# now has none.
+# =============================================================================
+eval (function(){ window.fakeF = D.makeFakeBackend({history: true}); D.setBackend(window.fakeF); localStorage.removeItem('splitpage-server-bookmarks'); localStorage.removeItem('splitpage-comment-author'); return typeof window.fakeF.historyPut === 'function' && localStorage.getItem('splitpage-comment-author') === null; })()
+expect true
+
+eval (async function(){ window.__impResult = await A.importText(JSON.stringify(window.__expBundle)); return window.__impResult; })()
+expect window.__impResult.ok === true
+expect window.__impResult.history.docs === 2
+expect window.__impResult.history.added === 3
+expect window.__impResult.history.older === 1
+expect window.__impResult.history.failed === 0
+expect window.__impResult.bookmarks.added === 1
+expect window.__impResult.bookmarks.failed === 0
+
+eval (function(){ window.__impDump = window.fakeF._historyDump(); return Object.keys(window.__impDump).sort(); })()
+expect window.__impDump[window.__d1].length === 2
+expect window.__impDump[window.__d2].length === 1
+expect window.__impDump._older.length === 1
+
+eval (function(){ window.__impIds1 = window.__impDump[window.__d1].map(function(e){return e.meta.id;}).sort(); return window.__impIds1; })()
+expect window.__impIds1.join(',') === 'sexp1,sexp2'
+eval (function(){ window.__impBodyA = window.__impDump[window.__d1].filter(function(e){return e.meta.id === 'sexp1';})[0].stateJson; return window.__impBodyA; })()
+expect window.__impBodyA.indexOf('doc1-a') !== -1
+eval (function(){ window.__impIds2 = window.__impDump[window.__d2].map(function(e){return e.meta.id;}); return window.__impIds2; })()
+expect window.__impIds2.join(',') === 'sexp3'
+eval (function(){ window.__impOlderIds = window.__impDump._older.map(function(e){return e.meta.id;}); return window.__impOlderIds; })()
+expect window.__impOlderIds.join(',') === 'sexpolder1'
+
+eval (function(){ window.__impBm = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return window.__impBm; })()
+expect window.__impBm.length === 1
+expect window.__impBm[0].url === 'http://export.example/'
+expect localStorage.getItem('splitpage-comment-author') === 'Export Author'
+
+# A second export off the FRESH backend, right after the round trip, matches
+# the original in everything but the timestamp the export itself stamps.
+eval (async function(){ window.__reExport = await A.build(); return window.__reExport; })()
+expect window.__reExport.history.docs.length === 2
+expect window.__reExport.history.older.length === 1
+eval (function(){ window.__reDoc1 = window.__reExport.history.docs.filter(function(d){return d.docId === window.__d1;})[0]; return window.__reDoc1.snapshots.length; })()
+expect window.__reDoc1.snapshots.length === 2
+
+# =============================================================================
+# cleanup
+# =============================================================================
+eval (function(){ D.restoreBackend(); localStorage.removeItem('splitpage-server-bookmarks'); localStorage.removeItem('splitpage-comment-author'); return true; })()
+expect true
+expect !window.splitpageDesktop
+
+quit

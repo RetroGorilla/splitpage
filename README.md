@@ -37,8 +37,8 @@ Windows may say it "protected your PC" — click **More info ▸ Run anyway**.
 installer finds it, removes it, and keeps your shared-session documents; the
 browser version updates itself, nothing to do.
 
-**Moving your browser data over?** See
-[Moving from the browser app to the desktop app](#moving-from-the-browser-app-to-the-desktop-app).
+**Moving your data between the browser and desktop apps?** See
+[Moving between the browser app and the desktop app](#moving-between-the-browser-app-and-the-desktop-app).
 
 **Follow My Voice** isn't available in the desktop app yet — it still works
 in the browser version.
@@ -108,17 +108,19 @@ exceptions for now:
   works: it opens the Doc's .docx download in your browser, and you then open
   the downloaded file with File ▸ Open.
 
-### Moving from the browser app to the desktop app
+### Moving between the browser app and the desktop app
 
-If you have been using the browser version and want to move to the desktop app,
-you can bring your version history, saved servers, and preferences with you:
+**File ▸ Export app data…** and **File ▸ Import app data…** work the same way
+in both the browser app and the desktop app, so you can carry your version
+history, saved servers, and preferences either direction — moving to the
+desktop app, moving back, or just backing up:
 
-1. In the browser app, **File ▸ Export app data…** saves a `.json` file with
-   your history, servers, and settings (`splitpage-app-data-YYYYMMDD.json`).
-2. Install and launch the desktop app.
-3. In the desktop app, **File ▸ Import app data…** and pick the file you
-   exported. Everything merges into what you already have — nothing is
-   overwritten or deleted, and importing the same file twice adds nothing new.
+1. **File ▸ Export app data…** saves a `.json` file with your history,
+   servers, and settings (`splitpage-app-data-YYYYMMDD.json`).
+2. On the other app (or the other machine), **File ▸ Import app data…** and
+   pick the file you exported. Everything merges into what you already have —
+   nothing is overwritten or deleted, and importing the same file twice adds
+   nothing new.
 
 **What travels:** version history (every snapshot you've saved, per document and
 in the Older archive), saved servers (bookmarks including SSH settings), and
@@ -128,10 +130,6 @@ sorting preference, writer column width, and the tagging-help dismissal).
 **What does not travel:** server sign-in tokens or PINs, Google Drive API keys,
 and the documents themselves — those are files you already have on your
 computer.
-
-Export is currently available in the browser app only. The desktop app's history
-backend is stored as files on disk, and exporting from it is planned but not yet
-built.
 
 ### Tabs
 
