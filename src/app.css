@@ -1519,6 +1519,53 @@
   .review-chip[hidden] { display: none; }
   .review-chip-icon { font-size: 12px; }
 
+  /* ---------- who else is here (13a-presence.js) ----------
+     A badge per person: initials in their own colour, in the header and
+     again beside whatever they are editing. `pointer-events: none` on the
+     marks matters — they sit inside #rows and .field-wrap, where a click
+     would otherwise reach the row's own delegated handlers. */
+  .presence-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .presence-bar[hidden] { display: none; }
+  .presence-chip, .presence-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: var(--presence, var(--text-dim));
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    flex: none;
+    box-shadow: 0 0 0 1.5px var(--surface);
+  }
+  .presence-mark {
+    width: 18px;
+    height: 18px;
+    font-size: 8.5px;
+    pointer-events: none;
+  }
+  /* In the gutter it sits under the row's controls, in the flex column. On a
+     field it is pinned to the corner of the box being typed in, which is the
+     warning worth seeing before you start. */
+  .presence-mark.is-field {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    z-index: 2;
+  }
+
   /* The controls a review session never renders are gone from the markup
      (05-render.js, 10-comments.js); these are the ones that live in the page
      shell, so hiding them here is the only place it can happen. */
