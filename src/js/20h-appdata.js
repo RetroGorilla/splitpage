@@ -1,20 +1,21 @@
-  /* ================= export/import: the whole app's browser data =================
+  /* ================= export/import: the whole app's data =================
 
-     File ▸ Export app data… (X1, this file) lets someone moving from the
-     browser build to the desktop app take their version history, server
-     bookmarks and preferences with them — none of which live in a document,
-     so opening a file never carries them. File ▸ Import app data… (X2, the
-     second half of this file) is the desktop-side merge: parse and refuse
-     what did not come from this app, then MERGE, NEVER REPLACE — history
-     only through importHistoryBundle (03a-history-store.js, invariant #49),
-     bookmarks as a union where the existing entry wins, preferences only
-     where this machine has none.
+     File ▸ Export app data… (X1, this file) lets someone take their version
+     history, server bookmarks and preferences to another machine or between
+     the browser build and the desktop app — none of which live in a
+     document, so opening a file never carries them. File ▸ Import app
+     data… (X2, the second half of this file) is the merge on the receiving
+     side: parse and refuse what did not come from this app, then MERGE,
+     NEVER REPLACE — history only through importHistoryBundle
+     (03a-history-store.js, invariant #49), bookmarks as a union where the
+     existing entry wins, preferences only where this machine has none.
 
-     Export is deliberately browser-only for now (the desktop history store
-     cannot enumerate its own documents without new main-process IPC —
-     exportHistoryAll() answers that with a rejection, not an empty bundle,
-     and buildAppDataBundle() below lets that section fail on its own without
-     failing the whole export).
+     Both directions run in every build. exportHistoryAll()
+     (03a-history-store.js) reads through whichever history backend this
+     page resolved to — IndexedDB/memory in the browser, or the desktop
+     bridge's DESKTOP.historyListDocs() enumerating main's on-disk store —
+     and buildAppDataBundle() below lets that one section fail on its own
+     (a backend that cannot answer, say) without failing the whole export.
 
      WHAT NEVER LEAVES: a server sign-in token, a Drive API key or client id,
      the last-used Drive folder, a launch token, a conflict stash, or the
@@ -137,11 +138,11 @@
     return "splitpage-app-data-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".json";
   }
 
-  /* File ▸ Export app data… (browser only — 20f-desktop.js's initDesktop
-     hides this entry and unhides "import-app-data" instead, X2). Gathers,
-     asserts, then hands off to deliverFile() the same way every export in
-     18-local-files.js already does (browser download, or the desktop native
-     Save dialog on the rare case this ever runs there too). */
+  /* File ▸ Export app data… (X1 — visible in both the browser and the
+     desktop app; 20f-desktop.js's initDesktop no longer hides this entry).
+     Gathers, asserts, then hands off to deliverFile() the same way every
+     export in 18-local-files.js already does: a browser download, or the
+     desktop native Save dialog. */
   async function exportAppData() {
     showToast("Gathering your Splitpage data…");
     /* Let the toast actually paint before the (possibly large) history read

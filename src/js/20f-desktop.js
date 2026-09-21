@@ -234,12 +234,13 @@
     var driveItem = document.getElementById("menu-drive-open");
     if (driveItem) driveItem.hidden = true;
 
-    /* App data moves one way: exported from the browser build, imported
-       here (X1/X2, 20h-appdata.js). Export stays hidden on the desktop
-       because its history store cannot enumerate its own documents yet
-       (exportHistoryAll refuses there); import is the desktop's half. */
+    /* App data (X1/X2, 20h-appdata.js) now travels both ways on desktop:
+       DESKTOP.historyListDocs() lets exportHistoryAll() enumerate the
+       on-disk history store the same way it walks IndexedDB in the browser,
+       so Export app data… no longer needs to stay hidden here. Import stays
+       visible too — the two sit side by side, same as the browser build. */
     var exportAppItem = document.getElementById("menu-export-app-data");
-    if (exportAppItem) exportAppItem.hidden = true;
+    if (exportAppItem) exportAppItem.hidden = false;
     var importAppItem = document.getElementById("menu-import-app-data");
     if (importAppItem) importAppItem.hidden = false;
 
@@ -699,6 +700,22 @@
       return Promise.resolve({ totalBytes: total, capBytes: Infinity, overCap: false, docCount: docCount, readOnly: false });
     };
 
+    /* The real bridge's splitpage:history-list-docs twin (desktop/main.js) —
+       every bucket that has ever had a put/touch against it, Older excluded,
+       exactly the documents historyPut()/historyTouch() above created a
+       record for. Backs desktopHistoryBackend.rawDocIds()/rawDoc()
+       (03a-history-store.js), which is what lets exportHistoryAll() run
+       against this fake the same way it runs against the real desktop store. */
+    backend.historyListDocs = function () {
+      var out = [];
+      Object.keys(records).forEach(function (bucket) {
+        if (bucket === HISTORY_OLDER_KEY) return;
+        var rec = records[bucket];
+        out.push({ docId: bucket, title: rec.title || "", lastOpenedAt: rec.lastOpenedAt || 0 });
+      });
+      return Promise.resolve(out);
+    };
+
     /* The whole store: bucket -> [{meta, stateJson}], oldest first. */
     backend._historyDump = function () {
       var out = {};
@@ -715,6 +732,14 @@
     makeHandle: makeDesktopHandle,
     runMenuCommand: runDesktopMenuCommand,
     makeFakeBackend: makeFakeDesktopBackend,
+    /* The real boot-time wiring (init(), 21-events.js) only calls this
+       against whatever DESKTOP already is at load — null in every browser
+       suite. Exposed so a test can re-run it AFTER setBackend() swaps a fake
+       in, which is the only way to exercise its menu-visibility toggling
+       (34-desktop-app-data-export.txt) headless. Safe to call more than
+       once: every DESKTOP.on*() registration just replaces the last handler
+       pointer, and the hidden-attribute writes are idempotent. */
+    initDesktop: initDesktop,
     setBackend: function (fake) {
       DESKTOP = fake;
       /* initDesktop() ran at boot against the REAL bridge, which in a browser
