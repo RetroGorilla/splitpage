@@ -96,6 +96,32 @@ body {
   flex: 0 1 180px;
   min-width: 76px;
   max-width: 180px;
+  /* WHY width + contain: inline-size (issue #17): .tab is itself a flex
+     container (icon/title/dot/close), and its title text has no fixed
+     length. .tabstrip__tabs is auto-sized (see its own comment below), so
+     it has to ask every .tab how wide it "wants" to be — and a nested flex
+     item's answer to that question is its CONTENT's natural width, not its
+     flex-basis (flex-basis only feeds the flex algorithm's own layout math,
+     not what an item reports to an ancestor sizing itself around its
+     children). So one tab's title text set the width every OTHER tab
+     reported to .tabstrip__tabs, which sized its whole row off whichever
+     title happened to be longest, and the row's flex-shrink then divided
+     that single number evenly across every tab — all of them tracked one
+     title, and none of them ever reached the 180px target.
+     `contain: inline-size` makes an element answer that question with "as
+     if it had no content", falling back to its explicit width — which is
+     why `width: 180px` is set here too, alongside (and equal to) the
+     flex-basis above: flex-basis still drives the actual shrink/grow math,
+     but it is `width` containment falls back to for what this element
+     reports outward. Together they make a .tab report a constant 180px to
+     any ancestor regardless of its title, so .tabstrip__tabs — and in turn
+     every tab's real, laid-out width — is driven only by the strip's real
+     available space (ordinary flex-shrink among equal 180px bases) and
+     never by what any tab's title says. Containment only affects that
+     outward report; the tab's own actual rendered width still governs
+     .tab__title's overflow/ellipsis below. */
+  width: 180px;
+  contain: inline-size;
   padding: 0 8px;
   margin: 4px 2px;
   border-radius: 6px;
