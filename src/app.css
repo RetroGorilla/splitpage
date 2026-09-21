@@ -3018,3 +3018,71 @@
     .newtab-cards.has-recents .newtab-recents { grid-column: 1 / -1; }
     .newtab-cards.has-recents .newtab-recents-list { max-width: 420px; }
   }
+
+  /* ---------- the local-file merge review pane (18a-local-merge.js) ---------- */
+
+  /* Five outcomes (Cancel / Load the newer file / Merge them / Save as a
+     copy / Overwrite it) are wider than a 560px panel. Nothing clipped them:
+     .modal-footer-actions is a nowrap flex row, so it simply spilled out of
+     the panel, and "Overwrite it" ended up drawn on the backdrop — where a
+     real click hits the backdrop, not the button, which is exactly how
+     19-save-conflict.txt and 28-autosave.txt caught it. The wider panel
+     keeps all five on one line at a normal window size; the wrap is the
+     guarantee that a narrower one puts them on two lines INSIDE the panel
+     rather than outside it. Same .modal-panel.<class> tie-break the Drive
+     panel above explains. */
+  .modal-panel.conflict-panel { max-width: 720px; }
+  .conflict-panel .modal-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+  /* Wider than an ordinary modal: two columns of script text side by side at
+     560px leave neither readable. */
+  .modal-panel.merge-review-panel { max-width: 780px; }
+  .merge-group { margin-bottom: 16px; }
+  .merge-group-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    font-family: var(--font-display); font-size: 12px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-faint);
+    padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .merge-group-note {
+    font-family: var(--font-body); font-size: 12px; letter-spacing: 0;
+    text-transform: none; color: var(--text-dim);
+  }
+  .merge-entry { margin-bottom: 12px; }
+  .merge-entry-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+  }
+  .merge-entry-outcome { font-weight: 400; font-size: 12px; color: var(--text-dim); }
+  /* A field both sides changed is the only one that loses something from
+     view, so it is the only one flagged. */
+  .merge-entry[data-outcome="conflict"] .merge-entry-outcome { color: var(--danger); }
+  .merge-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .merge-side {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); padding: 8px 10px; min-width: 0;
+  }
+  .merge-side-head {
+    font-family: var(--font-display); font-size: 10.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-faint); margin-bottom: 5px;
+  }
+  .merge-side-body {
+    font-size: 13.5px; line-height: 1.5; color: var(--text);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .diff-del {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    text-decoration: line-through; border-radius: 2px;
+  }
+  .diff-add {
+    background: color-mix(in srgb, var(--ok) 20%, transparent);
+    border-radius: 2px;
+  }
+  .diff-empty { color: var(--text-faint); font-style: italic; }
+  .diff-img { max-width: 100%; max-height: 120px; border-radius: var(--radius-sm); display: block; }
+
+  /* Side by side is the whole point, but two columns at 375px are two
+     columns of one word each — stack them instead. */
+  @media (max-width: 560px) {
+    .merge-sides { grid-template-columns: 1fr; }
+  }

@@ -643,6 +643,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `16-csv.js` | csv |
 | `17-pdf.js` | pdf, packing lists |
 | `18-local-files.js` | `openProjectFile`/`adoptProjectState`, save-back, File menu dispatch |
+| `18a-local-merge.js` | the on-disk conflict modal's "Merge them": the mergeable-file probe, the retained ancestor (`diskBase`), the field-by-field review pane and its word-level diff |
 | `19-writer.js` | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | teleprompter and voice follow |
 | `20a-update.js` | update notice (check, Download, Install), About box |

@@ -238,13 +238,21 @@
   }
 
   /* Turn a parsed project into the state to adopt. Async only because the
-     row-count question is a real modal — no silent choice. */
-  async function applyMarkdownProject(proj) {
+     row-count question is a real modal — no silent choice.
+
+     `opts.noAsk` is the one exception, and it is not a silent choice made on
+     the user's behalf: a caller only asking what is in a file (the merge
+     review's probe, 18a-local-merge.js) must not throw a modal over one the
+     user is already looking at, so it takes "keep the record" — exactly what
+     Esc means here — and the file is never adopted from that read. */
+  async function applyMarkdownProject(proj, opts) {
     var s = proj.state;
     if (proj.title && proj.title !== s.title) s.title = plainText(proj.title).slice(0, 300);
 
     if (proj.table.length === s.rows.length) {
       reconcileMarkdownRows(s, proj.table);
+    } else if (opts && opts.noAsk) {
+      /* keep the record */
     } else {
       var choice = await askMarkdownRowChoice(s.rows.length, proj.table.length);
       if (choice === "table") s.rows = rowsFromMarkdownTable(s, proj.table);
@@ -310,5 +318,12 @@
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return state; },
-    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; }
+    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; },
+    /* The local-file merge (18a-local-merge.js), for 42-local-merge.txt.
+       `hasDiskBase` proves the ancestor is being retained at open and at
+       save; `forgetDiskBase` drops it, which is the only way to drive the
+       two-way fallback from outside — once a file has been opened, nothing
+       a user can do takes the ancestor away again. */
+    hasDiskBase: function () { return !!(docFileHandle && docFileHandle.diskBase); },
+    forgetDiskBase: function () { if (docFileHandle) docFileHandle.diskBase = null; baseState = null; return true; }
   };

@@ -3052,6 +3052,74 @@
     .newtab-cards.has-recents .newtab-recents { grid-column: 1 / -1; }
     .newtab-cards.has-recents .newtab-recents-list { max-width: 420px; }
   }
+
+  /* ---------- the local-file merge review pane (18a-local-merge.js) ---------- */
+
+  /* Five outcomes (Cancel / Load the newer file / Merge them / Save as a
+     copy / Overwrite it) are wider than a 560px panel. Nothing clipped them:
+     .modal-footer-actions is a nowrap flex row, so it simply spilled out of
+     the panel, and "Overwrite it" ended up drawn on the backdrop — where a
+     real click hits the backdrop, not the button, which is exactly how
+     19-save-conflict.txt and 28-autosave.txt caught it. The wider panel
+     keeps all five on one line at a normal window size; the wrap is the
+     guarantee that a narrower one puts them on two lines INSIDE the panel
+     rather than outside it. Same .modal-panel.<class> tie-break the Drive
+     panel above explains. */
+  .modal-panel.conflict-panel { max-width: 720px; }
+  .conflict-panel .modal-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+  /* Wider than an ordinary modal: two columns of script text side by side at
+     560px leave neither readable. */
+  .modal-panel.merge-review-panel { max-width: 780px; }
+  .merge-group { margin-bottom: 16px; }
+  .merge-group-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    font-family: var(--font-display); font-size: 12px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-faint);
+    padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .merge-group-note {
+    font-family: var(--font-body); font-size: 12px; letter-spacing: 0;
+    text-transform: none; color: var(--text-dim);
+  }
+  .merge-entry { margin-bottom: 12px; }
+  .merge-entry-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+  }
+  .merge-entry-outcome { font-weight: 400; font-size: 12px; color: var(--text-dim); }
+  /* A field both sides changed is the only one that loses something from
+     view, so it is the only one flagged. */
+  .merge-entry[data-outcome="conflict"] .merge-entry-outcome { color: var(--danger); }
+  .merge-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .merge-side {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); padding: 8px 10px; min-width: 0;
+  }
+  .merge-side-head {
+    font-family: var(--font-display); font-size: 10.5px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-faint); margin-bottom: 5px;
+  }
+  .merge-side-body {
+    font-size: 13.5px; line-height: 1.5; color: var(--text);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .diff-del {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    text-decoration: line-through; border-radius: 2px;
+  }
+  .diff-add {
+    background: color-mix(in srgb, var(--ok) 20%, transparent);
+    border-radius: 2px;
+  }
+  .diff-empty { color: var(--text-faint); font-style: italic; }
+  .diff-img { max-width: 100%; max-height: 120px; border-radius: var(--radius-sm); display: block; }
+
+  /* Side by side is the whole point, but two columns at 375px are two
+     columns of one word each — stack them instead. */
+  @media (max-width: 560px) {
+    .merge-sides { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -3499,7 +3567,7 @@
 </div>
 
 <div class="modal-backdrop" id="file-conflict-modal" hidden>
-  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
+  <div class="modal-panel conflict-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
     <div class="modal-header">
       <h2 id="file-conflict-title">That file changed on disk</h2>
       <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close">×</button>
@@ -3510,8 +3578,33 @@
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="file-conflict-cancel">Cancel</button>
         <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
+        <!-- Shown only once the copy on disk has been read back as a
+             document there is something to merge with (18a-local-merge.js). -->
+        <button type="button" class="btn" id="file-conflict-merge" hidden>Merge them</button>
         <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
         <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Every field the two versions disagree about, side by side, BEFORE
+     mergeStates() runs and before anything is written (18a-local-merge.js).
+     Opens over the conflict modal, so Cancel puts its four original choices
+     straight back with nothing changed. -->
+<div class="modal-backdrop" id="merge-review-modal" hidden>
+  <div class="modal-panel merge-review-panel" role="dialog" aria-modal="true" aria-labelledby="merge-review-title">
+    <div class="modal-header">
+      <h2 id="merge-review-title">What's different</h2>
+      <button type="button" class="modal-close" id="merge-review-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint" id="merge-review-detail"></p>
+    <div id="merge-review-list"></div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="merge-review-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="merge-review-confirm">Merge them</button>
       </div>
     </div>
   </div>
@@ -3926,6 +4019,7 @@ node update.mjs           # download and verify it</code></pre>
 <p>Turn it off with <strong>File ▸ Autosave</strong>, and the file is written only when you press Save. The setting is remembered between launches. Either way, the desktop app keeps its own crash-safe copy of everything typed since the last save — see <a href="#help-desktop-app">Desktop app</a>.</p>
 <h3 id="help-if-you-edit-the-md-somewhere-else">If you edit the <code>.md</code> somewhere else</h3>
 <p>You can. Open it in any editor, fix a line of narration in the table, save, and reopen it in Splitpage — your edit is there. Splitpage compares the table against its own record cell by cell: a cell you did not touch keeps everything it had, and a cell you rewrote is taken from your version, with any tracked prop, location, cast, gear or sound name in it tagged again automatically. The one thing it cannot rescue is a comment that pointed at exact words in a cell you rewrote — the comment stays, along with the text it quoted, but it no longer has a place to point to and shows in the panel as no longer in the script. Changing the <code># </code> heading renames the script. Adding or deleting whole scene rows is the one thing Splitpage will not guess at: it asks whether to keep its own record or rebuild the scenes from your table.</p>
+<p>If the file changed <strong>while it was still open here</strong> — you edited it in another window, someone emailed a revision back, a sync client caught up — Splitpage says so when you Save rather than overwriting it, and offers to <strong>Merge them</strong>. That opens a review pane listing every field the two versions disagree about, side by side, with the changed words highlighted: titles, scene text, statuses, breakdown items, crew and b-roll. Nothing is written to the file and nothing changes on screen until you press <strong>Merge them</strong> again at the bottom of it — Cancel puts you back to the other choices, having changed nothing. Confirming keeps both sides' edits where they touched different things; where you both changed the same line, the file's version goes into the script and yours is kept as a comment flagged <strong>Unmerged edit</strong>, exactly as on a server. The merged script sits on screen, unsaved, until you press Save.</p>
 <h3 id="help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</h3>
 <p><strong>File ▸ Export a copy ▸ Standalone HTML (.html)</strong> writes one self-contained page: your script with a copy of Splitpage wrapped around it. They double-click it and the script is there, editable, with nothing to install and no account. It is a far bigger file than a <code>.md</code>, so it is for sending, not for working in.</p>
 <p>It is a <strong>copy</strong>, though, and that is deliberate: it carries no link back here, it never connects anywhere, and whatever they type stays in their file. If you want their edits to come back, send a link instead.</p>
@@ -17001,6 +17095,11 @@ node update.mjs           # download and verify it</code></pre>
         if (retarget && docFileHandle === retarget) rememberLastFileHandle(targetHandle);
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         var docIdAfterSave = state.docId;
+        /* What this file now says the document is — the ancestor a later
+           "Merge them" measures both sides against (18a-local-merge.js).
+           Set beside lastModified because the two are one fact: the state
+           and the timestamp of the bytes that are on disk right now. */
+        if (homeAtWrite && stillOurs) homeAtWrite.diskBase = published;
         try {
           var afterFile = await targetHandle.getFile();
           if (homeAtWrite && docFileHandle === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
@@ -19449,7 +19548,11 @@ node update.mjs           # download and verify it</code></pre>
      docIdEmbedded is read BEFORE migrateDocument(), which always leaves a
      valid id behind — see parseMarkdownProject (20d-formats.js) for the same
      ordering and for why a draft restore has to know the difference. */
-  async function parseProjectFileState(file) {
+  /* `opts.noAsk` forwards to applyMarkdownProject: a caller that is only
+     asking "what document is in this file?" — the merge review's probe
+     (18a-local-merge.js) — must not raise the row-count modal at the user,
+     who has not asked for anything yet. It takes the same answer Esc does. */
+  async function parseProjectFileState(file, opts) {
     var kind = fileKindFromName(file.name);
     if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
 
@@ -19498,7 +19601,7 @@ node update.mjs           # download and verify it</code></pre>
     }
     if (!project) return null;
     /* awaits the row-count question when the table and the record disagree */
-    var reconciled = await applyMarkdownProject(project);
+    var reconciled = await applyMarkdownProject(project, opts);
     return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
   }
 
@@ -19533,8 +19636,14 @@ node update.mjs           # download and verify it</code></pre>
     state = newState;
     baseState = cloneState(state);
     /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
-       there is no handle to ask — a plain <input type=file> open. */
-    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null, name: file.name };
+       there is no handle to ask — a plain <input type=file> open.
+       `diskBase` is the document exactly as this file last said it was: the
+       common ancestor "Merge them" needs to do a true three-way merge if the
+       file later changes under us (18a-local-merge.js). It rides on the home
+       record so it is dropped the moment the document's home changes, and
+       moves with it on every successful write (saveDoc, 14-export.js). */
+    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null,
+                      name: file.name, diskBase: cloneState(state) };
     /* A hosted document and a local file are two homes for one Save button
        (§3.1). Opening a server document already clears the file side; this
        is the other half, which was missing — open a file while a hosted
@@ -19881,11 +19990,22 @@ node update.mjs           # download and verify it</code></pre>
     return { ok: true };
   }
 
-  /* Which flow popped the conflict modal, so its three buttons (reload /
-     overwrite / save-as-a-copy) know whether to act on the import re-save
-     path's `openedFile` or the project-save path's `docFileHandle`. Set by
-     showFileConflict(), read by 21-events.js's button wiring. */
+  /* Which flow popped the conflict modal, so its buttons (reload /
+     overwrite / save-as-a-copy / merge) know whether to act on the import
+     re-save path's `openedFile` or the project-save path's `docFileHandle`.
+     Set by showFileConflict(), read by 21-events.js's button wiring. */
   var fileConflictCtx = { kind: "import" };
+  /* Bumped by every showFileConflict() and by closeFileConflict(), so a
+     modal still waiting on its merge probe never opens over a later one, or
+     after the user has already answered. */
+  var fileConflictShowToken = 0;
+
+  /* Which home record this conflict is about, read off fileConflictCtx the
+     same way each of the modal's buttons reads it — "Merge them" needs the
+     answer while the modal is going up, before any button is pressed. */
+  function fileConflictHome() {
+    return fileConflictCtx && fileConflictCtx.kind === "project" ? docFileHandle : openedFile;
+  }
 
   async function saveBackToFile(opts) {
     if (!openedFile.name) return;
@@ -19952,6 +20072,8 @@ node update.mjs           # download and verify it</code></pre>
       document.getElementById("file-conflict-detail").textContent =
         "Could not check whether " + fileName + " is still there — it may have been moved, " +
         "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
+      /* nothing readable to merge with */
+      resetMergeOffer();
       document.getElementById("file-conflict-modal").hidden = false;
       return;
     }
@@ -19961,11 +20083,28 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("file-conflict-detail").textContent =
       fileName + " changed on disk at " + when +
       ", after you opened it here. Saving now would overwrite that version.";
-    document.getElementById("file-conflict-modal").hidden = false;
+    /* "Merge them" is revealed only once that version has been read back as
+       a document — a file this app cannot parse has nothing to merge
+       (18a-local-merge.js). The modal waits for that answer before it
+       opens: the row is right-aligned, so a button appearing a moment
+       after the others would shove them sideways under the pointer. The
+       read is local and takes milliseconds; should it ever not answer, the
+       four choices the modal has always had go up on their own. */
+    var token = ++fileConflictShowToken;
+    var show = function () {
+      if (token !== fileConflictShowToken) return;   /* superseded or closed */
+      document.getElementById("file-conflict-modal").hidden = false;
+    };
+    var probe = offerFileMerge(currentFile, fileConflictHome());
+    var timer = setTimeout(show, 1500);
+    probe.then(function () { clearTimeout(timer); show(); },
+               function () { clearTimeout(timer); show(); });
   }
 
   function closeFileConflict() {
+    fileConflictShowToken++;
     document.getElementById("file-conflict-modal").hidden = true;
+    resetMergeOffer();
   }
 
   async function reloadFileFromDisk() {
@@ -20083,6 +20222,429 @@ node update.mjs           # download and verify it</code></pre>
     else if (action === "import-app-data") openImportAppData();
     else if (action === "tagging-help") showTaggingHelp();
     else if (action === "about") showAbout();
+  }
+  /* ================= merging a local file that changed on disk =================
+
+     The on-disk conflict guard (checkFileConflict, 18-local-files.js) used to
+     offer four outcomes, and every one of them means picking one version
+     whole, sight unseen. "Merge them" is the fifth: it lists every field the
+     two versions disagree about, side by side, and only then runs the same
+     three-way mergeStates() the hosted save and the crash-draft restore
+     already run. Nothing is read into the document and nothing is written to
+     disk until the user confirms (HANDOFF #1) — Cancel leaves the file, the
+     document and the modal exactly as they were.
+
+     The merge is genuinely three-way wherever there is an ancestor to use:
+     the state as parsed at the last read from, or write to, THIS file is
+     kept on the file's own home record (docFileHandle.diskBase, set by
+     adoptProjectState and by saveDoc's successful write). Keeping it there
+     rather than in a variable of its own means it is dropped the moment the
+     document's home changes, and can never be mistaken for some other
+     file's ancestor. With no ancestor at all it degrades to the two-way
+     merge mergeStates already does, where everything that differs becomes a
+     conflict comment: nothing is lost either way, there is just far more to
+     review. */
+
+  /* What "Merge them" would merge, parsed once when the conflict modal goes
+     up: {theirs, base, home, fileName, lastModified}, or null while there is
+     nothing mergeable on disk. */
+  var mergeCandidate = null;
+  /* A second conflict can raise the modal while the first probe is still
+     reading — only the newest one may reveal the button. */
+  var mergeProbeToken = 0;
+
+  /* The common ancestor for a local-file merge, or null for a two-way one. */
+  function fileMergeBase(home) {
+    if (home && home.diskBase) return home.diskBase;
+    /* saveDoc() sets baseState to exactly what it wrote (HANDOFF §3.6), so on
+       the project path it holds the same ancestor — the fallback for a
+       document that reached this file by a route predating diskBase (a
+       crash-draft restore, a boot stash merge). Only ever this document's. */
+    if (home === docFileHandle && baseState && state &&
+        normalizeDocId(baseState.docId) === normalizeDocId(state.docId)) return baseState;
+    return null;
+  }
+
+  function resetMergeOffer() {
+    mergeCandidate = null;
+    mergeProbeToken++;
+    var btn = document.getElementById("file-conflict-merge");
+    if (btn) btn.hidden = true;
+  }
+
+  /* Can the version now on disk be read back as a document? Only then is
+     there anything to merge with. A .docx, a .csv, a .txt or somebody else's
+     .md re-read through loadFileIntoEditor() comes back with fresh row ids,
+     which mergeStates would read as "every scene deleted and every scene
+     added again" — and the import re-save path writes exactly those formats
+     (buildFileData's lossy exports, never a project file), so "Merge them"
+     simply never appears there. The parse is told not to raise the
+     row-count question (noAsk): nothing may put a second modal on screen
+     for a merge nobody has asked for yet. */
+  async function offerFileMerge(currentFile, home) {
+    resetMergeOffer();
+    var token = mergeProbeToken;
+    if (!currentFile || !state) return;
+    var parsed = null;
+    try {
+      parsed = await parseProjectFileState(currentFile, { noAsk: true });
+    } catch (e) {
+      parsed = null;
+    }
+    if (token !== mergeProbeToken) return;   /* a newer conflict owns the modal */
+    if (!parsed || parsed.error || !parsed.state) return;
+
+    var theirs = parsed.state;
+    var base = fileMergeBase(home);
+    /* THE docIdEmbedded RULE, the same one restoreFileDraft() applies
+       (20g-drafts.js): a file that carries its own id and now carries a
+       DIFFERENT one is a different script saved into the same place, and
+       splicing two unrelated scripts together is not a merge. Anything else
+       — above all a legacy file whose id is derived from its own bytes, and
+       whose bytes have just changed — is still this file, so line the disk
+       copy up with the document's identity before merging, or mergedDocId
+       would take the freshly derived id and split the version history. */
+    var refId = normalizeDocId((base && base.docId) || state.docId);
+    if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
+    if (refId) theirs.docId = refId;
+
+    mergeCandidate = {
+      theirs: theirs,
+      base: base,
+      home: home || null,
+      fileName: currentFile.name || "",
+      lastModified: currentFile.lastModified || null
+    };
+    var btn = document.getElementById("file-conflict-merge");
+    if (btn) btn.hidden = false;
+  }
+
+  /* ---- what differs, field by field ---- */
+
+  var MERGE_OUTCOME_TEXT = {
+    theirs: "The file's version is taken",
+    mine: "Your version is kept",
+    conflict: "Changed on both sides — the file's version goes live, yours is kept as a comment",
+    status: "Whichever got further wins",
+    both: "Both sides are kept"
+  };
+
+  /* Mirrors mergeRow()'s ladder in 03-sync.js exactly: the pane has to say
+     what the merge is actually going to do, not something close to it. `b`
+     is null when there is no ancestor, which is what makes every difference
+     a conflict in a two-way merge. */
+  function mergeFieldOutcome(b, m, t) {
+    if (m === t) return null;
+    if (b !== null && m === b) return "theirs";
+    if (b !== null && t === b) return "mine";
+    return "conflict";
+  }
+
+  /* Which way a row present on only one side goes — the same three rules
+     mergeStates applies when it walks each side's rows. */
+  function mergeRowFate(b, m, t) {
+    if (m && t) return null;
+    if (m && !t) {
+      if (b && rowContentEqual(b, m)) return "Deleted in the file on disk — it goes.";
+      return b ? "Deleted in the file on disk, but you changed it — your version stays."
+               : "A scene you added — it stays.";
+    }
+    if (b && rowContentEqual(b, t)) return "You deleted this scene — it stays deleted.";
+    return b ? "You deleted this scene, but it changed on disk — it comes back."
+             : "A new scene from the file on disk.";
+  }
+
+  function mergeFieldText(row, field) {
+    if (!row) return "";
+    return htmlToPlainText(row[field] || "");
+  }
+
+  function mergeStatusLabel(id) {
+    var s = rowStatus(id);
+    return s ? s.label : "To do";
+  }
+
+  /* One item of the breakdown registry / crew / b-roll list as a single line
+     of text, so the three of them can be diffed the same way a field is.
+     All three merge by union (mergePeople, mergeProductionTags,
+     mergeBrollShots), so the outcome is always "both". */
+  function mergeItemSummary(bits) {
+    return bits.filter(function (b) { return b; }).join(" · ");
+  }
+
+  function mergeListEntries(label, mineList, theirList, keyOf, nameOf, summaryOf) {
+    var mineMap = {}, theirMap = {}, order = [], seen = {};
+    (mineList || []).forEach(function (it) { if (it) mineMap[keyOf(it)] = it; });
+    (theirList || []).forEach(function (it) { if (it) theirMap[keyOf(it)] = it; });
+    (theirList || []).concat(mineList || []).forEach(function (it) {
+      if (!it) return;
+      var k = keyOf(it);
+      if (seen[k]) return;
+      seen[k] = true;
+      order.push(k);
+    });
+    var entries = [];
+    order.forEach(function (k) {
+      var m = mineMap[k], t = theirMap[k];
+      var ms = m ? summaryOf(m) : "", ts = t ? summaryOf(t) : "";
+      if (ms === ts) return;
+      var pair = mergeDiffPairHtml(ms, ts);
+      entries.push({
+        label: label + ": " + nameOf(m || t),
+        outcome: "both",
+        mineHtml: pair.mine,
+        theirsHtml: pair.theirs
+      });
+    });
+    return entries;
+  }
+
+  /* The whole pane's content: groups of entries, in the order the merged
+     document will be in (theirs first, then anything only this side has). */
+  function mergeDiffModel(base, mine, theirs) {
+    var groups = [];
+    var b = base || null;
+
+    var mineTitle = mine.title || "", theirTitle = theirs.title || "";
+    if (mineTitle !== theirTitle) {
+      var titlePair = mergeDiffPairHtml(mineTitle, theirTitle);
+      groups.push({ label: "Title", entries: [{
+        label: "Script title",
+        outcome: mergeFieldOutcome(b ? (b.title || "") : null, mineTitle, theirTitle),
+        mineHtml: titlePair.mine,
+        theirsHtml: titlePair.theirs
+      }] });
+    }
+
+    var baseRows = byId(b && b.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
+    var order = [], seen = {}, sceneNo = {};
+    theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
+    mine.rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
+
+    order.forEach(function (id) {
+      var m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
+      var entries = [];
+      ROW_FIELDS.forEach(function (f) {
+        if (f === "visualImage") {
+          var mi = (m && m.visualImage) || null, ti = (t && t.visualImage) || null;
+          if (mi === ti) return;
+          entries.push({
+            label: "Visual image",
+            outcome: mergeFieldOutcome(bb ? (bb.visualImage || null) : null, mi, ti),
+            mineHtml: mergeDiffImageHtml(mi),
+            theirsHtml: mergeDiffImageHtml(ti)
+          });
+          return;
+        }
+        var mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
+        if (mv === tv) return;
+        var pair = mergeDiffPairHtml(mv, tv);
+        entries.push({
+          label: f === "audioText" ? "Audio" : "Visual",
+          /* On the raw HTML, not the plain text just diffed: that is what
+             mergeStates compares, and two cells can read identically while
+             differing in a tag span or a comment anchor. */
+          outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null),
+          mineHtml: pair.mine,
+          theirsHtml: pair.theirs
+        });
+      });
+      if (m && t && m.status !== t.status) {
+        var statusPair = mergeDiffPairHtml(mergeStatusLabel(m.status), mergeStatusLabel(t.status));
+        entries.push({ label: "Status", outcome: "status", mineHtml: statusPair.mine, theirsHtml: statusPair.theirs });
+      }
+      if (!entries.length) return;
+      groups.push({ label: "Scene " + pad2(sceneNo[id]), note: mergeRowFate(bb, m, t), entries: entries });
+    });
+
+    var tagEntries = mergeListEntries("Breakdown", mine.productionTags, theirs.productionTags,
+      function (t) { return registryKey(t.cat, t.name); },
+      function (t) { var c = tagCategory(t.cat); return (c ? c.label + " " : "") + t.name; },
+      function (t) {
+        var st = tagStatus(t.status);
+        return mergeItemSummary([st ? st.label : "Needed", t.owner, t.notes]);
+      });
+    if (tagEntries.length) groups.push({ label: "Production breakdown", entries: tagEntries });
+
+    var peopleEntries = mergeListEntries("Crew", mine.people, theirs.people,
+      function (p) { return normalizeTagName(p.name); },
+      function (p) { return p.name; },
+      function (p) { return p.name; });
+    if (peopleEntries.length) groups.push({ label: "Crew", entries: peopleEntries });
+
+    var brollEntries = mergeListEntries("B-roll", mine.brollShots, theirs.brollShots,
+      function (s) { return s.id; },
+      function (s) { return s.name || "Shot"; },
+      function (s) {
+        return mergeItemSummary([s.name, s.desc, s.location, s.owner, s.audioRef, s.notes,
+          s.status === "shot" ? "Shot" : "Not shot", s.reshoot ? "Needs attention" : ""]);
+      });
+    if (brollEntries.length) groups.push({ label: "B-roll", entries: brollEntries });
+
+    return groups;
+  }
+
+  /* ---- a word-level diff, dependency-free ----
+
+     Tokenise both sides into words and the whitespace between them, find the
+     longest common subsequence, mark whatever is not in it. Quadratic, so a
+     pair of very long fields falls back to marking each side whole rather
+     than making the modal wait on a table of millions of cells — the pane is
+     still correct there, just less precise. Every token is escaped on the
+     way out; nothing reaches innerHTML unescaped. */
+
+  var MERGE_DIFF_TOKEN_CAP = 600;
+
+  function mergeDiffTokenize(s) {
+    return String(s == null ? "" : s).split(/(\s+)/).filter(function (t) { return t !== ""; });
+  }
+
+  function mergeDiffOps(a, b) {
+    var n = a.length, m = b.length;
+    if (n > MERGE_DIFF_TOKEN_CAP || m > MERGE_DIFF_TOKEN_CAP) return null;
+    var w = m + 1;
+    var lcs = new Int32Array((n + 1) * w);
+    for (var i = n - 1; i >= 0; i--) {
+      for (var j = m - 1; j >= 0; j--) {
+        lcs[i * w + j] = a[i] === b[j]
+          ? lcs[(i + 1) * w + j + 1] + 1
+          : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
+      }
+    }
+    var out = [], x = 0, y = 0;
+    while (x < n && y < m) {
+      if (a[x] === b[y]) { out.push({ op: "same", text: a[x] }); x++; y++; }
+      else if (lcs[(x + 1) * w + y] >= lcs[x * w + y + 1]) { out.push({ op: "del", text: a[x] }); x++; }
+      else { out.push({ op: "add", text: b[y] }); y++; }
+    }
+    while (x < n) out.push({ op: "del", text: a[x++] });
+    while (y < m) out.push({ op: "add", text: b[y++] });
+    return out;
+  }
+
+  function mergeDiffSideHtml(ops, want) {
+    var html = "", any = false;
+    ops.forEach(function (o) {
+      if (o.op !== "same" && o.op !== want) return;
+      if (o.text.trim()) any = true;
+      html += o.op === "same"
+        ? escapeHtml(o.text)
+        : '<span class="diff-' + want + '">' + escapeHtml(o.text) + "</span>";
+    });
+    return any ? html : '<em class="diff-empty">(empty)</em>';
+  }
+
+  function mergeDiffWholeHtml(text, cls) {
+    return text ? '<span class="diff-' + cls + '">' + escapeHtml(text) + "</span>"
+                : '<em class="diff-empty">(empty)</em>';
+  }
+
+  function mergeDiffPairHtml(mineText, theirText) {
+    var ops = mergeDiffOps(mergeDiffTokenize(mineText), mergeDiffTokenize(theirText));
+    if (!ops) return { mine: mergeDiffWholeHtml(mineText, "del"), theirs: mergeDiffWholeHtml(theirText, "add") };
+    return { mine: mergeDiffSideHtml(ops, "del"), theirs: mergeDiffSideHtml(ops, "add") };
+  }
+
+  function mergeDiffImageHtml(src) {
+    var ok = src ? safeImageSrc(src) : null;
+    return ok ? '<img class="diff-img" src="' + escapeHtml(ok) + '" alt="">'
+              : '<em class="diff-empty">(no image)</em>';
+  }
+
+  /* ---- the review pane ---- */
+
+  function mergeEntryHtml(e) {
+    return '<div class="merge-entry" data-outcome="' + escapeHtml(e.outcome || "both") + '">' +
+      '<div class="merge-entry-head">' + escapeHtml(e.label) +
+        '<span class="merge-entry-outcome">' + escapeHtml(MERGE_OUTCOME_TEXT[e.outcome] || "") + "</span></div>" +
+      '<div class="merge-sides">' +
+        '<div class="merge-side"><div class="merge-side-head">Open here</div>' +
+          '<div class="merge-side-body">' + e.mineHtml + "</div></div>" +
+        '<div class="merge-side"><div class="merge-side-head">On disk</div>' +
+          '<div class="merge-side-body">' + e.theirsHtml + "</div></div>" +
+      "</div></div>";
+  }
+
+  function mergeGroupHtml(g) {
+    return '<div class="merge-group">' +
+      '<div class="merge-group-head">' + escapeHtml(g.label) +
+        (g.note ? '<span class="merge-group-note">' + escapeHtml(g.note) + "</span>" : "") + "</div>" +
+      g.entries.map(mergeEntryHtml).join("") +
+    "</div>";
+  }
+
+  /* Opens over the conflict modal rather than replacing it: Cancel here puts
+     the four original choices straight back, having changed nothing. */
+  function openMergeReview() {
+    if (!mergeCandidate || !state) return;
+    var groups = mergeDiffModel(mergeCandidate.base, state, mergeCandidate.theirs);
+    var count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
+    document.getElementById("merge-review-detail").textContent = count
+      ? (count === 1 ? "One field differs" : count + " fields differ") +
+        " between " + (mergeCandidate.fileName || "the file on disk") + " and what you have open" +
+        (mergeCandidate.base ? "" : ", and there is no earlier version of this file to compare both against, " +
+          "so every one of them is treated as changed on both sides") +
+        ". Nothing is written until you merge."
+      : "Nothing differs between " + (mergeCandidate.fileName || "the file on disk") +
+        " and what you have open.";
+    document.getElementById("merge-review-list").innerHTML = count
+      ? groups.map(mergeGroupHtml).join("")
+      : '<div class="comments-empty">The two versions say the same thing.</div>';
+    document.getElementById("file-conflict-modal").hidden = true;
+    document.getElementById("merge-review-modal").hidden = false;
+    document.getElementById("merge-review-confirm").focus();
+  }
+
+  /* Back to the conflict modal with the candidate intact — nothing on disk
+     and nothing on screen has been touched. */
+  function cancelMergeReview() {
+    document.getElementById("merge-review-modal").hidden = true;
+    document.getElementById("merge-review-list").innerHTML = "";
+    if (mergeCandidate) document.getElementById("file-conflict-modal").hidden = false;
+  }
+
+  /* The one place the merge actually happens, and the first moment anything
+     changes. Still nothing is written: the merged document is on screen and
+     dirty, autosave is halted (reportMerge's noAutoSave, invariant #51), and
+     the Save the user presses when they have looked it over is what puts it
+     on disk. */
+  function confirmFileMerge() {
+    var cand = mergeCandidate;
+    if (!cand || !state) { cancelMergeReview(); return; }
+    document.getElementById("merge-review-modal").hidden = true;
+    document.getElementById("merge-review-list").innerHTML = "";
+    closeFileConflict();
+
+    var diskCopy = cloneState(cand.theirs);
+    var prevDocId = state.docId;
+    /* applyStashedWork (14-export.js) is the shared merge entry point: it
+       files the "Before merging your unsaved changes" snapshot, arms Undo
+       merge and runs mergeStates — the same three steps the boot-stash and
+       crash-draft paths take. */
+    var applied = applyStashedWork(migrateRows(cloneState(cand.theirs)), {
+      base: cand.base, mine: cloneState(state)
+    });
+    state = applied.state;
+    /* What is on disk is this document's ancestor from here on, and the next
+       Save has to write the merged version over exactly the bytes we just
+       read — so the conflict guard's baseline moves with it, or the very
+       next Save would raise this same modal again. */
+    if (cand.home) {
+      cand.home.diskBase = diskCopy;
+      if (cand.lastModified) cand.home.lastModified = cand.lastModified;
+    }
+    baseState = cloneState(diskCopy);
+    render();
+    updateIdentityChip();
+    updateFileChip();
+    /* if the disk copy's id won the merge, the history written under ours
+       follows the document to it */
+    noteMergedDocId(prevDocId);
+    if (applied.report) reportMerge(applied.report, { noAutoSave: true });
+    else markDirty();
+    showToast("Merged " + (cand.fileName || "the file on disk") + " into what you have open. " +
+      "Nothing has been saved yet — press Save when you have looked it over.", "warn", true);
+    mergeCandidate = null;
   }
   /* ================= the writer =================
 
@@ -22789,13 +23351,21 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   /* Turn a parsed project into the state to adopt. Async only because the
-     row-count question is a real modal — no silent choice. */
-  async function applyMarkdownProject(proj) {
+     row-count question is a real modal — no silent choice.
+
+     `opts.noAsk` is the one exception, and it is not a silent choice made on
+     the user's behalf: a caller only asking what is in a file (the merge
+     review's probe, 18a-local-merge.js) must not throw a modal over one the
+     user is already looking at, so it takes "keep the record" — exactly what
+     Esc means here — and the file is never adopted from that read. */
+  async function applyMarkdownProject(proj, opts) {
     var s = proj.state;
     if (proj.title && proj.title !== s.title) s.title = plainText(proj.title).slice(0, 300);
 
     if (proj.table.length === s.rows.length) {
       reconcileMarkdownRows(s, proj.table);
+    } else if (opts && opts.noAsk) {
+      /* keep the record */
     } else {
       var choice = await askMarkdownRowChoice(s.rows.length, proj.table.length);
       if (choice === "table") s.rows = rowsFromMarkdownTable(s, proj.table);
@@ -22861,7 +23431,14 @@ node update.mjs           # download and verify it</code></pre>
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return state; },
-    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; }
+    docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; },
+    /* The local-file merge (18a-local-merge.js), for 42-local-merge.txt.
+       `hasDiskBase` proves the ancestor is being retained at open and at
+       save; `forgetDiskBase` drops it, which is the only way to drive the
+       two-way fallback from outside — once a file has been opened, nothing
+       a user can do takes the ancestor away again. */
+    hasDiskBase: function () { return !!(docFileHandle && docFileHandle.diskBase); },
+    forgetDiskBase: function () { if (docFileHandle) docFileHandle.diskBase = null; baseState = null; return true; }
   };
   /* ================= connecting to a server =================
 
@@ -27235,6 +27812,23 @@ node update.mjs           # download and verify it</code></pre>
       if (ctx && ctx.kind === "project") saveDoc({ force: true });
       else saveBackToFile({ force: true });
     });
+    /* The fifth outcome: show what differs first, merge only if the user
+       says so (18a-local-merge.js). Nothing else about the modal changes —
+       the candidate stays put, so Cancel in the review pane comes back to
+       these same four choices. */
+    document.getElementById("file-conflict-merge").addEventListener("click", openMergeReview);
+    document.getElementById("merge-review-close").addEventListener("click", cancelMergeReview);
+    document.getElementById("merge-review-cancel").addEventListener("click", cancelMergeReview);
+    document.getElementById("merge-review-confirm").addEventListener("click", confirmFileMerge);
+    window.addEventListener("keydown", function (e) {
+      /* Esc backs out of the review, never through it: a merge is only ever
+         made by pressing the button that says so. */
+      if (e.key === "Escape" && !document.getElementById("merge-review-modal").hidden) {
+        e.preventDefault();
+        cancelMergeReview();
+      }
+    });
+
     document.getElementById("file-conflict-copy").addEventListener("click", function () {
       var ctx = fileConflictCtx;
       closeFileConflict();

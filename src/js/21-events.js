@@ -1110,6 +1110,23 @@
       if (ctx && ctx.kind === "project") saveDoc({ force: true });
       else saveBackToFile({ force: true });
     });
+    /* The fifth outcome: show what differs first, merge only if the user
+       says so (18a-local-merge.js). Nothing else about the modal changes —
+       the candidate stays put, so Cancel in the review pane comes back to
+       these same four choices. */
+    document.getElementById("file-conflict-merge").addEventListener("click", openMergeReview);
+    document.getElementById("merge-review-close").addEventListener("click", cancelMergeReview);
+    document.getElementById("merge-review-cancel").addEventListener("click", cancelMergeReview);
+    document.getElementById("merge-review-confirm").addEventListener("click", confirmFileMerge);
+    window.addEventListener("keydown", function (e) {
+      /* Esc backs out of the review, never through it: a merge is only ever
+         made by pressing the button that says so. */
+      if (e.key === "Escape" && !document.getElementById("merge-review-modal").hidden) {
+        e.preventDefault();
+        cancelMergeReview();
+      }
+    });
+
     document.getElementById("file-conflict-copy").addEventListener("click", function () {
       var ctx = fileConflictCtx;
       closeFileConflict();
