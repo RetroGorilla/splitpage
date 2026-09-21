@@ -3730,7 +3730,7 @@ node update.mjs           # download and verify it</code></pre>
 <table><thead><tr><th>Type</th><th>Becomes</th></tr></thead><tbody><tr><td><code>[gaffer tape]</code></td><td>Prop</td></tr><tr><td><code>{kitchen}</code></td><td>Location</td></tr><tr><td><code>~lens flare~</code></td><td>VFX</td></tr><tr><td><code>&lt;wireless lav&gt;</code></td><td>Gear</td></tr></tbody></table>
 <p><strong>Cast</strong> and <strong>Music/SFX</strong> have no shortcut (nothing else is safe to type in normal prose) — select the words and press <strong>Tag</strong>. Once a tag of any category exists, typing a bracket and the first few letters offers to complete it: press <strong>Tab</strong> to accept. The completion keeps that tag's own category, so you never end up with the same thing filed twice.</p>
 <p>Other things worth knowing:</p>
-<ul><li><strong>Ctrl+Enter</strong> while writing starts the next scene and jumps into it.</li><li><strong>Alt+Enter</strong> splits the scene you're in at the caret — everything after it becomes a new scene right below, in the same column. The <em>other</em> column isn't touched: splitting the Audio doesn't disturb the Visual next to it, and it doesn't disturb the Visual next to the new scene either — that one starts blank, the way a beat nobody's framed a shot for yet should.</li><li>Click a tag in the script — or any card in the panel — to open it and <strong>assign who's responsible</strong> and keep <strong>notes, links or file paths</strong> against it. The crew list is just names you type; nothing is verified.</li><li><strong>Track how far along each item is.</strong> Every card carries a state — <strong>Needed → Sourcing → Have it → Returned</strong>. Click the pill in the card's top corner to step it on by one, or open the card and pick a state outright. The same four words are used whatever the category: "Returned" means a hired prop went back, and for a location or a VFX shot it just means finished with. The state travels in every export, and shows against each item in the <strong>Shoot</strong> view so on the day you can see what still isn't here. If two people edit the same file, a merge keeps whichever state got further — it can never un-buy something somebody already bought.</li><li><strong>Work on several items at once.</strong> <kbd>Ctrl</kbd>+click cards in the breakdown to select them (<kbd>Shift</kbd>+click takes the whole run between two), and a bar appears at the top of the panel: assign them all to one person, add a new person and assign them in the same step, set them all to one status, or delete them. A plain click still just opens a card and leaves the selection alone — <kbd>Esc</kbd> or the <strong>×</strong> clears it. Works in the Category and Person groupings, which are the two that show cards. <strong>Delete</strong> here removes the items from the breakdown <em>and</em> takes their labels out of the script — the words stay, only the labels go. It asks once first and tells you how many labels are about to go with them.</li><li>Group the breakdown by <strong>category, person or scene</strong>, and export the whole thing as CSV (the <strong>CSV</strong> button in the panel, or File ▸ Export ▸ Breakdown only). One sheet with a Category column, so it filters down to a props list, a graphics list, or one person's pull list. The Word, PDF, Markdown and plain-text exports carry the breakdown too, including who each item is assigned to and what state it's in.</li><li>Deleting a tag from the script doesn't delete it from the breakdown — it stays, flagged <strong>Not in script</strong>, until you delete it deliberately.</li><li><strong>File ▸ Tagging reference</strong> brings back the reference strip at the top once you've dismissed it.</li></ul>
+<ul><li><strong>Ctrl+Enter</strong> while writing starts the next scene and jumps into it.</li><li><strong>Alt+Enter</strong> splits the scene you're in at the caret — everything after it becomes a new scene right below, in the same column. The <em>other</em> column isn't touched: splitting the Audio doesn't disturb the Visual next to it, and it doesn't disturb the Visual next to the new scene either — that one starts blank, the way a beat nobody's framed a shot for yet should.</li><li><strong>Alt+Up / Alt+Down</strong> moves the scene you're in one place earlier or later, caret and all — in the split view or the writer.</li><li>Click a tag in the script — or any card in the panel — to open it and <strong>assign who's responsible</strong> and keep <strong>notes, links or file paths</strong> against it. The crew list is just names you type; nothing is verified.</li><li><strong>Track how far along each item is.</strong> Every card carries a state — <strong>Needed → Sourcing → Have it → Returned</strong>. Click the pill in the card's top corner to step it on by one, or open the card and pick a state outright. The same four words are used whatever the category: "Returned" means a hired prop went back, and for a location or a VFX shot it just means finished with. The state travels in every export, and shows against each item in the <strong>Shoot</strong> view so on the day you can see what still isn't here. If two people edit the same file, a merge keeps whichever state got further — it can never un-buy something somebody already bought.</li><li><strong>Work on several items at once.</strong> <kbd>Ctrl</kbd>+click cards in the breakdown to select them (<kbd>Shift</kbd>+click takes the whole run between two), and a bar appears at the top of the panel: assign them all to one person, add a new person and assign them in the same step, set them all to one status, or delete them. A plain click still just opens a card and leaves the selection alone — <kbd>Esc</kbd> or the <strong>×</strong> clears it. Works in the Category and Person groupings, which are the two that show cards. <strong>Delete</strong> here removes the items from the breakdown <em>and</em> takes their labels out of the script — the words stay, only the labels go. It asks once first and tells you how many labels are about to go with them.</li><li>Group the breakdown by <strong>category, person or scene</strong>, and export the whole thing as CSV (the <strong>CSV</strong> button in the panel, or File ▸ Export ▸ Breakdown only). One sheet with a Category column, so it filters down to a props list, a graphics list, or one person's pull list. The Word, PDF, Markdown and plain-text exports carry the breakdown too, including who each item is assigned to and what state it's in.</li><li>Deleting a tag from the script doesn't delete it from the breakdown — it stays, flagged <strong>Not in script</strong>, until you delete it deliberately.</li><li><strong>File ▸ Tagging reference</strong> brings back the reference strip at the top once you've dismissed it.</li></ul>
 <h3 id="help-gear">Gear</h3>
 <p>Camera, mics, lighting, stands — equipment, not set dressing. It's its own category (Prop is still there for what's actually in front of the camera), with its own shortcut, and its own screen: click <strong>Gear</strong> in the header.</p>
 <p>The one thing gear needs that the others don't is that most of it never gets <em>written</em> anywhere — nobody says "wireless lav" out loud, and it's not always worth describing in the visual notes either. So the Gear screen opens with a plain box: <strong>one item per line</strong>, and whatever you type there is tracked, whether or not it's ever mentioned in the script. Add three lines, hit <strong>Update list</strong>, and all three show up as cards — same status pill, same owner assignment, same notes field as everywhere else in the breakdown. Take a line back out and it stops being tracked, <em>unless</em> it's also tagged somewhere in the script — an item that's actually written in stays, because the box only remembers what it alone was responsible for adding.</p>
@@ -9129,6 +9129,7 @@ node update.mjs           # download and verify it</code></pre>
 
   function addRow(afterId) {
     lastSplitUndo = null;
+    lastMoveUndo = null;
     var row = { id: makeId(), visualText: "", visualImage: null, audioText: "",
                 status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
     if (afterId) {
@@ -9179,6 +9180,10 @@ node update.mjs           # download and verify it</code></pre>
     if (!sel.rangeCount) return null;
     var range = sel.getRangeAt(0);
     if (!cellEl.contains(range.startContainer)) return null;
+    /* A new row is about to be spliced in, which can land right between the
+       two rows lastMoveUndo names — invalidate it here rather than trust
+       every caller to remember. */
+    lastMoveUndo = null;
     /* captured before any mutation below — the field's whole content as it
        stood the instant the split was requested, for undoSplitCellField */
     var originalHtml = sanitizeHtml(cellEl.innerHTML);
@@ -9216,6 +9221,13 @@ node update.mjs           # download and verify it</code></pre>
          exactly what the split put there, so text typed into either cell
          afterwards is never silently discarded. */
   var lastSplitUndo = null;
+
+  /* Same discipline, for a single-step reorder (the gutter's own ↑/↓
+     buttons and Alt+Up/Alt+Down — see swapAdjacentRows/undoMoveRow below):
+     any other row-structural edit clears it, and it refuses once the two
+     rows it names are no longer sitting right next to each other, so a
+     stale entry never swaps a pair a later action already moved apart. */
+  var lastMoveUndo = null;
 
   function splitCellField(cellEl) {
     var res = splitRowFieldCore(cellEl);
@@ -9383,6 +9395,7 @@ node update.mjs           # download and verify it</code></pre>
 
   function moveRowTo(id, targetId, after) {
     lastSplitUndo = null;
+    lastMoveUndo = null;
     var from = findRowIndex(id);
     var to = findRowIndex(targetId);
     if (from === -1 || to === -1 || from === to) return;
@@ -9400,21 +9413,65 @@ node update.mjs           # download and verify it</code></pre>
     var idx = findRowIndex(id);
     if (idx === -1) return;
     lastSplitUndo = null;
+    lastMoveUndo = null;
     state.rows.splice(idx, 1);
     markDirty();
     render();
   }
 
-  function moveRow(id, dir) {
+  /* The one place state.rows actually swaps two adjacent scenes for a
+     single-step move — shared by the gutter's ↑/↓ buttons (moveRow, via
+     click) and Alt+Up/Alt+Down (via onRootKeydown, both #rows and the
+     writer). Records lastMoveUndo and syncs exactly the way dragging a row
+     does (moveRowTo just above: one markDirty(), one queueAutoSave()), but
+     does not render — callers differ on whether the split view, the
+     writer, or both need repainting afterward, and on how precisely the
+     caret has to land, so that is left to them. `field`/`offset` are
+     optional and only matter for restoring an exact caret position on
+     undo; the gutter buttons have no caret to restore and omit them.
+     Returns false at either end (no wrap) or if the row is gone. */
+  function swapAdjacentRows(id, dir, field, offset) {
     var idx = findRowIndex(id);
     var j = idx + dir;
     lastSplitUndo = null;
-    if (idx === -1 || j < 0 || j >= state.rows.length) return;
+    if (idx === -1 || j < 0 || j >= state.rows.length) return false;
+    var otherId = state.rows[j].id;
     var tmp = state.rows[idx];
     state.rows[idx] = state.rows[j];
     state.rows[j] = tmp;
+    lastMoveUndo = { movedId: id, otherId: otherId, field: field || null, offset: offset || 0 };
     markDirty();
+    queueAutoSave();
+    return true;
+  }
+
+  function moveRow(id, dir) {
+    if (!swapAdjacentRows(id, dir)) return;
     render();
+  }
+
+  /* Ctrl/Cmd+Z right after a move: swaps the same two rows back. Swapping
+     twice restores the original arrangement regardless of which direction
+     the move went, so this needs no record of that — only of which two rows
+     it touched. Declines once they are no longer adjacent (something else
+     restructured the rows in between — an add, a delete, a split landing
+     between them) rather than swap whatever now happens to be there.
+     Returns the undo record on success (for the caller to restore the
+     caret from) or false. Does not render, for the same reason
+     swapAdjacentRows doesn't. */
+  function undoMoveRow() {
+    var undo = lastMoveUndo;
+    if (!undo) return false;
+    lastMoveUndo = null;
+    var idxA = findRowIndex(undo.movedId);
+    var idxB = findRowIndex(undo.otherId);
+    if (idxA === -1 || idxB === -1 || Math.abs(idxA - idxB) !== 1) return false;
+    var tmp = state.rows[idxA];
+    state.rows[idxA] = state.rows[idxB];
+    state.rows[idxB] = tmp;
+    markDirty();
+    queueAutoSave();
+    return undo;
   }
 
   function armDelete(btn, id) {
@@ -19187,6 +19244,23 @@ node update.mjs           # download and verify it</code></pre>
 
   /* ---- caret plumbing ---- */
 
+  /* The inverse of placeCaretAtTextOffset: how far the caret sits into
+     `el`'s plain text right now. Same technique writerCaretState() uses for
+     the writer's own paragraphs, generalised to any element — Alt+Up/
+     Alt+Down (21-events.js) uses it in the split view too, where the row
+     being moved keeps its id and field but render() only ever lands the
+     caret at the end of the cell, not back at the exact offset it was at. */
+  function caretTextOffset(el) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    var range = sel.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return 0;
+    var probe = document.createRange();
+    probe.selectNodeContents(el);
+    probe.setEnd(range.startContainer, range.startOffset);
+    return probe.toString().length;
+  }
+
   /* Put the caret at a plain-text offset inside a block. Used after a merge
      so it lands exactly where the two scenes were joined, rather than at
      the top of the paragraph they became. */
@@ -19324,6 +19398,9 @@ node update.mjs           # download and verify it</code></pre>
     var prev = state.rows[intoIdx];
     var cur = state.rows[intoIdx + 1];
     if (!prev || !cur) return;
+    /* one of the two rows a pending move-undo names is about to disappear —
+       see lastMoveUndo in 06-rows.js */
+    lastMoveUndo = null;
 
     var prevHasVisual = !!(htmlToPlainText(prev.visualText) || prev.visualImage);
     var curHasVisual = !!(htmlToPlainText(cur.visualText) || cur.visualImage);
@@ -25433,6 +25510,23 @@ node update.mjs           # download and verify it</code></pre>
        Ctrl+Shift+Z — that is a redo request, which this never was. */
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
       if (undoSplitCellField()) { e.preventDefault(); return; }
+      /* Same idea for Alt+Up/Alt+Down (undoMoveRow, 06-rows.js): swaps the
+         two rows back and hands back the record it undid so the caret can
+         return to the exact field/offset the move started from. Split view
+         and the writer finish it differently for the same reason the move
+         itself does — see the Alt+Up/Alt+Down handler below. */
+      var moveUndo = undoMoveRow();
+      if (moveUndo) {
+        e.preventDefault();
+        if (writerOpen) {
+          renderWriter();
+        } else {
+          render();
+          if (moveUndo.field) focusRowField(moveUndo.movedId, moveUndo.field, moveUndo.offset);
+        }
+        renderProduction();
+        return;
+      }
     }
     /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
        The untagged-mention prompt only ever gets the key when nothing more
@@ -25470,6 +25564,42 @@ node update.mjs           # download and verify it</code></pre>
       hideTagGhost();
       syncFieldFromDom(cellEl);
       splitCellField(cellEl);
+      return;
+    }
+    /* Alt+Up / Alt+Down: move the scene the caret is in one place earlier
+       or later — the keyboard equivalent of dragging its grip, sharing the
+       same swap the gutter's own ↑/↓ buttons use (swapAdjacentRows,
+       06-rows.js) and syncing exactly the way a drag-reorder does (one
+       markDirty(), one queueAutoSave() — see moveRowTo). isScriptCell()
+       matches a cell in #rows or in #writer-doc alike and excludes a
+       comment reply box, so this never fires there. No wrap: past either
+       end swapAdjacentRows() declines and nothing happens.
+
+       The two views finish the repaint differently. renderWriter() already
+       re-finds and re-focuses whatever paragraph was active before it ran
+       (writerCaretState(), 19-writer.js), which is this same row, so
+       nothing further is needed there. The split view's render() only ever
+       lands the caret at the end of the cell, not the exact offset it was
+       at, so that is corrected explicitly with focusRowField() afterward.
+       Calling the full render() from inside the writer instead would reach
+       past it into #rows's own copy of this field and steal focus there —
+       the same reason splitWriterRow/mergeWriterRows call renderWriter()
+       only, never render(), while the writer is open. */
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.altKey && !mod && isScriptCell(cellEl)) {
+      e.preventDefault();
+      syncFieldFromDom(cellEl);
+      var mvId = cellEl.getAttribute("data-id");
+      var mvField = cellEl.getAttribute("data-field");
+      var mvOffset = caretTextOffset(cellEl);
+      if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1, mvField, mvOffset)) {
+        if (writerOpen) {
+          renderWriter();
+        } else {
+          render();
+          focusRowField(mvId, mvField, mvOffset);
+        }
+        renderProduction();
+      }
       return;
     }
     /* Only the script has scenes to add one to. In a comment or reply box

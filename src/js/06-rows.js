@@ -2,6 +2,7 @@
 
   function addRow(afterId) {
     lastSplitUndo = null;
+    lastMoveUndo = null;
     var row = { id: makeId(), visualText: "", visualImage: null, audioText: "",
                 status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
     if (afterId) {
@@ -52,6 +53,10 @@
     if (!sel.rangeCount) return null;
     var range = sel.getRangeAt(0);
     if (!cellEl.contains(range.startContainer)) return null;
+    /* A new row is about to be spliced in, which can land right between the
+       two rows lastMoveUndo names — invalidate it here rather than trust
+       every caller to remember. */
+    lastMoveUndo = null;
     /* captured before any mutation below — the field's whole content as it
        stood the instant the split was requested, for undoSplitCellField */
     var originalHtml = sanitizeHtml(cellEl.innerHTML);
@@ -89,6 +94,13 @@
          exactly what the split put there, so text typed into either cell
          afterwards is never silently discarded. */
   var lastSplitUndo = null;
+
+  /* Same discipline, for a single-step reorder (the gutter's own ↑/↓
+     buttons and Alt+Up/Alt+Down — see swapAdjacentRows/undoMoveRow below):
+     any other row-structural edit clears it, and it refuses once the two
+     rows it names are no longer sitting right next to each other, so a
+     stale entry never swaps a pair a later action already moved apart. */
+  var lastMoveUndo = null;
 
   function splitCellField(cellEl) {
     var res = splitRowFieldCore(cellEl);
@@ -256,6 +268,7 @@
 
   function moveRowTo(id, targetId, after) {
     lastSplitUndo = null;
+    lastMoveUndo = null;
     var from = findRowIndex(id);
     var to = findRowIndex(targetId);
     if (from === -1 || to === -1 || from === to) return;
@@ -273,21 +286,65 @@
     var idx = findRowIndex(id);
     if (idx === -1) return;
     lastSplitUndo = null;
+    lastMoveUndo = null;
     state.rows.splice(idx, 1);
     markDirty();
     render();
   }
 
-  function moveRow(id, dir) {
+  /* The one place state.rows actually swaps two adjacent scenes for a
+     single-step move — shared by the gutter's ↑/↓ buttons (moveRow, via
+     click) and Alt+Up/Alt+Down (via onRootKeydown, both #rows and the
+     writer). Records lastMoveUndo and syncs exactly the way dragging a row
+     does (moveRowTo just above: one markDirty(), one queueAutoSave()), but
+     does not render — callers differ on whether the split view, the
+     writer, or both need repainting afterward, and on how precisely the
+     caret has to land, so that is left to them. `field`/`offset` are
+     optional and only matter for restoring an exact caret position on
+     undo; the gutter buttons have no caret to restore and omit them.
+     Returns false at either end (no wrap) or if the row is gone. */
+  function swapAdjacentRows(id, dir, field, offset) {
     var idx = findRowIndex(id);
     var j = idx + dir;
     lastSplitUndo = null;
-    if (idx === -1 || j < 0 || j >= state.rows.length) return;
+    if (idx === -1 || j < 0 || j >= state.rows.length) return false;
+    var otherId = state.rows[j].id;
     var tmp = state.rows[idx];
     state.rows[idx] = state.rows[j];
     state.rows[j] = tmp;
+    lastMoveUndo = { movedId: id, otherId: otherId, field: field || null, offset: offset || 0 };
     markDirty();
+    queueAutoSave();
+    return true;
+  }
+
+  function moveRow(id, dir) {
+    if (!swapAdjacentRows(id, dir)) return;
     render();
+  }
+
+  /* Ctrl/Cmd+Z right after a move: swaps the same two rows back. Swapping
+     twice restores the original arrangement regardless of which direction
+     the move went, so this needs no record of that — only of which two rows
+     it touched. Declines once they are no longer adjacent (something else
+     restructured the rows in between — an add, a delete, a split landing
+     between them) rather than swap whatever now happens to be there.
+     Returns the undo record on success (for the caller to restore the
+     caret from) or false. Does not render, for the same reason
+     swapAdjacentRows doesn't. */
+  function undoMoveRow() {
+    var undo = lastMoveUndo;
+    if (!undo) return false;
+    lastMoveUndo = null;
+    var idxA = findRowIndex(undo.movedId);
+    var idxB = findRowIndex(undo.otherId);
+    if (idxA === -1 || idxB === -1 || Math.abs(idxA - idxB) !== 1) return false;
+    var tmp = state.rows[idxA];
+    state.rows[idxA] = state.rows[idxB];
+    state.rows[idxB] = tmp;
+    markDirty();
+    queueAutoSave();
+    return undo;
   }
 
   function armDelete(btn, id) {

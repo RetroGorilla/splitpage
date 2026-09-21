@@ -413,6 +413,23 @@
        Ctrl+Shift+Z — that is a redo request, which this never was. */
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
       if (undoSplitCellField()) { e.preventDefault(); return; }
+      /* Same idea for Alt+Up/Alt+Down (undoMoveRow, 06-rows.js): swaps the
+         two rows back and hands back the record it undid so the caret can
+         return to the exact field/offset the move started from. Split view
+         and the writer finish it differently for the same reason the move
+         itself does — see the Alt+Up/Alt+Down handler below. */
+      var moveUndo = undoMoveRow();
+      if (moveUndo) {
+        e.preventDefault();
+        if (writerOpen) {
+          renderWriter();
+        } else {
+          render();
+          if (moveUndo.field) focusRowField(moveUndo.movedId, moveUndo.field, moveUndo.offset);
+        }
+        renderProduction();
+        return;
+      }
     }
     /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
        The untagged-mention prompt only ever gets the key when nothing more
@@ -450,6 +467,42 @@
       hideTagGhost();
       syncFieldFromDom(cellEl);
       splitCellField(cellEl);
+      return;
+    }
+    /* Alt+Up / Alt+Down: move the scene the caret is in one place earlier
+       or later — the keyboard equivalent of dragging its grip, sharing the
+       same swap the gutter's own ↑/↓ buttons use (swapAdjacentRows,
+       06-rows.js) and syncing exactly the way a drag-reorder does (one
+       markDirty(), one queueAutoSave() — see moveRowTo). isScriptCell()
+       matches a cell in #rows or in #writer-doc alike and excludes a
+       comment reply box, so this never fires there. No wrap: past either
+       end swapAdjacentRows() declines and nothing happens.
+
+       The two views finish the repaint differently. renderWriter() already
+       re-finds and re-focuses whatever paragraph was active before it ran
+       (writerCaretState(), 19-writer.js), which is this same row, so
+       nothing further is needed there. The split view's render() only ever
+       lands the caret at the end of the cell, not the exact offset it was
+       at, so that is corrected explicitly with focusRowField() afterward.
+       Calling the full render() from inside the writer instead would reach
+       past it into #rows's own copy of this field and steal focus there —
+       the same reason splitWriterRow/mergeWriterRows call renderWriter()
+       only, never render(), while the writer is open. */
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.altKey && !mod && isScriptCell(cellEl)) {
+      e.preventDefault();
+      syncFieldFromDom(cellEl);
+      var mvId = cellEl.getAttribute("data-id");
+      var mvField = cellEl.getAttribute("data-field");
+      var mvOffset = caretTextOffset(cellEl);
+      if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1, mvField, mvOffset)) {
+        if (writerOpen) {
+          renderWriter();
+        } else {
+          render();
+          focusRowField(mvId, mvField, mvOffset);
+        }
+        renderProduction();
+      }
       return;
     }
     /* Only the script has scenes to add one to. In a comment or reply box

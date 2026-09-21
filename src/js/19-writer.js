@@ -108,6 +108,23 @@
 
   /* ---- caret plumbing ---- */
 
+  /* The inverse of placeCaretAtTextOffset: how far the caret sits into
+     `el`'s plain text right now. Same technique writerCaretState() uses for
+     the writer's own paragraphs, generalised to any element — Alt+Up/
+     Alt+Down (21-events.js) uses it in the split view too, where the row
+     being moved keeps its id and field but render() only ever lands the
+     caret at the end of the cell, not back at the exact offset it was at. */
+  function caretTextOffset(el) {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    var range = sel.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return 0;
+    var probe = document.createRange();
+    probe.selectNodeContents(el);
+    probe.setEnd(range.startContainer, range.startOffset);
+    return probe.toString().length;
+  }
+
   /* Put the caret at a plain-text offset inside a block. Used after a merge
      so it lands exactly where the two scenes were joined, rather than at
      the top of the paragraph they became. */
@@ -245,6 +262,9 @@
     var prev = state.rows[intoIdx];
     var cur = state.rows[intoIdx + 1];
     if (!prev || !cur) return;
+    /* one of the two rows a pending move-undo names is about to disappear —
+       see lastMoveUndo in 06-rows.js */
+    lastMoveUndo = null;
 
     var prevHasVisual = !!(htmlToPlainText(prev.visualText) || prev.visualImage);
     var curHasVisual = !!(htmlToPlainText(cur.visualText) || cur.visualImage);
