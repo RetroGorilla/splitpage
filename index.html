@@ -1531,6 +1531,40 @@
   .file-chip-state { color: var(--text-faint); }
   .file-chip-state.unsaved { color: var(--accent); }
 
+  /* ---------- viewing, comments only (13-hosted.js) ----------
+     Loud enough to be read before anyone starts typing into a field that
+     will not take it, quiet enough to sit in a header beside the title. */
+  .review-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    margin-left: 8px;
+    padding: 4px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .review-chip[hidden] { display: none; }
+  .review-chip-icon { font-size: 12px; }
+
+  /* The controls a review session never renders are gone from the markup
+     (05-render.js, 10-comments.js); these are the ones that live in the page
+     shell, so hiding them here is the only place it can happen. */
+  body.is-review .add-row-bar,
+  body.is-review #btn-write,
+  body.is-review #find-replace,
+  body.is-review #find-replace-all,
+  body.is-review .gear-quickadd { display: none; }
+  /* Not a button any more, just the colour: keep the dot where it was. */
+  .status-btn.is-static { cursor: default; }
+  body.is-review .cell-editable { cursor: text; }
+
   /* ---------- save-state indicator ----------
      Beside each Save button (header and writer). Quiet on purpose: the
      states it reports last about two seconds each with autosave on, so
@@ -2990,6 +3024,15 @@
         <span id="file-chip-name"></span>
         <span class="file-chip-state" id="file-chip-state"></span>
       </div>
+      <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
+           joined with the review credential and a hosted document is open:
+           the fields are not editable and the server would refuse the save
+           anyway, so say which before anyone types. -->
+      <div class="review-chip" id="review-chip" hidden
+           title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
+        <span class="review-chip-icon" aria-hidden="true">👁</span>
+        <span>Viewing · comments only</span>
+      </div>
       <span class="stat-chips">
         <button type="button" class="stat-chip" id="runtime-chip"
                 title="Estimated read time for the Audio column — click to set your reading speed">
@@ -3675,7 +3718,7 @@
       <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
     </div>
     <div class="help-layout">
-      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-what-s-new-in-20">What's new in 2.0</a></li><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-between-the-browser-app-and-the-desktop-app">Moving between the browser app and the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-autosave">Autosave</a></li><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li><li><a href="#help-sending-a-link-so-their-edits-come-back">Sending a link, so their edits come back</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
+      <nav id="help-toc" aria-label="Help topics"><ul><li><a href="#help-what-s-new-in-20">What's new in 2.0</a></li><li><a href="#help-setting-up">Setting up</a></li><li><a href="#help-running-it">Running it</a></li><li><a href="#help-desktop-app">Desktop app</a><ul><li><a href="#help-moving-between-the-browser-app-and-the-desktop-app">Moving between the browser app and the desktop app</a></li><li><a href="#help-tabs">Tabs</a></li></ul></li><li><a href="#help-installing-it">Installing it</a></li><li><a href="#help-hosting-a-shared-session">Hosting a shared session</a><ul><li><a href="#help-asking-for-a-code">Asking for a code</a></li><li><a href="#help-letting-someone-comment-without-letting-them-edit">Letting someone comment without letting them edit</a></li></ul></li><li><a href="#help-connecting-to-a-server">Connecting to a server</a></li><li><a href="#help-connecting-over-ssh">Connecting over SSH</a></li><li><a href="#help-uninstalling">Uninstalling</a></li><li><a href="#help-keeping-it-up-to-date">Keeping it up to date</a></li><li><a href="#help-tagging-and-the-production-breakdown">Tagging and the production breakdown</a><ul><li><a href="#help-gear">Gear</a></li></ul></li><li><a href="#help-writing-and-planning">Writing and planning</a></li><li><a href="#help-working-with-other-people-hosted">Working with other people (hosted)</a></li><li><a href="#help-google-drive-files">Google Drive files</a></li><li><a href="#help-on-a-phone">On a phone</a></li><li><a href="#help-two-shapes-of-markdown-export">Two shapes of Markdown export</a></li><li><a href="#help-importing-a-google-doc">Importing a Google Doc</a></li><li><a href="#help-saving-your-script">Saving your script</a><ul><li><a href="#help-autosave">Autosave</a></li><li><a href="#help-if-you-edit-the-md-somewhere-else">If you edit the `.md` somewhere else</a></li><li><a href="#help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</a></li><li><a href="#help-sending-a-link-so-their-edits-come-back">Sending a link, so their edits come back</a></li></ul></li><li><a href="#help-version-history">Version history</a></li><li><a href="#help-reopening-a-saved-project">Reopening a saved project</a><ul><li><a href="#help-older-html-projects">Older `.html` projects</a></li></ul></li><li><a href="#help-resuming-your-last-project-on-launch">Resuming your last project on launch</a></li><li><a href="#help-files">Files</a></li></ul></nav>
       <div id="help-body"><h1 id="help-splitpage">Splitpage</h1>
 <p>Splitpage is a two-column visual/audio script editor — pictures on one side, narration on the other — with a built-in teleprompter, comments for collaborating on a draft, and a production breakdown that tracks every prop, location, VFX shot, and person mentioned in the script.</p>
 <p>Scripts save as plain Markdown (<code>.md</code>) files by default, so you can open and edit them anywhere, or as native <code>.splitpage</code> files that keep everything — tags, comments, version history — in one file. Splitpage itself runs portable straight out of a folder with nothing to install, or you can <a href="#help-installing-it">install it</a> properly, with a Start Menu entry and auto-updates.</p>
@@ -3715,7 +3758,7 @@
 <p><strong>Installing:</strong> run <code>SplitpageDesktopSetup-&lt;version&gt;.exe</code>. It installs for you only (no administrator needed) and lets you choose the folder, and there is nothing else to install first. It isn't on the releases page yet — for now it is built from source (see DEPLOY.md) — and it isn't code-signed yet, so Windows may warn before running it.</p>
 <p>The installer adds a desktop shortcut and a <strong>Splitpage</strong> folder in the Start Menu with two shortcuts:</p>
 <ul><li><strong>Splitpage</strong> — the app on its own.</li><li><strong>Splitpage (shared session)</strong> — starts hosting for others on your network straight away, always with a join PIN. The Servers dialog opens to show the addresses to open and the PIN; closing Splitpage stops sharing.</li></ul>
-<p><strong>Command-line flags</strong> match the browser launcher's: <code>--library</code>, <code>--host</code>, <code>--pin [code]</code>, <code>--data DIR</code>, <code>--port N</code>, <code>--allow-origin URL</code> and <code>--tunnel user@host</code>. The desktop app has no console window to type an SSH password into, so <code>--tunnel</code> needs key-based SSH login. Script files named on the command line open at launch.</p>
+<p><strong>Command-line flags</strong> match the browser launcher's: <code>--library</code>, <code>--host</code>, <code>--pin [code]</code>, <code>--review-pin [code]</code>, <code>--share-readonly</code>, <code>--data DIR</code>, <code>--port N</code>, <code>--allow-origin URL</code> and <code>--tunnel user@host</code>. The desktop app has no console window to type an SSH password into, so <code>--tunnel</code> needs key-based SSH login. Script files named on the command line open at launch.</p>
 <h2 id="help-installing-it">Installing it</h2>
 <p><strong>For the desktop app</strong> — its own window, tabs, and version history — see <a href="#help-desktop-app">Desktop app</a> above; that installer (<code>SplitpageDesktopSetup-&lt;version&gt;-x64.exe</code> / <code>-arm64.exe</code>) is what's on the releases page now.</p>
 <p>This section covers the older, browser-based install instead: the same app, opened in Chrome or Edge, with a Start Menu entry and auto-updates, built as a self-extracting <code>SplitpageSetup-&lt;version&gt;.exe</code>. It still builds from source exactly as described below, but the 2.0.0 release no longer publishes it — the zip and the desktop installers above are what ship.</p>
@@ -3732,6 +3775,10 @@
 <p>The launcher prints a six-digit <strong>join PIN</strong> in a box beside the addresses. Everyone who opens the address is asked for it once; read it out to them. <code>--pin 4821</code> uses a code you chose instead of a generated one.</p>
 <p>What the PIN does: it stops someone who is merely on the same wifi — a hotel, a co-working floor, a client's office — from opening your scripts by typing an address. What it does <strong>not</strong> do is hide anything. It is checked by your computer but travels in the clear over plain HTTP, so anyone able to watch the network can read it as it goes past, and read the scripts with it. It is a door lock for a room you are already in, not encryption, and it is not a substitute for Cloudflare Access on the internet.</p>
 <p>The code is remembered for as long as the other person's browser tab is open, unless they tick "remember on this device". Restarting your session invalidates every code you handed out.</p>
+<h3 id="help-letting-someone-comment-without-letting-them-edit">Letting someone comment without letting them edit</h3>
+<pre><code>node start.mjs --host --pin --review-pin</code></pre>
+<p>The launcher prints a second address — the same one with <code>#review=…</code> on the end — and a second six-digit code beside it. Either one opens the document to be <strong>read and commented on</strong>: the script renders, the teleprompter and every export work, comments and replies can be added, and nothing else can change. Fields are not editable, the header says <em>Viewing · comments only</em>, and <strong>File ▸ Servers…</strong> has a <strong>Copy review link</strong> button for handing the address on. <code>--share-readonly</code> is the same thing with both codes generated for you.</p>
+<p>The refusal is your computer's, not the page's: the server compares what a review session sends against what it has stored and accepts only added comments and replies, so it does not matter what the other person's copy of Splitpage lets them click, or what they type into their browser's console. They cannot resolve or delete anyone's comments either. Restarting your session invalidates the review link and both codes.</p>
 <h2 id="help-connecting-to-a-server">Connecting to a server</h2>
 <p>Normally the app talks to whatever served it. <strong>File ▸ Servers…</strong> lets it talk to a different one — someone else's shared session, or your own machine from a laptop — and remembers the ones you use.</p>
 <ul><li><strong>Add a server</strong>: a name, the address they gave you (<code>http://192.168.1.20:8791/</code>), and the join PIN if they set one. The PIN is checked as you add it, so a typo in either is caught there and then.</li><li><strong>Use this server</strong> points the app at it; <strong>Back to this copy</strong> returns to the one you have open. The File menu says which one you are on.</li><li>Splitpage stores the name, the address, and (only if you ask) the join PIN. It never stores a password, an SSH key or a passphrase, and there is nowhere in it that could.</li></ul>
@@ -3929,6 +3976,12 @@ node update.mjs           # download and verify it</code></pre>
          window this app doesn't have. Never touches state, localStorage or
          anything served (invariant #29) — it lives only in this element. -->
     <div class="connect-current" id="desktop-share-info" hidden></div>
+    <!-- The read-and-comment-only address for this session, filled in by
+         20e-connect.js's renderReviewLink() when the launch was given a
+         review credential (--review-pin / --share-readonly) and this browser
+         is an editor here. The key it carries belongs to this launch and is
+         never stored anywhere. -->
+    <div class="connect-current" id="connect-review" hidden></div>
     <div class="connect-list" id="connect-list"></div>
 
     <div class="connect-add">
@@ -8651,21 +8704,29 @@ node update.mjs           # download and verify it</code></pre>
   function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 
   function fieldBlock(rowId, field, value, placeholder) {
+    /* A review session (13-hosted.js) gets the same field with the writing
+       taken out of it: not editable, and a toolbar holding only the one
+       thing it may still do. `tabindex` replaces what contenteditable was
+       giving the cell — something to focus, so :focus-within still reveals
+       that toolbar when the reader selects the words to comment on. */
+    var review = reviewMode();
+    var toolbar = review
+      ? '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>'
+      : '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
+        '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
+        '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
+        '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
+        '<span class="tb-sep"></span>' +
+        '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
+        '<button type="button" data-cmd="link" title="Add link">Link</button>' +
+        '<span class="tb-sep"></span>' +
+        '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>' +
+        '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>';
     return (
       '<div class="field-wrap">' +
-        '<div class="mini-toolbar" role="toolbar" aria-label="Text formatting">' +
-          '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
-          '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
-          '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
-          '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
-          '<span class="tb-sep"></span>' +
-          '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
-          '<button type="button" data-cmd="link" title="Add link">Link</button>' +
-          '<span class="tb-sep"></span>' +
-          '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>' +
-          '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>' +
-        '</div>' +
-        '<div class="cell-editable" contenteditable="true" data-id="' + rowId + '" data-field="' + field + '" data-placeholder="' + placeholder + '">' + (value || "") + '</div>' +
+        '<div class="mini-toolbar" role="toolbar" aria-label="Text formatting">' + toolbar + '</div>' +
+        '<div class="cell-editable" contenteditable="' + (review ? 'false" tabindex="0' : 'true') +
+          '" data-id="' + rowId + '" data-field="' + field + '" data-placeholder="' + placeholder + '">' + (value || "") + '</div>' +
         '<div class="link-popover" hidden>' +
           '<input type="url" placeholder="https://example.com" data-role="link-input">' +
           '<button type="button" data-action="link-confirm">Add</button>' +
@@ -8676,16 +8737,25 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function rowHtml(row, index) {
+    /* Reordering, status, insert/delete and the image controls are all
+       document writes the server would refuse from a review session — so
+       they are not rendered at all rather than rendered and then refused.
+       The scene number, its duration and its status colour still show: this
+       is a reader's view of the script, not a stripped-down one. */
+    var review = reviewMode();
     var imageBlock;
     if (row.visualImage) {
       imageBlock =
         '<div class="image-thumb-wrap">' +
           '<img src="' + escapeHtml(row.visualImage) + '" alt="">' +
-          '<div class="image-thumb-actions">' +
-            '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
-            '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
-          '</div>' +
+          (review ? '' :
+            '<div class="image-thumb-actions">' +
+              '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
+              '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
+            '</div>') +
         '</div>';
+    } else if (review) {
+      imageBlock = "";
     } else {
       imageBlock =
         '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
@@ -8699,20 +8769,27 @@ node update.mjs           # download and verify it</code></pre>
     return (
       '<div class="row' + (row.status === "shot" ? ' is-shot' : '') + '" data-id="' + row.id + '">' +
         '<div class="gutter">' +
-          '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
-            '" title="Drag to reorder — or use the arrows below">' +
-            '<span class="drag-grip" aria-hidden="true"></span>' +
-            '<span class="row-num">' + pad2(index + 1) + '</span>' +
-          '</div>' +
+          (review
+            ? '<div class="row-head"><span class="row-num">' + pad2(index + 1) + '</span></div>'
+            : '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
+                '" title="Drag to reorder — or use the arrows below">' +
+                '<span class="drag-grip" aria-hidden="true"></span>' +
+                '<span class="row-num">' + pad2(index + 1) + '</span>' +
+              '</div>') +
           (secs >= 0.5 ? '<div class="row-dur" title="Estimated read time">' + formatDuration(secs) + '</div>' : '') +
-          '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
-            '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
-            '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
-          '</button>' +
-          '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
-          '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
-          '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
-          '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>' +
+          (review
+            ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
+                '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
+                '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
+              '</span>'
+            : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
+                '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
+                '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
+              '</button>' +
+              '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
+              '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
+              '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
+              '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>') +
           (row.updatedBy
             ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
                 escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'
@@ -13019,6 +13096,7 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function replaceCurrent() {
+    if (reviewBlocked()) return;   /* find still works; replacing is an edit */
     var needle = findNeedle();
     if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
     var m = findMatches[findIndex];
@@ -13037,6 +13115,7 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function replaceAll() {
+    if (reviewBlocked()) return;
     var needle = findNeedle();
     if (!needle) return;
     var replacement = document.getElementById("replace-input").value || "";
@@ -13865,11 +13944,20 @@ node update.mjs           # download and verify it</code></pre>
           '</select>' +
         '</div>' +
         '<div class="comment-actions">' +
-          '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Resolve") + '</button>' +
+          /* A review session may add to a thread and nothing else. Resolving
+             and deleting are changes to a comment that is already stored,
+             which the server refuses from a review token (server.js's
+             "what a review session may write") — it cannot tell whose
+             comment this is, because `author` is a name somebody typed, so
+             it allows additions only. */
+          (reviewMode() ? '' :
+            '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
+              (c.resolved ? "Unresolve" : "Resolve") + '</button>') +
           (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
-          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
-            '" data-action="delete-comment" data-id="' + c.id + '">' +
-            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
+          (reviewMode() ? '' :
+            '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+              '" data-action="delete-comment" data-id="' + c.id + '">' +
+              (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>') +
         '</div>' +
       '</div>'
     );
@@ -13890,11 +13978,15 @@ node update.mjs           # download and verify it</code></pre>
         '<div class="comment-quote">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
         '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : c.body) + '</div>' +
         '<div class="comment-actions">' +
-          '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
-          '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' + (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
-          '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
-            '" data-action="delete-comment" data-id="' + c.id + '">' +
-            (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>' +
+          /* All three write the document: "Use my version" puts text back
+             into a row, and the other two change a stored comment. */
+          (reviewMode() ? '' :
+            '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
+            '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
+              (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
+            '<button type="button" class="danger' + (deleteCommentArmId === c.id ? ' armed' : '') +
+              '" data-action="delete-comment" data-id="' + c.id + '">' +
+              (deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>') +
         '</div>' +
       '</div>'
     );
@@ -14771,19 +14863,37 @@ node update.mjs           # download and verify it</code></pre>
   /* Minted per launch by start.mjs, arrives in the URL fragment, lives only
      as long as this tab. */
   var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
+  /* The key a review link carries, also in the fragment and also per launch.
+     Kept for this tab so a reload does not send the reviewer back to a code
+     they were never told — the token it buys is sessionStorage too. */
+  var REVIEW_KEY_KEY = "splitpage-review-key";
 
   var serverBase = "";
   var serverToken = "";
   var launchToken = "";
+  var reviewKey = "";
+
+  /* What this browser is allowed to do here, as the SERVER sees it: "edit",
+     "review", or "" before we have asked. It is read back from /api/me every
+     time the app connects, never stored, and never inferred from anything
+     local — a review session that reconnects is still a review session, and
+     nothing on this side can promote itself by editing its own storage. */
+  var serverRole = "";
 
   var serverMode = { available: false, readOnly: false, checked: false,
-                     authRequired: false, version: null };
+                     authRequired: false, reviewAvailable: false, version: null };
   var serverDoc = { id: null, rev: 0 };   /* the hosted document we are editing */
   var serverIdentity = null;              /* { email, name } from Cloudflare Access */
   var serverSessionExpired = false;
   var serverDocs = [];                    /* last listing, for the picker */
 
   function onServerDoc() { return !!serverDoc.id; }
+
+  /* Viewing a hosted document through the review credential: the editor is
+     read-only and only the comment machinery stays live. Gated on there
+     being a server document open, because the same tab can still have a
+     local file of its own — this browser is restricted THERE, not here. */
+  function reviewMode() { return serverRole === "review" && onServerDoc(); }
 
   /* A Cloudflare Access session that has expired does not fail — it answers
      200 with an HTML sign-in page. Left undetected that lands as "unexpected
@@ -14844,12 +14954,34 @@ node update.mjs           # download and verify it</code></pre>
 
   function clearServerToken() {
     serverToken = "";
+    serverRole = "";
     try { sessionStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
     try { localStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
   }
 
+  /* ---- the review link ----
+
+     `#review=<key>` in the address, the same delivery as the launcher's own
+     key: the fragment is the one part of a URL browsers never send to a
+     server and no proxy logs. Read once, kept for this tab, and taken out of
+     the address bar so it is not in a screenshot or a bookmark. */
+  function readReviewKey() {
+    try { reviewKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { reviewKey = ""; }
+    var hash = location.hash || "";
+    var m = /(?:^#|&)review=([A-Za-z0-9]+)/.exec(hash);
+    if (!m) return;
+    reviewKey = m[1];
+    try { sessionStorage.setItem(REVIEW_KEY_KEY, reviewKey); } catch (e) {}
+    var rest = hash.replace(/(^#|&)review=[A-Za-z0-9]+/, "$1").replace(/^#&/, "#");
+    if (rest === "#") rest = "";
+    try {
+      history.replaceState(null, "", location.pathname + location.search + rest);
+    } catch (e) { /* file:// in some browsers — the key is already stored */ }
+  }
+
   loadServerBase();
   loadServerToken();
+  readReviewKey();
 
   async function apiFetch(path, opts) {
     opts = opts || {};
@@ -14885,6 +15017,14 @@ node update.mjs           # download and verify it</code></pre>
          separate the two rather than calling everything an auth failure */
       var body403 = await res.json().catch(function () { return null; });
       if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
+      /* The review credential's own refusal: the token is fine, the change
+         is not. Nothing to re-ask for, so it must never reach the PIN
+         dialog or the lapsed-sign-in path. */
+      if (body403 && body403.error === "review-only") {
+        var e403 = ApiError("review-only", "this link can comment, but not change the script");
+        e403.detail = body403.detail || "";
+        throw e403;
+      }
       /* A missing or stale join PIN is nothing like a lapsed Access session:
          it is answered right here by asking for the code, with no reload and
          no stash. Kept as its own code so handleApiError() cannot confuse
@@ -15043,6 +15183,7 @@ node update.mjs           # download and verify it</code></pre>
     docIdWrittenOut = true;
     docFileHandle = { handle: null, kind: null };
     resetProductionPanelState();
+    applyReviewMode();
 
     var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
 
@@ -15156,6 +15297,11 @@ node update.mjs           # download and verify it</code></pre>
       showToast("This server is published read-only — save a copy to your own disk instead.", "warn");
       return;
     }
+    if (err && err.code === "review-only") {
+      showToast("You are viewing this session — you can comment on it, but not change the script. " +
+        "Ask whoever is hosting for the editing code.", "warn", true);
+      return;
+    }
     showToast(whatFailed + " — " + ((err && err.message) || "please try again") + ".", "error");
   }
 
@@ -15169,6 +15315,7 @@ node update.mjs           # download and verify it</code></pre>
       serverMode.available = !!(health && health.ok);
       serverMode.readOnly = !!(health && health.readOnly);
       serverMode.authRequired = !!(health && health.authRequired);
+      serverMode.reviewAvailable = !!(health && health.reviewAvailable);
       serverMode.version = (health && health.version) || null;
     } catch (e) {
       serverMode.available = false;
@@ -15192,6 +15339,19 @@ node update.mjs           # download and verify it</code></pre>
        past here would answer 401 anyway, and a picker full of "could not
        reach the server" is a worse way to say "type the PIN". */
     if (serverMode.authRequired && !serverToken) {
+      /* Arrived on a review link: the key in the fragment IS the code, so
+         ask the server with it rather than asking the reader for something
+         they were never given. A key that is no longer good (the session was
+         restarted since the link was sent) simply falls through to the
+         dialog, which is the only place a code is ever typed. */
+      if (reviewKey) {
+        var joined = await joinServer(serverBase, null, reviewKey);
+        if (joined && joined.ok) {
+          setServerToken(joined.token, false);
+          finishServerDetect();
+          return;
+        }
+      }
       updateServerMenu();
       openPinDialog({ reason: "This server asks for a join PIN before it will show you anything." });
       return;
@@ -15209,6 +15369,10 @@ node update.mjs           # download and verify it</code></pre>
        has deliberately set for themselves. */
     try {
       serverIdentity = await apiFetch("api/me");
+      /* The role rides along with identity: same answer, same round trip,
+         and it comes from the token rather than from anything this page
+         could have decided for itself. */
+      serverRole = (serverIdentity && serverIdentity.role) || "edit";
       if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
         saveAuthorName(serverIdentity.name);
         updateIdentityChip();
@@ -15216,6 +15380,7 @@ node update.mjs           # download and verify it</code></pre>
     } catch (e) { /* identity is a nicety, not a requirement */ }
 
     updateServerMenu();
+    applyReviewMode();
     /* The link's document is opened only if nothing else claimed this page:
        resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
        both are unsaved work that must not be replaced (issue #19). */
@@ -15232,7 +15397,10 @@ node update.mjs           # download and verify it</code></pre>
     var sep = document.getElementById("menu-server-sep");
     if (sep) sep.hidden = !serverMode.available;
     var newBtn = document.getElementById("menu-server-new");
-    if (newBtn) newBtn.disabled = serverMode.readOnly;
+    /* Publishing is a write, and a review session has none. The server says
+       so too (403 review-only on POST /api/docs) — this only keeps the app
+       from offering something it knows will be refused. */
+    if (newBtn) newBtn.disabled = serverMode.readOnly || serverRole === "review";
     /* The share entry is never hidden — it is how someone with no server yet
        finds out that sharing a live document is possible at all, and it says
        so and opens the Servers dialog rather than doing nothing. Read-only is
@@ -15240,12 +15408,52 @@ node update.mjs           # download and verify it</code></pre>
        the reason in its tooltip. */
     var shareBtn = document.getElementById("menu-share-link");
     if (shareBtn) {
-      shareBtn.disabled = serverMode.available && serverMode.readOnly;
+      shareBtn.disabled = serverMode.available && (serverMode.readOnly || serverRole === "review");
       shareBtn.title = shareBtn.disabled
-        ? "This server is published read-only — nothing new can be put on it."
+        ? (serverRole === "review"
+            ? "You are viewing this session — publishing a script needs the editing code."
+            : "This server is published read-only — nothing new can be put on it.")
         : "Puts this script on the connected server and copies a link to it. " +
           "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
     }
+  }
+
+  /* ---- viewing, comments only ----
+
+     The badge and the body class every read-only rule in app.css hangs off.
+     Called wherever the answer can change — the role arriving, a document
+     opening or closing — rather than polled, and it only ever reflects what
+     the SERVER said: flipping the class by hand changes what this page
+     offers and nothing about what it is allowed to save. */
+  function applyReviewMode() {
+    var on = reviewMode();
+    document.body.classList.toggle("is-review", on);
+    var badge = document.getElementById("review-chip");
+    if (badge) badge.hidden = !on;
+    var title = document.getElementById("doc-title");
+    if (title) title.readOnly = on;
+  }
+
+  /* Somewhere to say it once, rather than in every blocked handler. */
+  function reviewBlocked() {
+    if (!reviewMode()) return false;
+    showToast("Viewing only — you can comment on this script, but not change it.", "warn");
+    return true;
+  }
+
+  /* The address to hand to someone who should only read and comment: this
+     server's own, with the launch's review key in the fragment. Asked for at
+     the moment it is wanted rather than held — it is a credential, it
+     belongs to this launch, and a page whose owner never opens the Servers
+     dialog never learns it at all. "" whenever there is nothing to hand out
+     (no review credential, or this browser is itself a reviewer). */
+  async function fetchReviewLink() {
+    if (!serverMode.available || !serverMode.reviewAvailable || serverRole === "review") return "";
+    var body;
+    try { body = await apiFetch("api/share"); } catch (e) { return ""; }
+    if (!body || !body.reviewKey) return "";
+    var base = serverBase || (location.origin + "/");
+    return base + "#review=" + body.reviewKey;
   }
 
   /* ---- the picker ---- */
@@ -15291,7 +15499,7 @@ node update.mjs           # download and verify it</code></pre>
           '</span>' +
         '</button>' +
         (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-        (serverMode.readOnly ? '' :
+        (serverMode.readOnly || serverRole === "review" ? '' :
           '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
             escapeHtml(d.id) + '" title="Delete this document from the server">×</button>') +
       '</div>';
@@ -15321,6 +15529,9 @@ node update.mjs           # download and verify it</code></pre>
     resetProductionPanelState();
 
     clearDirty();
+    /* Before render(), not after: the rows are built editable or not from
+       this same answer, so the class has to be on the body first. */
+    applyReviewMode();
     render();
     updateIdentityChip();
     updateFileChip();
@@ -15334,6 +15545,10 @@ node update.mjs           # download and verify it</code></pre>
      copied for a publish that did not happen. */
   async function publishToServer() {
     if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
+    if (serverRole === "review") {
+      showToast("You are viewing this session — publishing a script needs the editing code.", "warn");
+      return false;
+    }
     var published = cloneState(state);
     /* Publishing makes a second home for this script. If its id already
        lives somewhere else (a file on disk, another server document), the
@@ -15676,6 +15891,37 @@ node update.mjs           # download and verify it</code></pre>
     if (!res.ok) throw ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
     return body;
   }
+
+  /* ---- test hook ----
+
+     The harness serves static files and cannot start server.js with an
+     environment, so the two halves of the review credential are tested in
+     two places: what the SERVER allows a review token to write lives in
+     tools/test-server.mjs, and what the EDITOR does about it lives in
+     tests/43-review-mode.txt, driven through this. `setSession` says what
+     /api/health, /api/join and /api/me would have said — nothing more: the
+     role still only ever comes from here or from the server, never from
+     anything the page stored. Nothing in the app reads this; the same trick
+     window.__updateTest (20a-update.js) plays. */
+  window.__hostedTest = {
+    setSession: function (opts) {
+      opts = opts || {};
+      serverMode.available = true;
+      serverMode.checked = true;
+      serverMode.authRequired = true;
+      serverMode.reviewAvailable = opts.reviewAvailable !== false;
+      serverRole = opts.role || "edit";
+      serverDoc = opts.docId === null
+        ? { id: null, rev: 0 }
+        : { id: opts.docId || "doc-test", rev: opts.rev || 1 };
+      applyReviewMode();
+      updateServerMenu();
+      render();
+    },
+    role: function () { return serverRole; },
+    reviewMode: reviewMode,
+    reviewLink: fetchReviewLink
+  };
 
   /* ================= Google Drive file manager =================
 
@@ -22367,14 +22613,17 @@ node update.mjs           # download and verify it</code></pre>
   /* Its own fetch rather than apiFetch(): this is the one call that has to
      tell a wrong code from a missing one from too many tries, and apiFetch
      deliberately flattens all of that into "pin". */
-  async function joinServer(base, pin) {
+  /* `key` is the review link's own credential (13-hosted.js's readReviewKey):
+     the same door, opened by a link rather than by something typed. The
+     server decides which role either one buys — this only carries it. */
+  async function joinServer(base, pin, key) {
     var url = (base ? String(base).replace(/\/+$/, "") + "/" : "") + "api/join";
     var res;
     try {
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ pin: String(pin || "") }),
+        body: JSON.stringify(key ? { key: String(key) } : { pin: String(pin || "") }),
         credentials: base ? "omit" : "same-origin",
         cache: "no-store"
       });
@@ -22383,7 +22632,7 @@ node update.mjs           # download and verify it</code></pre>
     }
     var body = null;
     try { body = await res.json(); } catch (e) { /* not JSON at all */ }
-    if (res.ok && body && body.token) return { ok: true, token: body.token };
+    if (res.ok && body && body.token) return { ok: true, token: body.token, role: body.role || "edit" };
     if (res.status === 429) return { ok: false, error: "too-many-attempts" };
     if (res.status === 404 || !body) return { ok: false, error: "not-splitpage" };
     return { ok: false, error: (body && body.error) || ("HTTP " + res.status) };
@@ -22431,7 +22680,11 @@ node update.mjs           # download and verify it</code></pre>
     var base = pinRequest.base;
     setServerToken(result.token, remember);
     closePinDialog();
-    showToast("Joined" + (base ? " " + shortHost(base) : "") + ".", "ok");
+    /* Which code was typed decides what the session is, and the server has
+       just said which — worth saying out loud, so nobody discovers it by
+       finding they cannot type. */
+    showToast("Joined" + (base ? " " + shortHost(base) : "") +
+      (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
     if (done) { done(); return; }
     /* No caller waiting: this was a code asked for mid-flight, so pick the
        detection back up where it stopped. */
@@ -22450,6 +22703,7 @@ node update.mjs           # download and verify it</code></pre>
     setConnectError("");
     modal.hidden = false;
     renderConnect();
+    renderReviewLink();
     /* Desktop's own "who's connected to me" summary — defined in
        20f-desktop.js, a no-op (and the element it would fill stays hidden)
        whenever DESKTOP is null, i.e. the whole web build. */
@@ -22466,6 +22720,33 @@ node update.mjs           # download and verify it</code></pre>
     if (!el) return;
     el.textContent = message || "";
     el.hidden = !message;
+  }
+
+  /* ---- the review link ----
+
+     Offered beside the addresses because that is what it is: another address
+     for this same session, one that opens it to be read and commented on and
+     nothing else. Hidden unless this launch actually has a review credential
+     and this browser is an editor here — a reviewer has nothing to hand on.
+     Async and last, so a server that is slow to answer never holds up the
+     dialog itself. */
+  var reviewLinkUrl = "";
+
+  async function renderReviewLink() {
+    var box = document.getElementById("connect-review");
+    if (!box) return;
+    reviewLinkUrl = await fetchReviewLink();
+    if (!reviewLinkUrl) { box.hidden = true; box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="connect-add-title">Share it to read and comment</div>' +
+      '<p class="modal-hint">Whoever opens this can read the script, present it and export it, ' +
+      'and leave comments — the server refuses every other change, whatever their copy of ' +
+      'Splitpage lets them click.</p>' +
+      '<div class="connect-share-url">' + escapeHtml(reviewLinkUrl) + '</div>' +
+      '<div class="modal-row">' +
+        '<span class="modal-hint">Restarting the session invalidates it, like the PIN.</span>' +
+        '<button type="button" class="btn" data-connect-action="review-copy">Copy review link</button>' +
+      '</div>';
+    box.hidden = false;
   }
 
   function renderConnect() {
@@ -22597,12 +22878,22 @@ node update.mjs           # download and verify it</code></pre>
   async function useServer(bookmark) {
     setServerBase(bookmark.url);
     serverDoc = { id: null, rev: 0 };
-    serverMode = { available: false, readOnly: false, checked: false, authRequired: false, version: null };
+    /* The role belongs to the server that granted it, like the token: what
+       the new one says about this browser is not known until it answers. */
+    serverRole = "";
+    serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
+                   reviewAvailable: false, version: null };
     updateConnectMenu();
     renderConnect();
     await detectServer();
+    /* Whatever is on screen is nobody's hosted document now, so it is not a
+       review of one either — rebuild it as the ordinary editable document it
+       has become. */
+    applyReviewMode();
+    if (state) render();
     updateFileChip();
     renderConnect();
+    renderReviewLink();
     if (serverMode.available && !(serverMode.authRequired && !serverToken)) {
       showToast("Now using " + (bookmark.name || shortHost(bookmark.url)) +
         " — open a document from the File menu.", "ok");
@@ -22648,11 +22939,15 @@ node update.mjs           # download and verify it</code></pre>
     setServerBase("");
     clearServerToken();
     serverDoc = { id: null, rev: 0 };
-    serverMode = { available: false, readOnly: false, checked: false, authRequired: false, version: null };
+    serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
+                   reviewAvailable: false, version: null };
     updateConnectMenu();
     await detectServer();
+    applyReviewMode();
+    if (state) render();
     updateFileChip();
     renderConnect();
+    renderReviewLink();
     showToast("Back to this copy of Splitpage.", "ok");
   }
 
@@ -22677,14 +22972,13 @@ node update.mjs           # download and verify it</code></pre>
     document.getElementById("connect-ssh-out").hidden = false;
   }
 
-  async function copySshCommand() {
-    if (!sshShownFor) return;
-    var b = bookmarkById(sshShownFor);
-    if (!b) return;
-    var text = sshCommandFor(b);
+  /* navigator.clipboard needs a secure origin, and a shared session on a LAN
+     is plain HTTP — so the old textarea trick is the path that actually runs
+     most of the time here, not the fallback it looks like. */
+  async function copyPlainText(text, okMsg, failMsg) {
     try {
       await navigator.clipboard.writeText(text);
-      showToast("Command copied.", "ok");
+      showToast(okMsg, "ok");
       return;
     } catch (e) { /* no permission, or an insecure origin — fall back */ }
     try {
@@ -22697,10 +22991,24 @@ node update.mjs           # download and verify it</code></pre>
       ta.select();
       document.execCommand("copy");
       ta.remove();
-      showToast("Command copied.", "ok");
+      showToast(okMsg, "ok");
     } catch (err) {
-      showToast("Could not copy — select the command and copy it by hand.", "warn");
+      showToast(failMsg, "warn");
     }
+  }
+
+  async function copySshCommand() {
+    if (!sshShownFor) return;
+    var b = bookmarkById(sshShownFor);
+    if (!b) return;
+    await copyPlainText(sshCommandFor(b), "Command copied.",
+      "Could not copy — select the command and copy it by hand.");
+  }
+
+  async function copyReviewLink() {
+    if (!reviewLinkUrl) return;
+    await copyPlainText(reviewLinkUrl, "Review link copied — anyone who opens it can comment, not edit.",
+      "Could not copy — select the address and copy it by hand.");
   }
 
   /* A .cmd rather than a .bat only because that is what Windows has called
@@ -22784,6 +23092,7 @@ node update.mjs           # download and verify it</code></pre>
         else if (action === "ssh-show") showSshFor(id);
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
+        else if (action === "review-copy") copyReviewLink();
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");
@@ -22986,8 +23295,23 @@ node update.mjs           # download and verify it</code></pre>
       pinHtml = '<p class="modal-hint connect-share-nopin">No PIN — anyone who can reach one of ' +
         "these addresses can open and edit this document.</p>";
     }
+    /* The read-and-comment-only half of the same session (issue #30). Shown
+       only when this launch was given a review credential; the link carries
+       this launch's key in its fragment, the code is for reading out. */
+    var reviewHtml = "";
+    if (info.reviewPin || (info.reviewUrls || []).length) {
+      var reviewAddrs = (info.reviewUrls || []).map(function (u) {
+        return '<div class="connect-share-url">' + escapeHtml(u) + "</div>";
+      }).join("");
+      reviewHtml = '<div class="connect-add-title">To read and comment only</div>' +
+        '<p class="modal-hint">Send one of these instead — the server refuses every change ' +
+        "but a comment, whatever their copy of Splitpage lets them click.</p>" + reviewAddrs +
+        (info.reviewPin
+          ? '<div class="connect-share-pin">Review PIN:<strong>' + escapeHtml(info.reviewPin) + "</strong></div>"
+          : "");
+    }
     el.innerHTML = '<div class="connect-add-title">Sharing this session</div>' +
-      '<p class="modal-hint">Others on your network can open:</p>' + addrs + pinHtml +
+      '<p class="modal-hint">Others on your network can open:</p>' + addrs + pinHtml + reviewHtml +
       '<p class="modal-hint">Closing Splitpage stops sharing.</p>';
     el.hidden = false;
   }
@@ -25438,7 +25762,36 @@ node update.mjs           # download and verify it</code></pre>
   };
   /* ================= events ================= */
 
+  /* Everything a review session (13-hosted.js) may still do from the click
+     delegation below. An ALLOW-list rather than a list of things to block,
+     because this handler serves the script, the comments panel, the comment
+     composer, the history panel and all three production panels: a new
+     action added to any of them has to be considered here before a reviewer
+     can reach it, which is the right way round for something the server is
+     going to refuse anyway. Everything on it either navigates (jumping to a
+     tag, a scene, a comment) or is part of writing a comment or a reply,
+     including the reply composer's own link popover. */
+  var REVIEW_SAFE_ACTIONS = {
+    "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
+    "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
+    "jump-tag": 1, "jump-row": 1, "writer-jump": 1,
+    "tag-expand": 1, "broll-expand": 1, "broll-jump": 1, "bulk-clear": 1
+  };
+
   function onRootClick(e) {
+    if (reviewMode()) {
+      var tbReview = e.target.closest(".mini-toolbar button[data-cmd]");
+      var actionEl = e.target.closest("[data-action]");
+      /* A click on nothing in particular — the comment card's own "jump to
+         this text", a selection gesture, plain padding — carries no action
+         and changes nothing, so it is left alone. */
+      if (tbReview ? tbReview.getAttribute("data-cmd") !== "comment"
+                   : (actionEl && !REVIEW_SAFE_ACTIONS[actionEl.getAttribute("data-action")])) {
+        reviewBlocked();
+        return;
+      }
+    }
+
     var addBtn = e.target.closest('[data-action="add-row"]');
     if (addBtn) { addRow(null); return; }
 
@@ -25847,6 +26200,12 @@ node update.mjs           # download and verify it</code></pre>
     }
     var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
     if (!cellEl) return;
+    /* A review session's script cells are not editable, but they are still
+       .cell-editable and still take focus — that is how a reader selects the
+       words to comment on — so every shortcut below would otherwise still
+       fire on them. A comment's own composer and a reply's are untouched:
+       they are not script cells. */
+    if (reviewMode() && isScriptCell(cellEl)) return;
     /* Ctrl/Cmd+Z right after Alt+Enter: render() rebuilt the contenteditable
        the split happened in, so the browser's own undo history has nothing
        left to act on. undoSplitCellField() is the app-level replacement —
@@ -26767,6 +27126,9 @@ node update.mjs           # download and verify it</code></pre>
 
     document.getElementById("btn-write").addEventListener("click", function () {
       if (!state) { showToast("Still loading…", "warn"); return; }
+      /* The writer is a writing surface end to end — its paragraphs ARE the
+         row fields — so a review session does not get one. */
+      if (reviewBlocked()) return;
       openWriter();
     });
 
