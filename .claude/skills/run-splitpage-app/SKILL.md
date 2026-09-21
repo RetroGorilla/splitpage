@@ -322,6 +322,30 @@ the app.
   into a cell, `eval document.activeElement.blur()` before using `jsclick` on
   anything that might re-render `#rows`** — cheapest fix, and it's what a real
   user's next click would have done anyway.
+- **A real `click` right after a burst of `press`-typing can miss a header
+  button, and `jsclick` on the same button "works" for the wrong reason**
+  (issue #31 — suites 02, 04, 07, 12). Root cause, confirmed with
+  `elementFromPoint` at the computed coordinates a moment apart: `.topbar` is
+  `position: sticky` and condenses on scroll (`src/js/20i-topbar.js`) through
+  a scroll listener that is deliberately `requestAnimationFrame`-coalesced,
+  i.e. asynchronous. Both drivers' old `click` called
+  `el.scrollIntoView({block:'center'})` unconditionally before measuring —
+  and calling `scrollIntoView` on an element that is already fully visible
+  inside a sticky ancestor is its own trap: the browser computes the target
+  from the element's un-stuck *static* position, so an already-visible
+  header button gets scrolled anyway. That scroll crosses the topbar's
+  un-condense threshold a frame later, moving the button out from under the
+  coordinates already computed for the two `Input.dispatchMouseEvent` calls.
+  `jsclick` never noticed because `el.click()` doesn't hit-test the page at
+  all. Fixed in both drivers' `click` (not `jsclick`, which was always
+  immune): skip the scroll when the target is already fully in the
+  viewport, wait two animation frames for a pending layout class toggle to
+  land, and confirm with `elementFromPoint` that the point about to be
+  dispatched is really the element (or a descendant of it) before trusting
+  it, retrying a few times and logging what was actually hit if it never
+  settles. This also quietly helps a `click` right after a panel's own CSS
+  open-transition (e.g. `.comments-panel`'s 0.18s transform), which could
+  briefly measure zero size the same way.
 - **Assert on `textContent`, not `innerText`.** Splitpage uppercases a lot of UI
   through CSS `text-transform`, and `innerText` returns the *rendered* casing —
   `"HAVE IT"`, `"▶ PLAY"`. `textContent` returns the source. This produced two
