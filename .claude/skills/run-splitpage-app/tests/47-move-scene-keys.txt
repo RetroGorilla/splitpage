@@ -1,0 +1,159 @@
+# Alt+Up / Alt+Down move the scene the caret is in one place earlier or
+# later (issue #24): swapAdjacentRows()/undoMoveRow() in 06-rows.js, reusing
+# the exact record-and-sync path moveRowTo() (drag-reorder) already uses.
+# Covers both #rows and the writer, no wrap at either end, one Ctrl+Z undo
+# step, tags/status/comments travelling with the scene, the production
+# breakdown picking up the new order, and never firing inside a comment
+# reply box. Selectors are id-based throughout rather than nth-child, since
+# position is exactly what this feature changes.
+
+open
+
+# capture the seed rows' own ids up front
+eval (function(){var rows=document.querySelectorAll('#rows .row');window.__r1=rows[0].getAttribute('data-id');window.__r2=rows[1].getAttribute('data-id');return [window.__r1,window.__r2];})()
+
+# --- set up: a third scene, and give the seed's SECOND scene (which already
+# carries a comment, seeded anchored to "word for word") a tag and a status
+# too, so a move can be checked as a whole -----------------------------------
+eval (function(){document.querySelector('.add-row-btn').click();return true;})()
+sleep 300
+expect document.querySelectorAll('#rows .row').length == 3
+eval (function(){window.__r3=document.querySelectorAll('#rows .row')[2].getAttribute('data-id');return window.__r3;})()
+
+eval (function(){var cell=document.querySelector('#rows .row[data-id="'+window.__r2+'"] .visual-cell .cell-editable');cell.focus();var r=document.createRange();r.setStart(cell.firstChild,0);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+press  [gaffer tape]
+sleep 400
+expect !!document.querySelector('#rows .row[data-id="'+window.__r2+'"] .tag-anchor[data-tag-name="gaffer tape"]')
+
+eval document.activeElement.blur()
+eval (function(){document.querySelector('#rows .row[data-id="'+window.__r2+'"] .status-btn').click();document.querySelector('#rows .row[data-id="'+window.__r2+'"] .status-btn').click();return true;})()
+sleep 400
+expect document.querySelector('#rows .row[data-id="'+window.__r2+'"]').classList.contains('is-shot')
+
+# --- Alt+Up on the FIRST scene: no wrap, nothing happens --------------------
+eval (function(){var cell=document.querySelector('#rows .row[data-id="'+window.__r1+'"] .audio-cell .cell-editable');cell.focus();var t=cell.firstChild;var i=t.nodeValue.indexOf('welcome');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return i;})()
+key alt ArrowUp
+sleep 400
+expect document.querySelectorAll('#rows .row').length == 3
+expect document.querySelectorAll('#rows .row')[0].getAttribute('data-id') === window.__r1
+expect document.activeElement.closest('.row').getAttribute('data-id') === window.__r1
+expect document.activeElement.getAttribute('data-field') == audioText
+
+# --- Alt+Down on the LAST scene: no wrap, nothing happens -------------------
+eval (function(){var cell=document.querySelector('#rows .row[data-id="'+window.__r3+'"] .audio-cell .cell-editable');cell.focus();var r=document.createRange();r.selectNodeContents(cell);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+key alt ArrowDown
+sleep 400
+expect document.querySelectorAll('#rows .row')[2].getAttribute('data-id') === window.__r3
+expect document.activeElement.closest('.row').getAttribute('data-id') === window.__r3
+
+# --- Alt+Up moves the tagged/statused/commented middle scene up a place,
+# taking everything with it, and the caret lands back at the same field and
+# the same plain-text offset -------------------------------------------------
+eval (function(){var cell=document.querySelector('#rows .row[data-id="'+window.__r2+'"] .audio-cell .cell-editable');cell.focus();var t=cell.firstChild;var i=t.nodeValue.indexOf('left');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);window.__r2Offset=i;return i;})()
+key alt ArrowUp
+sleep 400
+expect document.querySelectorAll('#rows .row')[0].getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#rows .row')[1].getAttribute('data-id') === window.__r1
+expect document.querySelectorAll('#rows .row')[2].getAttribute('data-id') === window.__r3
+expect document.activeElement.closest('.row').getAttribute('data-id') === window.__r2
+expect document.activeElement.getAttribute('data-field') == audioText
+expect (function(){var s=getSelection();var r=s.getRangeAt(0);var probe=document.createRange();probe.selectNodeContents(document.activeElement);probe.setEnd(r.startContainer,r.startOffset);return probe.toString().length===window.__r2Offset;})()
+# the tag, the status and the comment all moved with it
+expect !!document.querySelector('#rows .row[data-id="'+window.__r2+'"] .tag-anchor[data-tag-name="gaffer tape"]')
+expect document.querySelector('#rows .row[data-id="'+window.__r2+'"]').classList.contains('is-shot')
+expect !!document.querySelector('#rows .row[data-id="'+window.__r2+'"] .cmt-anchor[data-cmt="c1"]')
+
+# --- the production breakdown re-renders in the new order -------------------
+# blur first, and open the panel with jsclick rather than a real click: r2
+# is now the very first row, and its still-focused field's mini-toolbar sits
+# right where a real click's coordinates would otherwise land
+eval document.activeElement.blur()
+jsclick #btn-production
+sleep 500
+jsclick #production-modes [data-group="scene"]
+sleep 300
+expect document.querySelector('#production-list .tag-scene-group-head').textContent == Scene 01
+jsclick #production-close
+sleep 300
+
+# --- and so does the comments panel's own sense of where the scene is now --
+jsclick #btn-comments
+sleep 600
+eval (function(){var card=Array.from(document.querySelectorAll('.comment-card')).find(function(c){return c.querySelector('.comment-quote').textContent.indexOf('word for word')!==-1;});var loc=card.querySelector('.comment-loc').textContent;window.__locNum=parseInt(loc.match(/\d+/)[0],10);return window.__locNum;})()
+expect window.__locNum == 1
+jsclick #comments-panel-close
+sleep 300
+
+# --- Ctrl+Z is one undo step: the scene goes back, caret and all -----------
+eval (function(){var cell=document.querySelector('#rows .row[data-id="'+window.__r2+'"] .audio-cell .cell-editable');cell.focus();return true;})()
+key ctrl KeyZ
+sleep 400
+expect document.querySelectorAll('#rows .row')[0].getAttribute('data-id') === window.__r1
+expect document.querySelectorAll('#rows .row')[1].getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#rows .row')[2].getAttribute('data-id') === window.__r3
+expect document.activeElement.closest('.row').getAttribute('data-id') === window.__r2
+expect document.activeElement.getAttribute('data-field') == audioText
+expect (function(){var s=getSelection();var r=s.getRangeAt(0);var probe=document.createRange();probe.selectNodeContents(document.activeElement);probe.setEnd(r.startContainer,r.startOffset);return probe.toString().length===window.__r2Offset;})()
+expect !!document.querySelector('#rows .row[data-id="'+window.__r2+'"] .tag-anchor[data-tag-name="gaffer tape"]')
+expect document.querySelector('#rows .row[data-id="'+window.__r2+'"]').classList.contains('is-shot')
+
+# --- the same gesture works in the writer, on the same rows -----------------
+eval document.activeElement.blur()
+jsclick #btn-write
+sleep 700
+expect document.querySelectorAll('#writer-doc .wr-para').length == 3
+expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r1
+expect document.querySelectorAll('#writer-doc .wr-block')[1].getAttribute('data-row') === window.__r2
+expect document.querySelectorAll('#writer-doc .wr-block')[2].getAttribute('data-row') === window.__r3
+
+eval (function(){var cell=document.querySelector('#writer-doc .wr-para[data-id="'+window.__r2+'"]');cell.focus();var t=cell.firstChild;var i=t.nodeValue.indexOf('left');var r=document.createRange();r.setStart(t,i);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);window.__wrOffset=i;return i;})()
+key alt ArrowUp
+sleep 400
+expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r2
+expect document.querySelectorAll('#writer-doc .wr-block')[1].getAttribute('data-row') === window.__r1
+expect document.activeElement.getAttribute('data-id') === window.__r2
+expect (function(){var s=getSelection();var r=s.getRangeAt(0);var probe=document.createRange();probe.selectNodeContents(document.activeElement);probe.setEnd(r.startContainer,r.startOffset);return probe.toString().length===window.__wrOffset;})()
+
+# no wrap: r2 is first now, Alt+Up does nothing
+key alt ArrowUp
+sleep 400
+expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r2
+
+# Alt+Down moves it back down, restoring the original order
+key alt ArrowDown
+sleep 400
+expect document.querySelectorAll('#writer-doc .wr-block')[0].getAttribute('data-row') === window.__r1
+expect document.querySelectorAll('#writer-doc .wr-block')[1].getAttribute('data-row') === window.__r2
+expect document.activeElement.getAttribute('data-id') === window.__r2
+
+# no wrap at the other end either
+eval (function(){var cell=document.querySelector('#writer-doc .wr-para[data-id="'+window.__r3+'"]');cell.focus();var r=document.createRange();r.selectNodeContents(cell);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+key alt ArrowDown
+sleep 400
+expect document.querySelectorAll('#writer-doc .wr-block')[2].getAttribute('data-row') === window.__r3
+
+jsclick #wr-close
+sleep 500
+expect document.getElementById('writer').hidden
+# the split view catches up with whatever order the writer left things in
+expect document.querySelectorAll('#rows .row')[0].getAttribute('data-id') === window.__r1
+expect document.querySelectorAll('#rows .row')[1].getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#rows .row')[2].getAttribute('data-id') === window.__r3
+
+# --- never fires inside a comment reply box ---------------------------------
+jsclick #btn-comments
+sleep 600
+jsclick [data-action="toggle-reply"][data-id="c1"]
+sleep 400
+eval (function(){var el=document.querySelector('.reply-composer[data-for="c1"] .cell-editable');el.focus();return true;})()
+key alt ArrowUp
+sleep 300
+key alt ArrowDown
+sleep 300
+expect document.querySelectorAll('#rows .row')[0].getAttribute('data-id') === window.__r1
+expect document.querySelectorAll('#rows .row')[1].getAttribute('data-id') === window.__r2
+expect document.querySelectorAll('#rows .row')[2].getAttribute('data-id') === window.__r3
+jsclick #comments-panel-close
+sleep 300
+
+quit

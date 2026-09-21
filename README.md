@@ -499,6 +499,8 @@ Other things worth knowing:
   to it, and it doesn't disturb the Visual next to the new scene either —
   that one starts blank, the way a beat nobody's framed a shot for yet
   should.
+- **Alt+Up / Alt+Down** moves the scene you're in one place earlier or
+  later, caret and all — in the split view or the writer.
 - Click a tag in the script — or any card in the panel — to open it and
   **assign who's responsible** and keep **notes, links or file paths**
   against it. The crew list is just names you type; nothing is verified.
