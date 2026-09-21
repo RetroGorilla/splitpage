@@ -26,12 +26,27 @@ expect true
 # and title, then reopen it as a .splitpage project — docFileHandle.kind
 # becomes 'splitpage' (never pristine again) and the id is kept verbatim
 # (migrateDocument keeps an already-valid embedded id).
-eval (function(){window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; return true;})()
+#
+# ONE FILE NAME for every fixture in this suite, deliberately. The browser's
+# duplicate-document check (02b-doc-id.js) compares (docId, file name) across
+# same-origin pages, and a name is all it has to go on: two pages holding one
+# id under two DIFFERENT names read as two copies and the loser is re-id'd,
+# which is exactly what the two-instance race case below would otherwise
+# trip. The same name reads as the one file open twice, and is left alone.
+eval (function(){window.FIXTURE_NAME = 'fixture.splitpage'; window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], window.FIXTURE_NAME)); return F.docId(); }; return true;})()
 
-# pushForeign(name, expectTitle): a real "Before opening NAME" capture via
+# pushForeign(name): a real "Before opening NAME" capture via
 # loadFileIntoEditor — the only pushSnapshot caller reachable with a plain
-# File and no fake handle.
-eval (function(){window.pushForeign = async function(name){ await F.openFile(new File(['Just some plain text.'], name)); return true; }; return true;})()
+# File and no fake handle. The capture lands under the document that is on
+# screen when it runs.
+#
+# Opening a foreign file now STARTS A NEW DOCUMENT (issue #7): the capture
+# lands under the id that was current, and what replaces it has a new one.
+# So this points the replacement back at that id — the same direct poke
+# openFixture uses — which is what lets every case below go on pushing
+# capture after capture onto ONE document. The one case that cares about the
+# new-document half does its own raw F.openFile instead.
+eval (function(){window.pushForeign = async function(name){ var id = F.docId(); await F.openFile(new File(['Just some plain text.'], name)); F.state().docId = id; return true; }; return true;})()
 
 # =============================================================================
 # backend is 'idb'; the legacy key stays null
@@ -54,10 +69,15 @@ wait F.docFile().kind === null
 eval (async function(){ window.__pristineRec = await H.docRecord(__pristineId); return window.__pristineRec; })()
 expect window.__pristineRec === null
 expect document.getElementById('btn-save').classList.contains('is-dirty')
+# that open started a NEW document (issue #7), so the second open's capture
+# belongs to THAT one — not to the pristine seed, which still has none
+eval (function(){window.__afterPristineId = F.docId(); return window.__afterPristineId;})()
+expect window.__afterPristineId !== window.__pristineId
 eval (async function(){ await F.openFile(new File(['Plain text again.'], 'note2.txt')); await H.idle(); return true; })()
-eval (async function(){ window.__dirtyRec = await H.docRecord(__pristineId); return window.__dirtyRec; })()
+eval (async function(){ window.__dirtyRec = await H.docRecord(__afterPristineId); window.__stillNoSeed = await H.docRecord(__pristineId); return window.__dirtyRec; })()
 expect window.__dirtyRec !== null
 expect window.__dirtyRec.count === 1
+expect window.__stillNoSeed === null
 
 # =============================================================================
 # capture is synchronous: the snapshot taken right before loadFileIntoEditor
@@ -65,14 +85,21 @@ expect window.__dirtyRec.count === 1
 # (done.stored, checked indirectly: it shows up stored, not pending).
 # =============================================================================
 eval (async function(){ await H.resetForTest(); window.__syncId = await openFixture(did('c1'), 'Original Title'); return true; })()
-eval (async function(){ await pushForeign('Renamed.txt'); return true; })()
+# the raw open, not pushForeign: this case is also where the new-document
+# half of issue #7 is observed against a real history capture.
+eval (async function(){ await F.openFile(new File(['Just some plain text.'], 'Renamed.txt')); return true; })()
 wait F.state().title === 'Renamed'
+expect F.docId() !== __syncId
 eval (async function(){ await H.idle(); window.__syncRaw = await H.listRaw(__syncId); return window.__syncRaw.length; })()
 expect window.__syncRaw.length === 1
 expect window.__syncRaw[0].label.indexOf('Before opening Renamed.txt') !== -1
 expect H.pending(__syncId).length === 0
 # restoring that snapshot proves its BODY held the pre-mutation title, not
-# the one the same handler set a line later
+# the one the same handler set a line later. The history panel only ever
+# lists the document on screen, so come back to the one the capture belongs
+# to first — under a title that is neither the snapshot's nor 'Renamed', so
+# the title that turns up afterwards can only have come out of the snapshot.
+eval (async function(){ await openFixture(__syncId, 'Not The Original'); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
@@ -396,10 +423,17 @@ expect window.__pg2.overCap === true
 eval (async function(){ await H.resetForTest(); window.__raceId = await openFixture(did('e6'), 'Race'); return true; })()
 eval (function(){window.__frame = document.createElement('iframe'); window.__frame.style.cssText = 'position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;'; window.__frame.src = '/index.html'; document.body.appendChild(window.__frame); return true;})()
 wait window.__frame.contentWindow && window.__frame.contentWindow.__historyTest && window.__frame.contentWindow.__splitpageFormats
-eval (async function(){ var fw = window.__frame.contentWindow; fw.__splitpageFormats.state().docId = window.__raceId; for (var i = 0; i < 3; i++) { await fw.__splitpageFormats.openFile(new File(['iframe seed row.'], 'seed' + i + '.txt')); } return fw.__splitpageFormats.docId(); })()
+# The frame is taken off the pristine seed with one foreign open, then
+# pointed at the shared document. Its own pushForeign re-points it after
+# every push for the same reason the main page's does (issue #7) — without
+# that, only the first push of each run would land under the shared id.
+eval (async function(){ var FF = window.__frame.contentWindow.__splitpageFormats; await FF.openFile(new File(['iframe seed row.'], 'seed.txt')); FF.state().docId = window.__raceId; window.__framePush = async function(name){ var id = FF.docId(); await FF.openFile(new File(['frame content'], name)); FF.state().docId = id; return true; }; return FF.docId(); })()
 expect window.__frame.contentWindow.__splitpageFormats.docId() === window.__raceId
-eval (async function(){ var mainPushes = []; for (var i = 0; i < 20; i++) { mainPushes.push(pushForeign('main' + i + '.txt')); } await Promise.all(mainPushes); return true; })()
-eval (async function(){ var fw = window.__frame.contentWindow; var framePushes = []; for (var i = 0; i < 20; i++) { framePushes.push(fw.__splitpageFormats.openFile(new File(['frame content ' + i], 'frame' + i + '.txt'))); } await Promise.all(framePushes); return true; })()
+# Each instance pushes SEQUENTIALLY — two of its own opens interleaved would
+# capture under each other's new ids rather than the shared one — but the
+# two instances run concurrently, which is what this case is about.
+eval (function(){ window.__mainBatch = (async function(){ for (var i = 0; i < 20; i++) { await pushForeign('main' + i + '.txt'); } })(); window.__frameBatch = (async function(){ for (var i = 0; i < 20; i++) { await window.__framePush('frame' + i + '.txt'); } })(); return true; })()
+eval (async function(){ await window.__mainBatch; await window.__frameBatch; return true; })()
 eval (async function(){ await H.idle(); await window.__frame.contentWindow.__historyTest.idle(); window.__raceRaw = await H.listRaw(window.__raceId); window.__raceBody = await H.bodyCount(window.__raceId); return [window.__raceRaw.length, window.__raceBody]; })()
 expect window.__raceRaw.length >= 40
 eval (function(){var ids = {}; window.__raceRaw.forEach(function(m){ids[m.id] = (ids[m.id]||0)+1;}); window.__raceDistinct = Object.keys(ids).length; window.__raceDup = Object.keys(ids).some(function(k){return ids[k] > 1;}); return [window.__raceDistinct, window.__raceDup];})()

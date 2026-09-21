@@ -24,7 +24,12 @@ open
 eval (function(){window.F = window.__splitpageFormats; window.D = window.__desktopTest; window.H = window.__historyTest; window.A = window.__appDataTest; window.did = function(tag){ return 'd' + (tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag + tag).slice(0, 32); }; return !!(F && D && H && A && A.build && A.assertNoSecrets && A.parse && A.importText && A.summary);})()
 expect true
 
-eval (function(){window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; window.pushForeign = async function(name){ await F.openFile(new File(['Just some plain text.'], name)); return true; }; return true;})()
+# The same two helpers 24-history.txt defines, and for the same reasons.
+# pushForeign points the document back at the id it had before the open,
+# because opening a foreign file now starts a NEW document (issue #7) — the
+# capture lands under the id that was current, and without this only the
+# first push of a run would belong to the document under test.
+eval (function(){window.openFixture = async function(id, title){ F.state().docId = id; F.state().title = title; var text = F.buildSplitpage(); await F.openFile(new File([text], title.replace(/[^a-z0-9]+/gi,'-') + '.splitpage')); return F.docId(); }; window.pushForeign = async function(name){ var id = F.docId(); await F.openFile(new File(['Just some plain text.'], name)); F.state().docId = id; return true; }; return true;})()
 
 # =============================================================================
 # 1. bundle shape: format/version/exportedAt/appVersion, plus a history entry

@@ -2503,6 +2503,178 @@ async function caseRestoreAtLaunch(target, fixturesDir) {
   }
 }
 
+/* Recent documents (DESKTOP-RECENTS, issue #15): the list the New Tab page's
+   third column draws. Restoring two file tabs records both; the bridge lists
+   them with a name, a title and an opaque id but NO PATH (invariant #34);
+   per-entry remove and "clear" both land on disk; the cap, the de-duplication
+   and a relative path are enforced on read; and reopening an entry whose file
+   has since been deleted rejects rather than failing silently. */
+async function caseRecentDocuments(target, fixturesDir) {
+  const tag = target.name + " recents: recorded, listed without paths, removable, capped";
+  const fixtureA = writeFixture(fixturesDir, "case-recent-a.splitpage", "Recent Doc A", [["a", "b"]]);
+  const fixtureB = writeFixture(fixturesDir, "case-recent-b.splitpage", "Recent Doc B", [["c", "d"]]);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const winId = newHexId();
+  const tabAId = newHexId(), tabBId = newHexId();
+  writeDesktopStateFile(userDataDir, {
+    version: 2,
+    windows: [{
+      windowId: winId, bounds: null, maximized: false, activeTabId: tabAId,
+      tabs: [
+        { tabId: tabAId, source: { kind: "file", absPath: fixtureA }, lastKnownTitle: "Recent Doc A" },
+        { tabId: tabBId, source: { kind: "file", absPath: fixtureB }, lastKnownTitle: "Recent Doc B" }
+      ]
+    }]
+  });
+
+  let app = null;
+  let cdp = null;
+  try {
+    app = await launchApp(target, { label: "recents", userDataDir });
+    cdp = await connectTab(app, tabAId);
+
+    // Both restored tabs report their documents, so both are recorded with
+    // their real titles. Most recent first — whichever loaded last is in
+    // front, so this asserts the SET and the titles, not the order.
+    const listed = await poll(cdp,
+      "window.splitpageDesktop.listRecents().then(function(r){ return r.length === 2 ? r : null; })", 20000);
+    const names = listed.map((r) => r.name).sort();
+    record(tag + ": both restored documents are on the list, by file name",
+      names.length === 2 && names[0] === "case-recent-a.splitpage" && names[1] === "case-recent-b.splitpage",
+      JSON.stringify(names));
+
+    const titles = await pollNode(async () => {
+      const r = await evalPage(cdp, "window.splitpageDesktop && window.splitpageDesktop.listRecents()");
+      if (!Array.isArray(r)) return null;
+      const t = r.map((x) => x.title).sort();
+      return t[0] === "Recent Doc A" && t[1] === "Recent Doc B" ? t : null;
+    }, 20000).catch(() => null);
+    record(tag + ": each entry carries the title the document actually reported",
+      !!titles, JSON.stringify(titles));
+
+    // INVARIANT #34: an entry is a name, a title, a time and an opaque id.
+    // Nothing in it may be (or contain) a path — not even the fixtures dir.
+    // Polled, not a bare evalPage: on a loaded machine the view can still be
+    // swapping in a fresh document when this runs, and `window.splitpageDesktop`
+    // is momentarily undefined — the same reason every other read in this
+    // case goes through poll/pollNode.
+    const current = await poll(cdp,
+      "window.splitpageDesktop && window.splitpageDesktop.listRecents().then(function(r){ return r.length ? r : null; })", 20000);
+    const keys = Object.keys(current[0] || {}).sort().join(",");
+    record(tag + ": an entry is exactly {at, fileId, name, title} and nothing else",
+      keys === "at,fileId,name,title", keys);
+    const serialized = JSON.stringify(current);
+    record(tag + ": no path, and no fragment of one, reaches the page",
+      serialized.indexOf(fixturesDir) === -1 && serialized.indexOf(path.sep + "case-recent-a") === -1,
+      serialized.slice(0, 400));
+    record(tag + ": each fileId is an opaque 32-hex registry key, never a name",
+      current.every((r) => /^[0-9a-f]{32}$/.test(r.fileId)), JSON.stringify(current.map((r) => r.fileId)));
+
+    // It is on disk, in desktop-state.json beside the windows.
+    const onDisk = await pollNode(async () => {
+      const st = readDesktopStateFile(userDataDir);
+      return st && Array.isArray(st.recents) && st.recents.length === 2 ? st : null;
+    }, 20000).catch(() => null);
+    record(tag + ": the list is persisted in desktop-state.json", !!onDisk,
+      JSON.stringify(onDisk && onDisk.recents));
+
+    // Per-entry remove: the call answers with the list as it stands after.
+    const targetId = current.find((r) => r.name === "case-recent-a.splitpage").fileId;
+    const afterRemove = await pollNode(async () =>
+      evalPage(cdp, "window.splitpageDesktop.removeRecent(" + JSON.stringify(targetId) + ")"), 20000);
+    record(tag + ": removing one entry leaves the other",
+      afterRemove.length === 1 && afterRemove[0].name === "case-recent-b.splitpage",
+      JSON.stringify(afterRemove));
+    const diskAfterRemove = await pollNode(async () => {
+      const st = readDesktopStateFile(userDataDir);
+      return st && Array.isArray(st.recents) && st.recents.length === 1 ? st : null;
+    }, 15000).catch(() => null);
+    record(tag + ": the removal reaches disk", !!diskAfterRemove,
+      JSON.stringify(diskAfterRemove && diskAfterRemove.recents));
+
+    // An id main does not know removes nothing and does not throw.
+    const forged = await pollNode(async () =>
+      evalPage(cdp, "window.splitpageDesktop.removeRecent(" + JSON.stringify("f".repeat(32)) + ")"), 20000)
+      .catch(() => null);
+    record(tag + ": an unknown fileId removes nothing and does not throw",
+      Array.isArray(forged) && forged.length === 1, JSON.stringify(forged));
+
+    // Reopening an entry whose file is gone rejects — the case the column
+    // turns into "that file isn't there any more".
+    const goneId = afterRemove[0].fileId;
+    fs.unlinkSync(fixtureB);
+    const rejected = await poll(cdp,
+      "window.splitpageDesktop && window.splitpageDesktop.routeOpen({kind:'file', fileId:" + JSON.stringify(goneId) + "})" +
+      ".then(function(){ return 'resolved'; }, function(){ return 'rejected'; })", 20000);
+    record(tag + ": reopening a deleted file rejects rather than opening nothing",
+      rejected === "rejected", String(rejected));
+
+    // Clear everything.
+    const afterClear = await pollNode(async () => {
+      const r = await evalPage(cdp, "window.splitpageDesktop.clearRecents()");
+      return Array.isArray(r) ? { r } : null;
+    }, 20000).then((x) => x.r);
+    record(tag + ": clear empties the list", Array.isArray(afterClear) && afterClear.length === 0,
+      JSON.stringify(afterClear));
+    const diskAfterClear = await pollNode(async () => {
+      const st = readDesktopStateFile(userDataDir);
+      return st && Array.isArray(st.recents) && st.recents.length === 0 ? st : null;
+    }, 15000).catch(() => null);
+    record(tag + ": the clear reaches disk", !!diskAfterClear,
+      JSON.stringify(diskAfterClear && diskAfterClear.recents));
+  } finally {
+    if (cdp) { try { cdp.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+
+  // --- the read-side rules, from a hand-written file -----------------------
+  const tagB = target.name + " recents: capped at 20, de-duplicated, relative paths dropped";
+  const userDataDirB = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const winIdB = newHexId(), tabIdB = newHexId();
+  const many = [];
+  for (let i = 0; i < 25; i++) {
+    many.push({ absPath: path.join(fixturesDir, "many-" + i + ".splitpage"), title: "Many " + i, at: 1000 + i });
+  }
+  // A duplicate of the first, a relative path, and two shapes that are not
+  // entries at all — none of which may survive the read.
+  many.splice(3, 0, { absPath: many[0].absPath, title: "Duplicate", at: 9999 });
+  many.push({ absPath: "not-absolute.splitpage", title: "Relative", at: 9999 });
+  many.push(null, { title: "No path at all" });
+  writeDesktopStateFile(userDataDirB, {
+    version: 2,
+    windows: [{
+      windowId: winIdB, bounds: null, maximized: false, activeTabId: tabIdB,
+      tabs: [{ tabId: tabIdB, source: { kind: "blank" }, lastKnownTitle: "" }]
+    }],
+    recents: many
+  });
+
+  let appB = null;
+  let cdpB = null;
+  try {
+    appB = await launchApp(target, { label: "recents-cap", userDataDir: userDataDirB });
+    cdpB = await connectTab(appB, tabIdB);
+    const read = await poll(cdpB,
+      "window.splitpageDesktop && window.splitpageDesktop.listRecents().then(function(r){ return r.length ? r : null; })", 20000);
+    record(tagB + ": capped at 20 entries", read.length === 20, String(read.length));
+    const readNames = read.map((r) => r.name);
+    record(tagB + ": the duplicate is collapsed to its first (most recent) entry",
+      readNames.filter((n) => n === "many-0.splitpage").length === 1, JSON.stringify(readNames));
+    record(tagB + ": file order is preserved (most recent first)",
+      readNames[0] === "many-0.splitpage" && readNames[1] === "many-1.splitpage",
+      JSON.stringify(readNames.slice(0, 3)));
+    record(tagB + ": a relative path and a malformed entry are dropped",
+      readNames.indexOf("not-absolute.splitpage") === -1 && read.every((r) => !!r.name),
+      JSON.stringify(readNames));
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    if (appB) { await teardown(appB, tagB); rmrf(appB.userDataDir); }
+    rmrf(userDataDirB);
+  }
+}
+
 /* "v1→v2 migration: a hand-written v1 file → one window/one tab, version 2
    on disk; corrupt JSON boots like a fresh install." */
 async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
@@ -4278,6 +4450,7 @@ async function runTargetSuite(target) {
     ["tear-off preserves live tab state", () => caseTearOffPreservesState(target)],
     ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir)],
     ["v1->v2 migration; corrupt JSON boots fresh", () => caseV1MigrationAndCorruptJson(target, fixturesDir)],
+    ["recents: recorded/listed/removed/cleared, capped and path-free", () => caseRecentDocuments(target, fixturesDir)],
     // --- step M: document id + desktop history ---
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],

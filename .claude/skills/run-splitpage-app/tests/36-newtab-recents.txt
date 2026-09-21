@@ -1,0 +1,86 @@
+# The New Tab page's recent-documents column (issue #15), opted into with
+# ?newtab=1 exactly as 30-new-tab.txt is.
+#
+# The list itself lives in the desktop main process (desktop-state.json,
+# contract DESKTOP-RECENTS) and desktop/test/smoke.mjs covers that half. This
+# suite is the column: it appears only on desktop, draws what the bridge
+# hands over, reopens an entry through the same routeOpen path File ▸ Open
+# uses, removes one, clears the lot, and says so rather than failing silently
+# when the file behind an entry has been moved or deleted.
+#
+# __desktopTest's fake backend stands in for a real Electron shell, the same
+# way it does in 21-desktop-shim.txt — there is no other way to drive an IPC
+# bridge headlessly.
+
+open /index.html?newtab=1
+wait document.getElementById('newtab-page').hidden == false
+
+# --- the browser build gets no column at all -----------------------------
+# DESKTOP is null here (no shell, no fake installed yet), which is exactly
+# what a browser copy looks like.
+expect document.getElementById('newtab-recents').hidden == true
+expect document.querySelector('#newtab-page .newtab-cards').classList.contains('has-recents') == false
+
+# --- with a desktop bridge, the column shows what main hands over --------
+eval (function(){ window.D = window.__desktopTest; window.fake = D.makeFakeBackend(); D.setBackend(window.fake); window.__idA = window.fake._addFile('script-a.md', '# Script A' + String.fromCharCode(10,10) + 'Narration for A.'); window.__idB = window.fake._addFile('script-b.md', '# Script B' + String.fromCharCode(10,10) + 'Narration for B.'); window.fake._addRecent(window.__idB, 'script-b.md', 'Script B', Date.now()); window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now()); return true; })()
+eval (async function(){ await window.__newTab.refreshRecents(); return true; })()
+wait document.getElementById('newtab-recents').hidden == false
+expect document.querySelector('#newtab-page .newtab-cards').classList.contains('has-recents') == true
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
+# most recent first, and each card names the document and the file
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent-title')[0].textContent == Script A
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent-title')[1].textContent == Script B
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent-name')[0].textContent.indexOf('script-a.md') !== -1
+# the entry carries the opaque id and nothing else — no path to be had
+expect document.querySelectorAll('#newtab-recents-list [data-newtab-action="open-recent"]')[0].getAttribute('data-file-id') === window.__idA
+expect document.getElementById('newtab-recents-list').textContent.indexOf('/') === -1
+
+# --- clicking one opens it in this tab and closes the page ---------------
+click #newtab-recents-list [data-newtab-action="open-recent"]
+wait document.getElementById('newtab-page').hidden == true
+wait document.getElementById('file-chip-name').textContent.indexOf('script-a.md') !== -1
+expect document.getElementById('doc-title').value == Script A
+
+# --- a missing file says so and leaves the entry to be forgotten ---------
+eval (function(){ window.__newTab.open(); window.fake._routeMissing = true; return true; })()
+wait document.getElementById('newtab-page').hidden == false
+eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; return window.__toastsBefore; })()
+click #newtab-recents-list [data-newtab-action="open-recent"]
+wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
+eval (function(){ var t = document.querySelectorAll('.toast.warn'); window.__missingText = t[t.length - 1].textContent; return window.__missingText; })()
+expect window.__missingText.indexOf("isn't there any more") !== -1
+# the page stays up, the entry stays on the list — it is the user's to forget
+expect document.getElementById('newtab-page').hidden == false
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
+eval (function(){ window.fake._routeMissing = false; return true; })()
+
+# --- × forgets exactly one entry -----------------------------------------
+click #newtab-recents-list [data-newtab-action="forget-recent"]
+wait document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 1
+expect document.querySelectorAll('#newtab-recents-list .newtab-recent-title')[0].textContent == Script B
+# and the backend was actually told, not just the DOM
+eval (async function(){ window.__left = await window.fake.listRecents(); return window.__left.length; })()
+expect window.__left.length == 1
+expect window.__left[0].fileId === window.__idB
+
+# --- "Clear recent" empties it, and the column stays with its empty note --
+click [data-newtab-action="clear-recents"]
+wait document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 0
+expect document.querySelectorAll('.newtab-recents-empty').length == 1
+expect document.getElementById('newtab-recents').hidden == false
+expect document.getElementById('newtab-recents-clear').hidden == true
+eval (async function(){ window.__cleared = await window.fake.listRecents(); return window.__cleared.length; })()
+expect window.__cleared.length == 0
+
+# --- it is not in the app-data export (§5 #48) ---------------------------
+# The bundle is built from an allowlist of localStorage keys and the history
+# store; it never asks main for the recents, and this is the check that says
+# so if a future edit ever adds it.
+eval (function(){ window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now()); return true; })()
+eval (async function(){ window.__bundle = await window.__appDataTest.build(); window.__bundleJson = JSON.stringify(window.__bundle); return Object.keys(window.__bundle).join(','); })()
+expect Object.keys(window.__bundle).indexOf('recents') === -1
+expect window.__bundleJson.indexOf('script-a.md') === -1
+expect window.__bundleJson.indexOf('Script A') === -1
+
+eval window.__desktopTest.restoreBackend()
+quit
