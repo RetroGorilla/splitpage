@@ -1,0 +1,167 @@
+# "Merge them" on the on-disk conflict modal (issue #16).
+#
+# The guard that raises #file-conflict-modal (checkFileConflict,
+# 18-local-files.js) offered four outcomes, all of which mean picking one
+# version whole. This drives the fifth: a review pane listing every field the
+# two versions disagree about, side by side, and only then the same
+# three-way mergeStates() the hosted save runs (18a-local-merge.js).
+#
+# Same fake FileSystemFileHandle-shaped object 19-save-conflict.txt and
+# 28-autosave.txt use — no file picker can run headless — plus, at the end,
+# __desktopTest's fake backend, because the desktop app reaches this code
+# through a makeDesktopHandle() handle rather than a browser one.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;return typeof F.save === 'function';})()
+expect true
+
+# --- a project file, opened through a handle whose mtime we can move ------
+eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__written = 0;window.__fakeHandle = {name:'merge.md',_mtime: window.__t0,_body: window.__md,createWritable: async function(){window.__written++;return {write: async function(b){window.__fakeHandle._body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__fakeHandle._body],'merge.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
+eval (function(){var f = new File([window.__md],'merge.md',{type:'text/markdown', lastModified: window.__t0});return F.openFile(f, window.__fakeHandle);})()
+wait F.docFile().kind === 'md'
+
+# opening retained the ancestor — without it this is only ever a two-way merge
+expect F.hasDiskBase() === true
+
+# --- somebody else edits scene 2 in the file; we edit scene 1 here --------
+eval (function(){var t = F.clone(F.state());t.rows[1].audioText = 'THEIRSCENETWO';window.__fakeHandle._body = F.buildMarkdown(t);window.__fakeHandle._mtime = window.__t0 + 200000;return true;})()
+caret #rows .row .audio-cell .cell-editable
+type MINESCENEONE
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('MINESCENEONE') !== -1
+
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+expect window.__written === 0
+
+# --- the fifth button is offered, because the file parses back ------------
+wait !document.getElementById('file-conflict-merge').hidden
+
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect document.getElementById('file-conflict-modal').hidden
+
+# both sides are on screen, in the same entry list, before anything happens
+expect document.querySelectorAll('#merge-review-list .merge-entry').length >= 2
+expect document.getElementById('merge-review-list').textContent.indexOf('MINESCENEONE') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('THEIRSCENETWO') !== -1
+# changed spans are highlighted inside the field, not just the field flagged
+expect document.querySelectorAll('#merge-review-list .diff-add').length > 0
+expect document.querySelectorAll('#merge-review-list .diff-del').length > 0
+# a real three-way merge: two disjoint edits, so neither is a conflict
+expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length === 0
+# nothing written, and nothing applied to the open document yet
+expect window.__written === 0
+expect document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') === -1
+
+# --- Cancel changes nothing, and hands the four original choices back -----
+click #merge-review-cancel
+wait document.getElementById('merge-review-modal').hidden
+expect document.getElementById('file-conflict-modal').hidden == false
+expect window.__written === 0
+expect document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') === -1
+expect F.docFile().lastModified === window.__t0
+
+# --- confirming merges both sides in, and still writes nothing ------------
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+click #merge-review-confirm
+wait document.getElementById('merge-review-modal').hidden
+expect document.getElementById('file-conflict-modal').hidden
+wait document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('THEIRSCENETWO') !== -1
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('MINESCENEONE') !== -1
+expect window.__written === 0
+# reported through the existing merge banner, and nothing overlapped
+expect document.getElementById('merge-banner').hidden == false
+expect F.state().comments.filter(function(c){return c.kind === 'conflict';}).length === 0
+expect document.getElementById('merge-review').hidden
+# autosave is halted until the user has looked it over (invariant #51)
+expect F.autosave.halt() !== ''
+
+# the baseline moved with the merge, so the Save that follows just writes
+eval (function(){F.save();return true;})()
+wait window.__written === 1
+expect document.getElementById('file-conflict-modal').hidden
+expect window.__fakeHandle._body.indexOf('MINESCENEONE') !== -1
+expect window.__fakeHandle._body.indexOf('THEIRSCENETWO') !== -1
+
+# --- with no ancestor it degrades to a two-way merge, and says so ---------
+eval (function(){return F.forgetDiskBase();})()
+expect F.hasDiskBase() === false
+eval (function(){document.getElementById('merge-banner').hidden = true;var t = F.clone(F.state());t.rows[0].audioText = 'DISKONLY';window.__fakeHandle._body = F.buildMarkdown(t);window.__fakeHandle._mtime = Date.now() + 300000;return true;})()
+caret #rows .row .audio-cell .cell-editable
+type LOCALONLY
+eval document.activeElement.blur()
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect document.getElementById('merge-review-detail').textContent.indexOf('no earlier version') !== -1
+expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length > 0
+click #merge-review-confirm
+wait document.getElementById('merge-review-modal').hidden
+# an overlapping edit survives as a conflict comment, exactly as on the
+# hosted path — and the banner offers Review conflicts for it
+wait F.state().comments.filter(function(c){return c.kind === 'conflict';}).length > 0
+expect document.getElementById('merge-banner').hidden == false
+expect document.getElementById('merge-review').hidden == false
+expect document.getElementById('merge-banner').className.indexOf('notice-warn') !== -1
+expect window.__written === 1
+
+# --- a file that cannot be read back as a document offers no merge --------
+eval (function(){F.save();return true;})()
+wait window.__written === 2
+eval (function(){window.__fakeHandle._body = '# Just a script\n\nSomebody retyped this in a text editor.\n';window.__fakeHandle._mtime = Date.now() + 600000;return true;})()
+caret #rows .row .audio-cell .cell-editable
+type ANOTHEREDIT
+eval document.activeElement.blur()
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+sleep 400
+expect document.getElementById('file-conflict-merge').hidden
+expect window.__written === 2
+click #file-conflict-cancel
+wait document.getElementById('file-conflict-modal').hidden
+
+# --- the same flow through a desktop file handle --------------------------
+# The desktop app has no File System Access API: every local file reaches
+# this code as a makeDesktopHandle() handle over the bridge, so the merge
+# has to read and re-read the file through that instead.
+#
+# #toast-host sits at z-index 200, above every modal (app.css), and this
+# suite has stacked up six toasts in a few seconds that a real session would
+# have watched fade — by here they reach the conflict modal's button row and
+# a real CDP click lands on a toast instead. Clear them rather than reaching
+# for jsclick, which wouldn't blur the cell just typed into.
+eval (function(){Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){t.remove();});return true;})()
+eval (function(){window.D = window.__desktopTest;window.fake = D.makeFakeBackend();D.setBackend(window.fake);return !!D.makeHandle;})()
+eval (function(){window.__deskId = window.fake._addFile('desktop-merge.md', F.buildMarkdown());return !!window.__deskId;})()
+eval (async function(){var h = D.makeHandle({id: window.__deskId, name: 'desktop-merge.md'});var f = await h.getFile();await F.openFile(f, h);return true;})()
+wait F.docFile().name === 'desktop-merge.md'
+expect F.hasDiskBase() === true
+eval (function(){var t = F.clone(F.state());t.rows[1].audioText = 'DESKTOPDISK';window.fake._setBytesKeepMtime(window.__deskId, F.buildMarkdown(t));window.fake._touch(window.__deskId);return true;})()
+caret #rows .row .audio-cell .cell-editable
+type DESKTOPLOCAL
+eval document.activeElement.blur()
+eval (function(){F.save();return true;})()
+wait !document.getElementById('file-conflict-modal').hidden
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect document.getElementById('merge-review-list').textContent.indexOf('DESKTOPDISK') !== -1
+expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length === 0
+click #merge-review-confirm
+wait document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').textContent.indexOf('DESKTOPDISK') !== -1
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('DESKTOPLOCAL') !== -1
+# still nothing on disk until the user saves
+expect window.fake._text(window.__deskId).indexOf('DESKTOPLOCAL') === -1
+eval (function(){F.save();return true;})()
+wait window.fake._text(window.__deskId).indexOf('DESKTOPLOCAL') !== -1
+expect window.fake._text(window.__deskId).indexOf('DESKTOPDISK') !== -1
+
+eval (function(){D.restoreBackend();return true;})()
+expect !window.splitpageDesktop
+
+quit
