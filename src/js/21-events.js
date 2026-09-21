@@ -518,13 +518,7 @@
       if (!row || row.getAttribute("data-id") === dragRowId) return;
       e.preventDefault();
       try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
-      var box = row.getBoundingClientRect();
-      var after = (e.clientY - box.top) > box.height / 2;
-      document.querySelectorAll("#rows .row").forEach(function (r) {
-        if (r !== row) r.classList.remove("drop-before", "drop-after");
-      });
-      row.classList.toggle("drop-before", !after);
-      row.classList.toggle("drop-after", after);
+      setDropMarkerForRow(row, e.clientY);
       return;
     }
     /* Foreign content being dragged in from outside the page (another tab,
@@ -733,6 +727,16 @@
     /* a drag that ends outside the list still has to clean up after itself */
     document.addEventListener("mouseup", function () {
       if (!dragRowId) clearDropMarkers();
+    });
+    /* Auto-scroll hot zone, listened for on window rather than #rows: the
+       sticky header sits above #rows in the DOM (src/page.html), so a
+       pointer resting over the header — squarely inside the top hot zone —
+       never reaches a listener scoped to #rows. Gated on dragRowId so an
+       image file being dragged in (the other thing dragover sees, handled by
+       imageDropTarget above) never moves the page. */
+    window.addEventListener("dragover", function (e) {
+      if (!dragRowId) return;
+      updateDragScroll(e.clientX, e.clientY);
     });
     document.querySelector(".add-row-bar").addEventListener("click", onRootClick);
     window.addEventListener("scroll", hideTagGhost, true);

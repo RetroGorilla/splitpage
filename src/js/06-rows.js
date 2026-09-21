@@ -161,6 +161,97 @@
     document.querySelectorAll("#rows .visual-cell.drag-over").forEach(function (c) {
       c.classList.remove("drag-over");
     });
+    /* every way a row drag can end — drop, dragend, or the native dragend
+       Escape produces — funnels through here, so this is the one place that
+       has to guarantee no scroll loop is left running. */
+    stopDragScroll();
+  }
+
+  /* Puts the drop-before/drop-after marker on `row`, matching whichever half
+     of it `clientY` falls in. Shared by onRootDragOver (pointer is moving,
+     e.target already IS the hit target) and the auto-scroll loop below
+     (pointer may be still, so the hit target has to be re-derived). */
+  function setDropMarkerForRow(row, clientY) {
+    var box = row.getBoundingClientRect();
+    var after = (clientY - box.top) > box.height / 2;
+    document.querySelectorAll("#rows .row").forEach(function (r) {
+      if (r !== row) r.classList.remove("drop-before", "drop-after");
+    });
+    row.classList.toggle("drop-before", !after);
+    row.classList.toggle("drop-after", after);
+  }
+
+  /* ---- auto-scroll while a scene is dragged to the edge of the window ----
+
+     There is no inner scroll container (see 20i-topbar.js), so this scrolls
+     the window itself. The hot zone is measured from the viewport edges, not
+     #rows's own box, because the sticky header sits on top of #rows and a
+     pointer resting on the header never reaches a listener on #rows at all —
+     hence the dragover listener driving this is on window, not #rows.
+
+     `dragover` only fires while the pointer actually moves in most engines,
+     so a pointer held still inside the zone has to be kept scrolling by its
+     own requestAnimationFrame loop rather than by further events. Each frame
+     re-derives whatever row is now under the pointer's last known viewport
+     position with elementFromPoint — which is what keeps the drop marker
+     tracking as the page moves beneath a motionless pointer, including
+     across the header's condense breakpoint (20i-topbar.js), where the
+     header's own height changes and shifts #rows under a pointer that never
+     moved. */
+  var DRAG_SCROLL_ZONE = 120; /* roughly a scene's height */
+  var DRAG_SCROLL_MIN_SPEED = 6; /* px/frame just inside the zone */
+  var DRAG_SCROLL_MAX_SPEED = 28; /* px/frame right at the window edge */
+  var dragScroll = null; /* { dir: -1|1, speed, x, y, raf } while running, else null */
+
+  function dragScrollSpeedFor(depthIntoZone) {
+    var t = Math.max(0, Math.min(1, depthIntoZone / DRAG_SCROLL_ZONE));
+    return DRAG_SCROLL_MIN_SPEED + t * (DRAG_SCROLL_MAX_SPEED - DRAG_SCROLL_MIN_SPEED);
+  }
+
+  function updateDropMarkersAtPoint(clientX, clientY) {
+    var el = document.elementFromPoint(clientX, clientY);
+    var row = el && el.closest && el.closest(".row");
+    if (!row || row.getAttribute("data-id") === dragRowId) return;
+    setDropMarkerForRow(row, clientY);
+  }
+
+  function dragScrollStep() {
+    if (!dragScroll) return;
+    window.scrollBy(0, dragScroll.dir * dragScroll.speed);
+    updateDropMarkersAtPoint(dragScroll.x, dragScroll.y);
+    dragScroll.raf = requestAnimationFrame(dragScrollStep);
+  }
+
+  function stopDragScroll() {
+    if (!dragScroll) return;
+    cancelAnimationFrame(dragScroll.raf);
+    dragScroll = null;
+  }
+
+  /* Called from every dragover while a row is armed for dragging (see
+     onRootMouseDown / dragRowId), with the pointer's current viewport
+     coordinates. Starts, updates, or stops the scroll loop for the zone the
+     pointer is in right now. */
+  function updateDragScroll(clientX, clientY) {
+    var vh = window.innerHeight;
+    var dir = 0, speed = 0;
+    if (clientY < DRAG_SCROLL_ZONE) {
+      dir = -1;
+      speed = dragScrollSpeedFor(DRAG_SCROLL_ZONE - clientY);
+    } else if (clientY > vh - DRAG_SCROLL_ZONE) {
+      dir = 1;
+      speed = dragScrollSpeedFor(clientY - (vh - DRAG_SCROLL_ZONE));
+    }
+    if (dir === 0) { stopDragScroll(); return; }
+    if (!dragScroll) {
+      dragScroll = { dir: dir, speed: speed, x: clientX, y: clientY, raf: null };
+      dragScroll.raf = requestAnimationFrame(dragScrollStep);
+    } else {
+      dragScroll.dir = dir;
+      dragScroll.speed = speed;
+      dragScroll.x = clientX;
+      dragScroll.y = clientY;
+    }
   }
 
   function moveRowTo(id, targetId, after) {
