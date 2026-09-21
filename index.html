@@ -2695,6 +2695,15 @@
   .broll-key:hover { color: var(--text); border-bottom-color: var(--broll); }
   .broll-badge { background: var(--broll); }
 
+  /* An item whose line still has no marker of its own (brollEntryFrom's
+     `markerless`). Shaped like the orphan badge it sits beside, but in the
+     b-roll colour rather than the danger one: nothing is broken yet. */
+  .broll-loose-badge {
+    font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--broll); background: color-mix(in srgb, var(--broll) 14%, transparent); border-radius: 999px;
+    padding: 2px 8px; white-space: nowrap; flex: none;
+  }
+
   .broll-quickadd input[type="text"] {
     flex: 1; min-width: 0;
     font-family: var(--font-body); font-size: 13.5px;
@@ -8771,6 +8780,13 @@ node update.mjs           # download and verify it</code></pre>
     updateScriptStats();
     updateCommentsCount();
     updateTagBadges();
+    /* Every route that puts new content into the document ends here — an
+       import, a file opened, a version restored, a merge landing — and any
+       of them can carry B-roll lines that never went through the typing
+       path and so have no marker of their own. The refresh's own debounce
+       is where they get one (see maybeAnchorBroll); scheduling rather than
+       calling keeps it off this frame and out of the way of a caret. */
+    scheduleBrollRefresh();
     renderProduction();
     captureReplyDrafts();
     renderComments();
@@ -11978,6 +11994,23 @@ node update.mjs           # download and verify it</code></pre>
      marker with no id (see brollLineMarker) falls back to matching an
      unclaimed record by name, so a Markdown round-trip recovers the item
      rather than orphaning it and minting a duplicate beside it. */
+  /* The id-then-name question asked of one marker, pulled out so the
+     anchoring pass below can ask it in exactly the same order and get
+     exactly the same answer. `claimed` is the caller's running note of
+     which records are already spoken for; this only reads it. */
+  function brollMatchRecord(found, claimed, byId) {
+    var rec = found.id ? byId[found.id] : null;
+    if (rec && !claimed[rec.id]) return rec;
+    var norm = normalizeTagName(found.name);
+    for (var i = 0; i < state.brollShots.length && norm; i++) {
+      var cand = state.brollShots[i];
+      if (claimed[cand.id]) continue;
+      if (normalizeTagName(cand.name) !== norm) continue;
+      return cand;
+    }
+    return null;
+  }
+
   function brollEntries() {
     var live = collectBrollFromRows(state.rows);
     var claimed = Object.create(null);
@@ -11986,18 +12019,7 @@ node update.mjs           # download and verify it</code></pre>
     var out = [];
 
     live.forEach(function (found) {
-      var rec = found.id ? byId[found.id] : null;
-      if (rec && claimed[rec.id]) rec = null;
-      if (!rec) {
-        var norm = normalizeTagName(found.name);
-        for (var i = 0; i < state.brollShots.length && norm; i++) {
-          var cand = state.brollShots[i];
-          if (claimed[cand.id]) continue;
-          if (normalizeTagName(cand.name) !== norm) continue;
-          rec = cand;
-          break;
-        }
-      }
+      var rec = brollMatchRecord(found, claimed, byId);
       if (!rec) {
         var row = brollRow(found.rowId);
         rec = newBrollRecord({
@@ -12137,6 +12159,177 @@ node update.mjs           # download and verify it</code></pre>
       '" contenteditable="false">' + escapeHtml(text) + '</span>';
   }
 
+  /* ---- anchoring a marker that never came from typing ----
+
+     maybeCaptureBroll() only fires on a live keystroke, so a marker that
+     arrived any other way — imported, pasted, opened from .md or .docx, or
+     written before markers existed — carried no id and was tied to its
+     record by name alone (see brollLineMarker). Reword that line and the
+     name match breaks: the status, notes, owner and audio reference are
+     left behind on an orphan and the line comes back as a new, unshot item.
+
+     This pass gives those lines the same span a typed one gets. One id per
+     LINE, never per name — two identical B-roll lines are two shots to go
+     and get (see the note at the top of this file) — and it adds, removes
+     and reorders nothing, so renameBrollInScript() still counts the same
+     marker lines in the same order. */
+
+  function brollLineTextNodes(nodes) {
+    var out = [];
+    (function walk(list) {
+      for (var i = 0; i < list.length; i++) {
+        var n = list[i];
+        if (n.nodeType === 3) out.push(n);
+        else if (n.nodeType === 1) walk(n.childNodes);
+      }
+    })(nodes);
+    return out;
+  }
+
+  /* A formatting element whose whole content was the marker's own words is
+     holding nothing once they are gone. */
+  function brollPruneEmpty(el, body) {
+    while (el && el !== body && el.parentNode && !el.childNodes.length) {
+      var parent = el.parentNode;
+      parent.removeChild(el);
+      el = parent;
+    }
+  }
+
+  /* Swaps the marker's words for the atomic span the typing path inserts,
+     in place. Those words can be spread over several nodes — a line can
+     open "<strong>B-roll:</strong> the gulls" — so they are consumed by
+     walking the line's text rather than by assuming one text node. Any
+     indentation in front of them goes with them, exactly as it does when
+     the marker is typed (maybeCaptureBroll wraps from the start of the
+     caret's text node, leading whitespace included). */
+  function brollWrapLineMarker(body, line, id) {
+    var m = BROLL_MARKER_RE.exec(brollLineText(line.nodes));
+    if (!m) return false;
+    var left = m[0].length;
+    brollLineTextNodes(line.nodes).forEach(function (t) {
+      if (left <= 0) return;
+      var val = t.nodeValue || "";
+      if (val.length > left) { t.nodeValue = val.slice(left); left = 0; return; }
+      left -= val.length;
+      var parent = t.parentNode;
+      if (!parent) return;
+      parent.removeChild(t);
+      brollPruneEmpty(parent, body);
+    });
+
+    /* Whatever of the line survived the strip still sits between the same
+       two <br>s, so the marker goes in front of the first of it — or, on a
+       line that was nothing but the marker, in front of the line's own
+       <br> (null for the last line, which appends). */
+    var ref = null;
+    for (var i = 0; i < line.nodes.length && !ref; i++) {
+      if (line.nodes[i].parentNode === body) ref = line.nodes[i];
+    }
+    if (!ref) ref = line.br;
+    var holder = document.createElement("div");
+    holder.innerHTML = brollKeyHtml(id, m[1] + m[2]) + " ";
+    Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
+      body.insertBefore(n, ref);
+    });
+    return true;
+  }
+
+  /* Which id each unanchored line should be given.
+
+     brollEntries() has already decided which record every marker belongs
+     to; minting a fresh id here would hand the line an id that record has
+     never heard of and leave the name match as the only thing still
+     holding the two together — the very state this is meant to end. So the
+     pass asks brollMatchRecord() the same question in the same order and
+     writes the answer into the script: a line already matched to a record
+     takes that record's id, and only a line with no record of its own gets
+     a new one. Keyed by row and ordinal, because that is what identifies a
+     line rather than a name. */
+  function brollAnchorPlan() {
+    var claimed = Object.create(null);
+    var byId = Object.create(null);
+    state.brollShots.forEach(function (r) { byId[r.id] = r; });
+    var plan = Object.create(null);
+    collectBrollFromRows(state.rows).forEach(function (found) {
+      var rec = brollMatchRecord(found, claimed, byId);
+      if (rec) claimed[rec.id] = true;
+      if (!found.id) plan[brollLineKey(found.rowId, found.ordinal)] = rec ? rec.id : makeId("bs");
+    });
+    return plan;
+  }
+
+  function brollLineKey(rowId, ordinal) {
+    return rowId + " " + ordinal;
+  }
+
+  /* `rows` is which rows to rewrite; the plan is always read from the whole
+     document, so a line brought into a script that already tracks a shot of
+     the same name cannot walk off with that shot's record. Callers that
+     anchor a subset (the import scan, 11-import.js) put those rows into
+     state.rows first for that reason. Returns how many lines were anchored. */
+  function anchorBrollInRows(rows) {
+    if (!state || !rows || !rows.length) return 0;
+    var plan = brollAnchorPlan();
+    var total = 0;
+    rows.forEach(function (row) {
+      var body = inertBody(row.visualText);
+      var ordinal = -1, n = 0;
+      brollFieldLines(body).forEach(function (line) {
+        var marker = brollLineMarker(line.nodes);
+        if (!marker) return;
+        ordinal++;
+        if (marker.el) return;
+        var id = plan[brollLineKey(row.id, ordinal)];
+        if (id && brollWrapLineMarker(body, line, id)) n++;
+      });
+      if (!n) return;
+      row.visualText = sanitizeHtml(body.innerHTML);
+      total += n;
+    });
+    return total;
+  }
+
+  /* Only ever at a moment when nothing is being edited. Rewriting a field
+     the caret is sitting in would cost that caret on the render() below,
+     and a marker halfway through being typed is not yet a marker — which
+     is also why this hangs off scheduleBrollRefresh()'s debounce rather
+     than the input handler. Everything that changes the document ends in a
+     render(), and render() schedules that refresh, so an import, an open,
+     a paste the writer has since stepped away from, and a merge landing
+     from the server all arrive here with the field safely left alone. */
+  function brollAnchoringIdle() {
+    var el = document.activeElement;
+    return !(el && el.isContentEditable);
+  }
+
+  function maybeAnchorBroll() {
+    if (!state || !brollAnchoringIdle()) return 0;
+    var n = anchorBrollInRows(state.rows);
+    if (!n) return 0;
+    markDirty();
+    render();
+    return n;
+  }
+
+  /* The one field that has just been left, anchored on its own. Nothing
+     holds a caret in it any more, so its markup can be refreshed in place —
+     which is what makes stepping away from a pasted line enough, without a
+     render of the whole document that could take the caret of whichever
+     field was clicked into next. */
+  function anchorBrollInLeftCell(cellEl) {
+    if (!state || cellEl.getAttribute("data-field") !== "visualText") return 0;
+    var row = brollRow(cellEl.getAttribute("data-id"));
+    if (!row) return 0;
+    var n = anchorBrollInRows([row]);
+    if (!n) return 0;
+    cellEl.innerHTML = row.visualText;
+    ensureTrailingCaretSpot(cellEl);
+    markDirty();
+    scheduleBrollRefresh();
+    return n;
+  }
+
   /* ---- writing an edit back into the script ----
 
      The list is not a second document. Renaming a shot there rewrites its
@@ -12208,6 +12401,9 @@ node update.mjs           # download and verify it</code></pre>
     if (brollRefreshTimer) clearTimeout(brollRefreshTimer);
     brollRefreshTimer = setTimeout(function () {
       brollRefreshTimer = null;
+      /* Anchoring first, because it can rewrite the very markers the badge
+         and the panel are about to read back. */
+      maybeAnchorBroll();
       updateBrollBadge();
       renderBroll();
     }, 400);
@@ -12240,6 +12436,15 @@ node update.mjs           # download and verify it</code></pre>
         '<span class="tag-entity-head-right">' +
           brollStatusPillHtml(entry) +
           (entry.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : '') +
+          /* Its line carries no marker of its own, so this item is held to
+             it by name alone and a rewording can still lose what is set
+             here. Normally a passing thing — the anchoring pass catches
+             these the moment the field is left — but while it lasts the
+             weaker identity is worth being able to see. */
+          (entry.markerless
+            ? '<span class="broll-loose-badge" title="This line has no marker yet, so it is matched by name — ' +
+                'click away from the script and it gets one.">Unanchored</span>'
+            : '') +
         '</span>' +
       '</div>' +
       (entry.reshoot ? '<div class="broll-flagline"><span class="broll-flag-mark">Needs attention</span>' +
@@ -25465,6 +25670,11 @@ node update.mjs           # download and verify it</code></pre>
     var clean = sanitizeHtml(cellEl.innerHTML);
     if (clean !== cellEl.innerHTML) cellEl.innerHTML = clean;
     syncFieldFromDom(cellEl);
+    /* Leaving a field is the safe moment to anchor a B-roll marker that got
+       into it without being typed — a paste, or the closing character
+       arriving as part of one. Only this field, and in place: see
+       anchorBrollInLeftCell(). */
+    anchorBrollInLeftCell(cellEl);
   }
 
   function onRootPaste(e) {

@@ -368,6 +368,11 @@
     var clean = sanitizeHtml(cellEl.innerHTML);
     if (clean !== cellEl.innerHTML) cellEl.innerHTML = clean;
     syncFieldFromDom(cellEl);
+    /* Leaving a field is the safe moment to anchor a B-roll marker that got
+       into it without being typed — a paste, or the closing character
+       arriving as part of one. Only this field, and in place: see
+       anchorBrollInLeftCell(). */
+    anchorBrollInLeftCell(cellEl);
   }
 
   function onRootPaste(e) {
