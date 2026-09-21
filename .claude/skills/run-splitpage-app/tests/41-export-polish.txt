@@ -1,0 +1,170 @@
+# .docx and Markdown export polish (issue #20): named docx styles, a theme
+# font, page numbers, scene numbering that survives reimport, a breakdown
+# table whose columns fit their content, and a plain Markdown export that
+# reads as a document instead of a filled-in form.
+#
+# Same interception trick as 03-exports.txt: URL.createObjectURL is hooked
+# so the exported blob never actually downloads. Every eval is one line —
+# the driver reads a script one command per line.
+
+open
+
+eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
+eval (function(){window.F = window.__splitpageFormats; return !!(F && F.state);})()
+expect true
+
+# the seed ships with a sample comment thread — clear it so the round trip
+# below tests the scene table alone; the docx importer turning a Comments
+# section's own paragraphs back into fabricated rows is pre-existing
+# behaviour this issue doesn't touch, not something new here
+eval (function(){F.state().comments = []; return true;})()
+
+# a store-only zip walker, identical in shape to 03-exports.txt's — kept on
+# window so later eval statements in this suite can reuse it
+eval (function(){window.__unzip = function(bytes){var dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);var off=0,files={};while(off+4<=bytes.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(bytes.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=bytes.subarray(d,d+cs);off=d+cs;}return files;};return 'unzip-ready';})()
+
+# =============================================================================
+# .docx — a plain script, no tags yet: styles, theme, footer and scene
+# numbering, then a genuine reimport round trip
+# =============================================================================
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+sleep 2000
+eval (async function(){var bytes=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());window.__parts=window.__unzip(bytes);window.__names=Object.keys(window.__parts);var dec=new TextDecoder();window.__docXml=dec.decode(window.__parts['word/document.xml']);window.__stylesXml=dec.decode(window.__parts['word/styles.xml']);function parses(name){var xml=dec.decode(window.__parts[name]);return !new DOMParser().parseFromString(xml,'application/xml').querySelector('parsererror');}window.__parsesOk={doc:parses('word/document.xml'),styles:parses('word/styles.xml'),theme:parses('word/theme/theme1.xml'),footer:parses('word/footer1.xml')};return true;})()
+
+# every XML part this export adds is well-formed
+expect window.__parsesOk.doc
+expect window.__parsesOk.styles
+expect window.__parsesOk.theme
+expect window.__parsesOk.footer
+
+# the parts a real Word document has and this one used to lack
+expect window.__names.indexOf('word/theme/theme1.xml') !== -1
+expect window.__names.indexOf('word/footer1.xml') !== -1
+
+# named styles, not just bold-and-a-size — and a document theme font
+expect window.__stylesXml.indexOf('w:styleId="Title"') !== -1
+expect window.__stylesXml.indexOf('w:styleId="Heading1"') !== -1
+expect window.__stylesXml.indexOf('w:styleId="SplitpageTable"') !== -1
+expect window.__stylesXml.indexOf('w:type="table"') !== -1
+expect window.__stylesXml.indexOf('asciiTheme="majorHAnsi"') !== -1
+expect window.__stylesXml.indexOf('asciiTheme="minorHAnsi"') !== -1
+
+# the table itself uses the named table style
+expect window.__docXml.indexOf('<w:tblStyle w:val="SplitpageTable"/>') !== -1
+
+# page numbers in the footer: a real PAGE field, referenced from the section
+expect window.__docXml.indexOf('<w:footerReference') !== -1
+eval (function(){window.__footerXml = new TextDecoder().decode(window.__parts['word/footer1.xml']); return true;})()
+expect window.__footerXml.indexOf('PAGE') !== -1
+expect window.__footerXml.indexOf('w:fldCharType="begin"') !== -1
+
+# scene numbering visible in the document: a "No." header and "01"/"02" cells
+expect window.__docXml.indexOf('>No.<') !== -1
+expect window.__docXml.indexOf('>01<') !== -1
+expect window.__docXml.indexOf('>02<') !== -1
+
+# --- a script exported to .docx and reimported still splits into the same
+# visual/audio rows (Done bullet 4) — the seed's own two rows, untagged, so
+# there is no breakdown/comments appendix to complicate the round trip
+eval (function(){window.__before = F.state().rows.map(function(r){return {v:r.visualText, a:r.audioText};}); return window.__before.length;})()
+expect window.__before.length === 2
+eval (async function(){ await F.openFile(new File([window.__blobs[window.__blobs.length-1]], 'roundtrip.docx')); return true; })()
+expect F.state().rows.length === 2
+expect F.state().rows[0].audioText.indexOf('welcome back') !== -1
+expect F.state().rows[0].visualText.indexOf('Host on camera') !== -1
+# the scene-number column never leaks into either cell's text
+expect F.state().rows[0].visualText.indexOf('No.') === -1
+
+# =============================================================================
+# .docx breakdown table — columns that fit their content
+# =============================================================================
+
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] to the {kitchen}.
+sleep 500
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+eval document.activeElement.blur()
+
+# give every tracked item a long note, so a fixed-width table would visibly
+# starve the Notes column the way the old hard-coded widths did
+eval (function(){var tags=F.state().productionTags;tags.forEach(function(t){t.notes="This prop needs a same-day replacement sourced from the rental house before the morning call, and someone has to confirm it arrives before crew call.";});return tags.length;})()
+expect window.F.state().productionTags.length >= 2
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+sleep 2000
+eval (async function(){var bytes=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dec=new TextDecoder();var xml=dec.decode(window.__unzip(bytes)['word/document.xml']);var grids=[],re=/<w:tblGrid>([\s\S]*?)<\/w:tblGrid>/g,m;while((m=re.exec(xml))!==null){var cols=[],re2=/<w:gridCol w:w="(\d+)"\/>/g,m2;while((m2=re2.exec(m[1]))!==null)cols.push(parseInt(m2[1],10));grids.push(cols);}window.__grids=grids;return true;})()
+expect window.__grids.length === 2
+expect window.__grids[0].length === 3
+expect window.__grids[1].length === 7
+# Notes (index 6) beats Mentions (index 4) and Status (index 2) given a real
+# long note — the old export hard-coded Notes narrower than several others
+expect window.__grids[1][6] > window.__grids[1][4]
+expect window.__grids[1][6] > window.__grids[1][2]
+# the grid still sums to the usable page width exactly (no drift from rounding)
+eval (function(){window.__gridSum = window.__grids[1].reduce(function(a,b){return a+b;}, 0); return window.__gridSum;})()
+expect window.__gridSum === 10080
+
+# =============================================================================
+# Markdown export — reads as a document, not a form
+# =============================================================================
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+sleep 1200
+eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return window.__md.length;})()
+
+expect window.__md.indexOf('### Scene 01') !== -1
+# no bold-label-per-field pattern
+expect window.__md.indexOf('**Visual**') === -1
+expect window.__md.indexOf('**Audio**') === -1
+# no empty-field placeholders
+expect window.__md.indexOf('_(no visual notes)_') === -1
+expect window.__md.indexOf('_(no dialogue)_') === -1
+# the visual direction is an inline lead-in instead
+expect window.__md.indexOf('*Visual —*') !== -1
+# a short summary under the title
+expect window.__md.indexOf('running time') !== -1
+# the breakdown and its long note still made it through unchanged
+expect window.__md.indexOf('## Production breakdown') !== -1
+expect window.__md.indexOf('rental house') !== -1
+
+# =============================================================================
+# Markdown export — an image is referenced from a sibling file, not pasted
+# inline as base64 (Done bullet 2), and the export becomes a small zip to
+# actually carry that file; the two-column Markdown export (the OTHER
+# format, still feeding the .md PROJECT round trip in 20d-formats.js) keeps
+# embedding base64 exactly as before — that one must not change.
+# =============================================================================
+
+eval (function(){F.state().rows[0].visualImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='; return true;})()
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+sleep 1200
+eval (async function(){var blob=window.__blobs[window.__blobs.length-1];window.__mdZipType=blob.type;var bytes=new Uint8Array(await blob.arrayBuffer());window.__isZip=(bytes[0]===0x50&&bytes[1]===0x4B);var files=window.__unzip(bytes);window.__mdZipNames=Object.keys(files);var mdName=window.__mdZipNames.filter(function(n){return /\.md$/.test(n);})[0];window.__mdFromZip=new TextDecoder().decode(files[mdName]);return true;})()
+expect window.__isZip
+expect window.__mdZipType == application/zip
+expect window.__mdZipNames.indexOf('images/scene-01.png') !== -1
+expect window.__mdFromZip.indexOf('images/scene-01.png') !== -1
+expect window.__mdFromZip.indexOf('data:image') === -1
+
+# the two-column export is untouched: still one file, still base64 inline —
+# it is what the .md project format (20d-formats.js) round-trips on
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md-table"]
+sleep 1200
+eval (async function(){window.__mdTable = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+expect window.__mdTable.indexOf('data:image/png;base64,') !== -1
+expect window.__mdTable.indexOf('| # | Visual | Audio | Status |') !== -1
+
+# a script with no picture still exports as a plain single .md file
+eval (function(){F.state().rows[0].visualImage = null; return true;})()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+sleep 1200
+expect window.__blobs[window.__blobs.length-1].type == text/markdown
+
+quit

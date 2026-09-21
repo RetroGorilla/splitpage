@@ -31,6 +31,33 @@
     return { w: w, h: h, ratio: h / w };
   }
 
+  /* Column widths that actually fit what's in them, instead of a fixed guess
+     — a Notes column full of real prose gets more room than a two-word
+     Status column, whatever the content looks like this run. `mins` is a
+     floor in the SAME character-count units as `longest`, not a twip width —
+     mixing the two would make the floor win every time, since a sane twip
+     minimum (hundreds) always dwarfs a column's actual character count.
+     Each column's weight is its longest cell (header included, so a header
+     alone always fits), clamped so one very long outlier can't starve every
+     other column; widths are then totalWidth split proportionally to those
+     weights, with the rounding remainder folded into the last column so the
+     grid always sums to exactly totalWidth. */
+  function fitColumnWidths(totalWidth, minChars, headers, rowsCells) {
+    var weights = headers.map(function (h, i) {
+      var longest = String(h).length;
+      rowsCells.forEach(function (r) {
+        var len = String(r[i] == null ? "" : r[i]).length;
+        if (len > longest) longest = len;
+      });
+      return Math.max(minChars[i], Math.min(40, longest));
+    });
+    var sum = weights.reduce(function (a, b) { return a + b; }, 0);
+    var widths = weights.map(function (w) { return Math.floor(totalWidth * w / sum); });
+    var used = widths.reduce(function (a, b) { return a + b; }, 0);
+    widths[widths.length - 1] += totalWidth - used;
+    return widths;
+  }
+
   function docxRunsXml(html, rels) {
     var runs = htmlToRuns(html);
     if (!runs.length) return '<w:p/>';
@@ -77,8 +104,42 @@
       '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + runXml + '</w:r></w:p>';
   }
 
+  /* One <w:tblPr> shape shared by both tables in the script export: a named
+     table style carries the header shading and row banding (styles.xml),
+     tblLook turns those conditional formats on for THIS table, and the
+     explicit borders stay as direct formatting so the hairline rule still
+     shows in viewers that ignore table styles entirely (older LibreOffice,
+     some online renderers). */
+  var TABLE_PR = '<w:tblStyle w:val="SplitpageTable"/>' +
+    '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' +
+    '<w:tblBorders>' +
+    ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
+      return '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="D9D5CC"/>';
+    }).join("") + '</w:tblBorders>';
+
+  /* A narrow centered cell for the scene-number column — its own small
+     builder rather than a new docxCellXml() parameter, since every other
+     caller of docxCellXml wants the plain left-aligned shape. */
+  function docxNumberCellXml(text, widthDxa, isHeader) {
+    var rPr = isHeader
+      ? '<w:b/><w:caps/><w:sz w:val="18"/>'
+      : '<w:b/><w:color w:val="8A6D3B"/>';
+    return '<w:tc><w:tcPr><w:tcW w:w="' + widthDxa + '" w:type="dxa"/><w:vAlign w:val="center"/>' +
+      '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
+      '<w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tcMar></w:tcPr>' +
+      '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr>' + rPr +
+      '</w:rPr><w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p></w:tc>';
+  }
+
   function buildDocx() {
-    var COL = 4675; /* twentieths of a point — two even columns inside 1" margins */
+    /* twentieths of a point, inside 1080-twip margins on a Letter page
+       (12240 wide) — 10080 usable, split into a narrow scene-number column
+       and two even Visual/Audio columns so scene numbering has somewhere to
+       live without turning the two-column shape into a three-column one the
+       importer would have to unlearn (mapTableColumns treats an unmatched
+       extra column as exactly this: a scene-number column to ignore). */
+    var COL_NO = 700;
+    var COL = (10080 - COL_NO) / 2;
     var media = [];
     var links = [];
     var rels = {
@@ -93,18 +154,18 @@
     };
 
     var body = "";
-    body += '<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:after="240"/></w:pPr>' +
-      '<w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr>' +
-      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
+    body += '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
+      '<w:r><w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
 
     var rowsXml = "";
     /* header row */
     rowsXml += '<w:tr><w:trPr><w:tblHeader/></w:trPr>' +
+      docxNumberCellXml("No.", COL_NO, true) +
       docxCellXml('<w:p><w:r><w:rPr><w:b/><w:caps/><w:sz w:val="18"/></w:rPr><w:t>Visual</w:t></w:r></w:p>', COL) +
       docxCellXml('<w:p><w:r><w:rPr><w:b/><w:caps/><w:sz w:val="18"/></w:rPr><w:t>Audio</w:t></w:r></w:p>', COL) +
       '</w:tr>';
 
-    state.rows.forEach(function (row) {
+    state.rows.forEach(function (row, idx) {
       var visual = "";
       if (row.visualImage) {
         try {
@@ -126,52 +187,54 @@
         } catch (e) { /* unreadable image — skip it rather than break the export */ }
       }
       visual += docxRunsXml(row.visualText, rels);
-      rowsXml += '<w:tr>' + docxCellXml(visual, COL) + docxCellXml(docxRunsXml(row.audioText, rels), COL) + '</w:tr>';
+      rowsXml += '<w:tr>' + docxNumberCellXml(pad2(idx + 1), COL_NO, false) +
+        docxCellXml(visual, COL) + docxCellXml(docxRunsXml(row.audioText, rels), COL) + '</w:tr>';
     });
 
-    /* (declared before the tables that use it) */
-    var borders = '<w:tblBorders>' +
-      ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
-        return '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="D9D5CC"/>';
-      }).join("") + '</w:tblBorders>';
-
-    body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + borders + '</w:tblPr>' +
-      '<w:tblGrid><w:gridCol w:w="' + COL + '"/><w:gridCol w:w="' + COL + '"/></w:tblGrid>' +
+    body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + TABLE_PR + '</w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="' + COL_NO + '"/><w:gridCol w:w="' + COL + '"/><w:gridCol w:w="' + COL + '"/></w:tblGrid>' +
       rowsXml + '</w:tbl>';
 
     var breakdown = breakdownRows();
     if (breakdown.length) {
-      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
-        '<w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>Production breakdown</w:t></w:r></w:p>';
+      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
+        '<w:r><w:t>Production breakdown</w:t></w:r></w:p>';
 
-      var bCols = [1300, 2200, 1100, 1300, 800, 1200, 1500];
+      var bHeaders = ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"];
+      /* floors in characters, not twips — see fitColumnWidths above */
+      var bMins = [10, 10, 8, 10, 6, 8, 10];
+      var bCellRows = breakdown.map(function (r) {
+        return [r.categoryLabel, r.name, r.statusLabel, r.owner, String(r.mentions), r.scenes.join(", "), r.notes];
+      });
+      /* columns sized to what's actually in them (fitColumnWidths above),
+         not a fixed guess a long Notes column would just wrap badly under */
+      var bCols = fitColumnWidths(10080, bMins, bHeaders, bCellRows);
+
       var bRows = '<w:tr><w:trPr><w:tblHeader/></w:trPr>' +
-        ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"].map(function (h, i) {
+        bHeaders.map(function (h, i) {
           return docxCellXml('<w:p><w:r><w:rPr><w:b/><w:caps/><w:sz w:val="18"/></w:rPr>' +
             '<w:t>' + h + '</w:t></w:r></w:p>', bCols[i]);
         }).join("") + '</w:tr>';
 
-      breakdown.forEach(function (r) {
-        var cells = [r.categoryLabel, r.name, r.statusLabel, r.owner, String(r.mentions),
-                     r.scenes.join(", "), r.notes];
+      bCellRows.forEach(function (cells) {
         bRows += '<w:tr>' + cells.map(function (text, i) {
           return docxCellXml('<w:p><w:r><w:t xml:space="preserve">' + xmlEscape(text) +
             '</w:t></w:r></w:p>', bCols[i]);
         }).join("") + '</w:tr>';
       });
 
-      body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + borders + '</w:tblPr>' +
+      body += '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' + TABLE_PR + '</w:tblPr>' +
         '<w:tblGrid>' + bCols.map(function (w) { return '<w:gridCol w:w="' + w + '"/>'; }).join("") + '</w:tblGrid>' +
         bRows + '</w:tbl>';
     }
 
     var comments = commentEntries();
     if (comments.length) {
-      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
-        '<w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>Comments</w:t></w:r></w:p>';
+      body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
+        '<w:r><w:t>Comments</w:t></w:r></w:p>';
       comments.forEach(function (c) {
         body += '<w:p><w:pPr><w:spacing w:before="200" w:after="20"/></w:pPr>' +
-          '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location) +
+          '<w:r><w:rPr><w:b/><w:color w:val="8A6D3B"/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location) +
           (c.resolved ? ' (resolved)' : '') + '</w:t></w:r>' +
           '<w:r><w:rPr><w:i/><w:color w:val="7A7364"/></w:rPr><w:t xml:space="preserve">' +
           xmlEscape('  —  ' + c.author + (c.when ? ', ' + c.when : '')) + '</w:t></w:r></w:p>';
@@ -191,13 +254,133 @@
     return packDocx(body, links, media);
   }
 
-  /* Everything below the body: page setup, relationships, styles and the
-     zip itself — identical for any .docx this file produces, so the
-     narration export builds its own body and hands it to the same packer
-     rather than growing a second copy of the boilerplate. */
+  /* Everything below the body: page setup, theme, styles, footer,
+     relationships and the zip itself — identical for any .docx this file
+     produces, so the narration export builds its own body and hands it to
+     the same packer rather than growing a second copy of the boilerplate. */
+
+  /* A minimal but schema-complete DrawingML theme — the "document theme
+     font" Word actually reads styles.xml's asciiTheme/hAnsiTheme references
+     against. Calibri/Calibri Light are Word's own long-standing defaults, so
+     every Windows and Mac install already has them; only the color scheme
+     is Splitpage's own. fmtScheme's four lists are fixed-size in the OOXML
+     schema (3 entries each) but nothing here ever draws a themed shape, so
+     each entry is the simplest legal one rather than a copy of Word's own
+     gradients. */
+  var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Splitpage">' +
+    '<a:themeElements>' +
+    '<a:clrScheme name="Splitpage">' +
+    '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>' +
+    '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>' +
+    '<a:dk2><a:srgbClr val="3B3527"/></a:dk2>' +
+    '<a:lt2><a:srgbClr val="F4F1EA"/></a:lt2>' +
+    '<a:accent1><a:srgbClr val="8A6D3B"/></a:accent1>' +
+    '<a:accent2><a:srgbClr val="6E7B6B"/></a:accent2>' +
+    '<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>' +
+    '<a:accent4><a:srgbClr val="C9A15A"/></a:accent4>' +
+    '<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>' +
+    '<a:accent6><a:srgbClr val="70AD47"/></a:accent6>' +
+    '<a:hlink><a:srgbClr val="1155CC"/></a:hlink>' +
+    '<a:folHlink><a:srgbClr val="7A4FA0"/></a:folHlink>' +
+    '</a:clrScheme>' +
+    '<a:fontScheme name="Splitpage">' +
+    '<a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
+    '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>' +
+    '</a:fontScheme>' +
+    '<a:fmtScheme name="Splitpage">' +
+    '<a:fillStyleLst>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '</a:fillStyleLst>' +
+    '<a:lnStyleLst>' +
+    '<a:ln w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+    '<a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+    '<a:ln w="19050" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+    '</a:lnStyleLst>' +
+    '<a:effectStyleLst>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '</a:effectStyleLst>' +
+    '<a:bgFillStyleLst>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '</a:bgFillStyleLst>' +
+    '</a:fmtScheme>' +
+    '</a:themeElements>' +
+    '</a:theme>';
+
+  /* Page numbers in the footer (Done bullet): a standard PAGE field, plus
+     the title so a printed or scattered page still says what it's from. A
+     hairline top border stands in for the rule a running footer usually
+     sits under. */
+  function footerXml() {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="D9D5CC"/></w:pBdr>' +
+      '<w:tabs><w:tab w:val="right" w:pos="10080"/></w:tabs>' +
+      '<w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr></w:pPr>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr>' +
+      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:tab/></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:t>1</w:t></w:r>' +
+      '<w:r><w:rPr><w:sz w:val="16"/><w:color w:val="7A7364"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>' +
+      '</w:p></w:ftr>';
+  }
+
+  /* Named paragraph, character and table styles — a document theme font
+     (via the theme part above), a table style carrying the header shading
+     and row banding, and colors that come from the theme's own scheme
+     rather than hard-coded hex wherever a style needs one. */
+  var STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults>' +
+    '<w:rPrDefault><w:rPr>' +
+    '<w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/>' +
+    '<w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="2B2B22"/>' +
+    '</w:rPr></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="288" w:lineRule="auto"/></w:pPr></w:pPrDefault>' +
+    '</w:docDefaults>' +
+    '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/>' +
+      '<w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="8" w:color="D9D5CC"/></w:pBdr>' +
+      '<w:spacing w:after="240"/></w:pPr>' +
+      '<w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi" w:cstheme="majorHAnsi"/>' +
+      '<w:b/><w:color w:val="2B2B22"/><w:sz w:val="40"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>' +
+      '<w:pPr><w:outlineLvl w:val="0"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
+      '<w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi" w:cstheme="majorHAnsi"/>' +
+      '<w:b/><w:caps/><w:color w:val="8A6D3B"/><w:sz w:val="26"/></w:rPr></w:style>' +
+    '<w:style w:type="table" w:styleId="SplitpageTable"><w:name w:val="Splitpage Table"/>' +
+      '<w:basedOn w:val="TableNormal"/>' +
+      '<w:tblPr>' +
+      '<w:tblBorders>' +
+      ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (side) {
+        return '<w:' + side + ' w:val="single" w:sz="4" w:space="0" w:color="D9D5CC"/>';
+      }).join("") +
+      '</w:tblBorders>' +
+      '<w:tblCellMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
+      '<w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar>' +
+      '</w:tblPr>' +
+      '<w:tblStylePr w:type="firstRow">' +
+      '<w:rPr><w:b/><w:caps/><w:color w:val="3B3527"/></w:rPr>' +
+      '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="EDE9DF"/></w:tcPr>' +
+      '</w:tblStylePr>' +
+      '<w:tblStylePr w:type="band1Horz">' +
+      '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F7F5EF"/></w:tcPr>' +
+      '</w:tblStylePr>' +
+      '</w:style>' +
+    '</w:styles>';
+
   function packDocx(body, links, media) {
-    body += '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>' +
-      '<w:pgMar w:top="1440" w:right="1080" w:bottom="1440" w:left="1080"/></w:sectPr>';
+    body += '<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter1"/>' +
+      '<w:pgSz w:w="12240" w:h="15840"/>' +
+      '<w:pgMar w:top="1440" w:right="1080" w:bottom="1440" w:left="1080" w:footer="720"/></w:sectPr>';
 
     var documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
@@ -209,7 +392,9 @@
 
     var relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '<Relationship Id="rIdTheme1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>' +
+      '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>';
     links.forEach(function (href, idx) {
       relsXml += '<Relationship Id="rIdL' + (idx + 1) + '"' +
         ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"' +
@@ -231,6 +416,8 @@
         '<Default Extension="jpeg" ContentType="image/jpeg"/>' +
         '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
         '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+        '<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+        '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
         '</Types>') },
       { name: "_rels/.rels", data: strBytes(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -238,16 +425,9 @@
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
         '</Relationships>') },
       { name: "word/document.xml", data: strBytes(documentXml) },
-      { name: "word/styles.xml", data: strBytes(
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/>' +
-          '<w:pPr><w:spacing w:after="240"/></w:pPr>' +
-          '<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>' +
-        '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>' +
-          '<w:pPr><w:outlineLvl w:val="0"/><w:spacing w:before="240" w:after="120"/></w:pPr>' +
-          '<w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>' +
-        '</w:styles>') },
+      { name: "word/styles.xml", data: strBytes(STYLES_XML) },
+      { name: "word/theme/theme1.xml", data: strBytes(THEME_XML) },
+      { name: "word/footer1.xml", data: strBytes(footerXml()) },
       { name: "word/_rels/document.xml.rels", data: strBytes(relsXml) }
     ];
     media.forEach(function (bytes, idx) {
@@ -291,9 +471,8 @@
     var links = [];
     var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
 
-    var body = '<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:after="240"/></w:pPr>' +
-      '<w:r><w:rPr><w:b/><w:sz w:val="36"/></w:rPr>' +
-      '<w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
+    var body = '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
+      '<w:r><w:t xml:space="preserve">' + xmlEscape(state.title || "Untitled Script") + '</w:t></w:r></w:p>';
 
     narrationRows().forEach(function (row) {
       /* docxRunsXml() opens its own <w:p>, so paragraph properties have to
