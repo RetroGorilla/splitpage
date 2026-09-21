@@ -1497,6 +1497,40 @@
   .file-chip-state { color: var(--text-faint); }
   .file-chip-state.unsaved { color: var(--accent); }
 
+  /* ---------- viewing, comments only (13-hosted.js) ----------
+     Loud enough to be read before anyone starts typing into a field that
+     will not take it, quiet enough to sit in a header beside the title. */
+  .review-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    margin-left: 8px;
+    padding: 4px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .review-chip[hidden] { display: none; }
+  .review-chip-icon { font-size: 12px; }
+
+  /* The controls a review session never renders are gone from the markup
+     (05-render.js, 10-comments.js); these are the ones that live in the page
+     shell, so hiding them here is the only place it can happen. */
+  body.is-review .add-row-bar,
+  body.is-review #btn-write,
+  body.is-review #find-replace,
+  body.is-review #find-replace-all,
+  body.is-review .gear-quickadd { display: none; }
+  /* Not a button any more, just the colour: keep the dot where it was. */
+  .status-btn.is-static { cursor: default; }
+  body.is-review .cell-editable { cursor: text; }
+
   /* ---------- save-state indicator ----------
      Beside each Save button (header and writer). Quiet on purpose: the
      states it reports last about two seconds each with autosave on, so

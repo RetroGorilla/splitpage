@@ -178,8 +178,23 @@
       pinHtml = '<p class="modal-hint connect-share-nopin">No PIN — anyone who can reach one of ' +
         "these addresses can open and edit this document.</p>";
     }
+    /* The read-and-comment-only half of the same session (issue #30). Shown
+       only when this launch was given a review credential; the link carries
+       this launch's key in its fragment, the code is for reading out. */
+    var reviewHtml = "";
+    if (info.reviewPin || (info.reviewUrls || []).length) {
+      var reviewAddrs = (info.reviewUrls || []).map(function (u) {
+        return '<div class="connect-share-url">' + escapeHtml(u) + "</div>";
+      }).join("");
+      reviewHtml = '<div class="connect-add-title">To read and comment only</div>' +
+        '<p class="modal-hint">Send one of these instead — the server refuses every change ' +
+        "but a comment, whatever their copy of Splitpage lets them click.</p>" + reviewAddrs +
+        (info.reviewPin
+          ? '<div class="connect-share-pin">Review PIN:<strong>' + escapeHtml(info.reviewPin) + "</strong></div>"
+          : "");
+    }
     el.innerHTML = '<div class="connect-add-title">Sharing this session</div>' +
-      '<p class="modal-hint">Others on your network can open:</p>' + addrs + pinHtml +
+      '<p class="modal-hint">Others on your network can open:</p>' + addrs + pinHtml + reviewHtml +
       '<p class="modal-hint">Closing Splitpage stops sharing.</p>';
     el.hidden = false;
   }

@@ -44,19 +44,37 @@
   /* Minted per launch by start.mjs, arrives in the URL fragment, lives only
      as long as this tab. */
   var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
+  /* The key a review link carries, also in the fragment and also per launch.
+     Kept for this tab so a reload does not send the reviewer back to a code
+     they were never told — the token it buys is sessionStorage too. */
+  var REVIEW_KEY_KEY = "splitpage-review-key";
 
   var serverBase = "";
   var serverToken = "";
   var launchToken = "";
+  var reviewKey = "";
+
+  /* What this browser is allowed to do here, as the SERVER sees it: "edit",
+     "review", or "" before we have asked. It is read back from /api/me every
+     time the app connects, never stored, and never inferred from anything
+     local — a review session that reconnects is still a review session, and
+     nothing on this side can promote itself by editing its own storage. */
+  var serverRole = "";
 
   var serverMode = { available: false, readOnly: false, checked: false,
-                     authRequired: false, version: null };
+                     authRequired: false, reviewAvailable: false, version: null };
   var serverDoc = { id: null, rev: 0 };   /* the hosted document we are editing */
   var serverIdentity = null;              /* { email, name } from Cloudflare Access */
   var serverSessionExpired = false;
   var serverDocs = [];                    /* last listing, for the picker */
 
   function onServerDoc() { return !!serverDoc.id; }
+
+  /* Viewing a hosted document through the review credential: the editor is
+     read-only and only the comment machinery stays live. Gated on there
+     being a server document open, because the same tab can still have a
+     local file of its own — this browser is restricted THERE, not here. */
+  function reviewMode() { return serverRole === "review" && onServerDoc(); }
 
   /* A Cloudflare Access session that has expired does not fail — it answers
      200 with an HTML sign-in page. Left undetected that lands as "unexpected
@@ -117,12 +135,34 @@
 
   function clearServerToken() {
     serverToken = "";
+    serverRole = "";
     try { sessionStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
     try { localStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
   }
 
+  /* ---- the review link ----
+
+     `#review=<key>` in the address, the same delivery as the launcher's own
+     key: the fragment is the one part of a URL browsers never send to a
+     server and no proxy logs. Read once, kept for this tab, and taken out of
+     the address bar so it is not in a screenshot or a bookmark. */
+  function readReviewKey() {
+    try { reviewKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { reviewKey = ""; }
+    var hash = location.hash || "";
+    var m = /(?:^#|&)review=([A-Za-z0-9]+)/.exec(hash);
+    if (!m) return;
+    reviewKey = m[1];
+    try { sessionStorage.setItem(REVIEW_KEY_KEY, reviewKey); } catch (e) {}
+    var rest = hash.replace(/(^#|&)review=[A-Za-z0-9]+/, "$1").replace(/^#&/, "#");
+    if (rest === "#") rest = "";
+    try {
+      history.replaceState(null, "", location.pathname + location.search + rest);
+    } catch (e) { /* file:// in some browsers — the key is already stored */ }
+  }
+
   loadServerBase();
   loadServerToken();
+  readReviewKey();
 
   async function apiFetch(path, opts) {
     opts = opts || {};
@@ -158,6 +198,14 @@
          separate the two rather than calling everything an auth failure */
       var body403 = await res.json().catch(function () { return null; });
       if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
+      /* The review credential's own refusal: the token is fine, the change
+         is not. Nothing to re-ask for, so it must never reach the PIN
+         dialog or the lapsed-sign-in path. */
+      if (body403 && body403.error === "review-only") {
+        var e403 = ApiError("review-only", "this link can comment, but not change the script");
+        e403.detail = body403.detail || "";
+        throw e403;
+      }
       /* A missing or stale join PIN is nothing like a lapsed Access session:
          it is answered right here by asking for the code, with no reload and
          no stash. Kept as its own code so handleApiError() cannot confuse
@@ -316,6 +364,7 @@
     docIdWrittenOut = true;
     docFileHandle = { handle: null, kind: null };
     resetProductionPanelState();
+    applyReviewMode();
 
     var typedDuringResume = stateAtStart && editSeq !== seqAtStart;
 
@@ -429,6 +478,11 @@
       showToast("This server is published read-only — save a copy to your own disk instead.", "warn");
       return;
     }
+    if (err && err.code === "review-only") {
+      showToast("You are viewing this session — you can comment on it, but not change the script. " +
+        "Ask whoever is hosting for the editing code.", "warn", true);
+      return;
+    }
     showToast(whatFailed + " — " + ((err && err.message) || "please try again") + ".", "error");
   }
 
@@ -442,6 +496,7 @@
       serverMode.available = !!(health && health.ok);
       serverMode.readOnly = !!(health && health.readOnly);
       serverMode.authRequired = !!(health && health.authRequired);
+      serverMode.reviewAvailable = !!(health && health.reviewAvailable);
       serverMode.version = (health && health.version) || null;
     } catch (e) {
       serverMode.available = false;
@@ -465,6 +520,19 @@
        past here would answer 401 anyway, and a picker full of "could not
        reach the server" is a worse way to say "type the PIN". */
     if (serverMode.authRequired && !serverToken) {
+      /* Arrived on a review link: the key in the fragment IS the code, so
+         ask the server with it rather than asking the reader for something
+         they were never given. A key that is no longer good (the session was
+         restarted since the link was sent) simply falls through to the
+         dialog, which is the only place a code is ever typed. */
+      if (reviewKey) {
+        var joined = await joinServer(serverBase, null, reviewKey);
+        if (joined && joined.ok) {
+          setServerToken(joined.token, false);
+          finishServerDetect();
+          return;
+        }
+      }
       updateServerMenu();
       openPinDialog({ reason: "This server asks for a join PIN before it will show you anything." });
       return;
@@ -482,6 +550,10 @@
        has deliberately set for themselves. */
     try {
       serverIdentity = await apiFetch("api/me");
+      /* The role rides along with identity: same answer, same round trip,
+         and it comes from the token rather than from anything this page
+         could have decided for itself. */
+      serverRole = (serverIdentity && serverIdentity.role) || "edit";
       if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
         saveAuthorName(serverIdentity.name);
         updateIdentityChip();
@@ -489,6 +561,7 @@
     } catch (e) { /* identity is a nicety, not a requirement */ }
 
     updateServerMenu();
+    applyReviewMode();
     /* The link's document is opened only if nothing else claimed this page:
        resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
        both are unsaved work that must not be replaced (issue #19). */
@@ -505,7 +578,10 @@
     var sep = document.getElementById("menu-server-sep");
     if (sep) sep.hidden = !serverMode.available;
     var newBtn = document.getElementById("menu-server-new");
-    if (newBtn) newBtn.disabled = serverMode.readOnly;
+    /* Publishing is a write, and a review session has none. The server says
+       so too (403 review-only on POST /api/docs) — this only keeps the app
+       from offering something it knows will be refused. */
+    if (newBtn) newBtn.disabled = serverMode.readOnly || serverRole === "review";
     /* The share entry is never hidden — it is how someone with no server yet
        finds out that sharing a live document is possible at all, and it says
        so and opens the Servers dialog rather than doing nothing. Read-only is
@@ -513,12 +589,52 @@
        the reason in its tooltip. */
     var shareBtn = document.getElementById("menu-share-link");
     if (shareBtn) {
-      shareBtn.disabled = serverMode.available && serverMode.readOnly;
+      shareBtn.disabled = serverMode.available && (serverMode.readOnly || serverRole === "review");
       shareBtn.title = shareBtn.disabled
-        ? "This server is published read-only — nothing new can be put on it."
+        ? (serverRole === "review"
+            ? "You are viewing this session — publishing a script needs the editing code."
+            : "This server is published read-only — nothing new can be put on it.")
         : "Puts this script on the connected server and copies a link to it. " +
           "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
     }
+  }
+
+  /* ---- viewing, comments only ----
+
+     The badge and the body class every read-only rule in app.css hangs off.
+     Called wherever the answer can change — the role arriving, a document
+     opening or closing — rather than polled, and it only ever reflects what
+     the SERVER said: flipping the class by hand changes what this page
+     offers and nothing about what it is allowed to save. */
+  function applyReviewMode() {
+    var on = reviewMode();
+    document.body.classList.toggle("is-review", on);
+    var badge = document.getElementById("review-chip");
+    if (badge) badge.hidden = !on;
+    var title = document.getElementById("doc-title");
+    if (title) title.readOnly = on;
+  }
+
+  /* Somewhere to say it once, rather than in every blocked handler. */
+  function reviewBlocked() {
+    if (!reviewMode()) return false;
+    showToast("Viewing only — you can comment on this script, but not change it.", "warn");
+    return true;
+  }
+
+  /* The address to hand to someone who should only read and comment: this
+     server's own, with the launch's review key in the fragment. Asked for at
+     the moment it is wanted rather than held — it is a credential, it
+     belongs to this launch, and a page whose owner never opens the Servers
+     dialog never learns it at all. "" whenever there is nothing to hand out
+     (no review credential, or this browser is itself a reviewer). */
+  async function fetchReviewLink() {
+    if (!serverMode.available || !serverMode.reviewAvailable || serverRole === "review") return "";
+    var body;
+    try { body = await apiFetch("api/share"); } catch (e) { return ""; }
+    if (!body || !body.reviewKey) return "";
+    var base = serverBase || (location.origin + "/");
+    return base + "#review=" + body.reviewKey;
   }
 
   /* ---- the picker ---- */
@@ -564,7 +680,7 @@
           '</span>' +
         '</button>' +
         (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-        (serverMode.readOnly ? '' :
+        (serverMode.readOnly || serverRole === "review" ? '' :
           '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
             escapeHtml(d.id) + '" title="Delete this document from the server">×</button>') +
       '</div>';
@@ -594,6 +710,9 @@
     resetProductionPanelState();
 
     clearDirty();
+    /* Before render(), not after: the rows are built editable or not from
+       this same answer, so the class has to be on the body first. */
+    applyReviewMode();
     render();
     updateIdentityChip();
     updateFileChip();
@@ -607,6 +726,10 @@
      copied for a publish that did not happen. */
   async function publishToServer() {
     if (serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
+    if (serverRole === "review") {
+      showToast("You are viewing this session — publishing a script needs the editing code.", "warn");
+      return false;
+    }
     var published = cloneState(state);
     /* Publishing makes a second home for this script. If its id already
        lives somewhere else (a file on disk, another server document), the
@@ -949,6 +1072,37 @@
     if (!res.ok) throw ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
     return body;
   }
+
+  /* ---- test hook ----
+
+     The harness serves static files and cannot start server.js with an
+     environment, so the two halves of the review credential are tested in
+     two places: what the SERVER allows a review token to write lives in
+     tools/test-server.mjs, and what the EDITOR does about it lives in
+     tests/43-review-mode.txt, driven through this. `setSession` says what
+     /api/health, /api/join and /api/me would have said — nothing more: the
+     role still only ever comes from here or from the server, never from
+     anything the page stored. Nothing in the app reads this; the same trick
+     window.__updateTest (20a-update.js) plays. */
+  window.__hostedTest = {
+    setSession: function (opts) {
+      opts = opts || {};
+      serverMode.available = true;
+      serverMode.checked = true;
+      serverMode.authRequired = true;
+      serverMode.reviewAvailable = opts.reviewAvailable !== false;
+      serverRole = opts.role || "edit";
+      serverDoc = opts.docId === null
+        ? { id: null, rev: 0 }
+        : { id: opts.docId || "doc-test", rev: opts.rev || 1 };
+      applyReviewMode();
+      updateServerMenu();
+      render();
+    },
+    role: function () { return serverRole; },
+    reviewMode: reviewMode,
+    reviewLink: fetchReviewLink
+  };
 
   /* ================= Google Drive file manager =================
 

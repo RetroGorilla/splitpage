@@ -3,21 +3,29 @@
   function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 
   function fieldBlock(rowId, field, value, placeholder) {
+    /* A review session (13-hosted.js) gets the same field with the writing
+       taken out of it: not editable, and a toolbar holding only the one
+       thing it may still do. `tabindex` replaces what contenteditable was
+       giving the cell — something to focus, so :focus-within still reveals
+       that toolbar when the reader selects the words to comment on. */
+    var review = reviewMode();
+    var toolbar = review
+      ? '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>'
+      : '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
+        '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
+        '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
+        '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
+        '<span class="tb-sep"></span>' +
+        '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
+        '<button type="button" data-cmd="link" title="Add link">Link</button>' +
+        '<span class="tb-sep"></span>' +
+        '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>' +
+        '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>';
     return (
       '<div class="field-wrap">' +
-        '<div class="mini-toolbar" role="toolbar" aria-label="Text formatting">' +
-          '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
-          '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
-          '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
-          '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
-          '<span class="tb-sep"></span>' +
-          '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
-          '<button type="button" data-cmd="link" title="Add link">Link</button>' +
-          '<span class="tb-sep"></span>' +
-          '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>' +
-          '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>' +
-        '</div>' +
-        '<div class="cell-editable" contenteditable="true" data-id="' + rowId + '" data-field="' + field + '" data-placeholder="' + placeholder + '">' + (value || "") + '</div>' +
+        '<div class="mini-toolbar" role="toolbar" aria-label="Text formatting">' + toolbar + '</div>' +
+        '<div class="cell-editable" contenteditable="' + (review ? 'false" tabindex="0' : 'true') +
+          '" data-id="' + rowId + '" data-field="' + field + '" data-placeholder="' + placeholder + '">' + (value || "") + '</div>' +
         '<div class="link-popover" hidden>' +
           '<input type="url" placeholder="https://example.com" data-role="link-input">' +
           '<button type="button" data-action="link-confirm">Add</button>' +
@@ -28,16 +36,25 @@
   }
 
   function rowHtml(row, index) {
+    /* Reordering, status, insert/delete and the image controls are all
+       document writes the server would refuse from a review session — so
+       they are not rendered at all rather than rendered and then refused.
+       The scene number, its duration and its status colour still show: this
+       is a reader's view of the script, not a stripped-down one. */
+    var review = reviewMode();
     var imageBlock;
     if (row.visualImage) {
       imageBlock =
         '<div class="image-thumb-wrap">' +
           '<img src="' + escapeHtml(row.visualImage) + '" alt="">' +
-          '<div class="image-thumb-actions">' +
-            '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
-            '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
-          '</div>' +
+          (review ? '' :
+            '<div class="image-thumb-actions">' +
+              '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
+              '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
+            '</div>') +
         '</div>';
+    } else if (review) {
+      imageBlock = "";
     } else {
       imageBlock =
         '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
@@ -51,20 +68,27 @@
     return (
       '<div class="row' + (row.status === "shot" ? ' is-shot' : '') + '" data-id="' + row.id + '">' +
         '<div class="gutter">' +
-          '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
-            '" title="Drag to reorder — or use the arrows below">' +
-            '<span class="drag-grip" aria-hidden="true"></span>' +
-            '<span class="row-num">' + pad2(index + 1) + '</span>' +
-          '</div>' +
+          (review
+            ? '<div class="row-head"><span class="row-num">' + pad2(index + 1) + '</span></div>'
+            : '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
+                '" title="Drag to reorder — or use the arrows below">' +
+                '<span class="drag-grip" aria-hidden="true"></span>' +
+                '<span class="row-num">' + pad2(index + 1) + '</span>' +
+              '</div>') +
           (secs >= 0.5 ? '<div class="row-dur" title="Estimated read time">' + formatDuration(secs) + '</div>' : '') +
-          '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
-            '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
-            '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
-          '</button>' +
-          '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
-          '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
-          '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
-          '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>' +
+          (review
+            ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
+                '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
+                '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
+              '</span>'
+            : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
+                '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
+                '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
+              '</button>' +
+              '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
+              '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
+              '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
+              '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>') +
           (row.updatedBy
             ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
                 escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'

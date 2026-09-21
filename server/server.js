@@ -60,6 +60,30 @@ const NO_API = process.env.NO_API === "1";
 const JOIN_PIN = String(process.env.JOIN_PIN || "");
 const SESSION_TOKEN = crypto.randomBytes(32).toString("hex");
 
+/* ---------- the review credential ----------
+ *
+ * A second code, and a link carrying a key instead of that code, which open
+ * the same documents to be READ and COMMENTED ON and nothing else. Two ways
+ * in because they are for two situations: REVIEW_PIN is read out loud like
+ * the join PIN, REVIEW_KEY rides in the fragment of a link that can simply be
+ * sent (see start.mjs) and is never the code itself, so passing the link on
+ * does not pass the code on.
+ *
+ * Both mint the SAME review token, and the role lives with that token in this
+ * process's memory — not in anything the client holds, so there is no local
+ * state to flip and a reconnect gets the role back rather than losing it.
+ * Restarting invalidates them exactly like the join PIN.
+ *
+ * A review credential without a join PIN would be a lock on a door standing
+ * open (with no JOIN_PIN, /api/join hands an EDITOR token to anyone who
+ * asks), and one that equals the join PIN is a typo that would quietly
+ * downgrade the host. Both are ignored, loudly, at startup.
+ */
+const REVIEW_PIN = String(process.env.REVIEW_PIN || "");
+const REVIEW_KEY = String(process.env.REVIEW_KEY || "");
+const REVIEW_ACTIVE = !!(JOIN_PIN && (REVIEW_PIN || REVIEW_KEY) && REVIEW_PIN !== JOIN_PIN);
+const REVIEW_TOKEN = crypto.randomBytes(32).toString("hex");
+
 /* Origins allowed to call this API from another page — a comma list, empty
    (the default) meaning same-origin only. A copy of the app opened from disk
    sends `Origin: null`, so the literal entry `null` is what lets a portable
@@ -156,12 +180,21 @@ function noteFailure(ip) {
   pinFailures.set(ip, list);
 }
 
-function hasSessionToken(req) {
-  const given = String(req.headers["x-splitpage-token"] || "");
+function sameToken(given, token) {
   /* length check first: timingSafeEqual throws on a length mismatch, and the
      token's length is not a secret (it is always 64 hex characters) */
-  if (given.length !== SESSION_TOKEN.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(SESSION_TOKEN));
+  if (given.length !== token.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token));
+}
+
+/* "edit", "review", or null for a caller carrying neither token. The role is
+   read from the token on every request, so it cannot be stale and cannot be
+   asserted by the client. */
+function roleOf(req) {
+  const given = String(req.headers["x-splitpage-token"] || "");
+  if (sameToken(given, SESSION_TOKEN)) return "edit";
+  if (REVIEW_ACTIVE && sameToken(given, REVIEW_TOKEN)) return "review";
+  return null;
 }
 
 /* Echoed only for an origin that was explicitly allowed, never `*`, and never
@@ -524,6 +557,251 @@ function handleLauncher(req, res, parts) {
   return sendJson(res, 404, { error: "not-found" });
 }
 
+/* ---------- what a review session may write ----------
+ *
+ * Enforcement here is a COMPARISON, not a list of permitted operations: the
+ * client sends whole documents, so the only honest question is whether the
+ * document it sent differs from the stored one in ways that nothing but
+ * posting a comment could have produced. Three kinds of difference are:
+ *
+ *   1. comments added, and replies appended to comments that were already
+ *      there. Nothing that was already stored may change — not a body, not
+ *      `resolved`, not an existing reply. "Authored in this request" is
+ *      enforced structurally, by only ever allowing additions, rather than
+ *      by trusting `author`, which is a name somebody typed into a box and
+ *      not an identity this server could check.
+ *   2. the `.cmt-anchor` span a new comment wraps around the words it is
+ *      about. That is a genuine edit to a row's HTML — the anchor lives in
+ *      the text — so a scene's visual/audio field may differ, but only by
+ *      the wrapping of one of THIS request's new comment ids, and only in a
+ *      way that leaves every character, tag, link, image and line break
+ *      exactly where it was.
+ *   3. `rev`/`lastEditedBy`/`lastEditedAt`, and `updatedAt`/`updatedBy` on a
+ *      scene that gained an anchor: bookkeeping, not content.
+ *
+ * Everything else — title, scene text, order, status, images, the production
+ * registry, people, reading speed — must arrive exactly as it is stored, or
+ * the write is refused with 403 review-only and nothing is written.
+ */
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
+    return true;
+  }
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!deepEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+function unionKeys(a, b) {
+  const out = new Set(Object.keys(a || {}));
+  for (const key of Object.keys(b || {})) out.add(key);
+  return out;
+}
+
+function refuse(reason) { return { ok: false, reason }; }
+
+/* Attributes as a set rather than as written, so two serialisations of the
+   same element compare equal whatever order or spacing they came out in. */
+function normalizeAttrs(attrs) {
+  const pairs = [];
+  const re = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g;
+  let m;
+  while ((m = re.exec(String(attrs || "")))) {
+    const value = m[2] === undefined ? "" : m[2].replace(/^["']|["']$/g, "");
+    pairs.push(m[1].toLowerCase() + "=" + value);
+  }
+  pairs.sort();
+  return pairs.join(" ");
+}
+
+const VOID_TAGS = new Set(["br", "img", "hr", "input", "wbr", "source", "track", "col", "area", "base", "embed", "link", "meta"]);
+
+/* Quote-aware, because a ">" inside an attribute value is serialised as
+   itself and would otherwise end the tag early. */
+function htmlTokens(html) {
+  const s = String(html == null ? "" : html);
+  const tokens = [];
+  let i = 0;
+  while (i < s.length) {
+    const lt = s.indexOf("<", i);
+    if (lt === -1) { tokens.push({ kind: "text", text: s.slice(i) }); break; }
+    if (lt > i) tokens.push({ kind: "text", text: s.slice(i, lt) });
+    let j = lt + 1;
+    let quote = "";
+    while (j < s.length) {
+      const ch = s[j];
+      if (quote) { if (ch === quote) quote = ""; }
+      else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === ">") break;
+      j++;
+    }
+    if (j >= s.length) { tokens.push({ kind: "text", text: s.slice(lt) }); break; }
+    const raw = s.slice(lt + 1, j);
+    i = j + 1;
+    if (raw.charAt(0) === "!" || raw.charAt(0) === "?") continue; /* a comment or a doctype is not content */
+    const close = raw.charAt(0) === "/";
+    const body = close ? raw.slice(1) : raw;
+    const name = (body.match(/^[a-zA-Z0-9-]+/) || [""])[0].toLowerCase();
+    if (!name) continue;
+    tokens.push({
+      kind: close ? "close" : "open",
+      name,
+      attrs: body.slice(name.length).replace(/\/\s*$/, "").trim(),
+      selfClosing: /\/\s*$/.test(body)
+    });
+  }
+  return tokens;
+}
+
+function attrValue(attrs, name) {
+  const re = new RegExp(name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s]+))", "i");
+  const m = re.exec(String(attrs || ""));
+  return m ? String(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : "";
+}
+
+/* The comment id of a `<span class="cmt-anchor" data-cmt="…">`, or "" for
+   any other element. */
+function anchorIdOf(attrs) {
+  if (attrValue(attrs, "class").split(/\s+/).indexOf("cmt-anchor") === -1) return "";
+  return attrValue(attrs, "data-cmt");
+}
+
+/* A field as the sequence of its text runs, each labelled with the inline
+   elements wrapped around it, plus <br>/<img> in place (sanitizeHtml never
+   lets a div or a p through — they come back as <br> — so there is no block
+   structure left to preserve). `dropIds` unwraps the comment anchors this
+   request is adding, which is what makes "the same words, now with a comment
+   on some of them" compare equal to what is stored.
+ *
+ * Deliberately blind to exactly one thing: WHERE an inline element starts and
+ * stops, when the text and the labels either side are identical. Wrapping a
+ * selection that crosses a <strong> boundary splits that element in two, and
+ * unwrapping the anchor again cannot glue it back together — so
+ * `<strong>hel</strong><strong>lo</strong>` has to compare equal to
+ * `<strong>hello</strong>`. The two render the same and say the same. */
+function fieldSignature(html, dropIds) {
+  const path = [];       /* [{ name, sig, dropped }] */
+  const out = [];
+  const label = () => path.filter((p) => !p.dropped).map((p) => p.sig).join("");
+  for (const tk of htmlTokens(html)) {
+    if (tk.kind === "text") {
+      if (!tk.text) continue;
+      const key = label();
+      const last = out[out.length - 1];
+      if (last && last.kind === "text" && last.key === key) last.text += tk.text;
+      else out.push({ kind: "text", key, text: tk.text });
+      continue;
+    }
+    const sig = tk.name + (tk.attrs ? " " + normalizeAttrs(tk.attrs) : "");
+    if (tk.kind === "open") {
+      if (VOID_TAGS.has(tk.name) || tk.selfClosing) { out.push({ kind: "void", key: label(), sig }); continue; }
+      const dropped = tk.name === "span" && !!dropIds && dropIds.has(anchorIdOf(tk.attrs));
+      path.push({ name: tk.name, sig, dropped });
+      continue;
+    }
+    if (VOID_TAGS.has(tk.name)) continue;
+    for (let n = path.length - 1; n >= 0; n--) {
+      if (path[n].name === tk.name) { path.length = n; break; }
+    }
+  }
+  return out
+    .filter((item) => item.kind === "void" || item.text.length)
+    .map((item) => item.kind + "" + item.key + "" + (item.kind === "void" ? item.sig : item.text))
+    .join("");
+}
+
+function reviewComments(storedList, incomingList) {
+  const stored = Array.isArray(storedList) ? storedList : [];
+  const incoming = Array.isArray(incomingList) ? incomingList : [];
+  const byId = new Map();
+  for (const c of incoming) {
+    if (!c || typeof c !== "object") return refuse("a comment is not an object");
+    const id = String(c.id == null ? "" : c.id);
+    if (!id || byId.has(id)) return refuse("every comment needs an id of its own");
+    byId.set(id, c);
+  }
+  for (const was of stored) {
+    const id = String(was && was.id != null ? was.id : "");
+    const now = byId.get(id);
+    if (!now) return refuse("a comment that was already there may not be removed");
+    byId.delete(id); /* what is left over at the end is what this request added */
+    const wasReplies = Array.isArray(was.replies) ? was.replies : [];
+    const nowReplies = Array.isArray(now.replies) ? now.replies : [];
+    if (nowReplies.length < wasReplies.length) return refuse("a reply may not be removed");
+    for (let i = 0; i < wasReplies.length; i++) {
+      if (!deepEqual(wasReplies[i], nowReplies[i])) return refuse("a reply that was already there may not be changed");
+    }
+    const replied = nowReplies.length > wasReplies.length;
+    for (const key of unionKeys(was, now)) {
+      if (key === "replies") continue;
+      /* a thread's own timestamp moves when it is replied to, and only then */
+      if (key === "updatedAt" && replied) continue;
+      if (!deepEqual(was[key], now[key])) {
+        return refuse("a comment that was already there may not be changed (" + key + ")");
+      }
+    }
+  }
+  return { ok: true, addedIds: new Set(byId.keys()) };
+}
+
+function reviewRows(storedRows, incomingRows, addedIds) {
+  const stored = Array.isArray(storedRows) ? storedRows : [];
+  const incoming = Array.isArray(incomingRows) ? incomingRows : [];
+  if (stored.length !== incoming.length) return refuse("scenes may not be added or removed");
+  for (let i = 0; i < stored.length; i++) {
+    const was = stored[i];
+    const now = incoming[i];
+    if (!was || !now || typeof was !== "object" || typeof now !== "object") return refuse("a scene is not an object");
+    let anchored = false;
+    for (const key of unionKeys(was, now)) {
+      if (deepEqual(was[key], now[key])) continue;
+      if (key === "visualText" || key === "audioText") {
+        if (fieldSignature(was[key], null) !== fieldSignature(now[key], addedIds)) {
+          return refuse("the script may not be changed");
+        }
+        anchored = true;
+        continue;
+      }
+      if (key === "updatedAt" || key === "updatedBy") continue; /* judged below */
+      return refuse("a scene's " + key + " may not be changed");
+    }
+    /* Posting a comment stamps the scene it is on. Nothing else may. */
+    if (!anchored && (!deepEqual(was.updatedAt, now.updatedAt) || !deepEqual(was.updatedBy, now.updatedBy))) {
+      return refuse("a scene may not be restamped without a comment landing on it");
+    }
+  }
+  return { ok: true };
+}
+
+/* rev/lastEditedBy/lastEditedAt are this document's save bookkeeping, and a
+   comment IS a save — a reviewer's name in lastEditedBy is true, not a
+   forged edit. */
+const REVIEW_BOOKKEEPING = new Set(["rev", "lastEditedBy", "lastEditedAt", "comments", "rows"]);
+
+function reviewWriteAllowed(stored, incoming) {
+  if (!stored || typeof stored !== "object") return refuse("there is nothing stored to compare against");
+  if (!incoming || typeof incoming !== "object") return refuse("bad state");
+  const comments = reviewComments(stored.comments, incoming.comments);
+  if (!comments.ok) return comments;
+  const rows = reviewRows(stored.rows, incoming.rows, comments.addedIds);
+  if (!rows.ok) return rows;
+  for (const key of unionKeys(stored, incoming)) {
+    if (REVIEW_BOOKKEEPING.has(key)) continue;
+    if (!deepEqual(stored[key], incoming[key])) return refuse(key + " may not be changed");
+  }
+  return { ok: true };
+}
+
 /* ---------- API ---------- */
 
 async function handleApi(req, res, url) {
@@ -540,6 +818,9 @@ async function handleApi(req, res, url) {
       mode: "server",
       readOnly: READ_ONLY,
       authRequired: !!JOIN_PIN,
+      /* whether a second, comment-only credential exists at all — not what
+         it is. A client needs this to know a review link is worth offering */
+      reviewAvailable: REVIEW_ACTIVE,
       version: VERSION
     });
   }
@@ -548,18 +829,27 @@ async function handleApi(req, res, url) {
      route wants. Rate-limited per address so the six digits cannot simply be
      enumerated. */
   if (parts[1] === "join" && req.method === "POST") {
-    if (!JOIN_PIN) return sendJson(res, 200, { token: SESSION_TOKEN, open: true });
+    if (!JOIN_PIN) return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit", open: true });
     const ip = clientIp(req);
     if (recentFailures(ip).length >= PIN_MAX_FAILURES) {
       return sendJson(res, 429, { error: "too-many-attempts" });
     }
     const body = await readBody(req);
-    if (!sameSecret(body && body.pin, JOIN_PIN)) {
-      noteFailure(ip);
-      return sendJson(res, 401, { error: "bad-pin" });
+    /* The join PIN is checked first, so a review PIN set to the same digits
+       by mistake can never take the host's own session down to read-only. */
+    if (sameSecret(body && body.pin, JOIN_PIN)) {
+      pinFailures.delete(ip);
+      return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit" });
     }
-    pinFailures.delete(ip);
-    return sendJson(res, 200, { token: SESSION_TOKEN });
+    /* Either half of the review credential: the code someone was read out,
+       or the key carried by a review link (start.mjs mints it per launch). */
+    if (REVIEW_ACTIVE && ((REVIEW_PIN && sameSecret(body && body.pin, REVIEW_PIN)) ||
+                          (REVIEW_KEY && sameSecret(body && body.key, REVIEW_KEY)))) {
+      pinFailures.delete(ip);
+      return sendJson(res, 200, { token: REVIEW_TOKEN, role: "review" });
+    }
+    noteFailure(ip);
+    return sendJson(res, 401, { error: "bad-pin" });
   }
 
   /* The launcher's own routes carry their own key and their own refusals
@@ -575,12 +865,30 @@ async function handleApi(req, res, url) {
      JSON, deliberately: the client treats a non-JSON answer as a lapsed
      Cloudflare Access session and reloads the page to sign in again, which
      would be exactly the wrong move here. */
-  if (JOIN_PIN && !hasSessionToken(req)) {
+  const role = JOIN_PIN ? roleOf(req) : "edit";
+  if (!role) {
     return sendJson(res, 401, { error: "pin-required" });
   }
 
+  /* Where the client learns what it is allowed to do — from the token it
+     already holds, on every load and every reconnect, rather than from
+     anything it stored for itself. */
   if (parts[1] === "me" && req.method === "GET") {
-    return sendJson(res, 200, who);
+    return sendJson(res, 200, Object.assign({ role }, who));
+  }
+
+  /* What the host needs to hand a review link out: the KEY that link
+     carries, never the review PIN itself, and only to someone who is
+     already an editor here — a reviewer asking has nothing to share and
+     gets a refusal. It is answered over the API and never written into
+     update-status.json, the document, or any file the static handler
+     serves (invariant #29). */
+  if (parts[1] === "share" && req.method === "GET") {
+    if (role !== "edit") return sendJson(res, 403, { error: "review-only" });
+    return sendJson(res, 200, {
+      reviewAvailable: REVIEW_ACTIVE,
+      reviewKey: REVIEW_ACTIVE ? REVIEW_KEY : ""
+    });
   }
 
   if (parts[1] !== "docs") return sendJson(res, 404, { error: "not-found" });
@@ -611,6 +919,7 @@ async function handleApi(req, res, url) {
   /* create */
   if (!id && req.method === "POST") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    if (role === "review") return sendJson(res, 403, { error: "review-only" });
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
@@ -683,6 +992,17 @@ async function handleApi(req, res, url) {
         });
       }
 
+      /* Inside the lock and after the rev check, so the version this is
+         compared against is the one that is about to be replaced — a review
+         client that hit a 409 first merges, retries, and is judged against
+         whatever it merged with rather than against a copy that has moved on. */
+      if (role === "review") {
+        const verdict = reviewWriteAllowed(current.state, body.state);
+        if (!verdict.ok) {
+          return sendJson(res, 403, { error: "review-only", detail: verdict.reason });
+        }
+      }
+
       const doc = {
         id,
         rev: (current.rev || 0) + 1,
@@ -697,6 +1017,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "DELETE") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    if (role === "review") return sendJson(res, 403, { error: "review-only" });
     return withDocLock(id, async () => {
       try {
         await fsp.unlink(docPath(id));
@@ -846,6 +1167,13 @@ async function start() {
       /* Never the PIN itself: this stream is inherited by the launcher and
          may end up in a log file. That it is set is all anyone needs here. */
       console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
+      if (REVIEW_ACTIVE) console.log("[splitpage] a review credential is set — it opens documents to read and comment on, nothing else");
+      else if (REVIEW_PIN || REVIEW_KEY) {
+        console.log("[splitpage] the review credential was IGNORED — it is the same as the join PIN");
+      }
+    } else if (REVIEW_PIN || REVIEW_KEY) {
+      console.log("[splitpage] the review credential was IGNORED — without a join PIN anyone who can reach this port is already an editor");
+      console.log("[splitpage] no authentication in this process — put it behind Cloudflare Access or a VPN");
     } else {
       console.log("[splitpage] no authentication in this process — put it behind Cloudflare Access or a VPN");
     }
