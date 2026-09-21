@@ -559,30 +559,85 @@
     }
   }
 
+  /* The file extension a data: URI's own mime says it is — used to name the
+     sibling image files toMarkdownDoc() references instead of embedding
+     (below), so a re-encoded PNG doesn't end up on disk claiming to be a
+     .jpg. Defaults to jpg: every image this app writes out itself is a
+     JPEG (toJpegDataUrl, 15-docx.js); only a foreign import could carry
+     something else. */
+  function dataUrlImageExt(dataUrl) {
+    var m = /^data:image\/([a-z0-9.+-]+)/i.exec(dataUrl || "");
+    var t = m ? m[1].toLowerCase() : "jpeg";
+    if (t === "jpeg") return "jpg";
+    if (t === "svg+xml") return "svg";
+    return t;
+  }
+
+  /* Where a scene's picture lives once it's a sibling file rather than a
+     base64 blob sitting in the text — shared by toMarkdownDoc() (which
+     writes the reference) and markdownExportImages() (which writes the
+     bytes), so the two can never point at different names. */
+  function markdownImagePath(row, i) {
+    return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(row.visualImage);
+  }
+
+  /* Every image the plain Markdown export needs to carry alongside it, as
+     real files rather than base64 text — dataUrlToBytes lives in
+     15-docx.js but every fragment shares one closure (build.mjs inlines
+     them into a single script), so it's already in scope here. */
+  function markdownExportImages() {
+    var out = [];
+    state.rows.forEach(function (row, i) {
+      if (!row.visualImage) return;
+      try {
+        out.push({ path: markdownImagePath(row, i), bytes: dataUrlToBytes(row.visualImage) });
+      } catch (e) { /* unreadable image data — the export just won't carry this one's picture */ }
+    });
+    return out;
+  }
+
+  /* The plain "Markdown" export: a document meant to be read, not a filled-
+     in form. Visual and Audio used to each get their own bold label on its
+     own line, with an italic placeholder when a field was empty — this
+     reads instead like a script, with the visual direction as an inline
+     lead-in ahead of whatever is actually spoken, and nothing printed for a
+     field that has nothing to say. Pictures are referenced from a sibling
+     images/ folder (buildFileData, 18-local-files.js, bundles both into a
+     zip when there is at least one) rather than pasted inline as base64 —
+     the embedded 2 MB a phone photo becomes made this file unreadable as
+     text and enormous for what it is. */
   function toMarkdownDoc() {
     var lines = [];
     lines.push("# " + (state.title || "Untitled Script"));
     lines.push("");
     if (!state.rows.length) {
       lines.push("_No rows yet._");
+      lines.push("");
+    } else {
+      lines.push("_" + state.rows.length + " scene" + (state.rows.length === 1 ? "" : "s") +
+                 " · est. " + formatDuration(totalSeconds()) + " running time_");
+      lines.push("");
     }
     state.rows.forEach(function (row, i) {
-      lines.push("## Scene " + pad2(i + 1));
-      lines.push("");
-      lines.push("**Visual**");
+      lines.push("### Scene " + pad2(i + 1));
       lines.push("");
       if (row.visualImage) {
-        lines.push("![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")");
+        lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
         lines.push("");
       }
       var vmd = htmlToMarkdown(row.visualText);
-      lines.push(vmd ? vmd : "_(no visual notes)_");
-      lines.push("");
-      lines.push("**Audio**");
-      lines.push("");
+      if (vmd) {
+        lines.push("*Visual —* " + vmd);
+        lines.push("");
+      }
       var amd = htmlToMarkdown(row.audioText);
-      lines.push(amd ? amd : "_(no dialogue)_");
-      lines.push("");
+      if (amd) {
+        lines.push(amd);
+        lines.push("");
+      } else if (!vmd && !row.visualImage) {
+        lines.push("_(blank scene)_");
+        lines.push("");
+      }
       lines.push("---");
       lines.push("");
     });

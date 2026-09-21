@@ -88,8 +88,14 @@
     saveBack.textContent = openedFile.inPlace ? "Save to " + openedFile.name : "Save a new copy of " + openedFile.name;
   }
 
-  /* Build the bytes for a given format. Returns {data, filename}. */
-  async function buildFileData(kind, baseName) {
+  /* Build the bytes for a given format. Returns {data, filename}.
+     opts.allowImageBundle lets a plain Markdown export ship as a small zip
+     instead of a lone .md when it needs to carry pictures (see the "md"
+     branch below) — on for the actual Export menu, off for saveBackToFile's
+     reuse of this same function, which writes back into a file whose name
+     and extension are already fixed and must stay a text file in place. */
+  async function buildFileData(kind, baseName, opts) {
+    opts = opts || {};
     if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
     if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
     if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
@@ -110,6 +116,22 @@
        export is a copy handed to someone else, and carrying the id would make
        it a duplicate of this document the moment both are open. */
     if (kind === "html") return { data: standaloneHtmlFor(state), filename: baseName + ".html" };
+    if (kind === "md" && opts.allowImageBundle) {
+      /* A script with no pictures stays a single plain-text .md, same as
+         always. One with pictures ships as a small zip instead — the .md
+         referencing images/scene-NN.ext (toMarkdownDoc, 14-export.js)
+         alongside the actual files — rather than ballooning the text file
+         with base64 the way the old export did. Gated on allowImageBundle:
+         saveBackToFile() reuses this same branch to rewrite an already-open
+         file in place, and that file's name and extension are fixed — it
+         must stay the plain-text .md it already is. */
+      var images = markdownExportImages();
+      if (images.length) {
+        var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
+        images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
+        return { data: zipWrite(entries), filename: baseName + " (with images).zip" };
+      }
+    }
     return { data: toMarkdownDoc(), filename: baseName + ".md" };
   }
 
@@ -560,6 +582,7 @@
     if (ext === "pdf") return "application/pdf";
     if (ext === "html") return "text/html";
     if (ext === "splitpage") return "application/json";
+    if (ext === "zip") return "application/zip";
     return "text/plain";
   }
 
@@ -753,7 +776,7 @@
     var base = openedFile.name ? openedFile.name.replace(/\.[^.]+$/, "") : slugify(state.title);
     var built;
     try {
-      built = await buildFileData(kind, base);
+      built = await buildFileData(kind, base, { allowImageBundle: true });
     } catch (e) {
       showToast("Could not build the " + kind.toUpperCase() + " file.", "error");
       return;
