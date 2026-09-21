@@ -136,8 +136,8 @@ foreach ($f in $files) {
 function Start-Lane($lane) {
   Remove-Item $lane.Out, $lane.Err -ErrorAction SilentlyContinue
   $a = @(
-    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $here 'driver.ps1'),
-    '-Port', ($Port + $lane.Index), '-CdpPort', ($CdpPort + $lane.Index), '-Script', $lane.File.FullName,
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f (Join-Path $here 'driver.ps1')),
+    '-Port', ($Port + $lane.Index), '-CdpPort', ($CdpPort + $lane.Index), '-Script', ('"{0}"' -f $lane.File.FullName),
     '-RunId', $lane.Tag
   )
   if ($Headed) { $a += '-Headed' }
