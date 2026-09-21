@@ -1199,12 +1199,59 @@
        sweep and historyFinishList both probe for one. */
     evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
 
-    /* There is no IPC (yet) to enumerate every document's history from the
-       renderer — that would mean walking main's on-disk folder tree, which
-       is follow-up work (HANDOFF, "Desktop-side export"). null tells
-       exportHistoryAll() this backend cannot enumerate, so a browser-only
-       export refuses cleanly here instead of silently exporting nothing. */
-    rawDocIds: function () { return Promise.resolve(null); }
+    /* Every document id this backend can enumerate, Older excluded — backs
+       exportHistoryAll() the same way the idb/memory backends' own
+       rawDocIds do. DESKTOP.historyListDocs() (desktop/main.js) walks main's
+       in-memory index, which the fsck keeps current, so this never touches
+       disk itself. Still null on a timeout/rejection/malformed answer, which
+       is exportHistoryAll()'s "cannot enumerate" signal — but a working
+       bridge never returns it, so an older desktop build without this
+       method (or a real I/O problem) is the only way export still sees the
+       browser-only refusal. */
+    rawDocIds: function () {
+      return historyDesktopCall(function () {
+        return DESKTOP.historyListDocs();
+      }, null, null).then(function (r) {
+        if (!Array.isArray(r)) return null;
+        var ids = [];
+        r.forEach(function (d) {
+          var id = normalizeDocId(d && d.docId);
+          if (id) ids.push(id);
+        });
+        return ids;
+      });
+    },
+
+    /* {title, lastOpenedAt} for one document — historyBuildExport's other
+       half of "docs" alongside rawList. Re-fetches the same full list
+       historyListDocs() answers rather than caching it: export runs once, on
+       demand, for at most a few dozen documents, and a cache here would be
+       one more place for this file's per-page state to drift from main's. */
+    rawDoc: function (bucket) {
+      return historyDesktopCall(function () {
+        return DESKTOP.historyListDocs();
+      }, null, null).then(function (r) {
+        if (!Array.isArray(r)) return null;
+        var hit = null;
+        r.forEach(function (d) {
+          if (d && normalizeDocId(d.docId) === bucket) hit = d;
+        });
+        return hit ? { title: hit.title || "", lastOpenedAt: Number(hit.lastOpenedAt) || 0 } : null;
+      });
+    },
+
+    /* Raw metas for one bucket (a document, or HISTORY_OLDER_KEY), oldest-
+       or-newest order does not matter — historyFlattenForExport sorts its
+       own flattened list. Reuses this backend's own list() (above), which
+       already turns a DESKTOP.historyList() answer into sanitized metas;
+       list(null) asks for "no document, just tell me what's in Older". */
+    rawList: function (bucket) {
+      var docId = bucket === HISTORY_OLDER_KEY ? null : bucket;
+      return desktopHistoryBackend.list(docId).then(function (r) {
+        if (!r) return [];
+        return bucket === HISTORY_OLDER_KEY ? r.older : r.entries;
+      });
+    }
   };
 
   /* ---- backend choice (per call) ----
@@ -1613,16 +1660,16 @@
     });
   }
 
-  /* ---- export (X1: File ▸ Export app data…, browser-only) ----
+  /* ---- export (X1: File ▸ Export app data…) ----
 
      The read path history never needed until now: every existing caller
      wants one document (list/get) or a write. Export wants EVERY document's
-     history at once, which only the idb and memory backends can answer —
-     the desktop store is a folder tree main.js owns, and enumerating it
-     needs new IPC that does not exist yet (recorded as a follow-up). So
-     rawDocIds() returns null there, and exportHistoryAll() turns that into a
-     rejection with a clear code rather than silently exporting an empty
-     bundle. */
+     history at once — idb/memory answer that by walking their own store,
+     and the desktop backend answers it through DESKTOP.historyListDocs(),
+     which walks the folder tree main.js owns. rawDocIds() still returns
+     null on a genuine failure (an old desktop build, a rejected/timed-out
+     call), and exportHistoryAll() turns that into a rejection with a clear
+     code rather than silently exporting an empty bundle. */
   var HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
 
   function historyExportError(code, message) {

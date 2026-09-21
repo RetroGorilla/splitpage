@@ -261,6 +261,13 @@ if (location.origin === "splitpage://app") {
       return ipcRenderer.invoke("splitpage:history-usage");
     },
 
+    /* Every document this store has history for — {docId, title,
+       lastOpenedAt}[], Older excluded. Backs File > Export app data.. on
+       desktop (20h-appdata.js / 03a-history-store.js's exportHistoryAll). */
+    historyListDocs() {
+      return ipcRenderer.invoke("splitpage:history-list-docs");
+    },
+
     getSessionInfo() {
       return ipcRenderer.invoke("splitpage:get-session-info");
     },

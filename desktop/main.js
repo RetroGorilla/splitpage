@@ -2148,6 +2148,24 @@ function historyUsageLocked() {
   return { totalBytes: total, capBytes: cap, overCap: total > cap, docCount, readOnly: historyReadOnly };
 }
 
+/* Every document this store can enumerate, Older excluded — argument-free
+   (#34: nothing here is a path or a name the renderer chose) and read-only,
+   so it never touches historyReadOnly. Backs the renderer's
+   desktopHistoryBackend.rawDocIds()/rawDoc() (03a-history-store.js), which
+   exportHistoryAll() (20h-appdata.js's File > Export app data..., desktop
+   half) needs to walk every document's history the way the browser's IndexedDB
+   backend already can. historyIndexes only holds a bucket once it has been
+   fscked or written to at least once, exactly the documents this backend
+   actually has snapshots for. */
+function historyListDocsLocked() {
+  const out = [];
+  for (const [bucket, rec] of historyIndexes) {
+    if (bucket === HISTORY_OLDER_KEY) continue;
+    out.push({ docId: bucket, title: rec.title || "", lastOpenedAt: rec.lastOpenedAt || 0 });
+  }
+  return out;
+}
+
 /* ---------------------------------------------------------------------
  * 7. The document server (--library / --host).
  * --------------------------------------------------------------------- */
@@ -4933,6 +4951,16 @@ function registerIpc() {
   ipcMain.handle("splitpage:history-usage", async (event) => {
     requireTrusted(event);
     return historyExclusive(() => historyUsageLocked());
+  });
+
+  /* Enumeration for File > Export app data.. on desktop (20h-appdata.js /
+     03a-history-store.js's exportHistoryAll). No arguments in, no path or
+     name out — just the docIds this store already knows about, each with the
+     same title/lastOpenedAt splitpage:history-list already exposes per
+     document. */
+  ipcMain.handle("splitpage:history-list-docs", async (event) => {
+    requireTrusted(event);
+    return historyExclusive(() => historyListDocsLocked());
   });
 
   /* ---- the tab strip's channels (TABSTRIP-BRIDGE) --------------------
