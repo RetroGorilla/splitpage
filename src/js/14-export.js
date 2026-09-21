@@ -539,7 +539,9 @@
       lines.push("## Comments");
       lines.push("");
       comments.forEach(function (c) {
-        lines.push("**" + c.location + "**" + (c.resolved ? " _(resolved)_" : "") +
+        lines.push("**" + c.location + "**" +
+                   (c.resolved ? " _(resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")_" : "") +
+                   (c.assignee ? " _(assigned to " + c.assignee + ")_" : "") +
                    " — " + c.author + (c.when ? " · " + c.when : ""));
         lines.push("");
         if (c.quoted) {

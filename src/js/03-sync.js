@@ -235,6 +235,7 @@
     if (!a || !b) return false;
     if ((a.body || "") !== (b.body || "")) return false;
     if (!!a.resolved !== !!b.resolved) return false;
+    if ((a.assignee || "") !== (b.assignee || "")) return false;
     if (JSON.stringify(a.replies || []) !== JSON.stringify(b.replies || [])) return false;
     return true;
   }
@@ -354,6 +355,29 @@
            reply) can silently revert a resolve/unresolve that happened
            earlier in wall-clock time on the other side. */
         pick.resolved = !!(m.resolved || t.resolved);
+        /* resolvedBy/resolvedAt (#29) ride along with the same
+           forward-progress rule: a resolve from either side beats an
+           unresolved copy, and between two resolves the later timestamp
+           wins, so the merge always credits whoever actually closed the
+           thread most recently rather than whichever whole side "newer"
+           happened to pick above. */
+        if (m.resolved && t.resolved) {
+          if ((t.resolvedAt || "") >= (m.resolvedAt || "")) {
+            pick.resolvedBy = t.resolvedBy || null; pick.resolvedAt = t.resolvedAt || null;
+          } else {
+            pick.resolvedBy = m.resolvedBy || null; pick.resolvedAt = m.resolvedAt || null;
+          }
+        } else if (m.resolved) {
+          pick.resolvedBy = m.resolvedBy || null; pick.resolvedAt = m.resolvedAt || null;
+        } else if (t.resolved) {
+          pick.resolvedBy = t.resolvedBy || null; pick.resolvedAt = t.resolvedAt || null;
+        } else {
+          pick.resolvedBy = null; pick.resolvedAt = null;
+        }
+        /* assignee: filled beats empty, the same rule mergeProductionTags
+           already applies to owner/notes — an assignment only one side
+           made still survives the merge. */
+        if (!pick.assignee) pick.assignee = m.assignee || t.assignee || "";
       }
       /* An edit outranks a delete for comments the same way it already does
          for rows a few lines up: only a comment BOTH honor as unchanged

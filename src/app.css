@@ -928,6 +928,12 @@
   .group-seg button:last-child { border-right: none; }
   .group-seg button:hover { color: var(--text); }
   .group-seg button.is-active { background: var(--surface-2); color: var(--text); }
+  /* --- comments filter bar (Open / Resolved / All) --- */
+  .filter-count {
+    display: inline-block; margin-left: 5px;
+    font-size: 9.5px; color: var(--text-faint);
+  }
+  .group-seg button.is-active .filter-count { color: inherit; opacity: 0.75; }
   .group-export {
     font-family: var(--font-display); font-size: 10.5px;
     border: 1px solid var(--border); border-radius: 999px;
@@ -1008,13 +1014,13 @@
   }
   .tag-detail-label + .tag-owner-row { margin-bottom: 9px; }
   .tag-owner-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-  .tag-owner-select, .tag-person-input {
+  .tag-owner-select, .tag-person-input, .comment-assignee-select {
     flex: 1; min-width: 0;
     font-family: var(--font-body); font-size: 12.5px;
     padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px;
     background: var(--surface); color: var(--text);
   }
-  .tag-owner-select:focus, .tag-person-input:focus { outline: none; border-color: var(--visual); }
+  .tag-owner-select:focus, .tag-person-input:focus, .comment-assignee-select:focus { outline: none; border-color: var(--visual); }
   .tag-person-add, .tag-owner-row button {
     font-family: var(--font-display); font-size: 10px; text-transform: uppercase;
     letter-spacing: 0.03em; white-space: nowrap; flex: none;
@@ -1668,6 +1674,12 @@
   .comment-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .comment-author { font-family: var(--font-display); font-size: 12.5px; font-weight: 800; color: var(--text); }
   .comment-time { font-size: 10.5px; color: var(--text-faint); white-space: nowrap; }
+  .comment-resolved-note { font-size: 10.5px; color: var(--text-faint); margin-bottom: 4px; }
+  .comment-assign-row { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+  .comment-assign-row label {
+    font-family: var(--font-display); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--text-faint); flex: none;
+  }
   .comment-loc {
     font-family: var(--font-display);
     font-size: 10.5px;
@@ -2231,7 +2243,8 @@
     .audio-cell .cell-editable { font-size: 17px; }
     .findbar input[type="text"], .link-popover input, .video-popover input,
     .tag-notes-input, .tag-person-input, .tag-rename-input, .tag-owner-select,
-    #tag-name, #comment-name, .bulk-person-row input { font-size: 16px; }
+    #tag-name, #comment-name, .bulk-person-row input,
+    .comment-assignee-select, #comments-assignee-filter { font-size: 16px; }
 
     .findbar button { padding: 9px 11px; font-size: 11px; }
 

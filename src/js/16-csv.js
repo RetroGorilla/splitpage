@@ -23,11 +23,12 @@
     if (comments.length) {
       lines.push("");
       lines.push(csvEscape("Comments"));
-      lines.push(["Location", "Status", "Author", "Date", "Quoted text", "Comment"].join(","));
+      lines.push(["Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"].join(","));
       comments.forEach(function (c) {
         lines.push([
           csvEscape(c.location),
-          csvEscape(c.resolved ? "Resolved" : "Open"),
+          csvEscape(c.resolved ? "Resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") : "Open"),
+          csvEscape(c.assignee),
           csvEscape(c.author),
           csvEscape(c.when),
           csvEscape(c.quoted),
@@ -35,7 +36,7 @@
         ].join(","));
         c.replies.forEach(function (rp) {
           lines.push([
-            csvEscape(""), csvEscape(""),
+            csvEscape(""), csvEscape(""), csvEscape(""),
             csvEscape("↳ " + rp.author), csvEscape(rp.when),
             csvEscape(""), csvEscape(rp.body)
           ].join(","));
