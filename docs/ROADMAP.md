@@ -67,10 +67,36 @@ These are not architecture. Each is a one-PR fix.
 - `HANDOFF.md` §7/§8 point at `C:\Users\Adam\.claude\plans\...`, which no
   clone can read.
 
+## Lanes: what can run at the same time
+
+Phases are the order of value. Lanes are what can actually run in parallel,
+and they are decided by which files an issue touches, not by its phase.
+Every issue carries one `lane:*` label.
+
+The one hard constraint is **#66**, the module conversion. It rewrites every
+file in `src/js`, so nothing else touching `src/js` may be open while it is
+in flight. Merge every open browser-lane PR, do #66 alone, then resume.
+
+| Lane | Files | Order | Runs during the #66 freeze? |
+|---|---|---|---|
+| `lane:browser` | `src/js` | #59, #60, #61 → **freeze** → #66 → #67, #68 → #69, #70, #72, #73 → #82, #84 → #83 → #85 | No |
+| `lane:server` | `server/server.js` | #62, #63, #74 any time; #71 (server half) any time | Yes |
+| `lane:desktop` | `desktop/`, packaging, `build.mjs`, `sw.js`, `.github/` | #57 → #58 → #80; #64, #65, #75, #77, #79 any time; #8, #86 any time; #76 after #66; #10, #11 after #73 | Yes |
+
+Two issues straddle lanes and ship as two PRs each: **#69** (server half
+returns the rev in the presence response, additive, any time; client half is
+browser lane) and **#71** (server half adds the comments endpoint, any time;
+switching the review client to it is browser lane). The server half is
+backwards compatible in both cases.
+
+A realistic first week is three branches at once: #57 then #58 in the
+desktop lane, #62 then #63 in the server lane, #59 then #60 in the browser
+lane.
+
 ## Phases
 
 Each phase is independently shippable. Do not start phase 5 before phase 2
-lands; the rest can overlap.
+lands; the rest can overlap per the lanes above.
 
 ### Phase 1: close the real risks (about a week, all small PRs)
 
