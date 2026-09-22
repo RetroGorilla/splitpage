@@ -21,7 +21,9 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = join(ROOT, "icon.svg");
-const TARGETS = [join(ROOT, "installer", "icon.ico"), join(ROOT, "desktop", "build", "icon.ico")];
+// #75 deleted installer/ (the IExpress setup), which carried the second copy.
+// The Electron build's icon is the only one left.
+const TARGETS = [join(ROOT, "desktop", "build", "icon.ico")];
 
 // The sizes the previous icon carried. Windows picks per surface: 16 in the
 // title bar, 32 on the taskbar, 256 for Explorer's extra-large view.

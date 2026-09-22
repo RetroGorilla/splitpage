@@ -340,20 +340,21 @@ build `npm install` fetches by default (`desktop/.npmrc`, `arch=arm64` — see
 HANDOFF.md §2); `desktop/test/smoke.mjs`'s dev-target runs, including the
 tabs cases, execute against that native ARM64 Electron, not under emulation.
 
-### Where they differ from the old (deprecated) IExpress recipe
+### Where they differ from the IExpress recipe that used to be here
 
-The old `start.bat` + `package.mjs --installer` + `installer/install.ps1` recipe
-shipped a PowerShell installer wrapped in IExpress; it is deprecated (see the
-header comment in `package.mjs`) but still builds, since `package.mjs` without
-`--installer` still produces the portable zip every release ships for 1.0.x
-compatibility (§7). The Electron-built installers, which 2.0.0 ships instead:
+Until 3.0 there was a second Windows installer: `package.mjs --installer` wrapped
+`installer/install.ps1`, `installer/uninstall.ps1` and a downloaded `node.exe`
+in a self-extracting archive built by `iexpress.exe`. It had been deprecated
+since 2.0.0 and unpublished since then; it is **deleted** now, along with
+`installer/`, `tools/fetch-runtime.mjs` and the `--installer` flag itself. The
+Electron-built installers, which ship instead:
 
 - Run natively inside Electron's window frame with native title bar and menus
 - Have stable `splitpage://app` origin, so localStorage/IndexedDB/version history
   survive across launches regardless of port changes
 - Use `electron-builder`'s NSIS configuration instead of IExpress
-- Carry their own runtime: Electron bundles Chromium and Node, so the portable
-  Node the IExpress setups ship is not used
+- Carry their own runtime: Electron bundles Chromium and Node, so no separate
+  portable Node has to be downloaded and packed
 - Support both x64 and ARM64 architectures with native binaries
 
 ---
@@ -369,17 +370,17 @@ node package.mjs
 cd desktop && npm run dist:win
 ```
 
-`node package.mjs` (no `--installer`) writes `dist/splitpage-<version>.zip`. The
-`--installer` (IExpress) branch of `package.mjs` is deprecated — see its file
-header — and is not part of this recipe; it may still be run by hand as a
-historical fallback, but its output (`SplitpageSetup-<version>-*.exe`) is not
-published. `npm run dist:win` runs `stage.mjs`, `electron-builder`, and finishes
-with `verify-dist.mjs` (§6); do not publish if it does not print ALL PASS.
+`node package.mjs` writes `dist/splitpage-<version>.zip` and nothing else — it
+has no flags left. `npm run dist:win` runs `stage.mjs`, `electron-builder`, and
+finishes with `verify-dist.mjs` (§6); do not publish if it does not print ALL
+PASS.
 
-The zip is still required every release, 2.0.0 included: the 1.0.x updater
-(`update.mjs`) hard-fails unless the release has an asset matching
-`/^splitpage-.*\.zip$/`, and that is how a 1.0.x install updates itself in
-place to the current browser app (see §6 and the 1.0.x removal note below).
+Ship the zip every release. It is the portable app, and it is also what a
+pre-3.0 copy looks for: the 1.0.x/2.x launcher hard-fails its own update unless
+the release carries an asset matching `/^splitpage-.*\.zip$/`. A 3.0 copy no
+longer installs it by itself — that self-update path is gone, and the portable
+copy is updated by unzipping a newer release over it — but leaving the asset off
+would break the copies still running the old launcher.
 
 On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
 
@@ -405,7 +406,16 @@ The 2.0.0 installer also removes a detected 1.0.x install from
 data folder untouched; see the `customInit` macro committed in
 `desktop/build/installer.nsh`.
 
-Existing installations will check the mirror on startup and offer the update. The `release.json` file in the repo controls the mirror URL, so if you need to change where releases come from, update that file and the next build will point there.
+Existing installations check the mirror on startup and say when there is
+something newer; the desktop app offers to install it.
+
+**Where that mirror URL comes from.** `SPLITPAGE_UPDATE_API`, or the default
+compiled into `update.mjs` and `desktop/main.js`, and nothing else. `release.json`
+used to be copied into each release's `.splitpage-release.json` as an
+`updateApi` field that the next update check would follow; #64 made that field
+ignored (a release naming where the next release comes from is a redirect
+nobody could revoke) and #75 stopped writing it. To move the mirror, change the
+default in those two files and cut a release from it.
 
 ---
 
