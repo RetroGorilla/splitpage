@@ -21,18 +21,9 @@ export var SCHEMA_VERSION = 2;
 S.editSeq = 0;
 S.dirty = false;
 export var suppressUnloadWarning = false;
-/* The project file this document lives in: a File System Access API
-   handle, once the user has picked or created one via Save, plus which
-   format it is — "md" | "splitpage" | "html". The handle lets subsequent
-   saves write in place instead of prompting again; the kind decides which
-   serializer runs (14-export.js). `handle` stays null (and Save falls back
-   to a plain download) in browsers without the API, e.g. Firefox.
-   "html" only ever arrives by OPENING a legacy file — nothing writes it.
-   `lastModified` is the file's own timestamp as of the last time we read
-   or wrote it — the same on-disk-conflict guard the import re-save path
-   has always had (openedFile.lastModified, 18-local-files.js), applied
-   here to project saves too (checkFileConflict). */
-S.docFileHandle = { handle: null, kind: null, lastModified: null };
+/* Where the document lives — its project file, the foreign file it was
+   opened from, or the server — is `home` in _home.js (#73), which starts
+   out "none" without any module's __init() having to run. */
 S.deleteArmId = null;
 S.deleteArmTimer = null;
 

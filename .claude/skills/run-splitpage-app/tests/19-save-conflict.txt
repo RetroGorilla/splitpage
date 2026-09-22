@@ -3,7 +3,7 @@
 # saveBackToFile() (the import re-save path) has always refused to overwrite
 # a file that changed on disk since it was opened. This extends the same
 # guard to saveDoc() (14-export.js) for a document opened from or saved to a
-# docFileHandle. No real file picker can run headless, so this drives
+# project file (a "file" home, _home.js). No real file picker can run headless, so this drives
 # window.__splitpageFormats' openFile()/save() hooks (20d-formats.js) with a
 # fake FileSystemFileHandle-shaped object — name, getFile(), createWritable()
 # — the same shape a real handle from showOpenFilePicker has.

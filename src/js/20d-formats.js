@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { fileHome } from "./_home.js";
 import { legacyMdToHtml, makeId, migrateRows } from "./02-state.js";
 import {
   adoptRestoredState,
@@ -364,13 +365,20 @@ export function __init() {
     migrate: migrateRows,
     clone: cloneState,
     state: function () { return S.state; },
-    docFile: function () { return { name: S.docFileHandle.handle ? S.docFileHandle.handle.name : null, kind: S.docFileHandle.kind, lastModified: S.docFileHandle.lastModified }; },
+    /* The project-file home (_home.js), in the shape the suites have always
+       read: `kind` here is the file's FORMAT ("md" | "splitpage" | "html"),
+       null when the document does not live in a project file. */
+    docFile: function () {
+      var f = fileHome();
+      return { name: f && f.handle ? f.handle.name : null, kind: f ? f.format : null,
+               lastModified: f ? f.lastModified : null };
+    },
     /* The local-file merge (18a-local-merge.js), for 42-local-merge.txt.
        `hasDiskBase` proves the ancestor is being retained at open and at
        save; `forgetDiskBase` drops it, which is the only way to drive the
        two-way fallback from outside — once a file has been opened, nothing
        a user can do takes the ancestor away again. */
-    hasDiskBase: function () { return !!(S.docFileHandle && S.docFileHandle.diskBase); },
-    forgetDiskBase: function () { if (S.docFileHandle) S.docFileHandle.diskBase = null; S.baseState = null; return true; }
+    hasDiskBase: function () { return !!(fileHome() && fileHome().diskBase); },
+    forgetDiskBase: function () { if (fileHome()) fileHome().diskBase = null; S.baseState = null; return true; }
   };
 }

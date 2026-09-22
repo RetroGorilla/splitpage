@@ -19,7 +19,7 @@
 #     driven by the REAL two-second heartbeat, not by poking the function;
 #   * B's own unsaved edit in another row survives it;
 #   * no PUT: a pull publishes nothing, not even the merged result;
-#   * the rev compared is the DOCUMENT's (serverDoc.rev, the compare-and-set
+#   * the rev compared is the DOCUMENT's (the server home's rev, the compare-and-set
 #     token), so a beat that repeats a number costs one comparison and no
 #     request at all;
 #   * NO HISTORY SNAPSHOT. A pull runs whenever anybody saves; one undo
@@ -50,7 +50,7 @@ expect true
 # and holding rev 3 as its base, which is what every merge measures against.
 eval (function(){ window.__hostedTest.setSession({docId:'doc-pull', rev: 3}); return window.__hostedTest.role(); })()
 expect 'edit'
-expect window.__hostedTest.serverDoc().rev === 3
+expect window.__hostedTest.home().rev === 3
 
 # What A and B both started from.
 eval (function(){ window.__server = F.clone(F.state()); return window.__server.rows.length; })()
@@ -92,7 +92,7 @@ expect window.__puts.length === 0
 
 # The compare-and-set token moved with it, so the save B makes later is
 # judged against A's version instead of conflicting with it.
-expect window.__hostedTest.serverDoc().rev === 4
+expect window.__hostedTest.home().rev === 4
 
 # It said so, naming whoever saved, and the merge banner says what moved.
 expect Array.prototype.some.call(document.querySelectorAll('.toast'), function(t){ return t.textContent.indexOf('Merged in changes from Priya Malhotra') !== -1; })
@@ -123,7 +123,7 @@ expect window.__gets === window.__g1
 # differed all along; the question is whether anything of THEIRS is new,
 # which is a question about the base.
 eval (function(){ window.__rowsHtml = document.getElementById('rows').innerHTML; window.__serverRev = 5; return 1; })()
-wait window.__hostedTest.serverDoc().rev === 5
+wait window.__hostedTest.home().rev === 5
 expect window.__gets === window.__g1 + 1
 expect document.getElementById('rows').innerHTML === window.__rowsHtml
 expect Array.prototype.filter.call(document.querySelectorAll('.toast'), function(t){ return t.textContent.indexOf('Merged in changes') !== -1; }).length === 0
@@ -155,7 +155,7 @@ expect document.querySelector('#rows').textContent.indexOf('AROWTWOAGAIN') === -
 eval (function(){ window.__putResolve({id:'doc-pull', rev: 6, updatedAt:new Date().toISOString(), updatedBy:'Sam Okafor'}); return 1; })()
 wait window.__gets === window.__g2 + 1
 wait document.querySelector('#rows').textContent.indexOf('AROWTWOAGAIN') !== -1
-expect window.__hostedTest.serverDoc().rev === 9
+expect window.__hostedTest.home().rev === 9
 expect window.__puts.length === 1
 # the save that just landed is not undone by the pull that followed it
 expect document.querySelector('#rows').textContent.indexOf('BROWONE') !== -1
@@ -167,7 +167,7 @@ expect document.querySelector('#rows').textContent.indexOf('BROWONE') !== -1
 eval (function(){ window.__g3 = window.__gets; window.__hostedTest.noteRev({docId:'some-other-doc', rev: 99}); return 1; })()
 sleep 300
 expect window.__gets === window.__g3
-expect window.__hostedTest.serverDoc().rev === 9
+expect window.__hostedTest.home().rev === 9
 
 # --- a document with no head line has no rev, and no pull ----------------
 # server.js answers a beat about one with rev null rather than parsing the
@@ -175,6 +175,6 @@ expect window.__hostedTest.serverDoc().rev === 9
 eval (function(){ window.__hostedTest.noteRev({docId:'doc-pull', rev: null}); return 1; })()
 sleep 300
 expect window.__gets === window.__g3
-expect window.__hostedTest.serverDoc().rev === 9
+expect window.__hostedTest.home().rev === 9
 
 quit

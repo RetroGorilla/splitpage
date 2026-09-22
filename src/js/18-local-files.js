@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { fileHome, home, importHome, setHome } from "./_home.js";
 import { loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import { toggleHideShotScenes } from "./01b-hide-shot.js";
 import { migrateRows } from "./02-state.js";
@@ -74,7 +75,9 @@ import { closeNewTabPage } from "./20j-newtab.js";
 
 /* ================= local documents: open, save back, export ================= */
 
-S.openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
+/* A foreign file opened for round-trip export is the "import" home
+   (_home.js): {kind, handle, format, name, lastModified, size, inPlace,
+   dirty}. The file chip and File ▸ "Save to <name>" below are about it. */
 
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
@@ -141,25 +144,26 @@ function updateHeaderFileChip() {
     var srvState = document.getElementById("file-chip-state");
     srvState.textContent = serverSessionExpired
       ? "· signed out — reload"
-      : (S.dirty ? "· saving…" : "· v" + S.serverDoc.rev + ", everyone sees this");
+      : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
     srvState.classList.toggle("unsaved", serverSessionExpired || !!S.dirty);
     saveBack.disabled = true;
     saveBack.textContent = "Save to file";
     return;
   }
-  if (!S.openedFile.name) {
+  var imported = importHome();
+  if (!imported) {
     chip.hidden = true;
     saveBack.disabled = true;
     saveBack.textContent = "Save to file";
     return;
   }
   chip.hidden = false;
-  document.getElementById("file-chip-name").textContent = S.openedFile.name;
+  document.getElementById("file-chip-name").textContent = imported.name;
   var stateEl = document.getElementById("file-chip-state");
-  stateEl.textContent = S.openedFile.dirty ? "· unsaved changes" : "· up to date";
-  stateEl.classList.toggle("unsaved", !!S.openedFile.dirty);
+  stateEl.textContent = imported.dirty ? "· unsaved changes" : "· up to date";
+  stateEl.classList.toggle("unsaved", !!imported.dirty);
   saveBack.disabled = false;
-  saveBack.textContent = S.openedFile.inPlace ? "Save to " + S.openedFile.name : "Save a new copy of " + S.openedFile.name;
+  saveBack.textContent = imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name;
 }
 
 /* Build the bytes for a given format. Returns {data, filename}.
@@ -395,22 +399,18 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
      common ancestor "Merge them" needs to do a true three-way merge if the
      file later changes under us (18a-local-merge.js). It rides on the home
      record so it is dropped the moment the document's home changes, and
-     moves with it on every successful write (saveDoc, 14-export.js). */
-  S.docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null,
-                    name: file.name, diskBase: cloneState(S.state) };
-  /* A hosted document and a local file are two homes for one Save button
-     (§3.1). Opening a server document already clears the file side; this
-     is the other half, which was missing — open a file while a hosted
-     document was loaded and Save still went to the server. */
-  S.serverDoc = { id: null, rev: 0 };
+     moves with it on every successful write (saveDoc, 14-export.js).
+     A hosted document and a local file are two homes for one Save button
+     (§3.1), and so is a foreign file opened for round-trip export: this
+     replaces whichever the page had. Opening a project replaces an import
+     outright — a .docx/.csv/foreign .md opened earlier no longer applies. */
+  setHome("file", { handle: handle || null, format: kind, lastModified: file.lastModified || null,
+                    name: file.name, diskBase: cloneState(S.state) });
   /* The breakdown panel's open card, rename box and group mode all belong
      to the document that was on screen a moment ago. Carrying them into a
      different project meant a card springing open by itself whenever the
      two happened to share an item name. */
   resetProductionPanelState();
-  /* opening a project replaces it outright — any file previously opened
-     for round-trip export (a .docx/.csv/foreign .md) no longer applies */
-  S.openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
 
   /* This id came from a file on disk, so it has already left the page: a
      later Save As must fork a new one rather than put this id in a second
@@ -579,12 +579,10 @@ async function loadFileIntoEditor(file, handle, opts) {
   } else {
     S.state = migrateRows({ title: openedTitle, rows: newRows });
     S.baseState = cloneState(S.state);
-    /* The two homes of the Save button (§3.1). Neither belongs to this
-       document: the project file and the hosted document both belonged to
-       whatever was on screen a moment ago, and saving into either of them
-       would overwrite an unrelated script. */
-    S.docFileHandle = { handle: null, kind: null };
-    S.serverDoc = { id: null, rev: 0 };
+    /* The two homes of the Save button (§3.1) — the project file and the
+       hosted document — both belonged to whatever was on screen a moment
+       ago, and saving into either would overwrite an unrelated script.
+       The setHome("import") below replaces them. */
     /* The breakdown panel's open card, rename box and group mode belong to
        the document that just went away — same reason adoptProjectState()
        resets them. */
@@ -594,18 +592,21 @@ async function loadFileIntoEditor(file, handle, opts) {
     S.docIdWrittenOut = false;
   }
 
-  S.openedFile.name = file.name;
-  S.openedFile.handle = handle || null;
-  S.openedFile.kind = kind;
-  S.openedFile.inPlace = !!(handle && handle.createWritable);
-  S.openedFile.dirty = false;
-  /* remember what the file looked like so we never blindly overwrite a
-     newer version someone edited in Word while we had it open */
-  S.openedFile.lastModified = file.lastModified || null;
-  S.openedFile.size = file.size || null;
+  /* `lastModified`/`size`: remember what the file looked like so we never
+     blindly overwrite a newer version someone edited in Word while we had
+     it open. A reload is the same home re-read, so it is set afresh too. */
+  var imported = setHome("import", {
+    name: file.name,
+    handle: handle || null,
+    format: kind,
+    inPlace: !!(handle && handle.createWritable),
+    dirty: false,
+    lastModified: file.lastModified || null,
+    size: file.size || null
+  });
 
   markDirty();
-  S.openedFile.dirty = false;
+  imported.dirty = false;
   if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
   render();
   updateIdentityChip();
@@ -755,7 +756,7 @@ export async function checkFileConflict(handle, lastModified) {
 
 /* Which flow popped the conflict modal, so its buttons (reload /
    overwrite / save-as-a-copy / merge) know whether to act on the import
-   re-save path's `openedFile` or the project-save path's `docFileHandle`.
+   re-save path's "import" home or the project-save path's "file" home.
    Set by showFileConflict(), read by 21-events.js's button wiring. */
 export var fileConflictCtx = { kind: "import" };
 /* Bumped by every showFileConflict() and by closeFileConflict(), so a
@@ -765,64 +766,69 @@ var fileConflictShowToken = 0;
 
 /* Which home record this conflict is about, read off fileConflictCtx the
    same way each of the modal's buttons reads it — "Merge them" needs the
-   answer while the modal is going up, before any button is pressed. */
+   answer while the modal is going up, before any button is pressed. Null
+   when the document no longer lives where the conflict was found. */
 function fileConflictHome() {
-  return fileConflictCtx && fileConflictCtx.kind === "project" ? S.docFileHandle : S.openedFile;
+  return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
 }
 
 export async function saveBackToFile(opts) {
-  if (!S.openedFile.name) return;
-  var baseName = S.openedFile.name.replace(/\.[^.]+$/, "");
+  /* The record this call writes back to, held across the awaits below: it
+     is the file the bytes were built for, whatever the page has since
+     opened. */
+  var imported = importHome();
+  if (!imported) return;
+  var baseName = imported.name.replace(/\.[^.]+$/, "");
   var built;
   try {
-    built = await buildFileData(S.openedFile.kind, baseName);
+    built = await buildFileData(imported.format, baseName);
   } catch (e) {
     showToast("Could not build the file.", "error");
     return;
   }
 
   /* true in-place write, when the browser allows it */
-  if (S.openedFile.handle && S.openedFile.handle.createWritable) {
+  if (imported.handle && imported.handle.createWritable) {
     /* has the file changed on disk since we opened it? */
     if (!opts || !opts.force) {
-      var check = await checkFileConflict(S.openedFile.handle, S.openedFile.lastModified);
+      var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
-        showFileConflict(S.openedFile.name, check.current, { kind: "import" });
+        showFileConflict(imported.name, check.current, { kind: "import" });
         return;
       }
     }
     try {
-      var writable = await S.openedFile.handle.createWritable();
+      var writable = await imported.handle.createWritable();
       await writable.write(built.data);
       await writable.close();
-      S.openedFile.dirty = false;
+      imported.dirty = false;
       try {
-        var after = await S.openedFile.handle.getFile();
-        S.openedFile.lastModified = after.lastModified;
-        S.openedFile.size = after.size;
+        var after = await imported.handle.getFile();
+        imported.lastModified = after.lastModified;
+        imported.size = after.size;
       } catch (e) { /* not fatal — the write already succeeded */ }
       updateFileChip();
-      showToast("Saved to " + S.openedFile.name, "ok");
+      showToast("Saved to " + imported.name, "ok");
       return;
     } catch (err) {
       if (err && err.name === "AbortError") return;
       /* permission revoked or frame not allowed — fall through to a copy */
-      S.openedFile.inPlace = false;
+      imported.inPlace = false;
       updateFileChip();
     }
   }
 
-  var ok = await deliverFile(S.openedFile.name, built.data, {
-    savedMsg: "Saved a copy of " + S.openedFile.name + " to your downloads"
+  var ok = await deliverFile(imported.name, built.data, {
+    savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
-  if (ok) { S.openedFile.dirty = false; updateFileChip(); }
+  if (ok) { imported.dirty = false; updateFileChip(); }
 }
 
 /* The file on disk moved under us. Never overwrite silently — the whole
    point of this guard is that the other version might be someone's work.
    `ctx` records which flow this is for ({kind:"import"} or
    {kind:"project"}) so the modal's three buttons (21-events.js) know
-   whether to act on `openedFile` or `docFileHandle`. */
+   whether to act on the "import" home or the "file" home (_home.js). */
 export function showFileConflict(fileName, currentFile, ctx) {
   fileConflictCtx = ctx || { kind: "import" };
   if (!currentFile) {
@@ -872,10 +878,11 @@ export function closeFileConflict() {
 
 export async function reloadFileFromDisk() {
   closeFileConflict();
-  if (!S.openedFile.handle) return;
+  var imported = importHome();
+  if (!imported || !imported.handle) return;
   try {
-    pushSnapshot("Before reloading " + S.openedFile.name + " from disk");
-    await loadFileIntoEditor(await S.openedFile.handle.getFile(), S.openedFile.handle, { reload: true });
+    pushSnapshot("Before reloading " + imported.name + " from disk");
+    await loadFileIntoEditor(await imported.handle.getFile(), imported.handle, { reload: true });
   } catch (e) {
     showToast("Could not re-read that file.", "error");
   }
@@ -887,9 +894,10 @@ export async function reloadFileFromDisk() {
    statuses and all, not flattened through the plain-text import path. */
 export async function reloadProjectFromDisk() {
   closeFileConflict();
-  if (!S.docFileHandle.handle) return;
+  var file = fileHome();
+  if (!file || !file.handle) return;
   try {
-    await openProjectFile(await S.docFileHandle.handle.getFile(), S.docFileHandle.handle);
+    await openProjectFile(await file.handle.getFile(), file.handle);
   } catch (e) {
     showToast("Could not re-read that file.", "error");
   }
@@ -902,7 +910,7 @@ export async function reloadProjectFromDisk() {
    the top bar (04b-busy.js) only if the build actually takes long enough
    to need it, which on a short script means nothing appears at all. */
 export async function exportAs(kind) {
-  var base = S.openedFile.name ? S.openedFile.name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+  var base = importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
   var built;
   try {
     built = await withBusyBar("Building the " + kind.toUpperCase() + " file…", function () {

@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
@@ -1404,9 +1405,11 @@ function init() {
     var ctx = fileConflictCtx;
     closeFileConflict();
     if (ctx && ctx.kind === "project") { saveDoc({ saveAs: true }); return; }
-    var base = S.openedFile.name.replace(/\.[^.]+$/, "");
-    var ext = (/\.([^.]+)$/.exec(S.openedFile.name) || ["", "md"])[1];
-    buildFileData(S.openedFile.kind, base + " (copy)").then(function (built) {
+    var imported = importHome();
+    if (!imported) return;
+    var base = imported.name.replace(/\.[^.]+$/, "");
+    var ext = (/\.([^.]+)$/.exec(imported.name) || ["", "md"])[1];
+    buildFileData(imported.format, base + " (copy)").then(function (built) {
       deliverFile(base + " (copy)." + ext, built.data, { savedMsg: "Saved a separate copy" });
     });
   });

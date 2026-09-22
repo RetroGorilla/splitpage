@@ -23,8 +23,8 @@ eval (function(){window.F = window.__splitpageFormats; window.D = window.__deskt
 expect true
 
 # openFixture(id, title): serialize the CURRENT document under a chosen id
-# and title, then reopen it as a .splitpage project — docFileHandle.kind
-# becomes 'splitpage' (never pristine again) and the id is kept verbatim
+# and title, then reopen it as a .splitpage project — the home becomes a
+# 'splitpage' file (F.docFile().kind, never pristine again) and the id is kept verbatim
 # (migrateDocument keeps an already-valid embedded id).
 #
 # ONE FILE NAME for every fixture in this suite, deliberately. The browser's

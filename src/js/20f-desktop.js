@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home, serverHomeId } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
 import {
@@ -13,7 +14,7 @@ import {
 } from "./03a-history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { onServerDoc, openServerDoc, serverToken } from "./13-hosted.js";
+import { openServerDoc, serverToken } from "./13-hosted.js";
 import { concatBytes, strBytes } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
@@ -119,8 +120,8 @@ export function notifyDesktopDocumentState() {
     dirty: !!S.dirty || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
     docId: S.state.docId || null,
-    fileId: (!onServerDoc() && S.docFileHandle.handle && S.docFileHandle.handle._desktopId) || null,
-    serverKey: onServerDoc() ? S.serverDoc.id : null
+    fileId: (home.kind === "file" && home.handle && home.handle._desktopId) || null,
+    serverKey: serverHomeId()
   });
 }
 

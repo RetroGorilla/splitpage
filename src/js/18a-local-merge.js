@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { fileHome } from "./_home.js";
 import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { normalizeDocId } from "./02b-doc-id.js";
@@ -27,7 +28,7 @@ import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 
    The merge is genuinely three-way wherever there is an ancestor to use:
    the state as parsed at the last read from, or write to, THIS file is
-   kept on the file's own home record (docFileHandle.diskBase, set by
+   kept on the file's own home record (home.diskBase, _home.js, set by
    adoptProjectState and by saveDoc's successful write). Keeping it there
    rather than in a variable of its own means it is dropped the moment the
    document's home changes, and can never be mistaken for some other
@@ -51,7 +52,7 @@ function fileMergeBase(home) {
      the project path it holds the same ancestor — the fallback for a
      document that reached this file by a route predating diskBase (a
      crash-draft restore, a boot stash merge). Only ever this document's. */
-  if (home === S.docFileHandle && S.baseState && S.state &&
+  if (home && home === fileHome() && S.baseState && S.state &&
       normalizeDocId(S.baseState.docId) === normalizeDocId(S.state.docId)) return S.baseState;
   return null;
 }
