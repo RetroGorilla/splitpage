@@ -148,6 +148,25 @@ const CHANNELS = [
      handler runs. */
   { name: "splitpage:prompter-open-in-browser", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
+  /* ---- Google Drive (issue #10, main.js § 9c) --------------------------
+     Main owns the whole OAuth flow: the loopback listener, PKCE, the token
+     exchange, the tokens themselves, and every request to Google. So the
+     three account calls take no argument at all, in the update bridge's
+     style (invariant #28): the page never names the URL the browser is sent
+     to, the redirect address or a client id. The three Drive calls take the
+     least the modal needs to say WHICH folder or file, and never a URL: a
+     Drive id (^[A-Za-z0-9_-]{1,200}$, checked in desktop/google-drive.js),
+     or for an upload {parentId | fileId, name, bytes, mimeType?}, the name
+     length-capped and the bytes size-capped there. Main builds every
+     request against Google's fixed hosts, and the answers carry names, ids
+     and bytes — never a token. */
+  { name: "splitpage:drive-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:drive-sign-in", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:drive-sign-out", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:drive-list", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:drive-download", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:drive-upload", direction: "invoke", argsSchema: ["object"], allowedOrigins: APP },
+
   /* ---- document state and routing ------------------------------------
      Both payloads stay `object`: their fields are checked one by one in the
      handler, which is stricter than a descriptor here could be. Since #11 a

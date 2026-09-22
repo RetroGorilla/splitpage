@@ -1974,20 +1974,267 @@ function saveDriveCreds(apiKey, clientId) {
   } catch (e) { /* not fatal — creds just won't survive a reload */ }
 }
 
-export function openDriveModal() {
-  /* Google Identity Services only ever authorizes an http/https origin
-     (Google Cloud Console has no "custom scheme" option for Authorized
-     JavaScript origins), and this page runs at splitpage://app — the menu
-     entry that reaches here is hidden on desktop for exactly that reason
-     (20f-desktop.js's initDesktop()). This is the defensive half, in case
-     something still calls the action directly (a native menu command, a
-     stale keyboard shortcut) — say why plainly instead of opening a modal
-     whose Sign in button can only ever fail. */
-  if (S.DESKTOP) {
-    showToast("Google Drive isn't available in the desktop app — sign-in needs a web address Google " +
-      "can redirect back to. Use File ▸ Open a document… instead.", "warn");
+/* ---- the desktop app's Drive (issue #10) ----
+
+   Google Identity Services only ever authorizes an http/https origin, and
+   the desktop page runs at splitpage://app, so none of the above can work
+   there. The desktop shell signs in instead — a loopback OAuth redirect
+   held by the MAIN process (desktop/google-drive.js, main.js § 9c) — and
+   performs every Drive request itself. What this page gets is the bridge's
+   six calls: driveStatus/driveSignIn/driveSignOut, which take no argument,
+   and driveList/driveDownload/driveUpload, which take a Drive id or an
+   upload request. It never holds a token, never names a URL, and there is
+   no API key and no Client ID form: the client is configured on the
+   machine (an environment variable or a JSON file in the settings folder),
+   and the modal says exactly where when nothing is.
+
+   The same modal, the same list and breadcrumb; what differs is the
+   account row, the setup panel, and that rename/delete/new folder are not
+   offered (the bridge does not carry them). An upload whose name matches
+   exactly one ordinary file in the folder replaces that file's content —
+   a new revision in Drive — instead of adding a second file of that name. */
+var driveDesktopStatus = null;
+
+function driveDesktopBridge() {
+  return !!(S.DESKTOP && typeof S.DESKTOP.driveStatus === "function");
+}
+
+var DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+var DRIVE_DOC_MIME = "application/vnd.google-apps.document";
+var DRIVE_ENV_VARS_FALLBACK = ["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"];
+
+/* Which of the modal's two sets of chrome is showing. Written both ways
+   because a browser suite swaps the desktop backend in and back out. */
+function applyDriveChrome(desktop) {
+  document.getElementById("drive-web-hint").hidden = desktop;
+  document.getElementById("drive-desktop-hint").hidden = !desktop;
+  document.getElementById("drive-desktop-setup").hidden = true;
+  if (desktop) document.getElementById("drive-setup").hidden = true;
+  var edit = document.querySelector("#drive-modal .drive-edit-creds");
+  if (edit) edit.hidden = desktop;
+  var nf = document.getElementById("drive-newfolder-toggle");
+  if (nf) nf.hidden = desktop;
+  var row = document.querySelector("#drive-modal .drive-connect-row");
+  if (row) row.hidden = false;
+  document.getElementById("drive-folder-input").placeholder = desktop
+    ? "Paste a Drive folder link or ID — or leave empty for My Drive"
+    : "Paste a Drive folder link or ID…";
+}
+
+function driveDesktopMessage(res) {
+  var code = res && res.code;
+  if (code === "SIGNED_OUT") return "Google no longer accepts this sign-in — sign in again.";
+  if (code === "NOT_CONFIGURED") return "no Google client is set up on this computer.";
+  if (code === "NETWORK") return "couldn't reach Google. Check your connection.";
+  if (code === "NOT_FOUND") return "it isn't there, or this Google account can't see it.";
+  if (code === "FORBIDDEN") return "this Google account doesn't have permission.";
+  if (code === "TOO_LARGE") return "it's larger than 64 MB.";
+  if (code === "UNSUPPORTED") return "Google Sheets, Slides and forms can't be downloaded here — open them in Drive.";
+  if (code === "NOT_A_FOLDER") return "that's a file, not a folder.";
+  if (code === "IS_A_FOLDER") return "that's a folder.";
+  if (code === "BAD_ARGS") return "Splitpage refused the request.";
+  return "something went wrong" + (code ? " (" + code + ")" : "") + ".";
+}
+
+async function driveDesktopCall(method, arg) {
+  try {
+    var res = await (arguments.length > 1 ? S.DESKTOP[method](arg) : S.DESKTOP[method]());
+    return res || { ok: false, code: "FAILED" };
+  } catch (e) {
+    return { ok: false, code: "FAILED" };
+  }
+}
+
+/* A Drive call answered SIGNED_OUT: the stored sign-in is gone (revoked in
+   the Google account, say). Show the signed-out modal rather than a list
+   nothing can refresh. */
+async function driveDesktopSignedOut(res) {
+  if (!res || res.code !== "SIGNED_OUT") return false;
+  driveResetBrowse();
+  await refreshDriveDesktop();
+  return true;
+}
+
+function driveResetBrowse() {
+  driveState.connected = false;
+  driveState.path = [];
+  driveState.items = [];
+  driveEditingId = null;
+}
+
+async function refreshDriveDesktop() {
+  var st = await driveDesktopCall("driveStatus");
+  driveDesktopStatus = st;
+  renderDriveDesktop();
+  if (st.ok && st.configured && st.signedIn && !driveState.connected) await driveConnect("");
+}
+
+function renderDriveDesktop() {
+  var st = driveDesktopStatus || {};
+  var configured = !!(st.ok && st.configured);
+  document.getElementById("drive-desktop-setup").hidden = configured;
+  document.getElementById("drive-main").hidden = !configured;
+  if (!configured) {
+    document.getElementById("drive-desktop-client-path").textContent =
+      st.clientFilePath || "google-oauth-client.json, in Splitpage's settings folder";
+    document.getElementById("drive-desktop-env-vars").textContent =
+      (Array.isArray(st.envVars) && st.envVars.length ? st.envVars : DRIVE_ENV_VARS_FALLBACK).join(" and ");
     return;
   }
+  driveState.signedIn = !!st.signedIn;
+  if (!driveState.signedIn) driveResetBrowse();
+  var row = document.querySelector("#drive-modal .drive-connect-row");
+  if (row) row.hidden = !driveState.signedIn;
+  document.getElementById("drive-browser").hidden = !(driveState.signedIn && driveState.connected);
+  renderDriveAccount();
+}
+
+function renderDriveAccountDesktop(el) {
+  var st = driveDesktopStatus || {};
+  if (st.signingIn) {
+    el.innerHTML = '<span class="drive-account-status">Finish signing in in your browser, then come back here.</span>' +
+      '<button type="button" class="btn" disabled>Waiting for Google…</button>';
+  } else if (driveState.signedIn) {
+    var who = st.email ? "Signed in as " + escapeHtml(st.email) : "Signed in";
+    var session = st.persisted ? "" : " — for this session only: this computer has no secure storage to keep the sign-in.";
+    el.innerHTML = '<span class="drive-account-status">✓ ' + who + escapeHtml(session) + '</span>' +
+      '<button type="button" class="btn" data-action="drive-signout">Sign out</button>';
+  } else {
+    el.innerHTML = '<span class="drive-account-status">Sign in to browse your Google Drive. Google opens in your browser.</span>' +
+      '<button type="button" class="btn btn-accent" data-action="drive-signin">Sign in with Google</button>';
+  }
+  updateDriveWriteButtons();
+}
+
+async function driveSignInDesktop() {
+  if (driveDesktopStatus && driveDesktopStatus.signingIn) return;
+  driveDesktopStatus = Object.assign({}, driveDesktopStatus, { signingIn: true });
+  renderDriveAccount();
+  var res = await driveDesktopCall("driveSignIn");
+  if (res.ok) {
+    driveDesktopStatus = res;
+    driveResetBrowse();
+    renderDriveDesktop();
+    showToast("Signed in to Google Drive" + (res.email ? " as " + res.email : "") + ".", "ok");
+    await driveConnect("");
+    return;
+  }
+  var code = res.code;
+  var msg = code === "DENIED" ? "Google sign-in was cancelled."
+    : code === "TIMEOUT" ? "Sign-in timed out — nothing came back from your browser within 5 minutes. Try again."
+    : code === "STATE_MISMATCH" ? "The reply from Google didn't match this sign-in, so it was refused. Try again."
+    : code === "NO_REFRESH_TOKEN" ? "Google didn't grant lasting access. Try again, and allow access when Google asks."
+    : code === "NO_BROWSER" ? "Couldn't open your browser for Google sign-in."
+    : code === "CANCELLED" ? "Sign-in was cancelled."
+    : code === "NOT_CONFIGURED" ? "No Google client is set up on this computer yet."
+    : "Couldn't finish signing in to Google Drive" + (code ? " (" + code + ")" : "") + ".";
+  showToast(msg, code === "DENIED" || code === "CANCELLED" ? "warn" : "error");
+  await refreshDriveDesktop();
+}
+
+async function driveSignOutDesktop() {
+  var res = await driveDesktopCall("driveSignOut");
+  driveResetBrowse();
+  driveDesktopStatus = res && res.status ? Object.assign({ ok: true }, res.status) : await driveDesktopCall("driveStatus");
+  renderDriveDesktop();
+  showToast("Signed out of Google Drive.", "ok");
+}
+
+async function driveConnectDesktop(rawInput) {
+  var raw = (rawInput || "").trim();
+  var id = raw ? parseDriveFolderId(raw) : "root";
+  if (!id) { showToast("That doesn't look like a Drive folder link or ID.", "warn"); return; }
+  var btn = document.getElementById("drive-connect-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Opening…"; }
+  try {
+    var res = await driveDesktopCall("driveList", id);
+    if (!res.ok) {
+      if (await driveDesktopSignedOut(res)) return;
+      showToast("Could not open that folder — " + driveDesktopMessage(res), res.code === "NOT_A_FOLDER" ? "warn" : "error");
+      return;
+    }
+    driveState.connected = true;
+    driveState.path = [id === "root"
+      ? { id: "root", name: "My Drive" }
+      : { id: (res.folder && res.folder.id) || id, name: (res.folder && res.folder.name) || "Drive folder" }];
+    driveState.items = Array.isArray(res.files) ? res.files : [];
+    driveEditingId = null;
+    document.getElementById("drive-browser").hidden = false;
+    renderDriveBreadcrumb();
+    renderDriveList();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Open folder"; }
+  }
+}
+
+async function driveListCurrentDesktop() {
+  var folder = driveState.path[driveState.path.length - 1];
+  if (!folder) return;
+  var list = document.getElementById("drive-list");
+  list.innerHTML = '<div class="drive-empty">Loading…</div>';
+  var res = await driveDesktopCall("driveList", folder.id);
+  if (!res.ok) {
+    if (await driveDesktopSignedOut(res)) return;
+    list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(driveDesktopMessage(res)) + '</div>';
+    return;
+  }
+  driveState.items = Array.isArray(res.files) ? res.files : [];
+  renderDriveBreadcrumb();
+  renderDriveList();
+}
+
+async function driveDownloadDesktop(it) {
+  if (it.mimeType !== DRIVE_DOC_MIME && /^application\/vnd\.google-apps\./.test(it.mimeType)) {
+    /* Same as the web build: Sheets, Slides, forms and the like have no
+       clean text form — send the person to Drive itself. */
+    S.DESKTOP.openExternal("https://drive.google.com/open?id=" + encodeURIComponent(it.id));
+    return;
+  }
+  var res = await driveDesktopCall("driveDownload", it.id);
+  if (!res.ok) {
+    if (await driveDesktopSignedOut(res)) return;
+    showToast("Could not download " + it.name + " — " + driveDesktopMessage(res), "error");
+    return;
+  }
+  var filename = it.name;
+  /* A Google Doc comes back as plain text (main exports it that way). */
+  if (it.mimeType === DRIVE_DOC_MIME && !/\.[a-z0-9]+$/i.test(filename)) filename += ".txt";
+  await deliverFile(filename, res.bytes);
+}
+
+async function driveUploadOneDesktop(file, parentId) {
+  var bytes = new Uint8Array(await file.arrayBuffer());
+  var same = driveState.items.filter(function (it) {
+    return it.name === file.name && it.mimeType !== DRIVE_FOLDER_MIME && !/^application\/vnd\.google-apps\./.test(it.mimeType);
+  });
+  var req = same.length === 1 ? { fileId: same[0].id, bytes: bytes } : { parentId: parentId, name: file.name, bytes: bytes };
+  if (file.type) req.mimeType = file.type;
+  var res = await driveDesktopCall("driveUpload", req);
+  if (!res.ok) {
+    var err = new Error(driveDesktopMessage(res));
+    err.driveResult = res;
+    throw err;
+  }
+  return same.length === 1 ? "updated" : "created";
+}
+
+export function openDriveModal() {
+  if (S.DESKTOP) {
+    /* A desktop shell without the Drive bridge (the entry is hidden then —
+       20f-desktop.js's initDesktop() — so this is the defensive half, for a
+       native menu command or a stale shortcut). */
+    if (!driveDesktopBridge()) {
+      showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open a document… instead.", "warn");
+      return;
+    }
+    document.getElementById("drive-modal").hidden = false;
+    document.getElementById("drive-folder-input").value = "";
+    applyDriveChrome(true);
+    document.getElementById("drive-main").hidden = true;
+    refreshDriveDesktop();
+    return;
+  }
+  applyDriveChrome(false);
   loadDriveCreds();
   document.getElementById("drive-modal").hidden = false;
   document.getElementById("drive-folder-input").value = driveLastFolder();
@@ -1999,6 +2246,7 @@ export function closeDriveModal() {
 }
 
 export function driveShowCredsForm() {
+  if (S.DESKTOP) return;
   document.getElementById("drive-setup").hidden = false;
   document.getElementById("drive-main").hidden = true;
 }
@@ -2040,6 +2288,9 @@ function parseDriveFolderId(input) {
 function driveApiKeyParam() { return "key=" + encodeURIComponent(driveCreds.apiKey); }
 
 async function driveFetch(url, opts) {
+  /* The one place this page talks to Google directly — never on desktop,
+     where main makes every Drive request and the page holds no token. */
+  if (S.DESKTOP) throw new Error("not available in the desktop app");
   opts = opts || {};
   var headers = opts.headers || {};
   if (driveState.accessToken && driveState.tokenExpiresAt > Date.now()) {
@@ -2058,6 +2309,7 @@ async function driveFetch(url, opts) {
 }
 
 export async function driveConnect(rawInput) {
+  if (driveDesktopBridge()) return driveConnectDesktop(rawInput);
   if (!driveHasCreds()) { showToast("Add your Google API key and Client ID first.", "warn"); return; }
   var id = parseDriveFolderId(rawInput);
   if (!id) { showToast("That doesn't look like a Drive folder link or ID.", "warn"); return; }
@@ -2086,6 +2338,7 @@ export async function driveConnect(rawInput) {
 }
 
 export async function driveListCurrent() {
+  if (driveDesktopBridge()) return driveListCurrentDesktop();
   var folder = driveState.path[driveState.path.length - 1];
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
@@ -2153,7 +2406,9 @@ function renderDriveList() {
     list.innerHTML = '<div class="drive-empty">This folder is empty.</div>';
     return;
   }
-  var canWrite = driveState.signedIn;
+  /* Rename and delete are the web build's; the desktop bridge does not
+     carry them (see the desktop section above). */
+  var canWrite = driveState.signedIn && !driveDesktopBridge();
   list.innerHTML = driveState.items.map(function (it) {
     var isFolder = it.mimeType === "application/vnd.google-apps.folder";
     if (driveEditingId === it.id) {
@@ -2205,6 +2460,7 @@ var DRIVE_EXPORT_MIME = {
 };
 
 async function driveDownloadFile(it) {
+  if (driveDesktopBridge()) return driveDownloadDesktop(it);
   var exportInfo = DRIVE_EXPORT_MIME[it.mimeType];
   var url, filename = it.name;
   if (exportInfo) {
@@ -2293,6 +2549,7 @@ export function toggleDriveNewFolder(force) {
 }
 
 export async function driveCreateFolder() {
+  if (driveDesktopBridge()) { toggleDriveNewFolder(false); return; }
   if (!driveState.signedIn) { showToast("Sign in with Google first.", "warn"); toggleDriveNewFolder(false); return; }
   var input = document.getElementById("drive-newfolder-input");
   var name = input ? input.value.trim() : "";
@@ -2337,15 +2594,22 @@ export async function driveUploadFiles(fileList) {
   if (!driveState.signedIn) { showToast("Sign in with Google first.", "warn"); return; }
   var parent = driveState.path[driveState.path.length - 1];
   var files = Array.prototype.slice.call(fileList || []);
-  if (!files.length) return;
-  var failed = 0;
+  if (!files.length || !parent) return;
+  var desktop = driveDesktopBridge();
+  var failed = 0, updated = 0;
   for (var i = 0; i < files.length; i++) {
-    try { await driveUploadOne(files[i], parent.id); }
-    catch (err) { failed++; showToast("Could not upload " + files[i].name + " — " + err.message, "error"); }
+    try {
+      if (desktop) { if (await driveUploadOneDesktop(files[i], parent.id) === "updated") updated++; }
+      else await driveUploadOne(files[i], parent.id);
+    } catch (err) {
+      failed++;
+      if (desktop && await driveDesktopSignedOut(err.driveResult)) return;
+      showToast("Could not upload " + files[i].name + " — " + err.message, "error");
+    }
   }
-  if (files.length - failed > 0) {
-    showToast("Uploaded " + (files.length - failed) + " file" + (files.length - failed === 1 ? "" : "s"), "ok");
-  }
+  var created = files.length - failed - updated;
+  if (created > 0) showToast("Uploaded " + created + " file" + (created === 1 ? "" : "s"), "ok");
+  if (updated > 0) showToast("Replaced " + updated + " file" + (updated === 1 ? "" : "s") + " of the same name with a new version", "ok");
   await driveListCurrent();
 }
 
@@ -2369,6 +2633,7 @@ function loadGisScript() {
 function renderDriveAccount() {
   var el = document.getElementById("drive-account");
   if (!el) return;
+  if (driveDesktopBridge()) { renderDriveAccountDesktop(el); return; }
   el.innerHTML = driveState.signedIn
     ? '<span class="drive-account-status">✓ Signed in — you can make changes here.</span>' +
       '<button type="button" class="btn" data-action="drive-signout">Sign out</button>'
@@ -2390,6 +2655,7 @@ function updateDriveWriteButtons() {
 }
 
 export async function driveSignIn() {
+  if (driveDesktopBridge()) return driveSignInDesktop();
   if (!driveCreds.clientId) { showToast("Add your OAuth Client ID first.", "warn"); return; }
   if (location.protocol === "file:") {
     showToast("Sign-in needs this page served over http/https, not opened from disk.", "warn");
@@ -2419,6 +2685,7 @@ export async function driveSignIn() {
 }
 
 export function driveSignOut() {
+  if (driveDesktopBridge()) return driveSignOutDesktop();
   if (driveState.accessToken && window.google && google.accounts && google.accounts.oauth2) {
     google.accounts.oauth2.revoke(driveState.accessToken, function () {});
   }

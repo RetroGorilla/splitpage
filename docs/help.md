@@ -136,10 +136,11 @@ exceptions for now:
   works there in Chrome or Edge. The browser shows a read-only copy: keep
   editing in the desktop app. If the script has never been saved, you'll be
   asked to save it first.
-- **Google Drive files** can't be browsed from the desktop app, because Google's
-  sign-in only returns to a web address. **Import from Google Doc link** still
-  works: it opens the Doc's .docx download in your browser, and you then open
-  the downloaded file with File ▸ Open.
+- **Google Drive files** work differently in the desktop app: you sign in once
+  through your own browser instead of pasting an API key, and it needs a
+  Google Cloud client set up on the computer first — see **Google Drive files
+  ▸ In the desktop app** below. Rename, delete and new folder are browser-app
+  only for now.
 
 ### Moving between the browser app and the desktop app
 
@@ -161,7 +162,7 @@ preferences (whether you've seen the setup wizard, your author name, comment
 sorting preference, writer column width, and the tagging-help dismissal).
 
 **What does not travel:** server sign-in tokens or PINs, Google Drive API keys,
-and the documents themselves — those are files you already have on your
+the desktop app's Google Drive sign-in, and the documents themselves — those are files you already have on your
 computer.
 
 ### Tabs
@@ -733,6 +734,47 @@ downloading work without signing in at all.
 Note: sign-in needs the page served over `http://`/`https://` — see
 **Running it** above for `start.bat`; it doesn't work opened straight off
 disk (`file://`).
+
+### In the desktop app
+
+The desktop app has no API key or Client ID form. Instead you **sign in with
+Google** in your own browser, once: the app opens Google's sign-in page,
+you choose your account and allow access, and the browser tab tells you to
+return to Splitpage. From then on the panel browses your whole Drive
+(starting at My Drive, or paste a folder link), downloads files to your
+computer (a Google Doc comes down as plain text), and uploads files — an
+upload with the same name as a file already in that folder replaces it with a
+new version rather than adding a second copy. Rename, delete and new folder are
+browser-app only for now. **Sign out** in the panel forgets the sign-in and
+tells Google to cancel it.
+
+The sign-in is kept in your system's secure storage (Windows' own credential
+encryption), never in your documents, drafts, or **Export app data**. On a
+Linux computer with no keyring, it lasts until you quit, and the panel says
+so.
+
+**Setting it up (once per computer).** Google only lets an app sign in on your
+behalf if it has a client ID from a Google Cloud project, and only the
+project's owner can make one:
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/apis/library/drive.googleapis.com),
+   pick or create a project and **enable the Google Drive API**.
+2. Under **APIs & Services ▸ OAuth consent screen**, set the app up and add the
+   `…/auth/drive` scope. Until Google verifies the app, add every Google
+   account that will sign in as a **test user**.
+3. Under **APIs & Services ▸ Credentials**, create an **OAuth client ID** of
+   type **Desktop app**, and download its JSON file.
+4. Save that file, unchanged, as `google-oauth-client.json` in Splitpage's
+   settings folder — the Google Drive panel shows the exact path while nothing
+   is set up (on Windows it is `%APPDATA%\Splitpage\google-oauth-client.json`).
+   Or, instead of the file, set the environment variables
+   `SPLITPAGE_GOOGLE_CLIENT_ID` and `SPLITPAGE_GOOGLE_CLIENT_SECRET` before
+   starting Splitpage. The file can also be written by hand as
+   `{"client_id": "…", "client_secret": "…"}`. Google calls the second value a
+   secret, but for a Desktop-app client it isn't one — every copy of the app
+   has it.
+
+No restart is needed after adding the file; just open the panel again.
 
 ## On a phone
 

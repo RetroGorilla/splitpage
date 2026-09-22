@@ -262,6 +262,27 @@ that proves #76's `shared/` staging and #77's `files` entry.
   Web Speech, and the page says so. Also try it on an unsaved new document:
   it should ask you to save first, with no Save dialog popping up by
   itself.
+- **Google Drive, signed in to the real Google** (#10). The smoke suite runs
+  the whole loopback flow against `desktop/test/fake-google.mjs`, so it has
+  never met the real consent screen, a real Desktop-type client, DPAPI
+  storing the token, or Drive's real answers. By hand, once a Google Cloud
+  project has the Drive API enabled, a consent screen with the `…/auth/drive`
+  scope and you as a test user, and an OAuth client ID of type **Desktop
+  app**: save its downloaded JSON as
+  `%APPDATA%\Splitpage\google-oauth-client.json`. Before that, open File ▸
+  **Google Drive files…** once and check it shows exactly that path and the
+  two `SPLITPAGE_GOOGLE_*` variable names. With the file in place, Sign in
+  with Google: the default browser opens Google's consent page, and
+  approving it lands on a page saying to return to Splitpage, with the app
+  showing "Signed in as <you>" and My Drive listed. Open a folder, download
+  a file and a Google Doc (it arrives as `.txt`), upload a file, then upload
+  one with the same name and check Drive shows a new version rather than a
+  second file. Quit and relaunch: still signed in, with
+  `%APPDATA%\Splitpage\google-drive-token.bin` present and not readable as
+  text. Sign out: the file is gone and
+  https://myaccount.google.com/permissions no longer lists the app. Also
+  refuse consent once (the app should say sign-in was cancelled) and leave
+  the consent tab open for over 5 minutes once (it should say it timed out).
 
 ## 4. The browser suites, on Windows
 

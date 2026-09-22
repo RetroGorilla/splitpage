@@ -23,7 +23,7 @@
 
 const {
   app, BrowserWindow, WebContentsView, Menu, protocol, net, ipcMain, dialog, shell,
-  utilityProcess, session, nativeTheme, screen
+  utilityProcess, session, nativeTheme, screen, safeStorage
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -41,6 +41,11 @@ const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./dr
    "Open in browser" (issue #86, section 9b). Plain Node, no Electron, in
    electron-builder.yml's `files` for the same reason drafts.js is. */
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
+/* desktop/google-drive.js: Google Drive through a loopback OAuth redirect
+   (issue #10, section 9c) — the listener, PKCE, the tokens and every Drive
+   request. Plain Node, no Electron, in electron-builder.yml's `files` for
+   the same reason drafts.js is. */
+const { createGoogleDrive } = require("./google-drive");
 /* desktop/ipc-channels.js is the one list of channels that cross this
    process boundary, and the one validator every inbound message goes
    through (section 14). Plain CommonJS data and pure functions, no Electron
@@ -3016,6 +3021,85 @@ async function openPrompterInBrowser(tab) {
 }
 
 /* ---------------------------------------------------------------------
+ * 9c. Google Drive, through a loopback OAuth redirect (issue #10).
+ *
+ *     The web build signs in with Google Identity Services, which needs an
+ *     http(s) origin registered with Google; splitpage://app can never be
+ *     one. Google's answer for installed apps is a loopback redirect, and
+ *     whoever holds the loopback listener holds the sign-in — so all of it
+ *     lives here, in desktop/google-drive.js: the one-shot listener on
+ *     127.0.0.1, PKCE S256 and `state`, the code-for-token exchange, the
+ *     refresh token (a safeStorage blob in userData, or memory only), the
+ *     access token (memory only), and every request to Google's fixed hosts.
+ *
+ *     THE SAME CONTRACT AS THE UPDATE BRIDGE (invariant #28). Sign in, sign
+ *     out and status take no argument: the page cannot name the URL the
+ *     browser is sent to, the redirect address, or the client. List,
+ *     download and upload take a Drive id (or an upload's name and bytes),
+ *     validated in google-drive.js — never a URL. No answer carries a token,
+ *     so a compromised page can at worst read and write the signed-in
+ *     person's Drive through main, for as long as it runs, which is what
+ *     the Drive modal itself does; it can never take the credential away.
+ *
+ *     CONFIG. SPLITPAGE_GOOGLE_CLIENT_ID / SPLITPAGE_GOOGLE_CLIENT_SECRET,
+ *     or <userData>/google-oauth-client.json. Read on every call, so a file
+ *     dropped in while the app runs is picked up without a restart.
+ *
+ *     TEST MODE. SPLITPAGE_TEST_GOOGLE_BASE points every Google endpoint at
+ *     a local fake (desktop/test/fake-google.mjs) — honoured only under
+ *     SPLITPAGE_TEST=1, and google-drive.js itself refuses the override
+ *     without testMode. shell.openExternal is already a recorder there
+ *     (section 1), which is how smoke.mjs reads the consent URL.
+ * --------------------------------------------------------------------- */
+
+/* safeStorage, with Linux's "basic_text" backend counted as unavailable:
+   it encrypts with a key compiled into Chromium, which is plain text by
+   another name. There the refresh token is kept for the session only and
+   the modal says so. SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1 (test mode only)
+   lets the smoke suite exercise the stored-token path on a Linux runner
+   that has no keyring: it switches safeStorage to its plain-text key
+   (setUsePlainTextEncryption) and accepts basic_text — the file on disk is
+   still not the token's bytes, which is what that suite checks. */
+const DRIVE_TEST_BASIC_TEXT = TEST_MODE && process.env.SPLITPAGE_TEST_DRIVE_BASIC_TEXT === "1";
+let driveBasicTextArmed = false;
+function driveSafeStorage() {
+  return {
+    isEncryptionAvailable() {
+      if (DRIVE_TEST_BASIC_TEXT && process.platform === "linux" && !driveBasicTextArmed &&
+          typeof safeStorage.setUsePlainTextEncryption === "function") {
+        driveBasicTextArmed = true;
+        safeStorage.setUsePlainTextEncryption(true);
+      }
+      if (!safeStorage.isEncryptionAvailable()) return false;
+      if (process.platform === "linux" && !DRIVE_TEST_BASIC_TEXT) {
+        let backend = "unknown";
+        try { backend = safeStorage.getSelectedStorageBackend(); } catch { /* treat as unknown */ }
+        if (backend === "basic_text" || backend === "unknown") return false;
+      }
+      return true;
+    },
+    encryptString: (s) => safeStorage.encryptString(s),
+    decryptString: (b) => safeStorage.decryptString(b)
+  };
+}
+
+let googleDrive = null;
+function googleDriveInstance() {
+  if (!googleDrive) {
+    googleDrive = createGoogleDrive({
+      userDataDir: app.getPath("userData"),
+      env: process.env,
+      safeStorage: driveSafeStorage(),
+      openExternal: (url) => shell.openExternal(url),
+      testMode: TEST_MODE,
+      testEndpointsBase: TEST_MODE && process.env.SPLITPAGE_TEST_GOOGLE_BASE ? process.env.SPLITPAGE_TEST_GOOGLE_BASE : undefined,
+      log: (line) => { if (TEST_MODE) process.stderr.write("[splitpage] " + line + "\n"); }
+    });
+  }
+  return googleDrive;
+}
+
+/* ---------------------------------------------------------------------
  * 10. protocol.handle — the whole of what the window is allowed to load.
  * --------------------------------------------------------------------- */
 
@@ -5145,6 +5229,51 @@ function registerIpc() {
     return openPrompterInBrowser(tabOf(event));
   });
 
+  /* ---- Google Drive (section 9c, issue #10) ---------------------------
+     The account calls take no argument; the Drive calls take a Drive id or
+     an upload request, which google-drive.js validates field by field.
+     Only a tab page may call them (the table's APP origin), and a sender
+     with no TabRecord is refused like every other tab-page handler. */
+  ipcHandle("splitpage:drive-status", async (event) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return Object.assign({ ok: true }, googleDriveInstance().status());
+  });
+
+  ipcHandle("splitpage:drive-sign-in", async (event) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    const result = await googleDriveInstance().signIn();
+    /* The person just finished in their browser; bring them back. Never in
+       a test run, where no window is ever shown (invariant #33). */
+    if (result && result.ok && !TEST_MODE) {
+      const win = dialogParentFor(event);
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        win.focus();
+      }
+    }
+    return result;
+  });
+
+  ipcHandle("splitpage:drive-sign-out", async (event) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().signOut();
+  });
+
+  ipcHandle("splitpage:drive-list", async (event, folderId) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().listFolder(folderId);
+  });
+
+  ipcHandle("splitpage:drive-download", async (event, fileId) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().download(fileId);
+  });
+
+  ipcHandle("splitpage:drive-upload", async (event, request) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().upload(request);
+  });
+
   /* The TabRecord is main's copy of what the page is showing, and it is the
      authority every close, routing and strip decision reads (invariant #42).
      It must be current the instant the page reports, which is why this is a
@@ -5731,6 +5860,18 @@ function registerIpc() {
            never a token or a script. */
         case "prompterShareStatus":
           return prompterShare ? prompterShare.status() : { listening: false, port: null, shares: [] };
+        /* Google Drive (section 9c): which safeStorage backend this run got
+           and which token endpoint the client is pointed at — never a token. */
+        case "driveInfo": {
+          let backend = null;
+          /* Linux only; other platforms may not have it at all. */
+          try { if (process.platform === "linux") backend = safeStorage.getSelectedStorageBackend(); } catch { backend = null; }
+          return {
+            backend,
+            encryptionAvailable: safeStorage.isEncryptionAvailable(),
+            tokenEndpoint: googleDriveInstance().endpoints.token
+          };
+        }
         default:
           throw new Error("test-shell: unknown op " + op);
       }
@@ -5926,6 +6067,11 @@ app.on("will-quit", () => {
      process's memory; closing the listener here is tidiness, not cleanup —
      there is nothing on disk to remove, on this path or on a crash. */
   if (prompterShare) prompterShare.closeAll();
+  /* A Google sign-in still waiting for its browser callback (section 9c):
+     close its loopback listener with the app. The tokens need nothing —
+     the access token was only ever in memory, the refresh token is already
+     wherever it is going to be. */
+  if (googleDrive) googleDrive.shutdown();
   /* The app is really going, in one piece. Recording that is what lets the
      next launch tell "you quit" from "you were killed": a session.json still
      saying 'running' at startup means the previous run died, and its drafts

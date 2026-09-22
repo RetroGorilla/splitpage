@@ -721,8 +721,26 @@
       <h2 id="drive-title">Google Drive files</h2>
       <button type="button" class="modal-close" id="drive-close" aria-label="Close">×</button>
     </div>
-    <p class="modal-hint">Browse, upload, rename, and delete files in any publicly shared Google
+    <p class="modal-hint" id="drive-web-hint">Browse, upload, rename, and delete files in any publicly shared Google
       Drive folder, straight from here — separate from opening and saving your script.</p>
+    <p class="modal-hint" id="drive-desktop-hint" hidden>Browse your Google Drive, download files to this
+      computer and upload files to it — separate from opening and saving your script. You sign in once, in
+      your own browser; Splitpage keeps the sign-in, never your password.</p>
+
+    <!-- Desktop app only (issue #10): shown when no OAuth client is configured.
+         The desktop app signs in through a loopback redirect, so it needs a
+         Desktop-type client ID from Google Cloud, which only whoever owns the
+         Google Cloud project can create. The path and variable names are
+         filled in from the desktop shell's own answer. -->
+    <div id="drive-desktop-setup" hidden>
+      <p class="modal-hint">Google Drive needs a Google Cloud <strong>OAuth client ID</strong> of type
+        <strong>Desktop app</strong>, with the Google Drive API enabled. Put it in a file at</p>
+      <p class="drive-desktop-path"><code id="drive-desktop-client-path"></code></p>
+      <p class="modal-hint">— the JSON file Google Cloud Console lets you download for the client works as it
+        is, or write <code>{"client_id": "…", "client_secret": "…"}</code> — or set the environment variables
+        <code id="drive-desktop-env-vars"></code> before starting Splitpage. Then open this again.
+        File ▸ Help, under “Google Drive files”, has the steps.</p>
+    </div>
 
     <div id="drive-setup">
       <p class="modal-hint">Google requires a project of your own for this: an <strong>API key</strong>

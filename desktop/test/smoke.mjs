@@ -4857,6 +4857,290 @@ async function caseTeleprompterOpenInBrowserServer(target) {
 }
 
 /* ----------------------------------------------------------------------
+ * Issue #10: Google Drive through a loopback OAuth redirect.
+ *
+ * Main owns the whole flow (desktop/google-drive.js, main.js § 9c). Every
+ * Google endpoint is pointed at desktop/test/fake-google.mjs through
+ * SPLITPAGE_TEST_GOOGLE_BASE, which main honours only under SPLITPAGE_TEST=1.
+ * TEST_MODE already turns shell.openExternal into a recorder, so the
+ * consent URL main WOULD have opened in the browser is read back with
+ * __testShell('externalOpens'); this harness then plays the browser by
+ * asking the fake to approve that request and fetching the loopback
+ * callback it answers with. What is real: main's listener, PKCE, the state
+ * check, the code-for-token exchange, safeStorage, and every Drive request
+ * main makes. The modal's own half is the browser suite
+ * 64-desktop-drive.txt; the module on its own is google-drive.test.mjs.
+ *
+ * On a Linux runner with no keyring safeStorage's backend is "basic_text",
+ * which main counts as unavailable (a key compiled into Chromium is not
+ * encryption). SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1 lets the round-trip case
+ * exercise the stored-token path there anyway; the bad-state case runs
+ * without it and checks whichever behaviour this machine's backend calls for.
+ * -------------------------------------------------------------------- */
+
+function driveEnv(fake, extra) {
+  return Object.assign({
+    SPLITPAGE_TEST_GOOGLE_BASE: fake.base,
+    SPLITPAGE_GOOGLE_CLIENT_ID: fake.clientId,
+    SPLITPAGE_GOOGLE_CLIENT_SECRET: fake.clientSecret
+  }, extra || {});
+}
+
+/* A bridge call, with any bytes turned into text in the page — CDP's
+   returnByValue cannot carry a Uint8Array. */
+async function driveCall(cdp, expr) {
+  return evalPage(cdp, "(" + expr + ").then(function (r) { if (r && r.bytes) { r.bytesIsView = ArrayBuffer.isView(r.bytes); " +
+    "r.text = new TextDecoder().decode(r.bytes); delete r.bytes; } return r; }, function (e) { return { rejected: String(e && e.message || e) }; })");
+}
+
+/* Starts driveSignIn() in the page, waits for the consent URL main hands the
+   (recorded) browser, lets the fake approve it — with `override` to forge
+   the state or refuse — and fetches the loopback callback as the browser
+   would. */
+async function driveSignInThroughFake(cdp, fake, override) {
+  const before = (await externalOpens(cdp)).length;
+  await evalPage(cdp, "window.__driveSignIn = null; window.splitpageDesktop.driveSignIn().then(function (r) { window.__driveSignIn = r; }, " +
+    "function (e) { window.__driveSignIn = { ok: false, code: 'REJECTED', message: String(e) }; }); true");
+  const opens = await waitForExternalOpens(cdp, before + 1, 15000);
+  const authUrl = opens ? opens[opens.length - 1] : null;
+  if (!authUrl) return { authUrl: null, callback: null, result: null };
+  let back;
+  try { back = fake.approve(authUrl, override); } catch (e) { return { authUrl, callback: { status: null, text: String(e.message) }, result: null }; }
+  const callback = await fetch(back).then(async (r) => ({ status: r.status, text: await r.text() }))
+    .catch((e) => ({ status: null, text: String(e) }));
+  const result = await poll(cdp, "window.__driveSignIn", 15000).catch(() => null);
+  return { authUrl, back, callback, result };
+}
+
+function driveSecretOnDisk(dir, secrets) {
+  for (const s of secrets) {
+    const f = dirContainsText(dir, s);
+    if (f) return s.slice(0, 16) + "… in " + f;
+  }
+  return null;
+}
+
+/* Everything the page can see that a token could have landed in: both
+   storages, the whole document, and the bridge's own member names. */
+async function driveSecretsInPage(cdp, secrets) {
+  const blob = await evalPage(cdp, "JSON.stringify({ ls: Object.assign({}, localStorage), ss: Object.assign({}, sessionStorage), " +
+    "html: document.documentElement.outerHTML, keys: Object.keys(window.splitpageDesktop) })");
+  return secrets.filter((s) => String(blob).indexOf(s) !== -1).map((s) => s.slice(0, 16) + "…");
+}
+
+async function caseGoogleDriveNotConfigured(target) {
+  const tag = target.name + " google drive: not configured";
+  const { startFakeGoogle } = await import("./fake-google.mjs");
+  const fake = await startFakeGoogle();
+  let app = null;
+  try {
+    /* The endpoints point at the fake, but no client at all — an inherited
+       real client id in this shell's environment is blanked out. */
+    app = await launchApp(target, { label: "drive-unconfigured",
+      env: { SPLITPAGE_TEST_GOOGLE_BASE: fake.base, SPLITPAGE_GOOGLE_CLIENT_ID: "", SPLITPAGE_GOOGLE_CLIENT_SECRET: "" } });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const entry = await evalPage(cdp, "!document.getElementById('menu-drive-open').hidden");
+    record(tag + ": File ▸ Google Drive files… is offered on desktop", entry === true);
+    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    const expectedPath = path.join(app.userDataDir, "google-oauth-client.json");
+    record(tag + ": status says not configured, and names the exact file and the env vars",
+      !!st && st.ok === true && st.configured === false && st.signedIn === false && st.clientFilePath === expectedPath &&
+      JSON.stringify(st.envVars) === JSON.stringify(["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"]), JSON.stringify(st));
+    const si = await driveCall(cdp, "window.splitpageDesktop.driveSignIn()");
+    record(tag + ": sign-in answers NOT_CONFIGURED", !!si && si.ok === false && si.code === "NOT_CONFIGURED", JSON.stringify(si));
+    record(tag + ": ... and nothing was opened in the browser", (await externalOpens(cdp)).length === 0);
+    const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    record(tag + ": a Drive call before any sign-in answers SIGNED_OUT", !!list && list.ok === false && list.code === "SIGNED_OUT", JSON.stringify(list));
+
+    /* The file Google Cloud Console downloads, dropped in while the app
+       runs: picked up on the next call, no restart. */
+    fs.writeFileSync(expectedPath, JSON.stringify({ installed: { client_id: fake.clientId, client_secret: fake.clientSecret,
+      redirect_uris: ["http://localhost"] } }));
+    const st2 = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    record(tag + ": dropping Google's client JSON at that path configures it", !!st2 && st2.configured === true && st2.signedIn === false, JSON.stringify(st2));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await fake.close();
+  }
+}
+
+async function caseGoogleDriveRoundTrip(target) {
+  const tag = target.name + " google drive: round trip";
+  const { startFakeGoogle } = await import("./fake-google.mjs");
+  const fake = await startFakeGoogle();
+  const env = driveEnv(fake, { SPLITPAGE_TEST_DRIVE_BASIC_TEXT: "1" });
+  let app = null;
+  const answers = [];
+  try {
+    app = await launchApp(target, { label: "drive-round-trip", env });
+    let cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const userDataDir = app.userDataDir;
+    const tokenFile = path.join(userDataDir, "google-drive-token.bin");
+
+    const info = await shell(cdp, "driveInfo", {});
+    record(tag + ": main points Google's endpoints at the fake (test mode only)", !!info && info.tokenEndpoint === fake.base + "/token", JSON.stringify(info));
+
+    // --- what the page is given ------------------------------------------
+    const surface = await evalPage(cdp, "(function () { var d = window.splitpageDesktop; var keys = Object.keys(d); " +
+      "return { drive: keys.filter(function (k) { return /drive/i.test(k); }).sort(), " +
+      "suspicious: keys.filter(function (k) { return /token|oauth|secret|credential|google/i.test(k); }) }; })()");
+    /* contextBridge proxies report length 0 for every function, so which
+       calls take no argument is ipc-table.test.mjs's to prove (the table
+       refuses one); here it is the set the page is given. */
+    record(tag + ": the bridge has exactly the six drive calls",
+      !!surface && JSON.stringify(surface.drive) === JSON.stringify(["driveDownload", "driveList", "driveSignIn", "driveSignOut", "driveStatus", "driveUpload"]),
+      JSON.stringify(surface));
+    record(tag + ": no bridge member is named for a token or a credential", !!surface && surface.suspicious.length === 0, JSON.stringify(surface && surface.suspicious));
+
+    // --- sign in through the fake ------------------------------------------
+    const signIn = await driveSignInThroughFake(cdp, fake);
+    const auth = signIn.authUrl ? new URL(signIn.authUrl) : null;
+    const p = auth ? auth.searchParams : new URLSearchParams();
+    record(tag + ": the consent URL goes to the (fake) Google auth endpoint with PKCE S256, a state, offline access",
+      !!auth && auth.origin + auth.pathname === fake.base + "/o/oauth2/v2/auth" && p.get("code_challenge_method") === "S256" &&
+      /^[A-Za-z0-9_-]{43}$/.test(p.get("code_challenge") || "") && (p.get("state") || "").length >= 32 && p.get("access_type") === "offline" &&
+      p.get("client_id") === fake.clientId && p.get("scope") === "https://www.googleapis.com/auth/drive", signIn.authUrl || "no URL");
+    record(tag + ": the redirect is a loopback listener on an OS-picked port", /^http:\/\/127\.0\.0\.1:\d+$/.test(p.get("redirect_uri") || ""), p.get("redirect_uri"));
+    record(tag + ": the callback page tells the person to return to the app",
+      !!signIn.callback && signIn.callback.status === 200 && /return to Splitpage/.test(signIn.callback.text), JSON.stringify(signIn.callback).slice(0, 300));
+    const r = signIn.result;
+    answers.push(r);
+    record(tag + ": sign-in succeeds and says who", !!r && r.ok === true && r.signedIn === true && r.email === "writer@example.com", JSON.stringify(r));
+    record(tag + ": the sign-in is stored (safeStorage)", !!r && r.persisted === true && fs.existsSync(tokenFile), JSON.stringify({ persisted: r && r.persisted, file: fs.existsSync(tokenFile) }));
+    const closed = await fetch((p.get("redirect_uri") || "http://127.0.0.1:1") + "/?code=x&state=" + p.get("state")).then(() => false).catch(() => true);
+    record(tag + ": the loopback listener is gone after its one callback", closed);
+    record(tag + ": main exchanged the code with the verifier (the fake checks it)", fake.log.includes("POST /token"), JSON.stringify(fake.log));
+
+    // --- Drive through main --------------------------------------------------
+    const root = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    answers.push(root);
+    record(tag + ": list My Drive", !!root && root.ok === true && root.files.map((f) => f.name).join(",") === "Scripts", JSON.stringify(root));
+    const scripts = await driveCall(cdp, "window.splitpageDesktop.driveList('scriptsFolder01')");
+    answers.push(scripts);
+    record(tag + ": list a folder", !!scripts && scripts.ok === true && scripts.folder.name === "Scripts" &&
+      scripts.files.map((f) => f.name).join(",") === "Budget,Notes,Pilot.fountain", JSON.stringify(scripts));
+    const dl = await driveCall(cdp, "window.splitpageDesktop.driveDownload('pilotFile01')");
+    answers.push(dl);
+    record(tag + ": download hands the page the file's bytes", !!dl && dl.ok === true && dl.bytesIsView === true &&
+      dl.text === fake.files.get("pilotFile01").data.toString("utf8") && dl.file.name === "Pilot.fountain", JSON.stringify(dl).slice(0, 300));
+    const up = await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'scriptsFolder01', name: 'Smoke — 🎬.splitpage', " +
+      "bytes: new TextEncoder().encode('{\"rows\":[]}'), mimeType: 'application/json' })");
+    answers.push(up);
+    const created = up && up.file && fake.files.get(up.file.id);
+    record(tag + ": upload makes a new file in that folder", !!up && up.ok === true && !!created && created.name === "Smoke — 🎬.splitpage" &&
+      created.parents[0] === "scriptsFolder01" && created.data.toString("utf8") === "{\"rows\":[]}", JSON.stringify(up));
+    const upd = up && up.file ? await driveCall(cdp, "window.splitpageDesktop.driveUpload({ fileId: " + JSON.stringify(up.file.id) +
+      ", bytes: new TextEncoder().encode('{\"rows\":[1]}') })") : null;
+    answers.push(upd);
+    record(tag + ": upload with a fileId replaces that file's content", !!upd && upd.ok === true && !!created &&
+      created.data.toString("utf8") === "{\"rows\":[1]}" && created.name === "Smoke — 🎬.splitpage", JSON.stringify(upd));
+
+    // --- what main refuses ---------------------------------------------------
+    const requestsBefore = fake.log.length;
+    const refusals = {
+      urlAsFolder: await driveCall(cdp, "window.splitpageDesktop.driveList('https://www.googleapis.com/drive/v3/files')"),
+      pathAsFile: await driveCall(cdp, "window.splitpageDesktop.driveDownload('../google-drive-token.bin')"),
+      nameWithNewline: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'a\\nb', bytes: 'x' })"),
+      notBytes: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'a', bytes: { length: 3 } })"),
+      tooLarge: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'big', bytes: new Uint8Array(64 * 1024 * 1024 + 1) })")
+    };
+    record(tag + ": a URL, a path, a bad name or non-bytes are refused as BAD_ARGS, oversize as TOO_LARGE",
+      refusals.urlAsFolder.code === "BAD_ARGS" && refusals.pathAsFile.code === "BAD_ARGS" && refusals.nameWithNewline.code === "BAD_ARGS" &&
+      refusals.notBytes.code === "BAD_ARGS" && refusals.tooLarge.code === "TOO_LARGE", JSON.stringify(refusals));
+    record(tag + ": none of the refused calls reached Google", fake.log.length === requestsBefore, JSON.stringify(fake.log.slice(requestsBefore)));
+
+    // --- the token never reaches the page or disk in the clear --------------
+    const secrets = fake.secrets();
+    record(tag + ": setup — the fake issued a refresh and an access token", secrets.some((s) => s.startsWith("1//")) && secrets.some((s) => s.startsWith("ya29.")));
+    const inAnswers = secrets.filter((s) => JSON.stringify(answers).indexOf(s) !== -1);
+    record(tag + ": no bridge answer carried a token", inAnswers.length === 0, inAnswers.join(","));
+    const inPage = await driveSecretsInPage(cdp, secrets);
+    record(tag + ": no token anywhere the page can see (storage, document, bridge)", inPage.length === 0, inPage.join(","));
+    const onDisk = driveSecretOnDisk(userDataDir, secrets);
+    record(tag + ": no token in plain text in any file under the profile (the blob is encrypted)", !onDisk, onDisk || "");
+    const mentionsGoogle = dirContainsText(userDataDir, fake.base);
+    record(tag + ": nothing under the profile (desktop-state.json, drafts, history) even names the Google endpoint", !mentionsGoogle, String(mentionsGoogle || ""));
+
+    // --- next launch: the stored sign-in comes back ---------------------------
+    await teardown(app, tag + " (first launch)");
+    app = await launchApp(target, { label: "drive-relaunch", env, userDataDir });
+    cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    record(tag + ": after a relaunch, still signed in from the stored token", !!st && st.signedIn === true && st.persisted === true &&
+      st.email === "writer@example.com", JSON.stringify(st));
+    const tokenCallsBefore = fake.log.filter((l) => l === "POST /token").length;
+    const again = await driveCall(cdp, "window.splitpageDesktop.driveList('scriptsFolder01')");
+    record(tag + ": ... and Drive works, through a refresh-token exchange", !!again && again.ok === true &&
+      fake.log.filter((l) => l === "POST /token").length === tokenCallsBefore + 1, JSON.stringify(again && again.code));
+
+    // --- sign out --------------------------------------------------------------
+    const refreshToken = fake.secrets().find((s) => s.startsWith("1//"));
+    const out = await driveCall(cdp, "window.splitpageDesktop.driveSignOut()");
+    record(tag + ": sign-out answers signed out", !!out && out.ok === true && out.status && out.status.signedIn === false, JSON.stringify(out));
+    record(tag + ": sign-out deletes the stored token", !fs.existsSync(tokenFile));
+    record(tag + ": sign-out revokes it with Google", fake.isRevoked(refreshToken));
+    const after = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    record(tag + ": after sign-out Drive calls answer SIGNED_OUT", !!after && after.ok === false && after.code === "SIGNED_OUT", JSON.stringify(after));
+    const leftOnDisk = driveSecretOnDisk(userDataDir, fake.secrets());
+    record(tag + ": no token anywhere under the profile after sign-out", !leftOnDisk, leftOnDisk || "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await fake.close();
+  }
+}
+
+async function caseGoogleDriveBadState(target) {
+  const tag = target.name + " google drive: bad state refused";
+  const { startFakeGoogle } = await import("./fake-google.mjs");
+  const fake = await startFakeGoogle();
+  let app = null;
+  try {
+    /* No SPLITPAGE_TEST_DRIVE_BASIC_TEXT: this launch gets the real rule for
+       this machine's safeStorage backend. */
+    app = await launchApp(target, { label: "drive-bad-state", env: driveEnv(fake) });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const tokenFile = path.join(app.userDataDir, "google-drive-token.bin");
+
+    const forged = await driveSignInThroughFake(cdp, fake, { state: "forged-by-another-page" });
+    record(tag + ": a callback with the wrong state is refused with a page saying so",
+      !!forged.callback && forged.callback.status === 400 && /refused/.test(forged.callback.text), JSON.stringify(forged.callback).slice(0, 300));
+    record(tag + ": sign-in answers STATE_MISMATCH", !!forged.result && forged.result.ok === false && forged.result.code === "STATE_MISMATCH", JSON.stringify(forged.result));
+    record(tag + ": the code was never exchanged", !fake.log.includes("POST /token"), JSON.stringify(fake.log));
+    const redirect = forged.authUrl ? new URL(forged.authUrl).searchParams.get("redirect_uri") : "http://127.0.0.1:1";
+    const closed = await fetch(redirect + "/").then(() => false).catch(() => true);
+    record(tag + ": the listener closed after that one callback", closed);
+    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    record(tag + ": still signed out, nothing stored", !!st && st.signedIn === false && !fs.existsSync(tokenFile), JSON.stringify(st));
+
+    const denied = await driveSignInThroughFake(cdp, fake, { error: "access_denied" });
+    record(tag + ": consent refused in the browser answers DENIED", !!denied.result && denied.result.code === "DENIED", JSON.stringify(denied.result));
+
+    /* A good sign-in on the same launch, with this machine's own storage
+       rule: basic_text (Linux, no keyring) keeps it for the session only and
+       writes nothing; a real backend (DPAPI, Keychain, libsecret) stores it. */
+    const info = await shell(cdp, "driveInfo", {});
+    const good = await driveSignInThroughFake(cdp, fake);
+    const sessionOnly = !info.encryptionAvailable || info.backend === "basic_text";
+    record(tag + ": a fresh sign-in after the refusal works", !!good.result && good.result.ok === true, JSON.stringify(good.result));
+    record(tag + ": storage follows the backend (" + info.backend + "): " + (sessionOnly ? "session only, nothing written" : "stored"),
+      !!good.result && (sessionOnly
+        ? good.result.persisted === false && good.result.canPersist === false && !fs.existsSync(tokenFile)
+        : good.result.persisted === true && fs.existsSync(tokenFile)), JSON.stringify({ result: good.result, file: fs.existsSync(tokenFile) }));
+    const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    record(tag + ": ... and Drive works", !!list && list.ok === true, JSON.stringify(list && list.code));
+    const onDisk = driveSecretOnDisk(app.userDataDir, fake.secrets());
+    record(tag + ": no token in plain text under the profile", !onDisk, onDisk || "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await fake.close();
+  }
+}
+
+/* ----------------------------------------------------------------------
  * 5c. Per-tab server connections (#11).
  *
  *     Every case here runs against REAL document servers — server/server.js
@@ -5442,6 +5726,10 @@ async function runTargetSuite(target, groupFilter) {
     // --- issue #86: the teleprompter in the browser ---
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
     ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
+    // --- issue #10: Google Drive through a loopback OAuth redirect ---
+    ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
+    ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],
+    ["google drive: bad state refused, storage follows the backend", () => caseGoogleDriveBadState(target)],
     // --- issue #11: per-tab server and tunnel connections ---
     ["per-tab connections: two servers side by side, close one", () => caseTwoServersSideBySide(target)],
     ["per-tab connections: a server tab beside a file tab", () => caseServerTabBesideFileTab(target, fixturesDir)],

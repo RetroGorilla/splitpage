@@ -287,6 +287,34 @@ test("the teleprompter's Open in browser takes no argument, from the app page on
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
+/* Issue #10 is the same contract a third time: main holds the OAuth
+   listener and the tokens, so signing in, signing out and asking for status
+   name nothing, and the Drive calls name a Drive id or an upload request —
+   never a URL, and nothing the tab strip can reach. The id's shape and the
+   upload's fields are checked in desktop/google-drive.js (its own test). */
+test("the Google Drive channels: argument-free account calls, id-only Drive calls, app page only", () => {
+  const row = (name) => channelFor(name, "invoke");
+  for (const name of ["splitpage:drive-status", "splitpage:drive-sign-in", "splitpage:drive-sign-out"]) {
+    assert.ok(row(name), name + " declared");
+    assert.deepEqual([...row(name).argsSchema], [], name + " takes no argument");
+    assert.ok(checkArgs(row(name).argsSchema, ["https://accounts.google.com/o/oauth2/v2/auth?client_id=evil"]), name + " refuses a URL");
+    assert.ok(checkArgs(row(name).argsSchema, [{ clientId: "evil" }]), name + " refuses a client");
+  }
+  assert.deepEqual([...row("splitpage:drive-list").argsSchema], ["string"]);
+  assert.deepEqual([...row("splitpage:drive-download").argsSchema], ["string"]);
+  assert.deepEqual([...row("splitpage:drive-upload").argsSchema], ["object"]);
+  assert.ok(checkArgs(row("splitpage:drive-list").argsSchema, []), "a list with no folder");
+  assert.ok(checkArgs(row("splitpage:drive-list").argsSchema, ["root", "https://www.googleapis.com/"]), "a second argument");
+  assert.ok(checkArgs(row("splitpage:drive-upload").argsSchema, ["name", "bytes"]), "an upload that is not one request object");
+  const drive = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:drive-"));
+  assert.equal(drive.length, 6);
+  for (const c of drive) {
+    assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN], c.name);
+    assert.equal(c.direction, "invoke", c.name);
+    assert.ok(!c.testOnly, c.name);
+  }
+});
+
 /* A malformed draft payload must reach the handler, which answers with a
    code the renderer can back off on rather than a rejection (DRAFT-STORE). */
 test("the draft channels let a bad payload through to their own answer", () => {

@@ -365,18 +365,20 @@ function wireReassignDocId() {
 export function initDesktop() {
   if (!S.DESKTOP) return;
 
-  /* Google Drive needs a real http/https origin for Google's own sign-in
-     to redirect back to (Google Cloud Console has no "custom scheme"
-     option for Authorized JavaScript origins) — splitpage://app cannot
-     ever satisfy that, so the entry is hidden rather than left to open a
-     modal whose Sign in button can only fail. openDriveModal()
-     (13-hosted.js) carries the same guard defensively, in case something
-     still reaches it directly. Google Doc import is different — it needs
-     no OAuth at all (11-import.js's confirmGdocImport() explains why) and
-     stays enabled, routed through DESKTOP.openExternal() instead of
-     window.open(). */
+  /* Google Drive (issue #10). The web build's sign-in (Google Identity
+     Services) needs an http/https origin and splitpage://app can never be
+     one, so on desktop the MAIN process signs in through a loopback
+     redirect and makes every Drive request (desktop/google-drive.js); the
+     modal talks to it through the bridge's drive* calls. The entry shows
+     whenever the bridge has them — even with no Google client configured
+     yet, because then the modal is where the person finds out how to set
+     one up. A bridge without them (a fake backend in a browser suite) keeps
+     it hidden, and openDriveModal() (13-hosted.js) carries the same guard.
+     Google Doc import is different — it needs no OAuth at all
+     (11-import.js's confirmGdocImport() explains why) and stays enabled,
+     routed through DESKTOP.openExternal() instead of window.open(). */
   var driveItem = document.getElementById("menu-drive-open");
-  if (driveItem) driveItem.hidden = true;
+  if (driveItem) driveItem.hidden = typeof S.DESKTOP.driveStatus !== "function";
 
   /* App data (X1/X2, 20h-appdata.js) now travels both ways on desktop:
      DESKTOP.historyListDocs() lets exportHistoryAll() enumerate the
@@ -782,7 +784,117 @@ function makeFakeDesktopBackend(opts) {
     _fireReassignDocId: function (msg) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
   };
   if (opts && opts.history) addFakeDesktopHistory(backend);
+  if (opts && opts.drive) addFakeDesktopDrive(backend);
   return backend;
+}
+
+/* The Google Drive bridge (issue #10), faked in memory: the six calls with
+   the real bridge's arities and answer SHAPES (desktop/google-drive.js) —
+   {ok, ...status} from the account calls, {ok, folder, files} /
+   {ok, file, bytes} / {ok, file} from the Drive ones, {ok:false, code}
+   otherwise — and the same Drive id rule main applies. What it cannot
+   fake is the OAuth flow itself, which is desktop/test/smoke.mjs's
+   (against a fake Google) and desktop/test/google-drive.test.mjs's.
+   _driveCalls records every call with its arguments, so a suite can prove
+   the page never passes a URL or a token; _drive exposes the switches. */
+function addFakeDesktopDrive(backend) {
+  var ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
+  var FOLDER = "application/vnd.google-apps.folder";
+  var nextFile = 1;
+  var drive = {
+    configured: true,
+    signedIn: false,
+    persisted: true,
+    email: "writer@example.com",
+    signInAnswer: null,     /* e.g. {ok:false, code:'DENIED'} for the next sign-in */
+    failNext: null,         /* e.g. {code:'SIGNED_OUT'} for the next Drive call */
+    files: {
+      root: { id: "root", name: "My Drive", mimeType: FOLDER, parent: null },
+      scriptsFolder01: { id: "scriptsFolder01", name: "Scripts", mimeType: FOLDER, parent: "root" },
+      pilotFile01: { id: "pilotFile01", name: "Pilot.fountain", mimeType: "text/plain", parent: "scriptsFolder01", text: "INT. KITCHEN - DAY\n" },
+      gdoc01: { id: "gdoc01", name: "Notes", mimeType: "application/vnd.google-apps.document", parent: "scriptsFolder01", text: "Notes as text.\n" },
+      sheet01: { id: "sheet01", name: "Budget", mimeType: "application/vnd.google-apps.spreadsheet", parent: "scriptsFolder01" }
+    }
+  };
+  var calls = [];
+  function status() {
+    return {
+      ok: true, configured: drive.configured, signedIn: drive.configured && drive.signedIn,
+      persisted: drive.signedIn && drive.persisted, canPersist: drive.persisted, signingIn: false,
+      email: drive.signedIn ? drive.email : "", name: "",
+      clientFilePath: "/fake/userData/google-oauth-client.json",
+      envVars: ["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"]
+    };
+  }
+  function entry(f) {
+    return { id: f.id, name: f.name, mimeType: f.mimeType, size: f.text != null ? strBytes(f.text).length : null, modifiedTime: "2026-09-01T10:00:00.000Z" };
+  }
+  function gate() {
+    if (drive.failNext) { var f = drive.failNext; drive.failNext = null; if (f.code === "SIGNED_OUT") drive.signedIn = false; return { ok: false, code: f.code }; }
+    if (!drive.signedIn) return { ok: false, code: "SIGNED_OUT" };
+    return null;
+  }
+  function bytesOf(v) {
+    if (typeof v === "string") return strBytes(v);
+    if (v instanceof Uint8Array) return v;
+    if (v instanceof ArrayBuffer) return new Uint8Array(v);
+    return null;
+  }
+  backend.driveStatus = function () { calls.push({ op: "status", args: [].slice.call(arguments) }); return Promise.resolve(status()); };
+  backend.driveSignIn = function () {
+    calls.push({ op: "signIn", args: [].slice.call(arguments) });
+    if (!drive.configured) return Promise.resolve({ ok: false, code: "NOT_CONFIGURED" });
+    if (drive.signInAnswer) { var a = drive.signInAnswer; drive.signInAnswer = null; return Promise.resolve(a); }
+    drive.signedIn = true;
+    return Promise.resolve(status());
+  };
+  backend.driveSignOut = function () {
+    calls.push({ op: "signOut", args: [].slice.call(arguments) });
+    drive.signedIn = false;
+    return Promise.resolve({ ok: true, status: status() });
+  };
+  backend.driveList = function (folderId) {
+    calls.push({ op: "list", args: [].slice.call(arguments) });
+    var g = gate(); if (g) return Promise.resolve(g);
+    if (typeof folderId !== "string" || !ID_RE.test(folderId)) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var folder = drive.files[folderId];
+    if (!folder) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
+    if (folder.mimeType !== FOLDER) return Promise.resolve({ ok: false, code: "NOT_A_FOLDER" });
+    var kids = Object.keys(drive.files).map(function (k) { return drive.files[k]; })
+      .filter(function (f) { return f.parent === folderId; })
+      .sort(function (a, b) { return ((b.mimeType === FOLDER) - (a.mimeType === FOLDER)) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    return Promise.resolve({ ok: true, folder: entry(folder), files: kids.map(entry) });
+  };
+  backend.driveDownload = function (fileId) {
+    calls.push({ op: "download", args: [].slice.call(arguments) });
+    var g = gate(); if (g) return Promise.resolve(g);
+    if (typeof fileId !== "string" || !ID_RE.test(fileId)) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var f = drive.files[fileId];
+    if (!f) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
+    if (f.mimeType === FOLDER) return Promise.resolve({ ok: false, code: "IS_A_FOLDER" });
+    if (f.text == null) return Promise.resolve({ ok: false, code: "UNSUPPORTED" });
+    return Promise.resolve({ ok: true, file: entry(f), bytes: strBytes(f.text) });
+  };
+  backend.driveUpload = function (req) {
+    calls.push({ op: "upload", args: [].slice.call(arguments) });
+    var g = gate(); if (g) return Promise.resolve(g);
+    var bytes = req && bytesOf(req.bytes);
+    if (!req || !bytes) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var text = new TextDecoder().decode(bytes);
+    if (req.fileId !== undefined) {
+      var f = drive.files[req.fileId];
+      if (!f) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
+      f.text = text;
+      f.revisions = (f.revisions || 1) + 1;
+      return Promise.resolve({ ok: true, file: entry(f) });
+    }
+    if (!ID_RE.test(String(req.parentId)) || typeof req.name !== "string" || !req.name) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var id = "upload" + (nextFile++);
+    drive.files[id] = { id: id, name: req.name, mimeType: req.mimeType || "application/octet-stream", parent: req.parentId, text: text };
+    return Promise.resolve({ ok: true, file: entry(drive.files[id]) });
+  };
+  backend._drive = drive;
+  backend._driveCalls = calls;
 }
 
 /* The HISTORY-IPC surface, faked in memory. Deliberately the same SHAPES

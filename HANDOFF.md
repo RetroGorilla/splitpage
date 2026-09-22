@@ -116,7 +116,7 @@ only exits non-zero for a command that throws, so read its `RESULT:` line.
 
 **CI** (`.github/workflows/ci.yml`, #58) runs `npm run lint`, `node
 build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
-`desktop/test/ipc-table.test.mjs`, `tools/test-server.mjs`,
+`desktop/test/ipc-table.test.mjs`, `desktop/test/google-drive.test.mjs`, `tools/test-server.mjs`,
 `tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
 A second job, `desktop-smoke`, runs `desktop/test/smoke.mjs --only-target
 dev` against an Xvfb display (#89) — that is where `main.js` and `preload.js`
@@ -556,6 +556,44 @@ tabs**.
   answers `REMOTE_SERVER` for a tab on someone else's server. A `tunnel` is
   host and ports only — the SSH forward the reader runs; nothing starts
   ssh for a tab. `--tunnel` is still its own single non-tab window.
+- **Google Drive through a loopback OAuth redirect** (#10,
+  `desktop/google-drive.js`, `main.js` §9c). The web build's Google
+  Identity Services flow needs an http(s) origin; `splitpage://app` can
+  never be one. So main owns the whole flow: a one-shot listener on
+  `127.0.0.1:0`, PKCE S256 plus a random `state`, the consent URL handed to
+  `shell.openExternal`, the code-for-token exchange, and every Drive
+  request, to Google's fixed hosts only, no redirects followed. The first
+  request to the listener's `/` is the callback — wrong `state` →
+  `STATE_MISMATCH`, `error=` → `DENIED`, nothing in 5 minutes → `TIMEOUT`;
+  the listener closes after it either way. A wrong Host header gets 421 and
+  does not spend the callback. **Tokens:** the refresh token is written only
+  as a `safeStorage` blob, `<userData>/google-drive-token.bin`; Linux's
+  `basic_text` backend counts as unavailable, and then the token lives in
+  memory for the session and the modal says so. The access token never
+  leaves memory. Neither reaches the renderer, `desktop-state.json`, a
+  draft, or the app-data export (those are written by code that cannot see
+  this module's state). Sign-out revokes (5s, best effort) and deletes the
+  blob. **Config**, read on every call: `SPLITPAGE_GOOGLE_CLIENT_ID` /
+  `SPLITPAGE_GOOGLE_CLIENT_SECRET`, else `<userData>/google-oauth-client.json`
+  — `{"client_id","client_secret"}` or the `{"installed":{…}}` file Google
+  Cloud Console downloads, as is. A Desktop-type client's "secret" is not
+  confidential (Google says so); it is config, not a credential. No
+  in-modal client field, deliberately: it would be a renderer-supplied
+  string steering where main signs in. **Channels** (all `invoke`, app
+  origin): `drive-status`, `drive-sign-in`, `drive-sign-out` take nothing;
+  `drive-list` and `drive-download` take a Drive id
+  (`^[A-Za-z0-9_-]{1,200}$`, `root` = My Drive); `drive-upload` takes
+  `{parentId, name, bytes, mimeType?}` (new file) or `{fileId, bytes,
+  mimeType?}` (new revision), name ≤255 chars with no control characters,
+  bytes ≤64 MB. Answers are `{ok, …}` or `{ok:false, code}`, never a token
+  and never an exception's text. The modal (13-hosted.js) browses, downloads
+  (a Google Doc as `.txt`) and uploads — an upload whose name matches one
+  ordinary file in the folder replaces it; rename, delete and new folder
+  stay web-only. **Test mode:** `SPLITPAGE_TEST_GOOGLE_BASE` points every
+  endpoint at `desktop/test/fake-google.mjs`, honoured only under
+  `SPLITPAGE_TEST=1` and refused by the module itself without `testMode`;
+  `SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1` lets a keyring-less Linux run use
+  safeStorage's plain-text key so the stored-token path is exercised.
 - Test mode: `SPLITPAGE_TEST=1` — window never shown/taskbarred, an
   unanswered dialog resolves Cancel, an uncaught main-process error exits
   to stderr instead of a modal. `SPLITPAGE_USER_DATA` gives a temp profile;
@@ -822,6 +860,18 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     from memory by `desktop/prompter-share.js` behind a 256-bit token in the
     URL fragment and a Host-header check; no temp file is ever written, so
     a crash leaves nothing on disk.
+    Google Drive (#10) is the third application of it. Signing in, signing
+    out and asking for status take no argument: the page never names the
+    consent URL, the redirect address or the client, so it cannot point the
+    browser anywhere or steer the code to a listener of its own. The Drive
+    calls take the least that says WHICH folder or file — a Drive id, or an
+    upload's name and bytes — validated in `desktop/google-drive.js`, and
+    main builds every request against Google's fixed hosts. No answer
+    carries a token. So a compromised page can at worst read and write the
+    signed-in person's Drive through main while it runs — what the Drive
+    modal does anyway — and can never take the credential out of the app.
+    The alternative, handing the page a short-lived access token so it
+    could call Drive itself, was rejected for exactly that last reason.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -968,6 +1018,8 @@ evaluation order via `_entry.js`):
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
+| `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |
 | `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`) |
@@ -1040,7 +1092,10 @@ tracked in the plan file, not here:
 desktop is paused pending a fresh look (parked files under
 `.cache/voice-parked/`, plan companion `breezy-booping-toucan-VL.md` for an
 opt-in local model, not yet approved). Google Drive via loopback OAuth is
-pitched but unbuilt. Per-tab server/tunnel connections are built (#11,
+built (#10, §3.13) and tested against a fake Google; it has never signed in
+to the real one, because that needs a Desktop-type OAuth client ID from a
+Google Cloud project only Adam can create — the by-hand check is in
+`docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`

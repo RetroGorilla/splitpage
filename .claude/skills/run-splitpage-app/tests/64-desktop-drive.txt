@@ -1,0 +1,188 @@
+# Google Drive in the desktop app (issue #10), the renderer's half.
+#
+# On desktop the MAIN process signs in to Google through a loopback OAuth
+# redirect and makes every Drive request (desktop/google-drive.js, main.js
+# § 9c). The page gets six bridge calls: driveStatus / driveSignIn /
+# driveSignOut with no argument, and driveList / driveDownload / driveUpload
+# with a Drive id or an upload request. It never holds a token, never names
+# a URL, and has no API key or Client ID form. There is no Electron shell
+# here, so window.__desktopTest swaps in its fake backend with the drive
+# members (makeFakeBackend({drive:true}), 20f-desktop.js) and drives the
+# real modal code in 13-hosted.js against it. The OAuth flow itself, the
+# token storage and the requests to Google are desktop/test/smoke.mjs's
+# "google drive" groups (against a fake Google) and
+# desktop/test/google-drive.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+
+eval (function(){ window.D = window.__desktopTest; window.__toasts = function(s){ return Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf(s) !== -1; }); }; window.__vis = function(sel){ var el = document.querySelector(sel); return !!el && !el.hidden && el.getBoundingClientRect().height > 0; }; return !!D; })()
+expect !!window.D
+
+# ---- a desktop bridge without the drive calls: entry hidden, action refused ----
+eval (function(){ window.plain = D.makeFakeBackend(); D.setBackend(window.plain); D.initDesktop(); return document.getElementById('menu-drive-open').hidden; })()
+expect document.getElementById('menu-drive-open').hidden === true
+jsclick [data-file-action="drive-open"]
+wait window.__toasts("isn't available in this version of the desktop app")
+expect document.getElementById('drive-modal').hidden === true
+
+# ---- with the drive calls: the entry is offered ----
+eval (function(){ window.B = D.makeFakeBackend({ drive: true }); D.setBackend(window.B); D.initDesktop(); return document.getElementById('menu-drive-open').hidden; })()
+expect document.getElementById('menu-drive-open').hidden === false
+expect typeof B.driveStatus === 'function' && B.driveStatus.length === 0 && B.driveSignIn.length === 0 && B.driveSignOut.length === 0
+
+# ---- nothing configured: the modal says exactly where to put the client ----
+eval (function(){ B._drive.configured = false; return true; })()
+jsclick [data-file-action="drive-open"]
+wait !document.getElementById('drive-modal').hidden
+wait window.__vis('#drive-desktop-setup')
+expect document.getElementById('drive-desktop-client-path').textContent == /fake/userData/google-oauth-client.json
+expect document.getElementById('drive-desktop-env-vars').textContent.indexOf('SPLITPAGE_GOOGLE_CLIENT_ID') !== -1
+expect document.getElementById('drive-desktop-env-vars').textContent.indexOf('SPLITPAGE_GOOGLE_CLIENT_SECRET') !== -1
+expect document.getElementById('drive-desktop-setup').textContent.indexOf('Desktop app') !== -1
+# no API key / Client ID form, no signed-in area, the desktop wording
+expect document.getElementById('drive-setup').hidden === true
+expect document.getElementById('drive-main').hidden === true
+expect document.getElementById('drive-web-hint').hidden === true
+expect window.__vis('#drive-desktop-hint')
+key Escape
+wait document.getElementById('drive-modal').hidden
+
+# ---- configured, signed out: one button, no browsing ----
+eval (function(){ B._drive.configured = true; return true; })()
+jsclick [data-file-action="drive-open"]
+wait window.__vis('#drive-main')
+wait window.__vis('#drive-account [data-action="drive-signin"]')
+expect document.getElementById('drive-desktop-setup').hidden === true
+expect document.getElementById('drive-setup').hidden === true
+expect document.querySelector('#drive-modal .drive-edit-creds').hidden === true
+expect document.querySelector('#drive-modal .drive-connect-row').hidden === true
+expect document.getElementById('drive-browser').hidden === true
+
+# ---- sign in: argument-free, then straight into My Drive ----
+jsclick #drive-account [data-action="drive-signin"]
+wait document.getElementById('drive-account').textContent.indexOf('Signed in as writer@example.com') !== -1
+wait window.__toasts('Signed in to Google Drive as writer@example.com')
+wait window.__vis('#drive-browser')
+wait document.getElementById('drive-breadcrumb').textContent === 'My Drive'
+expect document.querySelectorAll('#drive-list .drive-row').length === 1
+expect document.querySelector('#drive-list .drive-row-name').textContent == Scripts
+expect B._driveCalls.filter(function(c){ return c.op === 'signIn'; }).length === 1
+expect B._driveCalls.filter(function(c){ return c.op === 'signIn' || c.op === 'status' || c.op === 'signOut'; }).every(function(c){ return c.args.length === 0; })
+expect B._driveCalls.filter(function(c){ return c.op === 'list'; })[0].args[0] == root
+expect window.__vis('#drive-modal .drive-connect-row')
+# a persisted sign-in says nothing about "this session only"
+expect document.getElementById('drive-account').textContent.indexOf('session only') === -1
+
+# ---- into a folder: files listed, no rename/delete/new folder on desktop ----
+click [data-action="drive-open-item"][data-id="scriptsFolder01"]
+wait document.querySelectorAll('#drive-list .drive-row').length === 3
+expect document.getElementById('drive-breadcrumb').textContent.indexOf('My Drive') !== -1 && document.getElementById('drive-breadcrumb').textContent.indexOf('Scripts') !== -1
+expect document.querySelectorAll('#drive-list .drive-row-btn').length === 0
+expect document.getElementById('drive-newfolder-toggle').hidden === true
+expect document.querySelector('#drive-browser [data-action="drive-upload"]').disabled === false
+
+# ---- download: main's bytes, saved through the desktop Save dialog ----
+eval (function(){ var orig = B.saveFileDialog; window.__saves = []; B.saveFileDialog = function(o){ return orig.call(B, o).then(function(r){ window.__saves.push({ opts: o, picked: r }); return r; }); }; window.__opened = []; B.openExternal = function(u){ window.__opened.push(u); }; return true; })()
+click [data-action="drive-open-item"][data-id="pilotFile01"]
+wait window.__saves.length === 1
+expect window.__saves[0].opts.suggestedName == Pilot.fountain
+wait B._text(window.__saves[0].picked.id) === 'INT. KITCHEN - DAY\n'
+expect B._driveCalls.filter(function(c){ return c.op === 'download'; })[0].args.length === 1
+expect B._driveCalls.filter(function(c){ return c.op === 'download'; })[0].args[0] == pilotFile01
+# a Google Doc comes back as text, named .txt
+click [data-action="drive-open-item"][data-id="gdoc01"]
+wait window.__saves.length === 2
+expect window.__saves[1].opts.suggestedName == Notes.txt
+wait B._text(window.__saves[1].picked.id) === 'Notes as text.\n'
+# a Sheet is not downloaded; it opens in Drive in the browser
+click [data-action="drive-open-item"][data-id="sheet01"]
+wait window.__opened.length === 1
+expect window.__opened[0] == https://drive.google.com/open?id=sheet01
+expect window.__saves.length === 2
+
+# ---- upload: a new name makes a file in this folder ----
+eval (function(){ var dt = new DataTransfer(); dt.items.add(new File(['{"v":1}'], 'New.splitpage', { type: 'application/json' })); var input = document.getElementById('drive-upload-input'); input.files = dt.files; input.dispatchEvent(new Event('change')); return true; })()
+wait window.__toasts('Uploaded 1 file')
+wait document.querySelectorAll('#drive-list .drive-row').length === 4
+eval (function(){ var up = B._driveCalls.filter(function(c){ return c.op === 'upload'; }); window.__up1 = up[0].args[0]; return JSON.stringify({ n: up.length, parentId: window.__up1.parentId, name: window.__up1.name, fileId: window.__up1.fileId, bytes: window.__up1.bytes instanceof Uint8Array, mime: window.__up1.mimeType }); })()
+expect window.__up1.parentId == scriptsFolder01
+expect window.__up1.name == New.splitpage
+expect window.__up1.fileId === undefined
+expect window.__up1.bytes instanceof Uint8Array && window.__up1.bytes.length === 7
+expect window.__up1.mimeType == application/json
+expect B._drive.files.upload1.text === '{"v":1}'
+
+# ---- upload: the same name again replaces that file (a new revision) ----
+eval (function(){ var dt = new DataTransfer(); dt.items.add(new File(['{"v":2}'], 'New.splitpage', { type: 'application/json' })); var input = document.getElementById('drive-upload-input'); input.files = dt.files; input.dispatchEvent(new Event('change')); return true; })()
+wait window.__toasts('Replaced 1 file of the same name')
+eval (function(){ var up = B._driveCalls.filter(function(c){ return c.op === 'upload'; }); window.__up2 = up[1].args[0]; return JSON.stringify({ fileId: window.__up2.fileId, parentId: window.__up2.parentId, name: window.__up2.name }); })()
+expect window.__up2.fileId == upload1
+expect window.__up2.parentId === undefined && window.__up2.name === undefined
+expect B._drive.files.upload1.text === '{"v":2}' && B._drive.files.upload1.revisions === 2
+expect document.querySelectorAll('#drive-list .drive-row').length === 4
+
+# ---- the page never passed main a URL or anything token-shaped ----
+expect B._driveCalls.every(function(c){ return c.args.every(function(a){ var s = typeof a === 'string' ? a : JSON.stringify(a && typeof a === 'object' ? Object.keys(a).reduce(function(o, k){ if (k !== 'bytes') o[k] = a[k]; return o; }, {}) : a); return !/https?:|token|bearer|ya29|client_id|redirect/i.test(String(s)); }); })
+# and kept no Drive credential in this origin's storage
+expect localStorage.getItem('splitpage-drive-api-key') === null && localStorage.getItem('splitpage-drive-client-id') === null
+expect Object.keys(localStorage).concat(Object.keys(sessionStorage)).every(function(k){ return !/drive|google|oauth|token/i.test(k) || k === 'splitpage-drive-last-folder'; })
+expect localStorage.getItem('splitpage-drive-last-folder') === null
+
+# ---- a pasted folder link opens that folder ----
+eval (function(){ document.getElementById('drive-folder-input').value = 'https://drive.google.com/drive/folders/scriptsFolder01?usp=sharing'; return true; })()
+click #drive-connect-btn
+wait document.getElementById('drive-breadcrumb').textContent === 'Scripts'
+expect B._driveCalls.filter(function(c){ return c.op === 'list'; }).pop().args[0] == scriptsFolder01
+# and a file id is a file, not a folder
+eval (function(){ document.getElementById('drive-folder-input').value = 'pilotFile01'; return true; })()
+click #drive-connect-btn
+wait window.__toasts("that's a file, not a folder")
+expect document.getElementById('drive-breadcrumb').textContent == Scripts
+
+# ---- main says the sign-in is gone (revoked in the Google account) ----
+eval (function(){ B._drive.failNext = { code: 'SIGNED_OUT' }; return true; })()
+click [data-action="drive-refresh"]
+wait window.__vis('#drive-account [data-action="drive-signin"]')
+expect document.getElementById('drive-browser').hidden === true
+expect document.querySelector('#drive-modal .drive-connect-row').hidden === true
+
+# ---- a refused sign-in says so and stays signed out ----
+eval (function(){ B._drive.signInAnswer = { ok: false, code: 'DENIED' }; return true; })()
+jsclick #drive-account [data-action="drive-signin"]
+wait window.__toasts('Google sign-in was cancelled.')
+wait window.__vis('#drive-account [data-action="drive-signin"]')
+expect document.getElementById('drive-browser').hidden === true
+eval (function(){ B._drive.signInAnswer = { ok: false, code: 'STATE_MISMATCH' }; return true; })()
+jsclick #drive-account [data-action="drive-signin"]
+wait window.__toasts("didn't match this sign-in, so it was refused")
+wait window.__vis('#drive-account [data-action="drive-signin"]')
+
+# ---- a session-only sign-in (no secure storage) is named as one ----
+eval (function(){ B._drive.persisted = false; return true; })()
+jsclick #drive-account [data-action="drive-signin"]
+wait document.getElementById('drive-account').textContent.indexOf('for this session only') !== -1
+wait window.__vis('#drive-browser')
+
+# ---- sign out: argument-free, back to the sign-in button ----
+jsclick #drive-account [data-action="drive-signout"]
+wait window.__toasts('Signed out of Google Drive.')
+wait window.__vis('#drive-account [data-action="drive-signin"]')
+expect document.getElementById('drive-browser').hidden === true
+expect B._drive.signedIn === false
+expect B._driveCalls.filter(function(c){ return c.op === 'signOut'; }).length === 1 && B._driveCalls.filter(function(c){ return c.op === 'signOut'; })[0].args.length === 0
+key Escape
+wait document.getElementById('drive-modal').hidden
+
+# ---- back in the browser build: the web modal, unchanged ----
+eval (function(){ D.restoreBackend(); return window.__desktopTest.tabId === undefined || window.__desktopTest.tabId === null; })()
+jsclick [data-file-action="drive-open"]
+wait !document.getElementById('drive-modal').hidden
+wait window.__vis('#drive-setup')
+expect window.__vis('#drive-web-hint')
+expect document.getElementById('drive-desktop-hint').hidden === true
+expect document.getElementById('drive-desktop-setup').hidden === true
+expect window.__vis('#drive-api-key') && window.__vis('#drive-client-id')
+key Escape
+wait document.getElementById('drive-modal').hidden
