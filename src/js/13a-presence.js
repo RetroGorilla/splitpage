@@ -337,7 +337,6 @@ export function __init() {
        over this. */
     setWhere: function (w) { presenceWhere = w || { rowId: null, field: null }; paintPresence(); },
     goIdle: function () { presenceLastActive = 0; },
-    initials: presenceInitials,
     color: presenceColor,
     id: presenceSelfId
   };

@@ -311,14 +311,11 @@ export function __init() {
      this. */
   window.__newTab = {
     open: openNewTabPage,
-    close: closeNewTabPage,
     isOpen: function () { return newTabPageShown; },
     eligible: newTabEligibleForAutoShow,
-    blank: startBlankScript,
     blankState: blankDocumentState,
     /* The recents column (issue #15). Desktop-only and driven by IPC, so a
        browser suite reaches it through __desktopTest's fake backend. */
-    refreshRecents: refreshRecents,
-    openRecent: openRecent
+    refreshRecents: refreshRecents
   };
 }

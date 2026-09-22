@@ -945,14 +945,12 @@ export function __init() {
      boundary check it drives — and no way to reproduce it through a real
      scroll either, since requestAnimationFrame is throttled in a
      background/headless window (SKILL.md "What this cannot test"). This is
-     the sanctioned way around both: the pure comparison, exposed directly,
-     and a way to run the exact check prompterTick makes every frame against
-     whatever scrollTop a test sets on #prompter-scroll — no animation
-     needed. Nothing in the app itself reads this; the same trick
+     the sanctioned way around both: a way to run the exact check
+     prompterTick makes every frame against whatever scrollTop a test sets
+     on #prompter-scroll — no animation needed. Nothing in the app itself reads this; the same trick
      window.__updateTest (20a-update.js) and window.__historyTest
      (03a-history-store.js) play. */
   window.__prompterTest = {
-    scenePastReadingLine: scenePastReadingLine,
     checkSceneBoundaryNow: function () {
       var scroller = document.getElementById("prompter-scroll");
       if (!promptSceneMode || promptSceneEndWordOffset == null) return false;

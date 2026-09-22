@@ -2185,7 +2185,6 @@ export function __init() {
     },
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
-    exportAll: exportHistoryAll,
     /* ms, or null for the real 30 s — how long a desktop bridge call may hang */
     setDesktopTimeout: function (ms) {
       historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
