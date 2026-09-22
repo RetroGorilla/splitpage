@@ -1186,7 +1186,7 @@
       if (panel.hidden) openCommentsPanel(); else closeCommentsPanel();
     });
     document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
-    initCommentsPanelResize();
+    initSidePanelResizeHandles();
     document.getElementById("comments-panel").addEventListener("change", function (e) {
       if (e.target.id === "comments-assignee-filter") { setCommentAssigneeFilter(e.target.value); return; }
       if (e.target.classList.contains("comment-assignee-select")) {
