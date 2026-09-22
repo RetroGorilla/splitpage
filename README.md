@@ -452,8 +452,8 @@ only gets offered when a release has no installer your machine can run.
 ## Working on the code
 
 `index.html` is **generated**. The source is in `src/` — `page.html` (the
-shell), `app.css`, `seed-state.json` (the demo document) and the numbered
-fragments in `src/js/`. Rebuild with:
+shell), `app.css`, `seed-state.json` (the demo document) and the ES modules
+in `src/js/`. Run `npm install` once for esbuild, then rebuild with:
 
 ```
 node build.mjs           # write index.html
@@ -1079,7 +1079,7 @@ always works regardless.
   fetches is the Google Fonts stylesheet, loaded so that a slow or
   unreachable font server cannot stop the app starting.
 - `src/` — the source. `page.html` (the shell), `app.css`,
-  `seed-state.json` (the demo document), and `js/` — numbered fragments of
+  `seed-state.json` (the demo document), and `js/` — the ES modules of
   one script, concatenated in filename order.
 - `build.mjs` — inlines all of it back into `index.html`. `--check` says
   whether the two are in step.

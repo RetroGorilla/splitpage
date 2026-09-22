@@ -1,551 +1,591 @@
-  /* ================= rendering ================= */
+import { S } from "./_state.js";
+import { HIGHLIGHT_COLOR } from "./00-prelude.js";
+import {
+  ROW_STATUSES,
+  formatDuration,
+  rowSeconds,
+  rowStatus,
+  updateScriptStats
+} from "./01-scene-status.js";
+import { renderRowGroups } from "./01b-hide-shot.js";
+import { escapeHtml, makeId } from "./02-state.js";
+import { findRowIndex, stampRow } from "./03-sync.js";
+import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot } from "./04-richtext.js";
+import { withRowMotion } from "./04a-row-motion.js";
+import {
+  openTagComposer,
+  scheduleUntaggedScan,
+  tagFieldOccurrences,
+  updateTagBadges
+} from "./07-production-tags.js";
+import { renderProduction } from "./08-production-panels.js";
+import { scheduleBrollRefresh } from "./08c-broll.js";
+import {
+  captureReplyDrafts,
+  deleteCommentArmTimer,
+  formatTimestamp,
+  openCommentComposer,
+  renderComments,
+  syncAnchorResolvedClasses,
+  updateCommentsCount
+} from "./10-comments.js";
+import { markDirty, showToast } from "./12-dirty-toast.js";
+import { reviewMode } from "./13-hosted.js";
+import { paintPresence } from "./13a-presence.js";
+import { renderWriter, writerOpen } from "./19-writer.js";
 
-  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+/* ================= rendering ================= */
 
-  function fieldBlock(rowId, field, value, placeholder) {
-    /* A review session (13-hosted.js) gets the same field with the writing
-       taken out of it: not editable, and a toolbar holding only the one
-       thing it may still do. `tabindex` replaces what contenteditable was
-       giving the cell — something to focus, so :focus-within still reveals
-       that toolbar when the reader selects the words to comment on. */
-    var review = reviewMode();
-    var toolbar = review
-      ? '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>'
-      : '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
-        '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
-        '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
-        '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
-        '<span class="tb-sep"></span>' +
-        '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
-        '<button type="button" data-cmd="link" title="Add link">Link</button>' +
-        '<span class="tb-sep"></span>' +
-        '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>' +
-        '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>';
-    return (
-      '<div class="field-wrap">' +
-        '<div class="mini-toolbar" role="toolbar" aria-label="Text formatting">' + toolbar + '</div>' +
-        '<div class="cell-editable" contenteditable="' + (review ? 'false" tabindex="0' : 'true') +
-          '" data-id="' + rowId + '" data-field="' + field + '" data-placeholder="' + placeholder + '">' + (value || "") + '</div>' +
-        '<div class="link-popover" hidden>' +
-          '<input type="url" placeholder="https://example.com" data-role="link-input">' +
-          '<button type="button" data-action="link-confirm">Add</button>' +
-          '<button type="button" data-action="link-cancel">Cancel</button>' +
-        '</div>' +
-      '</div>'
-    );
+export function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+function fieldBlock(rowId, field, value, placeholder) {
+  /* A review session (13-hosted.js) gets the same field with the writing
+     taken out of it: not editable, and a toolbar holding only the one
+     thing it may still do. `tabindex` replaces what contenteditable was
+     giving the cell — something to focus, so :focus-within still reveals
+     that toolbar when the reader selects the words to comment on. */
+  var review = reviewMode();
+  var toolbar = review
+    ? '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>'
+    : '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
+      '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
+      '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
+      '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
+      '<span class="tb-sep"></span>' +
+      '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
+      '<button type="button" data-cmd="link" title="Add link">Link</button>' +
+      '<span class="tb-sep"></span>' +
+      '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>' +
+      '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>';
+  return (
+    '<div class="field-wrap">' +
+      '<div class="mini-toolbar" role="toolbar" aria-label="Text formatting">' + toolbar + '</div>' +
+      '<div class="cell-editable" contenteditable="' + (review ? 'false" tabindex="0' : 'true') +
+        '" data-id="' + rowId + '" data-field="' + field + '" data-placeholder="' + placeholder + '">' + (value || "") + '</div>' +
+      '<div class="link-popover" hidden>' +
+        '<input type="url" placeholder="https://example.com" data-role="link-input">' +
+        '<button type="button" data-action="link-confirm">Add</button>' +
+        '<button type="button" data-action="link-cancel">Cancel</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function rowHtml(row, index) {
+  /* Reordering, status, insert/delete and the image controls are all
+     document writes the server would refuse from a review session — so
+     they are not rendered at all rather than rendered and then refused.
+     The scene number, its duration and its status colour still show: this
+     is a reader's view of the script, not a stripped-down one. */
+  var review = reviewMode();
+  var imageBlock;
+  if (row.visualImage) {
+    imageBlock =
+      '<div class="image-thumb-wrap">' +
+        '<img src="' + escapeHtml(row.visualImage) + '" alt="">' +
+        (review ? '' :
+          '<div class="image-thumb-actions">' +
+            '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
+            '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
+          '</div>') +
+      '</div>';
+  } else if (review) {
+    imageBlock = "";
+  } else {
+    imageBlock =
+      '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
+        '" title="Attach a reference image — or drag one anywhere onto this scene’s visual column">' +
+        '<span class="clip-icon" aria-hidden="true">📎</span>Image</button>';
   }
 
-  function rowHtml(row, index) {
-    /* Reordering, status, insert/delete and the image controls are all
-       document writes the server would refuse from a review session — so
-       they are not rendered at all rather than rendered and then refused.
-       The scene number, its duration and its status colour still show: this
-       is a reader's view of the script, not a stripped-down one. */
-    var review = reviewMode();
-    var imageBlock;
-    if (row.visualImage) {
-      imageBlock =
-        '<div class="image-thumb-wrap">' +
-          '<img src="' + escapeHtml(row.visualImage) + '" alt="">' +
-          (review ? '' :
-            '<div class="image-thumb-actions">' +
-              '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
-              '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
+  var st = rowStatus(row.status) || ROW_STATUSES[0];
+  var secs = rowSeconds(row);
+
+  return (
+    '<div class="row' + (row.status === "shot" ? ' is-shot' : '') + '" data-id="' + row.id + '">' +
+      '<div class="gutter">' +
+        (review
+          ? '<div class="row-head"><span class="row-num">' + pad2(index + 1) + '</span></div>'
+          : '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
+              '" title="Drag to reorder — or use the arrows below">' +
+              '<span class="drag-grip" aria-hidden="true"></span>' +
+              '<span class="row-num">' + pad2(index + 1) + '</span>' +
             '</div>') +
+        (secs >= 0.5 ? '<div class="row-dur" title="Estimated read time">' + formatDuration(secs) + '</div>' : '') +
+        (review
+          ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
+              '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
+              '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
+            '</span>'
+          : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
+              '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
+              '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
+            '</button>' +
+            '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
+            '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
+            '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
+            '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>') +
+        (row.updatedBy
+          ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
+              escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'
+          : '') +
+      '</div>' +
+      '<div class="cell visual-cell">' +
+        '<div class="visual-media' + (row.visualImage ? '' : ' is-empty') + '" data-id="' +
+          row.id + '">' + imageBlock + '</div>' +
+        fieldBlock(row.id, "visualText", row.visualText, "Describe what is on screen…") +
+      '</div>' +
+      '<div class="cell audio-cell">' +
+        fieldBlock(row.id, "audioText", row.audioText, "Write what gets said…") +
+      '</div>' +
+    '</div>'
+  );
+}
+
+/* Anything that points at DOM this render is about to destroy must be reset,
+   or a later click acts on a stale target: an armed delete would fire without
+   ever showing its confirm, and a saved Range would apply to the wrong cell. */
+function resetTransientUiState() {
+  clearTimeout(S.deleteArmTimer);
+  S.deleteArmId = null;
+  clearTimeout(deleteCommentArmTimer);
+  S.deleteCommentArmId = null;
+  clearTimeout(S.tagDeleteArmTimer);
+  S.tagDeleteArmId = null;
+  S.tagAddingPersonFor = null;
+  S.savedRange = null;
+  S.savedRangeCell = null;
+}
+
+export function render() {
+  if (!S.state) return;
+  resetTransientUiState();
+  var rowsEl = document.getElementById("rows");
+  /* render() isn't only reachable from user clicks (which naturally blur
+     a field first) — a 409-conflict merge or resumeServerDoc() can call
+     it from an async network completion while the user is mid-typing in
+     a totally different row. innerHTML replacement below unconditionally
+     moves focus to <body>, silently discarding the caret and whatever
+     was open (a link/video popover, an IME composition). The title input
+     already gets this protection; give the same to whichever cell was
+     focused, so typing has somewhere to keep landing after a render it
+     had nothing to do with. Exact caret position isn't preserved (the
+     old DOM node is gone regardless) — landing at the end of the cell's
+     new content is the safest default. */
+  var focusedCell = document.activeElement && document.activeElement.classList &&
+    document.activeElement.classList.contains("cell-editable") ? document.activeElement : null;
+  var refocus = focusedCell
+    ? { id: focusedCell.getAttribute("data-id"), field: focusedCell.getAttribute("data-field") }
+    : null;
+
+  /* withRowMotion (04a-row-motion.js) measures the scenes, runs the
+     callback below, measures again, and animates whatever ended up
+     somewhere else — a reorder, an Alt+Up, a dropped drag, an insert, a
+     run of shot scenes collapsing. It calls the callback synchronously and
+     exactly once, so everything after this block still sees the finished
+     DOM; only the paint is deferred. With reduced motion asked for, or on
+     a document too long to be worth measuring, it is a direct call. */
+  withRowMotion(rowsEl, function () {
+    if (!S.state.rows.length) {
+      rowsEl.innerHTML =
+        '<div class="empty-state">' +
+          '<div>No rows yet. Each row pairs what is on screen with what gets said.</div>' +
+          '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
         '</div>';
-    } else if (review) {
-      imageBlock = "";
     } else {
-      imageBlock =
-        '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
-          '" title="Attach a reference image — or drag one anywhere onto this scene’s visual column">' +
-          '<span class="clip-icon" aria-hidden="true">📎</span>Image</button>';
+      rowsEl.innerHTML = renderRowGroups(S.state.rows, rowHtml);
+      rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
     }
+  });
 
-    var st = rowStatus(row.status) || ROW_STATUSES[0];
-    var secs = rowSeconds(row);
-
-    return (
-      '<div class="row' + (row.status === "shot" ? ' is-shot' : '') + '" data-id="' + row.id + '">' +
-        '<div class="gutter">' +
-          (review
-            ? '<div class="row-head"><span class="row-num">' + pad2(index + 1) + '</span></div>'
-            : '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
-                '" title="Drag to reorder — or use the arrows below">' +
-                '<span class="drag-grip" aria-hidden="true"></span>' +
-                '<span class="row-num">' + pad2(index + 1) + '</span>' +
-              '</div>') +
-          (secs >= 0.5 ? '<div class="row-dur" title="Estimated read time">' + formatDuration(secs) + '</div>' : '') +
-          (review
-            ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
-                '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
-                '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
-              '</span>'
-            : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
-                '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
-                '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
-              '</button>' +
-              '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
-              '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
-              '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
-              '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>') +
-          (row.updatedBy
-            ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-                escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'
-            : '') +
-        '</div>' +
-        '<div class="cell visual-cell">' +
-          '<div class="visual-media' + (row.visualImage ? '' : ' is-empty') + '" data-id="' +
-            row.id + '">' + imageBlock + '</div>' +
-          fieldBlock(row.id, "visualText", row.visualText, "Describe what is on screen…") +
-        '</div>' +
-        '<div class="cell audio-cell">' +
-          fieldBlock(row.id, "audioText", row.audioText, "Write what gets said…") +
-        '</div>' +
-      '</div>'
-    );
-  }
-
-  /* Anything that points at DOM this render is about to destroy must be reset,
-     or a later click acts on a stale target: an armed delete would fire without
-     ever showing its confirm, and a saved Range would apply to the wrong cell. */
-  function resetTransientUiState() {
-    clearTimeout(deleteArmTimer);
-    deleteArmId = null;
-    clearTimeout(deleteCommentArmTimer);
-    deleteCommentArmId = null;
-    clearTimeout(tagDeleteArmTimer);
-    tagDeleteArmId = null;
-    tagAddingPersonFor = null;
-    savedRange = null;
-    savedRangeCell = null;
-  }
-
-  function render() {
-    if (!state) return;
-    resetTransientUiState();
-    var rowsEl = document.getElementById("rows");
-    /* render() isn't only reachable from user clicks (which naturally blur
-       a field first) — a 409-conflict merge or resumeServerDoc() can call
-       it from an async network completion while the user is mid-typing in
-       a totally different row. innerHTML replacement below unconditionally
-       moves focus to <body>, silently discarding the caret and whatever
-       was open (a link/video popover, an IME composition). The title input
-       already gets this protection; give the same to whichever cell was
-       focused, so typing has somewhere to keep landing after a render it
-       had nothing to do with. Exact caret position isn't preserved (the
-       old DOM node is gone regardless) — landing at the end of the cell's
-       new content is the safest default. */
-    var focusedCell = document.activeElement && document.activeElement.classList &&
-      document.activeElement.classList.contains("cell-editable") ? document.activeElement : null;
-    var refocus = focusedCell
-      ? { id: focusedCell.getAttribute("data-id"), field: focusedCell.getAttribute("data-field") }
-      : null;
-
-    /* withRowMotion (04a-row-motion.js) measures the scenes, runs the
-       callback below, measures again, and animates whatever ended up
-       somewhere else — a reorder, an Alt+Up, a dropped drag, an insert, a
-       run of shot scenes collapsing. It calls the callback synchronously and
-       exactly once, so everything after this block still sees the finished
-       DOM; only the paint is deferred. With reduced motion asked for, or on
-       a document too long to be worth measuring, it is a direct call. */
-    withRowMotion(rowsEl, function () {
-      if (!state.rows.length) {
-        rowsEl.innerHTML =
-          '<div class="empty-state">' +
-            '<div>No rows yet. Each row pairs what is on screen with what gets said.</div>' +
-            '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
-          '</div>';
-      } else {
-        rowsEl.innerHTML = renderRowGroups(state.rows, rowHtml);
-        rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
-      }
-    });
-
-    if (refocus) {
-      var cellEl = rowsEl.querySelector(
-        '.cell-editable[data-id="' + cssAttr(refocus.id) + '"][data-field="' + cssAttr(refocus.field) + '"]');
-      if (cellEl) {
-        cellEl.focus();
-        try {
-          var range = document.createRange();
-          range.selectNodeContents(cellEl);
-          range.collapse(false);
-          var sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-        } catch (e) {}
-      }
-    }
-
-    var titleInput = document.getElementById("doc-title");
-    if (document.activeElement !== titleInput) titleInput.value = state.title || "";
-    syncAnchorResolvedClasses();
-    updateScriptStats();
-    updateCommentsCount();
-    updateTagBadges();
-    /* Every route that puts new content into the document ends here — an
-       import, a file opened, a version restored, a merge landing — and any
-       of them can carry B-roll lines that never went through the typing
-       path and so have no marker of their own. The refresh's own debounce
-       is where they get one (see maybeAnchorBroll); scheduling rather than
-       calling keeps it off this frame and out of the way of a caret. */
-    scheduleBrollRefresh();
-    renderProduction();
-    captureReplyDrafts();
-    renderComments();
-    /* A full render means the document changed underneath the UI — a
-       merge landing from the server, a version restored. The writer is not
-       on the typing path (typing only ever reaches paintRowStatus and the
-       debounced counters), so rebuilding it here cannot cost anyone a
-       caret, and leaving it stale would show narration that no longer
-       matches what is being edited. */
-    if (writerOpen) renderWriter();
-    /* The ranges this holds point at DOM that has just been thrown away.
-       Debounced rather than immediate: render() is already the expensive
-       frame, and nothing is wrong in the meantime beyond a missing
-       underline. */
-    scheduleUntaggedScan();
-    /* The gutter and field marks live outside the document (13a-presence.js)
-       and have just been thrown away with the rest of #rows, so they are put
-       back from the last answer rather than waiting for the next beat. */
-    paintPresence();
-  }
-
-  /* ================= field sync ================= */
-
-  function syncFieldFromDom(cellEl) {
-    var id = cellEl.getAttribute("data-id");
-    var field = cellEl.getAttribute("data-field");
-    var idx = findRowIndex(id);
-    if (idx !== -1) {
-      /* Strips the zero-width caret spot ensureTrailingCaretSpot() may have
-         appended after a trailing tag/b-roll span — it exists only to give
-         the DOM a place to put the caret and must never reach stored text. */
-      var html = cellEl.innerHTML.indexOf("​") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/​/g, "");
-      if (state.rows[idx][field] !== html) {
-        state.rows[idx][field] = html;
-        stampRow(state.rows[idx]);
-        markDirty();
-      }
-    }
-  }
-
-  /* ================= rich text commands ================= */
-
-  /* Is there anything after `node` that gives the last line a box to sit in?
-     A zero-width caret spot does not count — it is ensureTrailingCaretSpot()'s
-     scaffolding, and syncFieldFromDom() strips it back out again. */
-  function hasRenderedContentAfter(cellEl, node) {
-    var r = document.createRange();
-    r.setStartAfter(node);
-    r.setEnd(cellEl, cellEl.childNodes.length);
-    var frag = r.cloneContents();
-    if (frag.querySelector("br, img, span, a, strong, em, u, s, mark")) return true;
-    return frag.textContent.replace(/\u200B/g, "").length > 0;
-  }
-
-  /* A line break inside a cell, the way the browser's own Enter does it.
-     This used to be insertHTML("<br>"), which inserts exactly one <br> — and
-     a <br> at the very END of a block renders no line at all, so a break
-     typed at the end of a scene looked like nothing happened, the next
-     character landed BEFORE the <br> on the same line, and once a trailing
-     <br> was there every later Enter in that cell was a complete no-op.
-     insertLineBreak adds the second, sentinel <br> that gives the new last
-     line a box, and consumes it again as soon as you type. */
-  function insertLineBreak(cellEl) {
-    try {
-      if (document.execCommand("insertLineBreak")) return;
-    } catch (err) {}
-    /* Manual fallback for anything that does not implement the command. */
-    var sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    var range = sel.getRangeAt(0);
-    if (!cellEl.contains(range.startContainer)) return;
-    range.deleteContents();
-    var br = document.createElement("br");
-    range.insertNode(br);
-    if (!hasRenderedContentAfter(cellEl, br)) {
-      br.parentNode.insertBefore(document.createElement("br"), br.nextSibling);
-    }
-    range.setStartAfter(br);
-    range.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  function isSelectionInsideTag(root, tagName) {
-    var sel = window.getSelection();
-    if (!sel.rangeCount) return false;
-    var node = sel.getRangeAt(0).commonAncestorContainer;
-    if (node.nodeType === 3) node = node.parentNode;
-    while (node && node !== root) {
-      if (node.tagName === tagName) return true;
-      node = node.parentNode;
-    }
-    return false;
-  }
-
-  /* execCommand("hiliteColor"/"backColor") produces a styled <span
-     style="background-color:...">, never a <mark>, in every modern
-     browser — removeHighlight() below already knows to look for both, but
-     the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
-     state indicator only ever checked for MARK, so clicking Highlight a
-     second time re-applied it instead of removing it (the field only
-     turned into a real <mark> — and so became toggle-able — once it had
-     been blurred and sanitizeHtml() ran). */
-  function isSelectionHighlighted(root) {
-    var sel = window.getSelection();
-    if (!sel.rangeCount) return false;
-    var node = sel.getRangeAt(0).commonAncestorContainer;
-    if (node.nodeType === 3) node = node.parentNode;
-    while (node && node !== root) {
-      if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) return true;
-      node = node.parentNode;
-    }
-    return false;
-  }
-
-  function unwrapElement(el) {
-    var parent = el.parentNode;
-    if (!parent) return;
-    while (el.firstChild) parent.insertBefore(el.firstChild, el);
-    parent.removeChild(el);
-  }
-
-  function applyHighlight() {
-    var ok = false;
-    try { ok = document.execCommand("hiliteColor", false, HIGHLIGHT_COLOR); } catch (e) {}
-    if (!ok) { try { document.execCommand("backColor", false, HIGHLIGHT_COLOR); } catch (e) {} }
-  }
-
-  function removeHighlight(cellEl) {
-    var sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    var node = sel.getRangeAt(0).commonAncestorContainer;
-    if (node.nodeType === 3) node = node.parentNode;
-    while (node && node !== cellEl) {
-      if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) {
-        unwrapElement(node);
-        return;
-      }
-      node = node.parentNode;
-    }
-  }
-
-  function updateToolbarState(cellEl) {
-    var wrap = cellEl.closest(".field-wrap");
-    if (!wrap) return;
-    var toolbar = wrap.querySelector(".mini-toolbar");
-    if (!toolbar) return;
-    ["bold", "italic", "underline", "strikeThrough"].forEach(function (cmd) {
-      var btn = toolbar.querySelector('[data-cmd="' + cmd + '"]');
-      if (!btn) return;
-      var on = false;
-      try { on = document.queryCommandState(cmd); } catch (e) {}
-      btn.classList.toggle("is-active", on);
-    });
-    var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
-    if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
-  }
-
-  function handleToolbarCmd(btn) {
-    var wrap = btn.closest(".field-wrap");
-    var cellEl = wrap.querySelector(".cell-editable");
-    var cmd = btn.getAttribute("data-cmd");
-    cellEl.focus();
-    if (cmd === "highlight") {
-      if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
-      else applyHighlight();
-      syncFieldFromDom(cellEl);
-      updateToolbarState(cellEl);
-      return;
-    }
-    if (cmd === "link") {
-      var sel = window.getSelection();
-      if (!sel.rangeCount || sel.isCollapsed || !rangeInside(sel.getRangeAt(0), cellEl)) {
-        showToast("Select some text inside one cell, then add a link.", "warn");
-        return;
-      }
-      savedRange = sel.getRangeAt(0).cloneRange();
-      savedRangeCell = cellEl;
-      var popover = wrap.querySelector(".link-popover");
-      popover.hidden = false;
-      var input = popover.querySelector("input");
-      input.value = "";
-      input.focus();
-      return;
-    }
-    if (cmd === "comment") {
-      var csel = window.getSelection();
-      if (!csel.rangeCount || csel.isCollapsed || !rangeInside(csel.getRangeAt(0), cellEl)) {
-        showToast("Select some text inside one cell, then add a comment.", "warn");
-        return;
-      }
-      var quotedText = csel.toString();
-      var cRange = csel.getRangeAt(0);
-      var cmtId = makeId("c");
-      var anchorSpanEl;
+  if (refocus) {
+    var cellEl = rowsEl.querySelector(
+      '.cell-editable[data-id="' + cssAttr(refocus.id) + '"][data-field="' + cssAttr(refocus.field) + '"]');
+    if (cellEl) {
+      cellEl.focus();
       try {
-        anchorSpanEl = wrapRangeInComment(cRange, cmtId);
-      } catch (e) {
-        showToast("Could not anchor a comment to that selection.", "error");
-        return;
-      }
-      csel.removeAllRanges();
-      var afterC = document.createRange();
-      afterC.setStartAfter(anchorSpanEl);
-      afterC.collapse(true);
-      csel.addRange(afterC);
-      syncFieldFromDom(cellEl);
-      openCommentComposer({
-        id: cmtId,
-        rowId: cellEl.getAttribute("data-id"),
-        field: cellEl.getAttribute("data-field"),
-        quotedText: quotedText
-      });
+        var range = document.createRange();
+        range.selectNodeContents(cellEl);
+        range.collapse(false);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (e) {}
+    }
+  }
+
+  var titleInput = document.getElementById("doc-title");
+  if (document.activeElement !== titleInput) titleInput.value = S.state.title || "";
+  syncAnchorResolvedClasses();
+  updateScriptStats();
+  updateCommentsCount();
+  updateTagBadges();
+  /* Every route that puts new content into the document ends here — an
+     import, a file opened, a version restored, a merge landing — and any
+     of them can carry B-roll lines that never went through the typing
+     path and so have no marker of their own. The refresh's own debounce
+     is where they get one (see maybeAnchorBroll); scheduling rather than
+     calling keeps it off this frame and out of the way of a caret. */
+  scheduleBrollRefresh();
+  renderProduction();
+  captureReplyDrafts();
+  renderComments();
+  /* A full render means the document changed underneath the UI — a
+     merge landing from the server, a version restored. The writer is not
+     on the typing path (typing only ever reaches paintRowStatus and the
+     debounced counters), so rebuilding it here cannot cost anyone a
+     caret, and leaving it stale would show narration that no longer
+     matches what is being edited. */
+  if (writerOpen) renderWriter();
+  /* The ranges this holds point at DOM that has just been thrown away.
+     Debounced rather than immediate: render() is already the expensive
+     frame, and nothing is wrong in the meantime beyond a missing
+     underline. */
+  scheduleUntaggedScan();
+  /* The gutter and field marks live outside the document (13a-presence.js)
+     and have just been thrown away with the rest of #rows, so they are put
+     back from the last answer rather than waiting for the next beat. */
+  paintPresence();
+}
+
+/* ================= field sync ================= */
+
+export function syncFieldFromDom(cellEl) {
+  var id = cellEl.getAttribute("data-id");
+  var field = cellEl.getAttribute("data-field");
+  var idx = findRowIndex(id);
+  if (idx !== -1) {
+    /* Strips the zero-width caret spot ensureTrailingCaretSpot() may have
+       appended after a trailing tag/b-roll span — it exists only to give
+       the DOM a place to put the caret and must never reach stored text. */
+    var html = cellEl.innerHTML.indexOf("​") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/​/g, "");
+    if (S.state.rows[idx][field] !== html) {
+      S.state.rows[idx][field] = html;
+      stampRow(S.state.rows[idx]);
+      markDirty();
+    }
+  }
+}
+
+/* ================= rich text commands ================= */
+
+/* Is there anything after `node` that gives the last line a box to sit in?
+   A zero-width caret spot does not count — it is ensureTrailingCaretSpot()'s
+   scaffolding, and syncFieldFromDom() strips it back out again. */
+function hasRenderedContentAfter(cellEl, node) {
+  var r = document.createRange();
+  r.setStartAfter(node);
+  r.setEnd(cellEl, cellEl.childNodes.length);
+  var frag = r.cloneContents();
+  if (frag.querySelector("br, img, span, a, strong, em, u, s, mark")) return true;
+  return frag.textContent.replace(/\u200B/g, "").length > 0;
+}
+
+/* A line break inside a cell, the way the browser's own Enter does it.
+   This used to be insertHTML("<br>"), which inserts exactly one <br> — and
+   a <br> at the very END of a block renders no line at all, so a break
+   typed at the end of a scene looked like nothing happened, the next
+   character landed BEFORE the <br> on the same line, and once a trailing
+   <br> was there every later Enter in that cell was a complete no-op.
+   insertLineBreak adds the second, sentinel <br> that gives the new last
+   line a box, and consumes it again as soon as you type. */
+export function insertLineBreak(cellEl) {
+  try {
+    if (document.execCommand("insertLineBreak")) return;
+  } catch (err) {}
+  /* Manual fallback for anything that does not implement the command. */
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  var range = sel.getRangeAt(0);
+  if (!cellEl.contains(range.startContainer)) return;
+  range.deleteContents();
+  var br = document.createElement("br");
+  range.insertNode(br);
+  if (!hasRenderedContentAfter(cellEl, br)) {
+    br.parentNode.insertBefore(document.createElement("br"), br.nextSibling);
+  }
+  range.setStartAfter(br);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+export function isSelectionInsideTag(root, tagName) {
+  var sel = window.getSelection();
+  if (!sel.rangeCount) return false;
+  var node = sel.getRangeAt(0).commonAncestorContainer;
+  if (node.nodeType === 3) node = node.parentNode;
+  while (node && node !== root) {
+    if (node.tagName === tagName) return true;
+    node = node.parentNode;
+  }
+  return false;
+}
+
+/* execCommand("hiliteColor"/"backColor") produces a styled <span
+   style="background-color:...">, never a <mark>, in every modern
+   browser — removeHighlight() below already knows to look for both, but
+   the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
+   state indicator only ever checked for MARK, so clicking Highlight a
+   second time re-applied it instead of removing it (the field only
+   turned into a real <mark> — and so became toggle-able — once it had
+   been blurred and sanitizeHtml() ran). */
+function isSelectionHighlighted(root) {
+  var sel = window.getSelection();
+  if (!sel.rangeCount) return false;
+  var node = sel.getRangeAt(0).commonAncestorContainer;
+  if (node.nodeType === 3) node = node.parentNode;
+  while (node && node !== root) {
+    if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) return true;
+    node = node.parentNode;
+  }
+  return false;
+}
+
+function unwrapElement(el) {
+  var parent = el.parentNode;
+  if (!parent) return;
+  while (el.firstChild) parent.insertBefore(el.firstChild, el);
+  parent.removeChild(el);
+}
+
+export function applyHighlight() {
+  var ok = false;
+  try { ok = document.execCommand("hiliteColor", false, HIGHLIGHT_COLOR); } catch (e) {}
+  if (!ok) { try { document.execCommand("backColor", false, HIGHLIGHT_COLOR); } catch (e) {} }
+}
+
+export function removeHighlight(cellEl) {
+  var sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  var node = sel.getRangeAt(0).commonAncestorContainer;
+  if (node.nodeType === 3) node = node.parentNode;
+  while (node && node !== cellEl) {
+    if (node.tagName === "MARK" || (node.tagName === "SPAN" && node.style && node.style.backgroundColor)) {
+      unwrapElement(node);
       return;
     }
-    if (cmd === "tag") {
-      var tsel = window.getSelection();
-      if (!tsel.rangeCount || tsel.isCollapsed || !rangeInside(tsel.getRangeAt(0), cellEl)) {
-        showToast("Select the words you want to label first.", "warn");
-        return;
-      }
-      var tagQuoted = tsel.toString().trim();
-      /* Which occurrence of this phrase, among any others in the cell, the
-         user actually selected — captured now, while the real Range still
-         exists, since applyTag() runs after the modal has closed and can
-         only re-find the phrase as plain text. Counted the same way
-         tagFieldOccurrences() itself counts matches (word-boundary rule and
-         document order), by re-running it in countOnly mode over just the
-         text before the selection start, so the index lines up exactly. */
-      var tagRange = tsel.getRangeAt(0);
-      var beforeRange = document.createRange();
-      beforeRange.selectNodeContents(cellEl);
-      beforeRange.setEnd(tagRange.startContainer, tagRange.startOffset);
-      var beforeDiv = document.createElement("div");
-      beforeDiv.appendChild(beforeRange.cloneContents());
-      var tagOccurrenceIndex = tagQuoted
-        ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
-        : 0;
-      openTagComposer({
-        rowId: cellEl.getAttribute("data-id"),
-        field: cellEl.getAttribute("data-field"),
-        quotedText: tagQuoted,
-        occurrenceIndex: tagOccurrenceIndex
-      });
-      return;
-    }
-    if (cmd === "image") {
-      document.getElementById("comment-image-input").click();
-      return;
-    }
-    if (cmd === "video") {
-      var vpopover = wrap.querySelector(".video-popover");
-      if (vpopover) {
-        vpopover.hidden = false;
-        var vinput = vpopover.querySelector("input");
-        vinput.value = "";
-        vinput.focus();
-      }
-      return;
-    }
-    document.execCommand(cmd);
+    node = node.parentNode;
+  }
+}
+
+export function updateToolbarState(cellEl) {
+  var wrap = cellEl.closest(".field-wrap");
+  if (!wrap) return;
+  var toolbar = wrap.querySelector(".mini-toolbar");
+  if (!toolbar) return;
+  ["bold", "italic", "underline", "strikeThrough"].forEach(function (cmd) {
+    var btn = toolbar.querySelector('[data-cmd="' + cmd + '"]');
+    if (!btn) return;
+    var on = false;
+    try { on = document.queryCommandState(cmd); } catch (e) {}
+    btn.classList.toggle("is-active", on);
+  });
+  var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
+  if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
+}
+
+export function handleToolbarCmd(btn) {
+  var wrap = btn.closest(".field-wrap");
+  var cellEl = wrap.querySelector(".cell-editable");
+  var cmd = btn.getAttribute("data-cmd");
+  cellEl.focus();
+  if (cmd === "highlight") {
+    if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
+    else applyHighlight();
     syncFieldFromDom(cellEl);
     updateToolbarState(cellEl);
+    return;
   }
-
-  /* extractContents() on a range that leaves the cell rips content out of two
-     rows at once and loses it, so refuse anything not fully contained */
-  function rangeInside(range, el) {
-    if (!range || !el) return false;
-    return el.contains(range.startContainer) && el.contains(range.endContainer) &&
-           el.contains(range.commonAncestorContainer);
-  }
-
-  function wrapRangeInLink(range, url) {
-    var frag = range.extractContents();
-    var a = document.createElement("a");
-    a.setAttribute("href", url);
-    a.setAttribute("target", "_blank");
-    a.setAttribute("rel", "noopener");
-    a.appendChild(frag);
-    range.insertNode(a);
-    return a;
-  }
-
-  function confirmLink(wrap) {
-    if (!wrap) return;
-    var popover = wrap.querySelector(".link-popover");
-    var input = popover.querySelector("input");
-    var url = (input.value || "").trim();
-    var owner = wrap.querySelector(".cell-editable");
-    /* the saved Range must still belong to THIS field and still be in the document */
-    if (!url || !savedRange || !savedRangeCell || savedRangeCell !== owner ||
-        !document.contains(savedRangeCell)) {
-      popover.hidden = true;
-      savedRange = null; savedRangeCell = null;
+  if (cmd === "link") {
+    var sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed || !rangeInside(sel.getRangeAt(0), cellEl)) {
+      showToast("Select some text inside one cell, then add a link.", "warn");
       return;
     }
-    if (!/^https?:\/\//i.test(url) && url.indexOf("mailto:") !== 0) url = "https://" + url;
-    var cellEl = savedRangeCell;
-    cellEl.focus();
-    var sel = window.getSelection();
-    sel.removeAllRanges();
-    try {
-      var a = wrapRangeInLink(savedRange, url);
-      var afterRange = document.createRange();
-      afterRange.setStartAfter(a);
-      afterRange.collapse(true);
-      sel.addRange(afterRange);
-    } catch (e) {
-      sel.addRange(savedRange);
-      document.execCommand("createLink", false, url);
-      var links = cellEl.querySelectorAll("a:not([target])");
-      for (var i = 0; i < links.length; i++) {
-        links[i].setAttribute("target", "_blank");
-        links[i].setAttribute("rel", "noopener");
-      }
-    }
-    popover.hidden = true;
-    savedRange = null; savedRangeCell = null;
-    syncFieldFromDom(cellEl);
-  }
-
-  function cancelLink(wrap) {
-    if (!wrap) return;
-    wrap.querySelector(".link-popover").hidden = true;
-    savedRange = null; savedRangeCell = null;
-  }
-
-  function wrapRangeInComment(range, cmtId) {
-    var frag = range.extractContents();
-    var span = document.createElement("span");
-    span.className = "cmt-anchor";
-    span.setAttribute("data-cmt", cmtId);
-    span.appendChild(frag);
-    range.insertNode(span);
-    return span;
-  }
-
-  function confirmVideo(wrap) {
-    if (!wrap) return;
-    var popover = wrap.querySelector(".video-popover");
+    S.savedRange = sel.getRangeAt(0).cloneRange();
+    S.savedRangeCell = cellEl;
+    var popover = wrap.querySelector(".link-popover");
+    popover.hidden = false;
     var input = popover.querySelector("input");
-    var url = (input.value || "").trim();
-    popover.hidden = true;
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-    var cellEl = wrap.querySelector(".cell-editable");
-    cellEl.focus();
-    cellEl.appendChild(document.createElement("br"));
-    cellEl.appendChild(buildVideoCardEl(url));
-    cellEl.appendChild(document.createElement("br"));
+    input.value = "";
+    input.focus();
+    return;
+  }
+  if (cmd === "comment") {
+    var csel = window.getSelection();
+    if (!csel.rangeCount || csel.isCollapsed || !rangeInside(csel.getRangeAt(0), cellEl)) {
+      showToast("Select some text inside one cell, then add a comment.", "warn");
+      return;
+    }
+    var quotedText = csel.toString();
+    var cRange = csel.getRangeAt(0);
+    var cmtId = makeId("c");
+    var anchorSpanEl;
+    try {
+      anchorSpanEl = wrapRangeInComment(cRange, cmtId);
+    } catch (e) {
+      showToast("Could not anchor a comment to that selection.", "error");
+      return;
+    }
+    csel.removeAllRanges();
+    var afterC = document.createRange();
+    afterC.setStartAfter(anchorSpanEl);
+    afterC.collapse(true);
+    csel.addRange(afterC);
     syncFieldFromDom(cellEl);
+    openCommentComposer({
+      id: cmtId,
+      rowId: cellEl.getAttribute("data-id"),
+      field: cellEl.getAttribute("data-field"),
+      quotedText: quotedText
+    });
+    return;
   }
+  if (cmd === "tag") {
+    var tsel = window.getSelection();
+    if (!tsel.rangeCount || tsel.isCollapsed || !rangeInside(tsel.getRangeAt(0), cellEl)) {
+      showToast("Select the words you want to label first.", "warn");
+      return;
+    }
+    var tagQuoted = tsel.toString().trim();
+    /* Which occurrence of this phrase, among any others in the cell, the
+       user actually selected — captured now, while the real Range still
+       exists, since applyTag() runs after the modal has closed and can
+       only re-find the phrase as plain text. Counted the same way
+       tagFieldOccurrences() itself counts matches (word-boundary rule and
+       document order), by re-running it in countOnly mode over just the
+       text before the selection start, so the index lines up exactly. */
+    var tagRange = tsel.getRangeAt(0);
+    var beforeRange = document.createRange();
+    beforeRange.selectNodeContents(cellEl);
+    beforeRange.setEnd(tagRange.startContainer, tagRange.startOffset);
+    var beforeDiv = document.createElement("div");
+    beforeDiv.appendChild(beforeRange.cloneContents());
+    var tagOccurrenceIndex = tagQuoted
+      ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
+      : 0;
+    openTagComposer({
+      rowId: cellEl.getAttribute("data-id"),
+      field: cellEl.getAttribute("data-field"),
+      quotedText: tagQuoted,
+      occurrenceIndex: tagOccurrenceIndex
+    });
+    return;
+  }
+  if (cmd === "image") {
+    document.getElementById("comment-image-input").click();
+    return;
+  }
+  if (cmd === "video") {
+    var vpopover = wrap.querySelector(".video-popover");
+    if (vpopover) {
+      vpopover.hidden = false;
+      var vinput = vpopover.querySelector("input");
+      vinput.value = "";
+      vinput.focus();
+    }
+    return;
+  }
+  document.execCommand(cmd);
+  syncFieldFromDom(cellEl);
+  updateToolbarState(cellEl);
+}
 
-  function cancelVideo(wrap) {
-    if (!wrap) return;
-    wrap.querySelector(".video-popover").hidden = true;
+/* extractContents() on a range that leaves the cell rips content out of two
+   rows at once and loses it, so refuse anything not fully contained */
+function rangeInside(range, el) {
+  if (!range || !el) return false;
+  return el.contains(range.startContainer) && el.contains(range.endContainer) &&
+         el.contains(range.commonAncestorContainer);
+}
+
+function wrapRangeInLink(range, url) {
+  var frag = range.extractContents();
+  var a = document.createElement("a");
+  a.setAttribute("href", url);
+  a.setAttribute("target", "_blank");
+  a.setAttribute("rel", "noopener");
+  a.appendChild(frag);
+  range.insertNode(a);
+  return a;
+}
+
+export function confirmLink(wrap) {
+  if (!wrap) return;
+  var popover = wrap.querySelector(".link-popover");
+  var input = popover.querySelector("input");
+  var url = (input.value || "").trim();
+  var owner = wrap.querySelector(".cell-editable");
+  /* the saved Range must still belong to THIS field and still be in the document */
+  if (!url || !S.savedRange || !S.savedRangeCell || S.savedRangeCell !== owner ||
+      !document.contains(S.savedRangeCell)) {
+    popover.hidden = true;
+    S.savedRange = null; S.savedRangeCell = null;
+    return;
   }
+  if (!/^https?:\/\//i.test(url) && url.indexOf("mailto:") !== 0) url = "https://" + url;
+  var cellEl = S.savedRangeCell;
+  cellEl.focus();
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  try {
+    var a = wrapRangeInLink(S.savedRange, url);
+    var afterRange = document.createRange();
+    afterRange.setStartAfter(a);
+    afterRange.collapse(true);
+    sel.addRange(afterRange);
+  } catch (e) {
+    sel.addRange(S.savedRange);
+    document.execCommand("createLink", false, url);
+    var links = cellEl.querySelectorAll("a:not([target])");
+    for (var i = 0; i < links.length; i++) {
+      links[i].setAttribute("target", "_blank");
+      links[i].setAttribute("rel", "noopener");
+    }
+  }
+  popover.hidden = true;
+  S.savedRange = null; S.savedRangeCell = null;
+  syncFieldFromDom(cellEl);
+}
+
+export function cancelLink(wrap) {
+  if (!wrap) return;
+  wrap.querySelector(".link-popover").hidden = true;
+  S.savedRange = null; S.savedRangeCell = null;
+}
+
+function wrapRangeInComment(range, cmtId) {
+  var frag = range.extractContents();
+  var span = document.createElement("span");
+  span.className = "cmt-anchor";
+  span.setAttribute("data-cmt", cmtId);
+  span.appendChild(frag);
+  range.insertNode(span);
+  return span;
+}
+
+export function confirmVideo(wrap) {
+  if (!wrap) return;
+  var popover = wrap.querySelector(".video-popover");
+  var input = popover.querySelector("input");
+  var url = (input.value || "").trim();
+  popover.hidden = true;
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  var cellEl = wrap.querySelector(".cell-editable");
+  cellEl.focus();
+  cellEl.appendChild(document.createElement("br"));
+  cellEl.appendChild(buildVideoCardEl(url));
+  cellEl.appendChild(document.createElement("br"));
+  syncFieldFromDom(cellEl);
+}
+
+export function cancelVideo(wrap) {
+  if (!wrap) return;
+  wrap.querySelector(".video-popover").hidden = true;
+}
+
+/* Eval-time work for this module. _entry.js calls every module's __init()
+   in filename order — the order these statements used to run in. */
+export function __init() {}

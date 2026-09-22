@@ -3,24 +3,40 @@
  *
  * Source lives in src/ as separate files so it can be edited like normal code:
  * page.html (shell), app.css, seed-state.json (the demo document) and the
- * numbered fragments in src/js/.
+ * numbered ES modules in src/js/.
  * The SHIPPED app is a single index.html, and that is not a packaging
  * preference — it is load-bearing. A save writes
  *   "<!doctype html>" + document.documentElement.outerHTML
  * with the new document spliced into #state-data (see buildPublishHtml in
- * src/app.js). If the page linked out to app.css / app.js, every saved
- * .splitpage.html would be a shell that only works next to those files. So we
- * inline everything back into one self-contained page here.
+ * src/js/02-state.js). If the page linked out to app.css / app.js, every
+ * saved .splitpage.html would be a shell that only works next to those files.
+ * So we inline everything back into one self-contained page here.
  *
- * No dependencies, no plugins: substitution of three marker lines. Run it with
+ * Substitution of a handful of marker lines, plus one bundler. Run it with
  *   node build.mjs           write index.html
  *   node build.mjs --check   verify index.html matches src/ (exit 1 if not)
+ *
+ * esbuild is the only dependency, and it is a build-time one: nothing it
+ * produces needs a runtime, and the shipped page still has no <script src>.
+ * `npm install` (or `npm ci`) before either command.
  */
 
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+
+/* Imported this way, rather than at the top, so a checkout that has not run
+   `npm install` yet gets told what is wrong instead of a module-resolution
+   stack trace. CI and desktop/stage.mjs both shell out to this file. */
+let esbuild;
+try {
+  esbuild = await import("esbuild");
+} catch {
+  console.error("esbuild is not installed — run `npm install` first.");
+  console.error("(src/js has been bundled rather than concatenated since #66.)");
+  process.exit(1);
+}
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
@@ -30,17 +46,49 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
    newline becomes the inserted block's last one. */
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-/* src/js/*.js are FRAGMENTS of one IIFE, not modules: they share a single
-   closure and are concatenated in filename order, which is why every name is
-   numbered. A fragment is not valid JS on its own — 00-prelude.js opens the
-   function and 21-events.js closes it. That is deliberate: it keeps the
-   scoping identical to the single file this was split out of, with no bundler
-   and no dependency. Renaming one renumbers its position, so don't. */
+/* src/js/*.js are ES modules (#66). They used to be fragments of one IIFE,
+   concatenated in filename order — which is why they are still numbered: the
+   numbers are the order src/js/_entry.js calls their __init()s in, and that
+   is the app's boot order. Nothing else depends on the filenames now, so a
+   rename costs an edit to _entry.js and the imports that name the file.
+
+   One esbuild call, no plugins and no config file, producing one IIFE with
+   everything in it — the same shape the concatenated fragments had, which is
+   what lets it be inlined into the page exactly as before.
+
+   - bundle: follow the imports from _entry.js; nothing is left external.
+   - format iife: a classic script, not a module. <script type="module"> is
+     deferred, and 00-prelude has to capture PAGE_SHELL while the parser is
+     still paused on this tag (that is the whole reason the page is one file).
+   - minify: names, whitespace and dead code. The window.__* test backdoors
+     survive it because they are property assignments, not bindings.
+   - charset utf8: leave the app's text alone rather than re-escaping every
+     non-ASCII character. The page is <meta charset="utf-8"> and the CSP hash
+     below is taken over the same characters the parser will see.
+   - legalComments none: keep the output a single pure line of JS, so the
+     hash and the byte count only move when the source does. */
 function appJs() {
-  const dir = join(ROOT, "src", "js");
-  const names = readdirSync(dir).filter((n) => n.endsWith(".js")).sort();
-  if (!names.length) throw new Error("no fragments in src/js");
-  return names.map((n) => chomp(readFileSync(join(dir, n), "utf8"))).join("\n");
+  const result = esbuild.buildSync({
+    entryPoints: [join(ROOT, "src", "js", "_entry.js")],
+    bundle: true,
+    format: "iife",
+    minify: true,
+    charset: "utf8",
+    legalComments: "none",
+    absWorkingDir: ROOT,
+    logLevel: "warning",
+    write: false
+  });
+  if (result.outputFiles.length !== 1) {
+    throw new Error("esbuild produced " + result.outputFiles.length + " files, expected 1");
+  }
+  const code = result.outputFiles[0].text;
+  /* The bundle is inlined into <script id="app-logic">, so an unescaped
+     "</script" anywhere in it would end the tag early and leave the rest of
+     the app as text on the page. esbuild escapes the sequence inside string
+     literals; this is the guard for everything else. */
+  if (/<\/script/i.test(code)) throw new Error("the bundle contains a literal </script");
+  return code;
 }
 
 /* ---- README.md -> in-app Help ----

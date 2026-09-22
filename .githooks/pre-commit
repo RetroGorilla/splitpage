@@ -25,7 +25,7 @@ set -e
 # file, used to skip this whole check, letting a stale-version index.html
 # through undetected. README.md became a build input in Phase 5 (the in-app
 # Help page is rendered from it at build time), so it needs the same check.
-if git diff --cached --name-only | grep -qE '^(index\.html|src/|build\.mjs|VERSION|README\.md)'; then
+if git diff --cached --name-only | grep -qE '^(index\.html|src/|build\.mjs|VERSION|README\.md|package(-lock)?\.json)'; then
   if [ "$SPLITPAGE_SKIP_BUILD_CHECK" = "1" ]; then
     echo "pre-commit: build check skipped (SPLITPAGE_SKIP_BUILD_CHECK=1)." >&2
   elif ! command -v node >/dev/null 2>&1; then
@@ -49,6 +49,11 @@ NONODE
     STAGE_DIR=$(mktemp -d)
     trap 'rm -rf "$STAGE_DIR"' EXIT
     git checkout-index -a --prefix="$STAGE_DIR/"
+    # node_modules is ignored, so checkout-index does not export it, and since
+    # #66 build.mjs needs esbuild from it. Without this the check fails and the
+    # commit is blocked with the misleading "index.html does not match src/"
+    # below (stderr is discarded, so the real reason never surfaces).
+    ln -s "$(git rev-parse --show-toplevel)/node_modules" "$STAGE_DIR/node_modules"
     if ! (cd "$STAGE_DIR" && node build.mjs --check >/dev/null 2>&1); then
       cat >&2 <<'STALE'
 

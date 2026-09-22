@@ -38,6 +38,11 @@ jobs:
         with:
           node-version: '22'
 
+      # build.mjs bundles src/js with esbuild since #66, so there is a
+      # devDependency to install before anything can build or check.
+      - name: Install build dependencies
+        run: npm ci
+
       # index.html is generated from src/. A commit where the two disagree is
       # always a mistake — either index.html was hand-edited (and those edits
       # are about to be thrown away) or src/ changed without a rebuild. The
