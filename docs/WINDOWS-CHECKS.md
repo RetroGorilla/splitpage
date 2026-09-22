@@ -17,6 +17,32 @@ the handful of things no automated test reaches on any platform.
 Treat a green Windows run as the thing that lets a **release** ship. It is no
 longer the only thing that can tell you the desktop shell works at all.
 
+## Windows runs so far
+
+**Run 1 — Windows 11 x64, at `eb9904f`. Everything that was run passed.**
+
+- Dev smoke 488/488 with `SKIPPED (0)`, the `MainWindowHandle` probe included.
+- `npm run dist:win` + `verify-dist.mjs` 11/11.
+- **Packaged-x64 smoke 488/488** — the first run of a real build. It confirms
+  #76's `shared/` loads from `resources/splitpage` and #77's bridge exists in
+  the installed app.
+- Portable zip unzipped and started through `start.bat`, both of the branches
+  that zip can reach (Node on PATH, and the error without it).
+- `run-tests.ps1` 2054/2054 checks across 51 suites.
+- Offline reload (#79) by hand in real Edge.
+- Smoke took 6.3 minutes. The same 15 teardowns were force-killed as on Linux
+  (see below — not a platform difference).
+
+Not run: packaged-arm64 (needs the ARM machine), an upgrade over a 1.0.x
+install (no safe old install to try it on — a VM or Windows Sandbox if ever),
+and `start.bat`'s bundled-runtime branches (the zip has no `runtime/`).
+
+**Run 2 — due.** Landed since `eb9904f`: #73 (one home record), #86 (teleprompter
+Open in Browser), #71 (reviewers write through the comments endpoints), #98
+(prompter under the topbar) and #11 (per-tab connections), plus everything
+committed after this line. #86 and #11 both change `desktop/main.js`, so the
+packaged smoke has to run again, and #86 has a by-hand check (§3).
+
 ## Before you start
 
 `index.html` is no longer committed (#80). A fresh clone has to build it:
@@ -74,13 +100,30 @@ Every check the running platform cannot answer prints a `SKIP - <name> ::
 pass/fail line. A skip is not counted as a pass and not counted in the
 total, so a thin run cannot print the same summary as a full one.
 
-A full dev-target run is 57 groups, ~487 checks and about **55 minutes** —
-sixty-odd real app launches,
-several of them deliberately crashed and relaunched. `--only-group <text>`
-(debugging only, like `--only-target`) runs just the groups whose name
-contains that text; it prints a banner and tags the summary `PARTIAL RUN`,
+A full dev-target run is 62 groups and ~600 checks — sixty-odd real app
+launches, several of them deliberately crashed and relaunched. It took **6.3
+minutes** on Windows 11 x64. The "about 55 minutes" this file used to quote
+was the cloud container, which is slow and shared, not the suite. `--only-group
+<text>` (debugging only, like `--only-target`) runs just the groups whose
+**registered** name contains that text — the name in `runTargetSuite`'s list
+(`open/boot/security`), not the tag printed on each check line
+(`boot+security`). It prints a banner and tags the summary `PARTIAL RUN`,
 because a partial run that read like a full one is exactly what this file is
-not allowed to produce.
+not allowed to produce; and a filter that matches no group at all lists the
+registered names and **exits 1**, instead of the `ALL PASS - 0/0` it used to
+print.
+
+**Force-killed teardowns are how some cases end, on every platform.** Every
+launch is closed with CDP `Browser.close` first, and killed if it has not
+exited 12 s later. #89 reported that 15 of 63 teardowns needed the kill on
+Linux and called it a Linux/Windows difference. It is not: the first Windows
+run force-killed the **same 15**. They are the launches that end with a dirty
+tab — test mode answers the unsaved-changes prompt with Cancel, so the app
+rightly stays open — or with a process the case crashed on purpose. Those
+teardowns now say so (`expectForceKill`) and go straight to the kill instead of
+waiting out the 12 s. Any other teardown that falls back to the kill is listed
+under `FORCE-KILLED (n)` above the pass line: not a failure, since nothing is
+orphaned, but a change worth looking at.
 
 CI (`.github/workflows/ci.yml`) runs the full dev target as its own
 `desktop-smoke` job on every pull request. It starts `Xvfb :99` itself rather
@@ -92,7 +135,7 @@ would turn a green suite red for a reason unrelated to the app.
 
 ## 1. Desktop smoke — what Windows still adds
 
-The dev target's ~487 checks now run on Linux and in CI — one skip, the rest
+The dev target's ~600 checks now run on Linux and in CI — one skip, the rest
 executed — which covers
 `main.js` and `preload.js` end to end: boot and CSP, save/Save As/export,
 second instance and argv routing, session restore, `--library`/`--host`, the
@@ -108,16 +151,19 @@ be listed for:
 - **#76 — shared policy modules.** `main.js` requires them out of `APP_ROOT`
   at startup, so every launch proves the dev resolution path.
   `caseAtomicSaveKeepsBirthtime` and `caseDuplicateDocIdAcrossTabs` run
-  against the shared `chooseDuplicateLoser`. **The packaged half is still
-  unrun**: that one depends on `stage.mjs` having copied `shared/` into
-  `resources/splitpage`, which only a real build produces.
+  against the shared `chooseDuplicateLoser`. The packaged half, which
+  depends on `stage.mjs` having copied `shared/` into `resources/splitpage`,
+  passed in Windows run 1.
 - **#64 — updater trust.** `update without a checksum` runs and passes.
 
 What a Windows run still adds for this file:
 
 - **The packaged targets.** `dist/win-unpacked/Splitpage.exe` and
   `dist/win-arm64-unpacked/Splitpage.exe` are the only packaged shape
-  anything builds, so `resolveTargets()` looks for them on Windows only. They
+  anything builds, so `resolveTargets()` looks for them on Windows only. An
+  arm64 build found on an **x64** host is not run — every group would fail
+  with `spawn UNKNOWN` — and is listed as `SKIP - packaged-arm64 (whole
+  target)` instead; an arm64 host runs both, the x64 one under emulation. They
   are the only way to exercise `APP_ROOT` as `resources/splitpage` — the
   staging path, the `files` allowlist in `electron-builder.yml`, and the
   `shared/` copy #76 depends on.
@@ -161,8 +207,9 @@ assertion still fails on the behaviour it exists to catch.
 
 ## 2. Packaged builds
 
-Nothing below has produced a real installer. This is now the bulk of what
-needs the machine.
+Windows run 1 built and checked all of this for x64. It stays listed because
+every change to `stage.mjs`, `electron-builder.yml` or `package.mjs` needs it
+again, and arm64 has not been built at all.
 
 - `npm run dist:win` and `desktop/verify-dist.mjs`, for x64 and arm64.
 - **`desktop/stage.mjs` changed three times.** It stages `server/package.json`
@@ -218,14 +265,16 @@ that proves #76's `shared/` staging and #77's `files` entry.
 
 ## 4. The browser suites, on Windows
 
-`driver.mjs` runs them one at a time on Linux and all 49 pass there. Two
-reasons to re-run on Windows with `run-tests.ps1`:
+`driver.mjs` runs them one at a time on Linux, and every suite in
+`.claude/skills/run-splitpage-app/tests/` passes there (51 at Windows run 1;
+more have landed since — `run-tests.ps1` prints the count). Two reasons to
+re-run on Windows with `run-tests.ps1`:
 
 - **Width assertions can legitimately disagree.** Google Fonts does not load in
   the container (the proxy's CA is untrusted), so the app falls back to generic
   sans/mono. SKILL.md has the CA-pinning recipe.
 - `run-tests.ps1` runs them in one pass with its own orphan-process sweep,
-  which is a different shape of run from 49 separate invocations.
+  which is a different shape of run from one invocation per suite.
 
 New suites worth a first Windows run: `53-service-worker.txt` (#79),
 `54-server-conflict.txt` (#72) and `55-pull-merge.txt` (#69), all written
@@ -237,17 +286,25 @@ opinion on a different machine.
 
 ## Status
 
+"Windows x64, run 1" means it passed on the Windows machine at `eb9904f`.
+Anything changed since then is due again in run 2.
+
 | Item | Needs | State |
 | --- | --- | --- |
-| #77 IPC table | desktop smoke | **runs and passes on Linux + CI** |
-| #76 shared modules, dev path | desktop smoke | **runs and passes on Linux + CI** |
-| #76 shared modules, packaged path | `dist:win` + packaged smoke | never run |
-| #64 checksum case | desktop smoke | **runs and passes on Linux + CI** |
-| MainWindowHandle probe | Windows | skipped by name off Windows |
-| #75 / #80 packaging | `dist:win`, `verify-dist`, unzip and start | never run |
-| #79 offline reload | by hand | unreachable by test |
-| #79 deploy pickup | by hand | unreachable by test |
+| #77 IPC table | desktop smoke | passes on Linux + CI; **Windows x64, run 1** (dev and packaged) |
+| #76 shared modules, dev path | desktop smoke | passes on Linux + CI; **Windows x64, run 1** |
+| #76 shared modules, packaged path | `dist:win` + packaged smoke | **Windows x64, run 1** |
+| #64 checksum case | desktop smoke | passes on Linux + CI; **Windows x64, run 1** |
+| #89 smoke on Linux | a Windows run to compare | **Windows x64, run 1** — same results, same 15 force-kills |
+| MainWindowHandle probe | Windows | skipped by name off Windows; **Windows x64, run 1** |
+| #74 packaged server (`server/package.json` staged) | `dist:win`, packaged smoke | **Windows x64, run 1** |
+| #75 / #80 packaging | `dist:win`, `verify-dist`, unzip and start | **Windows x64, run 1** (not the bundled-runtime `start.bat` branches) |
+| #79 offline reload | by hand | **Windows x64, run 1**, real Edge |
+| #79 deploy pickup | by hand | unreachable by test; not run |
 | #74 fsync | by hand, if at all | unreachable by test |
+| packaged-arm64 | the ARM machine | **never run** |
+| upgrade over a 1.0.x install | a VM / Windows Sandbox | **never run** |
+| #73, #71, #98, #11 | dev + packaged smoke, `run-tests.ps1` | pass on Linux; **due in run 2** |
+| #86 Open in browser | by hand, desktop app | URL and served script verified; real browser launch **due in run 2** |
 | #8 Follow My Voice | by hand | unreachable by any agent |
-| #86 Open in browser | by hand, desktop app | URL and served script verified; real browser launch unverified |
-| browser suites | `run-tests.ps1` | pass on Linux |
+| browser suites | `run-tests.ps1` | pass on Linux; **Windows x64, run 1** (51 suites) |

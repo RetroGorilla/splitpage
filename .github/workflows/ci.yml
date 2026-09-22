@@ -169,8 +169,9 @@ jobs:
   # Its own job, not a step in `checks`: it launches ~60 real Electron
   # processes and takes far longer than everything above put together, and a
   # failure here should be readable as "the desktop shell broke", separately
-  # from lint or the browser suites. Budget an hour — a full dev-target run
-  # is ~55 minutes of mostly waiting (each case boots, drives and tears down
+  # from lint or the browser suites. Budget an hour: a full dev-target run
+  # took 6.3 minutes on a Windows 11 x64 machine but ~55 on a slow shared
+  # container — it is mostly waiting (each case boots, drives and tears down
   # a real app, and several deliberately crash one and relaunch). The
   # concurrency group above already cancels a superseded run, so a branch
   # being pushed to repeatedly does not stack these up.
