@@ -152,6 +152,30 @@ const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "splitpage")
   : path.resolve(__dirname, "..");
 
+/* shared/ (issue #76): the policy this process and the browser bundle must
+   not disagree about — what version history keeps and throws away, and who
+   gives a document id up when two tabs hold the same one. Plain CommonJS
+   with no Electron and no DOM in it, so the same files are required here,
+   bundled into the page by esbuild, and imported by node --test.
+
+   It rides on APP_ROOT rather than __dirname because APP_ROOT is already
+   exactly the two places these files are: the repo root in dev (they are
+   <repo>/shared/), and resources/splitpage when packaged, where stage.mjs
+   copies them next to index.html and server/. main.js is inside the asar
+   in a packaged build and shared/ is not, which is fine — this is an
+   ordinary require of an ordinary file on disk. shared/package.json travels
+   with them and is not optional: these are CommonJS, the repo root's
+   package.json says "type": "module", and node resolves the nearest one
+   (the same reason server/package.json is staged). */
+const SHARED_ROOT = path.join(APP_ROOT, "shared");
+const {
+  HISTORY_OLDER_KEY, HISTORY_OLDER_TTL_MS, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE,
+  historyClip, historyStampAfter, planHistoryEviction, sanitizeHistoryMeta
+} = require(path.join(SHARED_ROOT, "history-policy.js"));
+const {
+  DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
+} = require(path.join(SHARED_ROOT, "doc-id-policy.js"));
+
 /* Only these get served from "/" other than index.html. Anything else is a
    404, and traversal is impossible by construction: the request path is
    matched against this fixed table, never used to build a filesystem path. */
@@ -350,12 +374,14 @@ const MIN_WINDOW_H = 400;
 
 /* DOC-ID-FORMAT. A document's own id — minted in the renderer, carried inside
    the document, and the same 33 characters everywhere (history's and drafts'
-   looser patterns were dropped for it). Declared once here because more than
-   one section needs it: section 8b builds a version-history folder name out
-   of it, and the duplicate-claim authority keys a Map on it. Every docId
-   reaching this process came out of a file someone else may have written, so
-   nothing may use one before it matches this (invariant #38). */
-const DOC_ID_RE = /^d[0-9a-f]{32}$/;
+   looser patterns were dropped for it). More than one section here needs it:
+   section 8b builds a version-history folder name out of it, and the
+   duplicate-claim authority keys a Map on it. Every docId reaching this
+   process came out of a file someone else may have written, so nothing may
+   use one before it matches DOC_ID_RE (invariant #38) — which is
+   shared/doc-id-policy.js's, required at the top of this file, so that the
+   renderer minting an id and this process accepting one are the same test
+   (#76). */
 
 /* The crash-loop guard (DRAFT-IPC-AND-SHAPES): main reloads a tab whose
    renderer died at most twice per minute. A third crash inside the window
@@ -493,73 +519,37 @@ function homeKeyForClaim(tab) {
   return null;
 }
 
-/* OFF, and measured rather than assumed. The idea was that on win32
-   birthtime is a real creation time, so of two identical files the one that
-   came into existence later is the copy — with a 2 s window so a copy made by
-   the same operation as the original was not judged on noise.
+/* chooseDuplicateLoser — which of two claims on one id has to give it up,
+   pure and symmetric so both tabs reach the same verdict — is
+   shared/doc-id-policy.js's, required at the top of this file, next to the
+   renderer's own BroadcastChannel rule (#76).
 
-   It does not survive contact with this filesystem. atomicWrite() saves by
-   writing `.<name>.tmp-xxxx` next to the document and renaming it over the
-   original, and NTFS here does NOT carry the destination's creation time
-   across that rename (the "file tunnelling" behaviour the rule was counting
-   on): measured on Windows 11, every save-in-place moved birthtimeMs forward
-   by exactly the elapsed time (two saves 2.5 s apart moved it 2517 ms and
-   2512 ms; a plain in-place fs.writeFileSync moved it not at all). So every
-   save Splitpage makes re-dates the file.
+   The win32 birthtime branch it used to carry is GONE, not merely off. The
+   idea was that birthtime is a real creation time there, so of two identical
+   files the one that came into existence later is the copy. It does not
+   survive contact with the filesystem: atomicWrite() saves by writing
+   `.<name>.tmp-xxxx` next to the document and renaming it over the original,
+   and NTFS here does NOT carry the destination's creation time across that
+   rename (the "file tunnelling" behaviour the rule was counting on) —
+   measured on Windows 11, every save-in-place moved birthtimeMs forward by
+   exactly the elapsed time. That is not merely useless, it inverts the
+   answer: save the ORIGINAL after someone copied it and the original looks
+   younger than the copy, so the rule would re-id the document the user has
+   been working in. Nothing reads a claim's birthtime now, so nothing stats
+   for one either. */
 
-   That is not merely useless, it inverts the answer: save the ORIGINAL after
-   someone copied it and the original now looks younger than the copy, so the
-   rule would name the original as the loser and re-id the document the user
-   has been working in, leaving the untouched copy holding the id. The seq
-   tie-break below — which tab adopted the identity first — is the honest
-   answer, and it is symmetric for free.
-
-   Left as one clearly commented branch rather than deleted (overrides §2):
-   if a future measurement shows a filesystem that really does preserve it,
-   this is a one-word change. desktop/test/smoke.mjs's
-   caseAtomicSaveKeepsBirthtime re-measures on every run and fails if the two
-   ever disagree. */
-const DUP_TRUST_BIRTHTIME = false;
-const DUP_BIRTHTIME_NOISE_MS = 2000;
-
-/* Pure, and symmetric: run on either claim of a pair it must name the same
-   loser, or both tabs would re-id (or neither). Returns the claim that has to
-   give the id up, or null when the pair is not a duplicate at all. */
-function chooseDuplicateLoser(a, b) {
-  if (!a || !b || !a.docId || a.docId !== b.docId) return null;
-  /* One home, one document. Nothing to split. */
-  if (a.homeKey === b.homeKey) return null;
-  const aServer = a.homeKey.startsWith("server:");
-  const bServer = b.homeKey.startsWith("server:");
-  /* Two server documents sharing an id are the SAME document opened twice
-     (or two connections to it) — that is what a server id means. */
-  if (aServer && bServer) return null;
-  /* A server document against a local file: the server copy is the one other
-     people are also editing, so the local file is the copy that gets re-id'd.
-     (In practice this is a file saved down from a server document.) */
-  if (aServer !== bServer) return aServer ? b : a;
-  /* Two files. Birthtime is NOT consulted — see DUP_TRUST_BIRTHTIME. */
-  if (DUP_TRUST_BIRTHTIME &&
-      a.birthtimeMs > 0 && b.birthtimeMs > 0 &&
-      Math.abs(a.birthtimeMs - b.birthtimeMs) > DUP_BIRTHTIME_NOISE_MS) {
-    return a.birthtimeMs > b.birthtimeMs ? a : b;
-  }
-  /* Nothing to tell them apart on disk: the tab that adopted the identity
-     later is the newcomer. */
-  return a.seq > b.seq ? a : b;
-}
-
-/* The replacement identity, derived so it is stable across relaunches. This
-   MUST stay byte-identical to the renderer's
-   deriveDocId('splitpage-dup', fromId + '\n' + homeKey) — both are sha256
-   over UTF-8 of 'splitpage-dup\n<fromId>\n<homeKey>', first 32 hex after a
-   'd'. Invariant #37: changing either side re-identifies every copy that has
-   not been saved since, and splits its history. */
+/* The replacement identity, derived so it is stable across relaunches. It
+   MUST come out byte-identical to the renderer's, and since #76 that is
+   structural rather than a promise in a comment: the string being hashed and
+   the truncation both come from shared/doc-id-policy.js, and only the sha256
+   differs — node's here, the renderer's own frozen implementation there
+   (invariant #37: changing either side re-identifies every copy that has not
+   been saved since, and splits its history). */
 function replacementDocId(fromId, homeKey) {
   const digest = crypto.createHash("sha256")
-    .update("splitpage-dup\n" + fromId + "\n" + homeKey, "utf8")
+    .update(duplicateReplacementInput(fromId, homeKey), "utf8")
     .digest("hex");
-  return "d" + digest.slice(0, 32);
+  return docIdFromSha256Hex(digest);
 }
 
 /* The live page behind a claim, or null. Deliberately resolved through the
@@ -580,22 +570,13 @@ function tabWebContentsForClaim(webContentsId) {
 function checkDuplicateDocId(senderId) {
   const mine = docClaims.get(senderId);
   if (!mine) return;
-  /* NEVER JUDGE ON EVIDENCE THAT HAS NOT ARRIVED. A claim whose stat is
-     still in flight reads as birthtimeMs 0 — so a rule that consults it
-     could name DIFFERENT losers for the same pair before and after that stat
-     lands, and both tabs would be told to re-id: both give up the shared id,
-     both show the "this file is a copy" toast, and the history under the
-     original id is copied to two derived ids and owned by neither. With
-     DUP_TRUST_BIRTHTIME off the verdict no longer depends on the stat at
-     all, so this is now insurance rather than the load-bearing guard — it
-     stays because it is what makes turning that flag back on safe, and it
-     costs one deferred check. A skipped pair is not forgotten: when the
-     other claim's stat settles it runs this check for itself, with both
-     sides evidenced, and pendingToId still keeps each loser told exactly
-     once. */
-  if (mine.statPending) return;
+  /* A verdict depends on nothing but the two claims themselves — their
+     docId, their home and the order they were adopted in — so there is no
+     evidence to wait for and no deferred re-check (#76 deleted the stat the
+     old birthtime rule needed). Both tabs compute the same answer from the
+     same pair whenever either of them reports. */
   for (const [otherId, theirs] of docClaims) {
-    if (otherId === senderId || theirs.statPending) continue;
+    if (otherId === senderId) continue;
     const loser = chooseDuplicateLoser(mine, theirs);
     if (!loser) continue;
     const winner = loser === mine ? theirs : mine;
@@ -629,7 +610,9 @@ function recordDocClaim(sender, tab) {
   const previous = docClaims.get(webContentsId);
   /* The overwhelmingly common report: same document, same place, the title
      or the dirty flag moved. Re-claiming would burn a seq on every keystroke
-     and lose the birthtime we already paid a stat for. */
+     — and the seq IS the verdict's tie-break, so a tab that kept minting
+     fresh ones would eventually make itself the newcomer against a tab that
+     had gone quiet. */
   if (previous && previous.docId === docId && previous.homeKey === homeKey) {
     previous.title = tab.title;
     return;
@@ -638,48 +621,17 @@ function recordDocClaim(sender, tab) {
     docClaimCleanupRegistered.add(sender);
     sender.once("destroyed", () => { docClaims.delete(webContentsId); });
   }
-  const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
-  const claim = {
+  docClaims.set(webContentsId, {
     docId,
     homeKey,
     seq: ++docClaimSeq,
-    birthtimeMs: 0,
     title: tab.title,
-    pendingToId: null,
-    /* True from the moment a file home is claimed until its stat answers.
-       checkDuplicateDocId refuses to judge a pair while either side is
-       pending, so a verdict is only ever computed from two fully-evidenced
-       claims (see its own comment). */
-    statPending: !!absPath
-  };
-  docClaims.set(webContentsId, claim);
-
-  if (!absPath) {
-    checkDuplicateDocId(webContentsId);
-    return;
-  }
-  /* A file home is still stat'ed for its creation time before the verdict,
-     even though DUP_TRUST_BIRTHTIME is off and nothing reads the answer
-     today: it is what a re-enabled rule would need, and recording it here is
-     what lets that be a one-word change. The await is why every use of
-     `claim` afterwards re-checks that it is still the current claim: the page
-     can have reported three more times, or closed, while the disk answered. A
-     stat that fails simply leaves birthtimeMs at 0. */
-  fsp.stat(absPath).then(
-    (stat) => {
-      claim.statPending = false;
-      if (docClaims.get(webContentsId) !== claim) return;
-      claim.birthtimeMs = Number(stat.birthtimeMs) || 0;
-      checkDuplicateDocId(webContentsId);
-    },
-    () => {
-      /* The stat failed, so birthtimeMs stays 0 and the seq tie-break
-         decides — but the evidence is IN, which is what pending means. */
-      claim.statPending = false;
-      if (docClaims.get(webContentsId) !== claim) return;
-      checkDuplicateDocId(webContentsId);
-    }
-  );
+    pendingToId: null
+  });
+  /* Synchronously, because the verdict reads nothing but the claims
+     themselves: until #76 a file home was stat'ed first and the check waited
+     on the answer, for a birthtime rule that was off and that nothing read. */
+  checkDuplicateDocId(webContentsId);
 }
 
 /* The draft store (DRAFT-STORE). Every question about a tab's crash draft
@@ -1471,15 +1423,12 @@ async function atomicWrite(absPath, buffer) {
  *     first job through it is always ensureHistoryTable (the fsck).
  * --------------------------------------------------------------------- */
 
-const HISTORY_PER_DOC = 50;
-const HISTORY_OLDER_KEY = "_older";
-const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
-/* Orchestrator override §2, confirmed 2026-09-14: the Older bucket expires as
-   a WHOLE, 90 days after the migration that created it, because counting from
-   each legacy snapshot's own date would empty it on day one. One named
-   constant here and one in 03a-history-store.js: changing the policy is two
-   edits, both obvious. */
-const HISTORY_OLDER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+/* HISTORY_PER_DOC, HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE and
+   HISTORY_OLDER_TTL_MS — the Older bucket's 90 days included (orchestrator
+   override §2, confirmed 2026-09-14: it expires as a WHOLE, because counting
+   from each legacy snapshot's own date would empty it on day one) — are
+   shared/history-policy.js's, required at the top of this file. Changing the
+   policy is ONE edit now, not two kept in step by hand (#76). */
 const HISTORY_FORMAT_VERSION = 1;
 const HISTORY_SNAP_MAGIC = "splitpage-snapshot 1";
 /* 256 MiB (HISTORY-IPC). A body past this is refused outright rather than
@@ -1595,8 +1544,6 @@ function historyExclusive(job) {
   return run;
 }
 
-function historyClip(v, n) { return String(v == null ? "" : v).slice(0, n); }
-
 function historyIsNoSpace(err) {
   const code = err && err.code;
   return code === "ENOSPC" || code === "EDQUOT";
@@ -1604,48 +1551,11 @@ function historyIsNoSpace(err) {
 
 function historyErrorCode(err) { return historyIsNoSpace(err) ? "enospc" : "io"; }
 
-/* SnapshotMeta (HISTORY-STORAGE), rebuilt from plain values with every length
-   clamped — the same clamps 03a-history-store.js applies, so a meta means the
-   same thing on both sides of the bridge. Deliberately carries no document
-   id: on disk the folder is the document. Returns null when the id is
-   unusable, which is what makes an invalid meta a rejected invoke. */
-function sanitizeHistoryMeta(m) {
-  if (!m || typeof m !== "object") return null;
-  const id = typeof m.id === "string" ? m.id : "";
-  if (!HISTORY_SNAP_ID_RE.test(id)) return null;
-  let atMs = Number(m.atMs);
-  if (!Number.isFinite(atMs)) atMs = Date.parse(m.at) || 0;
-  if (!Number.isFinite(atMs)) atMs = 0;
-  const out = {
-    id,
-    label: historyClip(m.label, 300),
-    at: typeof m.at === "string" && m.at ? historyClip(m.at, 40) : new Date(atMs).toISOString(),
-    atMs,
-    by: historyClip(m.by, 100),
-    rows: Math.max(0, Math.floor(Number(m.rows) || 0)),
-    title: historyClip(m.title, 300),
-    sizeBytes: Math.max(0, Math.floor(Number(m.sizeBytes) || 0)),
-    kind: m.kind === "legacy" ? "legacy" : "snapshot",
-    formatVersion: 1
-  };
-  if (m.legacyId != null) out.legacyId = historyClip(m.legacyId, 100);
-  return out;
-}
-
-/* WHY A PUT RE-STAMPS atMs (orchestrator override §2b, and the same reasoning
-   as 03a's historyStampAfter). Trims and the eviction planner call the
-   largest atMs a document's NEWEST snapshot. After the system clock is
-   corrected backwards, every new capture would otherwise sort below snapshots
-   stamped in the "future": each save's trim would delete the previous real
-   snapshot and keep the stale ones. So a put stamps strictly after the newest
-   snapshot already stored in its bucket; `at` keeps the wall-clock text the
-   user actually saw. copy and import-older keep their source atMs — they are
-   not new work. */
-function historyStampAfter(m, newestAtMs) {
-  const n = Number(newestAtMs);
-  if (newestAtMs != null && Number.isFinite(n) && !(m.atMs > n)) m.atMs = n + 1;
-  return m;
-}
+/* sanitizeHistoryMeta (SnapshotMeta rebuilt from plain values with every
+   length clamped, so a meta means the same thing on both sides of the
+   bridge) and historyStampAfter (why a put stamps strictly after the newest
+   snapshot already stored in its bucket — orchestrator override §2b) are
+   shared/history-policy.js's, required at the top of this file (#76). */
 
 /* A NON-POSITIVE expiresAt is "not stamped", never "expired since 1970".
    historyNewRecord starts an Older record at 0, and a bucket the fsck rebuilt
@@ -1923,77 +1833,13 @@ async function fsckHistoryBucket(bucket) {
 
 /* ---- eviction planner ----
 
-   A LINE-FOR-LINE COPY of planHistoryEviction in src/js/03a-history-store.js,
-   de-indented to this file's top level and otherwise untouched (it is written
-   in the renderer's plain-ES5 house style for exactly that reason: `var`,
-   function declarations, nothing from either closure). The browser and the
-   desktop app must expire, trim and evict version history identically, and
-   the ONLY way to keep two copies honest is to compare them — which is what
-   caseHistoryPlannerTwin (step M) does, running the same fixtures through
-   window.__historyTest.planEviction and through splitpage:test-history-plan
-   and demanding the same answer. If you change one, change the other in the
-   same commit. */
-function planHistoryEviction(docs, capBytes, nowMs, opts) {
-  opts = opts || {};
-  var perDoc = Number(opts.perDoc) > 0 ? Math.floor(Number(opts.perDoc)) : 50;
-  var olderKey = typeof opts.olderKey === "string" ? opts.olderKey : "_older";
-  var cap = (typeof capBytes === "number" && capBytes >= 0) ? capBytes : Infinity;
-  var now = (typeof nowMs === "number" && isFinite(nowMs)) ? nowMs : 0;
-  var protect = Object.create(null);
-  (Array.isArray(opts.protect) ? opts.protect : []).forEach(function (p) {
-    if (p && typeof p.docId === "string" && typeof p.id === "string") protect[p.docId + "\n" + p.id] = true;
-  });
-  function toMs(v) {
-    if (typeof v === "number") return isFinite(v) ? v : 0;
-    if (typeof v === "string" && v) { var p = Date.parse(v); return isFinite(p) ? p : 0; }
-    return 0;
-  }
-  var list = [], older = null, total = 0, deletes = [];
-  (Array.isArray(docs) ? docs : []).forEach(function (d) {
-    if (!d || typeof d.docId !== "string") return;
-    var snaps = [];
-    (Array.isArray(d.snapshots) ? d.snapshots : []).forEach(function (s) {
-      if (!s || typeof s.id !== "string") return;
-      var size = Number(s.sizeBytes);
-      snaps.push({ id: s.id, atMs: toMs(s.atMs), size: isFinite(size) && size > 0 ? size : 0 });
-    });
-    snaps.sort(function (a, b) { return (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
-    snaps.forEach(function (s) { total += s.size; });
-    var entry = { docId: d.docId, lastOpenedAt: toMs(d.lastOpenedAt), expiresAt: toMs(d.expiresAt), snaps: snaps };
-    if (d.docId === olderKey) older = entry; else list.push(entry);
-  });
-  var totalBefore = total;
-  /* Deletes entry's oldest snapshot that is not protected — never its
-     newest one when keepNewest. false when nothing there may go. */
-  function dropOldest(entry, keepNewest) {
-    var end = keepNewest ? entry.snaps.length - 1 : entry.snaps.length;
-    for (var j = 0; j < end; j++) {
-      var s = entry.snaps[j];
-      if (protect[entry.docId + "\n" + s.id]) continue;
-      entry.snaps.splice(j, 1);
-      total -= s.size;
-      deletes.push({ docId: entry.docId, id: s.id });
-      return true;
-    }
-    return false;
-  }
-  if (older && older.expiresAt > 0 && now >= older.expiresAt) {
-    while (dropOldest(older, false)) { /* the whole bucket */ }
-  }
-  list.forEach(function (e) {
-    while (e.snaps.length > perDoc && dropOldest(e, true)) { /* newest perDoc stay */ }
-  });
-  if (older) {
-    while (total > cap && dropOldest(older, false)) { /* Older before any document */ }
-  }
-  list.sort(function (a, b) {
-    return (a.lastOpenedAt - b.lastOpenedAt) || (a.docId < b.docId ? -1 : a.docId > b.docId ? 1 : 0);
-  });
-  for (var i = 0; i < list.length && total > cap; i++) {
-    while (total > cap && dropOldest(list[i], true)) { /* its newest stays */ }
-  }
-  return { deletes: deletes, totalBefore: totalBefore, totalAfter: total, overCap: total > cap };
-}
+   planHistoryEviction is shared/history-policy.js's, required at the top of
+   this file. It used to be a LINE-FOR-LINE COPY of the renderer's, kept
+   honest by a smoke case (caseHistoryPlannerTwin) that ran the same fixtures
+   through both over CDP and demanded the same answer. There is one copy now,
+   so there is no drift left to detect: that case and the
+   splitpage:test-history-plan hook it drove are both gone, and
+   src/test/history-eviction.test.mjs unit-tests the planner itself (#76). */
 
 /* Runs the plan and applies it: index first, then unlink, one bucket at a
    time. `protect` is the renderer's held snapshots (protectHistorySnapshot,
@@ -5472,30 +5318,23 @@ function registerIpc() {
       event.sender.forcefullyCrashRenderer();
     });
 
-    /* The eviction planner, straight through, on a fixture the test supplies
-       — no disk, no folder, no state of this process at all. It exists so
-       caseHistoryPlannerTwin can prove main's line-for-line copy of
-       planHistoryEviction still answers exactly what the renderer's original
-       does: two copies of a policy stay honest only if something compares
-       them. TEST_MODE only, like every hook in this block. */
-    ipcHandle("splitpage:test-history-plan", async (event, fixture) => {
-      const f = fixture || {};
-      return planHistoryEviction(f.docs, f.capBytes, f.nowMs, f.opts);
-    });
+    /* The real chooseDuplicateLoser (DOC-CLAIMS) over two claims the test
+       invents, answering 'a', 'b' or null. Asking the function is the
+       assertion: caseAtomicSaveKeepsBirthtime measures what this filesystem
+       does to a saved file's birthtime and then holds the verdict against
+       it, which no amount of reading the source would prove. A birthtime a
+       caller still sends is simply not copied — the rule has no branch for
+       one any more (#76).
 
-    /* chooseDuplicateLoser over two claims the test invents, answering 'a',
-       'b' or null. Same shape of hook as the planner above, for the same
-       reason: caseAtomicSaveKeepsBirthtime measures what this filesystem
-       does to a saved file's birthtime, and then has to ask the real
-       function whether it would have been fooled by it. Asking the function
-       is the assertion — reading DUP_TRUST_BIRTHTIME out of the source would
-       only prove a constant's spelling. */
+       There was a splitpage:test-history-plan hook beside this one, running
+       main's own copy of planHistoryEviction so caseHistoryPlannerTwin could
+       hold it against the renderer's. Both are gone: there is one planner
+       now (shared/history-policy.js) and nothing left to compare. */
     ipcHandle("splitpage:test-dup-loser", async (event, a, b) => {
       const claim = (c) => ({
         docId: String((c && c.docId) || ""),
         homeKey: String((c && c.homeKey) || ""),
-        seq: Number((c && c.seq) || 0),
-        birthtimeMs: Number((c && c.birthtimeMs) || 0)
+        seq: Number((c && c.seq) || 0)
       });
       const ca = claim(a), cb = claim(b);
       const loser = chooseDuplicateLoser(ca, cb);

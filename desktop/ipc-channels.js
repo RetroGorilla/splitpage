@@ -200,7 +200,6 @@ const CHANNELS = [
   { name: "splitpage:test-request-quit", direction: "send", argsSchema: NONE, allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-crash-renderer", direction: "send", argsSchema: NONE, allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-draft-status", direction: "invoke", argsSchema: ["tabId?"], allowedOrigins: APP, testOnly: true },
-  { name: "splitpage:test-history-plan", direction: "invoke", argsSchema: ["object"], allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-dup-loser", direction: "invoke", argsSchema: ["object", "object"], allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-shell", direction: "invoke", argsSchema: ["string", "object|null"], allowedOrigins: APP, testOnly: true }
 ];

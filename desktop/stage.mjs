@@ -6,7 +6,8 @@
  * 1. Runs the repo's build (build.mjs) to regenerate index.html
  * 2. Verifies desktop/package.json version matches ../VERSION (single source of truth)
  * 3. Recreates desktop/.stage/splitpage/ with the exact files electron-builder
- *    will embed as extraResources, matched to the allowlist in main.js:protocol.handle()
+ *    will embed as extraResources: the allowlist in main.js:protocol.handle(),
+ *    the document server, and shared/ (which main.js requires at startup)
  *
  * Run: node stage.mjs (from desktop/)
  */
@@ -112,6 +113,22 @@ for (const filename of ["server.js", "package.json"]) {
   const data = await fs.readFile(resolve(REPO_ROOT, "server", filename));
   await fs.writeFile(resolve(serverDir, filename), data);
   console.log(`  server/${filename} (${data.length} bytes)`);
+}
+
+// shared/ (issue #76). main.js REQUIRES these at startup — the history
+// eviction planner, the meta clamps, the duplicate-id rules — so a packaged
+// app without them does not launch. They cannot live in the asar beside
+// main.js: main.js resolves them from APP_ROOT, which is the repo root in dev
+// and resources/splitpage here, and one path has to work in both.
+// package.json travels with them for the same reason server/'s does: they are
+// CommonJS, the repo root's package.json says "type": "module", and node
+// resolves the nearest one.
+const sharedDir = resolve(STAGE_DIR, "shared");
+await fs.mkdir(sharedDir, { recursive: true });
+for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js"]) {
+  const data = await fs.readFile(resolve(REPO_ROOT, "shared", filename));
+  await fs.writeFile(resolve(sharedDir, filename), data);
+  console.log(`  shared/${filename} (${data.length} bytes)`);
 }
 
 console.log(`\nStaging complete. Ready to run: npx electron-builder --config electron-builder.yml`);

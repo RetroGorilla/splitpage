@@ -5,6 +5,16 @@ import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import { plainText } from "./04-richtext.js";
 import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
+/* The identity rules the desktop main process has to agree with: what a
+   valid id looks like, which of two claims on one id gives it up, and the
+   exact string a replacement id is derived from (#76). */
+import {
+  decideDuplicateLoser,
+  docIdFromSha256Hex,
+  duplicateReplacementInput,
+  normalizeDocId
+} from "../../shared/doc-id-policy.js";
+export { decideDuplicateLoser, normalizeDocId };
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -34,15 +44,9 @@ var PAGE_NONCE;
    for any of this — bumping it would re-run legacyMdToHtml over every
    already-migrated file (02-state.js). */
 
-var DOC_ID_RE = /^d[0-9a-f]{32}$/;
-
-/* The id arrives from untrusted places (a pasted file, a server, another
-   tab), and the desktop builds a folder name out of it, so anything that
-   is not exactly the canonical shape is treated as absent — never
-   trimmed, lower-cased or otherwise "repaired" into something valid. */
-export function normalizeDocId(v) {
-  return (typeof v === "string" && DOC_ID_RE.test(v)) ? v : "";
-}
+/* DOC_ID_RE and normalizeDocId are shared/doc-id-policy.js's, imported and
+   re-exported at the top of this file (#76): the main process validates the
+   same shape before it builds a history folder name out of an id. */
 
 function randomHexBytes(n) {
   var bytes = new Uint8Array(n), i;
@@ -409,21 +413,10 @@ function announceDocIdentity() {
   return true;
 }
 
-/* Pure, and symmetric: both tabs must reach the same verdict from the same
-   two claims, or both would re-id (or neither). Returns the claim that has
-   to give its id up, or null when the pair is not a duplicate at all. The
-   later adopter loses — the earlier one has had the id longer and more
-   likely owns the history under it; a tie falls to the nonce. */
-export function decideDuplicateLoser(a, b) {
-  if (!a || !b || typeof a !== "object" || typeof b !== "object") return null;
-  var id = normalizeDocId(a.docId);
-  if (!id || id !== normalizeDocId(b.docId)) return null;
-  if (String(a.nonce) === String(b.nonce)) return null;
-  if (String(a.home) === String(b.home)) return null;
-  var at = Number(a.at) || 0, bt = Number(b.at) || 0;
-  if (at !== bt) return at > bt ? a : b;
-  return String(a.nonce) > String(b.nonce) ? a : b;
-}
+/* decideDuplicateLoser — which of two tabs' claims on one id has to give it
+   up, pure and symmetric so both tabs reach the same verdict — is
+   shared/doc-id-policy.js's (#76), next to the main process's own rule.
+   Imported and re-exported at the top of this file. */
 
 function onDocIdentityMessage(msg) {
   if (S.DESKTOP || !msg || typeof msg !== "object") return;
@@ -444,7 +437,10 @@ function onDocIdentityMessage(msg) {
   var loser = decideDuplicateLoser(mine, theirs);
   if (!loser) return;
   if (loser === mine) {
-    reassignDocId(deriveDocId("splitpage-dup", mine.docId + "\n" + mine.home),
+    /* The replacement id, byte-identical to the one desktop/main.js derives
+       for the same pair: one shared input string, one shared truncation,
+       this module's own frozen sha256 (invariant #37). */
+    reassignDocId(docIdFromSha256Hex(sha256Hex(duplicateReplacementInput(mine.docId, mine.home))),
       { fromId: mine.docId, otherTitle: theirs.title });
     return;
   }

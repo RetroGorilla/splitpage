@@ -10,6 +10,29 @@ import {
 import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
 import { checksumText, seedCheckPasses } from "./20b-onboarding.js";
+/* The policy half of version history — what is kept and what is thrown
+   away — is shared with desktop/main.js, which used to carry a line-for-line
+   copy of planHistoryEviction and its own clamps for a meta (#76). Re-
+   exported below so every importer of this module keeps naming this file. */
+import {
+  HISTORY_OLDER_KEY,
+  HISTORY_OLDER_TTL_MS,
+  HISTORY_PER_DOC,
+  HISTORY_SNAP_ID_RE,
+  historyClip,
+  historyStampAfter,
+  planHistoryEviction,
+  sanitizeHistoryMeta
+} from "../../shared/history-policy.js";
+export {
+  HISTORY_OLDER_KEY,
+  HISTORY_OLDER_TTL_MS,
+  HISTORY_PER_DOC,
+  HISTORY_SNAP_ID_RE,
+  historyStampAfter,
+  planHistoryEviction,
+  sanitizeHistoryMeta
+};
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -48,13 +71,9 @@ var historyChain;
    {older:true}, so a hostile file claiming docId "_older" cannot read or
    write it. */
 
-export var HISTORY_PER_DOC = 50;
-export var HISTORY_OLDER_KEY = "_older";
-export var HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
-/* Orchestrator override §2 (Adam confirms): the Older bucket expires as a
-   WHOLE, 90 days after the migration that created it. Counting from each
-   legacy entry's own date would empty it on day one — they are old already. */
-export var HISTORY_OLDER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+/* HISTORY_PER_DOC, HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE and
+   HISTORY_OLDER_TTL_MS are shared/history-policy.js's, imported and
+   re-exported at the top of this file (#76). */
 var HISTORY_DB_NAME = "splitpage-history";
 var HISTORY_DB_VERSION = 1;
 /* Browser cap = max(5 MB, quota − (usage − historyBytes) − 50 MB): history
@@ -101,10 +120,6 @@ function historyNow() {
   return historyNowOverride != null ? historyNowOverride : Date.now();
 }
 
-function historyClip(v, n) {
-  return String(v == null ? "" : v).slice(0, n);
-}
-
 /* UTF-8 byte length without allocating a copy of a multi-megabyte string.
    sizeBytes means the same thing here and on desktop disk, so a cap and a
    "bytes equal the sum" check agree across backends. */
@@ -125,30 +140,10 @@ function isQuotaError(e) {
   return !!e && (e.name === "QuotaExceededError" || e.code === 22 || e.name === "NS_ERROR_DOM_QUOTA_REACHED");
 }
 
-/* SnapshotMeta (HISTORY-STORAGE), rebuilt from plain values with every
-   length clamped. Returns null when the id is unusable. sizeBytes is set by
-   the backend from the body it actually stores. */
-export function sanitizeHistoryMeta(m) {
-  if (!m || typeof m !== "object") return null;
-  var id = typeof m.id === "string" ? m.id : "";
-  if (!HISTORY_SNAP_ID_RE.test(id)) return null;
-  var atMs = Number(m.atMs);
-  if (!isFinite(atMs)) atMs = Date.parse(m.at) || 0;
-  var out = {
-    id: id,
-    label: historyClip(m.label, 300),
-    at: typeof m.at === "string" && m.at ? historyClip(m.at, 40) : new Date(atMs).toISOString(),
-    atMs: atMs,
-    by: historyClip(m.by, 100),
-    rows: Math.max(0, Math.floor(Number(m.rows) || 0)),
-    title: historyClip(m.title, 300),
-    sizeBytes: Math.max(0, Math.floor(Number(m.sizeBytes) || 0)),
-    kind: m.kind === "legacy" ? "legacy" : "snapshot",
-    formatVersion: 1
-  };
-  if (m.legacyId != null) out.legacyId = historyClip(m.legacyId, 100);
-  return out;
-}
+/* sanitizeHistoryMeta — SnapshotMeta rebuilt from plain values with every
+   length clamped — is shared/history-policy.js's (#76), so a meta means the
+   same thing on both sides of the desktop bridge. Imported and re-exported
+   at the top of this file. */
 
 /* ---- test faults (window.__historyTest.injectFault) ----
    Checked at the start of each backend write, so the renderer-side logic
@@ -466,21 +461,9 @@ function historyPutWithQuotaRetry(backend, bucket, meta, stateJson) {
   });
 }
 
-/* WHY a put re-stamps atMs. Trims and the planner call the largest atMs a
-   document's newest snapshot. captureSnapshot keeps atMs increasing only
-   within this page, so after the system clock is corrected backwards (a
-   dual-boot machine starting hours ahead, then NTP) and the page reloaded,
-   every new capture would sort below snapshots stamped in the "future":
-   each save's trim would delete the previous real snapshot and keep the
-   stale ones, and eviction would guard a stale one as the newest. So a put
-   stamps strictly after the newest snapshot already stored in its bucket,
-   inside the same transaction; `at` keeps the wall-clock text the user saw.
-   copy and importOlder keep their source atMs — they are not new work. */
-export function historyStampAfter(m, newestAtMs) {
-  var n = Number(newestAtMs);
-  if (newestAtMs != null && isFinite(n) && !(m.atMs > n)) m.atMs = n + 1;
-  return m;
-}
+/* historyStampAfter — why a put stamps strictly after the newest snapshot
+   already in its bucket — is shared/history-policy.js's (#76). Imported and
+   re-exported at the top of this file. */
 
 /* Snapshots a restore is reading right now: bucket + "\n" + id → hold
    count. WHY: restoreSnapshot reads a snapshot, stores a "Before
@@ -1297,98 +1280,14 @@ function resolveHistoryBackend() {
 
 /* ---- eviction planner ----
 
-   PURE. desktop/main.js keeps a line-for-line copy (caseHistoryPlannerTwin
-   compares them), so it may use nothing from this closure.
-
-     docs      [{docId, lastOpenedAt (ms or ISO), expiresAt? (ms or ISO),
-                 snapshots: [{id, atMs, sizeBytes}]}] — any order
-     capBytes  total budget; not a finite number ≥ 0 → no budget
-     nowMs     the clock (Older expiry)
-     opts      {perDoc = 50, olderKey = '_older', protect = []}
-               protect: [{docId, id}] that no step below ever deletes —
-               the snapshot a restore is reading while its backup is
-               written (protectHistorySnapshot)
-
-   Order, applied until the total fits:
-     1. the Older bucket once expired (always, cap or not) — as a whole,
-        except a protected entry, which the next sweep takes
-     2. every document trimmed to perDoc (always)
-     3. Older, oldest first
-     4. documents by lastOpenedAt ascending (ties by docId), each one's
-        oldest snapshot first, while it still has more than one
-     5. a document's newest snapshot is never deleted; if nothing more can
-        go, overCap is reported
-   → {deletes: [{docId, id}], totalBefore, totalAfter, overCap} */
-function planHistoryEviction(docs, capBytes, nowMs, opts) {
-  opts = opts || {};
-  var perDoc = Number(opts.perDoc) > 0 ? Math.floor(Number(opts.perDoc)) : 50;
-  var olderKey = typeof opts.olderKey === "string" ? opts.olderKey : "_older";
-  var cap = (typeof capBytes === "number" && capBytes >= 0) ? capBytes : Infinity;
-  var now = (typeof nowMs === "number" && isFinite(nowMs)) ? nowMs : 0;
-  var protect = Object.create(null);
-  (Array.isArray(opts.protect) ? opts.protect : []).forEach(function (p) {
-    if (p && typeof p.docId === "string" && typeof p.id === "string") protect[p.docId + "\n" + p.id] = true;
-  });
-  function toMs(v) {
-    if (typeof v === "number") return isFinite(v) ? v : 0;
-    if (typeof v === "string" && v) { var p = Date.parse(v); return isFinite(p) ? p : 0; }
-    return 0;
-  }
-  var list = [], older = null, total = 0, deletes = [];
-  (Array.isArray(docs) ? docs : []).forEach(function (d) {
-    if (!d || typeof d.docId !== "string") return;
-    var snaps = [];
-    (Array.isArray(d.snapshots) ? d.snapshots : []).forEach(function (s) {
-      if (!s || typeof s.id !== "string") return;
-      var size = Number(s.sizeBytes);
-      snaps.push({ id: s.id, atMs: toMs(s.atMs), size: isFinite(size) && size > 0 ? size : 0 });
-    });
-    snaps.sort(function (a, b) { return (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
-    snaps.forEach(function (s) { total += s.size; });
-    var entry = { docId: d.docId, lastOpenedAt: toMs(d.lastOpenedAt), expiresAt: toMs(d.expiresAt), snaps: snaps };
-    if (d.docId === olderKey) older = entry; else list.push(entry);
-  });
-  var totalBefore = total;
-  /* Deletes entry's oldest snapshot that is not protected — never its
-     newest one when keepNewest. false when nothing there may go. */
-  function dropOldest(entry, keepNewest) {
-    var end = keepNewest ? entry.snaps.length - 1 : entry.snaps.length;
-    for (var j = 0; j < end; j++) {
-      var s = entry.snaps[j];
-      if (protect[entry.docId + "\n" + s.id]) continue;
-      entry.snaps.splice(j, 1);
-      total -= s.size;
-      deletes.push({ docId: entry.docId, id: s.id });
-      return true;
-    }
-    return false;
-  }
-  if (older && older.expiresAt > 0 && now >= older.expiresAt) {
-    while (dropOldest(older, false)) { /* the whole bucket */ }
-  }
-  list.forEach(function (e) {
-    while (e.snaps.length > perDoc && dropOldest(e, true)) { /* newest perDoc stay */ }
-  });
-  if (older) {
-    while (total > cap && dropOldest(older, false)) { /* Older before any document */ }
-  }
-  list.sort(function (a, b) {
-    return (a.lastOpenedAt - b.lastOpenedAt) || (a.docId < b.docId ? -1 : a.docId > b.docId ? 1 : 0);
-  });
-  for (var i = 0; i < list.length && total > cap; i++) {
-    while (total > cap && dropOldest(list[i], true)) { /* its newest stays */ }
-  }
-  return { deletes: deletes, totalBefore: totalBefore, totalAfter: total, overCap: total > cap };
-}
-
-/* Exported as a separate statement rather than by prefixing the
-   declaration above: desktop/main.js keeps a line-for-line copy of this
-   function (HANDOFF §3.13), and a keyword added to its first line would be
-   the first difference between two bodies that are meant to be readable
-   side by side. src/test/history-eviction.test.mjs imports it from here;
-   the desktop twin still compares the two by running fixtures through
-   both. */
-export { planHistoryEviction };
+   planHistoryEviction lives in shared/history-policy.js (#76) — what the
+   browser and the desktop app expire, trim and evict has to be one
+   decision, and it used to be two line-for-line copies kept honest by a
+   smoke test that compared them over CDP. It is imported and re-exported at
+   the top of this file, so the callers in this module and everything that
+   imports it still name it the same way; src/test/history-eviction.test.mjs
+   imports it straight from shared/, and window.__historyTest.planEviction
+   — which existed only for that smoke case to drive — is gone with it. */
 
 /* ---- capture ---- */
 
@@ -2279,7 +2178,6 @@ export function __init() {
       if (!bucket) return Promise.resolve(null);
       return resolveHistoryBackend().then(function (b) { return b.rawDoc ? b.rawDoc(bucket) : null; });
     },
-    planEviction: planHistoryEviction,
     /* this page's not-yet-stored snapshots: [{docId, id, label, status}] */
     pending: function (docId) {
       return historyLocalEntries(docId ? normalizeDocId(docId) || "-" : null, "pending").map(function (e) {

@@ -18,6 +18,8 @@
  *
  *   src/js/*.js           ES modules, browser globals   (#66)
  *   src/test/*.mjs        ES modules, node globals      (#67)
+ *   shared/*.js           CommonJS, NO globals          (shared/package.json
+ *                         says "type": "commonjs"; #76)
  *   server/server.js      CommonJS, node globals        (server/package.json
  *                         says "type": "commonjs"; the root says "module")
  *   desktop/*.js          CommonJS, node + Electron     (no "type" field, so
@@ -125,6 +127,27 @@ export default [
       /* jsdom is installed into globalThis by src/test/_dom.mjs, so a suite
          legitimately names `document` and `window` as bare globals. */
       globals: { ...globals.node, ...globals.browser }
+    }
+  },
+
+  /* ---- shared/: CommonJS, and no globals at all (#76) ----
+     One copy of the policy three different module systems have to load: the
+     browser bundle (esbuild follows an ES module's import straight into
+     these files), desktop/main.js (a CommonJS require at startup) and
+     node --test. CommonJS is the only format all three read without a build
+     step or an await, and shared/package.json says "type": "commonjs" so
+     node agrees — the same arrangement server/ has.
+
+     The globals are deliberately NOT node's and NOT the browser's: nothing
+     here may touch a document, a window, a filesystem or a process, because
+     it runs in all three. Only `module` and `exports` are named, which is
+     what sourceType "commonjs" already gives — so this block supplies no
+     globals object at all and no-undef then reports any DOM or node name as
+     the error it would be. */
+  {
+    files: ["shared/**/*.js"],
+    languageOptions: {
+      sourceType: "commonjs"
     }
   },
 

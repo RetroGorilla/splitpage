@@ -11,6 +11,14 @@ directories:
 # strip's own three files are NOT here — they are served from
 # resources/splitpage/tabstrip (stage.mjs stages them, extraResources below
 # ships them), because protocol.handle reads them off disk.
+#
+# shared/ (issue #76) is required at startup too but is NOT here either, for a
+# different reason: it lives at the REPO root, one level above this app
+# directory, and main.js finds it through APP_ROOT — the repo root in dev,
+# resources/splitpage when packaged. stage.mjs copies it there with the rest,
+# so one path expression works in both, and requiring a plain file outside the
+# asar is ordinary. Deleting it from stage.mjs breaks launch, not just a
+# feature.
 files:
   - main.js
   - preload.js

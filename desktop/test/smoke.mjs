@@ -2787,12 +2787,14 @@ async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
    file's creation time alone. NTFS is documented to carry the destination's
    creation time across such a rename (file tunnelling); on Windows 11 here
    it does not, and every save moves birthtime forward by the elapsed time.
-   The rule is therefore off (DUP_TRUST_BIRTHTIME), and this case no longer
-   asserts the filesystem behaves one way — it asserts the two AGREE:
-   whatever the filesystem does to birthtime, the real chooseDuplicateLoser
-   must not be fooled by it. It fails if a save starts re-dating files on a
-   machine where the rule was turned back on, or if the rule is turned back
-   on while saves still re-date files. */
+   The rule is therefore gone — #76 deleted the branch and the stat that fed
+   it, so shared/doc-id-policy.js's chooseDuplicateLoser decides on the seq
+   alone — and this case no longer asserts the filesystem behaves one way. It
+   asserts the two AGREE: whatever the filesystem does to birthtime, the real
+   verdict must not be fooled by it. That is the guard against a birthtime
+   rule being written back in on a machine where saves still re-date files.
+   The claims below still carry a birthtimeMs for exactly that reason: the
+   hook drops it, and a rule that started reading one again would fail here. */
 async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
   /* The function keeps step M's name for traceability; the reported tag says
      what it actually asserts now, so a PASS line never reads as a claim that
@@ -2896,11 +2898,11 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     const idA = await poll(app.cdp, "window.__splitpageFormats.docId()", 10000);
 
     // The 2.5 s gap used to matter because it put the copy's birthtime
-    // outside chooseDuplicateLoser's 2 s noise window. That rule is off now
-    // (DUP_TRUST_BIRTHTIME — see caseAtomicSaveKeepsBirthtime), so the seq
-    // tie-break names B either way; the gap is kept only so the two files
-    // are unambiguously distinguishable on disk to anything reading this
-    // fixture, and so Save As has fully settled before the copy is taken.
+    // outside chooseDuplicateLoser's 2 s noise window. That rule is gone
+    // (#76 — see caseAtomicSaveKeepsBirthtime), so the seq tie-break names B
+    // either way; the gap is kept only so the two files are unambiguously
+    // distinguishable on disk to anything reading this fixture, and so Save
+    // As has fully settled before the copy is taken.
     await sleep(2500);
     fs.copyFileSync(aPath, bPath);
     const aBytesOriginal = fs.readFileSync(aPath);
@@ -3519,59 +3521,6 @@ async function caseHistoryLegacyMigration(target) {
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
-  }
-}
-
-/* caseHistoryPlannerTwin. desktop/main.js's planHistoryEviction is meant to
-   be a line-for-line copy of src/js/03a-history-store.js's (overrides §2b);
-   the only way to keep two copies honest is to run the same fixtures through
-   both and demand the same answer, every time either one changes. */
-async function caseHistoryPlannerTwin(target) {
-  const tag = target.name + " history: caseHistoryPlannerTwin — main's planHistoryEviction matches the renderer's";
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "history-planner-twin" });
-    await waitForRows(app.cdp, 20000);
-    const cdp = app.cdp;
-
-    const fixtures = [
-      // 1. nothing to do at all.
-      { docs: [], capBytes: 1000, nowMs: 1000, opts: {} },
-      // 2. one document, well under cap — nothing evicted.
-      { docs: [{ docId: "d" + "1".repeat(32), lastOpenedAt: 100, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 10 }] }],
-        capBytes: 1000, nowMs: 1000, opts: {} },
-      // 3. per-document trim: 3 snapshots, perDoc 2 — the oldest goes, the newest stays.
-      { docs: [{ docId: "d" + "2".repeat(32), lastOpenedAt: 100,
-          snapshots: [{ id: "s1", atMs: 10, sizeBytes: 5 }, { id: "s2", atMs: 20, sizeBytes: 5 }, { id: "s3", atMs: 30, sizeBytes: 5 }] }],
-        capBytes: 1000, nowMs: 1000, opts: { perDoc: 2 } },
-      // 4. cap eviction across two documents — the one with the OLDER lastOpenedAt goes first.
-      { docs: [
-          { docId: "d" + "3".repeat(32), lastOpenedAt: 100, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 60 }, { id: "s2", atMs: 20, sizeBytes: 60 }] },
-          { docId: "d" + "4".repeat(32), lastOpenedAt: 200, snapshots: [{ id: "s3", atMs: 30, sizeBytes: 60 }, { id: "s4", atMs: 40, sizeBytes: 60 }] }
-        ], capBytes: 150, nowMs: 1000, opts: {} },
-      // 5. an expired Older bucket goes as a whole, ahead of any document.
-      { docs: [
-          { docId: "_older", lastOpenedAt: 0, expiresAt: 500, snapshots: [{ id: "o1", atMs: 5, sizeBytes: 50 }, { id: "o2", atMs: 6, sizeBytes: 50 }] },
-          { docId: "d" + "5".repeat(32), lastOpenedAt: 900, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 5 }] }
-        ], capBytes: 1000000, nowMs: 1000, opts: { olderKey: "_older" } },
-      // 6. a protected snapshot is never the one an eviction removes.
-      { docs: [{ docId: "d" + "6".repeat(32), lastOpenedAt: 100,
-          snapshots: [{ id: "s1", atMs: 10, sizeBytes: 60 }, { id: "s2", atMs: 20, sizeBytes: 60 }] }],
-        capBytes: 60, nowMs: 1000, opts: { protect: [{ docId: "d" + "6".repeat(32), id: "s1" }] } }
-    ];
-
-    for (let i = 0; i < fixtures.length; i++) {
-      const f = fixtures[i];
-      const rendererResult = await evalPage(cdp,
-        "window.__historyTest.planEviction(" + JSON.stringify(f.docs) + "," + JSON.stringify(f.capBytes) + "," +
-        JSON.stringify(f.nowMs) + "," + JSON.stringify(f.opts) + ")");
-      const mainResult = await evalPage(cdp, "window.splitpageDesktop.__testHistoryPlan(" + JSON.stringify(f) + ")");
-      record(tag + ": fixture " + (i + 1) + " — main's plan matches the renderer's byte for byte",
-        JSON.stringify(rendererResult) === JSON.stringify(mainResult),
-        "renderer=" + JSON.stringify(rendererResult) + " main=" + JSON.stringify(mainResult));
-    }
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
 }
 
@@ -4512,7 +4461,6 @@ async function runTargetSuite(target) {
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target)],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target)],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target)],
-    ["history: caseHistoryPlannerTwin (main vs renderer planEviction)", () => caseHistoryPlannerTwin(target)],
     ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
     // --- step N: crash-safe drafts (single and multi tab) ---
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
