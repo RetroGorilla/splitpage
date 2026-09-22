@@ -12,9 +12,11 @@
  * saved .splitpage.html would be a shell that only works next to those files.
  * So we inline everything back into one self-contained page here.
  *
- * Substitution of a handful of marker lines, plus one bundler. Run it with
- *   node build.mjs           write index.html
- *   node build.mjs --check   verify index.html matches src/ (exit 1 if not)
+ * Substitution of a handful of marker lines, plus one bundler. Two outputs:
+ * index.html, and sw.js, which cannot be inlined into it (a service worker
+ * has to have its own URL) and so is stamped in place — see "sw.js (#79)".
+ *   node build.mjs           write index.html and stamp sw.js
+ *   node build.mjs --check   verify both are current (exit 1 if not)
  *
  * esbuild is the only dependency, and it is a build-time one: nothing it
  * produces needs a runtime, and the shipped page still has no <script src>.
@@ -355,11 +357,17 @@ function readmeHtml() {
   return readmeHelp;
 }
 
+/* VERSION is one line. Two different outputs splice it in — index.html's
+   <meta> and sw.js's cache name — and only one of them goes through chomp(),
+   so trim it here rather than leaving the second one to inherit whatever
+   line ending an editor left behind. */
+const version = () => readFileSync(join(ROOT, "VERSION"), "utf8").trim();
+
 const PARTS = [
   /* Inline, not a line of its own: stamps the release into a <meta> so the
      About box can name a version even on a file:// open, where there is no
      launcher to ask. */
-  ["{{VERSION}}", () => readFileSync(join(ROOT, "VERSION"), "utf8")],
+  ["{{VERSION}}", version],
   ["{{SEED_CHECK}}", seedCheckValue],
   ["/*{{APP_CSS}}*/", () => src("app.css")],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
@@ -457,6 +465,40 @@ export function buildCsp(html) {
   return CSP_DIRECTIVES(hash).join("; ");
 }
 
+/* ---------- sw.js (#79) ----------
+ *
+ * The service worker is the one shipped file that is NOT inlined into
+ * index.html, and it cannot be: a worker has to have its own URL or the
+ * browser will not register it. So package.mjs, the Dockerfile and
+ * desktop/stage.mjs all copy the repo-root sw.js out verbatim, and there is
+ * no template for it to be spliced into on the way past.
+ *
+ * It is therefore stamped IN PLACE. sw.js in the tree is both the file you
+ * edit and the artifact that ships, and exactly one line of it belongs to
+ * this build: the cache name, which has to carry VERSION so that a deploy
+ * renames the cache and the worker's activate handler drops the previous
+ * release's entries (the whole of issue #79 — see sw.js's own header).
+ *
+ * --check is meaningful for it in the way that matters: what it catches is
+ * VERSION and sw.js having drifted apart, which is the only way this file
+ * can be wrong, and it is exactly the failure a version bump committed on
+ * its own would otherwise ship. It cannot catch a hand-edit elsewhere in
+ * sw.js, because there is no other source for the rest of the file to
+ * disagree with.
+ */
+const SW_CACHE_LINE = /^var CACHE = "(splitpage-[^"]*)";$/m;
+const swCacheName = (text) => SW_CACHE_LINE.exec(text)[1];
+
+function buildSw() {
+  const current = readFileSync(join(ROOT, "sw.js"), "utf8");
+  if (!SW_CACHE_LINE.test(current)) {
+    throw new Error('sw.js: no `var CACHE = "splitpage-<version>";` line for the build to stamp');
+  }
+  /* A function replacement, not "$1...$2": VERSION is data, and replace()
+     would expand a "$&" in it — the same reason build() splits and joins. */
+  return current.replace(SW_CACHE_LINE, () => 'var CACHE = "splitpage-' + version() + '";');
+}
+
 function build() {
   let html = src("page.html");
   for (const [marker, load] of PARTS) {
@@ -471,18 +513,35 @@ function build() {
 
 const out = join(ROOT, "index.html");
 const built = build();
+const swOut = join(ROOT, "sw.js");
+const swBuilt = buildSw();
 
 if (process.argv.includes("--check")) {
+  let stale = false;
   const current = readFileSync(out, "utf8");
   if (current === built) {
     console.log("index.html is up to date with src/ (" + Buffer.byteLength(built) + " bytes)");
-    process.exit(0);
+  } else {
+    console.error("index.html does NOT match src/ — run `node build.mjs`");
+    console.error("  built:   " + Buffer.byteLength(built) + " bytes");
+    console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
+    stale = true;
   }
-  console.error("index.html does NOT match src/ — run `node build.mjs`");
-  console.error("  built:   " + Buffer.byteLength(built) + " bytes");
-  console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
-  process.exit(1);
+  /* Reported separately, and both are reported, so a run that is wrong twice
+     does not have to be fixed twice to find that out. */
+  const swCurrent = readFileSync(swOut, "utf8");
+  if (swCurrent === swBuilt) {
+    console.log("sw.js is stamped with VERSION (cache " + swCacheName(swBuilt) + ")");
+  } else {
+    console.error("sw.js's cache name does NOT match VERSION — run `node build.mjs`");
+    console.error("  built:   " + swCacheName(swBuilt));
+    console.error("  on disk: " + swCacheName(swCurrent));
+    stale = true;
+  }
+  process.exit(stale ? 1 : 0);
 }
 
 writeFileSync(out, built);
 console.log("wrote index.html (" + Buffer.byteLength(built) + " bytes)");
+writeFileSync(swOut, swBuilt);
+console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");
