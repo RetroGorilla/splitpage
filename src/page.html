@@ -113,83 +113,125 @@
             <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close">✕</button>
           </div>
           <div class="menu-body" role="none">
+          <!-- Most-used, no heading, never collapses (issue #51): the three
+               things every save touches, in the order you reach for them. -->
           <button type="button" role="menuitem" data-file-action="save-as">Save As…</button>
-          <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
-          <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
-          <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
-          <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
-          <!-- shown only when the page was served by a Splitpage document
-               server; hidden on file:// and on plain static hosting -->
-          <div class="menu-sep" id="menu-server-sep" hidden></div>
-          <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
-          <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
-          <!-- Always shown, unlike the two above: this is where you point the
-               app at a server in the first place, so it cannot wait for one
-               to answer. Handled in 20e-connect.js, not the File dispatch. -->
-          <div class="menu-sep" id="menu-connect-sep"></div>
-          <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
-          <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
           <!-- Says what is on, not what pressing it does — updateAutoSaveMenu()
                (14-export.js) rewrites the label on every change. -->
           <button type="button" role="menuitemcheckbox" aria-checked="true" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing">Autosave: on</button>
+
           <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-file-action="history">Version history…</button>
+
+          <!-- Headed, collapsible sections from here down (issue #51):
+               .menu-section-toggle is a real <button> so Enter/Space toggles
+               it and it sits in the normal Tab order; .menu-section-body
+               carries the plain `hidden` attribute when collapsed, which
+               both hides it and — for free, via the browser's own tab-order
+               rules — takes every button inside it out of Tab traversal.
+               initFileMenuSections() (18-local-files.js) sets aria-expanded
+               and `hidden` to match the remembered per-device state on boot;
+               toggleFileMenuSection() flips both on click. -->
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="open" aria-expanded="true" aria-controls="menu-section-open"><span class="menu-label">Open</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-open" role="none">
+              <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
+              <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
+              <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
+              <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <!-- Browser build only: takes history, bookmarks and prefs to the
-               desktop app. 20f-desktop.js's initDesktop hides the export
-               entry and unhides the import one there. -->
-          <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
-          <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
+
+          <!-- #menu-section-server-wrap is hidden by updateServerMenu()
+               (13-hosted.js) when every item inside it is hidden — today
+               that never quite happens, since Servers… and Publish & copy a
+               link stay offered even with nothing connected, but the section
+               follows the same "nothing to show" rule as its items rather
+               than assuming that. -->
+          <div class="menu-section" id="menu-section-server-wrap">
+            <button type="button" class="menu-section-toggle" data-menu-section="server" aria-expanded="true" aria-controls="menu-section-server" id="menu-server-section-toggle"><span class="menu-label">Server</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-server" role="none">
+              <!-- shown only when the page was served by a Splitpage document
+                   server; hidden on file:// and on plain static hosting -->
+              <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
+              <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
+              <div class="menu-sep" id="menu-server-sep" hidden></div>
+              <!-- The live counterpart of the export formats below, and
+                   deliberately next to the rest of the server tools (issue
+                   #19/#51): every export hands someone a DEAD COPY whose
+                   edits never come back, and this is the one that doesn't.
+                   It publishes to the connected server and copies the
+                   address of that one shared document. Always shown — with
+                   no server it says so and opens Servers… rather than doing
+                   nothing. 13-hosted.js. -->
+              <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
+              <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <!-- Collapses every scene marked Shot into a thin strip — issue #25.
-               Says what is on, not what pressing it does (see menu-autosave);
-               updateHideShotMenu() (01b-hide-shot.js) keeps aria-checked and
-               the checkmark in sync. Ctrl/Cmd+Alt+H, mirrored in the desktop
-               View menu (desktop/main.js). -->
-          <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="export" aria-expanded="false" aria-controls="menu-section-export"><span class="menu-label">Export</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-export" role="none" hidden>
+              <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
+              <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
+              <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
+              <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
+              <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
+              <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
+              <!-- the old save format, now an export: one self-contained page
+                   for sending a script to someone with nothing installed -->
+              <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
+              <div class="menu-sep"></div>
+              <div class="menu-label">Narration</div>
+              <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
+              <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
+              <div class="menu-sep"></div>
+              <div class="menu-label">Packing lists</div>
+              <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
+              <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <!-- Ctrl+F everywhere else; this entry exists because phone
-               keyboards have no Ctrl -->
-          <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
+
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="document" aria-expanded="true" aria-controls="menu-section-document"><span class="menu-label">This document</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-document" role="none">
+              <button type="button" role="menuitem" data-file-action="history">Version history…</button>
+              <!-- Ctrl+F everywhere else; this entry exists because phone
+                   keyboards have no Ctrl -->
+              <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
+              <!-- Collapses every scene marked Shot into a thin strip — issue
+                   #25. Says what is on, not what pressing it does (see
+                   menu-autosave); updateHideShotMenu() (01b-hide-shot.js)
+                   keeps aria-checked and the checkmark in sync. Ctrl/Cmd+
+                   Alt+H, mirrored in the desktop View menu (desktop/main.js). -->
+              <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <div class="menu-label">Export a copy</div>
-          <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
-          <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
-          <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
-          <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
-          <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
-          <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
-          <!-- the old save format, now an export: one self-contained page for
-               sending a script to someone with nothing installed -->
-          <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
-          <!-- The live counterpart of the export above, and deliberately
-               next to it (issue #19): every other entry in this group hands
-               someone a DEAD COPY whose edits never come back, and this is
-               the one that doesn't. It publishes to the connected server and
-               copies the address of that one shared document. Always shown —
-               with no server it says so and opens Servers… rather than doing
-               nothing. 13-hosted.js. -->
-          <div class="menu-sep"></div>
-          <div class="menu-label">Share a live copy</div>
-          <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Export the narration</div>
-          <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
-          <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Packing lists</div>
-          <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
-          <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Help</div>
-          <button type="button" role="menuitem" data-file-action="setup">Set up Splitpage…</button>
-          <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
-          <button type="button" role="menuitem" data-file-action="help">User guide…</button>
-          <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
-          <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
+
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="help" aria-expanded="false" aria-controls="menu-section-help"><span class="menu-label">Help &amp; settings</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-help" role="none" hidden>
+              <button type="button" role="menuitem" data-file-action="setup">Set up Splitpage…</button>
+              <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+              <button type="button" role="menuitem" data-file-action="help">User guide…</button>
+              <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
+              <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
+              <div class="menu-sep"></div>
+              <!-- Browser build only: takes history, bookmarks and prefs to
+                   the desktop app. 20f-desktop.js's initDesktop hides the
+                   export entry and unhides the import one there. -->
+              <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
+              <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
+            </div>
+          </div>
           </div>
         </div>
       </div>
