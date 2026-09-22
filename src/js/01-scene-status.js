@@ -52,7 +52,18 @@
   function updateScriptStats() {
     if (!state) return;
     var totalEl = document.getElementById("runtime-total");
-    if (totalEl) totalEl.textContent = formatDuration(totalSeconds());
+    if (totalEl) {
+      /* With shot scenes hidden, the number that matters is what's left to
+         record — but the total is still worth keeping in view, so both show. */
+      if (hideShotScenes) {
+        var remaining = state.rows.reduce(function (n, r) {
+          return n + (r.status === "shot" ? 0 : rowSeconds(r));
+        }, 0);
+        totalEl.textContent = formatDuration(remaining) + " / " + formatDuration(totalSeconds());
+      } else {
+        totalEl.textContent = formatDuration(totalSeconds());
+      }
+    }
 
     var chip = document.getElementById("progress-chip");
     var text = document.getElementById("progress-text");
@@ -109,9 +120,18 @@
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
     var row = state.rows[idx];
+    var wasShot = row.status === "shot";
     row.status = nextRowStatus(row.status);
     stampRow(row);
     markDirty();
+    /* A scene turning Shot while the toggle is on stays visible for a beat
+       (armShotHideGrace, 01b-hide-shot.js) rather than collapsing out from
+       under the click that just changed it. Leaving Shot cancels any such
+       grace still pending — nothing left to delay. */
+    if (hideShotScenes) {
+      if (!wasShot && row.status === "shot") armShotHideGrace(row.id);
+      else if (wasShot && row.status !== "shot") clearShotHideGrace(row.id);
+    }
     /* full render only if the row isn't on screen to patch (it always is) */
     if (!paintRowStatus(row)) render();
     updateScriptStats();          /* the shot counter in the header */

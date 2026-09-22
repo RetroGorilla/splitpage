@@ -219,8 +219,12 @@
     var statusBtn = e.target.closest('[data-action="cycle-status"]');
     if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
 
+    var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
+    if (expandShotBtn) { expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids")); return; }
+
     var jumpRowBtn = e.target.closest('[data-action="jump-row"]');
     if (jumpRowBtn) {
+      revealRow(jumpRowBtn.getAttribute("data-row"));
       var target = document.querySelector('#rows .row[data-id="' + cssAttr(jumpRowBtn.getAttribute("data-row")) + '"]');
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -754,6 +758,7 @@
          File menu's autosave label and the save-state indicator get their
          first values here rather than waiting for the first keystroke. */
       updateAutoSaveMenu();
+      updateHideShotMenu();
       updateSaveStatus();
 
       if (applied.report) {
@@ -905,6 +910,22 @@
       e.preventDefault();
       if (findOpen) { document.getElementById("find-input").select(); }
       else openFindBar();
+    });
+
+    /* ---- hide shot scenes (issue #25) ----
+       Ctrl/Cmd+Alt+H: doesn't collide with Ctrl+F (find), Ctrl+B/I/U
+       (formatting), Ctrl/Alt+Enter (split/next scene) or Ctrl+Z (undo
+       split) — see 01b-hide-shot.js for the toggle itself. Mirrored as a
+       real Electron accelerator on the View menu (desktop/main.js), which
+       Electron consumes before it ever reaches this listener there — this
+       copy is what makes the shortcut work in the plain browser build. */
+    window.addEventListener("keydown", function (e) {
+      if (!(e.ctrlKey || e.metaKey) || !e.altKey) return;
+      if (e.key !== "h" && e.key !== "H") return;
+      if (!state) return;
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
+      e.preventDefault();
+      toggleHideShotScenes();
     });
 
     /* ---- reading speed ---- */
@@ -1408,7 +1429,9 @@
     });
     writerDocEl.addEventListener("click", function (e) {
       var gutter = e.target.closest('[data-action="writer-jump"]');
-      if (gutter) jumpFromWriterToRow(gutter.getAttribute("data-row"));
+      if (gutter) { jumpFromWriterToRow(gutter.getAttribute("data-row")); return; }
+      var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
+      if (expandShotBtn) expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids"));
     });
 
     document.getElementById("wr-save").addEventListener("click", function () { saveDoc(); });

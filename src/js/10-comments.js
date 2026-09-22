@@ -411,6 +411,24 @@
     return !!document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   }
 
+  /* anchorLiveText's fallback for a row the "hide shot scenes" toggle
+     (issue #25) has folded into a strip: the anchor is not missing, it just
+     is not rendered right now. Re-derives its text from the row's own
+     stored HTML — the same source rowHtml() would render from — so a
+     hidden comment never reads as orphaned. Returns null exactly when the
+     span really is gone, same as the DOM path. */
+  function anchorTextFromState(cmtId) {
+    if (!state) return null;
+    var cIdx = findCommentIndex(cmtId);
+    if (cIdx === -1) return null;
+    var c = state.comments[cIdx];
+    var row = state.rows[findRowIndex(c.rowId)];
+    if (!row) return null;
+    var body = inertBody(row[c.field] || "");
+    var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(cmtId) + '"]');
+    return span ? span.textContent : null;
+  }
+
   /* The `.cmt-anchor` span is editable on purpose — a comment must never
      lock the writer out of their own sentence — so the words inside it can
      drift away from `c.quotedText` without the anchor itself disappearing.
@@ -419,7 +437,8 @@
      Returns null when the span itself is gone (the orphaned case). */
   function anchorLiveText(cmtId) {
     var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
-    return el ? el.textContent : null;
+    if (el) return el.textContent;
+    return anchorTextFromState(cmtId);
   }
 
   function unwrapAnchorInState(rowId, field, cmtId) {
@@ -643,6 +662,8 @@
   }
 
   function jumpToAnchor(cmtId) {
+    var cIdx = findCommentIndex(cmtId);
+    if (cIdx !== -1) revealRow(state.comments[cIdx].rowId);
     var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
     if (!el) {
       showToast("That text is no longer in the script.", "warn");

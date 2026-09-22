@@ -44,8 +44,12 @@
   function buildPrompterContent() {
     /* On day two you only want what's left. Filtering here rather than
        hiding after the fact keeps the word index — and so voice follow —
-       lined up with what is actually on screen. */
-    var source = prompterSkipShot
+       lined up with what is actually on screen. Two independent reasons to
+       leave a Shot scene out: the prompter's own "Skip shot" toggle, and
+       the app-wide "hide shot scenes" toggle (issue #25) — either one is
+       enough. */
+    var skippingShot = prompterSkipShot || hideShotScenes;
+    var source = skippingShot
       ? state.rows.filter(function (row) { return row.status !== "shot"; })
       : state.rows;
     var lineHtml = source
@@ -61,8 +65,8 @@
 
     var content = document.getElementById("prompter-content");
     if (!paragraphs.length) {
-      content.innerHTML = '<div class="prompter-empty">' + (prompterSkipShot
-        ? "Every scene is marked Shot — switch off Skip shot to read them again."
+      content.innerHTML = '<div class="prompter-empty">' + (skippingShot
+        ? "Every scene is marked Shot — switch off Skip shot (or Hide shot scenes) to read them again."
         : "Nothing to read yet — add some audio text first.") + '</div>';
       promptWords = [];
     } else {
