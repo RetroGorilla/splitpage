@@ -417,6 +417,13 @@ export async function apiFetch(path, opts) {
 
   var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
   if (res.status === 409) { var c = ApiError("conflict"); c.payload = body; throw c; }
+  /* The server's own "there is no such document" (a GET, PUT or DELETE of
+     api/docs/:id whose file is gone) gets a name of its own, the way a 409
+     does: callers ask `err.code === "not-found"`. Every other non-ok status
+     is named by its number with the server's reason as the message — a 404
+     that is about something else (a comment, "no-such-comment") stays
+     "404", and the comment routes read it that way (#99). */
+  if (res.status === 404 && body && body.error === "not-found") throw ApiError("not-found");
   if (!res.ok) throw ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
   return body;
 }
@@ -513,10 +520,10 @@ async function resumeServerDoc() {
        back its answer — it opens the edits as an unsaved local copy. Any
        other failure (signed out, no answer yet, a PIN still to type) leaves
        the override armed: finishServerDetect() calls this again once the
-       PIN dialog succeeds. The literal "404" is here because apiFetch()
-       names non-ok statuses by their number; "not-found" is what
-       saveToServer's own branch looks for. */
-    if (override && err && (err.code === "not-found" || err.code === "404")) {
+       PIN dialog succeeds. apiFetch() names the server's "no such
+       document" 404 "not-found" (#99), the same code saveToServer's own
+       branch looks for. */
+    if (override && err && err.code === "not-found") {
       S.draftServerResume = null;
       try { override.onDone("not-found"); } catch (e2) {}
     }
@@ -1266,6 +1273,12 @@ export async function saveToServer() {
       }
 
       if (err && err.code === "not-found") {
+        /* Somebody deleted it on the server. There is nothing left to
+           compare-and-set against, so this page stops calling it home: the
+           server home is cleared through setHome() (#73), which also stops
+           autosave and the presence beat for it. What is on screen stays,
+           and stays dirty — it is now the only copy. (Dead until #99:
+           apiFetch() used to call this "404".) */
         showToast("That document is no longer on the server. Use “Put this script on the server” to publish it again.", "warn");
         setHome("none");
         updateFileChip();

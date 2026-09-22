@@ -1,0 +1,99 @@
+# A save to a server document that has been deleted (saveToServer's
+# not-found branch, 13-hosted.js, #99).
+#
+# The branch had never run: apiFetch() named every non-ok status by its
+# number, so the server's 404 {error:"not-found"} arrived as code "404" and
+# `err.code === "not-found"` was always false — a save to a deleted document
+# fell through to handleApiError()'s generic "Could not save to the server —
+# not-found." error toast and left the page still calling the server its
+# home, so every later Save and autosave PUT at a document that was not
+# there. apiFetch() now names the server's own "no such document" 404
+# "not-found", and this suite is what would have caught it.
+#
+# `fetch` is replaced for PUTs to api/docs/ only, the way 54-server-conflict
+# replaces it; the rest of the session is window.__hostedTest.setSession().
+#
+# What it pins down:
+#   * a 404 {error:"not-found"} for the PUT runs the not-found path: the
+#     warning that names it, and the server home cleared through setHome()
+#     (#73) to "none" — not the generic error toast;
+#   * what was on screen stays, and stays dirty: it is the only copy now;
+#   * the same path runs when the document goes away between a 409 and the
+#     retry the merge makes;
+#   * a 404 about something else (not the server's "not-found") is still
+#     named by its number and still gets the generic handling.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;return typeof F.save === 'function';})()
+expect true
+
+# A hosted document autosaves from the first keystroke, and every one of
+# those writes would take an answer out of the queue below.
+eval (function(){ if (F.autosave.enabled()) F.autosave.toggle(); return F.autosave.enabled() === false; })()
+expect true
+
+# The fake server: PUTs to api/docs/ are recorded and answered from
+# __answers; everything else goes through to the real one.
+eval (function(){ window.__puts = []; window.__answers = []; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); if (opts && opts.method === 'PUT' && u.indexOf('api/docs/') !== -1) { window.__puts.push(JSON.parse(opts.body)); var a = window.__answers.shift(); return Promise.resolve(new Response(JSON.stringify(a.body), {status: a.status, headers: {'content-type':'application/json'}})); } return real(url, opts); }; return true; })()
+expect true
+
+# Every toast, as it is put up — they fade on their own, so reading the host
+# afterwards would race them.
+eval (function(){ window.__toasts = []; new MutationObserver(function(ms){ ms.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 1 && n.classList.contains('toast')) window.__toasts.push({cls: n.className, text: n.textContent}); }); }); }).observe(document.getElementById('toast-host'), {childList: true}); return true; })()
+expect true
+eval (function(){ window.__saw = function(cls, words){ return window.__toasts.some(function(t){ return t.cls.split(' ').indexOf(cls) !== -1 && t.text.indexOf(words) !== -1; }); }; return true; })()
+
+# ---- 1. the document is gone: one PUT, answered 404 not-found -------------
+eval (function(){ window.__hostedTest.setSession({docId:'doc-gone', rev: 3}); return window.__hostedTest.home().kind; })()
+expect window.__hostedTest.home().kind == server
+
+caret #rows .row .audio-cell .cell-editable
+type STILLHEREONE
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('STILLHEREONE') !== -1
+
+eval (async function(){ window.__toasts.length = 0; window.__answers = [ {status:404, body:{error:'not-found'}} ]; window.__saved = await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 1
+expect window.__puts[0].baseRev === 3
+
+# the not-found path ran: its own warning, and the server home is gone
+expect window.__saw('warn', 'no longer on the server')
+expect window.__hostedTest.home().kind == none
+expect !window.__saw('error', 'Could not save to the server')
+
+# and nothing typed was lost
+expect document.querySelector('#rows').textContent.indexOf('STILLHEREONE') !== -1
+expect window.__hostedTest.dirty() === true
+
+# ---- 2. gone between a 409 and the merge's retry ---------------------------
+eval (function(){ window.__hostedTest.setSession({docId:'doc-gone-2', rev: 7}); window.__theirs = F.clone(F.state()); window.__theirs.rows[1].audioText = 'THEIRSGONE'; return window.__hostedTest.home().kind; })()
+expect window.__hostedTest.home().kind == server
+
+caret #rows .row .audio-cell .cell-editable
+type MINEGONE
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('MINEGONE') !== -1
+
+eval (async function(){ window.__toasts.length = 0; window.__putsBefore = window.__puts.length; window.__answers = [ {status:409, body:{error:'conflict', rev:8, state: window.__theirs}}, {status:404, body:{error:'not-found'}} ]; await F.save(); return window.__puts.length - window.__putsBefore; })()
+expect window.__puts.length - window.__putsBefore === 2
+expect window.__puts[window.__putsBefore + 1].baseRev === 8
+expect window.__saw('warn', 'no longer on the server')
+expect window.__hostedTest.home().kind == none
+expect !window.__saw('error', 'Could not save to the server')
+# the merge that happened before it vanished is still on screen
+expect document.querySelector('#rows').textContent.indexOf('MINEGONE') !== -1
+expect document.querySelector('#rows').textContent.indexOf('THEIRSGONE') !== -1
+
+# ---- 3. a 404 that is NOT the server's "no such document" ------------------
+# Named by its number, as every other non-ok status is: the generic error,
+# and the home left where it was.
+eval (function(){ window.__hostedTest.setSession({docId:'doc-other', rev: 2}); return window.__hostedTest.home().kind; })()
+expect window.__hostedTest.home().kind == server
+eval (async function(){ window.__toasts.length = 0; window.__answers = [ {status:404, body:{error:'something-else'}} ]; await F.save(); return window.__toasts.length; })()
+expect window.__saw('error', 'Could not save to the server')
+expect !window.__saw('warn', 'no longer on the server')
+expect window.__hostedTest.home().kind == server
+expect window.__hostedTest.home().id == doc-other
+
+quit
