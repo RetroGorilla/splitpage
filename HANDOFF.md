@@ -23,6 +23,14 @@ breakdown for props/locations/cast/VFX/sound.
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
   fails a commit where they disagree. Run `npm install` once first — esbuild
   is the one devDependency.
+- **The build writes two files, not one.** `index.html` and, since #79,
+  `sw.js` — whose cache name is stamped from `VERSION`, which is what makes a
+  deploy take effect on the next load instead of the one after it. `sw.js` is
+  stamped in place rather than generated from `src/`, because a worker needs
+  its own URL so it cannot be inlined, and `package.mjs`, the `Dockerfile` and
+  `desktop/stage.mjs` all copy the repo-root file out verbatim. `--check`
+  reports on both, separately, so two stale outputs are not found one at a
+  time.
 - **Two files carry what one closure used to.** `src/js/_state.js` holds the
   57 `var`s that are written from a module other than the one declaring them:
   an ESM import binding is read-only, so they are properties of one exported
