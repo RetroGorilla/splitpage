@@ -253,6 +253,12 @@ from the server. Your backup of the data folder is the undo.
 **Large scripts.** Embedded images make documents big; the cap is 25 MB per
 document (`MAX_BODY_BYTES`). Raise it if you hit it.
 
+That cap is for saving a whole script. Posting a comment has its own, much
+smaller one — half a megabyte, fixed — because a comment is a comment, and a
+review session that can only comment should never be able to make the server
+buffer a script-sized upload. Raising `MAX_BODY_BYTES` does not raise it, and
+nothing a reviewer legitimately sends comes close to it.
+
 **`JOIN_PIN` is not a substitute for Access.** Setting `JOIN_PIN` in the
 container's environment makes every `/api/*` route except `/api/health` and
 `/api/join` require a token, which a client gets by posting the right PIN. It

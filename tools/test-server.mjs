@@ -251,6 +251,8 @@ try {
     check("...allows the token header",
       (res.headers.get("access-control-allow-headers") || "").includes("x-splitpage-token"));
     check("...allows PUT", (res.headers.get("access-control-allow-methods") || "").includes("PUT"));
+    check("...and PATCH, which the comment resolve route needs (#71)",
+      (res.headers.get("access-control-allow-methods") || "").includes("PATCH"));
     eq("...and never allows credentials", res.headers.get("access-control-allow-credentials"), null);
   }
   {
@@ -1205,6 +1207,424 @@ try {
   eq("...and does not write one", readFileSync(path, "utf8"), before);
 } finally {
   sHeadRO.stop();
+}
+
+/* ---------- comments on their own (issue #71) ----------
+ *
+ * The review role used to post four words by uploading the whole script and
+ * having the server prove, by comparing it against the stored one, that only
+ * a comment had moved. `POST /api/docs/:id/comments` is that same act with
+ * nothing else in the envelope, so most of what is below is about the things
+ * a comparison used to be needed for: that only a comment lands, that two of
+ * them at once both land, and that a document the comparison used to choke
+ * on (#62) is now simply a document.
+ */
+
+const sCmt = await startServer({
+  JOIN_PIN: PIN,
+  REVIEW_PIN,
+  REVIEW_KEY,
+  HOST: "127.0.0.1"
+});
+
+try {
+  const joinAs = async (payload) => await json(await fetch(sCmt.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }));
+
+  const editToken = (await joinAs({ pin: PIN })).token;
+  const reviewToken = (await joinAs({ pin: REVIEW_PIN })).token;
+  const hdr = (token) => ({ "Content-Type": "application/json", "x-splitpage-token": token });
+
+  const make = async (title) => await json(await fetch(sCmt.base + "api/docs", {
+    method: "POST", headers: hdr(editToken),
+    body: JSON.stringify({ state: Object.assign(fixtureState(), { title }) })
+  }));
+  const readDocAs = async (docId, token) =>
+    await json(await fetch(sCmt.base + "api/docs/" + docId, { headers: { "x-splitpage-token": token } }));
+
+  const doc = await make("Comments endpoint");
+  const otherDoc = await make("Somebody else's script");
+  const cmtUrl = (docId) => sCmt.base + "api/docs/" + docId + "/comments";
+
+  const post = (docId, token, payload) => fetch(cmtUrl(docId), {
+    method: "POST", headers: hdr(token), body: JSON.stringify(payload)
+  });
+  const patch = (docId, token, cid, payload) => fetch(cmtUrl(docId) + "/" + cid, {
+    method: "PATCH", headers: hdr(token), body: JSON.stringify(payload)
+  });
+
+  const note = (id, extra) => Object.assign({
+    id, rowId: "r1", field: "audioText", anchorId: id,
+    quotedText: "there", author: "Reviewer", body: "a note", kind: "anchor"
+  }, extra || {});
+
+  /* ---- the happy path: a comment, and nothing else in the envelope ---- */
+  let afterFirst = 0;
+  {
+    const before = await readDocAs(doc.id, editToken);
+    const res = await post(doc.id, reviewToken, { comment: note("n1"), by: "Reviewer" });
+    const body = await json(res);
+    eq("a reviewer may post a comment on its own", res.status, 200);
+    eq("...and is told the new rev", body && body.rev, (before.rev || 0) + 1);
+    eq("...that something was written", body && body.changed, true);
+    check("...and handed the stored comment back", !!(body && body.comment && body.comment.id === "n1"));
+    eq("...unresolved, whatever was sent", body && body.comment.resolved, false);
+    check("...stamped by the server's own clock, not the client's",
+      !!(body && body.comment.createdAt && body.comment.createdAt !== "2026-02-01T00:00:00.000Z"));
+    afterFirst = body && body.rev;
+
+    const now = await readDocAs(doc.id, editToken);
+    check("...and it is in the document", (now.state.comments || []).some((c) => c.id === "n1"));
+    eq("...beside the one that was already there", (now.state.comments || []).length, 2);
+    eq("...with the script untouched", now.state.rows[0].audioText, "Hello there");
+    eq("...and the reviewer's name on the document", now.state.lastEditedBy, "Reviewer");
+  }
+
+  /* ---- the rev and the head line agree afterwards (#74) ---- */
+  {
+    const file = join(sCmt.dataDir, doc.id + ".json");
+    const head = headOfFile(file);
+    eq("a comment write moves the head line's rev with it", head.rev, afterFirst);
+    eq("...keeps the title on it", head.title, "Comments endpoint");
+    eq("...and the scene count", head.rows, 1);
+    const read = await readDocAs(doc.id, editToken);
+    eq("...and the document reads at that same rev", read.rev, afterFirst);
+    check("a comment write leaves no temp file behind",
+      !readdirSync(sCmt.dataDir).some((n) => n.endsWith(".tmp")),
+      readdirSync(sCmt.dataDir).join(", "));
+  }
+
+  /* ---- an editor may use it too ---- */
+  {
+    const res = await post(doc.id, editToken, { comment: note("n2", { author: "Host" }) });
+    eq("an editor may post through it as well", res.status, 200);
+  }
+
+  /* ---- the anchor: one field of one scene, never the script ---- */
+  {
+    const res = await post(doc.id, reviewToken, {
+      comment: note("n3"),
+      anchor: {
+        rowId: "r1", field: "audioText",
+        html: 'Hello <span class="cmt-anchor" data-cmt="n3">there</span>'
+      },
+      by: "Reviewer"
+    });
+    const body = await json(res);
+    eq("a comment may carry the anchor it wrapped", res.status, 200);
+    eq("...and is told it was placed", body && body.anchored, true);
+    const now = await readDocAs(doc.id, editToken);
+    eq("...which is in the scene", now.state.rows[0].audioText,
+      'Hello <span class="cmt-anchor" data-cmt="n3">there</span>');
+    eq("...and the scene is stamped with who anchored it", now.state.rows[0].updatedBy, "Reviewer");
+  }
+  {
+    const res = await post(doc.id, reviewToken, {
+      comment: note("n4"),
+      anchor: { rowId: "r1", field: "audioText", html: 'Hello there, and a word the reviewer added' }
+    });
+    const body = await json(res);
+    eq("an anchor that would change the words is not placed", body && body.anchored, false);
+    eq("...but the comment still lands, rather than being lost", res.status, 200);
+    const now = await readDocAs(doc.id, editToken);
+    check("...it is stored", (now.state.comments || []).some((c) => c.id === "n4"));
+    eq("...and the scene is exactly as it was",
+      now.state.rows[0].audioText, 'Hello <span class="cmt-anchor" data-cmt="n3">there</span>');
+  }
+  {
+    const res = await post(doc.id, reviewToken, {
+      comment: note("n5"), anchor: { rowId: "r1", field: "status", html: "done" }
+    });
+    const body = await json(res);
+    eq("an anchor on a field that holds no text is refused outright", res.status, 400);
+    eq("...saying bad-anchor", body && body.error, "bad-anchor");
+    const now = await readDocAs(doc.id, editToken);
+    check("...and nothing was written", !(now.state.comments || []).some((c) => c.id === "n5"));
+  }
+
+  /* ---- replies ---- */
+  {
+    const before = await readDocAs(doc.id, editToken);
+    const wasAt = before.state.comments.find((c) => c.id === "n1").updatedAt;
+    const res = await post(doc.id, reviewToken, {
+      replyTo: "n1", reply: { id: "rp1", author: "Reviewer", body: "and another thing" }
+    });
+    const body = await json(res);
+    eq("a reply goes through the same route", res.status, 200);
+    eq("...and comes back on its thread", body && body.comment && body.comment.replies.length, 1);
+    check("...whose own timestamp moved", body.comment.updatedAt !== wasAt);
+    const now = await readDocAs(doc.id, editToken);
+    eq("...and it is stored", now.state.comments.find((c) => c.id === "n1").replies[0].body,
+      "and another thing");
+  }
+  {
+    const res = await post(doc.id, reviewToken, {
+      replyTo: "nothing-here", reply: { id: "rp2", body: "hello?" }
+    });
+    const body = await json(res);
+    eq("a reply to a comment that is not there is 404", res.status, 404);
+    eq("...saying no-such-comment", body && body.error, "no-such-comment");
+  }
+
+  /* ---- resolve ---- */
+  {
+    const res = await patch(doc.id, reviewToken, "n1", { resolved: true, by: "Reviewer" });
+    const body = await json(res);
+    eq("resolving is a PATCH on the one comment", res.status, 200);
+    eq("...which says so", body && body.comment && body.comment.resolved, true);
+    eq("...and records who", body && body.comment.resolvedBy, "Reviewer");
+
+    const again = await json(await patch(doc.id, reviewToken, "n1", { resolved: true }));
+    eq("resolving an already-resolved comment writes nothing", again && again.changed, false);
+    eq("...and the rev stands still", again && again.rev, body.rev);
+
+    const undo = await json(await patch(doc.id, reviewToken, "n1", { resolved: false }));
+    eq("unresolving clears the resolver", undo && undo.comment.resolvedBy, null);
+    eq("...and the time with it", undo && undo.comment.resolvedAt, null);
+
+    const missing = await patch(doc.id, reviewToken, "nope", { resolved: true });
+    eq("resolving a comment that is not there is 404", missing.status, 404);
+    const nonsense = await patch(doc.id, reviewToken, "n1", { resolved: "yes" });
+    eq("...and a resolve that is not a boolean is 400", nonsense.status, 400);
+  }
+
+  /* ---- posting the same comment twice ----
+     A client that lost the answer to a dropped connection and tried again. */
+  {
+    const first = await json(await post(doc.id, reviewToken, { comment: note("dup") }));
+    const second = await json(await post(doc.id, reviewToken, { comment: note("dup", { body: "different words" }) }));
+    eq("the same comment posted twice does not land twice", second && second.changed, false);
+    eq("...the rev stands still", second && second.rev, first.rev);
+    eq("...and the stored one is the first one", second && second.comment.body, "a note");
+    const now = await readDocAs(doc.id, editToken);
+    eq("...with one copy in the document",
+      (now.state.comments || []).filter((c) => c.id === "dup").length, 1);
+  }
+
+  /* ---- the shape a comment has to have ---- */
+  {
+    const cases = [
+      ["a comment with no id", { comment: note("") }],
+      ["a comment with an id that is not one", { comment: note("../../etc") }],
+      ["a comment with no body", { comment: note("n6", { body: "" }) }],
+      ["a comment on no scene at all", { comment: { id: "n7", field: "audioText", body: "x" } }],
+      ["a body that is not a comment", { comment: "hello" }],
+      ["an empty request", {}]
+    ];
+    for (const [name, payload] of cases) {
+      const res = await post(doc.id, reviewToken, payload);
+      eq(name + " is 400", res.status, 400);
+    }
+    const stray = await json(await post(doc.id, reviewToken, {
+      comment: note("n8", { resolved: true, resolvedBy: "Reviewer", replies: [{ id: "x", body: "y" }] })
+    }));
+    eq("a comment cannot arrive pre-resolved", stray && stray.comment.resolved, false);
+    eq("...nor with replies already on it", stray && stray.comment.replies.length, 0);
+    check("...and carries no key this server has not heard of",
+      Object.keys(stray.comment).sort().join(",") ===
+      "anchorId,assignee,author,body,createdAt,field,id,kind,quotedText,replies,resolved,resolvedAt,resolvedBy,rowId,updatedAt");
+  }
+
+  /* ---- what is not a route here ---- */
+  {
+    const read = await fetch(cmtUrl(doc.id), { headers: { "x-splitpage-token": reviewToken } });
+    eq("there is no GET of the comments — reading is the document's own route", read.status, 405);
+    const deep = await fetch(cmtUrl(doc.id) + "/n1/replies", {
+      method: "POST", headers: hdr(reviewToken), body: "{}"
+    });
+    eq("...and no deeper path than the one comment", deep.status, 404);
+    const badCid = await patch(doc.id, reviewToken, "not a comment id", { resolved: true });
+    eq("...and a comment id that is not one is 400", badCid.status, 400);
+  }
+
+  /* ---- the review link's scope (#63) holds here too ---- */
+  {
+    const scoped = await json(await fetch(sCmt.base + "api/share?doc=" + doc.id, {
+      headers: { "x-splitpage-token": editToken }
+    }));
+    const scopedToken = (await joinAs({ key: scoped.reviewKey })).token;
+
+    const mine = await post(doc.id, scopedToken, { comment: note("s1") });
+    eq("a per-document review token comments on the document it names", mine.status, 200);
+
+    const theirs = await post(otherDoc.id, scopedToken, { comment: note("s2") });
+    const body = await json(theirs);
+    eq("...and on no other", theirs.status, 403);
+    eq("...saying wrong-document", body && body.error, "wrong-document");
+    const over = await readDocAs(otherDoc.id, scopedToken);
+    check("...nor reads that one's state", !(over && over.state));
+    const listed = await json(await fetch(sCmt.base + "api/docs", { headers: { "x-splitpage-token": scopedToken } }));
+    eq("...nor lists the library", (listed && listed.docs || []).length, 1);
+
+    /* And the refusal happens before a byte of the body is read (#74): this
+       request announces 20 MB and sends twenty bytes of it. An answer at all
+       is the proof. */
+    const early = await refuseBeforeBody(sCmt.base, "/api/docs/" + otherDoc.id + "/comments", "POST",
+      { "x-splitpage-token": scopedToken });
+    eq("a comment for the wrong document is refused before its body is read", early.status, 403);
+
+    const noToken = await fetch(cmtUrl(doc.id), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment: note("s3") })
+    });
+    eq("and with no token at all it is the gate that answers", noToken.status, 401);
+  }
+
+  /* ---- the cap: a comment, not a script ----
+     MAX_BODY is 25 MB because a whole script with its images has to fit
+     through PUT. Nothing a reviewer sends here is anywhere near that. */
+  {
+    const huge = await post(doc.id, reviewToken, {
+      comment: note("big", { body: "x".repeat(600 * 1024) })
+    });
+    eq("a comment over this route's cap is 413", huge.status, 413);
+    eq("...saying too-large", (await json(huge) || {}).error, "too-large");
+
+    const large = await post(doc.id, reviewToken, {
+      comment: note("big2", { body: "x".repeat(300 * 1024) })
+    });
+    eq("a single comment body over its own bound is 400", large.status, 400);
+
+    const now = await readDocAs(doc.id, editToken);
+    check("...and neither was written",
+      !(now.state.comments || []).some((c) => c.id === "big" || c.id === "big2"));
+  }
+
+  /* ---- two reviewers at once ----
+     The whole reason the append happens inside the document's lock rather
+     than as a read-modify-write: with the old PUT one of these two would
+     have lost, and been handed a 409 to merge and try again. */
+  {
+    const before = await readDocAs(doc.id, editToken);
+    const scoped = await json(await fetch(sCmt.base + "api/share?doc=" + doc.id, {
+      headers: { "x-splitpage-token": editToken }
+    }));
+    const scopedToken = (await joinAs({ key: scoped.reviewKey })).token;
+
+    const [a, b] = await Promise.all([
+      post(doc.id, reviewToken, { comment: note("race-a", { author: "Ada" }), by: "Ada" }),
+      post(doc.id, scopedToken, { comment: note("race-b", { author: "Bo" }), by: "Bo" })
+    ]);
+    eq("two reviewers commenting at once both succeed", a.status + "/" + b.status, "200/200");
+    const revs = [(await json(a)).rev, (await json(b)).rev].sort((x, y) => x - y);
+    eq("...at consecutive revs, one behind the other", revs.join(","),
+      [(before.rev || 0) + 1, (before.rev || 0) + 2].join(","));
+
+    const now = await readDocAs(doc.id, editToken);
+    check("...and neither comment was lost", ["race-a", "race-b"]
+      .every((cid) => (now.state.comments || []).some((c) => c.id === cid)));
+    eq("...the document's rev matching the later of the two", now.rev, revs[1]);
+    eq("...and the head line with it", headOfFile(join(sCmt.dataDir, doc.id + ".json")).rev, revs[1]);
+  }
+  {
+    /* Ten at once, to be sure it is the lock doing it and not luck. */
+    const before = await readDocAs(doc.id, editToken);
+    const many = await Promise.all(Array.from({ length: 10 }, (_, i) =>
+      post(doc.id, reviewToken, { comment: note("many-" + i, { author: "R" + i }) })));
+    eq("ten comments posted at once all succeed",
+      many.filter((r) => r.status === 200).length, 10);
+    const now = await readDocAs(doc.id, editToken);
+    eq("...and all ten are there",
+      (now.state.comments || []).filter((c) => /^many-/.test(c.id)).length, 10);
+    eq("...the rev counting every one of them", now.rev, (before.rev || 0) + 10);
+  }
+
+  /* ---- a document saved before any of this existed (#62) ----
+     No head line, no `comments` array, and none of the fields the client
+     fills in on load — which is exactly the document whose reviewers used
+     to be told "review-only" because their copy carried `brollShots: []`
+     and the stored one carried no such key. There is nothing to compare
+     here any more, so there is nothing to disagree about. */
+  {
+    const legacyPath = join(sCmt.dataDir, "legacy-comment.json");
+    writeFileSync(legacyPath, JSON.stringify({
+      id: "legacy-comment",
+      rev: 4,
+      state: {
+        title: "Saved the old way",
+        rows: [{ id: "r1", visualText: "", audioText: "Hello there" }]
+      },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      updatedBy: "Host"
+    }));
+
+    const res = await post("legacy-comment", reviewToken, {
+      comment: note("old1"),
+      anchor: {
+        rowId: "r1", field: "audioText",
+        html: 'Hello <span class="cmt-anchor" data-cmt="old1">there</span>'
+      },
+      by: "Reviewer"
+    });
+    const body = await json(res);
+    eq("a comment on a document saved before brollShots existed is 200, not 403", res.status, 200);
+    eq("...counting on from the rev it had", body && body.rev, 5);
+    eq("...and its anchor lands like any other", body && body.anchored, true);
+
+    const now = await readDocAs("legacy-comment", editToken);
+    eq("...the comments array is created for it", (now.state.comments || []).length, 1);
+    check("...nothing else in it was touched",
+      now.state.title === "Saved the old way" && now.state.rows.length === 1);
+    eq("...and it has a head line from now on, at the rev it is really at",
+      headOfFile(legacyPath).rev, 5);
+  }
+  {
+    const gone = await post("not-a-document", reviewToken, { comment: note("x1") });
+    eq("a comment on a document that is not there is 404", gone.status, 404);
+    const bad = await post("Not-An-Id", reviewToken, { comment: note("x2") });
+    eq("...and on an id that is not one, 400", bad.status, 400);
+  }
+
+  /* ---- the old path is still open ----
+     The browser lane moves reviewers over to the route above in its own
+     commit; until it has, the whole-document PUT it uses today must keep
+     working exactly as it did. */
+  {
+    const now = await readDocAs(doc.id, reviewToken);
+    const next = JSON.parse(JSON.stringify(now.state));
+    next.comments.push(Object.assign(note("put1"), {
+      createdAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-01T00:00:00.000Z",
+      resolved: false, replies: []
+    }));
+    const res = await fetch(sCmt.base + "api/docs/" + doc.id, {
+      method: "PUT", headers: hdr(reviewToken),
+      body: JSON.stringify({ baseRev: now.rev, state: next, by: "Reviewer" })
+    });
+    eq("the whole-document review PUT still works beside it", res.status, 200);
+
+    const worse = JSON.parse(JSON.stringify(next));
+    worse.rows[0].audioText = "a reviewer rewriting the script";
+    const refused = await fetch(sCmt.base + "api/docs/" + doc.id, {
+      method: "PUT", headers: hdr(reviewToken),
+      body: JSON.stringify({ baseRev: (await readDocAs(doc.id, reviewToken)).rev, state: worse })
+    });
+    eq("...and still refuses everything it always refused", refused.status, 403);
+    eq("...saying review-only", (await json(refused) || {}).error, "review-only");
+  }
+} finally {
+  sCmt.stop();
+}
+
+/* A published library takes no comments either — it is not a write with an
+   exemption, it is a write. */
+const sCmtRO = await startServer({ HOST: "127.0.0.1", READ_ONLY: "1" });
+try {
+  writeFileSync(join(sCmtRO.dataDir, "frozen-doc.json"), JSON.stringify({
+    id: "frozen-doc", rev: 1,
+    state: { title: "Frozen", rows: [{ id: "r1", audioText: "Hello" }], comments: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z", updatedBy: "Host"
+  }));
+  const res = await fetch(sCmtRO.base + "api/docs/frozen-doc/comments", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment: { id: "f1", rowId: "r1", field: "audioText", body: "no" } })
+  });
+  const body = await json(res);
+  eq("a read-only library refuses a comment", res.status, 403);
+  eq("...saying read-only", body && body.error, "read-only");
+} finally {
+  sCmtRO.stop();
 }
 
 console.log("");
