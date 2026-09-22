@@ -2,6 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Content Security Policy (#65). First thing after the charset, because a
+     meta policy only governs what the parser reaches AFTER it.
+
+     The renderer parses untrusted .splitpage and .md files and copies
+     innerHTML into state on every keystroke; on the desktop it sits in front
+     of the whole file and history bridge. sanitizeHtml() is the first line
+     and this is the second, so one slip in it is not one HTML injection away
+     from running code.
+
+     Written by build.mjs: the app's one inline script is allowed by the
+     SHA-256 of its own body, so nothing else inline can run — not an
+     injected <script>, not an onerror= in a pasted <img>. See buildCsp()
+     there for what each directive is holding back, and desktop/main.js,
+     which serves this same policy as a response header so it also covers
+     the tab strip's origin. -->
+<meta http-equiv="Content-Security-Policy" content="{{CSP}}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
@@ -27,9 +43,16 @@
      offline is the wrong failure. media="print" makes it non-render-blocking;
      onload promotes it to the real stylesheet once it has actually arrived.
      The <noscript> copy keeps the fonts for a scripting-disabled reader, who
-     has no app to block anyway. -->
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+     has no app to block anyway.
+
+     The promotion used to be an inline onload= attribute. Under the CSP
+     above an inline event handler is exactly what is being blocked, and an
+     exception for it ('unsafe-hashes' or 'unsafe-inline') would have been a
+     hole big enough to drive the rest through — so 00-prelude.js does it
+     instead, from the one script the policy trusts. -->
+<link id="font-css"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet" media="print">
 <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
 /*{{APP_CSS}}*/

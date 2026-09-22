@@ -2,6 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Content Security Policy (#65). First thing after the charset, because a
+     meta policy only governs what the parser reaches AFTER it.
+
+     The renderer parses untrusted .splitpage and .md files and copies
+     innerHTML into state on every keystroke; on the desktop it sits in front
+     of the whole file and history bridge. sanitizeHtml() is the first line
+     and this is the second, so one slip in it is not one HTML injection away
+     from running code.
+
+     Written by build.mjs: the app's one inline script is allowed by the
+     SHA-256 of its own body, so nothing else inline can run — not an
+     injected <script>, not an onerror= in a pasted <img>. See buildCsp()
+     there for what each directive is holding back, and desktop/main.js,
+     which serves this same policy as a response header so it also covers
+     the tab strip's origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-g4RFWEK06daSi7XR8mmASs6MzIlEjHs6pqBzAthvLfk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http:; object-src 'none'; frame-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
@@ -27,9 +43,16 @@
      offline is the wrong failure. media="print" makes it non-render-blocking;
      onload promotes it to the real stylesheet once it has actually arrived.
      The <noscript> copy keeps the fonts for a scripting-disabled reader, who
-     has no app to block anyway. -->
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet" media="print" onload="this.media='all';this.onload=null">
+     has no app to block anyway.
+
+     The promotion used to be an inline onload= attribute. Under the CSP
+     above an inline event handler is exactly what is being blocked, and an
+     exception for it ('unsafe-hashes' or 'unsafe-inline') would have been a
+     hole big enough to drive the rest through — so 00-prelude.js does it
+     instead, from the one script the policy trusts. -->
+<link id="font-css"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet" media="print">
 <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 <style>
   /* The hidden attribute wins, always.
@@ -4261,7 +4284,7 @@
 <pre><code>node update.mjs check     # is there a newer version?
 node update.mjs           # download and verify it</code></pre>
 <p>The launcher also checks at every launch, and the app shows a bar when there is something waiting — with a <strong>Download</strong> button, so you never have to go and find the right file yourself. Pressing it downloads and verifies the release there and then; the files are swapped in the next time you start Splitpage. Updates are fetched from a public releases mirror so the shipped copy can stay up to date even though the main repository is private.</p>
-<p>The desktop app does the same thing without a launcher: it checks at startup, and its Download button fetches the installer for your platform and architecture inside the app. When it has finished the button becomes <strong>Install and restart</strong>, which runs the installer and closes Splitpage. The release page only gets offered when a release has no installer your machine can run.</p>
+<p>The desktop app does the same thing without a launcher: it checks at startup, and its Download button fetches the installer for your platform and architecture inside the app. The download is checked against the <code>SHA256SUMS</code> published with that release, and a release that published none is <strong>not installed</strong> — the app says so rather than running a file it cannot vouch for. When a download has finished and matched, the button becomes <strong>Install and restart</strong>, which runs the installer and closes Splitpage. The release page only gets offered when a release has no installer your machine can run.</p>
 <p><strong>Updates install on restart, never while the app is open.</strong> Downloading is safe at any time; swapping out <code>index.html</code> under a browser that has it open is not. So <code>update.mjs</code> only downloads, checks every file against the new release's own checksums, and stages it — and <code>start.bat</code> puts it in place the next time you launch, before it serves anything. If an update fails halfway it rolls back to the copy it made, and if you have hand-edited any of the app's files it refuses to overwrite them until you say <code>--force</code> (the Download button reports that rather than overwriting your work).</p>
 <p>The button reaches <code>update.mjs</code> through <code>POST /api/launcher/update/stage</code>, which exists only on a loopback bind and only with the launch token the launcher handed the page — the same gate as the "add me to the Start Menu" route, and for the same reason. Nothing over HTTP can install anything: that route only ever <em>downloads</em>, and the swap happens at launch, in <code>start.mjs</code>, when no browser has the app open.</p>
 <h2 id="help-tagging-and-the-production-breakdown">Tagging and the production breakdown</h2>
@@ -4676,6 +4699,23 @@ node update.mjs           # download and verify it</code></pre>
      never risks the "serialize the live DOM" trap the platform warns
      about, because this copy is taken before the DOM is live at all. */
   var PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
+
+  /* The Google Fonts stylesheet ships as media="print" so a slow or
+     unreachable fonts.googleapis.com cannot stop this script from running
+     (see the comment on the <link> in page.html). Promoting it to the real
+     stylesheet once it has arrived used to be an inline onload= attribute;
+     the CSP (#65) blocks inline event handlers, so it happens here, from
+     the one script that policy trusts. Immediately after PAGE_SHELL is
+     captured, so the promotion never lands in a saved copy of the page —
+     the shell has to be the page as it was served. */
+  (function promoteFontCss() {
+    var link = document.getElementById("font-css");
+    if (!link) return;
+    /* `sheet` is set once the stylesheet has parsed, whatever its media. A
+       cached font stylesheet can be there already by the time this runs. */
+    if (link.sheet) { link.media = "all"; return; }
+    link.addEventListener("load", function () { link.media = "all"; });
+  })();
 
   /* The Electron bridge, when this page is running inside the desktop shell.
      desktop/preload.js (a sibling project, not part of this build) defines
@@ -13606,7 +13646,13 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function brollLineKey(rowId, ordinal) {
-    return rowId + " " + ordinal;
+    /* A separator no row id or ordinal can contain. Written as an escape,
+       not as a raw NUL byte: the app ships inside a <script> in one HTML
+       file, and the HTML parser rewrites a literal NUL in script data to
+       U+FFFD — so the byte on disk and the character that ran were never
+       the same thing, and the CSP hash of this script (#65) is computed
+       over what is on disk. */
+    return rowId + "\u0000" + ordinal;
   }
 
   /* Rows an import was asked NOT to scan (11-import.js). Browser state, never

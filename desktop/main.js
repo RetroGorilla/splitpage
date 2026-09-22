@@ -170,7 +170,15 @@ const rawArgv = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
 function argHas(list, flag) { return list.includes(flag); }
 function argValueOf(list, flag, fallback) {
   const i = list.indexOf(flag);
-  return i === -1 || i === list.length - 1 ? fallback : list[i + 1];
+  if (i === -1 || i === list.length - 1) return fallback;
+  const value = list[i + 1];
+  /* `--tunnel --something-else` has no value: it has the NEXT FLAG sitting
+     where a value should be, and taking that as the value turns a typo into
+     a setting (#64). argValuesOf below has always refused a "--" value for
+     the same reason; this is the single-value half of the same rule, and a
+     leading "-" covers the short forms too. */
+  if (typeof value === "string" && value.startsWith("-")) return fallback;
+  return value;
 }
 function argValuesOf(list, flag) {
   const out = [];
@@ -2822,12 +2830,21 @@ function downloadUpdate() {
     }
     const digest = hash.digest("hex");
     const published = await fetchPublishedChecksum(updateAssets, asset.name);
-    if (published && published !== digest) {
+    /* MANDATORY (#64). This file is the one thing the app will execute, and
+       it is not code-signed, so the published checksum is the whole chain.
+       It used to be optional: a release with no SHA256SUMS asset, or one
+       whose asset failed to fetch, installed anyway on the strength of
+       HTTPS to GitHub alone. A release we cannot verify is a release we do
+       not install — and saying so is more honest than proceeding. */
+    if (!published) {
+      throw new Error("this release has no published checksum, so it is not being installed");
+    }
+    if (published !== digest) {
       throw new Error("the download does not match the checksum published for it");
     }
 
     updateFile = target;
-    setDownloadState({ state: "ready", error: null, verified: !!published });
+    setDownloadState({ state: "ready", error: null, verified: true });
     return { ok: true, state: "ready" };
   })().catch(async (err) => {
     updateFile = null;
@@ -2908,6 +2925,57 @@ function runUpdateInstaller() {
  * 10. protocol.handle — the whole of what the window is allowed to load.
  * --------------------------------------------------------------------- */
 
+/* ---- Content Security Policy, as a response header (#65) ----
+ *
+ * index.html carries the policy in a <meta>, written by build.mjs (which
+ * computes the hash of the app's own inline script). That meta already
+ * applies here, since this is the same file — but a header is what the app
+ * origin should be answering with anyway, and it is the only way to give the
+ * tab strip's origin a policy at all, since its HTML has no meta of its own.
+ *
+ * Read out of the served index.html rather than written out again here, so
+ * the two can never drift: a directive widened in build.mjs is widened here
+ * on the next launch, and one tightened there is tightened here.
+ *
+ * Set on the responses this protocol handler returns rather than through
+ * session.webRequest.onHeadersReceived: the session is shared with the
+ * tunnel window, which loads somebody else's page over http and must not be
+ * handed this app's policy.
+ *
+ * frame-ancestors is added here and nowhere else. Browsers ignore it in a
+ * meta policy; in a header it is what stops either origin being framed.
+ */
+let appCspHeader = null;
+
+async function readAppCsp() {
+  if (appCspHeader !== null) return appCspHeader;
+  appCspHeader = "";
+  try {
+    const html = await fsp.readFile(path.join(APP_ROOT, "index.html"), "utf8");
+    /* The head is a few KB in; no need to scan a 1.4MB file for it. */
+    const m = /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"/i.exec(html.slice(0, 20000));
+    if (m) appCspHeader = m[1] + "; frame-ancestors 'none'";
+  } catch { /* no index.html to read — the 404 below is the real error */ }
+  return appCspHeader;
+}
+
+/* The tab strip is three static files with no inline script, no network and
+   no bridge (invariant #43), so its policy says exactly that. */
+const TABSTRIP_CSP = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'none'",
+  "object-src 'none'",
+  "frame-src 'none'",
+  "worker-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'"
+].join("; ");
+
 function contentTypeFor(ext) {
   const table = {
     ".html": "text/html; charset=utf-8",
@@ -2942,7 +3010,10 @@ function registerProtocol() {
       if (!stripPath.startsWith(TABSTRIP_ROOT)) return new Response("not found", { status: 404 });
       try {
         const buf = await fsp.readFile(stripPath);
-        return new Response(buf, { status: 200, headers: { "content-type": stripEntry.type } });
+        return new Response(buf, {
+          status: 200,
+          headers: { "content-type": stripEntry.type, "content-security-policy": TABSTRIP_CSP }
+        });
       } catch {
         return new Response("not found", { status: 404 });
       }
@@ -3003,7 +3074,10 @@ function registerProtocol() {
     if (!absPath.startsWith(APP_ROOT)) return new Response("not found", { status: 404 });
     try {
       const buf = await fsp.readFile(absPath);
-      return new Response(buf, { status: 200, headers: { "content-type": entry.type } });
+      const headers = { "content-type": entry.type };
+      const csp = await readAppCsp();
+      if (csp) headers["content-security-policy"] = csp;
+      return new Response(buf, { status: 200, headers });
     } catch {
       return new Response("not found", { status: 404 });
     }

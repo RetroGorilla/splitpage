@@ -458,8 +458,11 @@ up to date even though the main repository is private.
 
 The desktop app does the same thing without a launcher: it checks at startup,
 and its Download button fetches the installer for your platform and
-architecture inside the app. When it has finished the button becomes **Install
-and restart**, which runs the installer and closes Splitpage. The release page
+architecture inside the app. The download is checked against the `SHA256SUMS`
+published with that release, and a release that published none is **not
+installed** — the app says so rather than running a file it cannot vouch for.
+When a download has finished and matched, the button becomes **Install and
+restart**, which runs the installer and closes Splitpage. The release page
 only gets offered when a release has no installer your machine can run.
 
 **Updates install on restart, never while the app is open.** Downloading is

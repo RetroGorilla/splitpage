@@ -1,0 +1,74 @@
+# The Content Security Policy (issue #65).
+#
+# The renderer parses untrusted .splitpage and .md files and copies innerHTML
+# into state on every keystroke; in the desktop app it sits in front of the
+# whole file and history bridge. sanitizeHtml() is the first line against an
+# injection and the CSP is the second, so this suite checks the policy is
+# actually there, actually enforcing, and still lets the app work.
+#
+# The policy is written by build.mjs (buildCsp), which hashes the app's one
+# inline script — so "the app booted at all" is itself the assertion that the
+# hash is right. A wrong hash refuses the script and nothing below runs.
+
+open
+
+# ---- the app runs under it -------------------------------------------------
+expect document.querySelectorAll('#rows .row').length > 0
+expect typeof window.__splitpageFormats === 'object'
+
+# ---- the policy is in the page, before anything it governs -----------------
+eval (function(){var m=document.querySelector('meta[http-equiv="Content-Security-Policy"]');window.__csp=m?m.content:'';return window.__csp;})()
+expect window.__csp.length > 0
+# It has to be the first meta after the charset, or the parser reaches
+# resources it was meant to govern before it exists.
+eval (function(){var metas=document.head.querySelectorAll('meta');window.__cspIndex=Array.prototype.indexOf.call(metas,document.querySelector('meta[http-equiv="Content-Security-Policy"]'));return window.__cspIndex;})()
+expect window.__cspIndex == 1
+
+# ---- the directives that matter --------------------------------------------
+expect window.__csp.indexOf("default-src 'self'") !== -1
+expect window.__csp.indexOf("object-src 'none'") !== -1
+expect window.__csp.indexOf("base-uri 'self'") !== -1
+expect window.__csp.indexOf("form-action 'none'") !== -1
+# The inline app is allowed by hash and by nothing else: no 'unsafe-inline',
+# no 'unsafe-eval', no nonce that a future edit could leave stale.
+expect /script-src [^;]*'sha256-[A-Za-z0-9+/=]{44}'/.test(window.__csp)
+eval (function(){var m=/script-src ([^;]*)/.exec(window.__csp);window.__scriptSrc=m?m[1]:'';return window.__scriptSrc;})()
+expect window.__scriptSrc.indexOf("'unsafe-inline'") === -1
+expect window.__scriptSrc.indexOf("'unsafe-hashes'") === -1
+expect window.__csp.indexOf("'unsafe-eval'") === -1
+# 'unsafe-inline' appears exactly once in the whole policy, in style-src,
+# because the app sets style attributes (panel widths, the drag ghost, the
+# teleprompter's transform).
+expect window.__csp.split("'unsafe-inline'").length == 2
+expect /style-src [^;]*'unsafe-inline'/.test(window.__csp)
+# Images are data: URIs and nothing else (safeImageSrc), so http(s) images
+# stay refused even if one gets past the sanitiser.
+expect /img-src 'self' data: blob:;/.test(window.__csp)
+
+# ---- and it is enforcing ---------------------------------------------------
+# An inline <script> injected the way a successful HTML injection would inject
+# one. The tag lands in the DOM; the policy is what stops it running.
+eval (function(){window.__ran=false;var s=document.createElement('script');s.textContent='window.__ran=true;';document.body.appendChild(s);s.remove();return window.__ran;})()
+expect window.__ran === false
+
+# (eval() and new Function() are refused too — script-src carries no
+# 'unsafe-eval', asserted above. It cannot be driven from here: the harness
+# runs every `eval` line through the DevTools protocol, which is exempt from
+# the page's policy, and anything it calls inherits that exemption.)
+
+# An <img onerror> — the classic way an injected attribute runs code.
+eval (function(){window.__imgRan=false;var i=document.createElement('img');i.setAttribute('onerror','window.__imgRan=true');i.setAttribute('src','data:image/png;base64,notreallyapng');document.body.appendChild(i);return true;})()
+sleep 250
+expect window.__imgRan === false
+
+# ---- nothing legitimate was broken -----------------------------------------
+# The fonts stylesheet is loaded media="print" and promoted from 00-prelude.js
+# rather than from an inline onload= the policy would refuse.
+expect document.getElementById('font-css') !== null
+expect document.getElementById('font-css').getAttribute('onload') === null
+# The two places the app really does build a URL at runtime still work: a
+# data: image in a document, and a blob: URL for an export.
+eval (function(){var u=URL.createObjectURL(new Blob(['x'],{type:'text/plain'}));URL.revokeObjectURL(u);return u.slice(0,5);})()
+expect URL.createObjectURL(new Blob(['x'])).slice(0,5) === 'blob:'
+
+quit

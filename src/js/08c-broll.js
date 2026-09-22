@@ -490,7 +490,13 @@
   }
 
   function brollLineKey(rowId, ordinal) {
-    return rowId + " " + ordinal;
+    /* A separator no row id or ordinal can contain. Written as an escape,
+       not as a raw NUL byte: the app ships inside a <script> in one HTML
+       file, and the HTML parser rewrites a literal NUL in script data to
+       U+FFFD — so the byte on disk and the character that ran were never
+       the same thing, and the CSP hash of this script (#65) is computed
+       over what is on disk. */
+    return rowId + "\u0000" + ordinal;
   }
 
   /* Rows an import was asked NOT to scan (11-import.js). Browser state, never

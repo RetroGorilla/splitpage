@@ -14,6 +14,23 @@
      about, because this copy is taken before the DOM is live at all. */
   var PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
+  /* The Google Fonts stylesheet ships as media="print" so a slow or
+     unreachable fonts.googleapis.com cannot stop this script from running
+     (see the comment on the <link> in page.html). Promoting it to the real
+     stylesheet once it has arrived used to be an inline onload= attribute;
+     the CSP (#65) blocks inline event handlers, so it happens here, from
+     the one script that policy trusts. Immediately after PAGE_SHELL is
+     captured, so the promotion never lands in a saved copy of the page —
+     the shell has to be the page as it was served. */
+  (function promoteFontCss() {
+    var link = document.getElementById("font-css");
+    if (!link) return;
+    /* `sheet` is set once the stylesheet has parsed, whatever its media. A
+       cached font stylesheet can be there already by the time this runs. */
+    if (link.sheet) { link.media = "all"; return; }
+    link.addEventListener("load", function () { link.media = "all"; });
+  })();
+
   /* The Electron bridge, when this page is running inside the desktop shell.
      desktop/preload.js (a sibling project, not part of this build) defines
      window.splitpageDesktop ONLY on documents loaded from the privileged
