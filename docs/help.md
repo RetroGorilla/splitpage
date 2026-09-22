@@ -67,8 +67,8 @@ date](#keeping-it-up-to-date)).
 **Moving your data between the browser and desktop apps?** See
 [Moving between the browser app and the desktop app](#moving-between-the-browser-app-and-the-desktop-app).
 
-**Follow My Voice** isn't available in the desktop app yet — it still works
-in the browser version.
+**Follow My Voice** doesn't run inside the desktop app yet, but the desktop
+teleprompter can hand your script to your browser, where it does: see below.
 
 ## Setting up
 
@@ -129,8 +129,13 @@ files open in it when you double-click them. Editing, saving and hosting a
 shared session on your network all work the same as in the browser, with two
 exceptions for now:
 
-- **Follow My Voice** isn't available in the desktop app yet. It still works in
-  Chrome or Edge, and a fix is planned.
+- **Follow My Voice** doesn't run inside the desktop app yet. Instead, choose
+  **View ▸ Present in Browser (Follow My Voice)**, or the **Open in browser to
+  use Follow My Voice** button on the teleprompter. Your default browser opens
+  straight into the teleprompter with the same script, and Follow My Voice
+  works there in Chrome or Edge. The browser shows a read-only copy: keep
+  editing in the desktop app. If the script has never been saved, you'll be
+  asked to save it first.
 - **Google Drive files** can't be browsed from the desktop app, because Google's
   sign-in only returns to a web address. **Import from Google Doc link** still
   works: it opens the Doc's .docx download in your browser, and you then open

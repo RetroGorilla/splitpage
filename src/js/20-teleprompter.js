@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
 import { inertBody, sanitizeHtml } from "./04-richtext.js";
@@ -9,7 +10,12 @@ import {
   setTagNotes,
   setTagOwner
 } from "./08-production-panels.js";
+import { showToast } from "./12-dirty-toast.js";
 import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
+import { ONBOARD_KEY } from "./20b-onboarding.js";
+import { canOpenPrompterInBrowser, openPrompterInBrowser } from "./20f-desktop.js";
+import { closeNewTabPage } from "./20j-newtab.js";
 import { onRootClick } from "./21-events.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -441,21 +447,41 @@ function setVoiceStatus(msg, kind) {
   el.className = "pp-voice-status" + (kind ? " " + kind : "");
 }
 
+/* What the voice button says when it is not following. On desktop it does
+   not follow at all (see updateVoiceAvailability) — it opens the script in
+   the browser, and says so on the button rather than in small print. */
+var VOICE_IDLE_LABEL = "Follow My Voice";
+var VOICE_BROWSER_LABEL = "Open in browser to use Follow My Voice";
+var VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in the desktop app yet — it works in the browser version.";
+
+function voiceIdleLabel() {
+  return S.DESKTOP && canOpenPrompterInBrowser() ? VOICE_BROWSER_LABEL : VOICE_IDLE_LABEL;
+}
+
 export function updateVoiceAvailability() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
+  if (!S.voiceFollowActive) btn.textContent = voiceIdleLabel();
   /* The Web Speech API's constructor exists in Electron's Chromium, but
      recognition itself fails immediately with a 'network' error — Google's
      speech backend that powers it is not reachable from inside Electron
      the way it is from an actual Chrome/Edge install. Desktop voice needs
-     its own recognition engine (not Google's), which is a separate,
-     currently-paused piece of work — so rather than a button that looks
-     live and then fails on click with a misleading "needs an internet
-     connection" message, it is disabled with an honest status line. This
-     arm is replaced once that engine lands. */
+     its own recognition engine (not Google's, #8) — so rather than a
+     button that looks live and then fails on click with a misleading
+     "needs an internet connection" message, the desktop button does the
+     thing that works today: it opens this script in the default browser,
+     starting in the teleprompter (issue #86, openPrompterInBrowser in
+     20f-desktop.js). A bridge too old to offer that keeps the honest
+     disabled state. This arm changes again once the desktop engine lands:
+     the browser stays the fallback where it is not available. */
   if (S.DESKTOP) {
-    btn.disabled = true;
-    setVoiceStatus("Follow My Voice isn't available in the desktop app yet — it works in the browser version.", "");
+    if (canOpenPrompterInBrowser()) {
+      btn.disabled = false;
+      setVoiceStatus("Chrome or Edge can follow your voice — this opens the saved script there.", "");
+    } else {
+      btn.disabled = true;
+      setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, "");
+    }
   } else if (!SpeechRecognitionCtor) {
     btn.disabled = true;
     setVoiceStatus("Voice follow needs Chrome or Edge.", "");
@@ -476,7 +502,7 @@ function updateVoiceButtonUI() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
   btn.classList.toggle("is-active", S.voiceFollowActive);
-  btn.textContent = S.voiceFollowActive ? "Stop Following" : "Follow My Voice";
+  btn.textContent = S.voiceFollowActive ? "Stop Following" : voiceIdleLabel();
 }
 
 function applySpokenUpTo(idx) {
@@ -577,7 +603,11 @@ export async function startVoiceFollow() {
      ever reaching getUserMedia or the recognizer, even if something else
      re-enables the button. Same paused-engine reasoning as above. */
   if (S.DESKTOP) {
-    setVoiceStatus("Follow My Voice isn't available in the desktop app yet — it works in the browser version.", "");
+    if (!canOpenPrompterInBrowser()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
+    setVoiceStatus("Opening in your browser…", "");
+    openPrompterInBrowser().then(function (result) {
+      if (result && result.message) setVoiceStatus(result.message, result.ok ? "" : "error");
+    });
     return;
   }
   if (!SpeechRecognitionCtor) return;
@@ -736,6 +766,131 @@ export function stopVoiceFollow() {
   if (wasActive) setVoiceStatus("", "");
 }
 
+/* ---------- arriving from the desktop app (issue #86) ----------
+
+   The other half of the desktop teleprompter's "Open in browser". The
+   desktop shell (desktop/main.js section 9b) opens one of two addresses in
+   the default browser, and this is where the browser build recognises them:
+
+     ?teleprompter=1#script=<64 hex>
+         served by the desktop app's own loopback listener
+         (desktop/prompter-share.js): the page fetches the script from
+         prompter-script/<token> on the same origin, opens it as a project,
+         and starts in the teleprompter. A COPY to read from — no file
+         handle, so nothing here can write back over the desktop's file,
+         and no "before opening" snapshot, so no copy of the script is
+         left in this origin's version history.
+     ?doc=<id>&teleprompter=1
+         served by the desktop app's document server: 13-hosted.js opens
+         the hosted document from ?doc= as it does for any shared link
+         (after the join PIN, if the server has one), and the teleprompter
+         opens once it has.
+
+   Both parameters leave the address bar as soon as they are read — the
+   token especially, like the review key in 13-hosted.js: it is in the
+   fragment so no server ever sees it, and out of the bar so it is not in a
+   screenshot or a bookmark. It is kept in sessionStorage (this tab only)
+   so a reload re-reads the script for as long as the desktop still shares
+   it. */
+var PROMPTER_LAUNCH_KEY = "splitpage-prompter-launch";
+var PROMPTER_TOKEN_RE = /^[0-9a-f]{64}$/;
+/* Long enough for someone to type a join PIN; short enough that a page
+   which never reaches its document does not spring the prompter open on
+   something else much later. */
+var HOSTED_LAUNCH_WAIT_MS = 5 * 60 * 1000;
+
+function readPrompterLaunch() {
+  if (S.DESKTOP) return null;
+  var wanted;
+  try { wanted = new URLSearchParams(location.search).get("teleprompter") === "1"; } catch (e) { wanted = false; }
+  var m = /(?:^#|&)script=([0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
+  var token = m ? m[1] : "";
+  if (wanted || token) {
+    try {
+      var url = new URL(location.href);
+      url.searchParams.delete("teleprompter");
+      var rest = (url.hash || "").replace(/(^#|&)script=[0-9a-f]{64}/, "$1").replace(/^#&/, "#");
+      if (rest === "#") rest = "";
+      history.replaceState(null, "", url.pathname + url.search + rest);
+    } catch (e) { /* the launch is already in hand; the bar keeping it is cosmetic */ }
+  }
+  if (token) {
+    try { sessionStorage.setItem(PROMPTER_LAUNCH_KEY, token); } catch (e) { /* no reload, that's all */ }
+    return { token: token };
+  }
+  if (wanted) return { hosted: true };
+  var kept;
+  try { kept = sessionStorage.getItem(PROMPTER_LAUNCH_KEY) || ""; } catch (e) { kept = ""; }
+  return PROMPTER_TOKEN_RE.test(kept) ? { token: kept } : null;
+}
+
+/* init() (21-events.js) may wait for DOMContentLoaded before it creates
+   S.initialStateReady, so this cannot simply read it from __init(). */
+function whenInitialStateReady() {
+  return new Promise(function (resolve) {
+    (function check() {
+      if (S.initialStateReady) S.initialStateReady.then(resolve, resolve);
+      else setTimeout(check, 50);
+    })();
+  });
+}
+
+function showPrompterForLaunch() {
+  /* A tab that arrives to read a script is not someone arriving at the app:
+     the New Tab page has no business over it (20j-newtab.js shows itself
+     over the pristine demo this tab booted with). */
+  closeNewTabPage();
+  if (!S.prompterOpen) openPrompter();
+}
+
+async function launchPrompterFromScript(token) {
+  var body = null;
+  try {
+    var res = await fetch("prompter-script/" + token, { cache: "no-store", credentials: "same-origin" });
+    if (res.ok) body = await res.json();
+  } catch (e) { body = null; }
+  if (!body || typeof body.name !== "string" || typeof body.text !== "string") {
+    try { sessionStorage.removeItem(PROMPTER_LAUNCH_KEY); } catch (e) {}
+    showToast("This teleprompter link has expired — open it again from the Splitpage desktop app " +
+              "(View ▸ Present in Browser).", "warn", true);
+    return false;
+  }
+  var file = new File([body.text], body.name, { type: "text/plain" });
+  var parsed = await parseProjectFileState(file);
+  if (!parsed || parsed.error) {
+    showToast("Couldn't read the script the desktop app sent.", "error", true);
+    return false;
+  }
+  adoptProjectState(parsed.state, file, null, parsed.kind, { skipSnapshot: true, silent: true });
+  showPrompterForLaunch();
+  showToast("A copy from the desktop app, for reading — edit the script there; changes made here are not saved back.", "ok");
+  return true;
+}
+
+function launchPrompterForServerDoc() {
+  var deadline = Date.now() + HOSTED_LAUNCH_WAIT_MS;
+  (function check() {
+    if (serverHomeId()) { showPrompterForLaunch(); return; }
+    if (Date.now() < deadline) setTimeout(check, 250);
+  })();
+}
+
+function startPrompterLaunch(launch) {
+  /* The first-run wizard asks someone new to the app what they came for.
+     This tab came for a script, from an app they already use — and the
+     wizard's own gate (20b-onboarding.js) can decide before the script has
+     arrived. Marked done for this origin, the same record Skip writes. */
+  try {
+    if (!localStorage.getItem(ONBOARD_KEY)) {
+      localStorage.setItem(ONBOARD_KEY, JSON.stringify({ v: 1, done: true, skipped: true, at: "prompter-launch" }));
+    }
+  } catch (e) { /* private browsing — the wizard just shows */ }
+  whenInitialStateReady().then(function () {
+    if (launch.token) return launchPrompterFromScript(launch.token);
+    launchPrompterForServerDoc();
+  });
+}
+
 /* Shared by every panel that renders tagEntityHtml() cards. The card's own
    buttons (status pill, expand, rename, remove/delete) are all data-action
    and already work from any container through onRootClick — this wires
@@ -816,6 +971,15 @@ export function __init() {
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       return true;
-    }
+    },
+    /* The desktop's Open in browser, from the browser's end (issue #86):
+       the same function a ?teleprompter=1#script=<token> load runs, so a
+       suite can drive it with a stubbed fetch — no suite's static server
+       can answer prompter-script/<token> the way the desktop's listener
+       does. */
+    launchFromScript: launchPrompterFromScript
   };
+
+  var launch = readPrompterLaunch();
+  if (launch) startPrompterLaunch(launch);
 }

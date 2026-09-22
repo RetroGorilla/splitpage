@@ -137,6 +137,15 @@ const CHANNELS = [
   { name: "splitpage:update-download", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:update-install", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
+  /* ---- the teleprompter in the browser (issue #86, main.js § 9b) -------
+     Argument-free in the update bridge's style (invariant #28): the page
+     asks for what it is showing to be opened in the default browser; main
+     works out the file or the server document from the calling tab's own
+     record, and the URL from its own listener or its own document server.
+     A URL, a path or a document id from the page is refused before the
+     handler runs. */
+  { name: "splitpage:prompter-open-in-browser", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+
   /* ---- document state and routing ------------------------------------ */
   { name: "splitpage:set-document-state", direction: "send", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:renderer-ready", direction: "send", argsSchema: NONE, allowedOrigins: APP },

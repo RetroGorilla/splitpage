@@ -272,6 +272,21 @@ test("checkArgs refuses the shapes the handlers used to refuse for themselves", 
   assert.ok(bad("splitpage:read-file", "invoke", ["a", "b"]), "more arguments than the channel takes");
 });
 
+/* Issue #86 is the update bridge's contract again (invariant #28): the page
+   asks for "what I am showing" to be opened in the browser and names
+   nothing — no URL, no path, no document id. */
+test("the teleprompter's Open in browser takes no argument, from the app page only", () => {
+  const row = channelFor("splitpage:prompter-open-in-browser", "invoke");
+  assert.ok(row, "declared");
+  assert.deepEqual([...row.argsSchema], []);
+  assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN]);
+  assert.equal(checkArgs(row.argsSchema, []), null);
+  assert.ok(checkArgs(row.argsSchema, ["http://evil.example/"]), "a URL");
+  assert.ok(checkArgs(row.argsSchema, ["C:\\Users\\me\\script.md"]), "a path");
+  assert.ok(checkArgs(row.argsSchema, [{ doc: "abc" }]), "a document id");
+  assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
+});
+
 /* A malformed draft payload must reach the handler, which answers with a
    code the renderer can back off on rather than a rejection (DRAFT-STORE). */
 test("the draft channels let a bad payload through to their own answer", () => {

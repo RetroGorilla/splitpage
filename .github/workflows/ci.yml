@@ -88,6 +88,9 @@ jobs:
       - name: Desktop IPC channel table
         run: node desktop/test/ipc-table.test.mjs
 
+      - name: Desktop teleprompter share listener
+        run: node desktop/test/prompter-share.test.mjs
+
       - name: Server tests
         run: node tools/test-server.mjs
 
