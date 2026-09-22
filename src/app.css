@@ -2139,8 +2139,15 @@
   #comment-modal .mini-toolbar, .reply-composer .mini-toolbar { display: flex; }
 
   /* ---------- teleprompter (single dark world, not theme-linked) ---------- */
+  /* z-index 145: a full-screen mode, the same rung as the writer. It sat at
+     100 — below the sticky topbar (120) — so the topbar drew across the top
+     of the script while presenting (#98). It must still stay under the
+     modals (150), the tour (160) and the toasts (200): a "file changed on
+     disk" dialog or a toast has to be able to appear over a running
+     prompter, not open invisibly behind it. The scale itself is written up
+     at .topbar below. */
   .prompter {
-    position: fixed; inset: 0; z-index: 100;
+    position: fixed; inset: 0; z-index: 145;
     background: #0A0A0B;
     color: #F5F3EE;
     display: flex;
@@ -3111,9 +3118,10 @@
      What stays is everything you reach for mid-write — title, file chip,
      Production / Gear / B-roll / Comments / Write, Save, Present.
 
-     z-index 120 is deliberately below the side panels (140), the tour
-     overlay (160) and the modals (150/200): condensing must never put the
-     header on top of something the user opened. The background is opaque
+     z-index 120 is deliberately below the side panels (140), the
+     full-screen modes — writer and teleprompter — (145), the tour overlay
+     (160) and the modals (150/200): condensing must never put the header on
+     top of something the user opened. The background is opaque
      because rows scroll under it. */
   .topbar {
     position: sticky;
