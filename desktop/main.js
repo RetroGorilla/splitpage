@@ -4482,17 +4482,26 @@ function buildMenu() {
     { label: "Props (.pdf)", click: () => sendMenuCommand("export-packing-prop") }
   ];
 
+  /* Order and grouping mirror the in-app File menu's sections (issue #51):
+     the three things every save touches, then Open, then Server, then
+     This document, in the same order — Export is already its own submenu,
+     which is the native-menu equivalent of a collapsible section. New Tab
+     and Exit/Close have no in-app File-menu equivalent, so they keep their
+     previous, desktop-only spots. Find & replace and Hide shot scenes stay
+     on the Edit/View menus respectively (native convention), so they are
+     not duplicated here. */
   const fileMenu = {
     label: "File",
     submenu: [
       { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuCommand("save") },
       { label: "Save As…", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuCommand("save-as") },
-      { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
       { label: "Save to file", id: "menu-save-back", click: () => sendMenuCommand("save-back") },
       { type: "separator" },
+      { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
       { label: "Paste a script…", click: () => sendMenuCommand("paste") },
       { label: "Import from Google Doc link…", click: () => sendMenuCommand("gdoc-import") },
       { label: "Google Drive files…", click: () => sendMenuCommand("drive-open") },
+      { type: "separator" },
       { label: "Open from the server…", click: () => sendMenuCommand("server-open") },
       { label: "Put this script on the server", click: () => sendMenuCommand("server-publish") },
       { label: "Servers…", click: () => sendMenuCommand("servers") },
