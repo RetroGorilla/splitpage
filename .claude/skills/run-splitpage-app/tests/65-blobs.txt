@@ -70,8 +70,8 @@ expect (async function(){ var m = await B.ensureBytes([P]); return m.length === 
 expect (async function(){ var before = await B.idbRecord(P); var f = await B.persist([P]); var after = await B.idbRecord(P); return f.length === 0 && after.addedAt === before.addedAt && after.usedAt === before.usedAt; })()
 
 # ---- P2a: every reader of a row's picture goes through rowImage --------
-# Nothing in the app writes an imageRef yet (P2b does), so rows are given
-# one by hand and re-rendered through __renderTest.render. Four rows: the
+# Rows are given an imageRef by hand here (68-images.txt drops real
+# pictures) and re-rendered through __renderTest.render. Four rows: the
 # PNG whose bytes are in memory, the WebP whose bytes are only in
 # IndexedDB, a sha nobody has, and a legacy inline PNG.
 eval (function(){ window.F = window.__splitpageFormats; window.R = window.__renderTest; window.RP = B.recordFor(P); window.RW = { sha256: W, width: 37, height: 23, mime: 'image/webp' }; var c = document.createElement('canvas'); c.width = 29; c.height = 17; var g = c.getContext('2d'); g.fillStyle = '#3a3'; g.fillRect(0, 0, 29, 17); window.LEGACY = c.toDataURL('image/png'); var st = F.state(); while (st.rows.length < 4) st.rows.push({ id: 'img-row-' + st.rows.length, visualText: '', visualImage: null, audioText: 'filler', status: 'todo' }); window.IDS = st.rows.slice(0, 4).map(function(r){ return r.id; }); return !!(RP && RW && typeof R.render === 'function'); })()
@@ -113,7 +113,7 @@ expect pdfImgs[0].w === 37 && pdfImgs[0].h === 23 && pdfImgs[1].w === 37 && pdfI
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-docx"]
 wait !!lastOf('wordprocessingml')
-expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('wordprocessingml').arrayBuffer())); return t.indexOf('word/media/image3.jpeg') !== -1 && t.indexOf('word/media/image4.jpeg') === -1; })()
+expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('wordprocessingml').arrayBuffer())); return t.indexOf('word/media/image1.png') !== -1 && t.indexOf('word/media/image2.webp') !== -1 && t.indexOf('word/media/image3.png') !== -1 && t.indexOf('word/media/image4.') === -1 && t.indexOf('<Default Extension="png" ContentType="image/png"/>') !== -1 && t.indexOf('<Default Extension="webp" ContentType="image/webp"/>') !== -1; })()
 # Markdown: a zip carrying the three it has, each named for what it is
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md"]

@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { escapeHtml, makeId } from "./02-state.js";
-import { rowImage, rowImageBytes } from "./02c-blobs.js";
+import { internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { safeHref } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
@@ -30,6 +30,9 @@ export function dataUrlToBytes(dataUrl) {
   for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
+
+/* A picture's file extension inside a .docx, by the type its bytes are. */
+var DOCX_IMAGE_EXT = { "image/jpeg": "jpeg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
 
 /* read intrinsic pixel size straight out of the JPEG's SOF marker */
 export function jpegSize(bytes) {
@@ -156,9 +159,12 @@ export function buildDocx() {
       links.push(href);
       return "rIdL" + links.length;
     },
-    addImage: function (bytes) {
-      media.push(bytes);
-      return { rid: "rIdM" + media.length, name: "image" + media.length + ".jpeg" };
+    /* Each picture keeps the type it is, named and declared as that type
+       (#82): a PNG used to go in as "imageN.jpeg" under image/jpeg. */
+    addImage: function (bytes, mime) {
+      var ext = DOCX_IMAGE_EXT[mime] || "jpeg";
+      media.push({ bytes: bytes, ext: ext });
+      return { rid: "rIdM" + media.length, name: "image" + media.length + "." + ext };
     }
   };
 
@@ -184,7 +190,7 @@ export function buildDocx() {
       try {
         var bytes = pic.bytes;
         var dim = safeAspect(rowImage(row).ref ? { w: pic.width, h: pic.height } : jpegSize(bytes));
-        var img = rels.addImage(bytes);
+        var img = rels.addImage(bytes, pic.mime);
         var maxW = 2750000; /* ~2.9in in EMU, fits the cell */
         var cx = Math.round(Math.min(maxW, dim.w * 9525));
         var cy = Math.round(cx * dim.ratio);
@@ -371,10 +377,18 @@ function packDocx(body, links, media) {
       ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"' +
       ' Target="' + xmlEscape(href) + '" TargetMode="External"/>';
   });
-  media.forEach(function (_, idx) {
+  media.forEach(function (m, idx) {
     relsXml += '<Relationship Id="rIdM' + (idx + 1) + '"' +
       ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"' +
-      ' Target="media/image' + (idx + 1) + '.jpeg"/>';
+      ' Target="media/image' + (idx + 1) + '.' + m.ext + '"/>';
+  });
+  /* jpeg is always declared, as it always was; another type only when a
+     picture of that type is in the package */
+  var extraTypes = "";
+  ["png", "gif", "webp"].forEach(function (ext) {
+    if (media.some(function (m) { return m.ext === ext; })) {
+      extraTypes += '<Default Extension="' + ext + '" ContentType="image/' + ext + '"/>';
+    }
   });
   relsXml += '</Relationships>';
 
@@ -384,7 +398,7 @@ function packDocx(body, links, media) {
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
-      '<Default Extension="jpeg" ContentType="image/jpeg"/>' +
+      '<Default Extension="jpeg" ContentType="image/jpeg"/>' + extraTypes +
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
       '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
       '<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
@@ -401,8 +415,8 @@ function packDocx(body, links, media) {
     { name: "word/footer1.xml", data: strBytes(footerXml()) },
     { name: "word/_rels/document.xml.rels", data: strBytes(relsXml) }
   ];
-  media.forEach(function (bytes, idx) {
-    entries.push({ name: "word/media/image" + (idx + 1) + ".jpeg", data: bytes });
+  media.forEach(function (m, idx) {
+    entries.push({ name: "word/media/image" + (idx + 1) + "." + m.ext, data: m.bytes });
   });
 
   return zipWrite(entries);
@@ -651,7 +665,7 @@ export async function docxToRows(file) {
     return {
       id: makeId(),
       visualText: fields.visualText || "",
-      visualImage: null,
+      imageRef: null,
       audioText: fields.audioText || "",
       _pendingImage: fields._pendingImage || null
     };
@@ -721,7 +735,7 @@ export async function docxToRows(file) {
 
     if (target) {
       /* an image paragraph is a visual: attach it to the row being built */
-      if (pending && !pending.visualImage && !pending._pendingImage) {
+      if (pending && !pending.imageRef && !pending._pendingImage) {
         pending._pendingImage = target;
         if (plain) pending.visualText = pending.visualText ? pending.visualText + "<br>" + html : html;
       } else {
@@ -760,8 +774,10 @@ export async function docxToRows(file) {
       var imgBytes = await zip.get(path);
       if (imgBytes) {
         var raw = bytesToDataUrl(imgBytes, mimeForPath(path));
-        /* the exporters embed JPEG only (DCTDecode / image/jpeg part) */
-        rows[ri].visualImage = await toJpegDataUrl(raw);
+        /* JPEG, at most 1000px — what a picture attached by hand becomes
+           too — then into the image registry (#82), named by its record */
+        var rec = internDataUrl(await toJpegDataUrl(raw));
+        if (rec) { queuePersist([rec.sha256]); rows[ri].imageRef = rec; }
       }
     } catch (e) { /* unreadable picture — keep the row, drop the image */ }
   }

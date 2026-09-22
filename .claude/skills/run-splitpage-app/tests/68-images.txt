@@ -1,0 +1,87 @@
+# Images out of the document state (#82 P2b): a picture is `row.imageRef`,
+# a record naming bytes in the image registry (02c-blobs.js), and the
+# bytes live in the 'splitpage-blobs' IndexedDB database, not in `state`.
+# Three pictures dropped onto three scenes the way a user drops them (a
+# real DragEvent carrying a File) leave the state under 10 KB and show
+# through blob: URLs; the crash/sign-in stash carries them across a real
+# reload as refs and they render again from IndexedDB; an old document
+# whose pictures are base64 data: URIs opens content-addressed (its
+# imageRef is the SHA-256 of the decoded bytes) and still shows; and a
+# .splitpage save carries every picture inline, as the format always has.
+# Every `eval` is one physical line.
+
+open
+
+# ---- a clean image store ------------------------------------------------
+eval (async function(){ await new Promise(function(r){ var q = indexedDB.deleteDatabase('splitpage-blobs'); q.onsuccess = q.onerror = r; q.onblocked = function(){ setTimeout(r, 1000); }; }); sessionStorage.removeItem('splitpage-conflict-stash'); return true; })()
+goto /index.html
+wait document.querySelectorAll('#rows .row').length >= 2
+# the document every boot of this page loads, for the stash leg below
+eval (function(){ sessionStorage.setItem('seed68', JSON.stringify(window.__splitpageFormats.state())); return true; })()
+
+# ---- helpers: a noisy canvas PNG (so it is a real ~100 KB picture), a
+# File from it, a drop of that File onto a scene's visual column, and
+# crypto.subtle as the independent oracle for the sha
+eval (function(){ window.F = window.__splitpageFormats; window.B = window.__blobsTest; window.pngUrl = function(w, h, seed){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); var d = g.createImageData(w, h); var x = seed * 2654435761 >>> 0; for (var i = 0; i < d.data.length; i++) { x = (x * 1103515245 + 12345) >>> 0; d.data[i] = (i % 4 === 3) ? 255 : (x >>> 16) & 255; } g.putImageData(d, 0, 0); return c.toDataURL('image/png'); }; window.bytesOf = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }; window.subtleHex = async function(bytes){ var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); return Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }; window.dropOn = function(rowId, url, name){ var dt = new DataTransfer(); dt.items.add(new File([bytesOf(url)], name, { type: 'image/png' })); var target = document.querySelector('#rows .row[data-id="' + rowId + '"] .visual-media'); target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; }; window.imgOf = function(rowId){ return document.querySelector('#rows .row[data-id="' + rowId + '"] .visual-media img'); }; return true; })()
+
+# a third scene to put the third picture in
+jsclick #rows .row:last-child [data-action="insert-below"]
+wait F.state().rows.length === 3
+eval (function(){ window.IDS = F.state().rows.map(function(r){ return r.id; }); window.U = [pngUrl(180, 120, 1), pngUrl(160, 140, 2), pngUrl(150, 150, 3)]; return U.map(function(u){ return u.length; }); })()
+expect U.every(function(u){ return u.length > 15000; })
+
+# ---- three pictures dropped: refs in the state, blob: URLs on screen -----
+eval (function(){ dropOn(IDS[0], U[0], 'one.png'); dropOn(IDS[1], U[1], 'two.png'); dropOn(IDS[2], U[2], 'three.png'); return true; })()
+wait F.state().rows.every(function(r){ return r.imageRef && r.imageRef.sha256; })
+expect F.state().rows.every(function(r){ return !('visualImage' in r); })
+expect new Set(F.state().rows.map(function(r){ return r.imageRef.sha256; })).size === 3
+expect JSON.stringify(F.state()).length < 10240
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
+expect F.state().rows[0].imageRef.width === 180 && F.state().rows[0].imageRef.height === 120 && F.state().rows[0].imageRef.mime === 'image/png'
+wait IDS.every(function(id){ var i = imgOf(id); return i && (i.getAttribute('src') || '').indexOf('blob:') === 0 && i.complete && i.naturalWidth > 0; })
+expect IDS.every(function(id){ return imgOf(id).getAttribute('data-blob') === F.state().rows[IDS.indexOf(id)].imageRef.sha256; })
+# the bytes went to IndexedDB on their own
+wait (async function(){ var ok = true; for (var r of F.state().rows) { var rec = await B.idbRecord(r.imageRef.sha256); ok = ok && !!rec && rec.isBlob; } return ok; })()
+wait F.state().rows.every(function(r){ return B.isDurableSync(r.imageRef.sha256); })
+
+# ---- a .splitpage save carries every picture inline ----------------------
+eval (function(){ window.__saved = []; window.__h = { name: 'pictures.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ return { write: async function(d){ window.__saved.push(typeof d === 'string' ? d : await new Blob([d]).text()); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__saved[window.__saved.length - 1] || F.buildSplitpage()], 'pictures.splitpage', { lastModified: window.__h._mtime }); } }; return F.openFile(new File([F.buildSplitpage()], 'pictures.splitpage', { lastModified: window.__h._mtime }), window.__h).then(function(){ return true; }); })()
+wait F.docFile().kind === 'splitpage'
+eval (function(){ F.state().rows[0].audioText = 'saved with pictures'; F.save(); return true; })()
+wait window.__saved.length === 1
+eval (function(){ var t = __saved[0]; var j = JSON.parse(t); window.__file = { inline: j.rows.filter(function(r){ return typeof r.visualImage === 'string' && r.visualImage.indexOf('data:image/png;base64,') === 0; }).length, refs: t.indexOf('"imageRef"') !== -1, size: t.length, text: t }; return JSON.stringify({ inline: __file.inline, refs: __file.refs, size: __file.size }); })()
+expect __file.inline === 3 && __file.refs === false && __file.size > 50000
+expect F.state().rows.every(function(r){ return __file.text.indexOf(B.dataUrlForSync(r.imageRef.sha256)) !== -1; })
+# the save left the page's own state as refs
+expect JSON.stringify(F.state()).length < 10240
+
+# ---- the stash carries refs across a real reload; IndexedDB has the bytes
+# The boot stash is merged into whatever the page loads — here the seed
+# document — so its base is set to that seed: then every scene here is
+# "changed by me" and comes back as it is (the merge rules are
+# merge-states.test.mjs's; what this leg is about is the pictures).
+eval (function(){ window.__stashed = F.stash(); var st = JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')); st.base = JSON.parse(sessionStorage.getItem('seed68')); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify(st)); sessionStorage.setItem('shas68', JSON.stringify(F.state().rows.map(function(r){ return r.imageRef.sha256; }))); return JSON.stringify({ ok: __stashed, blobs: !!st.blobs, size: sessionStorage.getItem('splitpage-conflict-stash').length }); })()
+expect __stashed === true
+# every picture is already durable, so the stash carries none of their bytes
+expect !JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')).blobs
+expect sessionStorage.getItem('splitpage-conflict-stash').length < 20000
+goto /index.html
+eval (function(){ window.F = window.__splitpageFormats; window.B = window.__blobsTest; window.SHAS = JSON.parse(sessionStorage.getItem('shas68')); window.imgFor = function(sha){ return document.querySelector('#rows .visual-media img[data-blob="' + sha + '"]'); }; return SHAS.length; })()
+wait F.state() && F.state().rows.filter(function(r){ return r.imageRef; }).length === 3
+expect JSON.stringify(F.state().rows.map(function(r){ return r.imageRef && r.imageRef.sha256; })) === JSON.stringify(SHAS)
+# nothing in this page's memory: every picture on screen came out of IndexedDB
+wait SHAS.every(function(sha){ var i = imgFor(sha); return i && (i.getAttribute('src') || '').indexOf('blob:') === 0 && i.complete && i.naturalWidth > 0; })
+expect SHAS.every(function(sha){ return B.has(sha); })
+
+# ---- an old document: pictures as base64 data: URIs ----------------------
+eval (function(){ var c = document.createElement('canvas'); c.width = 64; c.height = 48; var g = c.getContext('2d'); g.fillStyle = '#2a6'; g.fillRect(0, 0, 64, 48); g.fillStyle = '#fc3'; g.fillRect(8, 8, 30, 20); window.OLD = c.toDataURL('image/jpeg', 0.9); var bin = atob(OLD.slice(OLD.indexOf(',') + 1)); window.OLDBYTES = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) OLDBYTES[i] = bin.charCodeAt(i); window.OLDDOC = JSON.stringify({ schema: 2, title: 'Old pictures', rows: [{ id: 'o1', visualText: 'from before', visualImage: OLD, audioText: 'one', status: 'todo' }, { id: 'o2', visualText: '', visualImage: null, audioText: 'two', status: 'todo' }], comments: [] }); return OLDDOC.length; })()
+eval (async function(){ window.OLDSHA = await (async function(){ var d = new Uint8Array(await crypto.subtle.digest('SHA-256', OLDBYTES)); return Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); })(); await F.openFile(new File([OLDDOC], 'old.splitpage')); return OLDSHA; })()
+wait F.state().title === 'Old pictures'
+expect F.state().rows[0].imageRef.sha256 === OLDSHA && F.state().rows[0].imageRef.mime === 'image/jpeg' && F.state().rows[0].imageRef.width === 64 && F.state().rows[0].imageRef.height === 48
+expect !('visualImage' in F.state().rows[0]) && F.state().rows[1].imageRef === null
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
+wait (function(){ var i = document.querySelector('#rows .row[data-id="o1"] .visual-media img'); return i && i.complete && i.naturalWidth > 0 && i.getAttribute('data-blob') === OLDSHA; })()
+# and saving it again writes the same picture inline
+expect F.buildSplitpage().indexOf('"visualImage": "' + OLD + '"') !== -1
+
+logs

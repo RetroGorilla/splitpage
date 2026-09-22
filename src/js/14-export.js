@@ -9,9 +9,18 @@ import {
   normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { has as hasBlob, rowImage, rowImageBytes, rowImageDataUrl } from "./02c-blobs.js";
+import {
+  ensureBytes,
+  has as hasBlob,
+  rowImage,
+  rowImageBytes,
+  rowImageDataUrl,
+  rowImageKey
+} from "./02c-blobs.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import {
   RELOAD_GUARD_KEY,
+  acceptStash,
   applyMerge,
   clearStash,
   cloneState,
@@ -43,7 +52,7 @@ import {
   showFileConflict,
   updateFileChip
 } from "./18-local-files.js";
-import { buildMarkdownProject, buildSplitpageFile } from "./20d-formats.js";
+import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -241,6 +250,13 @@ export async function saveDoc(opts) {
       }
     }
 
+    /* The file carries its pictures inline (#82 D1/D2), so their bytes
+       have to be in this page first — fetched from the blob store (or the
+       server) when they are not. One nobody has goes into the file as a
+       ref with no picture, and the user is told once the write lands. */
+    await ensureBytes(refsIn(published));
+    var imagesLeftOut = fileImagesMissing(published).length;
+
     var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
     var body;
     try {
@@ -285,6 +301,7 @@ export async function saveDoc(opts) {
          typing is noise sitting on top of the work. */
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       else noteSaveStatus("Saved to " + targetHandle.name);
+      warnImagesLeftOut(imagesLeftOut, targetHandle.name);
     } else {
       /* no File System Access API (e.g. Firefox) — a plain download is the
          best this browser can do; the user re-opens the newest copy next
@@ -296,6 +313,7 @@ export async function saveDoc(opts) {
         if (downloadedOurs) setBaseState(published, "saveDoc: the copy just downloaded");
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         if (downloadedOurs && S.editSeq === seqAtSave) clearDirty();
+        warnImagesLeftOut(imagesLeftOut, filename);
       } else {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
       }
@@ -320,6 +338,16 @@ export async function saveDoc(opts) {
     S.saveButtonBusy = false;
     setSaveButtons(S.dirty ? "Save •" : "Save", false);
   }
+}
+
+/* A written file that could not carry every picture: its bytes were
+   nowhere to be had (a version restored after its image was lost, say).
+   The row keeps naming the picture, so nothing is deleted — but the file
+   does not show it, and the user should know before sending it on. */
+export function warnImagesLeftOut(n, name) {
+  if (!n) return;
+  showToast(n + (n === 1 ? " image" : " images") + " could not be included in " + name +
+    " — the picture" + (n === 1 ? " was" : "s were") + " not available on this computer.", "warn");
 }
 
 /* The one place a Save As fork becomes this document's identity (DOCID-API).
@@ -381,6 +409,8 @@ export function applyStashedWork(loaded, override, apply) {
   var stash = override || readStash();
   if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
+  /* the pictures it carries, and an older build's stripped images (#82) */
+  acceptStash(stash, loaded);
   /* A stash left by a lapsed hosted session belongs to a document on the
      server, not to the page's own embedded one. Merging it into `loaded`
      here would splice someone's script into a blank default document —
@@ -423,7 +453,6 @@ export function applyStashedWork(loaded, override, apply) {
   return through({
     base: stash.base || null,
     mine: stash.mine,
-    imagesStripped: !!stash.imagesStripped,
     undoPoint: migrateRows(cloneState(loaded))
   });
 }
@@ -792,7 +821,8 @@ function mdRichTableCell(md) {
    table *row* and is undone again by parseMarkdownTable, so it is
    deliberately not part of this comparison basis. */
 export function mdSceneCellSource(row, i) {
-  var visual = htmlToMarkdown(row.visualText);
+  var text = htmlToMarkdown(row.visualText);
+  var visual = text;
   /* The picture inline, as it always was (#82 D2) — a legacy URI exactly as
      stored, a ref'd one as its canonical data: URI. */
   var image = rowImageDataUrl(row);
@@ -801,6 +831,11 @@ export function mdSceneCellSource(row, i) {
   }
   return {
     visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
+    /* the same cell without its picture, and which picture — what the
+       reconcile compares when the whole cell differs only in how the
+       picture's base64 was spelled (an older client's file) */
+    visualText: String(text).replace(/\r\n|\r|\n/g, "<br>").trim(),
+    image: image ? rowImageKey(row) : null,
     audio: String(htmlToMarkdown(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
   };
 }

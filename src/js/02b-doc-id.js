@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { buildPublishHtml, migrateRows } from "./02-state.js";
+import { inlineStateImages } from "./02c-blobs.js";
 import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import { plainText } from "./04-richtext.js";
@@ -483,6 +484,9 @@ export function docIdEvents() {
    original the moment it is opened next to it. */
 export function standaloneHtmlFor(s) {
   var copy = migrateRows(cloneState(s || S.state));
+  /* its pictures inline, like a .splitpage file (#82): the copy stands on
+     its own. buildFileData awaits ensureBytes before this runs. */
+  inlineStateImages(copy);
   delete copy.docId;
   return buildPublishHtml(JSON.stringify(copy));
 }

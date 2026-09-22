@@ -1,25 +1,27 @@
 import { sha256Bytes } from "./02b-doc-id.js";
 import { safeImageSrc } from "./04-richtext.js";
-import { imageDims, isSha256Hex, normalizeImageRef, sniffImageMime } from "../../shared/blob-policy.js";
+import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 
 /* ================= image blobs (issue #82) =================
 
-   The page's registry of image bytes, addressed by their SHA-256. Rows are
-   moving from `visualImage: "data:image/...;base64,..."` to
-   `imageRef: {sha256, width, height, mime}` (shared/blob-policy.js has the
+   The page's registry of image bytes, addressed by their SHA-256. A row's
+   picture is `imageRef: {sha256, width, height, mime}` (it used to be
+   `visualImage: "data:image/...;base64,..."`; shared/blob-policy.js has the
    record and its gate); this file is where the bytes behind a record live
    while the page is open, and the door to where they are kept durably.
 
-   How it is wired so far: every reader of a row's picture asks rowImage()
-   and friends below rather than a row key (#82 P2a) — the renderer
-   (blobImgHtml plus the hydrator), the exports and the local merge's
-   review; the hosted client (13-hosted.js, P5) installs its server fetch
-   as the remote source (setRemoteSource) and reads bytes out to upload
-   them; the desktop shell (20f-desktop.js) installs the blob folder as the
-   backend. No database is opened until the first ensureBytes() or
-   persist() that actually has a sha to ask about. Still to come (P2b):
-   migrateRows interning legacy data: URIs, the file writers re-inlining
-   bytes, the history job and drafts persisting before they write.
+   How it is wired: migrateRows (02-state.js) interns every legacy data:
+   URI and gives the row an imageRef (P2b); every reader of a row's picture
+   asks rowImage() and friends below rather than a row key (P2a) — the
+   renderer (blobImgHtml plus the hydrator), the exports, the local merge's
+   review; the file writers put the bytes back inline (inlineStateImages);
+   the history job, the drafts and the stash persist before they write;
+   the hosted client (13-hosted.js, P5) installs its server fetch as the
+   remote source (setRemoteSource) and reads bytes out to upload them; the
+   desktop shell (20f-desktop.js) installs the blob folder as the backend.
+   No database is opened until the first ensureBytes() or persist() that
+   actually has a sha to ask about. HTML images (comments, replies, pasted
+   cell HTML) are still inline data: URIs — P6 moves them.
 
    Two halves, and the split is the point:
 
@@ -374,6 +376,99 @@ export function blobImgHtml(ref, cls) {
 
 function blobAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ---- the inline form, for what must carry its own pictures ----
+
+   A .splitpage file, a .md project's data block and the standalone HTML
+   export carry their images inline, as they always have (#82 D1/D2): the
+   format on disk is unchanged and an older client reads it whole. This
+   turns a (migrated, already cloned — it is changed in place) state into
+   that form: every row's imageRef whose bytes this page holds becomes
+   `visualImage: data:…` again, and an image-conflict comment's
+   `imageValue` gets the picture back in its body the way older clients
+   wrote it (the record stays, so a newer client needs no parsing).
+
+   Synchronous, so the caller awaits ensureBytes(refsIn(state)) first.
+   What still is not here stays a ref with no inline copy — the row keeps
+   its imageRef and has no visualImage — and its sha is in the answer, so
+   the writer can say "N images could not be included".
+
+   `only` (an array of shas) limits it to those — the history job and the
+   draft writer inline just the blobs the store refused. */
+export function inlineStateImages(s, only) {
+  var missing = [];
+  var want = only ? {} : null;
+  if (only) only.forEach(function (sha) { want[sha] = true; });
+  function pick(rec) {
+    var ref = normalizeImageRef(rec);
+    if (!ref || (want && !want[ref.sha256])) return null;
+    var url = dataUrlForSync(ref.sha256);
+    if (!url && missing.indexOf(ref.sha256) === -1) missing.push(ref.sha256);
+    return url;
+  }
+  if (!s || typeof s !== "object") return missing;
+  (Array.isArray(s.rows) ? s.rows : []).forEach(function (r) {
+    if (!r || typeof r !== "object") return;
+    if (!r.imageRef) {
+      /* no picture: the file says so the way it always did */
+      if (!only && "imageRef" in r) { delete r.imageRef; r.visualImage = null; }
+      return;
+    }
+    var url = pick(r.imageRef);
+    if (url) { r.visualImage = url; delete r.imageRef; }
+  });
+  (Array.isArray(s.comments) ? s.comments : []).forEach(function (c) {
+    if (!c || typeof c !== "object" || !c.imageValue) return;
+    var url = pick(c.imageValue);
+    if (url) c.body = '<img src="' + url + '" class="comment-img">';
+  });
+  return missing;
+}
+
+/* inlineStateImages over a JSON string, for a record already serialised
+   (a history snapshot, a draft). The string comes back unchanged when
+   there is nothing it can inline. */
+export function inlineStateJson(json, only) {
+  if (typeof json !== "string" || !only || !only.length) return json;
+  var s;
+  try { s = JSON.parse(json); } catch (e) { return json; }
+  var before = only.filter(has).length;
+  if (!before) return json;
+  inlineStateImages(s, only);
+  return JSON.stringify(s);
+}
+
+/* The shas a state names whose bytes this page does not hold — what an
+   inline writer cannot include (after ensureBytes, what nobody had). */
+export function missingInlineImages(s) {
+  return refsIn(s).filter(function (sha) { return !has(sha); });
+}
+
+/* ---- persisting what migration interned ----
+
+   migrateRows (02-state.js) interns a legacy data: URI synchronously and
+   asks for it to be stored; this batches those asks into one persist() a
+   tick later. Nothing is queued where there is no durable store to put it
+   in (no backend chosen and no IndexedDB — the unit tests' jsdom). The
+   writers that must not name an unstored blob do not rely on this: they
+   await persist() themselves. */
+var persistQueue = {};
+var persistQueued = false;
+
+export function queuePersist(shas) {
+  (Array.isArray(shas) ? shas : []).forEach(function (sha) {
+    if (isSha256Hex(sha) && !blobDurable[sha]) persistQueue[sha] = true;
+  });
+  if (persistQueued || !Object.keys(persistQueue).length) return;
+  if (!blobBackend && !(typeof window !== "undefined" && window.indexedDB)) { persistQueue = {}; return; }
+  persistQueued = true;
+  setTimeout(function () {
+    persistQueued = false;
+    var list = Object.keys(persistQueue);
+    persistQueue = {};
+    if (list.length) persist(list);
+  }, 0);
 }
 
 /* ---- the hydrator ----

@@ -286,6 +286,26 @@ expect F.docId() !== '../../etc/passwd'
 expect F.state().rows[0].audioText === 'SAN-EDIT'
 
 # =============================================================================
+# pictures (#82): the blob folder holds a picture BEFORE a draft names it
+# (invariant 52). A fake with the blob calls is the registry's store once
+# setBackend() installs it, as the real bridge is at boot. When the folder
+# refuses the bytes, the draft carries that picture inline instead, and a
+# restore of it gives the ref back.
+# =============================================================================
+eval (function(){ window.B = window.__blobsTest; window.hashOf = function(u8){ var r = B.intern(u8); return r ? r.sha256 : null; }; window.canvasPng = function(col){ var c = document.createElement('canvas'); c.width = 24; c.height = 18; var g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 24, 18); return c.toDataURL('image/png'); }; return true; })()
+eval (async function(){ await H.resetForTest(); window.fakeImg = D.makeFakeBackend({blobs: true, blobHash: hashOf}); D.setBackend(fakeImg); D.drafts.setTiming({idle: 60000, max: 60000}); window.__imgOrder = []; var put = fakeImg.blobPut, wd = fakeImg.writeDraft; fakeImg.blobPut = function(sha){ __imgOrder.push('blob'); return put.apply(this, arguments); }; fakeImg.writeDraft = function(p){ __imgOrder.push('draft:' + (window.__imgRec && fakeImg._blobs[__imgRec.sha256] ? 'held' : 'absent')); return wd.apply(this, arguments); }; window.__imgRec = B.internDataUrl(canvasPng('#39c')); F.state().rows[0].imageRef = __imgRec; D.markDirtyForTest(); window.__imgW = await D.drafts.flushNow(); return JSON.stringify(__imgOrder); })()
+expect __imgW && __imgW.ok === true
+expect __imgOrder[0] === 'blob' && __imgOrder.indexOf('draft:held') !== -1 && __imgOrder.indexOf('draft:absent') === -1
+expect fakeImg._drafts.current.stateJson.indexOf(__imgRec.sha256) !== -1 && fakeImg._drafts.current.stateJson.indexOf('data:image') === -1
+eval (async function(){ window.__imgRec2 = B.internDataUrl(canvasPng('#c93')); F.state().rows[0].imageRef = __imgRec2; fakeImg._blobFailNext = {code: 'ENOSPC'}; D.markDirtyForTest(); window.__imgW2 = await D.drafts.flushNow(); return true; })()
+expect __imgW2 && __imgW2.ok === true
+expect !fakeImg._blobs[__imgRec2.sha256]
+expect JSON.parse(fakeImg._drafts.current.stateJson).rows[0].visualImage === B.dataUrlForSync(__imgRec2.sha256)
+eval (async function(){ window.__imgTaken = { header: { docIdWrittenOut: true, origin: { kind: 'untitled' } }, stateJson: fakeImg._drafts.current.stateJson, baseJson: null }; window.__imgOutcome = await D.drafts.applyForTest(window.__imgTaken); return true; })()
+expect __imgOutcome === 'applied'
+expect F.state().rows[0].imageRef.sha256 === __imgRec2.sha256 && !('visualImage' in F.state().rows[0])
+
+# =============================================================================
 # browser inertness: once the real (null) backend is back, nothing here does
 # anything — the same guarantee every other suite in this harness relies on
 # without ever mentioning drafts.

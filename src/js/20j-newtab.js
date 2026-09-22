@@ -107,7 +107,7 @@ function onNewTabKeydown(e) {
 function blankDocumentState() {
   return migrateRows({
     title: "Untitled Script",
-    rows: [{ id: makeId("r"), visualText: "", visualImage: null, audioText: "" }]
+    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }]
   });
 }
 

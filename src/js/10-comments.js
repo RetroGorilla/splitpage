@@ -1,6 +1,8 @@
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
+import { blobImgHtml } from "./02c-blobs.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   findRowIndex,
   getEditorName,
@@ -14,7 +16,6 @@ import {
   inertBody,
   plainText,
   safeId,
-  safeImageSrc,
   sanitizeHtml
 } from "./04-richtext.js";
 import { editableCellHtml, pad2, render } from "./05-render.js";
@@ -786,6 +787,17 @@ function commentCardHtml(c) {
   );
 }
 
+/* An image conflict's picture is its `imageValue` record (#82), drawn as
+   an <img data-blob> the hydrator (02c-blobs.js) fills in; everything
+   else is the stored body. */
+function conflictBodyHtml(c) {
+  if (c.field === "visualImage") {
+    var ref = normalizeImageRef(c.imageValue);
+    return ref ? blobImgHtml(ref, "comment-img") : "";
+  }
+  return c.body;
+}
+
 /* A card holding one edit that could not be merged automatically —
    the user's own version, kept verbatim with a one-click way to put it back. */
 function conflictCardHtml(c) {
@@ -799,7 +811,7 @@ function conflictCardHtml(c) {
       commentResolvedNoteHtml(c) +
       '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
       '<div class="comment-quote">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
-      '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : c.body) + '</div>' +
+      '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>' +
       '<div class="comment-actions">' +
         /* All three write the document: "Use my version" puts text back
            into a row, and the other two change a stored comment. */
@@ -834,10 +846,10 @@ export function restoreConflictValue(commentId) {
   if (ri === -1) { showToast("That row no longer exists.", "warn"); return; }
 
   pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
-  var container = inertBody(c.body);
   if (c.field === "visualImage") {
-    var img = container.querySelector("img");
-    S.state.rows[ri].visualImage = img ? safeImageSrc(img.getAttribute("src")) : null;
+    /* the picture is the card's record (#82), not anything in its body */
+    delete S.state.rows[ri].visualImage;
+    S.state.rows[ri].imageRef = c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null);
   } else {
     /* an empty original must come back empty, not as placeholder text */
     S.state.rows[ri][c.field] = c.emptyValue ? "" : sanitizeHtml(c.body);

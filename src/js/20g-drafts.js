@@ -2,6 +2,8 @@ import { S } from "./_state.js";
 import { conn, fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
+import { inlineStateJson, persist } from "./02c-blobs.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import {
   copyDocHistorySafe,
   mintDocId,
@@ -274,8 +276,12 @@ function captureAndSendDraft() {
   var baseAtCapture = S.baseState;
   var sendBase = S.baseState !== draftSentBase;
   var baseTextCache = null;
+  var inlineFailed = null; /* shas the blob folder refused (below) */
   function baseTextFor() {
-    if (baseTextCache === null) baseTextCache = baseAtCapture ? JSON.stringify(baseAtCapture) : "null";
+    if (baseTextCache === null) {
+      baseTextCache = baseAtCapture ? JSON.stringify(baseAtCapture) : "null";
+      if (inlineFailed) baseTextCache = inlineStateJson(baseTextCache, inlineFailed);
+    }
     return baseTextCache;
   }
   var payload = {
@@ -296,8 +302,29 @@ function captureAndSendDraft() {
     baseJson: sendBase ? baseTextFor() : null
   };
 
+  /* The images this draft names are stored durably first (#82, invariant
+     52): a draft restored after a crash must find every picture it names
+     in the blob folder. Read now, with the capture (which stays
+     synchronous); a blob the folder refused travels inline in the draft
+     instead, when this page has its bytes. */
+  var draftRefs = refsIn(S.state);
+  if (sendBase && baseAtCapture) {
+    refsIn(baseAtCapture).forEach(function (sha) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
+  }
+
   draftChangePending = false;
-  draftInFlight = sendDraftPayload(payload, baseTextFor, false).then(function (r) {
+  var sent = draftRefs.length
+    ? persist(draftRefs).then(function (failed) {
+        if (failed.length) {
+          inlineFailed = failed;
+          payload.stateJson = inlineStateJson(payload.stateJson, failed);
+          if (baseTextCache !== null) baseTextCache = inlineStateJson(baseTextCache, failed);
+          if (payload.baseJson) payload.baseJson = baseTextCache;
+        }
+        return sendDraftPayload(payload, baseTextFor, false);
+      })
+    : sendDraftPayload(payload, baseTextFor, false);
+  draftInFlight = sent.then(function (r) {
     draftInFlight = null;
     if (r && r.ok) {
       draftStats.writes++;

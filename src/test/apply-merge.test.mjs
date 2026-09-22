@@ -100,7 +100,7 @@ test("mergeOnly merges and hands the result back, touching nothing on screen", (
      merge writes onto the rows it took (stampRow) are the clock too, so
      they come off both sides before the comparison — what is being
      compared is that applyMerge merges and does not do anything else. */
-  const direct = mergeStates(cloneState(base), cloneState(mine), cloneState(theirs), false).merged;
+  const direct = mergeStates(cloneState(base), cloneState(mine), cloneState(theirs)).merged;
 
   const out = applyMerge({
     base: base, mine: mine, theirs: theirs,
@@ -131,6 +131,29 @@ test("`base` and `mine` are normalised, so a caller hands over what it holds", (
   assert.equal(out.state.rows.length, 2);
   assert.equal(out.state.rows[0].audioText, "typed");
   assert.equal(out.result.stats.rowsFromMe, 1);
+});
+
+test("pictures merge by sha through applyMerge, and a stash's legacy inline one is the same picture (#82)", () => {
+  reset();
+  const id = freshId();
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const theirs = mk(id);
+  theirs.rows[0].audioText = "theirs";
+  /* mine straight off an old stash: the picture still inline, and base
+     from the same era */
+  const legacyRows = () => [
+    { id: "r1", visualText: "v1", audioText: "a1", visualImage: png },
+    { id: "r2", visualText: "v2", audioText: "a2" }
+  ];
+  const base = { docId: id, title: "M", rows: legacyRows() };
+  const mine = { docId: id, title: "M", rows: legacyRows() };
+  mine.rows[1].audioText = "mine";
+  theirs.rows[0].imageRef = migrateRows({ rows: [{ id: "x", visualImage: png }] }).rows[0].imageRef;
+  const out = applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash", mergeOnly: true });
+  assert.equal(out.result.conflicts.length, 0, "the same picture on both sides is no conflict");
+  assert.deepEqual(out.state.rows[0].imageRef, theirs.rows[0].imageRef);
+  assert.equal(out.state.rows[0].audioText, "theirs");
+  assert.equal(out.state.rows[1].audioText, "mine");
 });
 
 test("nothing differed: no merge, no snapshot, no rev bump", () => {

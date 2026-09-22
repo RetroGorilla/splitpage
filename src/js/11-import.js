@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { escapeHtml, legacyMdToHtml, makeId } from "./02-state.js";
+import { internDataUrl, queuePersist } from "./02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
@@ -236,6 +237,12 @@ export function normalizeImportedRows(rows) {
      plain text but is not a sanitizer, so a pasted line containing a raw
      '<' (a page whose markup was preserved as text, or a deliberately
      crafted paste) went straight into the document as live HTML. */
+  /* into the image registry (02c-blobs.js, #82): the row names it */
+  function importedImageRef(dataUrl) {
+    var rec = dataUrl ? internDataUrl(dataUrl) : null;
+    if (rec) queuePersist([rec.sha256]);
+    return rec;
+  }
   return rows.map(function (r) {
     /* An inline image at the head of the Visual cell is how this app's own
        Markdown writes a storyboard frame (toMarkdownTableDoc). This used
@@ -255,7 +262,7 @@ export function normalizeImportedRows(rows) {
     return {
       id: makeId(),
       visualText: sanitizeHtml(legacyMdToHtml(visual)),
-      visualImage: image,
+      imageRef: importedImageRef(image),
       audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
     };
   });

@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { makeId } from "./02-state.js";
 import { mintDocId, normalizeDocId, sha256Bytes } from "./02b-doc-id.js";
-import { dataUrlForSync, ensureBytes, intern, persist, recordFor } from "./02c-blobs.js";
+import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "./02c-blobs.js";
 import {
   SNAPSHOT_KEY,
   getEditorName,
@@ -1346,9 +1346,26 @@ function historyMarkPending(entry) {
   }
 }
 
+/* The images a snapshot names are made durable BEFORE the snapshot is
+   written (#82, invariant 52): no stored snapshot may name a blob the
+   blob store does not hold. The refs were read at capture, which stays
+   synchronous (invariant 39); this is the job's half. A blob the store
+   refused goes into the snapshot inline instead, when this page has its
+   bytes; one nobody has cannot be helped (a version restored after its
+   picture was lost) and is written as it is. */
+function historyPersistRefs(entry) {
+  var refs = entry.refs || [];
+  if (!refs.length) return Promise.resolve();
+  return persist(refs).then(function (failed) {
+    if (failed.length) entry.stateJson = inlineStateJson(entry.stateJson, failed);
+  });
+}
+
 function historyStoreEntry(backend, entry) {
   entry.status = "writing";
-  return backend.put(entry.docId, entry.meta, entry.stateJson).then(function (r) {
+  return historyPersistRefs(entry).then(function () {
+    return backend.put(entry.docId, entry.meta, entry.stateJson);
+  }).then(function (r) {
     r = r || { stored: false, code: "io" };
     var key = historyLocalKey(entry.docId, entry.meta.id);
     if (r.stored) {
@@ -1408,7 +1425,7 @@ export function captureSnapshot(label, src, opts) {
     title: typeof src.title === "string" ? src.title : "",
     kind: "snapshot"
   });
-  var entry = { docId: docId, meta: meta, stateJson: stateJson, status: "writing" };
+  var entry = { docId: docId, meta: meta, stateJson: stateJson, status: "writing", refs: refsIn(src) };
   historyLocal[historyLocalKey(docId, id)] = entry;
   var done = enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
