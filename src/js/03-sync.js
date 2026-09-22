@@ -139,7 +139,19 @@ var RESTORE_BACKUP_ATTEMPTS = 3;
    whole call: the backup's own write may have to evict, the Older bucket
    goes first, and without the hold a restore from Older under a full quota
    could delete the very snapshot it is restoring — leaving nothing for the
-   "restore anyway" click to find. */
+   "restore anyway" click to find.
+
+   `opts.restoredText` replaces the "Restored the version from …" toast,
+   for a caller that knows better what just happened (undoMerge after a
+   save conflict, whose next save has something specific to do).
+
+   `opts.local` leaves the restored version on screen and dirty instead of
+   writing it straight away — markDirty() still arms the ordinary idle
+   autosave, so the autosave preference decides when it goes, not this
+   call. queueAutoSave() writes whether autosave is on or off. undoMerge
+   passes it after a save conflict: there the version being replaced is
+   already safe on the server, and the write this would force is the one
+   that takes a collaborator's work back out of it for everybody. */
 async function restoreSnapshot(id, opts) {
   opts = opts || {};
   if (restoreInFlight) return "busy";
@@ -184,8 +196,8 @@ async function restoreSnapshot(id, opts) {
     markDirty();
     render();
     closeHistoryPanel();
-    showToast("Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
-    queueAutoSave();
+    showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
+    if (!opts.local) queueAutoSave();
     return "restored";
   } finally {
     releaseHold();
@@ -944,10 +956,11 @@ export async function renderHistory() {
 
 /* ---- merge reporting ---- */
 
-/* {id, docId} of the "Before merging your unsaved changes" snapshot, or
-   null. The docId is kept because history is per document: after another
-   document is opened, "Undo merge" must not pull the merged-away version
-   of the first one into it. */
+/* {id, docId, source} of the undo point the last merge filed ("Before
+   merging …"), or null. The docId is kept because history is per document:
+   after another document is opened, "Undo merge" must not pull the
+   merged-away version of the first one into it. `source` is applyMerge's,
+   and says which version the snapshot holds — see undoMerge. */
 S.lastMergeUndo = null;
 var undoArmed = false;
 var undoArmTimer = null;
@@ -966,7 +979,31 @@ var undoMergeForceFor = null;
    restore (20g-drafts.js) passes it: Splitpage never writes the user's file
    on its own (invariant #41), least of all with a merge the user has not
    seen yet, done against a file they did not open. Their next Save writes
-   it, as it would any other unsaved change. */
+   it, as it would any other unsaved change.
+
+   `opts.undo` is what the banner's "Undo merge" may promise, because the
+   merges it reports are not all the same kind (#97):
+     undefined  the button as it always was: go back to the version that
+                was live before the merge
+     "saved"    saveToServer's 409. The undo point is the version the user
+                was SAVING, and the merge is already on the server, so
+                undoing is local: it puts their version back on screen,
+                dirty, and the next save — judged against the rev the
+                merge's own save came back with, and measured from the
+                merged base — writes it over the merged copy. The banner
+                says so.
+     false      no button. The pull channel (#69) files no undo point on
+                purpose, and undoing a pull would mean throwing away a
+                collaborator's saved work, which is not what the button
+                promises.
+   Whatever `undo` says, there is no button while nothing is armed: a
+   button that can only answer "No merge snapshot to undo." is the bug
+   this replaced. */
+var UNDO_SAVED_NOTE = "Undo merge puts your version back here; the next save replaces the merged copy on the server.";
+var UNDO_SAVED_TITLE = "Go back to the version you were saving, before someone else's changes were merged into it. " +
+  "It stays unsaved until the next save, which replaces the merged copy on the server. Recoverable from Version history.";
+var undoTitleDefault = null;
+
 export function reportMerge(result, opts) {
   opts = opts || {};
   var s = result.stats;
@@ -987,6 +1024,13 @@ export function reportMerge(result, opts) {
     summary += " " + result.conflicts.length + " edit" + (result.conflicts.length === 1 ? " was" : "s were") +
       " changed on both sides — your version is saved as a comment.";
   }
+
+  var undoBtn = document.getElementById("merge-undo");
+  if (undoTitleDefault === null) undoTitleDefault = undoBtn.title;
+  var offerUndo = opts.undo !== false && !!S.lastMergeUndo;
+  undoBtn.hidden = !offerUndo;
+  undoBtn.title = opts.undo === "saved" ? UNDO_SAVED_TITLE : undoTitleDefault;
+  if (offerUndo && opts.undo === "saved") summary += " " + UNDO_SAVED_NOTE;
 
   document.getElementById("merge-summary").textContent = " " + summary;
   document.getElementById("merge-review").hidden = !result.conflicts.length;
@@ -1029,10 +1073,10 @@ function noteMergeAutoSave(opts) {
    out five times — saveToServer's 409 and two of resumeServerDoc's merges
    (13-hosted.js), applyStashedWork (14-export.js) and, through it,
    confirmFileMerge (18a-local-merge.js) — which is five chances for one
-   copy to drift from the others, and one already had: the 409 path files
-   an undo snapshot and never arms the button that would use it. That
-   divergence is now an option with a name (`armUndo`) rather than a line
-   that is simply missing from one copy of five.
+   copy to drift from the others, and one already had: the 409 path filed
+   an undo snapshot and never armed the button that would use it. #72 gave
+   that divergence a name (`armUndo:false`); #97 removed it, so an undo
+   point asked for is an undo point armed, on every path.
 
    THE ONE WRITER OF `baseState` on the merge paths. The base a merge
    measures against has to be exactly what the other side last confirmed
@@ -1048,7 +1092,6 @@ function noteMergeAutoSave(opts) {
                           the merge REPLACES, which is `theirs` at load time
                           and `mine` in the middle of a save. Omitted files
                           no snapshot and leaves "Undo merge" as it was.
-     armUndo              false files the snapshot without arming Undo merge
      keepLabel            a second snapshot, of `mine`, so a version that was
                           recovered from somewhere is a version in the history
                           rather than something that only existed in a function
@@ -1101,8 +1144,8 @@ export function applyMerge(opts) {
      some EARLIER merge of this same document, which is a version from
      before work this one has nothing to do with. */
   function armUndoPoint(docId) {
-    if (!opts.undoPoint || opts.armUndo === false) return;
-    S.lastMergeUndo = snap ? { id: snap.id, docId: docId } : null;
+    if (!opts.undoPoint) return;
+    S.lastMergeUndo = snap ? { id: snap.id, docId: docId, source: opts.source } : null;
   }
 
   if (opts.mergeOnly) {
@@ -1138,9 +1181,34 @@ export function applyMerge(opts) {
   return { state: next, result: result, snapshot: snap };
 }
 
-/* Reverts to the version that was live before the merge — i.e. discards the
-   work the merge just rescued. Destructive enough to need a confirm, and
-   recoverable afterwards because restoreSnapshot snapshots first. */
+/* Reverts to the undo point the merge filed. Destructive enough to need a
+   confirm, and recoverable afterwards because restoreSnapshot snapshots
+   first. What it discards depends on which version that undo point is:
+
+     most merges      the version that was live before the merge (`theirs`
+                      at load time), so undoing discards the work the merge
+                      just rescued — "Discard my edits?"
+     server-conflict  saveToServer's 409, whose undo point is the version
+                      the user was SAVING. Undoing puts that back and
+                      discards what the merge brought in from the other
+                      side — "Drop their changes?". The merged copy is
+                      already on the server; what is restored here stays
+                      local and dirty (restoreSnapshot's `local`: the
+                      autosave preference decides when it is written, and
+                      nothing forces a write), and the next save — Save,
+                      or autosave's idle timer when that is on — carries
+                      `baseRev` = the rev that merged save came back with,
+                      so it is accepted and replaces the merged copy. If
+                      somebody saved in the meantime, the merge that brings
+                      their save in (that save's 409, or a pull) measures
+                      against the merged base, so it counts the undone
+                      changes as this side's edits and keeps them undone. */
+var UNDO_CONFIRM = { "server-conflict": "Drop their changes?" };
+var UNDO_LOCAL = { "server-conflict": true };
+var UNDO_RESTORED = {
+  "server-conflict": "Your version is back, unsaved. The next save replaces the merged copy on the server."
+};
+
 export function undoMerge(btn) {
   if (!S.lastMergeUndo) { showToast("No merge snapshot to undo.", "warn"); return; }
   if (!S.state || S.lastMergeUndo.docId !== S.state.docId) {
@@ -1155,7 +1223,11 @@ export function undoMerge(btn) {
     var undo = S.lastMergeUndo;
     var force = undoMergeForceFor === undo;
     undoMergeForceFor = null;
-    restoreSnapshot(undo.id, { force: force }).then(function (r) {
+    restoreSnapshot(undo.id, {
+      force: force,
+      local: !!UNDO_LOCAL[undo.source],
+      restoredText: UNDO_RESTORED[undo.source]
+    }).then(function (r) {
       if (r === "no-backup") {
         undoMergeForceFor = undo;
         showToast("Couldn't keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
@@ -1170,7 +1242,7 @@ export function undoMerge(btn) {
     return;
   }
   undoArmed = true;
-  btn.textContent = "Discard my edits?";
+  btn.textContent = UNDO_CONFIRM[S.lastMergeUndo.source] || "Discard my edits?";
   btn.classList.add("armed");
   clearTimeout(undoArmTimer);
   undoArmTimer = setTimeout(function () {

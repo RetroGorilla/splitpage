@@ -1220,8 +1220,11 @@ export async function saveToServer() {
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
       /* reported only once the merged result is actually stored, so the
-         banner can never describe a merge that failed to save */
-      if (mergeResult) reportMerge(mergeResult, { alreadySaved: true });
+         banner can never describe a merge that failed to save. `undo:
+         "saved"` because it is stored: Undo merge can only put the user's
+         version back HERE, and the banner says the next save is what
+         replaces the merged copy (reportMerge, #97). */
+      if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
       if (serverHomeId() !== docId) return false;
@@ -1241,15 +1244,19 @@ export async function saveToServer() {
         });
         /* The undo point here is MINE — mid-save, what is on screen is
            what this call was trying to publish, so that is the version
-           the merge replaces.
+           the merge replaces — and "Undo merge" is armed at it like every
+           other merge's (#97; it used to be filed and never armed, so the
+           banner's button answered "No merge snapshot to undo.").
 
-           armUndo:false is this path's one divergence from every other
-           merge, and it is deliberate only in the sense that it is what
-           the code has always done: the snapshot is filed and "Undo merge"
-           is never pointed at it, so the button reportMerge puts on screen
-           below answers "No merge snapshot to undo." Arming it is a change
-           to what a user can do after a save conflict, not a refactor, so
-           it is left for its own issue rather than smuggled in here.
+           Only on the FIRST conflict of this save. A second 409 finds the
+           first round's merge on screen, which is not a version the user
+           ever had: filing that would point Undo at a half-merged
+           document and bury the one they were actually saving.
+
+           What Undo then does is local: see undoMerge (03-sync.js). The
+           merge is on the server by the time the banner offers it, and
+           the next save, at the rev that merged save came back with,
+           writes the restored version over it.
 
            report:false because the merged version is not on the server
            yet: the loop retries, and the 200 branch above reports it with
@@ -1260,8 +1267,7 @@ export async function saveToServer() {
           mine: S.state,
           theirs: theirs,
           source: "server-conflict",
-          undoPoint: cloneState(S.state),
-          armUndo: false,
+          undoPoint: mergeResult ? null : cloneState(S.state),
           /* if theirs won the id, the history written under ours follows it */
           historyFrom: prevDocId,
           report: false
@@ -1812,12 +1818,12 @@ async function pullServerDoc(docId) {
      definition. Marking a CLEAN document dirty here is the loop described
      above, in one line.
 
-     The banner's "Undo merge" has nothing to undo, because this path files
-     no snapshot. That is the same answer saveToServer's 409 gives today
-     (applyMerge's armUndo:false, pinned by tests/54-server-conflict.txt),
-     and it is the honest one here: undoing a pull would mean throwing away
-     somebody else's work, which is not what that button promises. */
-  if (merged.result) reportMerge(merged.result, { alreadySaved: true });
+     `undo: false` takes "Undo merge" off the banner (#97). This path files
+     no snapshot, so the button would have nothing of this merge to undo —
+     and whatever it still pointed at would be from before somebody else's
+     saved work arrived, so undoing a pull means throwing that work away,
+     which is not what the button promises. The merge is still reported. */
+  if (merged.result) reportMerge(merged.result, { alreadySaved: true, undo: false });
   showToast("Merged in changes from " + (body.updatedBy || "someone else"), "ok");
 }
 
