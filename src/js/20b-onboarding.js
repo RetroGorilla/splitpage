@@ -194,23 +194,31 @@ function onboardFinishAndTour() {
   if (typeof startTour === "function") startTour();
 }
 
-/* ---- step 2: portable, or add to the Start Menu ----
+/* ---- step 2: where this copy lives ----
+
+   Nothing here installs anything any more. #75 deleted the IExpress setup
+   and `installer/install.ps1` with it, and the POST that ran that script
+   went with them — so this step no longer offers a button, it explains the
+   shape of the copy you are looking at. A portable folder that runs from
+   wherever you put it is the honest description, and the desktop app is
+   the answer for anyone who wanted a Start Menu entry.
 
    GET api/launcher/info answers only when this copy was started by
    start.mjs and the request is on loopback (13-hosted.js's
    launcherFetch()) — a 404/offline here just means "not available in
-   this copy" (opened from file://, the PowerShell fallback, a hosted
-   copy, or the test harness, none of which are the launcher), not an
-   error worth alarming over. */
+   this copy" (opened from file://, a hosted copy, or the test harness,
+   none of which are the launcher), not an error worth alarming over. All
+   it buys is naming the folder; the advice below it is the same either
+   way. */
 function noLauncherHtml() {
   return '<p class="modal-hint">This copy of Splitpage runs wherever its folder is — ' +
     "copy it anywhere and it still works. Splitpage cannot register itself in the " +
-    "Start Menu from here, because this page was not opened by the launcher (a " +
-    "browser tab reached over <code>file://</code>, a hosted copy, or a plain static " +
-    "server all look like this). To add it to your Start Menu instead: run " +
-    "<code>start.bat</code> once from that folder, then come back to " +
-    '<strong>Setup ▸ Add to Start Menu</strong> — or run the <code>SplitpageSetup</code> ' +
-    "installer, which does the same thing without a command line.</p>";
+    "Start Menu: nothing in this copy installs anything, so there is nothing to " +
+    "uninstall either — delete the folder and it is gone.</p>" +
+    '<p class="modal-hint">If you want a Start Menu entry, a taskbar icon and updates ' +
+    "that install themselves, that is the <strong>desktop app</strong> — a separate " +
+    "download from the releases page. To update this copy, unzip a newer release over " +
+    "its folder.</p>";
 }
 
 function renderLauncherInfoBody(html) {
@@ -219,9 +227,8 @@ function renderLauncherInfoBody(html) {
 }
 
 /* The desktop app has no launcher and no /api/launcher/* routes to ask —
-   it is already the thing the launcher's Start Menu step exists to
-   produce, so the honest answer is "you already have this", not a
-   register button that would 404. */
+   it is already the installed thing this step points everyone else at, so
+   the honest answer is "you already have this". */
 function desktopInstallHtml() {
   return '<p class="modal-hint">Splitpage is already installed as a desktop app — this is it. ' +
     "Opening a <code>.splitpage</code> file (or a Markdown script saved from here) opens it " +
@@ -229,17 +236,15 @@ function desktopInstallHtml() {
 }
 
 function renderLauncherInfo(info) {
-  var html = '<p class="modal-hint">Running from <code>' + escapeHtml(info.root || "") + "</code>.</p>";
-  if (info.installed) {
-    html += '<p class="modal-hint">Already in your Start Menu — nothing else to do.</p>';
-  } else if (info.canRegister) {
-    html += '<p class="modal-hint">Add this copy to your Start Menu so it shows up, and ' +
-      "uninstalls, like any other app — the files stay right where they are.</p>" +
-      '<button type="button" class="btn btn-accent" data-onboard-action="register">Add to Start Menu</button>';
-  } else {
-    html += '<p class="modal-hint">This copy can stay exactly where it is.</p>';
-  }
-  renderLauncherInfoBody(html);
+  renderLauncherInfoBody(
+    '<p class="modal-hint">Running from <code>' + escapeHtml(info.root || "") + "</code>. " +
+    "This copy runs wherever that folder is — move it, copy it onto a USB stick, " +
+    "it still works. Nothing was installed, so there is nothing to uninstall: " +
+    "delete the folder and it is gone.</p>" +
+    '<p class="modal-hint">To update it, unzip a newer release over that folder — it does ' +
+    "not replace its own files. For a Start Menu entry, a taskbar icon and updates that " +
+    "install themselves, get the <strong>desktop app</strong> from the releases page.</p>"
+  );
 }
 
 async function loadLauncherInfo() {
@@ -257,21 +262,6 @@ async function loadLauncherInfo() {
   if (onboardStep !== 2) return; /* Back/Next moved on while this was in flight */
   if (!info) renderLauncherInfoBody(noLauncherHtml());
   else renderLauncherInfo(info);
-}
-
-async function registerLauncher() {
-  var btn = document.querySelector('#onboard-install-body [data-onboard-action="register"]');
-  if (btn) { btn.disabled = true; btn.textContent = "Adding…"; }
-  try {
-    await launcherFetch("api/launcher/register", { method: "POST" });
-    renderLauncherInfoBody('<p class="modal-hint">Registered — Splitpage is now in your Start Menu.</p>');
-    if (typeof showToast === "function") showToast("Added to the Start Menu.", "ok");
-  } catch (e) {
-    var msg = (e && e.message) || "could not register";
-    renderLauncherInfoBody('<p class="modal-hint">Could not add it: ' + escapeHtml(msg) + "</p>" +
-      '<button type="button" class="btn btn-accent" data-onboard-action="register">Try again</button>');
-    if (typeof showToast === "function") showToast("Could not add to the Start Menu.", "warn");
-  }
 }
 
 /* ---- step 3: how you'll be working ---- */
@@ -454,7 +444,6 @@ export function __init() {
         if (name === "skip") onboardSkip();
         else if (name === "back") onboardBack();
         else if (name === "next") onboardNext();
-        else if (name === "register") registerLauncher();
         else if (name === "host-copy") copyOnboardHostCmd();
         else if (name === "host-save") saveOnboardHostCmd();
         else if (name === "join-submit") submitOnboardJoin();

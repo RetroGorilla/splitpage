@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Behaviour tests for server/server.js — the join PIN, CORS, the
- * compare-and-set save, and the launcher's loopback-only routes.
+ * compare-and-set save, and the launcher's loopback-only route.
  *
  *   node tools/test-server.mjs
  *
@@ -210,13 +210,7 @@ const s2 = await startServer({
   JOIN_PIN: PIN,
   ALLOW_ORIGINS: ORIGIN + ",null",
   LAUNCH_TOKEN: LAUNCH,
-  HOST: "127.0.0.1",
-  /* The update-staging route spawns update.mjs, which would otherwise ask
-     GitHub for the latest release and — on a machine with network — actually
-     download it into this checkout's .update/. Pointed at a closed port it
-     fails immediately instead, which is all the route test needs: proof that
-     the route ran the updater and reported its answer. */
-  SPLITPAGE_UPDATE_API: "http://127.0.0.1:9/never"
+  HOST: "127.0.0.1"
 });
 
 let token;
@@ -307,7 +301,10 @@ try {
       !!(staleBody && staleBody.state && staleBody.state.title === "Conflict test"));
   }
 
-  /* the launcher's routes */
+  /* the launcher's route. `info` is all that is left of it: `register` and
+     `update/stage` both spawned a program #75 deleted, so both are gone and
+     nothing under /api/launcher/ runs anything any more. What is still worth
+     asserting is the gate, which is why the route was ever allowed to exist. */
   {
     const res = await fetch(s2.base + "api/launcher/info");
     eq("launcher/info without the launch header is 404", res.status, 404);
@@ -321,39 +318,21 @@ try {
     const body = await json(res);
     eq("launcher/info with the launch token is 200", res.status, 200);
     check("...and names this folder", !!(body && body.root));
-    check("...and says whether it could register it", body && typeof body.canRegister === "boolean");
-    check("...and whether it already is", body && typeof body.installed === "boolean");
-  }
-  /* the staging route: the one launcher route that downloads a release */
-  {
-    const res = await fetch(s2.base + "api/launcher/update/stage", { method: "POST" });
-    eq("launcher/update/stage without the launch header is 404", res.status, 404);
+    check("...and what it is running on", !!(body && body.platform && body.arch));
   }
   {
-    const res = await fetch(s2.base + "api/launcher/update/stage", {
-      method: "POST", headers: { "x-splitpage-launch": "wrong" }
-    });
-    eq("launcher/update/stage with the wrong launch token is 404", res.status, 404);
-  }
-  {
-    /* POST only: staging is not something a GET (a link, a prefetch, an image
-       src) should ever be able to start. */
-    const res = await fetch(s2.base + "api/launcher/update/stage", {
-      headers: { "x-splitpage-launch": LAUNCH }
-    });
-    eq("launcher/update/stage refuses GET", res.status, 404);
-  }
-  {
+    /* A verb that no longer exists is a 404 like any other — not a 500 from
+       a half-removed route, and not a 200 with an error in it. */
     const res = await fetch(s2.base + "api/launcher/update/stage", {
       method: "POST", headers: { "x-splitpage-launch": LAUNCH }
     });
-    const body = await json(res);
-    /* The updater ran and could not reach its update server. That is an
-       answer, not a server fault, so it is a 200 carrying the reason —
-       the page needs to read `error` to say which. */
-    eq("launcher/update/stage with the launch token runs the updater", res.status, 200);
-    check("...and reports the failure rather than staging", !!(body && body.ok === false));
-    check("...naming what went wrong", !!(body && body.message));
+    eq("the staging route is gone, even with the launch token", res.status, 404);
+  }
+  {
+    const res = await fetch(s2.base + "api/launcher/register", {
+      method: "POST", headers: { "x-splitpage-launch": LAUNCH }
+    });
+    eq("...and so is register", res.status, 404);
   }
   {
     const res = await fetch(s2.base + "api/launcher/info", {
@@ -367,7 +346,7 @@ try {
   s2.stop();
 }
 
-/* the same server, reachable from the network: the launcher's routes are gone */
+/* the same server, reachable from the network: the launcher's route is gone */
 const s3 = await startServer({
   JOIN_PIN: PIN,
   LAUNCH_TOKEN: LAUNCH,
@@ -376,16 +355,6 @@ const s3 = await startServer({
 try {
   const res = await fetch(s3.base + "api/launcher/info", { headers: { "x-splitpage-launch": LAUNCH } });
   eq("under --host, launcher/info is 404 even with the launch token", res.status, 404);
-  const reg = await fetch(s3.base + "api/launcher/register", {
-    method: "POST",
-    headers: { "x-splitpage-launch": LAUNCH }
-  });
-  eq("...and so is register", reg.status, 404);
-  const stage = await fetch(s3.base + "api/launcher/update/stage", {
-    method: "POST",
-    headers: { "x-splitpage-launch": LAUNCH }
-  });
-  eq("...and so is update/stage", stage.status, 404);
 } finally {
   s3.stop();
 }

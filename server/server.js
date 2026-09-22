@@ -26,7 +26,6 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const child_process = require("node:child_process");
 
 const PORT = Number(process.env.PORT || 8791);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -685,19 +684,27 @@ async function summaryOf(id) {
 
 /* ---------- the launcher's routes ----------
  *
- * This is the ONE place in the process that runs another program (invariant
- * #28), and it exists so the first-run wizard can offer "put this copy in
- * the Start Menu" without the user going to find a command line.
+ * One route, and all it does is describe this process: where the copy of the
+ * app it is serving sits on disk, and what it is running on. The first-run
+ * wizard asks, so that step 2 can name the folder rather than talk about it
+ * in the abstract.
  *
- * Three locks, all of which must be open:
+ * It used to do more, and what it did is why the locks below exist.
+ * `register` spawned `installer/install.ps1` to put this folder in the Start
+ * Menu, and `update/stage` spawned `update.mjs stage --json` to download a
+ * release. #75 deleted both of those programs, so both routes went with
+ * them — and with them the last place this server started another process
+ * at all (invariant #28 is now a flat no, with no exception attached).
+ *
+ * The locks stay exactly as they were. They are the reason a route here
+ * could exist in the first place, they are cheap, and `root` is still an
+ * absolute path off somebody's disk, which is nobody else's business:
  *   1. a launch token, minted by start.mjs for this launch and handed to the
  *      page in the URL fragment — so another tab in the same browser, which
  *      can reach localhost just as easily, cannot call this;
  *   2. HOST === "127.0.0.1" — never under --host, where the port is on the
- *      network and "install something" would be a remote code execution
- *      route with a friendly name;
- *   3. the script it runs is a fixed path inside this installation. Nothing
- *      from the request reaches a command line.
+ *      network.
+ * Anything that ever lands here next inherits both.
  *
  * A refusal is 404, not 401: when these conditions are not met the routes
  * genuinely do not exist, and saying so gives a prober nothing to work with.
@@ -710,145 +717,14 @@ function launcherAllowed(req) {
   return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(LAUNCH_TOKEN));
 }
 
-/* Is there an Add/Remove Programs entry pointing at THIS folder? Not "is
-   Splitpage installed" — a portable copy sitting next to an installed one
-   must still be able to offer to register itself. */
-function installedHere(root) {
-  if (process.platform !== "win32") return false;
-  const key = "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Splitpage";
-  for (const hive of ["HKCU", "HKLM"]) {
-    let out;
-    try {
-      out = child_process.spawnSync("reg", ["query", hive + key, "/v", "InstallLocation"],
-        { encoding: "utf8", windowsHide: true, timeout: 5000 });
-    } catch (e) { continue; }
-    if (!out || out.status !== 0 || !out.stdout) continue;
-    const m = /InstallLocation\s+REG_SZ\s+(.+)/i.exec(out.stdout);
-    if (!m) continue;
-    try {
-      if (path.resolve(m[1].trim()) === path.resolve(root)) return true;
-    } catch (e) { /* an unparseable path is not this one */ }
-  }
-  return false;
-}
-
-/* Staging outcomes that mean this server could not run the updater at all,
-   as opposed to the updater running and reporting something about the
-   release. Only these are HTTP failures — see the route below. */
-const STAGE_INFRA_ERRORS = new Set(["updater-missing", "could-not-run", "no-answer"]);
-
-/* One staging run at a time, for the whole process. Two concurrent runs would
-   both rm -rf and rebuild the same .update/staged tree, and the loser could
-   delete files the winner had already verified — so a second caller joins the
-   run in flight instead of starting another. */
-let updateStaging = null;
-
-/* Download-and-verify the newest release into .update/, by spawning the
-   updater that already knows how (update.mjs). Nothing here installs
-   anything: staging only writes under .update/, and the swap happens at the
-   next launch, in start.mjs, when no browser has the app open. That split is
-   what keeps this route safe to expose at all — see update.mjs's header.
-   The command line is this process's own node binary and a fixed path inside
-   this installation; no part of the request reaches it. */
-function stageUpdate(root) {
-  if (updateStaging) return updateStaging;
-  const script = path.join(root, "update.mjs");
-  if (!fs.existsSync(script)) return Promise.resolve({ error: "updater-missing" });
-
-  updateStaging = new Promise((resolve) => {
-    const child = child_process.spawn(process.execPath, [script, "stage", "--json"], {
-      cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"]
-    });
-    let out = "";
-    let errOut = "";
-    child.stdout.on("data", (chunk) => { if (out.length < 64000) out += chunk; });
-    child.stderr.on("data", (chunk) => { if (errOut.length < 8000) errOut += chunk; });
-    /* A release zip over a slow link is legitimately slow; a hung one still
-       has to end. Ten minutes, then the child is killed and the caller is
-       told, rather than the request hanging until the browser gives up. */
-    const timer = setTimeout(() => { try { child.kill(); } catch (e) {} }, 600000);
-    const finish = (value) => { clearTimeout(timer); resolve(value); };
-    child.on("error", (err) => finish({ error: "could-not-run", detail: String(err && err.message) }));
-    child.on("exit", () => {
-      /* --json prints exactly one JSON line, but stdout is still a pipe that
-         anything the child's runtime writes (a Node deprecation warning) can
-         land in. Take the last line that parses, not the first or the whole. */
-      let parsed = null;
-      for (const line of out.split(/\r?\n/).reverse()) {
-        if (!line.trim()) continue;
-        try { parsed = JSON.parse(line); break; } catch (e) { /* not the answer line */ }
-      }
-      if (!parsed) return finish({ error: "no-answer", detail: (errOut || out).trim().slice(0, 500) });
-      finish(parsed);
-    });
-  }).finally(() => { updateStaging = null; });
-
-  return updateStaging;
-}
-
 function handleLauncher(req, res, parts) {
   if (!launcherAllowed(req)) return sendJson(res, 404, { error: "not-found" });
 
-  const root = path.resolve(STATIC_DIR);
-  const script = path.join(root, "installer", "install.ps1");
-
   if (parts[2] === "info" && req.method === "GET") {
     return sendJson(res, 200, {
-      root,
-      installed: installedHere(root),
+      root: path.resolve(STATIC_DIR),
       arch: process.arch,
-      platform: process.platform,
-      canRegister: process.platform === "win32" && fs.existsSync(script)
-    });
-  }
-
-  if (parts[2] === "register" && req.method === "POST") {
-    if (process.platform !== "win32") {
-      return sendJson(res, 501, { error: "not-supported" });
-    }
-    if (!fs.existsSync(script)) return sendJson(res, 500, { error: "installer-missing" });
-    return new Promise((resolve) => {
-      /* An argument array, never a shell, and every argument is a constant
-         or a path this process computed for itself. */
-      const child = child_process.spawn("powershell.exe", [
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
-        "-InPlace", "-Dir", root
-      ], { cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-      let output = "";
-      const take = (chunk) => { if (output.length < 8000) output += chunk; };
-      child.stdout.on("data", take);
-      child.stderr.on("data", take);
-      const timer = setTimeout(() => child.kill(), 120000);
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        resolve(sendJson(res, 500, { error: "could-not-run", detail: String(err && err.message) }));
-      });
-      child.on("exit", (code) => {
-        clearTimeout(timer);
-        if (code === 0) resolve(sendJson(res, 200, { ok: true, root, output: output.trim() }));
-        else resolve(sendJson(res, 500, { error: "install-failed", code, output: output.trim() }));
-      });
-    });
-  }
-
-  /* "Download the update now", the button in the app's update bar. It answers
-     with what update.mjs decided: staged (restart to finish), already up to
-     date, or an error the page can show verbatim — notably "local-edits",
-     which means staging stopped rather than overwrite a file the user
-     changed by hand. */
-  if (parts[2] === "update" && parts[3] === "stage" && req.method === "POST") {
-    return stageUpdate(root).then((result) => {
-      if (!result) return sendJson(res, 500, { error: "no-answer" });
-      /* "The updater could not be run" is a server fault and answers 5xx.
-         "The updater ran and said no" — it is already up to date, or it
-         refused to overwrite files the user edited — is a successful request
-         with an answer in it, and answers 200: the page needs to read
-         `error` to say WHICH, and an HTTP error status reduces all of them
-         to a status code on the way through launcherFetch. */
-      if (STAGE_INFRA_ERRORS.has(result.error)) {
-        return sendJson(res, result.error === "updater-missing" ? 501 : 500, result);
-      }
-      return sendJson(res, 200, result);
+      platform: process.platform
     });
   }
 
@@ -1982,8 +1858,8 @@ async function handleStatic(req, res, url) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
   /* The launcher route is the one piece of API a static-only (NO_API) copy
-     still answers: it is what lets the app the launcher just opened offer to
-     add itself to the Start Menu. It is gated by the per-launch token and the
+     still answers: it is what lets the app the launcher just opened ask
+     where it was started from. It is gated by the per-launch token and the
      loopback bind, never by NO_API - see launcherAllowed(). */
   const isLauncher = url.pathname.startsWith("/api/launcher/");
   const isApi = (!NO_API || isLauncher) && url.pathname.startsWith("/api/");
