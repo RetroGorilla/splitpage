@@ -4474,6 +4474,14 @@ function buildMenu() {
       { label: "Write", click: () => sendMenuCommand("write") },
       { label: "Present", click: () => sendMenuCommand("present") },
       { type: "separator" },
+      /* Issue #25: collapses scenes marked Shot into a thin strip. The
+         renderer owns the on/off state (per-device localStorage, not this
+         process), so this is a plain toggle action like Production/Comments
+         above rather than an Electron checkbox item — sendMenuCommand finds
+         and clicks the matching #file-menu button, which already keeps its
+         own label and aria-checked in sync (01b-hide-shot.js). */
+      { label: "Hide shot scenes", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
+      { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" },
         { role: "toggleDevTools" },
