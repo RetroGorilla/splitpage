@@ -59,8 +59,9 @@ function parseCliArgs(argv) {
     // single named target (dev | packaged-x64 | packaged-arm64) without
     // having to comment code out. Not part of the public CLI contract.
     if (argv[i] === "--only-target") out.onlyTarget = argv[++i];
-    /* Same spirit, for one group out of ~60 when a full run is 55 minutes:
-       a case-insensitive substring of the group's name in runTargetSuite.
+    /* Same spirit, for one group out of ~60: a case-insensitive substring
+       of the group's REGISTERED name in runTargetSuite (not the tag each
+       check line prints). A filter matching no group exits 1.
        A filtered run prints a loud banner and carries "GROUP FILTER" into
        the summary, because a partial run that read like a full one is the
        thing this file is not allowed to do. */
@@ -104,7 +105,16 @@ function resolveTargets(exeOverride) {
     const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
     if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
     const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
-    if (fs.existsSync(arm64Exe)) targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
+    /* An x64 host cannot start an arm64 exe at all — every group fails with
+       `spawn UNKNOWN` — while an arm64 host runs x64 under emulation, so
+       only that one direction is gated. The target is named as a skip rather
+       than dropped: a build sitting in dist/ that this run did not test must
+       show up in the summary (#89's rule). */
+    if (fs.existsSync(arm64Exe)) {
+      if (process.arch === "arm64") targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
+      else targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe,
+        cannotRun: "an arm64 build cannot start on this " + process.arch + " host — run it on the ARM machine" });
+    }
   }
   return targets;
 }
@@ -1076,14 +1086,31 @@ async function waitForNoProcesses(userDataDir, timeoutMs) {
   return left;
 }
 
+/* opts.expectForceKill (a reason string): this launch is known to end in a
+   state where Browser.close cannot close it — a dirty tab whose unsaved-
+   changes prompt test mode answers Cancel, or a process the case already
+   crashed — so go straight to the kill instead of waiting 12 s for a close
+   that is not going to happen. The same launches were force-killed on
+   Linux AND on Windows (the first Windows run, at eb9904f), so this is how
+   those cases end everywhere, not a platform difference. Any OTHER teardown
+   that falls back to the kill is listed under FORCE-KILLED in the summary:
+   not a failure (nothing is orphaned), but a change worth seeing. */
+// The reason every expectForceKill call site in this file gives today.
+const ENDS_DIRTY = "the case ends with a dirty tab, and test mode answers the unsaved-changes prompt Cancel";
+
 async function teardown(app, tag, opts) {
   opts = opts || {};
   const notes = [];
   try { app.cdp && app.cdp.close(); } catch {}
-  if (app.cdp) await closeBrowserGracefully(app);
-  let exited = await waitForExit(app.proc, 12000);
+  const expected = !!opts.expectForceKill;
+  if (app.cdp && !expected) await closeBrowserGracefully(app);
+  let exited = await waitForExit(app.proc, expected ? 500 : 12000);
   if (!exited) {
-    notes.push("did not exit after Browser.close; force-killed via killPid");
+    if (expected) notes.push("force-killed by design: " + opts.expectForceKill);
+    else {
+      notes.push("did not exit after Browser.close; force-killed via killPid");
+      unexpectedForceKills.push(tag || "(untagged teardown)");
+    }
     killPid(app.proc.pid);
     /* 30 s, not 10: taskkill /F is authoritative, but an x64 Electron tree
        under ARM64 emulation on a loaded machine (an installer build or the
@@ -1151,8 +1178,17 @@ function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch
  * -------------------------------------------------------------------- */
 
 let totalChecks = 0, passedChecks = 0;
+// Groups that passed --only-group's filter, across every target. A filter
+// that matches nothing must fail the run, not print "ALL PASS - 0/0".
+let groupsRun = 0;
+// Every registered group name, so a filter that matched nothing can say
+// what it could have matched.
+const groupNames = new Set();
 const failureLines = [];
 const skippedLines = [];
+// Teardowns that fell back to the force-kill without expecting to (see
+// teardown()). Listed in the summary; not failures.
+const unexpectedForceKills = [];
 
 function record(name, ok, detail) {
   totalChecks++;
@@ -1930,7 +1966,7 @@ async function caseUnsavedChangesClose(target) {
     }
   } finally {
     if (app2) {
-      await teardown(app2, tag + " (no pre-answered dialog)");
+      await teardown(app2, tag + " (no pre-answered dialog)", { expectForceKill: ENDS_DIRTY });
       rmrf(app2.userDataDir);
     }
   }
@@ -2429,7 +2465,7 @@ async function caseTabRoutingRules(target, fixturesDir) {
       !!ownerWindow && ownerWindow.windowId === newWindowId && ownerWindow.activeTabId === tabBId, JSON.stringify(ownerWindow));
   } finally {
     if (cdpB) { try { cdpB.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -2679,7 +2715,7 @@ async function caseTearOffPreservesState(target) {
     record(tag + ": the strip records the tab under its new window", !!w2 && w2.tabs.some((t) => t.tabId === tab2Id), JSON.stringify(w2));
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
   }
 }
 
@@ -3918,7 +3954,7 @@ async function caseDraftCrashDirtyFile(target, fixturesDir) {
     record(tag + ": splitpage:test-draft-status reports hasDraft:true after the crash reload", !!status && status.hasDraft === true, JSON.stringify(status));
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
   }
 }
 
@@ -3965,7 +4001,7 @@ async function caseDraftFileChangedOnDisk(target, fixturesDir) {
     const fileUnchanged = fs.readFileSync(filePath, "utf8") === diskTextBeforeRelaunch;
     record(tag + ": the file on disk is untouched by the restore (invariant #41)", fileUnchanged);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4000,7 +4036,7 @@ async function caseDraftFileDeleted(target, fixturesDir) {
     const toast = await toastContaining(cdp, "isn't where it was", 15000);
     record(tag + ": the toast says the file is gone and it's open as an unsaved copy", !!toast, String(toast));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4124,7 +4160,7 @@ async function caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir) {
     record(tag + ": A's discarded work never comes back", !gotA);
   } finally {
     if (cdpB) { try { cdpB.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4184,7 +4220,7 @@ async function caseDraftCrashMidWrite(target) {
     const leftoverTmp = entries.filter((n) => n.indexOf(".tmp-") === 0);
     record(tag + ": no leftover .tmp-* file (init()'s own sweep)", leftoverTmp.length === 0, JSON.stringify(entries));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4246,7 +4282,7 @@ async function caseDraftCorrupt(target) {
         held.indexOf("current.draft") !== -1 && held.indexOf("previous.draft") !== -1, JSON.stringify(held));
     }
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4284,7 +4320,7 @@ async function caseDraftDiskFull(target) {
     const stickyGone = await poll(cdp, "document.querySelectorAll('.toast.warn.is-sticky').length === 0", 8000).catch(() => false);
     record(tag + ": the sticky paused toast is withdrawn once recovery resumes", !!stickyGone);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
   }
 }
 
@@ -4336,7 +4372,7 @@ async function caseDraftForgedFileId(target) {
     const dirtyAfter = await isDirty(cdp2);
     record(tag + ": the copy is dirty", !!dirtyAfter);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4386,7 +4422,7 @@ async function caseDraftNoSecrets(target) {
     record(tag + ": header server.base (when present) carries no userinfo ('@')",
       base === undefined || base === null || String(base).indexOf("@") === -1, JSON.stringify(base));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dataDir);
   }
 }
@@ -4458,7 +4494,7 @@ async function caseDraftServerDocMerges(target) {
     const dirtyAfter = await isDirty(cdp2);
     record(tag + ": the merged tab stays dirty (btn-save is-dirty)", !!dirtyAfter);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dataDir);
     rmrf(userDataDir);
   }
@@ -4507,7 +4543,7 @@ async function caseDraftServerGone(target) {
     const toast = await toastContaining(cdp2, "no longer on the server", 15000);
     record(tag + ": a toast says the document is no longer on the server", !!toast, String(toast));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dataDir);
     rmrf(userDataDir);
   }
@@ -4618,7 +4654,7 @@ async function caseTornOffDirtyTabCrashRestoresOnce(target) {
     }
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -5402,6 +5438,7 @@ async function runTargetSuite(target, groupFilter) {
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {
+    groups.forEach(([name]) => groupNames.add(name));
     for (const [name, fn, opts] of groups) {
       /* A group marked windowsOnly is named in the summary as a skip rather
          than run and failed, or — worse — quietly dropped. Nothing in the
@@ -5414,6 +5451,7 @@ async function runTargetSuite(target, groupFilter) {
       // "skipped because the platform cannot run it", and must not land in
       // the summary's skip list claiming that it was.
       if (groupFilter && !name.toLowerCase().includes(groupFilter)) continue;
+      groupsRun++;
       if (opts && opts.windowsOnly && !IS_WINDOWS) {
         skip(target.name + ": " + name + " (group)", WINDOWS_ONLY + " — " + opts.windowsOnly);
         continue;
@@ -5434,7 +5472,8 @@ async function main() {
   const groupFilter = onlyGroup ? onlyGroup.toLowerCase() : null;
   let targets = resolveTargets(exe);
   if (onlyTarget) targets = targets.filter((t) => t.name === onlyTarget);
-  if (!targets.length) {
+  if (!targets.some((t) => !t.cannotRun)) {
+    targets.filter((t) => t.cannotRun).forEach((t) => console.error("SKIP - " + t.name + " :: " + t.cannotRun));
     console.error(
       "No target found. Nothing to test.\n" +
       "  dev:      " + devElectronExe() + " (run `npm install` in desktop/)\n" +
@@ -5453,11 +5492,25 @@ async function main() {
   }
 
   for (const target of targets) {
+    if (target.cannotRun) {
+      skip(target.name + " (whole target)", target.cannotRun);
+      continue;
+    }
     try {
       await runTargetSuite(target, groupFilter);
     } catch (e) {
       record(target.name + ": target suite", false, "uncaught exception: " + (e && e.stack || e));
     }
+  }
+
+  if (groupFilter && groupsRun === 0) {
+    console.log("");
+    console.log("NO GROUP MATCHED --only-group " + JSON.stringify(onlyGroup) + ". It matches the registered group");
+    console.log("name (e.g. \"open/boot/security\"), not the tag printed on each check line (\"boot+security\").");
+    console.log("Registered groups:");
+    groupNames.forEach((n) => console.log("  " + n));
+    console.log("NOTHING RAN - 0 desktop checks — PARTIAL RUN matched nothing");
+    process.exit(1);
   }
 
   console.log("");
@@ -5470,6 +5523,11 @@ async function main() {
     console.log("");
   } else {
     console.log("SKIPPED (0) — every check in this file ran.");
+    console.log("");
+  }
+  if (unexpectedForceKills.length) {
+    console.log(`FORCE-KILLED (${unexpectedForceKills.length}) — Browser.close did not close these, and they were not expected to need the kill:`);
+    unexpectedForceKills.forEach((l) => console.log("  - " + l));
     console.log("");
   }
   const skipNote = (skippedLines.length ? `, ${skippedLines.length} skipped` : "") +

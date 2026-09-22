@@ -120,9 +120,10 @@ build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
 `tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
 A second job, `desktop-smoke`, runs `desktop/test/smoke.mjs --only-target
 dev` against an Xvfb display (#89) — that is where `main.js` and `preload.js`
-are actually executed, ~487 checks of it. It is its own job because it
-launches ~60 real Electron processes and takes ~55 minutes, far longer than
-everything else together. It is not the
+are actually executed, ~600 checks of it. It is its own job because it
+launches ~60 real Electron processes — 6.3 minutes on a Windows 11 x64
+machine, far longer on a slow shared runner — which is more than everything
+else together. It is not the
 full regression run — that is still `run-tests.ps1` on Windows, or
 `driver.mjs` one suite at a time here, plus the packaged targets.
 
@@ -186,10 +187,16 @@ ships. Every check the platform cannot answer is printed as a `SKIP` line and
 listed again under `SKIPPED (n)` at the end of the run, above the pass line —
 so a thinner run never reads like a full one.
 
-A full dev-target run is ~55 minutes. `--only-group <text>` (debugging only,
-same spirit as `--only-target`) runs just the matching groups; it prints a
-banner and tags the summary `PARTIAL RUN`, so a one-case run can never be
-mistaken for the suite.
+A full dev-target run took 6.3 minutes on Windows 11 x64; the ~55 minutes
+first quoted here was the slow cloud container, not the suite.
+`--only-group <text>` (debugging only, same spirit as `--only-target`) runs
+just the groups whose registered name (`open/boot/security`, not the printed
+tag `boot+security`) contains the text; it prints a banner and tags the
+summary `PARTIAL RUN`, so a one-case run can never be mistaken for the suite,
+and a filter that matches nothing exits 1. Launches that end with a dirty
+tab are torn down with `expectForceKill` — the same 15 needed the kill on
+Windows as on Linux, so it is how those cases end, not a platform quirk;
+any other teardown that needs it is listed under `FORCE-KILLED (n)`.
 
 Dev Electron is pinned to native ARM64 (`desktop/.npmrc`, `arch=arm64`); a
 plain `npm install` in `desktop/` on the Windows machine fetches the right
