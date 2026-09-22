@@ -1,7 +1,8 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { makeId } from "./02-state.js";
-import { mintDocId, normalizeDocId } from "./02b-doc-id.js";
+import { mintDocId, normalizeDocId, sha256Bytes } from "./02b-doc-id.js";
+import { dataUrlForSync, ensureBytes, intern, persist, recordFor } from "./02c-blobs.js";
 import {
   SNAPSHOT_KEY,
   getEditorName,
@@ -24,6 +25,7 @@ import {
   planHistoryEviction,
   sanitizeHistoryMeta
 } from "../../shared/history-policy.js";
+import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 export {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -1588,8 +1590,30 @@ export function copyHistory(from, to) {
    which walks the folder tree main.js owns. rawDocIds() still returns
    null on a genuine failure (an old desktop build, a rejected/timed-out
    call), and exportHistoryAll() turns that into a rejection with a clear
-   code rather than silently exporting an empty bundle. */
+   code rather than silently exporting an empty bundle.
+
+   IMAGES (#82). A snapshot's state names its images by sha (refsIn,
+   shared/blob-policy.js) and their bytes live in the blob store, not in the
+   snapshot — so an export that carried only stateJson would arrive on the
+   other machine with every picture missing. exportHistoryAll() therefore
+   also returns
+     blobs:        {sha: {mime, b64}} for every sha an exported snapshot
+                   names whose bytes this page could get (the registry's
+                   ensureBytes: memory, then the blob backend — IndexedDB in
+                   a browser, main's <userData>/blobs on the desktop once
+                   that backend is set), each exactly once;
+     missingBlobs: [sha] the ones it could not — listed, never silently
+                   dropped, so the export can say so.
+   Blob bytes count toward HISTORY_EXPORT_CAP_BYTES like snapshot bodies do,
+   each blob once, charged to the newest snapshot that names it. */
 var HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
+/* A test-only stand-in for the cap (__historyTest.setExportCap), so a suite
+   can prove blobs count toward it without writing 200 MB. */
+var historyExportCapOverride = null;
+
+function historyExportCap() {
+  return historyExportCapOverride != null ? historyExportCapOverride : HISTORY_EXPORT_CAP_BYTES;
+}
 
 function historyExportError(code, message) {
   var e = new Error(message);
@@ -1624,7 +1648,7 @@ function historyAssembleExport(backend, docs, olderMetas) {
   var total = 0, truncated = false, keep = {};
   flat.forEach(function (f) {
     var key = (f.docId == null ? "_older" : f.docId) + "\n" + f.id;
-    if (total === 0 || total + f.sizeBytes <= HISTORY_EXPORT_CAP_BYTES) {
+    if (total === 0 || total + f.sizeBytes <= historyExportCap()) {
       total += f.sizeBytes;
       keep[key] = true;
     } else {
@@ -1702,7 +1726,74 @@ export function exportHistoryAll() {
     });
   }, function (e) {
     return Promise.reject(e && e.code ? e : historyExportError("io", "Could not read version history for export."));
+  }).then(historyExportAttachBlobs);
+}
+
+/* Cheap test before a JSON.parse: a state that names no image cannot
+   contain any of these (refsIn reads only imageRef, imageValue and
+   <img data-blob>), and nearly every snapshot today names none. */
+var HISTORY_BLOB_HINT_RE = /imageRef|imageValue|data-blob/;
+
+function historyRefsInJson(stateJson) {
+  if (typeof stateJson !== "string" || !HISTORY_BLOB_HINT_RE.test(stateJson)) return [];
+  try { return refsIn(JSON.parse(stateJson)); } catch (e) { return []; }
+}
+
+/* What one blob adds to the file: its bytes as base64, its key and type,
+   and the JSON around them. */
+function historyBlobCost(sha, entry) {
+  return sha.length + entry.mime.length + entry.b64.length + 40;
+}
+
+/* The second, image-aware pass of the cap, run AFTER the history job (so
+   reading blobs never holds the history queue). The first pass
+   (historyAssembleExport) picked snapshots by body size alone; this one
+   walks what it kept newest first, charges each snapshot its body plus
+   every image it is the newest snapshot to name, and drops a snapshot
+   whose total would pass the cap (truncated, as before). The newest
+   snapshot is always kept whole, as the first pass keeps it. Never
+   rejects on a blob problem: a sha whose bytes cannot be had goes to
+   missingBlobs, and the snapshot still exports. */
+async function historyExportAttachBlobs(out) {
+  var cap = historyExportCap();
+  var all = [];
+  out.docs.forEach(function (d) {
+    d.snapshots.forEach(function (s) { all.push({ snap: s, owner: d.snapshots }); });
   });
+  out.older.forEach(function (s) { all.push({ snap: s, owner: out.older }); });
+  all.sort(function (a, b) {
+    return (b.snap.meta.atMs - a.snap.meta.atMs) || (a.snap.meta.id < b.snap.meta.id ? 1 : -1);
+  });
+
+  var blobs = {}, missing = [], counted = {}, total = 0, dropped = [];
+  for (var i = 0; i < all.length; i++) {
+    var snap = all[i].snap;
+    var fresh = historyRefsInJson(snap.stateJson).filter(function (sha) { return !counted[sha]; });
+    var gone = fresh.length ? await ensureBytes(fresh) : [];
+    var add = {}, addMissing = [], cost = historyUtf8Length(snap.stateJson);
+    fresh.forEach(function (sha) {
+      var url = gone.indexOf(sha) === -1 ? dataUrlForSync(sha) : null;
+      var rec = url ? recordFor(sha) : null;
+      if (!url || !rec) { addMissing.push(sha); return; }
+      add[sha] = { mime: rec.mime, b64: url.slice(url.indexOf(",") + 1) };
+      cost += historyBlobCost(sha, add[sha]);
+    });
+    if (total > 0 && total + cost > cap) {
+      dropped.push(all[i]);
+      continue;
+    }
+    total += cost;
+    Object.keys(add).forEach(function (sha) { blobs[sha] = add[sha]; counted[sha] = true; });
+    addMissing.forEach(function (sha) { missing.push(sha); counted[sha] = true; });
+  }
+  dropped.forEach(function (x) {
+    var at = x.owner.indexOf(x.snap);
+    if (at !== -1) x.owner.splice(at, 1);
+  });
+  if (dropped.length) out.truncated = true;
+  out.blobs = blobs;
+  out.missingBlobs = missing;
+  return out;
 }
 
 /* ---- import (X2: File ▸ Import app data…) ----
@@ -1724,6 +1815,20 @@ export function exportHistoryAll() {
      * historyLocal is never touched: an imported snapshot is not this
        page's capture, so it must never become a 'pending' entry held in
        RAM and retried.
+     * IMAGES FIRST (#82). bundle.blobs ({sha: {mime, b64}}, 20h-appdata.js)
+       is verified and stored durably — the registry's persist(), which
+       resolves only once the blob backend holds the bytes — BEFORE the
+       first history put, so no imported snapshot is ever stored naming an
+       image this machine's store does not already hold. Verification: the
+       key is a sha, the base64 is strict, the bytes are at most
+       HISTORY_IMPORT_BLOB_MAX_BYTES, sniff as PNG/JPEG/GIF/WebP with a
+       readable size (never SVG; the entry's own `mime` is not trusted),
+       and hash to the key. A blob that fails is dropped and reported; the
+       snapshots naming it still import (they show a placeholder, as any
+       snapshot does whose image is gone). A blob no snapshot in the bundle
+       names is ignored — the file is untrusted, and the store is never
+       garbage-collected (#82 D4). No bundle.blobs (every file exported
+       before #82) imports exactly as it always did.
 
    WHY OLDEST FIRST, AND WHY SOME ARE LEFT OUT. Every put re-stamps atMs to
    just after the newest snapshot already in its bucket (historyStampAfter,
@@ -1742,12 +1847,90 @@ export function exportHistoryAll() {
    typing, and a capture issued meanwhile slots in between batches instead
    of waiting behind the whole file.
 
-   → Promise<{docs, added, skipped, failed, older, capped, code?}>, never
-   rejects. docs counts documents that received at least one snapshot;
-   older counts Older entries added; code is "quota" when storage refused a
-   write — the import stops there, and everything not yet written is
-   counted as failed. */
+   → Promise<{docs, added, skipped, failed, older, capped, blobs, code?}>,
+   never rejects. docs counts documents that received at least one
+   snapshot; older counts Older entries added; code is "quota" when storage
+   refused a write — the import stops there, and everything not yet written
+   is counted as failed. blobs is {stored, refused: [key], failed: [sha],
+   ignored}: stored counts images now held durably (already held counts
+   too), refused lists the ones that failed verification, failed the ones
+   the blob store would not take, ignored those no snapshot names. */
 var HISTORY_IMPORT_BATCH = 25;
+/* The largest image an import will store: the desktop blob bridge's own
+   cap (desktop/blob-store.js refuses more), and twice the server's. */
+var HISTORY_IMPORT_BLOB_MAX_BYTES = 16 * 1024 * 1024;
+var HISTORY_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/* Strict base64 (what historyExportAttachBlobs writes: unwrapped, padded)
+   → bytes, or null. */
+function historyDecodeBase64(b64) {
+  if (typeof b64 !== "string" || !HISTORY_BASE64_RE.test(b64)) return null;
+  var bin;
+  try { bin = atob(b64); } catch (e) { return null; }
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/* Every sha the bundle's snapshots name, as a set. */
+function historyImportRefs(docs, older) {
+  var refs = {};
+  function scan(list) {
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      if (!s || typeof s !== "object") return;
+      historyRefsInJson(s.stateJson).forEach(function (sha) { refs[sha] = true; });
+    });
+  }
+  (Array.isArray(docs) ? docs : []).forEach(function (d) {
+    if (d && typeof d === "object") scan(d.snapshots);
+  });
+  scan(older);
+  return refs;
+}
+
+/* One entry of bundle.blobs → its verified bytes, or a reason it is not. */
+function historyVerifyBlob(sha, entry) {
+  if (!isSha256Hex(sha)) return { reason: "not-a-sha" };
+  if (!entry || typeof entry !== "object" || typeof entry.b64 !== "string") return { reason: "malformed" };
+  if (entry.b64.length > Math.ceil(HISTORY_IMPORT_BLOB_MAX_BYTES / 3) * 4) return { reason: "too-large" };
+  var bytes = historyDecodeBase64(entry.b64);
+  if (!bytes || !bytes.length) return { reason: "bad-base64" };
+  if (bytes.length > HISTORY_IMPORT_BLOB_MAX_BYTES) return { reason: "too-large" };
+  if (!sniffImageMime(bytes) || !imageDims(bytes)) return { reason: "not-an-image" };
+  if (sha256Bytes(bytes) !== sha) return { reason: "hash-mismatch" };
+  return { bytes: bytes };
+}
+
+/* Verifies, registers and persists every referenced blob of the bundle;
+   resolves once persist() has answered — i.e. once every blob that could
+   be stored IS stored durably. Never rejects. */
+async function historyImportBlobs(blobs, refs) {
+  var out = { stored: 0, refused: [], failed: [], ignored: 0 };
+  if (!blobs || typeof blobs !== "object" || Array.isArray(blobs)) return out;
+  var keys = Object.keys(blobs);
+  var ready = [];
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (isSha256Hex(key) && !Object.prototype.hasOwnProperty.call(refs, key)) { out.ignored++; continue; }
+    var v = historyVerifyBlob(key, blobs[key]);
+    if (!v.bytes) {
+      out.refused.push(String(key).slice(0, 64));
+      if (window.console) console.warn("Import app data: image " + String(key).slice(0, 64) + " refused (" + v.reason + ")");
+      continue;
+    }
+    var rec = intern(v.bytes);
+    if (!rec || rec.sha256 !== key) { out.refused.push(key); continue; }
+    ready.push(key);
+    /* hashing a large image is real work on this thread; let typing in */
+    await historyImportYield();
+  }
+  if (ready.length) {
+    out.failed = await persist(ready);
+    out.stored = ready.length - out.failed.length;
+    if (out.failed.length && window.console) console.warn("Import app data: the image store did not take", out.failed);
+  }
+  return out;
+}
 
 function historyImportYield() {
   return new Promise(function (resolve) { setTimeout(resolve, 0); });
@@ -1781,11 +1964,15 @@ function historyImportByAtAscending(a, b) {
 }
 
 export async function importHistoryBundle(bundle) {
-  var result = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0 };
+  var result = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0,
+                 blobs: { stored: 0, refused: [], failed: [], ignored: 0 } };
   try {
     bundle = (bundle && typeof bundle === "object") ? bundle : {};
     var docs = Array.isArray(bundle.docs) ? bundle.docs : [];
     var stopped = false;
+
+    /* Images before the history that names them (invariant #49). */
+    if (bundle.blobs) result.blobs = await historyImportBlobs(bundle.blobs, historyImportRefs(docs, bundle.older));
 
     for (var d = 0; d < docs.length; d++) {
       var doc = docs[d];
@@ -2190,7 +2377,13 @@ export function __init() {
       historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
       return historyDesktopTimeoutOverride;
     },
-    /* the X2 write path itself: bundle.history's {docs, older} shape */
-    importBundle: importHistoryBundle
+    /* the X2 write path itself: bundle.history's {docs, older} shape, plus
+       the app-data bundle's blobs */
+    importBundle: importHistoryBundle,
+    /* bytes, or null for the real 200 MB — the export cap (#82: blobs count) */
+    setExportCap: function (bytes) {
+      historyExportCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Math.max(0, Number(bytes));
+      return historyExportCapOverride;
+    }
   };
 }
