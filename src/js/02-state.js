@@ -157,6 +157,13 @@ export function migrateRows(s) {
      the oldest possible schema (legacy), anything current or newer is not. */
   var legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;
 
+  /* Asked BEFORE the defaults pass below, which is the whole point: that
+     pass gives productionTags its `[]`, after which "never had a registry"
+     and "has an empty one" are indistinguishable. The back-fill further
+     down needs to tell them apart — see #92, where it silently stopped
+     firing for exactly the files it exists for. */
+  var hadTagRegistry = "productionTags" in s;
+
   /* Defaults first, from the one table (#60), so a field added there is
      present on every document without a second edit here. The bespoke
      normalisation below still has the last word — a default only fills a
@@ -244,12 +251,6 @@ export function migrateRows(s) {
     c.assignee = c.assignee ? plainText(c.assignee).trim().slice(0, 80) : "";
   });
 
-  /* The production registry — see the comment above productionEntries()
-     for why this exists as real, separate storage rather than being read
-     straight off the script like the rest of tagging is. A file saved
-     before this existed has no such list yet: back-fill it from whatever
-     is tagged in the script right now, so opening an old file doesn't
-     just silently start tracking nothing. */
   /* Who's responsible for each tracked item. Deliberately just names the
      user typed — there are no accounts here and nothing is verified; it's
      a crew list for sorting a breakdown by, not an identity system. */
@@ -268,7 +269,18 @@ export function migrateRows(s) {
   var knownPeople = Object.create(null);
   s.people.forEach(function (p) { knownPeople[p.id] = true; });
 
-  if (!Array.isArray(s.productionTags)) {
+  /* The production registry — see the comment above productionEntries()
+     for why this exists as real, separate storage rather than being read
+     straight off the script like the rest of tagging is. A file saved
+     before this existed has no such list yet: back-fill it from whatever
+     is tagged in the script right now, so opening an old file doesn't
+     just silently start tracking nothing.
+
+     `hadTagRegistry`, not an emptiness test: a registry the user emptied
+     on purpose must stay empty, or every load would resurrect every tag
+     they just deleted. The Array.isArray half still catches a key holding
+     rubbish — null, a string — from a bad merge or a hand-edited save. */
+  if (!hadTagRegistry || !Array.isArray(s.productionTags)) {
     s.productionTags = collectTagsFromRows(s.rows).map(function (t) {
       return { cat: t.cat.id, name: t.name };
     });

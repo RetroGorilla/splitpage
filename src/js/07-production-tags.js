@@ -20,7 +20,6 @@ import { writerOpen } from "./19-writer.js";
    DOM, read storage, or depend on another module's value, so they have to
    run in fragment order rather than in whatever order the bundle lands in. */
 var TAG_SHORTCUT_CHARS;
-export var tagsInField;
 
 /* ================= production tags =================
 
@@ -168,6 +167,29 @@ export function contentMemo(compute) {
     return val;
   };
 }
+
+/* Assigned here rather than in __init(), unlike its neighbours: contentMemo
+   is a hoisted declaration in this same module and the closure it returns
+   touches the DOM only when CALLED, so there is nothing here that needs
+   fragment order. #66 moved it into __init() under a blanket "no calls at
+   evaluation time" rule, which made migrateRows — a pure core, unit-tested
+   directly since #67 — depend on init having run: fine in the browser,
+   where _entry.js always runs first, and a TypeError anywhere else. #92's
+   back-fill is the path that found it.
+
+   The returned array is SHARED with every other caller for the same field
+   content — read it, never mutate it. Mentions are built around it. */
+export var tagsInField = contentMemo(function (html) {
+  var out = [];
+  var body = inertBody(html);
+  Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
+    var catId = el.getAttribute("data-tag-cat");
+    var name = (el.getAttribute("data-tag-name") || "").trim();
+    if (!catId || !name) return;
+    out.push({ catId: catId, name: name, text: (el.textContent || "").trim() });
+  });
+  return out;
+});
 
 export function collectTagsFromRows(rows) {
   var groups = {}, order = [];
@@ -1233,15 +1255,4 @@ export function __init() {
 
   /* The returned array is SHARED with every other caller for the same field
      content — read it, never mutate it. Mentions are built around it. */
-  tagsInField = contentMemo(function (html) {
-    var out = [];
-    var body = inertBody(html);
-    Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-      var catId = el.getAttribute("data-tag-cat");
-      var name = (el.getAttribute("data-tag-name") || "").trim();
-      if (!catId || !name) return;
-      out.push({ catId: catId, name: name, text: (el.textContent || "").trim() });
-    });
-    return out;
-  });
 }
