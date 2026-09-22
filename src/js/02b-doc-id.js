@@ -124,51 +124,71 @@ function utf8Bytes(str) {
   return utf8BytesManual(str);
 }
 
-export function sha256Hex(str) {
-  var bytes = utf8Bytes(String(str));
+/* One 64-byte block of `src`, starting at `off`, folded into H. `src` is
+   anything indexable holding byte values — the caller's own Uint8Array, a
+   plain array from utf8BytesManual, or the padded tail below — so a large
+   input is hashed where it lies instead of being copied first. */
+function sha256Block(H, w, src, off) {
+  var a, b, c, d, e, f, g, h, t, j, x, y, t1, t2;
+  for (t = 0; t < 16; t++) {
+    j = off + t * 4;
+    w[t] = (src[j] << 24) | (src[j + 1] << 16) | (src[j + 2] << 8) | src[j + 3];
+  }
+  for (t = 16; t < 64; t++) {
+    x = w[t - 2]; y = w[t - 15];
+    w[t] = ((((x >>> 17) | (x << 15)) ^ ((x >>> 19) | (x << 13)) ^ (x >>> 10)) +
+            w[t - 7] +
+            (((y >>> 7) | (y << 25)) ^ ((y >>> 18) | (y << 14)) ^ (y >>> 3)) +
+            w[t - 16]) | 0;
+  }
+  a = H[0]; b = H[1]; c = H[2]; d = H[3]; e = H[4]; f = H[5]; g = H[6]; h = H[7];
+  for (t = 0; t < 64; t++) {
+    t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) +
+          ((e & f) ^ (~e & g)) + SHA256_K[t] + w[t]) | 0;
+    t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) +
+          ((a & b) ^ (a & c) ^ (b & c))) | 0;
+    h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+  }
+  H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+  H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+}
+
+/* SHA-256 of raw bytes, as 64 lowercase hex (#82: the content address of an
+   image blob). The same core as sha256Hex — which is FROZEN — split out so
+   an image is hashed without a detour through a string; sha256Hex is this
+   over the string's UTF-8, and its vectors pin that the split changed
+   nothing. Synchronous for the reasons above: the migration that interns a
+   legacy data: URI runs inside migrateRows, and crypto.subtle is absent on
+   a plain-HTTP LAN page anyway. */
+export function sha256Bytes(bytes) {
   var len = bytes.length;
-  var total = Math.ceil((len + 9) / 64) * 64;
-  var msg = new Uint8Array(total);
-  msg.set(bytes);
-  msg[len] = 0x80;
-  /* The message length in bits as a 64-bit big-endian integer. len * 8 is
-     exact in a double for any string a browser can hold; the high word is
+  var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  var w = new Int32Array(64);
+  var full = len - (len % 64), off, t;
+  for (off = 0; off < full; off += 64) sha256Block(H, w, bytes, off);
+  /* The padded tail: what is left of the message, 0x80, zeros, and the
+     message length in bits as a 64-bit big-endian integer — one block, or
+     two when the length no longer fits behind the leftover bytes. len * 8
+     is exact in a double for anything a browser can hold; the high word is
      taken by division so nothing is lost to 32-bit bitwise truncation. */
+  var rest = len - full;
+  var total = rest + 9 <= 64 ? 64 : 128;
+  var msg = new Uint8Array(total);
+  for (t = 0; t < rest; t++) msg[t] = bytes[full + t];
+  msg[rest] = 0x80;
   var hi = Math.floor(len / 0x20000000), lo = (len * 8) >>> 0;
   msg[total - 8] = (hi >>> 24) & 0xff; msg[total - 7] = (hi >>> 16) & 0xff;
   msg[total - 6] = (hi >>> 8) & 0xff;  msg[total - 5] = hi & 0xff;
   msg[total - 4] = (lo >>> 24) & 0xff; msg[total - 3] = (lo >>> 16) & 0xff;
   msg[total - 2] = (lo >>> 8) & 0xff;  msg[total - 1] = lo & 0xff;
-
-  var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
-  var w = new Int32Array(64);
-  var a, b, c, d, e, f, g, h, t, j, x, y, t1, t2, off;
-  for (off = 0; off < total; off += 64) {
-    for (t = 0; t < 16; t++) {
-      j = off + t * 4;
-      w[t] = (msg[j] << 24) | (msg[j + 1] << 16) | (msg[j + 2] << 8) | msg[j + 3];
-    }
-    for (t = 16; t < 64; t++) {
-      x = w[t - 2]; y = w[t - 15];
-      w[t] = ((((x >>> 17) | (x << 15)) ^ ((x >>> 19) | (x << 13)) ^ (x >>> 10)) +
-              w[t - 7] +
-              (((y >>> 7) | (y << 25)) ^ ((y >>> 18) | (y << 14)) ^ (y >>> 3)) +
-              w[t - 16]) | 0;
-    }
-    a = H[0]; b = H[1]; c = H[2]; d = H[3]; e = H[4]; f = H[5]; g = H[6]; h = H[7];
-    for (t = 0; t < 64; t++) {
-      t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) +
-            ((e & f) ^ (~e & g)) + SHA256_K[t] + w[t]) | 0;
-      t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) +
-            ((a & b) ^ (a & c) ^ (b & c))) | 0;
-      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
-    }
-    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
-    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
-  }
+  for (off = 0; off < total; off += 64) sha256Block(H, w, msg, off);
   var hex = "";
   for (t = 0; t < 8; t++) hex += ("0000000" + (H[t] >>> 0).toString(16)).slice(-8);
   return hex;
+}
+
+export function sha256Hex(str) {
+  return sha256Bytes(utf8Bytes(String(str)));
 }
 
 /* FROZEN, for the same reason as sha256Hex. `domain` keeps the three
