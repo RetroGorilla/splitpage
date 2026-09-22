@@ -1,0 +1,135 @@
+# Teleprompter scene mode (issue #26): cue one scene's first word to the
+# reading line, auto-pause once its last word passes that line, Next/Previous
+# (buttons and Left/Right) re-cue the neighbour, a "Scene N of M" readout
+# tracks where you are, it skips scenes "hide shot scenes" (#25) has hidden,
+# and it is off by default, remembered per device.
+#
+# The scroll-driven auto-pause can't be exercised with a real
+# requestAnimationFrame loop headless (SKILL.md "What this cannot test"), so
+# window.__prompterTest (20-teleprompter.js) exposes the pure boundary check
+# and a way to run it against a scrollTop this script sets directly — a
+# simulated scroll position, exactly as intended. The same test hook stands
+# in for Follow My Voice, which needs a real microphone.
+
+open
+sleep 800
+
+# --- build a 4-scene fixture: r1, r2 (seed) plus two new, real scenes ------
+jsclick .add-row-bar [data-action="add-row"]
+sleep 200
+jsclick .add-row-bar [data-action="add-row"]
+sleep 200
+expect document.querySelectorAll('#rows .row').length == 4
+
+caret #rows .row:nth-child(3) .audio-cell .cell-editable
+press Scene three narration for the reading test.
+sleep 300
+caret #rows .row:nth-child(4) .audio-cell .cell-editable
+press Scene four narration to close things out.
+sleep 500
+
+# --- off by default: Prev/Next/readout all start hidden --------------------
+click #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-scene-prev').hidden
+expect document.getElementById('pp-scene-next').hidden
+expect document.getElementById('pp-scene-readout').hidden
+jsclick #pp-close
+
+# --- opening from a scene (caret in it) cues that scene once it's on ------
+caret #rows .row:nth-child(3) .audio-cell .cell-editable
+sleep 200
+click #btn-present
+wait !document.getElementById('prompter').hidden
+jsclick #pp-scene-mode
+sleep 300
+expect !document.getElementById('pp-scene-prev').hidden
+expect document.getElementById('pp-scene-readout').textContent == Scene 3 of 4
+
+# --- Next / Previous, by button and by keyboard ----------------------------
+jsclick #pp-scene-next
+sleep 250
+expect document.getElementById('pp-scene-readout').textContent == Scene 4 of 4
+jsclick #pp-scene-prev
+sleep 250
+expect document.getElementById('pp-scene-readout').textContent == Scene 3 of 4
+key ArrowLeft
+sleep 250
+expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 4
+key ArrowRight
+sleep 250
+expect document.getElementById('pp-scene-readout').textContent == Scene 3 of 4
+
+# --- back to scene 1, then simulate scrolling into its last word -----------
+jsclick #pp-scene-prev
+jsclick #pp-scene-prev
+sleep 250
+expect document.getElementById('pp-scene-readout').textContent == Scene 1 of 4
+expect window.__prompterTest.checkSceneBoundaryNow() == false
+
+jsclick #pp-play
+sleep 200
+expect document.getElementById('pp-play').classList.contains('is-active')
+
+# r1's own narration ends in "works." — scroll just past that word's own
+# position (the exact reading-line math cueScene used to place it there)
+eval (function(){ var scroller = document.getElementById('prompter-scroll'); var guideOffset = scroller.clientHeight / 2; var last = Array.from(document.querySelectorAll('#prompter-content .w')).find(function (w) { return w.textContent === 'works.'; }); scroller.scrollTop = last.offsetTop - guideOffset + 1; return scroller.scrollTop; })()
+
+# --- auto-pause fires once, moves the target on, and does NOT re-scroll ---
+expect window.__prompterTest.checkSceneBoundaryNow() == true
+sleep 200
+expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 4
+expect !document.getElementById('pp-play').classList.contains('is-active')
+expect window.__prompterTest.checkSceneBoundaryNow() == false
+
+# --- pressing Play again continues into scene 2 rather than replaying it --
+jsclick #pp-play
+sleep 200
+expect document.getElementById('pp-play').classList.contains('is-active')
+expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 4
+jsclick #pp-play
+
+# --- Follow My Voice: the recognised word position, not the scroll, is
+#     what trips the same boundary (no microphone needed for this half) ---
+jsclick #pp-scene-prev
+sleep 250
+expect document.getElementById('pp-scene-readout').textContent == Scene 1 of 4
+eval window.__prompterTest.simulateVoiceWordCursor(document.querySelectorAll('#prompter-content .w').length)
+sleep 200
+expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 4
+
+jsclick #pp-close
+
+# --- remembered per device: still on, without reopening it ----------------
+expect localStorage.getItem('splitpage-prompter-scene-mode') == 1
+
+# --- scenes "hide shot scenes" (#25) hides are skipped here too -----------
+jsclick #rows .row[data-id="r2"] .status-btn
+jsclick #rows .row[data-id="r2"] .status-btn
+sleep 200
+key ctrl+alt KeyH
+sleep 300
+expect document.querySelectorAll('.hidden-shot-strip').length == 1
+
+caret #rows .row:nth-child(3) .audio-cell .cell-editable
+sleep 200
+click #btn-present
+wait !document.getElementById('prompter').hidden
+expect !document.getElementById('pp-scene-prev').hidden
+# r2 is Shot and hidden — down to 3 scenes, and scene 3 (audio "…reading
+# test.") is now the SECOND one, not the third
+expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 3
+expect document.getElementById('prompter-content').textContent.indexOf("viewer sees") === -1
+jsclick #pp-close
+key ctrl+alt KeyH
+
+# --- turning it off hides the controls and un-remembers itself -------------
+click #btn-present
+wait !document.getElementById('prompter').hidden
+jsclick #pp-scene-mode
+sleep 250
+expect document.getElementById('pp-scene-prev').hidden
+expect localStorage.getItem('splitpage-prompter-scene-mode') == 0
+jsclick #pp-close
+
+quit

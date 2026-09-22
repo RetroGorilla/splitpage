@@ -928,6 +928,17 @@
       toggleHideShotScenes();
     });
 
+    /* ---- "which scene was the caret in" (issue #26) ----
+       Feeds the teleprompter's scene mode: opening the prompter (or turning
+       scene mode on) cues whichever scene this last pointed at. Covers both
+       the split view's cells and the writer's paragraphs — both carry the
+       same data-id, so one listener does either. */
+    document.addEventListener("focusin", function (e) {
+      var cell = e.target.closest && e.target.closest(".cell-editable");
+      var id = cell && cell.getAttribute("data-id");
+      if (id) lastFocusedRowId = id;
+    });
+
     /* ---- reading speed ---- */
     document.getElementById("runtime-chip").addEventListener("click", promptForWpm);
 
@@ -1375,6 +1386,10 @@
       applyPrompterSize();
       document.getElementById("prompter-scroll").scrollTop = 0;
       updateVoiceAvailability();
+      /* buildPrompterContent() just reset the scene boundaries along with
+         everything else — re-cue from scratch rather than leave scene mode
+         pointed at a scene index that may no longer mean the same thing. */
+      if (promptSceneMode) cueSceneForCurrentPosition(); else updateSceneReadout();
     });
     document.getElementById("pp-mirror").addEventListener("click", function () {
       setPrompterMirror(!prompterMirror);
@@ -1382,6 +1397,11 @@
     document.getElementById("pp-flip").addEventListener("click", function () {
       setPrompterFlip(!prompterFlip);
     });
+    document.getElementById("pp-scene-mode").addEventListener("click", function () {
+      setPrompterSceneMode(!promptSceneMode);
+    });
+    document.getElementById("pp-scene-prev").addEventListener("click", function () { stepScene(-1); });
+    document.getElementById("pp-scene-next").addEventListener("click", function () { stepScene(1); });
     document.getElementById("pp-fullscreen").addEventListener("click", function () {
       var el = document.getElementById("prompter");
       if (document.fullscreenElement) { document.exitFullscreen().catch(function () {}); }
@@ -1396,6 +1416,12 @@
       else if (e.key === "ArrowDown") { prompterSpeed = Math.max(10, prompterSpeed - 6); document.getElementById("pp-speed").value = prompterSpeed; }
       else if (e.key === "m" || e.key === "M") { setPrompterMirror(!prompterMirror); }
       else if (e.key === "f" || e.key === "F") { setPrompterFlip(!prompterFlip); }
+      /* Scene mode's own step keys — ArrowUp/Down already own speed, so
+         Left/Right (unused anywhere else in the prompter) step scenes. A
+         no-op while scene mode is off, same as every other bar control it
+         doesn't apply to yet. */
+      else if (e.key === "ArrowLeft") { stepScene(-1); }
+      else if (e.key === "ArrowRight") { stepScene(1); }
     });
 
     /* ---- the writer ---- */
