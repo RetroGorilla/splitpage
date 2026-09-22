@@ -59,8 +59,10 @@ machine it is running on.
 Windows may say it "protected your PC" — click **More info ▸ Run anyway**.
 
 **Upgrading from 1.0.** If you installed 1.0 with its setup program, the 2.0
-installer finds it, removes it, and keeps your shared-session documents; the
-browser version updates itself, nothing to do.
+desktop installer finds it, removes it, and keeps your shared-session
+documents. For a portable copy, unzip the new release over the old folder —
+it no longer replaces its own files (see [Keeping it up to
+date](#keeping-it-up-to-date)).
 
 **Moving your data between the browser and desktop apps?** See
 [Moving between the browser app and the desktop app](#moving-between-the-browser-app-and-the-desktop-app).
@@ -235,64 +237,39 @@ the command line open at launch.
 **For the desktop app** — its own window, tabs, and version history — see
 [Desktop app](#desktop-app) above; that installer
 (`SplitpageDesktopSetup-<version>-x64.exe` / `-arm64.exe`) is what's on the
-releases page now.
+releases page.
 
-This section covers the older, browser-based install instead: the same app,
-opened in Chrome or Edge, with a Start Menu entry and auto-updates, built as
-a self-extracting `SplitpageSetup-<version>.exe`. It still builds from
-source exactly as described below, but the 2.0.0 release no longer publishes
-it — the zip and the desktop installers above are what ship.
+**For the portable copy**, download `splitpage-<version>.zip` from the same
+place, unzip it anywhere, and run `start.bat` (Windows) or `./start.sh`
+(macOS/Linux). Nothing is installed and nothing is compiled; it uses a Node
+you already have. Without Node you can still open `index.html` directly in a
+browser to write and export — you lose "Install app", the offline service
+worker and the teleprompter's microphone, all of which need a served page.
 
-Double-click it and a window asks where to put it:
-
-- **Just for me** — `%LOCALAPPDATA%\Programs\Splitpage`, no administrator.
-- **Everyone on this PC** — `C:\Program Files\Splitpage`, offered only when
-  you started the setup as an administrator, since it cannot ask for that later.
-- **Somewhere else** — any folder you pick.
-
-and whether you want a desktop shortcut and a *shared session* shortcut. It
-registers with Add/Remove Programs like anything else. `SplitpageSetup.exe /Q`
-installs silently for the current user and `/Q:A` for everyone (needs an
-administrator prompt). To choose the folder as well, override the command:
-`SplitpageSetup.exe /Q /C:"powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -Dir C:\path"`.
+There used to be a third way in here: a self-extracting
+`SplitpageSetup-<version>.exe`, built by Windows' own `iexpress.exe` around a
+PowerShell installer, a PowerShell uninstaller and its own copy of
+`node.exe`. 2.0.0 had already stopped publishing it and DEPLOY.md called it
+deprecated; it is deleted now, along with the PowerShell fallback server and
+the portable uninstaller scripts. The Electron setup and the zip are the two
+ways to install this.
 
 <!-- help:skip-start -->
 ### Building a release
 
 ```
 node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 KB
-node package.mjs --installer  # ...and dist/SplitpageSetup-<version>.exe — ~33 MB (deprecated, not published)
 ```
 
-**Nothing needs installing to build this.** The setup is a self-extracting
-archive made by `iexpress.exe`, which is part of Windows. `--installer` also
-downloads the official Node build for Windows and checks it against
-nodejs.org's published SHA-256 before packing it — that happens once and is
-cached in `.cache/`.
+**Nothing needs installing to build this.** The zip is written by
+`package.mjs` itself rather than shelled out to `zip` or
+`Compress-Archive`, so the same commit produces the same bytes on Windows and
+on a Linux CI box.
 
-Run `--installer` on a non-Windows machine and it prepares everything and
-tells you the one command to finish on Windows.
-
-**Deprecated as of 2.0.0.** The Electron installers in `desktop/` replace
-this recipe (`cd desktop && npm run dist:win`, see [Desktop
-app](#desktop-app) and DEPLOY.md); `--installer` still builds and is kept as
-a historical fallback, but its output isn't part of the release.
-
-**The portable zip** is still there and still tiny, and every release still
-ships it — 1.0.x installs use it to update themselves to the current
-version. Unzip it anywhere and run `start.bat` or `./start.sh`; it uses a
-Node you already have, and without one it falls back to a PowerShell file
-server that serves the app but cannot host a session.
-
-### Windows on ARM (the legacy installer)
-
-On Windows machines with ARM64 processors, the deprecated recipe above
-builds with `node package.mjs --installer --arch arm64` for an ARM64-only
-setup, or `--arch both` to bundle both architectures. The installer detects
-your machine's architecture and uses the matching runtime; for portable
-copies with both runtimes, `start.bat` picks the right one automatically.
-For the real desktop app on ARM64, see [What's new in
-2.0](#whats-new-in-20) and [Desktop app](#desktop-app) instead.
+For the desktop installers — including ARM64 — it's `cd desktop && npm run
+dist:win`; see [Desktop app](#desktop-app) and DEPLOY.md. On a portable copy
+carrying both architectures' runtimes, `start.bat` picks the right one
+automatically.
 <!-- help:skip-end -->
 
 ## Hosting a shared session
@@ -432,54 +409,44 @@ does that job.
 
 ## Uninstalling
 
-The installed copy registers itself, so remove it from **Add/Remove Programs**
-— that clears the shortcuts too, and leaves any shared-session scripts in
+The desktop app registers itself, so remove it from **Add/Remove Programs** —
+that clears the shortcuts too, and leaves any shared-session scripts in
 `%LOCALAPPDATA%\Splitpage\data` where they are.
 
-For the portable copy, run **`uninstall.bat`** (Windows) or **`./uninstall.sh`**,
-which removes exactly the files the release shipped and lists anything else it
-found so you can see what it is leaving behind. Your scripts are never touched:
-saved scripts and the `data/` folder both survive, and it tells you they
-did. `--dry-run` shows what would go without doing it.
+The portable copy is a folder. Delete it. There is nothing registered, no
+service and nothing outside it, so there is nothing an uninstaller could do
+that deleting the folder does not — which is why the `uninstall.bat` /
+`uninstall.sh` / `uninstall.mjs` trio is gone. Check `data/` for scripts you
+want to keep before you do: they live inside that folder unless you pointed
+`--data` somewhere else.
 
 ## Keeping it up to date
 
 ```
-node update.mjs check     # is there a newer version?
-node update.mjs           # download and verify it
+node update.mjs           # is there a newer version?
 ```
 
-The launcher also checks at every launch, and the app shows a bar when there
-is something waiting — with a **Download** button, so you never have to go and
-find the right file yourself. Pressing it downloads and verifies the release
-there and then; the files are swapped in the next time you start Splitpage.
-Updates are fetched from a public releases mirror so the shipped copy can stay
-up to date even though the main repository is private.
+The launcher checks at every launch too, and the app shows a bar when there is
+something newer. **The portable copy does not update itself**: download the
+new `splitpage-<version>.zip` and unzip it over the old folder, or install the
+desktop app, which does update itself. Update checks go to a public releases
+mirror so a shipped copy can still see new versions even though the main
+repository is private.
 
-The desktop app does the same thing without a launcher: it checks at startup,
-and its Download button fetches the installer for your platform and
+That in-place self-update used to exist — the launcher staged a verified copy
+of the release under `.update/` and swapped the files in at the next launch,
+with a backup, a crash sentinel and a rollback. It was one distribution path
+too many and the one that kept breaking releases, so it was removed. What is
+left is the question it was really answering: is there something newer?
+
+The desktop app is the copy that installs its own updates. It checks at
+startup, and its Download button fetches the installer for your platform and
 architecture inside the app. The download is checked against the `SHA256SUMS`
 published with that release, and a release that published none is **not
 installed** — the app says so rather than running a file it cannot vouch for.
 When a download has finished and matched, the button becomes **Install and
 restart**, which runs the installer and closes Splitpage. The release page
 only gets offered when a release has no installer your machine can run.
-
-**Updates install on restart, never while the app is open.** Downloading is
-safe at any time; swapping out `index.html` under a browser that has it open
-is not. So `update.mjs` only downloads, checks every file against the new
-release's own checksums, and stages it — and `start.bat` puts it in place the
-next time you launch, before it serves anything. If an update fails halfway it
-rolls back to the copy it made, and if you have hand-edited any of the app's
-files it refuses to overwrite them until you say `--force` (the Download
-button reports that rather than overwriting your work).
-
-The button reaches `update.mjs` through `POST /api/launcher/update/stage`,
-which exists only on a loopback bind and only with the launch token the
-launcher handed the page — the same gate as the "add me to the Start Menu"
-route, and for the same reason. Nothing over HTTP can install anything: that
-route only ever *downloads*, and the swap happens at launch, in `start.mjs`,
-when no browser has the app open.
 
 <!-- help:skip-start -->
 ## Working on the code
@@ -1122,30 +1089,20 @@ always works regardless.
 
 **Running it**
 
-- `start.mjs` — the launcher: serves the app, opens your browser, installs a
-  staged update, and with `--host` shares the session with your network.
-- `start.bat` / `start.sh` — the double-click and terminal ways in. `start.bat`
-  prefers the bundled runtime, then a Node on PATH, then `start.ps1`.
-- `start.ps1` — the zero-install fallback: a static server built on .NET's
-  `HttpListener`, for a machine with no Node. Serves the app; cannot host.
-- `update.mjs` — checks for a new version, verifies it, stages it. The
-  install happens at the next launch, never while the app is open.
-- `uninstall.mjs` / `uninstall.bat` / `uninstall.sh` — removes a portable
-  copy, and only the files the release shipped.
+- `start.mjs` — the launcher: serves the app, opens your browser, and with
+  `--host` shares the session with your network. It installs nothing.
+- `start.bat` / `start.sh` — thin wrappers, the double-click and terminal ways
+  in. Both prefer a bundled runtime, then a Node on PATH.
+- `update.mjs` — says whether a newer release exists. It does not download or
+  install one; the desktop app is the copy that updates itself.
 
 **Packaging**
 
-- `package.mjs` — builds the portable zip; `VERSION` is the single source of
-  the version number. Its `--installer` flag builds the old IExpress
-  `SplitpageSetup-<version>.exe` and is deprecated as of 2.0.0.
-- `installer/` — `install.ps1` and `uninstall.ps1` (the legacy installer
-  proper) and `icon.ico` for its shortcuts.
-- `tools/fetch-runtime.mjs` — downloads and verifies the Node runtime that
-  ships inside the legacy setup.exe.
+- `package.mjs` — builds the portable zip, and nothing else; `VERSION` is the
+  single source of the version number.
 - `tools/make-icon.mjs` — rasterises `icon.svg` into the Windows `icon.ico`
   that the shortcuts, the NSIS installer and the packaged app use. Run it
-  after editing `icon.svg`; `--check` says whether the two `.ico` copies
-  (`installer/` and `desktop/build/`) are still in step.
+  after editing `icon.svg`.
 - `desktop/` — the Electron desktop app: source, `npm run dist:win` to build
   the per-architecture installers, and its own test suite.
 

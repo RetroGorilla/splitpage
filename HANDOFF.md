@@ -22,9 +22,13 @@ breakdown for props/locations/cast/VFX/sound.
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
   spliced into `#state-data` (`buildPublishHtml`, `PAGE_SHELL`). That's why
   there's an inlining build step instead of `<script src>`.
-- Supporting files: `README.md`, `start.mjs`/`.bat`/`.sh`/`.ps1` (local
-  launcher), `server/server.js` + `Dockerfile` (hosted mode), `package.mjs` +
-  `installer/` + `tools/fetch-runtime.mjs` (portable zip, Windows setup.exe).
+- Supporting files: `README.md`, `start.mjs` with thin `start.bat`/`start.sh`
+  wrappers (local launcher), `update.mjs` (says whether a newer release
+  exists; installs nothing), `server/server.js` + `Dockerfile` (hosted mode),
+  `package.mjs` (the portable zip), `desktop/` (the Electron app and its NSIS
+  installers). #75 deleted the rest of the packaging: `installer/` (the
+  IExpress setup), `tools/fetch-runtime.mjs`, `start.ps1` (a third HTTP server
+  implementation), `uninstall.*`, and the launcher's in-place self-update.
 - Began life as a Claude artifact, converted to standalone. Stale "the
   artifact" wording anywhere is a bug, not a quirk.
 
@@ -223,14 +227,17 @@ per document in `DATA_DIR`.
   answered 204 before any route runs.
 - `/api/launcher/*` is the one route that runs another program — launch
   token in the URL fragment, `HOST === "127.0.0.1"`, fixed script path. Any
-  failing check is 404, not 401 (invariant #28). Two routes use it:
-  `register` (the Start Menu entry) and `update/stage`, which spawns
-  `update.mjs stage --json` so the update bar's Download button needs no
-  terminal. `stage` only ever DOWNLOADS into `.update/` — the swap is
-  `start.mjs`'s at the next launch, never over an app a browser has open —
-  and it is POST-only so a link or a prefetch cannot start one. An updater
-  verdict ("up to date", "you edited these files") is 200 carrying `error`;
-  only "could not run the updater at all" is 5xx.
+  failing check is 404, not 401 (invariant #28). Both programs it ran are
+  now gone: `register` spawned `installer/install.ps1 -InPlace` for the Start
+  Menu entry, and `update/stage` spawned `update.mjs stage --json` for the
+  update bar's Download button. #75 deleted `installer/` and `update.mjs`'s
+  staging half, so **`server/server.js`'s `handleLauncher` and
+  `src/js/20a-update.js`'s Download button are still to be taken out.**
+  Until they are, `register` 404s on a missing script and `update/stage`
+  answers 200 with an `error` from an updater that no longer knows the verb.
+  The gating rules above stay as written: they are why a route that runs a
+  program could exist here at all, and anything that ever replaces it
+  inherits them.
 - `REVIEW_PIN`/`REVIEW_KEY` are a second credential minting a second token
   with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
   role is read from the token on every request (`roleOf`), so it survives a
@@ -710,7 +717,10 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     union by URL with local winning.**
 50. **The 1.0.x removal in the installer waits for the old folder to
     disappear before writing** — the old uninstaller's detached `rmdir`
-    runs ~2s after it exits, into the same folder.
+    runs ~2s after it exits, into the same folder. `installer/uninstall.ps1`
+    is gone from this repo (#75), but it is still on every machine that
+    installed 1.0.x, which is exactly who this macro runs for:
+    `desktop/build/installer.nsh` keeps it.
 51. **Autosave writes only where the user has already sent this document,
     and only work they have seen.** `autoSaveTarget()` (14-export.js) is the
     single gate: a file handle the user picked, or the server — never a
