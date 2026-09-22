@@ -1381,6 +1381,15 @@ function planHistoryEviction(docs, capBytes, nowMs, opts) {
   return { deletes: deletes, totalBefore: totalBefore, totalAfter: total, overCap: total > cap };
 }
 
+/* Exported as a separate statement rather than by prefixing the
+   declaration above: desktop/main.js keeps a line-for-line copy of this
+   function (HANDOFF §3.13), and a keyword added to its first line would be
+   the first difference between two bodies that are meant to be readable
+   side by side. src/test/history-eviction.test.mjs imports it from here;
+   the desktop twin still compares the two by running fixtures through
+   both. */
+export { planHistoryEviction };
+
 /* ---- capture ---- */
 
 /* The one pristine test (shared with the tab shell): the demo document

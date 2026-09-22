@@ -2,13 +2,15 @@
   "name": "splitpage",
   "private": true,
   "version": "0.0.0",
-  "description": "Build tooling for Splitpage. The app itself has no runtime dependencies; esbuild is the one build-time dependency (see build.mjs).",
+  "description": "Build and test tooling for Splitpage. The app itself has no runtime dependencies; esbuild builds the bundle and jsdom lends the unit tests a DOM (see build.mjs and src/test/_dom.mjs).",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "check": "node build.mjs --check"
+    "check": "node build.mjs --check",
+    "test": "node --test \"src/test/*.test.mjs\""
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "jsdom": "30.1.1"
   }
 }

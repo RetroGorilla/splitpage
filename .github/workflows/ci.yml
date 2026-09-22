@@ -50,6 +50,12 @@ jobs:
       - name: index.html matches src/
         run: node build.mjs --check
 
+      # The pure cores (mergeStates, migrateRows, the .splitpage and .md
+      # round-trips, deriveDocId, planHistoryEviction) are unit-tested
+      # directly since #67, instead of through backdoors in a booted browser.
+      - name: Unit tests over src/js
+        run: npm test
+
       - name: Desktop drafts unit tests
         run: node desktop/test/drafts.test.mjs
 
