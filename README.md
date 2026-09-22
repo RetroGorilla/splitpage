@@ -656,11 +656,24 @@ scenes out, so on day two you only read what's left.
 **Hide shot scenes.** File ▸ **Hide shot scenes** (or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>)
 collapses every Shot scene into a thin "N shot scenes hidden" strip — click
 one open to see it again. The runtime chip switches to showing what's left
-to read alongside the total. It's a reading preference for this device, like
-Mirror/Flip below, so it never touches the file: changing a scene you can see
-to Shot gives it a moment before it collapses, and Find, comments and tag
-jump-to all expand a hidden scene rather than missing it. The writer and the
-teleprompter both honour it too.
+to read alongside the total. It's a reading preference for this device, so
+it never touches the file: changing a scene you can see to Shot gives it a
+moment before it collapses, and Find, comments and tag jump-to all expand a
+hidden scene rather than missing it. The writer and the teleprompter both
+honour it too.
+
+**Scene mode**, in the teleprompter, plays one scene at a time instead of
+scrolling straight through the whole script — the way a solo shooter records.
+Turn it on with the **Scene mode** button on the prompter's bar (off by
+default, remembered on this device); it cues the scene you had the caret in
+(or the one you're reading if you switch it on mid-read) with its first line
+at the reading guide, plays, and pauses itself the moment the last line
+passes that guide, ready for the next take. **‹ Prev** / **Next ›** (or
+<kbd>←</kbd>/<kbd>→</kbd>) jump to the neighbouring scene, and a small "Scene
+4 of 12" readout says where you are — pressing Play again after an auto-pause
+carries straight on into the next scene rather than replaying the one that
+just stopped. It works the same way with **Follow My Voice**, and it skips
+whatever **Hide shot scenes** above is currently hiding.
 
 **Mentions you forgot to tag.** Once something is in the breakdown, Splitpage
 watches the Visual column for it. Write "gaffer tape" into a scene without

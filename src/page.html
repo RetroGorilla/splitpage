@@ -381,6 +381,13 @@
     <span id="pp-voice-status" class="pp-voice-status"></span>
     <div class="div-sep"></div>
     <button id="pp-play" type="button">▶ Play</button>
+    <!-- Scene mode (issue #26): off by default, remembered per device
+         (20-teleprompter.js). Prev/Next/readout only show once it's on —
+         updatePrompterSceneModeUI() toggles their `hidden`. -->
+    <button id="pp-scene-mode" type="button" title="Cue and auto-pause one scene at a time">Scene mode</button>
+    <button id="pp-scene-prev" type="button" title="Previous scene (←)" hidden>‹ Prev</button>
+    <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
+    <button id="pp-scene-next" type="button" title="Next scene (→)" hidden>Next ›</button>
     <div class="grp">
       <label for="pp-speed">Speed</label>
       <input id="pp-speed" type="range" min="10" max="160" value="42">

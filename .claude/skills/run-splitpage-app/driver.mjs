@@ -483,6 +483,9 @@ const KEY_MAP = {
   backspace: { key: "Backspace", code: "Backspace", vk: 8 },
   arrowdown: { key: "ArrowDown", code: "ArrowDown", vk: 40 },
   arrowup:   { key: "ArrowUp",   code: "ArrowUp",   vk: 38 },
+  // prompter scene-mode step keys (issue #26)
+  arrowleft:  { key: "ArrowLeft",  code: "ArrowLeft",  vk: 37 },
+  arrowright: { key: "ArrowRight", code: "ArrowRight", vk: 39 },
   delete:    { key: "Delete",    code: "Delete",    vk: 46 },
   home:      { key: "Home",      code: "Home",      vk: 36 },
   end:       { key: "End",       code: "End",       vk: 35 },
@@ -498,7 +501,7 @@ const KEY_MAP = {
   // Ctrl/Cmd+Alt+H: hide-shot-scenes toggle (issue #25)
   keyh:      { key: "h",         code: "KeyH",      vk: 72 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH";
+const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH";
 
 async function pressKey(name, mods = "") {
   // PowerShell hashtable lookup is case-insensitive; the suites write `key Tab`
