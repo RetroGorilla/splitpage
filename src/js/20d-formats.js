@@ -11,7 +11,7 @@ import {
   reassignDocId,
   standaloneHtmlFor
 } from "./02b-doc-id.js";
-import { cloneState } from "./03-sync.js";
+import { cloneState, setBaseState } from "./03-sync.js";
 import { plainText, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
@@ -379,6 +379,6 @@ export function __init() {
        two-way fallback from outside — once a file has been opened, nothing
        a user can do takes the ancestor away again. */
     hasDiskBase: function () { return !!(fileHome() && fileHome().diskBase); },
-    forgetDiskBase: function () { if (fileHome()) fileHome().diskBase = null; S.baseState = null; return true; }
+    forgetDiskBase: function () { if (fileHome()) fileHome().diskBase = null; setBaseState(null, "__splitpageFormats.forgetDiskBase: test hook, drives the two-way fallback"); return true; }
   };
 }

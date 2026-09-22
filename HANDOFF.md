@@ -305,9 +305,14 @@ three-way-merges `(baseState, state, theirs)` and retries (3 rounds max).
 save path sets it to what it successfully sent, nothing else. Since #72 the
 merge paths do not write it themselves: `applyMerge()` (03-sync.js) is the
 one orchestration — snapshot, undo point, `baseState`, autosave, chips,
-toast — and the only writer of `baseState` on a merge. The sites that still
-assign it directly are all "adopt what the other side just confirmed" after
-a successful write or open. `reportMerge(result, {alreadySaved:true})`
+toast — and the only writer of `baseState` on a merge; since #96 that
+includes the boot stash and the crash-draft file merge, the latter through
+`awaitUndoPoint` (the undo point is on disk before the merge is on screen).
+Every other write is "adopt what the other side just confirmed" after a
+successful write or open (or `null`: no ancestor), and goes through
+`setBaseState(next, why)` next to it, each call with its reason — so
+`grep -rn "S\.baseState *=" src/js/` shows the declaration, `applyMerge` and
+`setBaseState`, and nothing else. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
 Since #69 the heartbeat is also a **pull** channel: `/api/presence` answers
