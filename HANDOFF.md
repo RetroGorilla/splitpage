@@ -798,10 +798,9 @@ main's `index.html` — a removal you can't name is main's work being dropped.
 
 ## 7. Current status
 
-Status, verification history, and step-by-step state live in the plan
-file's Progress table, not here:
-`C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Read it before
-picking up any work on this branch.
+Sequencing, phase status and the decisions waiting on Adam live in
+`docs/ROADMAP.md`, not here. Read it before picking up any work. The two
+architecture reviews it was decided from are in `docs/reviews/`.
 
 ---
 
@@ -817,12 +816,11 @@ desktop, installer, server, export, ui) for where it lives,
 can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
 Longer-range sequencing and the pending decisions for Adam are
-tracked in the plan file, not here:
-`C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Follow My Voice on
-desktop is paused pending a fresh look (parked files under
-`.cache/voice-parked/`, plan companion `breezy-booping-toucan-VL.md` for an
-opt-in local model, not yet approved). Google Drive via loopback OAuth and
-per-tab server/tunnel connections are pitched but unbuilt.
+tracked in `docs/ROADMAP.md`, not here. Follow My Voice on desktop is
+paused pending a decision recorded there (parked files under
+`.cache/voice-parked/`; the local-model approach is not recommended).
+Google Drive via loopback OAuth and per-tab server/tunnel connections are
+pitched but unbuilt; the roadmap says what each one waits on.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)
