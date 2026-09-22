@@ -128,19 +128,42 @@ function findBrowser() {
   if (fs.existsSync(pw)) {
     for (const d of fs.readdirSync(pw)) {
       if (!/^chromium-/.test(d)) continue;      // headless_shell can't screenshot a real window
+      // Playwright's own layout, which has changed under us: older builds
+      // unpack to chrome-linux/, and the Chrome-for-Testing builds newer
+      // Playwright downloads unpack to chrome-linux64/. Both are listed
+      // rather than one being picked, because a machine can hold either —
+      // and getting this wrong does not fail loudly, it falls through to
+      // whatever is on PATH. On a GitHub runner that is /usr/bin/chromium,
+      // a snap wrapper that starts and never opens a CDP port, so the whole
+      // suite fails with "no CDP page target" and nothing says why.
       cands.push(path.join(pw, d, "chrome-linux", "chrome"));
+      cands.push(path.join(pw, d, "chrome-linux64", "chrome"));
       cands.push(path.join(pw, d, "chrome-mac", "Chromium.app", "Contents/MacOS/Chromium"));
+      cands.push(path.join(pw, d, "chrome-mac-arm64", "Chromium.app", "Contents/MacOS/Chromium"));
       cands.push(path.join(pw, d, "chrome-win", "chrome.exe"));
+      cands.push(path.join(pw, d, "chrome-win64", "chrome.exe"));
+      // And a catch-all for the next rename: any chrome-*/ holding an
+      // executable called chrome (or chrome.exe).
+      try {
+        for (const sub of fs.readdirSync(path.join(pw, d))) {
+          if (!/^chrome-/.test(sub)) continue;
+          cands.push(path.join(pw, d, sub, "chrome"));
+          cands.push(path.join(pw, d, sub, "chrome.exe"));
+        }
+      } catch { /* not a directory — the next candidate will do */ }
     }
   }
   if (process.platform === "win32") {
     cands.push(`${process.env["ProgramFiles(x86)"]}\\Microsoft\\Edge\\Application\\msedge.exe`);
     cands.push(`${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`);
   }
-  cands.push("/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome");
+  // google-chrome before chromium: on Ubuntu (and so on a GitHub runner)
+  // /usr/bin/chromium is a snap wrapper that cannot be driven over CDP,
+  // while google-chrome is a real binary.
+  cands.push("/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser");
   for (const c of cands) { if (c && fs.existsSync(c)) return c; }
   try {
-    const p = execFileSync("sh", ["-c", "command -v chromium || command -v google-chrome || command -v chrome"], { encoding: "utf8" }).trim();
+    const p = execFileSync("sh", ["-c", "command -v google-chrome || command -v chromium || command -v chrome"], { encoding: "utf8" }).trim();
     if (p) return p;
   } catch {}
   throw new Error("no Chromium/Edge found — pass --chrome <path> or set SPLITPAGE_CHROME");

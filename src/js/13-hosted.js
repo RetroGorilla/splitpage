@@ -822,6 +822,18 @@ function updateServerMenu() {
       : "Puts this script on the connected server and copies a link to it. " +
         "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
   }
+  /* The Server section (issue #51) hides itself, heading and all, once
+     every item inside it is hidden — same "nothing to show" rule as the
+     items above rather than a fixed assumption about which of them can
+     ever go dark. Disabled is not hidden: Publish & copy a link and
+     Servers… are never hidden by this function, so in practice the
+     section stays put even with no server connected. */
+  var serverSectionWrap = document.getElementById("menu-section-server-wrap");
+  if (serverSectionWrap) {
+    var serverItems = document.querySelectorAll("#menu-section-server [data-file-action]");
+    var anyVisible = Array.prototype.some.call(serverItems, function (b) { return !b.hidden; });
+    serverSectionWrap.hidden = !anyVisible;
+  }
 }
 
 /* ---- viewing, comments only ----

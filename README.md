@@ -131,7 +131,7 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 - `index.html` — the whole app, and **a build output that is not committed**:
   generated from `src/` by `node build.mjs` and listed in `.gitignore`, so
   edit the source, not this, and expect a fresh clone not to have one at all.
-  It is self-contained on purpose (that is what makes **Export a copy ▸
+  It is self-contained on purpose (that is what makes **Export ▸
   Standalone HTML** possible, and what lets the app run straight off a USB
   stick); the only thing it fetches is the Google Fonts stylesheet, loaded so
   that a slow or unreachable font server cannot stop the app starting.
