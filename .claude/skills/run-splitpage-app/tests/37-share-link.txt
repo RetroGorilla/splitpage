@@ -28,7 +28,7 @@ goto /index.html
 eval (function(){ window.S = window.__shareTest; window.F0 = window.__splitpageFormats; return !!(S && S.url && S.note && F0); })()
 expect true
 
-# --- the entry sits with the exports, always shown ------------------------
+# --- the entry sits with the Server tools, always shown --------------------
 # Always shown on purpose: it is how someone with no server yet finds out
 # that sharing a live document is possible at all.
 jsclick #btn-file
@@ -36,8 +36,9 @@ expect !document.getElementById('file-menu').hidden
 expect document.getElementById('menu-share-link') !== null
 expect document.getElementById('menu-share-link').hidden == false
 expect document.getElementById('menu-share-link').disabled == false
-# it is in the export group, after the standalone HTML export it contrasts with
-expect document.getElementById('menu-share-link').previousElementSibling.className.indexOf('menu-label') !== -1
+# it lives in the headed, collapsible Server section (issue #51), next to
+# Servers…, the other tool that is never hidden either
+expect document.getElementById('menu-share-link').closest('#menu-section-server') !== null
 expect document.getElementById('menu-share-link').title.indexOf('same document') !== -1
 jsclick #file-menu-close
 

@@ -85,7 +85,7 @@ function measureRowMotion(rowsEl) {
   return out;
 }
 
-function rowMotionMs(name, fallback) {
+export function rowMotionMs(name, fallback) {
   try {
     var raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     if (!raw) return fallback;
