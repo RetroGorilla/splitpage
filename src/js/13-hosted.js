@@ -19,13 +19,16 @@ import {
   stashLocalWork,
   updateIdentityChip
 } from "./03-sync.js";
+import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import {
+  captureReplyDrafts,
   formatTimestamp,
   getSavedAuthorName,
   nowIso,
+  renderComments,
   saveAuthorName
 } from "./10-comments.js";
 import { clearDirty, showToast } from "./12-dirty-toast.js";
@@ -982,6 +985,9 @@ export async function armServerDelete(btn, id) {
    here forever — three rounds is far more contention than a script gets. */
 export async function saveToServer() {
   if (serverSessionExpired) return false;
+  /* A review session has no PUT: the server refuses one outright (#71).
+     What it has to send is its own comments, one at a time, below. */
+  if (reviewMode()) return sendReviewWrites();
   /* The server picker is never disabled while a save is in flight, so
      openServerDoc() can reassign home/state/baseState to a different
      hosted document mid-save. Remember which document THIS call is for,
@@ -1086,6 +1092,354 @@ export async function saveToServer() {
   return false;
 }
 
+/* ---- a reviewer's writes (#71) ----
+
+   A review token writes through two routes and nothing else:
+   POST api/docs/:id/comments (a new comment, or a reply) and
+   PATCH api/docs/:id/comments/:cid (resolve / unresolve). The server
+   refuses a review PUT outright — it used to diff the whole uploaded script
+   against the stored one to prove only a comment had moved, and that proof
+   is gone. So saveToServer() never PUTs from a review session; it comes
+   here instead, and everything that makes a reviewer's comment reach the
+   server — posting it, the autosave that follows, pressing Save after a
+   failure, a stash merged back in after a lapsed sign-in — is the same
+   path it always was, ending somewhere else.
+
+   WHAT TO SEND is what this view holds that the server has not confirmed:
+   a comment in S.state that S.baseState does not have, a reply its thread
+   in the base does not have, a resolve the base does not agree with.
+   S.baseState is what the server last confirmed (HANDOFF §3.6), so the
+   difference IS the outbox — which is why a comment typed while offline, or
+   carried across a reload in the stash, goes out on the next save without
+   a queue of its own to keep. Conflict cards are never sent: they are this
+   view's own record of a merge, not something a reviewer wrote. Nothing
+   else a reviewer's state could differ in is sendable, and nothing else is
+   looked at.
+
+   WHAT COMES BACK is adopted, not kept alongside: the server builds the
+   stored comment itself (its clock, its bounded author), so the stored copy
+   replaces ours in S.state and goes into S.baseState, keeping only what
+   this view has not sent yet (a reply still to go, a resolve still to go).
+   Only the one comment the answer is about is folded in (with, for a placed
+   anchor, the one field its span sits in and that scene's stamp) — nothing
+   else of the document changes on either side, so a later merge still sees
+   every other difference exactly as it was.
+
+   THE REV. Every answer carries the DOCUMENT's rev, the one the heartbeat
+   reports and the pull compares with home.rev (#69). When it is exactly
+   the rev this view held plus the one write it just made, nobody else wrote
+   in between: the server now holds precisely our base plus this change, so
+   home.rev takes it and the next beat is quiet — a reviewer's own comment
+   does not come back round as a pull-merge of itself. When it has moved
+   further, somebody else saved meanwhile and this view has not seen it:
+   home.rev stays where it was, so the next beat pulls their change and
+   merges it against a base that already holds ours. Adopting the higher
+   number there would mark their save as seen and it would never arrive.
+
+   THE ANCHOR. The `.cmt-anchor` span a new comment wrapped around its words
+   is in S.state's row, so the request carries that one field's HTML with
+   every OTHER span this view has not had confirmed taken back out (a second
+   comment still waiting, the one a composer that is open right now just
+   wrapped) — the server places the anchor only if the words are unchanged
+   apart from this comment's own span. `anchored:false` is not a failure:
+   the comment landed, somebody rewrote that scene meanwhile, and the span
+   comes back out of the scene on screen so this view never shows a
+   highlight the server does not have. The card falls back to its scene,
+   field and quoted words, as for any comment whose text has gone.
+
+   EDITORS STAY ON PUT. The routes take an edit token too, but an editor's
+   comment changes travel in the same save as their script edits, share its
+   409 and its three-way merge, and include what these routes cannot say at
+   all — a delete, an assignee, "use my version" on a conflict card. Moving
+   only some of them to a second channel would mean ordering two kinds of
+   write against each other for nothing; the issue keeps editors on PUT, and
+   this does. */
+
+/* A pull must not land in the middle of these, for the same reason it must
+   not land in the middle of a PUT: it replaces S.baseState, which the
+   answers below are folded into. saveDoc()'s saveButtonBusy already covers
+   every path that gets here; this covers the flush itself. */
+var reviewWriting = false;
+
+/* Refused for good by the server (too large, too many, a thread that has
+   been deleted): kept on screen so nothing typed is thrown away, and not
+   sent again this session. Keyed by what was being sent. */
+var reviewRefused = {};
+
+function commentIndexIn(list, id) {
+  for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return i;
+  return -1;
+}
+
+function rowIn(state, id) {
+  var rows = (state && state.rows) || [];
+  for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id === id) return rows[i];
+  return null;
+}
+
+function jsonCopy(v) { return JSON.parse(JSON.stringify(v)); }
+
+/* The next thing this view holds that the server has not confirmed, in
+   document order: a comment before its replies, a reply before a resolve. */
+function nextReviewWrite() {
+  var base = (S.baseState && S.baseState.comments) || [];
+  var list = (S.state && S.state.comments) || [];
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i];
+    if (!c || c.kind === "conflict") continue;
+    var bi = commentIndexIn(base, c.id);
+    if (bi === -1) {
+      if (!reviewRefused["c:" + c.id]) return { kind: "comment", id: c.id, key: "c:" + c.id };
+      continue; /* its replies cannot go before it does */
+    }
+    var was = base[bi];
+    var had = {};
+    (was.replies || []).forEach(function (r) { if (r) had[r.id] = true; });
+    var replies = c.replies || [];
+    for (var j = 0; j < replies.length; j++) {
+      var r = replies[j];
+      var rkey = "r:" + c.id + ":" + (r && r.id);
+      if (r && !had[r.id] && !reviewRefused[rkey]) return { kind: "reply", id: c.id, replyId: r.id, key: rkey };
+    }
+    var xkey = "x:" + c.id + ":" + !!c.resolved;
+    if (!!c.resolved !== !!was.resolved && !reviewRefused[xkey]) return { kind: "resolve", id: c.id, key: xkey };
+  }
+  return null;
+}
+
+/* One field's HTML as the server should see it: this comment's span in
+   place, every span the server has not confirmed yet taken back out. Null
+   when there is no span of this comment's to place. */
+function reviewAnchorFor(c) {
+  if (c.field !== "visualText" && c.field !== "audioText") return null;
+  var row = rowIn(S.state, c.rowId);
+  var baseRow = rowIn(S.baseState, c.rowId);
+  if (!row || !baseRow) return null;
+  var body = inertBody(row[c.field] || "");
+  if (!body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(c.id) + '"]')) return null;
+  var confirmed = {};
+  inertBody(baseRow[c.field] || "").querySelectorAll(".cmt-anchor").forEach(function (el) {
+    confirmed[el.getAttribute("data-cmt")] = true;
+  });
+  confirmed[c.id] = true;
+  body.querySelectorAll(".cmt-anchor").forEach(function (el) {
+    if (!confirmed[el.getAttribute("data-cmt")]) unwrapElement(el);
+  });
+  return { rowId: c.rowId, field: c.field, html: body.innerHTML };
+}
+
+function unwrapElement(el) {
+  while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+  el.parentNode.removeChild(el);
+}
+
+/* This comment's span out of the scene on screen — the anchor did not
+   land. When that leaves the field as the server has it, the scene's stamp
+   goes back too: the reviewer did not change it after all. */
+function dropLocalAnchor(c) {
+  var row = rowIn(S.state, c.rowId);
+  if (!row || (c.field !== "visualText" && c.field !== "audioText")) return false;
+  var body = inertBody(row[c.field] || "");
+  var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(c.id) + '"]');
+  if (!span) return false;
+  unwrapElement(span);
+  row[c.field] = body.innerHTML;
+  var baseRow = rowIn(S.baseState, c.rowId);
+  if (baseRow && baseRow[c.field] === row[c.field]) {
+    row.updatedAt = baseRow.updatedAt;
+    row.updatedBy = baseRow.updatedBy;
+  }
+  return true;
+}
+
+function reviewRequest(op, c) {
+  var path = "api/docs/" + encodeURIComponent(home.id) + "/comments";
+  var by = getEditorName();
+  if (op.kind === "resolve") {
+    return {
+      path: path + "/" + encodeURIComponent(c.id),
+      method: "PATCH",
+      body: { resolved: !!c.resolved, by: by },
+      busy: c.resolved ? "Resolving…" : "Reopening…"
+    };
+  }
+  if (op.kind === "reply") {
+    var reply = null;
+    (c.replies || []).forEach(function (r) { if (r && r.id === op.replyId) reply = r; });
+    return {
+      path: path,
+      method: "POST",
+      body: { replyTo: c.id, reply: { id: reply.id, author: reply.author, body: reply.body }, by: by },
+      busy: "Posting your reply…"
+    };
+  }
+  var payload = {
+    comment: {
+      id: c.id, rowId: c.rowId, field: c.field, anchorId: c.anchorId,
+      quotedText: c.quotedText, author: c.author, body: c.body,
+      assignee: c.assignee || "", kind: c.kind
+    },
+    by: by
+  };
+  var anchor = reviewAnchorFor(c);
+  if (anchor) payload.anchor = anchor;
+  return { path: path, method: "POST", body: payload, busy: "Posting your comment…" };
+}
+
+/* The server's copy of the one comment an answer is about, into the base
+   and onto the screen. Returns true when something visible in the script
+   changed (an anchor came back out), so the caller knows to re-render. */
+function adoptReviewAnswer(op, sent, body) {
+  var stored = body.comment;
+  var baseList = S.baseState.comments || (S.baseState.comments = []);
+  var bi = commentIndexIn(baseList, stored.id);
+  var wasResolved = bi === -1 ? false : !!baseList[bi].resolved;
+  if (bi === -1) baseList.push(jsonCopy(stored));
+  else baseList[bi] = jsonCopy(stored);
+
+  var list = S.state.comments;
+  var si = commentIndexIn(list, stored.id);
+  var local = si === -1 ? null : list[si];
+  if (local) {
+    var next = jsonCopy(stored);
+    if (!Array.isArray(next.replies)) next.replies = [];
+    var have = {};
+    next.replies.forEach(function (r) { if (r) have[r.id] = true; });
+    /* replies still to go stay, after the ones the server has */
+    (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
+    /* and so does a resolve still to go */
+    if (op.kind !== "resolve" && !!local.resolved !== wasResolved) {
+      next.resolved = local.resolved;
+      next.resolvedBy = local.resolvedBy;
+      next.resolvedAt = local.resolvedAt;
+    }
+    list[si] = next;
+  }
+
+  var redraw = false;
+  if (op.kind === "comment" && sent.anchor) {
+    if (body.anchored === true) {
+      /* stamped exactly as placeAnchor() stamped it: the write's own time
+         and the comment's stored author */
+      var baseRow = rowIn(S.baseState, sent.anchor.rowId);
+      if (baseRow) {
+        baseRow[sent.anchor.field] = sent.anchor.html;
+        baseRow.updatedAt = body.updatedAt;
+        baseRow.updatedBy = stored.author;
+      }
+      var row = rowIn(S.state, sent.anchor.rowId);
+      if (row) {
+        row.updatedAt = body.updatedAt;
+        row.updatedBy = stored.author;
+      }
+    } else if (local) {
+      redraw = dropLocalAnchor(local);
+    }
+  }
+
+  /* See above: only a rev that is exactly ours-plus-this-write is ours. */
+  if (typeof body.rev === "number" && body.rev === (home.rev || 0) + (body.changed ? 1 : 0)) {
+    home.rev = body.rev;
+  }
+  return redraw;
+}
+
+var REVIEW_REFUSALS = {
+  "too-many-comments": "this script already holds as many comments as it can",
+  "too-many-replies": "that thread already holds as many replies as it can",
+  "no-such-comment": "the comment it belongs to has been deleted",
+  "too-large": "it is too large to send",
+  "bad-comment": "the server could not read it as a comment",
+  "bad-anchor": "the server could not read where it goes",
+  "bad-comment-id": "the server could not read it as a comment",
+  "no-state": "the document on the server is empty"
+};
+
+/* A refusal that will be the same answer every time — keep the words on
+   screen, stop sending them, say why once. Anything else (offline, signed
+   out, a PIN to type) is worth trying again. */
+function permanentReviewRefusal(err) {
+  if (!err) return "";
+  var reason = err.code === "conflict" ? (err.payload && err.payload.error) : err.message;
+  if (err.code === "conflict" || err.code === "400" || err.code === "413" ||
+      (err.code === "404" && reason === "no-such-comment")) {
+    return REVIEW_REFUSALS[reason] || reason || "the server refused it";
+  }
+  return "";
+}
+
+/* → true once nothing this view holds is waiting for the server (anything
+   it refused for good excepted), false when something is still to go. */
+async function sendReviewWrites() {
+  var docId = serverHomeId();
+  /* openServerDoc() always sets one; without it there is no telling what
+     the server has already confirmed, so nothing is sent. */
+  if (!S.baseState) return false;
+  var redraw = false;
+  var sentAny = false;
+  var sentKeys = {};
+  reviewWriting = true;
+  try {
+    for (;;) {
+      if (serverHomeId() !== docId) return false;
+      var op = nextReviewWrite();
+      if (!op) break;
+      /* An answer that did not settle it — a stored copy whose reply list
+         somehow still lacks ours — must not become a loop. */
+      if (sentKeys[op.key]) { reviewRefused[op.key] = true; continue; }
+      sentKeys[op.key] = true;
+      var c = S.state.comments[commentIndexIn(S.state.comments, op.id)];
+      var req = reviewRequest(op, c);
+      var body;
+      try {
+        body = await withBusyBar(req.busy, function () {
+          return apiFetch(req.path, { method: req.method, body: req.body });
+        });
+      } catch (err) {
+        if (serverHomeId() !== docId) return false;
+        var why = permanentReviewRefusal(err);
+        if (why) {
+          reviewRefused[op.key] = true;
+          showToast((op.kind === "resolve" ? "That could not be marked resolved" :
+                     op.kind === "reply" ? "Your reply could not be posted" :
+                     "Your comment could not be posted") +
+                    " — " + why + ". It stays on this screen only, so copy anything you need.",
+                    "warn", true);
+          continue;
+        }
+        if (err && err.code === "405") {
+          showToast("This server is older than this copy of Splitpage and cannot take a " +
+                    "comment from a review link. Ask whoever is hosting to update it.", "warn", true);
+          return false;
+        }
+        handleApiError(err, op.kind === "reply" ? "Could not post your reply" :
+                            op.kind === "resolve" ? "Could not change that comment" :
+                            "Could not post your comment");
+        return false;
+      }
+      if (serverHomeId() !== docId) return true; /* it landed; the page has moved on */
+      if (!body || !body.comment) return false;
+      if (adoptReviewAnswer(op, req.body, body)) redraw = true;
+      sentAny = true;
+    }
+  } finally {
+    reviewWriting = false;
+  }
+  if (redraw) render();
+  else if (sentAny) { captureReplyDrafts(); renderComments(); }
+  /* Clean unless something refused for good is still only on this screen:
+     the unload guard should still say so about that. */
+  var refusedHere = false;
+  (S.state.comments || []).forEach(function (c) {
+    if (!c) return;
+    if (reviewRefused["c:" + c.id] || reviewRefused["x:" + c.id + ":" + !!c.resolved]) refusedHere = true;
+    (c.replies || []).forEach(function (r) { if (r && reviewRefused["r:" + c.id + ":" + r.id]) refusedHere = true; });
+  });
+  if (!refusedHere) clearDirty();
+  updateFileChip();
+  return true;
+}
+
 /* ---- the pull channel (issue #69) ----
 
    Hosted mode had no way of learning that somebody else had saved. The only
@@ -1182,7 +1536,7 @@ function sameDocumentContent(a, b) {
    13a-presence.js paints badges and knows nothing about documents; every
    decision about what a rev means is here. */
 export function notePresenceRev(body) {
-  if (!body || pullInFlight || serverSessionExpired) return;
+  if (!body || pullInFlight || serverSessionExpired || reviewWriting) return;
   var docId = serverHomeId();
   if (!docId || body.docId !== docId) return;
   /* A document with no head line yet answers with no rev (server.js) — and
@@ -1212,7 +1566,7 @@ async function pullServerDoc(docId) {
      opened; and a save may have started, in which case this pull is dropped
      and that save's own 409 does the merging instead. */
   if (serverHomeId() !== docId) return;
-  if (S.saveButtonBusy) return;
+  if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;   /* a save of ours landed first */
 
@@ -1294,7 +1648,6 @@ function readLaunchToken() {
   } catch (e) { /* file:// in some browsers — the token is already stored */ }
 }
 
-export function hasLauncher() { return !!launchToken; }
 
 /* Deliberately not apiFetch(): these routes are never on another origin
    (the server refuses them off loopback), they carry a different header,
@@ -1920,6 +2273,12 @@ export function __init() {
     home: function () { return Object.assign({}, home); },
     /* Hand a heartbeat's answer straight to the pull channel, so a suite can
        drive it without waiting out a real two-second beat. */
-    noteRev: notePresenceRev
+    noteRev: notePresenceRev,
+    /* What the server last confirmed, and whether this view thinks it holds
+       anything the server does not — for tests/57-review-comments.txt, which
+       watches a reviewer's comment go out through the comment routes (#71)
+       and be folded back in. Copies, not the live objects. */
+    base: function () { return S.baseState ? cloneState(S.baseState) : null; },
+    dirty: function () { return !!S.dirty; }
   };
 }

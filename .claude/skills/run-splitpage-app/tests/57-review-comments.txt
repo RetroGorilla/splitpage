@@ -1,0 +1,251 @@
+# A reviewer's comments reach the server through the comment routes, never
+# through PUT (#71, browser half; the server half is 8b813ad).
+#
+# The review token used to write by PUTting the whole script back and having
+# the server prove, by diffing it against the stored one, that only a comment
+# had moved. The server now refuses a review PUT outright, so the review
+# client sends one comment, one reply or one resolve at a time:
+#   POST  api/docs/:id/comments              a comment (+ its anchor) or a reply
+#   PATCH api/docs/:id/comments/:commentId   resolve / unresolve
+# and folds the stored copy the server answers with back into S.state and
+# S.baseState (saveToServer's review branch, 13-hosted.js).
+#
+# The harness serves static files and cannot start server.js, so `fetch` is
+# replaced the way tests/54-server-conflict.txt and 55-pull-merge.txt replace
+# it. This one is a small EMULATOR of the two routes rather than a queue of
+# canned answers — it builds the stored comment itself on its own clock (the
+# year 2030, so an adopted copy is unmistakable), bumps the rev, places the
+# anchor only when unwrapping it gives back exactly the stored field, and
+# answers a PUT with 403 review-only, which is what the real one now does.
+# What the real server checks is tools/test-server.mjs; what this pins is
+# what the page does with the answers:
+#
+#   * NO PUT, ever, from a review session — not on posting, not from the
+#     autosave timers the anchor's own markDirty arms, not on pressing Save;
+#   * the request is one comment, never the document;
+#   * the server's copy is adopted, not kept alongside ours;
+#   * THE REV. An answer at exactly (our rev + 1) is ours alone, so home.rev
+#     takes it and the next heartbeat pulls NOTHING — a reviewer's own
+#     comment must not come back round as a pull-merge of itself. An answer
+#     further on means somebody else saved meanwhile: home.rev must NOT take
+#     it (that would mark their save as seen and it would never arrive), and
+#     the next beat pulls their change in;
+#   * a stale anchor (anchored:false) takes the span back out of the scene on
+#     screen and keeps the comment;
+#   * a failed post stays and goes on the next Save, with the same ids (the
+#     server's idempotent retry); a refused one stays on screen and is not
+#     re-sent;
+#   * an editor on the same document still saves with PUT.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;window.H=window.__hostedTest;return typeof H.base === 'function';})()
+expect true
+
+# --- the emulated server --------------------------------------------------
+# __srv.rev is the one number the heartbeat reports, the GET comes back at and
+# every write moves. __srv.hideRev makes the heartbeat keep reporting an old
+# number for a moment, so a suite can put "somebody else saved" and "we
+# posted" in a known order without a real beat landing between them.
+eval (function(){ window.__srv = { rev: 3, state: null, puts: [], posts: [], patches: [], gets: 0, beats: 0, tick: 0, fail: null, hideRev: null, lastBy: 'Host' }; return true; })()
+eval (function(){ window.__ans = function(status, body){ return Promise.resolve(new Response(JSON.stringify(body), {status: status, headers: {'content-type':'application/json'}})); }; window.__norm = function(h){ var t = document.createElement('template'); t.innerHTML = h || ''; return t.innerHTML; }; window.__find = function(list, id){ for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }; window.__now = function(){ return new Date(Date.UTC(2030, 0, 1, 0, 0, ++window.__srv.tick)).toISOString(); }; return true; })()
+eval (function(){ window.__comments = function(u, m, b){ var S2 = window.__srv, st = S2.state, now; if (S2.fail) { var f = S2.fail; S2.fail = null; if (f === 'offline') return Promise.reject(new TypeError('Failed to fetch')); return window.__ans(f.status, f.body); } if (m === 'PATCH') { S2.patches.push({url: u, body: b}); var pc = window.__find(st.comments, decodeURIComponent(u.split('/').pop())); if (!pc) return window.__ans(404, {error: 'no-such-comment'}); if (pc.resolved === b.resolved) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: pc, changed: false}); now = window.__now(); pc.resolved = b.resolved; pc.updatedAt = now; pc.resolvedBy = b.resolved ? (b.by || 'Anonymous') : null; pc.resolvedAt = b.resolved ? now : null; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: pc, changed: true}); } S2.posts.push(b); if (b.reply) { var parent = window.__find(st.comments, b.replyTo); if (!parent) return window.__ans(404, {error: 'no-such-comment'}); if (window.__find(parent.replies, b.reply.id)) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: parent, changed: false}); now = window.__now(); var rp = {id: b.reply.id, author: b.reply.author || 'Anonymous', body: b.reply.body, createdAt: now}; parent.replies.push(rp); parent.updatedAt = now; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: parent, changed: true, reply: rp}); } var already = window.__find(st.comments, b.comment.id); if (already) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: already, changed: false, anchored: false}); now = window.__now(); var c = {id: b.comment.id, rowId: b.comment.rowId, field: b.comment.field, anchorId: b.comment.anchorId || b.comment.id, quotedText: b.comment.quotedText || '', author: b.comment.author || 'Anonymous', body: b.comment.body, resolved: false, resolvedBy: null, resolvedAt: null, assignee: b.comment.assignee || '', createdAt: now, updatedAt: now, kind: 'anchor', replies: []}; var anchored = false; if (b.anchor) { var row = window.__find(st.rows, b.anchor.rowId); var t = document.createElement('template'); t.innerHTML = b.anchor.html; var sp = t.content.querySelector('.cmt-anchor[data-cmt=\"' + c.id + '\"]'); if (sp) { while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp); sp.remove(); } if (row && sp && window.__norm(t.innerHTML) === window.__norm(row[b.anchor.field])) { row[b.anchor.field] = b.anchor.html; row.updatedAt = now; row.updatedBy = c.author; anchored = true; } } st.comments.push(c); S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: c, changed: true, anchored: anchored}); }; return true; })()
+eval (function(){ window.__editorPutsOk = false; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); opts = opts || {}; var m = opts.method || 'GET'; var S2 = window.__srv; if (m === 'POST' && u.indexOf('api/presence') !== -1) { S2.beats++; return window.__ans(200, {docId: 'doc-rv', rev: S2.hideRev != null ? S2.hideRev : S2.rev, here: []}); } if (u.indexOf('api/docs/doc-rv/comments') !== -1) return window.__comments(u, m, JSON.parse(opts.body)); if (m === 'PUT' && u.indexOf('api/docs/') !== -1) { var pb = JSON.parse(opts.body); S2.puts.push(pb); if (!window.__editorPutsOk) return window.__ans(403, {error: 'review-only'}); S2.state = pb.state; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: new Date().toISOString(), updatedBy: 'Host'}); } if (u.indexOf('api/docs/doc-rv') !== -1) { S2.gets++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, state: S2.state, updatedAt: new Date().toISOString(), updatedBy: S2.lastBy}); } return real(url, opts); }; return true; })()
+
+# --- a review session on a hosted document at the server's rev 3 -----------
+eval (function(){ H.setSession({role: 'review', docId: 'doc-rv', rev: 3}); window.__srv.state = F.clone(F.state()); return H.role(); })()
+expect H.reviewMode() === true
+expect H.home().rev === 3
+
+# The assignee select changes a comment that is already stored, and a review
+# token has no route for that — it is not offered.
+jsclick #btn-comments
+sleep 400
+expect document.querySelectorAll('#comments-list .comment-assignee-select').length > 0
+expect document.querySelectorAll('#comments-list .comment-assignee-select:not([disabled])').length === 0
+jsclick #comments-panel-close
+sleep 200
+
+# --- 1. a comment on "Hey" in scene 1 ------------------------------------
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,3);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return s.toString();})()
+jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 400
+expect !document.getElementById('comment-modal').hidden
+eval (function(){document.getElementById('comment-name').value='Rita Reviewer';var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'REVIEWNOTEONE');return b.textContent;})()
+jsclick #comment-post
+wait window.__srv.posts.length === 1
+wait H.dirty() === false
+
+# what went up: one comment and one field of one scene — not the document
+eval (function(){ window.__p1 = window.__srv.posts[0]; window.__c1 = window.__p1.comment.id; return window.__c1; })()
+expect !('state' in window.__p1) && !('baseRev' in window.__p1)
+expect window.__p1.comment.body.indexOf('REVIEWNOTEONE') !== -1
+expect window.__p1.comment.author === 'Rita Reviewer'
+expect window.__p1.anchor.rowId === F.state().rows[0].id
+expect window.__p1.anchor.field === 'audioText'
+expect window.__p1.anchor.html.indexOf('data-cmt="' + window.__c1 + '"') !== -1
+expect window.__srv.puts.length === 0
+
+# the server placed it, and this view adopted the server's copy
+expect window.__srv.state.rows[0].audioText.indexOf('data-cmt="' + window.__c1 + '"') !== -1
+expect F.state().comments.filter(function(c){return c.id === window.__c1;})[0].createdAt.indexOf('2030-') === 0
+expect H.base().comments.filter(function(c){return c.id === window.__c1;})[0].createdAt.indexOf('2030-') === 0
+expect H.base().rows[0].audioText.indexOf('data-cmt="' + window.__c1 + '"') !== -1
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="' + window.__c1 + '"]').length === 1
+
+# THE REV: exactly ours + 1, so it is ours, and it is adopted...
+expect H.home().rev === 4
+expect window.__srv.rev === 4
+# ...so the heartbeat has nothing to pull. Two real beats, not a poke.
+eval (function(){ window.__beatsAt = window.__srv.beats; return window.__beatsAt; })()
+wait window.__srv.beats >= window.__beatsAt + 2
+expect window.__srv.gets === 0
+shot 57-review-comment-posted
+
+# --- 2. a reply -------------------------------------------------------------
+jsclick #btn-comments
+sleep 400
+eval (function(){ document.querySelector('#comments-list .comment-card[data-id="' + window.__c1 + '"] [data-action="toggle-reply"]').click(); return true; })()
+sleep 300
+eval (function(){var box=document.querySelector('#comments-list .reply-composer .cell-editable');box.focus();document.execCommand('insertText',false,'REVIEWREPLYONE');var n=document.querySelector('#comments-list .reply-composer .reply-name-input');if(n)n.value='Rita Reviewer';return box.textContent;})()
+jsclick #comments-list [data-action="reply-post"]
+wait window.__srv.posts.length === 2
+wait H.dirty() === false
+expect window.__srv.posts[1].replyTo === window.__c1
+expect window.__srv.posts[1].reply.body.indexOf('REVIEWREPLYONE') !== -1
+expect !('state' in window.__srv.posts[1]) && !('comment' in window.__srv.posts[1])
+expect H.home().rev === 5
+expect F.state().comments.filter(function(c){return c.id === window.__c1;})[0].replies[0].createdAt.indexOf('2030-') === 0
+expect document.getElementById('comments-list').textContent.indexOf('REVIEWREPLYONE') !== -1
+expect window.__srv.puts.length === 0
+jsclick #comments-panel-close
+sleep 200
+
+# --- 3. somebody else saved while we were posting --------------------------
+# The editor rewords scene 2's picture at rev 6. The beat is held at 5 until
+# our comment is in, so the order is fixed: theirs, then ours at 7.
+eval (function(){ var S2 = window.__srv; S2.hideRev = 5; S2.state = JSON.parse(JSON.stringify(S2.state)); S2.state.rows[1].visualText = 'THEIRVISUALTWO'; S2.rev = 6; S2.lastBy = 'Host'; return S2.rev; })()
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,4);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return s.toString();})()
+jsclick #rows .row:nth-child(1) .visual-cell .mini-toolbar [data-cmd="comment"]
+sleep 400
+eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'REVIEWNOTETWO');return b.textContent;})()
+jsclick #comment-post
+wait window.__srv.posts.length === 3
+wait H.dirty() === false
+eval (function(){ window.__c2 = window.__srv.posts[2].comment.id; return window.__c2; })()
+expect window.__srv.rev === 7
+# NOT adopted: 7 is not 5 + 1, so rev 6 is somebody else's and unseen
+expect H.home().rev === 5
+# ours is in the base all the same, so the merge below measures against it
+expect H.base().comments.some(function(c){return c.id === window.__c2;})
+expect window.__srv.gets === 0
+# let the beat say 7, and the pull brings their scene in
+eval (function(){ window.__srv.hideRev = null; return true; })()
+wait window.__srv.gets >= 1
+wait document.getElementById('rows').textContent.indexOf('THEIRVISUALTWO') !== -1
+wait H.home().rev === 7
+# nothing of ours was lost or doubled, and no conflict card came out of it
+expect F.state().comments.filter(function(c){return c.id === window.__c1 || c.id === window.__c2;}).length === 2
+expect F.state().comments.filter(function(c){return c.kind === 'conflict';}).length === 0
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="' + window.__c2 + '"]').length === 1
+expect window.__srv.puts.length === 0
+# and a pull that brought only what we already had does not come round again
+eval (function(){ window.__getsAt = window.__srv.gets; window.__beatsAt = window.__srv.beats; return true; })()
+wait window.__srv.beats >= window.__beatsAt + 2
+expect window.__srv.gets === window.__getsAt
+
+# --- 4. a stale anchor ------------------------------------------------------
+# Scene 2's words are rewritten on the server (held from the beat again) while
+# the reviewer comments on the words that used to be there.
+eval (function(){ var S2 = window.__srv; S2.hideRev = S2.rev; S2.state = JSON.parse(JSON.stringify(S2.state)); S2.state.rows[1].audioText = 'THEIRREWRITTENLINE.'; S2.rev++; return S2.rev; })()
+eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable');var t=c.firstChild;var r=document.createRange();r.setStart(t,0);r.setEnd(t,6);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return s.toString();})()
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 400
+eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'REVIEWNOTESTALE');return b.textContent;})()
+jsclick #comment-post
+wait window.__srv.posts.length === 4
+wait H.dirty() === false
+eval (function(){ window.__c3 = window.__srv.posts[3].comment.id; return window.__c3; })()
+# the comment landed without its anchor...
+expect window.__srv.state.comments.some(function(c){return c.id === window.__c3;})
+expect window.__srv.state.rows[1].audioText === 'THEIRREWRITTENLINE.'
+# ...so the span came back out of the scene on screen, and the comment stayed
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="' + window.__c3 + '"]').length === 0
+expect F.state().comments.some(function(c){return c.id === window.__c3;})
+eval (function(){ window.__srv.hideRev = null; return true; })()
+wait document.getElementById('rows').textContent.indexOf('THEIRREWRITTENLINE.') !== -1
+wait H.home().rev === window.__srv.rev
+expect F.state().comments.filter(function(c){return c.kind === 'conflict';}).length === 0
+expect F.state().comments.some(function(c){return c.id === window.__c3;})
+
+# --- 5. resolve (PATCH) ------------------------------------------------------
+# The Resolve button is not offered to a review session yet (21-events.js's
+# click guard refuses toggle-resolve), so the resolve is put into the state
+# directly, which is where the button would put it; Save sends it.
+eval (function(){ var c = F.state().comments.filter(function(x){return x.id === window.__c1;})[0]; c.resolved = true; c.resolvedBy = 'Rita Reviewer'; c.resolvedAt = new Date().toISOString(); return true; })()
+eval (async function(){ window.__revAt = H.home().rev; await F.save(); return window.__srv.patches.length; })()
+expect window.__srv.patches.length === 1
+expect /\/comments\/[A-Za-z0-9_-]+$/.test(window.__srv.patches[0].url)
+expect window.__srv.patches[0].url.split('/').pop() === window.__c1
+expect window.__srv.patches[0].body.resolved === true
+expect Object.keys(window.__srv.patches[0].body).sort().join(',') === 'by,resolved'
+expect H.home().rev === window.__revAt + 1
+expect H.base().comments.filter(function(c){return c.id === window.__c1;})[0].resolved === true
+expect window.__srv.puts.length === 0
+
+# --- 6. a post that does not arrive, then does ------------------------------
+# No answer at all. The reply stays where it is, the page says so, and the
+# next Save sends it again — the same reply id, which the server answers with
+# its stored copy if the first one had landed after all.
+eval (function(){ window.__srv.fail = 'offline'; window.__postsAt = window.__srv.posts.length; return true; })()
+jsclick #btn-comments
+sleep 400
+eval (function(){ document.querySelector('#comments-list .comment-card[data-id="' + window.__c2 + '"] [data-action="toggle-reply"]').click(); return true; })()
+sleep 300
+eval (function(){var box=document.querySelector('#comments-list .reply-composer .cell-editable');box.focus();document.execCommand('insertText',false,'REVIEWREPLYOFFLINE');return box.textContent;})()
+jsclick #comments-list [data-action="reply-post"]
+wait document.getElementById('toast-host').textContent.indexOf('Could not post your reply') !== -1
+expect H.dirty() === true
+expect F.state().comments.filter(function(c){return c.id === window.__c2;})[0].replies.length === 1
+expect !H.base().comments.filter(function(c){return c.id === window.__c2;})[0].replies.length
+expect window.__srv.posts.length === window.__postsAt
+eval (async function(){ await F.save(); return window.__srv.posts.length; })()
+expect window.__srv.posts.length === window.__postsAt + 1
+expect window.__srv.posts[window.__postsAt].reply.id === F.state().comments.filter(function(c){return c.id === window.__c2;})[0].replies[0].id
+expect H.dirty() === false
+expect H.home().rev === window.__srv.rev
+jsclick #comments-panel-close
+sleep 200
+
+# --- 7. a post the server refuses for good ----------------------------------
+# Kept on screen so nothing typed is lost, said once, not sent again.
+eval (function(){ window.__srv.fail = {status: 409, body: {error: 'too-many-comments'}}; window.__postsAt = window.__srv.posts.length; return true; })()
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var s=getSelection();var r=document.createRange();var w=document.createTreeWalker(c,NodeFilter.SHOW_TEXT);var t=null,n;while((n=w.nextNode())){if(!n.parentNode.closest('.cmt-anchor')&&n.nodeValue.length>8){t=n;break;}}r.setStart(t,2);r.setEnd(t,7);c.focus();s.removeAllRanges();s.addRange(r);return s.toString();})()
+jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 400
+eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'REVIEWNOTEREFUSED');return b.textContent;})()
+jsclick #comment-post
+wait document.getElementById('toast-host').textContent.indexOf('as many comments as it can') !== -1
+expect F.state().comments.some(function(c){return c.body.indexOf('REVIEWNOTEREFUSED') !== -1;})
+expect H.dirty() === true
+eval (async function(){ await F.save(); return window.__srv.posts.length; })()
+expect window.__srv.posts.length === window.__postsAt
+expect window.__srv.puts.length === 0
+
+# --- nothing the autosave timers did in the meantime was a PUT --------------
+sleep 6000
+expect window.__srv.puts.length === 0
+
+# --- an editor on the same document still saves with PUT --------------------
+eval (function(){ window.__editorPutsOk = true; H.setSession({role: 'edit', docId: 'doc-rv', rev: window.__srv.rev}); window.__srv.state = F.clone(F.state()); window.__postsAt = window.__srv.posts.length; window.__patchesAt = window.__srv.patches.length; return H.role(); })()
+expect H.reviewMode() === false
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+type EDITORWORDS
+eval document.activeElement.blur()
+eval (async function(){ await F.save(); return window.__srv.puts.length; })()
+expect window.__srv.puts.length >= 1
+expect window.__srv.puts[window.__srv.puts.length - 1].state.rows[1].visualText.indexOf('EDITORWORDS') !== -1
+expect window.__srv.posts.length === window.__postsAt
+expect window.__srv.patches.length === window.__patchesAt
+
+quit
