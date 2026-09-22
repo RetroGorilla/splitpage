@@ -41,6 +41,18 @@
      convenience) flows straight into the next row instead, with no gap. */
   var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
+  /* How many `.w` spans tokenizeForPrompter(html) would produce for one
+     row's own text, counted in an offscreen container rather than the real
+     one — the word count a row contributes, independent of whichever
+     paragraph it ends up glued into below. Used only to build scene
+     boundaries (issue #26); promptWords itself still comes from the real,
+     merged rendering, so the two can never disagree about what a "word" is. */
+  function countPrompterWords(html) {
+    var tmp = document.createElement("div");
+    tmp.innerHTML = tokenizeForPrompter(html);
+    return tmp.querySelectorAll(".w").length;
+  }
+
   function buildPrompterContent() {
     /* On day two you only want what's left. Filtering here rather than
        hiding after the fact keeps the word index — and so voice follow —
@@ -52,9 +64,15 @@
     var source = skippingShot
       ? state.rows.filter(function (row) { return row.status !== "shot"; })
       : state.rows;
-    var lineHtml = source
-      .map(function (row) { return (row.audioText || "").replace(/^(\s|<br\s*\/?>)+|(\s|<br\s*\/?>)+$/g, ""); })
-      .filter(function (html) { return html.trim(); });
+    /* Trimmed the same way lineHtml is below, but keeping every row (even a
+       blank one) and its id — scene mode's boundaries are addressed by
+       scene POSITION in this filtered list, the same list "Scene 4 of 12"
+       counts against, so a scene with nothing to read still holds its place
+       in the count even though stepScene() below will never stop on it. */
+    var sceneEntries = source.map(function (row) {
+      return { id: row.id, html: (row.audioText || "").replace(/^(\s|<br\s*\/?>)+|(\s|<br\s*\/?>)+$/g, "") };
+    });
+    var lineHtml = sceneEntries.map(function (e) { return e.html; }).filter(function (html) { return html.trim(); });
 
     var paragraphs = [];
     lineHtml.forEach(function (html, i) {
@@ -86,6 +104,28 @@
     });
     wordCursor = -1;
     speakCursor = -1;
+
+    /* ---- scene mode boundaries (issue #26) ----
+       sceneRowIds[i] is one entry of `source` (a scene, in its own document
+       order — never renumbered by what got merged into what paragraph);
+       [sceneWordStart[i], sceneWordEnd[i]) is that scene's half-open range
+       of indexes into promptWords, in the SAME index space wordCursor and
+       speakCursor already use. A blank scene gets a zero-width range —
+       still counted in "Scene N of Total", never a place cueScene/stepScene
+       will actually stop. */
+    sceneRowIds = [];
+    sceneWordStart = [];
+    sceneWordEnd = [];
+    var cursor = 0;
+    sceneEntries.forEach(function (e) {
+      var n = e.html.trim() ? countPrompterWords(e.html) : 0;
+      sceneRowIds.push(e.id);
+      sceneWordStart.push(cursor);
+      cursor += n;
+      sceneWordEnd.push(cursor);
+    });
+    promptSceneIndex = -1;
+    promptSceneEndWordOffset = null;
   }
 
   /* A phone's screen dims and locks mid-read without this — fatal for a
@@ -168,6 +208,183 @@
     applyPrompterOrientation();
   }
 
+  /* ---------- scene mode (issue #26) ----------
+
+     Off by default, remembered per device (same localStorage convention as
+     Mirror/Flip above — a reading preference, never written into the
+     document). Cues one scene's first word to the reading line, auto-pauses
+     once its last word passes that line, and Next/Previous re-cue the
+     neighbour — skipping any scene "hide shot scenes" (issue #25) or the
+     prompter's own "Skip shot" already left out of `source` entirely, since
+     sceneRowIds (buildPrompterContent above) never lists them to begin with. */
+  var PROMPTER_SCENE_MODE_KEY = "splitpage-prompter-scene-mode";
+  var promptSceneMode = readPrompterOrientationFlag(PROMPTER_SCENE_MODE_KEY);
+  var sceneRowIds = [];
+  var sceneWordStart = [];
+  var sceneWordEnd = [];
+  var promptSceneIndex = -1;
+  /* The CONTENT-space top (el.offsetTop — the scrollTop that would bring it
+     to the very top of the scroller) of the current scene's last word, and
+     the reading line's own distance from the top of the viewport. Both are
+     plain numbers, cached once per cue/step rather than re-measured every
+     animation frame, and comparing them needs nothing else from the DOM —
+     see scenePastReadingLine(). */
+  var promptSceneEndWordOffset = null;
+  var promptSceneGuideOffset = 0;
+  /* The row the caret was last in, in either the split view or the writer —
+     kept current by a focusin listener in 21-events.js. Read only by
+     cueSceneForCurrentPosition() below, to cue "the scene Present was opened
+     from" — capturing it here rather than at the moment Present is clicked,
+     because a real click already moves focus to the button itself by then. */
+  var lastFocusedRowId = null;
+
+  /* The one bit of geometry the auto-pause decision actually needs, pulled
+     out on its own so it can be driven with plain numbers instead of a real
+     scroll — the teleprompter's scroll speed can't be exercised headless
+     (requestAnimationFrame is throttled in a background/headless window;
+     see SKILL.md "What this cannot test"), but this function has no rAF and
+     no live scroll in it at all, so a test can call it directly. `.prompter-
+     guide` sits at top:50% of the viewport (app.css), so cueing a scene
+     already leaves promptSceneGuideOffset at scroller.clientHeight/2 —
+     scrolling to `scrollTop` has carried `wordTop` up to (or past) the
+     guide once its distance from the top of the viewport has shrunk to
+     `guideTop` or less. */
+  function scenePastReadingLine(scrollTop, wordTop, guideTop) {
+    return (wordTop - scrollTop) <= guideTop;
+  }
+
+  function updateSceneReadout() {
+    var el = document.getElementById("pp-scene-readout");
+    if (!el) return;
+    if (!promptSceneMode || promptSceneIndex === -1 || !sceneRowIds.length) { el.textContent = ""; return; }
+    el.textContent = "Scene " + (promptSceneIndex + 1) + " of " + sceneRowIds.length;
+  }
+
+  function updatePrompterSceneModeUI() {
+    var btn = document.getElementById("pp-scene-mode");
+    if (btn) btn.classList.toggle("is-active", promptSceneMode);
+    ["pp-scene-prev", "pp-scene-next", "pp-scene-readout"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.hidden = !promptSceneMode;
+    });
+    updateSceneReadout();
+  }
+
+  /* First index at or after (dir>0) / before (dir<0) `from`, inclusive, that
+     actually has something to read — i.e. skipping the blank scenes
+     buildPrompterContent() still counted but left zero-width. -1 means none
+     in that direction. */
+  function findNonEmptySceneIndex(from, dir) {
+    for (var i = from; i >= 0 && i < sceneRowIds.length; i += dir) {
+      if (sceneWordEnd[i] > sceneWordStart[i]) return i;
+    }
+    return -1;
+  }
+
+  /* Scrolls scene `idx`'s first word to the reading line and arms its last
+     word as the next auto-pause boundary. Does nothing (and reports it) for
+     an out-of-range or empty scene — callers resolve to a real one first
+     with findNonEmptySceneIndex. */
+  function cueScene(idx) {
+    if (idx < 0 || idx >= sceneRowIds.length) return false;
+    if (sceneWordEnd[idx] <= sceneWordStart[idx]) return false;
+    var scroller = document.getElementById("prompter-scroll");
+    var firstWord = promptWords[sceneWordStart[idx]].el;
+    var lastWord = promptWords[sceneWordEnd[idx] - 1].el;
+    promptSceneIndex = idx;
+    promptSceneGuideOffset = scroller.clientHeight / 2;
+    scroller.scrollTop = Math.max(0, firstWord.offsetTop - promptSceneGuideOffset);
+    promptSceneEndWordOffset = lastWord.offsetTop;
+    updateSceneReadout();
+    return true;
+  }
+
+  /* Next/Previous (buttons and the keyboard shortcut) — always re-cues (a
+     fresh scroll to the neighbour's first word), unlike the auto-pause path
+     below, which deliberately leaves the reader sitting where they stopped. */
+  function stepScene(dir) {
+    if (!promptSceneMode || !sceneRowIds.length) return;
+    var next = findNonEmptySceneIndex(promptSceneIndex + dir, dir);
+    if (next === -1) return;
+    setPrompterPlaying(false);
+    cueScene(next);
+  }
+
+  /* Where scene mode picks up when the prompter opens (or scene mode itself
+     switches on): the scene the caret was last in (lastFocusedRowId, kept
+     current by a focusin listener in 21-events.js — it survives the click
+     on Present itself, which always steals focus before this runs), or the
+     first scene with something to read if that row has nothing spoken, is
+     no longer here, or nothing was ever focused. */
+  function cueSceneForCurrentPosition() {
+    if (!sceneRowIds.length) { promptSceneIndex = -1; promptSceneEndWordOffset = null; updateSceneReadout(); return; }
+    var idx = lastFocusedRowId ? sceneRowIds.indexOf(lastFocusedRowId) : -1;
+    if (idx === -1) idx = 0;
+    var resolved = findNonEmptySceneIndex(idx, 1);
+    if (resolved === -1) resolved = findNonEmptySceneIndex(idx, -1);
+    if (resolved === -1) { promptSceneIndex = -1; promptSceneEndWordOffset = null; updateSceneReadout(); return; }
+    cueScene(resolved);
+  }
+
+  /* The one-shot auto-pause: fires once when the current scene's last word
+     passes the reading line (from the scroll tick or, during Follow My
+     Voice, from the recognised-word cursor), then arms the NEXT scene's end
+     as the boundary and moves the readout on — without re-scrolling, so
+     pressing Play again (or just talking on) continues straight into it
+     rather than replaying it from its own first word. */
+  function advanceSceneAfterAutoPause() {
+    var next = findNonEmptySceneIndex(promptSceneIndex + 1, 1);
+    if (next === -1) { promptSceneEndWordOffset = null; return; }
+    promptSceneIndex = next;
+    promptSceneEndWordOffset = promptWords[sceneWordEnd[next] - 1].el.offsetTop;
+    updateSceneReadout();
+  }
+
+  function setPrompterSceneMode(on) {
+    on = !!on;
+    if (on === promptSceneMode) return;
+    promptSceneMode = on;
+    writePrompterOrientationFlag(PROMPTER_SCENE_MODE_KEY, on);
+    updatePrompterSceneModeUI();
+    if (on) cueSceneForCurrentPosition();
+    else { promptSceneIndex = -1; promptSceneEndWordOffset = null; }
+  }
+
+  /* ---- test hook ----
+     Everything in src/js shares one closure (00-prelude.js), so a driver
+     script has no way to reach scenePastReadingLine or trigger the
+     boundary check it drives — and no way to reproduce it through a real
+     scroll either, since requestAnimationFrame is throttled in a
+     background/headless window (SKILL.md "What this cannot test"). This is
+     the sanctioned way around both: the pure comparison, exposed directly,
+     and a way to run the exact check prompterTick makes every frame against
+     whatever scrollTop a test sets on #prompter-scroll — no animation
+     needed. Nothing in the app itself reads this; the same trick
+     window.__updateTest (20a-update.js) and window.__historyTest
+     (03a-history-store.js) play. */
+  window.__prompterTest = {
+    scenePastReadingLine: scenePastReadingLine,
+    checkSceneBoundaryNow: function () {
+      var scroller = document.getElementById("prompter-scroll");
+      if (!promptSceneMode || promptSceneEndWordOffset == null) return false;
+      if (!scenePastReadingLine(scroller.scrollTop, promptSceneEndWordOffset, promptSceneGuideOffset)) return false;
+      setPrompterPlaying(false);
+      advanceSceneAfterAutoPause();
+      return true;
+    },
+    /* Follow My Voice needs a real microphone (no headless input — see
+       startVoiceFollow), so this drives just the scene-boundary half of
+       onSpeechTranscript()'s own check, with a caller-given word index
+       standing in for wherever real recognised speech would have landed. */
+    simulateVoiceWordCursor: function (idx) {
+      wordCursor = idx;
+      if (!promptSceneMode || promptSceneIndex === -1 || wordCursor < sceneWordEnd[promptSceneIndex]) return false;
+      stopVoiceFollow();
+      advanceSceneAfterAutoPause();
+      return true;
+    }
+  };
+
   function openPrompter() {
     buildPrompterContent();
     var el = document.getElementById("prompter");
@@ -177,6 +394,8 @@
     setPrompterPlaying(false);
     applyPrompterSize();
     applyPrompterOrientation();
+    updatePrompterSceneModeUI();
+    if (promptSceneMode) cueSceneForCurrentPosition();
     updateVoiceAvailability();
     acquireWakeLock();
   }
@@ -213,6 +432,12 @@
     var dt = (ts - prompterLastTs) / 1000;
     prompterLastTs = ts;
     scroller.scrollTop += prompterSpeed * dt;
+    if (promptSceneMode && promptSceneEndWordOffset != null &&
+        scenePastReadingLine(scroller.scrollTop, promptSceneEndWordOffset, promptSceneGuideOffset)) {
+      setPrompterPlaying(false);
+      advanceSceneAfterAutoPause();
+      return;
+    }
     if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) {
       setPrompterPlaying(false);
       return;
@@ -334,6 +559,17 @@
       wordCursor = speakable[speakCursor];
       applySpokenUpTo(wordCursor);
       scrollWordIntoView(wordCursor);
+      /* Scene mode's other stop: prompterTick's scroll-position check never
+         runs during Follow My Voice (setPrompterPlaying(false) is what
+         starts a voice session), so the boundary here is the recognised
+         word position itself passing the end of the cued scene — reusing
+         the same word-index space wordCursor already lives in, no scroll
+         math needed. */
+      if (promptSceneMode && promptSceneIndex !== -1 && wordCursor >= sceneWordEnd[promptSceneIndex]) {
+        stopVoiceFollow();
+        advanceSceneAfterAutoPause();
+        setVoiceStatus("Scene finished — say it again to keep following, or press Next.", "listening");
+      }
     }
 
     /* Only the last handful of words are ever matched against, so the rest
