@@ -36,6 +36,10 @@ files:
   # does. desktop/test/google-drive.test.mjs checks that every ./module
   # main.js requires is listed here.
   - google-drive.js
+  # The content-addressed blob folder images live in (issue #82). main.js
+  # requires it at startup, so it has to ship for the same reason drafts.js
+  # does.
+  - blob-store.js
   - package.json
 
 extraResources:

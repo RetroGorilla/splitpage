@@ -46,6 +46,14 @@ const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./pr
    request. Plain Node, no Electron, in electron-builder.yml's `files` for
    the same reason drafts.js is. */
 const { createGoogleDrive } = require("./google-drive");
+/* desktop/blob-store.js: the content-addressed blob folder images live in
+   since issue #82 (section 8c) — <userData>/blobs, named by SHA-256. Plain
+   Node, no Electron, in electron-builder.yml's `files` for the same reason
+   drafts.js is. The image-only rule (imageBlobRefusal) is the IPC door's,
+   and lives beside the store so the unit test holds the same copy. */
+const {
+  createBlobStore, imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY
+} = require("./blob-store");
 /* desktop/ipc-channels.js is the one list of channels that cross this
    process boundary, and the one validator every inbound message goes
    through (section 14). Plain CommonJS data and pure functions, no Electron
@@ -2340,6 +2348,36 @@ function historyListDocsLocked() {
     out.push({ docId: bucket, title: rec.title || "", lastOpenedAt: rec.lastOpenedAt || 0 });
   }
   return out;
+}
+
+/* ---------------------------------------------------------------------
+ * 8c. Content-addressed blobs (issue #82).
+ *
+ *     <userData>/blobs/FORMAT and sha256/<aa>/<sha>: raw bytes named by
+ *     their own SHA-256 (desktop/blob-store.js has the layout and the
+ *     integrity rules). Made once from whenReady, before any window, which
+ *     is also when a put that died mid-write has its temp file swept.
+ *
+ *     The page reaches it through three app-origin invokes, and names a
+ *     blob by its sha and nothing else — no path, no folder, no URL
+ *     (invariant #28): blob-put(sha, bytes), blob-get(sha) and
+ *     blob-missing(shas). A store that could not be created leaves the app
+ *     running without it: puts answer UNAVAILABLE, gets null, and every sha
+ *     is missing — the document still holds every image inline in its file
+ *     (#82 D1), so nothing is lost, only not cached here.
+ * --------------------------------------------------------------------- */
+
+let blobStore = null;
+
+function initBlobStore() {
+  try {
+    blobStore = createBlobStore({ dir: path.join(app.getPath("userData"), "blobs"), fs, fsp, path, crypto });
+    return blobStore.init();
+  } catch (err) {
+    blobStore = null;
+    if (TEST_MODE) process.stderr.write(`[splitpage] blob store unavailable: ${err && err.stack || err}\n`);
+    return null;
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -5629,6 +5667,47 @@ function registerIpc() {
     return historyExclusive(() => historyListDocsLocked());
   });
 
+  /* ---- content-addressed blobs (section 8c, issue #82) ----------------
+
+     The sha is typed in the table (64 lowercase hex), so by the time a
+     handler runs it cannot be a path. What stays here is what a schema
+     cannot say: blob-put's bytes must be real bytes (not a string), a PNG,
+     JPEG, GIF or WebP of at most 16 MiB, and hash to the sha — the store
+     checks that last one itself. Every content refusal is an answer,
+     {ok:false, code}, in the Drive calls' style; only a malformed call
+     (which the table mostly catches first) rejects. */
+
+  ipcHandle("splitpage:blob-put", async (event, sha, bytes) => {
+    if (typeof bytes === "string") return { ok: false, code: "BAD_BYTES" };
+    let buf;
+    try { buf = toBuffer(bytes); } catch { return { ok: false, code: "BAD_BYTES" }; }
+    const refusal = imageBlobRefusal(buf);
+    if (refusal) return { ok: false, code: refusal };
+    if (!blobStore) return { ok: false, code: "UNAVAILABLE" };
+    return blobStore.put(sha, buf);
+  });
+
+  /* {bytes, mime} or null. The mime is sniffed from the bytes, never
+     remembered from a put: this door hands back images only, so anything
+     else in the folder (a later issue's snapshot bodies) answers null here. */
+  ipcHandle("splitpage:blob-get", async (event, sha) => {
+    if (!blobStore) return null;
+    const buf = await blobStore.get(sha);
+    if (!buf) return null;
+    const mime = sniffImageMime(buf);
+    return mime ? { bytes: buf, mime } : null;
+  });
+
+  /* The subset of `shas` this store does not hold. At most
+     MAX_MISSING_QUERY per call, every one a sha — a list with anything else
+     in it rejects rather than being half-answered. */
+  ipcHandle("splitpage:blob-missing", async (event, shas) => {
+    if (shas.length > MAX_MISSING_QUERY) throw new Error("blob-missing: at most " + MAX_MISSING_QUERY + " shas per call");
+    if (!shas.every(isSha256)) throw new Error("blob-missing: every entry must be a sha256");
+    if (!blobStore) return [...new Set(shas)];
+    return blobStore.missing(shas);
+  });
+
   /* ---- the tab strip's channels (TABSTRIP-BRIDGE) --------------------
      A separate origin with its own trust check, and deliberately nothing
      else: no file, draft or history handler accepts a strip sender. What
@@ -5914,6 +5993,10 @@ app.whenReady().then(async () => {
      soon as its page loads, and init() is also what reads last session's
      state and finishes any discard whose delete did not complete. */
   const draftInit = initDraftStore();
+  /* The blob folder (section 8c) likewise, before the first page can ask
+     for an image — and its temp sweep has to run before any put of this
+     process could have a temp file of its own in flight. */
+  initBlobStore();
   registerProtocol();
   registerIpc();
   buildMenu();

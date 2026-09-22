@@ -315,6 +315,38 @@ test("the Google Drive channels: argument-free account calls, id-only Drive call
   }
 });
 
+/* Issue #82: the blob channels name a blob by its SHA-256 and nothing else
+   (invariant #28) — the sha is typed, so a path, a URL, an uppercase or a
+   short sha never reaches a handler. What a schema cannot say (the bytes
+   are an image, hash to the sha, the missing list is shas and at most
+   2000) is main's and desktop/blob-store.js's, tested there. */
+test("the blob channels: a typed sha256, app page only", () => {
+  const sha = "0123456789abcdef".repeat(4);
+  const row = (name) => channelFor(name, "invoke");
+  assert.deepEqual([...row("splitpage:blob-put").argsSchema], ["sha256", "bytes"]);
+  assert.deepEqual([...row("splitpage:blob-get").argsSchema], ["sha256"]);
+  assert.deepEqual([...row("splitpage:blob-missing").argsSchema], ["array"]);
+  assert.equal(checkArgs(row("splitpage:blob-put").argsSchema, [sha, new Uint8Array(4)]), null);
+  assert.equal(checkArgs(row("splitpage:blob-get").argsSchema, [sha]), null);
+  assert.equal(checkArgs(row("splitpage:blob-missing").argsSchema, [[sha]]), null);
+  for (const bad of [sha.toUpperCase(), sha.slice(1), sha + "0", "../" + sha.slice(3),
+    "C:\\Users\\me\\blobs\\" + sha, "https://evil.example/" + sha, "", null, 42, { sha }]) {
+    assert.ok(checkArgs(row("splitpage:blob-get").argsSchema, [bad]), "blob-get refuses " + JSON.stringify(bad));
+    assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [bad, new Uint8Array(4)]), "blob-put refuses " + JSON.stringify(bad));
+  }
+  assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [sha]), "a put with no bytes");
+  assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [sha, { not: "bytes" }]), "a put whose body is not bytes");
+  assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [sha, new Uint8Array(4), "image/svg+xml"]), "a caller-supplied mime");
+  assert.ok(checkArgs(row("splitpage:blob-missing").argsSchema, [sha]), "a missing query that is not a list");
+  const blob = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:blob-"));
+  assert.equal(blob.length, 3);
+  for (const c of blob) {
+    assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN], c.name);
+    assert.equal(c.direction, "invoke", c.name);
+    assert.ok(!c.testOnly, c.name);
+  }
+});
+
 /* A malformed draft payload must reach the handler, which answers with a
    code the renderer can back off on rather than a rejection (DRAFT-STORE). */
 test("the draft channels let a bad payload through to their own answer", () => {

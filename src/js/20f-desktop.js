@@ -558,6 +558,77 @@ function openPendingServerDocForTab(serverDocId) {
   }
 }
 
+/* ---- the desktop blob backend (issue #82) ----
+
+   The page's blob registry (02c-blobs.js) keeps image bytes by SHA-256 and
+   asks a backend to hold them durably: IndexedDB in the browser, and on the
+   desktop the main process's <userData>/blobs folder through the bridge
+   (desktop/blob-store.js, main.js section 8c). This is that desktop
+   backend, in the registry's interface:
+
+     get(sha)              -> Promise<{bytes: Uint8Array, mime} | null>
+     put(sha, bytes, mime) -> Promise<{stored}>, rejecting on refusal with
+                              err.code (HASH_MISMATCH, NOT_AN_IMAGE,
+                              TOO_LARGE, ENOSPC, READ_ONLY, UNAVAILABLE ...)
+     missing(shas)         -> Promise<string[]>
+
+   `mime` is accepted and not sent: main sniffs the bytes itself and serves
+   only PNG, JPEG, GIF and WebP, so a caller's label is never trusted.
+   Nothing names a path (invariant #28) — a sha is all that crosses.
+
+   get() never rejects: a blob that is not here, or a call main refused, is
+   null, and the registry then tries the next source (the server, or a
+   placeholder). missing() asks in slices of 2000, the most one
+   splitpage:blob-missing takes. Nothing calls this yet; 02c-blobs.js's
+   wiring does, once it lands. */
+var DESKTOP_BLOB_MISSING_SLICE = 2000;
+
+export function makeDesktopBlobBackend(bridge) {
+  var b = bridge;
+  if (!b || typeof b.blobPut !== "function" || typeof b.blobGet !== "function" || typeof b.blobMissing !== "function") {
+    return null;
+  }
+  return {
+    kind: "desktop",
+    get: function (sha) {
+      return Promise.resolve()
+        .then(function () { return b.blobGet(sha); })
+        .then(function (got) {
+          if (!got || !got.bytes || typeof got.mime !== "string") return null;
+          var bytes = got.bytes instanceof Uint8Array ? got.bytes : new Uint8Array(got.bytes);
+          return { bytes: bytes, mime: got.mime };
+        }, function () { return null; });
+    },
+    /* put(sha, bytes, mime): the third argument is the interface's and is
+       deliberately not read (see above). */
+    put: function (sha, bytes) {
+      return Promise.resolve()
+        .then(function () { return b.blobPut(sha, bytes); })
+        .then(function (res) {
+          if (res && res.ok === true) return { stored: res.stored === true };
+          var code = (res && typeof res.code === "string" && res.code) || "FAILED";
+          var err = new Error("blob-put refused: " + code);
+          err.code = code;
+          throw err;
+        });
+    },
+    missing: function (shas) {
+      var list = Array.isArray(shas) ? shas : [];
+      var slices = [];
+      for (var i = 0; i < list.length; i += DESKTOP_BLOB_MISSING_SLICE) {
+        slices.push(list.slice(i, i + DESKTOP_BLOB_MISSING_SLICE));
+      }
+      return slices.reduce(function (acc, slice) {
+        return acc.then(function (out) {
+          return Promise.resolve(b.blobMissing(slice)).then(function (m) {
+            return out.concat(Array.isArray(m) ? m : slice);
+          });
+        });
+      }, Promise.resolve([]));
+    }
+  };
+}
+
 /* ---- test hook ----
    There is no pre-load hook in the harness that can inject a real
    window.splitpageDesktop before this script runs — DESKTOP is captured
@@ -568,7 +639,9 @@ function openPendingServerDocForTab(serverDocId) {
    paths (saveDoc, deliverFile, openLocalFile, makeDesktopHandle) against
    it directly. Exists in both modes but does nothing unless a test calls
    it — same trick window.__splitpageFormats (20d-formats.js) plays. */
-/* opts.history === true gives the fake the seven HISTORY-IPC methods, kept
+/* opts.blobs === true adds the three blob-bridge members (issue #82) —
+   see addFakeDesktopBlobs below.
+   opts.history === true gives the fake the seven HISTORY-IPC methods, kept
    in memory, validating with the SAME regexes the real main process uses
    (normalizeDocId and HISTORY_SNAP_ID_RE, both from 03a-history-store.js)
    and applying the same "50 newest per document" trim. That is enough for
@@ -785,7 +858,74 @@ function makeFakeDesktopBackend(opts) {
   };
   if (opts && opts.history) addFakeDesktopHistory(backend);
   if (opts && opts.drive) addFakeDesktopDrive(backend);
+  if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
   return backend;
+}
+
+/* The blob bridge (issue #82), faked in memory: blobPut/blobGet/blobMissing
+   with the real bridge's arities, answer shapes and refusals — a sha that is
+   not 64 lowercase hex REJECTS (the IPC table refuses it before main's
+   handler runs), a string or non-image body, an empty one or one over
+   16 MiB answers {ok:false, code}, and a missing list over 2000 rejects.
+   The fake cannot hash on its own without pulling a SHA-256 into this
+   module, so opts.blobHash (bytes -> hex, e.g. 02b-doc-id.js's byte hasher)
+   turns on the HASH_MISMATCH check; without it the fake trusts the sha.
+   _blobs is the store (sha -> {bytes, mime}), _blobCalls every call, and
+   _blobFailNext = {code} makes the next put answer that code. */
+function addFakeDesktopBlobs(backend, opts) {
+  var SHA_RE = /^[0-9a-f]{64}$/;
+  var MAX = 16 * 1024 * 1024;
+  var hash = typeof opts.blobHash === "function" ? opts.blobHash : null;
+  var store = {};
+  var calls = [];
+  function sniff(u) {
+    if (u.length >= 8 && u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4e && u[3] === 0x47) return "image/png";
+    if (u.length >= 3 && u[0] === 0xff && u[1] === 0xd8 && u[2] === 0xff) return "image/jpeg";
+    if (u.length >= 6 && u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x38) return "image/gif";
+    if (u.length >= 12 && u[0] === 0x52 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x46 &&
+        u[8] === 0x57 && u[9] === 0x45 && u[10] === 0x42 && u[11] === 0x50) return "image/webp";
+    return null;
+  }
+  function badSha() { return Promise.reject(new Error("splitpage:blob: argument 1 is not sha256")); }
+  backend.blobPut = function (sha, bytes) {
+    calls.push({ op: "put", sha: sha });
+    if (typeof sha !== "string" || !SHA_RE.test(sha)) return badSha();
+    if (typeof bytes === "string") return Promise.resolve({ ok: false, code: "BAD_BYTES" });
+    var u = bytes instanceof Uint8Array ? bytes : bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : null;
+    if (!u) return Promise.reject(new Error("splitpage:blob-put: argument 2 is not bytes"));
+    if (!u.length) return Promise.resolve({ ok: false, code: "EMPTY" });
+    if (u.length > MAX) return Promise.resolve({ ok: false, code: "TOO_LARGE" });
+    var mime = sniff(u);
+    if (!mime) return Promise.resolve({ ok: false, code: "NOT_AN_IMAGE" });
+    if (backend._blobFailNext) { var f = backend._blobFailNext; backend._blobFailNext = null; return Promise.resolve({ ok: false, code: f.code }); }
+    if (hash && hash(u) !== sha) return Promise.resolve({ ok: false, code: "HASH_MISMATCH" });
+    if (store[sha]) return Promise.resolve({ ok: true, stored: false });
+    store[sha] = { bytes: new Uint8Array(u), mime: mime };
+    return Promise.resolve({ ok: true, stored: true });
+  };
+  backend.blobGet = function (sha) {
+    calls.push({ op: "get", sha: sha });
+    if (typeof sha !== "string" || !SHA_RE.test(sha)) return badSha();
+    var e = store[sha];
+    return Promise.resolve(e ? { bytes: new Uint8Array(e.bytes), mime: e.mime } : null);
+  };
+  backend.blobMissing = function (shas) {
+    calls.push({ op: "missing", count: Array.isArray(shas) ? shas.length : -1 });
+    if (!Array.isArray(shas)) return Promise.reject(new Error("splitpage:blob-missing: argument 1 is not array"));
+    if (shas.length > 2000) return Promise.reject(new Error("blob-missing: at most 2000 shas per call"));
+    if (!shas.every(function (x) { return typeof x === "string" && SHA_RE.test(x); })) {
+      return Promise.reject(new Error("blob-missing: every entry must be a sha256"));
+    }
+    var seen = {};
+    return Promise.resolve(shas.filter(function (x) {
+      if (seen[x] || store[x]) return false;
+      seen[x] = true;
+      return true;
+    }));
+  };
+  backend._blobs = store;
+  backend._blobCalls = calls;
+  backend._blobFailNext = null;
 }
 
 /* The Google Drive bridge (issue #10), faked in memory: the six calls with
@@ -1063,6 +1203,9 @@ export function __init() {
     makeHandle: makeDesktopHandle,
     runMenuCommand: runDesktopMenuCommand,
     makeFakeBackend: makeFakeDesktopBackend,
+    /* The desktop blob backend over whatever bridge a suite hands it —
+       usually makeFakeBackend({blobs:true}) — for 02c-blobs.js's suites. */
+    makeBlobBackend: makeDesktopBlobBackend,
     /* The real boot-time wiring (init(), 21-events.js) only calls this
        against whatever DESKTOP already is at load — null in every browser
        suite. Exposed so a test can re-run it AFTER setBackend() swaps a fake
