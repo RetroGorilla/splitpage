@@ -476,8 +476,19 @@ async function addMarkerRow(cdp, marker) {
   // supplements: '#rows > *'.length can stay unchanged across the very add
   // this is waiting for.
   const before = await evalPage(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length");
-  await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
-  await poll(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length > " + before, 10000);
+  /* Clicked again, up to three times, while no row has appeared: under load
+     a boot-time re-render can replace the button between the query and the
+     click, and a click on the detached node adds nothing — which failed a
+     full run twice (once with nothing of the case's own under test yet).
+     Only re-clicked while the count is still `before`, so it never adds two. */
+  const countExpr = "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
+    const added = await poll(cdp, countExpr + " > " + before, 4000).then(() => true, () => false);
+    if (added) break;
+    if ((await evalPage(cdp, countExpr)) > before) break;
+  }
+  await poll(cdp, countExpr + " > " + before, 2000);
   const expr = "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
     "var cell = cells[cells.length - 1]; if (!cell) return false; cell.textContent = " + JSON.stringify(marker) + "; " +
     "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()";
