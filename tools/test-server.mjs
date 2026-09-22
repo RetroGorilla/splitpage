@@ -785,12 +785,14 @@ const s7 = await startServer({
 });
 
 try {
-  const join = async (payload) => json(await fetch(s7.base + "api/join", {
+  /* joinAs, not `join`: node:path's join() is imported at the top of this
+     file and a local of that name shadowed it for the whole suite. */
+  const joinAs = async (payload) => json(await fetch(s7.base + "api/join", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   }));
-  const editToken = (await join({ pin: PIN })).token;
-  const reviewToken = (await join({ pin: REVIEW_PIN })).token;
+  const editToken = (await joinAs({ pin: PIN })).token;
+  const reviewToken = (await joinAs({ pin: REVIEW_PIN })).token;
 
   const beat = (token, body) => fetch(s7.base + "api/presence", {
     method: "POST",
@@ -884,6 +886,75 @@ try {
     check("...and never appears in its state",
       JSON.stringify(doc.state).indexOf("presence") === -1 && JSON.stringify(doc.state).indexOf("Priya") === -1,
       JSON.stringify(doc.state));
+  }
+
+  /* ---------- the heartbeat is the pull channel (issue #69) ----------
+   *
+   * The beat is the only thing in hosted mode that round-trips on its own,
+   * so it is also how a second editor learns that somebody saved: it names
+   * the document and the rev it is at, and the client GETs and merges when
+   * that number has moved past the one it holds. This is the wire half; what
+   * the page does with the answer is tests/55-pull-merge.txt.
+   */
+  {
+    const made = await json(await fetch(s7.base + "api/docs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
+      body: JSON.stringify({ state: { title: "Pull channel", rows: [{ id: "r1" }], comments: [] } })
+    }));
+    const first = await json(await beat(editToken, { docId: made.id, id: "pull1" }));
+    eq("a beat names the document it is about", first.docId, made.id);
+    eq("...and the rev that document is at", first.rev, made.rev);
+    check("...beside the people, not instead of them", Array.isArray(first.here));
+
+    const saved = await json(await fetch(s7.base + "api/docs/" + made.id, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
+      body: JSON.stringify({ baseRev: made.rev, state: { title: "Pull channel", rows: [{ id: "r1", audioText: "theirs" }], comments: [] } })
+    }));
+    const after = await json(await beat(editToken, { docId: made.id, id: "pull2" }));
+    eq("...and the number moves the moment somebody else saves", after.rev, saved.rev);
+    check("...which is one past where it was", saved.rev === made.rev + 1, String(saved.rev));
+  }
+  {
+    /* Presence is in memory and a document is on disk, and the two are not
+       required to agree: somebody can be beating about a document that was
+       never published. No rev is no pull channel, not a refusal. */
+    const res = await beat(editToken, { docId: "never-published", id: "pull3" });
+    const body = await json(res);
+    eq("a beat about a document that is not here still answers", res.status, 200);
+    eq("...with no rev to pull on", body.rev, null);
+    eq("...and still names the document it was asked about", body.docId, "never-published");
+  }
+  {
+    /* THE READ IS THE HEAD LINE AND NOT THE SCRIPT (#74's whole point, and
+       the reason this can run every two seconds for every tab). Proved by a
+       file whose head line is perfectly good and whose state is not JSON at
+       all: anything that parsed the document to answer a beat would throw,
+       and a GET of the same file duly does. */
+    writeFileSync(join(s7.dataDir, "head-only.json"),
+      JSON.stringify({
+        id: "head-only", rev: 9,
+        updatedAt: "2026-01-01T00:00:00.000Z", updatedBy: "Host",
+        title: "Head only", rows: 2
+      }).slice(0, -1) + ',\n"state": this is not json at all}');
+
+    const body = await json(await beat(editToken, { docId: "head-only", id: "pull4" }));
+    eq("a beat reads the head line rather than parsing the document", body.rev, 9);
+    const read = await fetch(s7.base + "api/docs/head-only", { headers: { "x-splitpage-token": editToken } });
+    eq("...which is a document a full parse cannot read at all", read.status, 500);
+  }
+  {
+    /* A closing tab's beacon is the one beat that touches no disk: it is not
+       there to read an answer, so it is not given one. */
+    const res = await fetch(s7.base + "api/presence", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ docId: "head-only", id: "pull4", gone: true, token: editToken })
+    });
+    const body = await json(res);
+    eq("a leaving beacon is answered without a rev", body.rev, undefined);
+    eq("...and is still just an acknowledgement", body.ok, true);
   }
 } finally {
   s7.stop();

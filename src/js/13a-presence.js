@@ -5,6 +5,7 @@ import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiFetch,
   apiUrl,
+  notePresenceRev,
   onServerDoc,
   serverBase,
   serverSessionExpired,
@@ -30,6 +31,12 @@ var presenceLastActive;
    who else is there in the same answer — one round trip, no second
    connection to keep alive, and the same token, CORS and tunnel path every
    other call takes.
+
+   AND IT IS THE PULL CHANNEL, because it is the only thing in hosted mode
+   that round-trips on its own. The answer names the document's rev as well
+   as the people (#69); notePresenceRev() in 13-hosted.js is handed it and
+   decides whether the document needs fetching and merging. Nothing about
+   that belongs in this file, and nothing of it is awaited here.
 
    PRESENCE IS NEVER PART OF THE DOCUMENT. It is not in `state`, so
    invariant #4 is deliberately not in play; it never dirties anything, never
@@ -170,6 +177,13 @@ async function presenceTick() {
     presenceAnnounced = true;
     presenceHere = (body && body.here) || [];
     paintPresence();
+    /* The beat is the pull channel too (#69): the answer names the
+       document's rev, and 13-hosted.js decides whether that means going and
+       getting it. Presence knows nothing about documents and is not about to
+       start — it hands the whole answer over and goes back to painting
+       badges. Nothing is awaited: a GET and a merge are far slower than a
+       beat, and the next beat must not be held up behind them. */
+    notePresenceRev(body);
   } catch (e) {
     /* Deliberately never handleApiError(): a heartbeat must not put a toast
        on screen, reload the page, or open the PIN dialog. A server that is
