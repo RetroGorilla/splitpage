@@ -25,6 +25,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   HOME_KINDS,
+  conn,
   fileHome,
   home,
   importHome,
@@ -52,7 +53,8 @@ test("setHome builds a record with exactly its kind's fields, defaulted", () => 
   assert.deepEqual(i, { kind: "import", handle: null, format: "docx", name: "notes.docx",
                         lastModified: null, size: null, inPlace: false, dirty: false });
   const s = setHome("server", { id: "doc-1" });
-  assert.deepEqual(s, { kind: "server", id: "doc-1", rev: 0 });
+  assert.deepEqual(s, { kind: "server", id: "doc-1", rev: 0, conn });
+  assert.equal(s.conn, conn, "a server home holds this tab's connection itself, not a copy");
   assert.deepEqual(setHome("none"), { kind: "none" });
 });
 

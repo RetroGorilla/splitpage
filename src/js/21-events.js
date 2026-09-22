@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { importHome } from "./_home.js";
+import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
@@ -1262,7 +1262,13 @@ function init() {
          the right place (pristine and ready), same as opening it always
          has. */
       if (S.DESKTOP) {
-        S.DESKTOP.routeOpen({ kind: "server", serverDocId: sid }).then(function (r) {
+        /* Which server is part of which document (#11): the same id on
+           another server is another document, and a new tab main makes for
+           this one has to boot onto THIS tab's server. The token goes too,
+           once, so that tab does not ask for a PIN this one already typed —
+           main keeps it in memory for that tab and never writes it down. */
+        S.DESKTOP.routeOpen({ kind: "server", serverDocId: sid, serverUrl: conn.serverUrl,
+                              token: conn.token, tunnel: conn.tunnel }).then(function (r) {
           if (r && r.where === "this-tab") openServerDoc(sid); else closeServerPicker();
         });
       } else {

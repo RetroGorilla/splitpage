@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { fileHome, home, serverHomeId } from "./_home.js";
+import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
 import {
@@ -14,7 +14,7 @@ import {
 } from "./03a-history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { openServerDoc, serverBase, serverToken } from "./13-hosted.js";
+import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { concatBytes, saveDoc, strBytes } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
@@ -115,13 +115,23 @@ export function makeDesktopHandle(entry) {
 export function notifyDesktopDocumentState() {
   if (!S.DESKTOP || !S.state) return;
   var restoring = typeof draftRestorePending !== "undefined" && draftRestorePending;
+  /* Where a server document lives is part of which document it is (#11):
+     the same id on two servers is two documents, and a restored tab has to
+     come back on the server its document is on, not on whichever server
+     another tab picked last. Server, tunnel and role only — the token never
+     rides on this report, which fires on every edit; main is only ever
+     handed one through routeOpen, to open a new tab without asking again. */
+  var c = homeConn();
   S.DESKTOP.setDocumentState({
     title: S.state.title || "Untitled Script",
     dirty: !!S.dirty || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
     docId: S.state.docId || null,
     fileId: (home.kind === "file" && home.handle && home.handle._desktopId) || null,
-    serverKey: serverHomeId()
+    serverKey: serverHomeId(),
+    serverUrl: c ? c.serverUrl : null,
+    tunnel: c ? c.tunnel : null,
+    role: c ? c.role : null
   });
 }
 
@@ -203,6 +213,7 @@ var PROMPTER_BROWSER_MESSAGES = {
   READ_FAILED: "Couldn't read the saved file — it may have moved. Save it again, then try again.",
   TOO_LARGE: "This script is too large to hand to the browser.",
   NO_SERVER: "The server this script lives on isn't running here any more.",
+  REMOTE_SERVER: "This script is on another server — use Share to get its link, then open that in Chrome or Edge.",
   SERVE_FAILED: "Couldn't open the script in your browser.",
   OPEN_FAILED: "Couldn't open your browser.",
   NO_TAB: "Couldn't open the script in your browser."
@@ -219,7 +230,7 @@ function prompterBrowserResult(ok, message, kind) {
    exactly as Share already does, so it goes to the clipboard instead. */
 async function copyPrompterLinkForRemoteServer(id) {
   var link;
-  try { link = new URL("?doc=" + encodeURIComponent(id) + "&teleprompter=1", serverBase).href; }
+  try { link = new URL("?doc=" + encodeURIComponent(id) + "&teleprompter=1", homeConn().serverUrl).href; }
   catch (e) { return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NO_SERVER); }
   var copied;
   try { await navigator.clipboard.writeText(link); copied = true; } catch (e) { copied = false; }
@@ -236,7 +247,8 @@ export async function openPrompterInBrowser() {
   try {
     if (!S.state) return prompterBrowserResult(false, "Still loading…");
     var serverId = serverHomeId();
-    if (serverId && serverBase) return await copyPrompterLinkForRemoteServer(serverId);
+    var hc = homeConn();
+    if (serverId && hc && hc.serverUrl) return await copyPrompterLinkForRemoteServer(serverId);
     var fh = fileHome();
     var onDisk = !!(fh && fh.handle && fh.handle._desktopId);
     if (!onDisk && !serverId) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
@@ -414,7 +426,10 @@ export function initDesktop() {
   S.DESKTOP.onOpenServerDoc(function (payload) {
     var serverDocId = payload && payload.serverDocId;
     if (!serverDocId) return;
-    function proceed() { openPendingServerDocForTab(serverDocId); }
+    function proceed() {
+      adoptPayloadServer(payload);
+      openPendingServerDocForTab(serverDocId);
+    }
     if (S.state) proceed();
     else if (S.initialStateReady) S.initialStateReady.then(proceed);
     else proceed();
@@ -478,9 +493,31 @@ export function initDesktop() {
    `if (typeof openPendingServerDocForTab === "function") …` there would
    cost nothing when this id is DESKTOP.only and nothing is pending. That
    one line lives in 13-hosted.js, which is not one of this step's files,
-   so this polls serverMode/serverToken instead of being called back;
+   so this polls serverMode and conn.token instead of being called back;
    step K (13-hosted.js) can wire the direct call later without this
    function needing to change shape. */
+/* The payload names the server its document is on (#11). A tab main made
+   for it already booted onto that server (TAB-BOOT-SYNC's connection), and
+   a this-tab route is this tab asking about its own server, so this is
+   normally a no-op. Should the two ever disagree, the document wins: the
+   tab is pointed at the payload's server before anything is asked for,
+   because asking the wrong server for this id would open a stranger's
+   document or none. */
+function adoptPayloadServer(payload) {
+  if (typeof payload.serverUrl !== "string") return;
+  var url = normalizeServerBase(payload.serverUrl);
+  if (url === conn.serverUrl) return;
+  if (home.kind === "server") setHome("none");
+  S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
+                   reviewAvailable: false, version: null };
+  try {
+    pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "", tunnel: payload.tunnel || null });
+  } catch (e) {
+    pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "" });
+  }
+  detectServer();
+}
+
 function openPendingServerDocForTab(serverDocId) {
   var CHECK_TIMEOUT_MS = 15000;
   var AUTH_TIMEOUT_MS = 10 * 60 * 1000;
@@ -489,11 +526,19 @@ function openPendingServerDocForTab(serverDocId) {
 
   function isChecked() { return typeof S.serverMode !== "undefined" && S.serverMode && S.serverMode.checked; }
   function needsAuth() {
-    return typeof S.serverMode !== "undefined" && S.serverMode && S.serverMode.authRequired &&
-      !(typeof serverToken !== "undefined" && serverToken);
+    return typeof S.serverMode !== "undefined" && S.serverMode && S.serverMode.authRequired && !conn.token;
   }
+  var retried = false;
   function openIt() {
-    if (typeof openServerDoc === "function") openServerDoc(serverDocId);
+    if (typeof openServerDoc !== "function") return;
+    Promise.resolve(openServerDoc(serverDocId)).then(function (ok) {
+      /* A token that looked fine and was not — remembered for this server
+         before it restarted, so a new session no longer takes it — is only
+         found out by this request: handleApiError() has dropped it and put
+         the PIN dialog up. Wait for the PIN once more rather than leave a
+         restored tab empty after the reader typed it. */
+      if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); }
+    });
   }
 
   (function waitForDetect() {
@@ -618,6 +663,9 @@ function makeFakeDesktopBackend(opts) {
          case the recents column has to cope with (issue #15) — the real
          handler throws ENOENT for it, so the fake does too. */
       if (p && p.kind === "file" && this._routeMissing) return Promise.reject(new Error("ENOENT: file is not readable"));
+      /* What the page asked for, for a suite to read back — a server route
+         carries the connection since #11. */
+      this._lastRoute = p ? JSON.parse(JSON.stringify(p)) : null;
       return Promise.resolve(this._routeAnswer || { where: "this-tab" });
     },
 
