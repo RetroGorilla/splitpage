@@ -31,6 +31,11 @@ files:
   # The teleprompter's loopback listener (issue #86). main.js requires it at
   # startup, so it has to ship for the same reason drafts.js does.
   - prompter-share.js
+  # Google Drive through a loopback OAuth redirect (issue #10). main.js
+  # requires it at startup, so it has to ship for the same reason drafts.js
+  # does. desktop/test/google-drive.test.mjs checks that every ./module
+  # main.js requires is listed here.
+  - google-drive.js
   - package.json
 
 extraResources:

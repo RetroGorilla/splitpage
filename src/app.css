@@ -737,6 +737,11 @@
   .modal-panel.drive-panel { max-width: 640px; }
   .drive-setup-steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
   .drive-setup-steps li { margin-bottom: 4px; }
+  .drive-desktop-path { margin: 0 0 12px; }
+  .drive-desktop-path code {
+    display: block; padding: 8px 10px; border-radius: 6px; background: var(--surface-2);
+    font-size: 12.5px; overflow-wrap: anywhere; user-select: all;
+  }
   .drive-field { margin-bottom: 10px; }
   .drive-field label { display: block; font-family: var(--font-display); font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 4px; }

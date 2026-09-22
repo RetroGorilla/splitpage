@@ -385,6 +385,40 @@ if (location.origin === "splitpage://app") {
        or {ok:false, code} — never the URL. */
     openPrompterInBrowser() {
       return invoke("splitpage:prompter-open-in-browser");
+    },
+
+    /* ---- Google Drive (main.js section 9c, issue #10) -------------------
+       Main holds the OAuth listener, the tokens and every request to Google;
+       these hand back names, ids, bytes and {ok:false, code} — never a
+       token, never a URL. The account calls take no argument (invariant
+       #28): the page cannot name the address the browser is sent to. */
+    driveStatus() {
+      return invoke("splitpage:drive-status");
+    },
+
+    driveSignIn() {
+      return invoke("splitpage:drive-sign-in");
+    },
+
+    driveSignOut() {
+      return invoke("splitpage:drive-sign-out");
+    },
+
+    /* A Drive folder id ("root" is My Drive). */
+    driveList(folderId) {
+      return invoke("splitpage:drive-list", folderId);
+    },
+
+    /* A Drive file id. Answers {ok, file:{id, name, mimeType, size,
+       modifiedTime}, bytes}. */
+    driveDownload(fileId) {
+      return invoke("splitpage:drive-download", fileId);
+    },
+
+    /* {parentId, name, bytes, mimeType?} makes a new file in that folder;
+       {fileId, bytes, mimeType?} replaces an existing file's content. */
+    driveUpload(request) {
+      return invoke("splitpage:drive-upload", request);
     }
   };
 

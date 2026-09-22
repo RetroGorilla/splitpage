@@ -98,6 +98,9 @@ jobs:
       - name: Desktop teleprompter share listener
         run: node desktop/test/prompter-share.test.mjs
 
+      - name: Desktop Google Drive client (loopback OAuth, fake Google)
+        run: node desktop/test/google-drive.test.mjs
+
       - name: Server tests
         run: node tools/test-server.mjs
 
