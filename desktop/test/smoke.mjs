@@ -3026,7 +3026,7 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     // and the data block's row counts disagreeing, which pops the real
     // #md-rows-modal in-page confirm and would hang this case, invariant
     // #33's "never trigger one" included), then treat this tab exactly as
-    // "A.md is open": the tab's docFileHandle is bound to aPath from here on,
+    // "A.md is open": the tab's "file" home is bound to aPath from here on,
     // same as if the file had been opened from disk.
     await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     let saveAsOk = false;
@@ -3035,7 +3035,7 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     }
     record(tag + ": setup — Save As creates A.md", saveAsOk);
     if (!saveAsOk) return;
-    await sleep(300); // let the save fully settle (docFileHandle retargeted, clean)
+    await sleep(300); // let the save fully settle (file home retargeted, clean)
 
     const stBefore = fs.statSync(aPath);
     const birthtimeBefore = stBefore.birthtimeMs;

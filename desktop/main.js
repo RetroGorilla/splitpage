@@ -753,9 +753,10 @@ function tabIsUnsaved(tab) {
    adding it to what it sends. */
 
 const DRAFT_ORIGIN_KINDS = new Set(["untitled", "file", "server", "import"]);
-/* The three kinds docFileHandle.kind can hold (18-local-files.js:218/233/245,
-   14-export.js:85). Anything else — including null for an untitled or
-   imported document — is recorded as null. */
+/* The three formats a renderer "file" home can hold (`home.format`,
+   src/js/_home.js — set by adoptProjectState in 18-local-files.js and by
+   saveDoc's retarget in 14-export.js). Anything else — including null for
+   an untitled or imported document — is recorded as null. */
 const DRAFT_FILE_KINDS = new Set(["md", "html", "splitpage"]);
 /* A name the user can see, long enough for a real title and no longer
    (DRAFT-IPC-AND-SHAPES: title <= 300). Deliberately its own constant rather

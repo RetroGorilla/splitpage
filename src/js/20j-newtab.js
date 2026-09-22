@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
@@ -138,7 +139,7 @@ function startBlankScript() {
    what that tab now is. */
 async function newTabOpenFile() {
   await openLocalFile();
-  if (S.openedFile.name || S.docFileHandle.kind) closeNewTabPage();
+  if (home.kind === "import" || home.kind === "file") closeNewTabPage();
 }
 
 /* ---- the recent-documents column (DESKTOP-RECENTS) ---- */
@@ -261,8 +262,7 @@ async function newTabEligibleForAutoShow() {
   if (newTabSuppressed()) return false;
   if (!seedCheckPasses()) return false;
   if (S.DESKTOP && typeof draftRestorePending !== "undefined" && draftRestorePending) return false;
-  if (typeof S.serverDoc !== "undefined" && S.serverDoc && S.serverDoc.id) return false;
-  if (typeof S.docFileHandle !== "undefined" && S.docFileHandle && S.docFileHandle.kind) return false;
+  if (home.kind === "server" || home.kind === "file") return false;
   if (S.DESKTOP) {
     if ((S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
         S.DESKTOP.hasDraftToRestore) return false;
@@ -272,9 +272,7 @@ async function newTabEligibleForAutoShow() {
     if (handle) return false;
   }
   /* Re-check what the round trip above gave a file time to change. */
-  if (typeof S.serverDoc !== "undefined" && S.serverDoc && S.serverDoc.id) return false;
-  if (typeof S.docFileHandle !== "undefined" && S.docFileHandle && S.docFileHandle.kind) return false;
-  if (S.openedFile.name) return false;
+  if (home.kind !== "none") return false;
   return true;
 }
 

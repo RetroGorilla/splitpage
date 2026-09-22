@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -165,16 +166,16 @@ function draftOriginOf() {
   };
   if (onServerDoc()) {
     origin.kind = "server";
-    origin.server = { base: serverBase || "", docId: S.serverDoc.id, rev: S.serverDoc.rev || 0 };
+    origin.server = { base: serverBase || "", docId: home.id, rev: home.rev || 0 };
     return origin;
   }
-  var handle = (S.docFileHandle && S.docFileHandle.kind) ? S.docFileHandle.handle : null;
-  var fileId = (handle && handle._desktopId) || null;
+  var file = fileHome();
+  var fileId = (file && file.handle && file.handle._desktopId) || null;
   if (fileId) {
     origin.kind = "file";
     origin.fileId = fileId;
-    origin.fileKind = S.docFileHandle.kind;
-    origin.baseLastModified = S.docFileHandle.lastModified || null;
+    origin.fileKind = file.format;
+    origin.baseLastModified = file.lastModified || null;
     return origin;
   }
   /* A foreign file opened for round-trip export is not a home the draft can
@@ -182,10 +183,11 @@ function draftOriginOf() {
      so its draft recovers as an unsaved copy, but naming the file it came
      from is the difference between "some recovered work" and "the script I
      was working on this morning". */
-  if (S.openedFile && S.openedFile.name) {
+  var imported = importHome();
+  if (imported) {
     origin.kind = "import";
-    origin.importName = S.openedFile.name;
-    origin.baseLastModified = S.openedFile.lastModified || null;
+    origin.importName = imported.name;
+    origin.baseLastModified = imported.lastModified || null;
     return origin;
   }
   return origin;
@@ -573,9 +575,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
      document is in starts from nothing rather than from a version of some
      other file. */
   S.baseState = null;
-  S.docFileHandle = { handle: null, kind: null, lastModified: null };
-  S.serverDoc = { id: null, rev: 0 };
-  S.openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
+  setHome("none");
   resetProductionPanelState();
   S.docIdWrittenOut = wasUntitled ? !!t.header.docIdWrittenOut : false;
   render();
@@ -825,9 +825,7 @@ async function restoreFileDraft(t, mine, base, origin) {
 function adoptUntitledDraft(t, mine, base) {
   S.state = mine;
   S.baseState = base || null;
-  S.docFileHandle = { handle: null, kind: null, lastModified: null };
-  S.serverDoc = { id: null, rev: 0 };
-  S.openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
+  setHome("none");
   resetProductionPanelState();
   /* A never-saved document keeps exactly what it had: its id has been
      nowhere, which is what lets the first Save As take it along instead of

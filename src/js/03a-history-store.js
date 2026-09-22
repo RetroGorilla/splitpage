@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home } from "./_home.js";
 import { makeId } from "./02-state.js";
 import { mintDocId, normalizeDocId } from "./02b-doc-id.js";
 import {
@@ -8,7 +9,6 @@ import {
   renderHistory
 } from "./03-sync.js";
 import { showToast } from "./12-dirty-toast.js";
-import { onServerDoc } from "./13-hosted.js";
 import { checksumText, seedCheckPasses } from "./20b-onboarding.js";
 /* The policy half of version history — what is kept and what is thrown
    away — is shared with desktop/main.js, which used to carry a line-for-line
@@ -1296,8 +1296,7 @@ function resolveHistoryBackend() {
    fill every new user's history with copies of the seed before they have
    typed a word. */
 export function isPristineSeedDocument() {
-  return !!S.state && S.editSeq === 0 && !S.dirty && !S.docFileHandle.kind && !onServerDoc() &&
-    !S.openedFile.name && seedCheckPasses();
+  return !!S.state && S.editSeq === 0 && !S.dirty && home.kind === "none" && seedCheckPasses();
 }
 
 /* Snapshots this page has captured but not (yet) stored, keyed

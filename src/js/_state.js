@@ -12,6 +12,9 @@
  * Nothing goes on S to be convenient; a name is here because two modules
  * write it.
  *
+ * Where the document lives is not here: it is the one `home` record in
+ * _home.js (#73), which replaced docFileHandle, openedFile and serverDoc.
+ *
  * Every property is spelled out with an `undefined` initialiser, mirroring
  * what `var` hoisting used to give these names before their first
  * assignment ran, and so this file is a readable list of what the app's
@@ -40,10 +43,6 @@ export const S = {
 
   /* 00-prelude declares it; 00-prelude, 12-dirty-toast assign it. */
   dirty: undefined,
-
-  /* 00-prelude declares it; 00-prelude, 13-hosted, 14-export, 18-local-files,
-     20g-drafts assign it. */
-  docFileHandle: undefined,
 
   /* 02b-doc-id declares it; 02-state, 02b-doc-id, 13-hosted, 14-export,
      18-local-files, 20g-drafts, 20j-newtab assign it. */
@@ -85,10 +84,6 @@ export const S = {
 
   /* 06-rows declares it; 06-rows, 19-writer assign it. */
   lastMoveUndo: undefined,
-
-  /* 18-local-files declares it; 13-hosted, 18-local-files, 20g-drafts assign
-     it. */
-  openedFile: undefined,
 
   /* 00-prelude declares it; 00-prelude, 21-events assign it. */
   pendingImageRowId: undefined,
@@ -135,10 +130,6 @@ export const S = {
 
   /* 20e-connect declares it; 20e-connect, 20h-appdata assign it. */
   serverBookmarks: undefined,
-
-  /* 13-hosted declares it; 13-hosted, 18-local-files, 20e-connect, 20g-drafts
-     assign it. */
-  serverDoc: undefined,
 
   /* 13-hosted declares it; 13-hosted, 20e-connect assign it. */
   serverMode: undefined,

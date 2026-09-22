@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home, setHome } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
@@ -394,7 +395,9 @@ export async function addServerBookmark(name, url, opts) {
    somewhere else always means proving yourself there again. */
 async function useServer(bookmark) {
   setServerBase(bookmark.url);
-  S.serverDoc = { id: null, rev: 0 };
+  /* A document on the old server is not on this one. A local home stays
+     exactly where it is. */
+  if (home.kind === "server") setHome("none");
   /* The role belongs to the server that granted it, like the token: what
      the new one says about this browser is not known until it answers. */
   S.serverRole = "";
@@ -455,7 +458,7 @@ function removeBookmark(id) {
 async function backToThisCopy() {
   setServerBase("");
   clearServerToken();
-  S.serverDoc = { id: null, rev: 0 };
+  if (home.kind === "server") setHome("none");
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
   updateConnectMenu();

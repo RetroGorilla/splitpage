@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home, serverHomeId, setHome } from "./_home.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
@@ -107,12 +108,13 @@ S.serverRole = "";
 
 S.serverMode = { available: false, readOnly: false, checked: false,
                    authRequired: false, reviewAvailable: false, version: null };
-S.serverDoc = { id: null, rev: 0 };   /* the hosted document we are editing */
+/* The hosted document we are editing is `home` when its kind is "server"
+   (_home.js): {kind, id, rev}. */
 var serverIdentity = null;              /* { email, name } from Cloudflare Access */
 export var serverSessionExpired = false;
 var serverDocs = [];                    /* last listing, for the picker */
 
-export function onServerDoc() { return !!S.serverDoc.id; }
+export function onServerDoc() { return home.kind === "server"; }
 
 /* Viewing a hosted document through the review credential: the editor is
    read-only and only the comment machinery stays live. Gated on there
@@ -282,7 +284,7 @@ export var SERVER_RESUME_KEY = "splitpage-server-resume";
 
    {id, rev, base, mine, at, onDone(outcome)}. onDone is how the restore
    learns which way this went ('server-resumed' or 'not-found'); polling
-   serverDoc.id cannot tell a resume that merged the draft from one that
+   the home's id cannot tell a resume that merged the draft from one that
    simply reopened the document. */
 S.draftServerResume = null;
 
@@ -297,7 +299,7 @@ function flagServerSessionExpired() {
   var stashed = false;
   if (onServerDoc()) {
     try {
-      sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: S.serverDoc.id, rev: S.serverDoc.rev }));
+      sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: home.id, rev: home.rev }));
       stashed = stashLocalWork();
       if (!stashed) sessionStorage.removeItem(SERVER_RESUME_KEY);
     } catch (e) { stashed = false; }
@@ -400,9 +402,8 @@ async function resumeServerDoc() {
     serverId: body.id,
     fallbackId: normalizeDocId(stash && stash.mine && stash.mine.docId) || null
   });
-  S.serverDoc = { id: body.id, rev: body.rev || 0 };
+  setHome("server", { id: body.id, rev: body.rev || 0 });
   S.docIdWrittenOut = true;
-  S.docFileHandle = { handle: null, kind: null };
   resetProductionPanelState();
   applyReviewMode();
 
@@ -688,12 +689,12 @@ export async function fetchReviewLink() {
   if (!S.serverMode.available || !S.serverMode.reviewAvailable || S.serverRole === "review") return "";
   if (!onServerDoc()) return "";
   var body;
-  try { body = await apiFetch("api/share?doc=" + encodeURIComponent(S.serverDoc.id)); } catch (e) { return ""; }
+  try { body = await apiFetch("api/share?doc=" + encodeURIComponent(home.id)); } catch (e) { return ""; }
   if (!body || !body.reviewKey) return "";
   var base = serverBase || (location.origin + "/");
   /* The link carries the document as well as the key: the key only opens
      that one document, so landing anywhere else would be a dead end. */
-  return base + "?doc=" + encodeURIComponent(body.docId || S.serverDoc.id) +
+  return base + "?doc=" + encodeURIComponent(body.docId || home.id) +
          "#review=" + body.reviewKey;
 }
 
@@ -730,7 +731,7 @@ function renderServerPicker() {
     return;
   }
   list.innerHTML = serverDocs.map(function (d) {
-    var isOpen = d.id === S.serverDoc.id;
+    var isOpen = d.id === serverHomeId();
     return '<div class="server-doc' + (isOpen ? ' is-current' : '') + '" data-id="' + escapeHtml(d.id) + '">' +
       '<button type="button" class="server-doc-open" data-action="server-open" data-id="' +
         escapeHtml(d.id) + '">' +
@@ -763,12 +764,11 @@ export async function openServerDoc(id) {
   S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
   S.baseState = cloneState(S.state);
   if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
-  S.serverDoc = { id: body.id, rev: body.rev || 0 };
-  S.docIdWrittenOut = true;
   /* a hosted document and a local file are different homes for the same
-     Save button — holding both would make it ambiguous which one it writes */
-  S.docFileHandle = { handle: null, kind: null };
-  S.openedFile = { name: null, handle: null, kind: null, dirty: false, inPlace: false };
+     Save button — setHome() replaces whichever one this page had, so it
+     can never be ambiguous which one Save writes */
+  setHome("server", { id: body.id, rev: body.rev || 0 });
+  S.docIdWrittenOut = true;
   resetProductionPanelState();
 
   clearDirty();
@@ -806,9 +806,8 @@ export async function publishToServer() {
       return apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
     });
   } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
-  S.serverDoc = { id: body.id, rev: body.rev || 1 };
+  setHome("server", { id: body.id, rev: body.rev || 1 });
   S.baseState = published;
-  S.docFileHandle = { handle: null, kind: null };
   /* Adopted only after the server has it, like Save As. The id check keeps
      a document opened while the POST was in flight from being re-id'd. */
   if (forkDocId && S.state.docId === oldId) {
@@ -910,7 +909,7 @@ export async function publishAndCopyShareLink() {
   } else if (!(await publishToServer()) || !onServerDoc()) {
     return false;
   }
-  var url = serverDocShareUrl(S.serverDoc.id);
+  var url = serverDocShareUrl(home.id);
   var copied = await copyShareText(url);
   showToast(copied
     ? "Link copied — " + shareAccessNote()
@@ -956,7 +955,7 @@ export async function armServerDelete(btn, id) {
     try {
       await apiFetch("api/docs/" + encodeURIComponent(id), { method: "DELETE" });
     } catch (err) { handleApiError(err, "Could not delete that document"); return; }
-    if (S.serverDoc.id === id) S.serverDoc = { id: null, rev: 0 };
+    if (serverHomeId() === id) setHome("none");
     serverDocs = serverDocs.filter(function (d) { return d.id !== id; });
     renderServerPicker();
     updateFileChip();
@@ -984,19 +983,19 @@ export async function armServerDelete(btn, id) {
 export async function saveToServer() {
   if (serverSessionExpired) return false;
   /* The server picker is never disabled while a save is in flight, so
-     openServerDoc() can reassign serverDoc/state/baseState to a different
+     openServerDoc() can reassign home/state/baseState to a different
      hosted document mid-save. Remember which document THIS call is for,
      and refuse to write a result — success or conflict — into whatever
-     serverDoc/state/baseState point at now if it has moved on. */
-  var docId = S.serverDoc.id;
+     home/state/baseState point at now if it has moved on. */
+  var docId = serverHomeId();
   var attempts = 0;
   var mergeResult = null;
 
   while (attempts < 3) {
     attempts++;
-    if (S.serverDoc.id !== docId) return false;
+    if (serverHomeId() !== docId) return false;
     /* `state.rev` is NOT touched here. The rev this save is judged by is
-       the DOCUMENT's, which the server keeps and hands back (serverDoc.rev
+       the DOCUMENT's, which the server keeps and hands back (home.rev
        below, sent as baseRev); `state.rev` is only the merge counter
        inside the document (max-plus-one, 02-state.js). Bumping it on the
        way out and putting it back on every failure was a second, private
@@ -1006,7 +1005,7 @@ export async function saveToServer() {
     S.state.lastEditedAt = nowIso();
     var published = cloneState(S.state);
     var seqAtSave = S.editSeq;
-    var baseRevAtSave = S.serverDoc.rev;
+    var baseRevAtSave = home.rev;
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
@@ -1015,8 +1014,8 @@ export async function saveToServer() {
           body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
         });
       });
-      if (S.serverDoc.id !== docId) return true; /* saved, but the open document has since changed */
-      S.serverDoc.rev = body.rev;
+      if (serverHomeId() !== docId) return true; /* saved, but the open document has since changed */
+      home.rev = body.rev;
       S.baseState = published;
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
@@ -1025,7 +1024,7 @@ export async function saveToServer() {
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true });
       return true;
     } catch (err) {
-      if (S.serverDoc.id !== docId) return false;
+      if (serverHomeId() !== docId) return false;
 
       if (err && err.code === "conflict" && err.payload && err.payload.state) {
         /* The id this view has been writing history under, before the merge
@@ -1069,13 +1068,13 @@ export async function saveToServer() {
         }).result;
         /* Their rev, from their answer — the baseRev the retry is judged
            against. Nothing on the client invents one. */
-        S.serverDoc.rev = err.payload.rev || S.serverDoc.rev;
+        home.rev = err.payload.rev || home.rev;
         continue; /* try again against their rev */
       }
 
       if (err && err.code === "not-found") {
         showToast("That document is no longer on the server. Use “Put this script on the server” to publish it again.", "warn");
-        S.serverDoc = { id: null, rev: 0 };
+        setHome("none");
         updateFileChip();
         return false;
       }
@@ -1104,7 +1103,7 @@ export async function saveToServer() {
    has moved past the one this view is holding, and only then, we GET the
    document and merge it in.
 
-   THE REV BEING COMPARED IS THE DOCUMENT'S — `S.serverDoc.rev`, the
+   THE REV BEING COMPARED IS THE DOCUMENT'S — `home.rev` (_home.js), the
    compare-and-set token every PUT carries as `baseRev` and the server hands
    back with every answer. NOT `state.rev`, which is the merge counter
    inside the document (max-plus-one, 02-state.js), is private to the
@@ -1184,12 +1183,12 @@ function sameDocumentContent(a, b) {
    decision about what a rev means is here. */
 export function notePresenceRev(body) {
   if (!body || pullInFlight || serverSessionExpired) return;
-  var docId = S.serverDoc.id;
+  var docId = serverHomeId();
   if (!docId || body.docId !== docId) return;
   /* A document with no head line yet answers with no rev (server.js) — and
      a rev that has not moved is the ordinary case, one comparison and out. */
   if (typeof body.rev !== "number") return;
-  if (body.rev <= (S.serverDoc.rev || 0)) return;
+  if (body.rev <= (home.rev || 0)) return;
   if (S.saveButtonBusy) return;
   pullInFlight = true;
   pullServerDoc(docId).catch(function () {}).then(function () { pullInFlight = false; });
@@ -1212,10 +1211,10 @@ async function pullServerDoc(docId) {
      The server picker is never disabled, so another document may have been
      opened; and a save may have started, in which case this pull is dropped
      and that save's own 409 does the merging instead. */
-  if (S.serverDoc.id !== docId) return;
+  if (serverHomeId() !== docId) return;
   if (S.saveButtonBusy) return;
   var rev = body.rev || 0;
-  if (rev <= (S.serverDoc.rev || 0)) return;   /* a save of ours landed first */
+  if (rev <= (home.rev || 0)) return;   /* a save of ours landed first */
 
   /* Their copy came from this same server document, so an id-less one saved
      by a client older than document ids is still THIS document: keep ours
@@ -1227,7 +1226,7 @@ async function pullServerDoc(docId) {
     fallbackId: S.state.docId
   });
 
-  S.serverDoc.rev = rev;
+  home.rev = rev;
   if (sameDocumentContent(theirs, S.baseState)) {
     /* Somebody saved a document that says what ours already said — their
        own pull-merge, a save that only moved `lastEditedAt`, a second
@@ -1896,9 +1895,10 @@ export function __init() {
       S.serverMode.authRequired = true;
       S.serverMode.reviewAvailable = opts.reviewAvailable !== false;
       S.serverRole = opts.role || "edit";
-      S.serverDoc = opts.docId === null
-        ? { id: null, rev: 0 }
-        : { id: opts.docId || "doc-test", rev: opts.rev || 1 };
+      /* `docId: null` says "not on a server document" — which leaves a
+         local home exactly where it was, as zeroing serverDoc used to. */
+      if (opts.docId === null) { if (home.kind === "server") setHome("none"); }
+      else setHome("server", { id: opts.docId || "doc-test", rev: opts.rev || 1 });
       /* A hosted document that is open always has a base — openServerDoc()
          sets one from the answer it opened with, and every merge measures
          against it (HANDOFF §3.6). Without this the hook produced a state
@@ -1906,7 +1906,7 @@ export function __init() {
          a two-way merge: every field either side had touched came out a
          conflict rather than being reconciled against what the server last
          confirmed. `false` is for a suite that wants exactly that. */
-      if (S.serverDoc.id && opts.base !== false) S.baseState = cloneState(S.state);
+      if (onServerDoc() && opts.base !== false) S.baseState = cloneState(S.state);
       applyReviewMode();
       updateServerMenu();
       render();
@@ -1914,9 +1914,10 @@ export function __init() {
     role: function () { return S.serverRole; },
     reviewMode: reviewMode,
     reviewLink: fetchReviewLink,
-    /* The compare-and-set token, for the suites that watch the pull channel
-       take a rev off a heartbeat (#69). A copy, not the object. */
-    serverDoc: function () { return { id: S.serverDoc.id, rev: S.serverDoc.rev }; },
+    /* Where the document lives (_home.js), for the suites that watch the
+       pull channel take a rev off a heartbeat (#69) — `rev` is the
+       compare-and-set token. A copy, not the record. */
+    home: function () { return Object.assign({}, home); },
     /* Hand a heartbeat's answer straight to the pull channel, so a suite can
        drive it without waiting out a real two-second beat. */
     noteRev: notePresenceRev

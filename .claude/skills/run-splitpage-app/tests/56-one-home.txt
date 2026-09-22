@@ -1,0 +1,83 @@
+# One home record (#73, src/js/_home.js).
+#
+# Where a document lives used to be three globals — docFileHandle,
+# openedFile, serverDoc — zeroed against each other by hand. Two paths left
+# two of them set at once: a Save As from a hosted document put a project
+# file underneath the server document (and once the server side was cleared,
+# Save wrote into that copy without asking), and an imported .docx/.txt that
+# was saved as a project kept its import alongside the new file. This suite
+# drives both through the real saveDoc() with the fake desktop backend
+# (20f-desktop.js) and reads the one answer back off
+# window.__hostedTest.home():
+#
+#   * a foreign file opens as the "import" home, with the file chip on it;
+#   * a plain Save from it that is cancelled, or whose write fails, leaves
+#     that import home in place (saveDoc's undoRetarget → restoreHome);
+#   * one that writes makes the project file the home and the import chip
+#     goes with the import;
+#   * a Save As from a server document leaves the server home alone — the
+#     copy is a file on disk, not a second home — and leaving the server
+#     afterwards leaves nothing underneath it;
+#   * setSession({docId:null}) only ever clears a server home.
+open
+eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.HT=window.__hostedTest; return !!(F && D && HT);})()
+expect true
+expect HT.home().kind === 'none'
+
+# --- a foreign .txt opens as an import home, chip shows it ---------------
+eval (function(){window.__h = {name:'notes.txt', createWritable: async function(){return {write: async function(){}, close: async function(){}};}, getFile: async function(){return new File(['one\n\ntwo'],'notes.txt',{type:'text/plain'});}}; return F.openFile(new File(['one\n\ntwo'],'notes.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
+wait HT.home().kind === 'import'
+expect HT.home().name === 'notes.txt'
+expect HT.home().format === 'txt'
+expect HT.home().inPlace === true
+expect F.docFile().kind === null
+expect document.getElementById('file-chip').hidden === false
+expect document.getElementById('file-chip-name').textContent === 'notes.txt'
+expect document.getElementById('menu-save-back').disabled === false
+
+# --- plain Save from an import: cancelled dialog keeps the import home ----
+eval (function(){window.fakeA = D.makeFakeBackend(); window.fakeA._cancelNextSave = true; D.setBackend(window.fakeA); return true;})()
+eval (async function(){ await F.save({}); return true; })()
+expect HT.home().kind === 'import'
+expect HT.home().name === 'notes.txt'
+expect document.getElementById('file-chip').hidden === false
+
+# --- a write that fails puts the import home back ------------------------
+eval (function(){ window.fakeA._origWrite = window.fakeA.writeFile; window.fakeA.writeFile = function(){ return Promise.reject(new Error('EBUSY')); }; return true;})()
+eval (async function(){ await F.save({}); return true; })()
+expect HT.home().kind === 'import'
+expect HT.home().name === 'notes.txt'
+expect document.getElementById('file-chip').hidden === false
+expect document.getElementById('file-chip-name').textContent === 'notes.txt'
+eval (function(){ window.fakeA.writeFile = window.fakeA._origWrite; return true;})()
+
+# --- plain Save that writes: the project file replaces the import ---------
+eval (async function(){ await F.save({}); return true; })()
+wait HT.home().kind === 'file'
+expect F.docFile().kind === 'md'
+expect document.getElementById('file-chip').hidden === true
+expect document.getElementById('menu-save-back').disabled === true
+expect HT.home().diskBase !== null
+
+# --- a server document: Save As takes a copy home, the page stays put -----
+eval (function(){ HT.setSession({docId:'doc-sa', rev: 4}); return HT.home().kind; })()
+expect HT.home().kind === 'server'
+expect HT.home().id === 'doc-sa'
+expect F.docFile().kind === null
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+sleep 300
+expect HT.home().kind === 'server'
+expect HT.home().id === 'doc-sa'
+expect HT.home().rev === 4
+expect F.docFile().kind === null
+
+# --- leaving the server: nothing underneath it ----------------------------
+eval (function(){ HT.setSession({docId:null}); return HT.home().kind; })()
+expect HT.home().kind === 'none'
+expect F.docFile().kind === null
+
+# --- setSession(docId:null) leaves a local file home alone ----------------
+eval (async function(){ await F.save({}); return true; })()
+wait HT.home().kind === 'file'
+eval (function(){ HT.setSession({docId:null}); return HT.home().kind; })()
+expect HT.home().kind === 'file'

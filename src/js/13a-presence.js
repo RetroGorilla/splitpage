@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { serverHomeId } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { cssAttr } from "./04-richtext.js";
 import { getSavedAuthorName } from "./10-comments.js";
@@ -149,7 +150,7 @@ function presenceWhereKey() {
 function presencePayload(gone) {
   presenceLocation();
   return {
-    docId: S.serverDoc.id,
+    docId: serverHomeId(),
     id: presenceSelfId(),
     /* The author-name preference, the same one comments are signed with.
        Empty is not "anonymous is a secret" — it is what makes the other

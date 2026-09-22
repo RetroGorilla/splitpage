@@ -856,7 +856,8 @@ evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
 | --- | --- |
-| `_state.js` | the 57 cross-module mutable vars, as one exported object `S` |
+| `_state.js` | the 54 cross-module mutable vars, as one exported object `S` |
+| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73) |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `01-scene-status.js` | scene status and runtime estimates |
@@ -983,8 +984,8 @@ per-tab server/tunnel connections are pitched but unbuilt.
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)
 now builds a fresh state through `migrateRows()`, so the document gets a new
 `docId` and empty `productionTags`, `people`, `brollShots` and `comments`,
-and both Save targets (`docFileHandle`, `serverDoc`) are cleared. It used to
-replace only `state.rows` and the title and keep the rest, which meant an
+and its home becomes the imported file (`setHome("import")`,
+`src/js/_home.js`), which replaces either Save target. It used to replace only `state.rows` and the title and keep the rest, which meant an
 unrelated Word file inherited the last script's breakdown, cast list and
 review comments, and Save still pointed at the previous project's file.
 

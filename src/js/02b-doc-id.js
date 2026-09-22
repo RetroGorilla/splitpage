@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home } from "./_home.js";
 import { buildPublishHtml, migrateRows } from "./02-state.js";
 import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
@@ -298,13 +299,15 @@ export function copyDocHistorySafe(from, to) {
   } catch (e) { warn(); }
 }
 
-/* Where this document lives, as far as identity is concerned. Only one of
-   the three can hold at a time (adoptProjectState clears serverDoc and
-   opening a server document clears docFileHandle, HANDOFF §3.1). */
+/* Where this document lives, as far as identity is concerned — read off
+   the one home record (_home.js), so only one answer can hold at a time.
+   A foreign file opened for round-trip export is not an identity home: its
+   document was minted fresh on open and has never been anywhere, the same
+   as a blank one (loadFileIntoEditor, 18-local-files.js). */
 function docHomeKey() {
-  if (S.serverDoc && S.serverDoc.id) return "server:" + S.serverDoc.id;
-  if (S.docFileHandle && S.docFileHandle.kind) {
-    return "file:" + ((S.docFileHandle.handle && S.docFileHandle.handle.name) || S.docFileHandle.name || "");
+  if (home.kind === "server") return "server:" + home.id;
+  if (home.kind === "file") {
+    return "file:" + ((home.handle && home.handle.name) || home.name || "");
   }
   return "none:" + PAGE_NONCE;
 }

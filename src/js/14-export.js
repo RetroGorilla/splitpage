@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { fileHome, home, restoreHome, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { formatDuration, totalSeconds } from "./01-scene-status.js";
 import { migrateRows } from "./02-state.js";
@@ -38,7 +39,8 @@ import {
   checkFileConflict,
   deliverFile,
   fileKindFromName,
-  showFileConflict
+  showFileConflict,
+  updateFileChip
 } from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
@@ -80,17 +82,36 @@ export async function saveDoc(opts) {
      plain Save would quietly reuse a file that never got this document —
      and, after a Save As whose fork was thrown away with the failed write,
      put the already-used id into a second file (invariant #36). */
-  var prevDocFileHandle = null;
+  var prevHome = null;
   var retarget = null;
+  /* The home a fresh pick was made for: the new file home, or — for a Save
+     As from a hosted document — the server home it leaves alone. Only
+     while that is still the home is the picked file remembered for the
+     next launch (rememberLastFileHandle, below). */
+  var pickedFor = null;
   var wrote = false;
   function retargetTo(handle, k) {
     if (S.state.docId !== docIdAtSave) return;
-    prevDocFileHandle = S.docFileHandle;
-    retarget = { handle: handle, kind: k, lastModified: null, name: handle.name };
-    S.docFileHandle = retarget;
+    /* A Save As from a hosted document takes a copy home while the page
+       stays on the server document (adoptSavedCopyDocId below), so the
+       copy is a file on disk and not this document's home. It used to be
+       one anyway, half-set: a project file underneath the server document,
+       invisible until the server side was cleared, when Save would start
+       writing into the copy without asking (#73). */
+    if (home.kind === "server") { pickedFor = home; return; }
+    prevHome = home;
+    retarget = setHome("file", { handle: handle, format: k, name: handle.name });
+    pickedFor = retarget;
+    /* A document imported from a .docx/.csv/.txt that is saved as a
+       project moves home: the file chip and "Save to <name>" were about
+       the import, and follow it out (18-local-files.js). */
+    if (prevHome.kind === "import") updateFileChip();
   }
   function undoRetarget() {
-    if (retarget && !wrote && S.docFileHandle === retarget) S.docFileHandle = prevDocFileHandle;
+    if (retarget && !wrote && home === retarget) {
+      restoreHome(prevHome);
+      if (prevHome.kind === "import") updateFileChip();
+    }
     retarget = null;
   }
   S.saveButtonBusy = true;
@@ -122,7 +143,7 @@ export async function saveDoc(opts) {
      HTML — the page stopped being a document format when .md and
      .splitpage arrived (HANDOFF §3.1). The first Save after opening one
      behaves as Save As, defaulting to <slug>.md, and says why. */
-  var converting = !saveAs && S.docFileHandle.kind === "html";
+  var converting = !saveAs && home.kind === "file" && home.format === "html";
   if (converting) {
     saveAs = true;
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
@@ -146,11 +167,11 @@ export async function saveDoc(opts) {
      time it has none. Either way, a fresh pick becomes the file future
      plain Saves write to — once the write to it has succeeded
      (retargetTo/undoRetarget above). */
-  var targetHandle = saveAs ? null : S.docFileHandle.handle;
+  var targetHandle = saveAs || !fileHome() ? null : fileHome().handle;
   /* Which serializer runs is decided by the file, not by a preference —
      and for a fresh pick that cannot be known until the picker has come
      back with the name the user typed. */
-  var kind = saveAs ? "md" : (S.docFileHandle.kind || "md");
+  var kind = saveAs ? "md" : ((fileHome() && fileHome().format) || "md");
 
   /* Was this the same file we already had open, with a fresh-pick not
      needed? Then the on-disk-conflict check below applies — a brand new
@@ -203,7 +224,7 @@ export async function saveDoc(opts) {
        file we already had open, and not when opts.force says the user
        just chose "Overwrite it" in that modal. */
     if (reusingHandle && !opts.force) {
-      var check = await checkFileConflict(targetHandle, S.docFileHandle.lastModified);
+      var check = await checkFileConflict(targetHandle, home.lastModified);
       if (!check.ok) {
         /* Nobody asked for this write, so it does not get to throw a modal
            over the sentence being typed. Autosave stops until a manual
@@ -243,9 +264,9 @@ export async function saveDoc(opts) {
          If another document took over, the copy is still written — the
          user asked for it — but it stays just a file on disk. */
       var stillOurs = S.state.docId === docIdAtSave;
-      var homeAtWrite = S.docFileHandle.handle === targetHandle ? S.docFileHandle : null;
+      var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
       if (stillOurs) S.baseState = published;
-      if (retarget && S.docFileHandle === retarget) rememberLastFileHandle(targetHandle);
+      if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
       adoptSavedCopyDocId(forkDocId, docIdAtSave);
       var docIdAfterSave = S.state.docId;
       /* What this file now says the document is — the ancestor a later
@@ -255,7 +276,7 @@ export async function saveDoc(opts) {
       if (homeAtWrite && stillOurs) homeAtWrite.diskBase = published;
       try {
         var afterFile = await targetHandle.getFile();
-        if (homeAtWrite && S.docFileHandle === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
+        if (homeAtWrite && home === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
       } catch (e) { /* not fatal — the write already succeeded */ }
       if (stillOurs && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
       /* An automatic save says so through the indicator, not a toast (see
@@ -463,10 +484,11 @@ export function autoSaveTarget() {
      indicator and the unload guard cover the user in the meantime; once a
      file handle exists (from a manual Save, or from opening a project),
      later edits save into it silently. */
-  if (!S.docFileHandle.handle) return null;
+  var file = fileHome();
+  if (!file || !file.handle) return null;
   /* A legacy .html project's next save opens a picker (see saveDoc) —
      exactly the ambush this gate exists to prevent. */
-  if (S.docFileHandle.kind === "html") return null;
+  if (file.format === "html") return null;
   return "file";
 }
 

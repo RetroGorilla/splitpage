@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
 import { showToast } from "./12-dirty-toast.js";
@@ -370,9 +371,9 @@ async function submitOnboardJoin() {
      - the pristine-seed gate passes (invariant #30);
      - the key has never been written (Skip and Finish both write it);
      - this load has not opened, and is not about to reopen, any project:
-       a hosted document (serverDoc.id), a file already adopted this load
-       (docFileHandle.kind — set the moment openProjectFile()/
-       adoptProjectState() runs, in 18-local-files.js), or a remembered
+       a hosted document or a file already adopted this load (a "server" or
+       "file" home, _home.js — set the moment openServerDoc() or
+       adoptProjectState() runs), or a remembered
        file handle in IndexedDB that tryResumeLastProject() (21-events.js)
        is either about to reopen outright or about to offer to reopen via
        the resume banner. That last check is deliberately broad: a
@@ -393,8 +394,7 @@ async function onboardEligibleForAutoShow() {
      belt to that gate's braces, and is what covers it while the gate below
      is still the older last-file one. */
   if (S.DESKTOP && draftRestorePending) return false;
-  if (typeof S.serverDoc !== "undefined" && S.serverDoc && S.serverDoc.id) return false;
-  if (typeof S.docFileHandle !== "undefined" && S.docFileHandle && S.docFileHandle.kind) return false;
+  if (home.kind === "server" || home.kind === "file") return false;
   /* Desktop has no per-tab equivalent of "a remembered handle exists" to
      ask for any more (00-prelude.js's rememberLastFileHandle no longer
      writes anything desktop-side — the main process persists open
@@ -417,8 +417,7 @@ async function onboardEligibleForAutoShow() {
      flight (a file could have finished opening, or Skip/Finish could have
      already run from a very fast manual File ▸ Setup…). */
   if (readOnboardKey()) return false;
-  if (typeof S.serverDoc !== "undefined" && S.serverDoc && S.serverDoc.id) return false;
-  if (typeof S.docFileHandle !== "undefined" && S.docFileHandle && S.docFileHandle.kind) return false;
+  if (home.kind === "server" || home.kind === "file") return false;
   return true;
 }
 

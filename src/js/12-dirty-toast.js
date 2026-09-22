@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { home } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { onServerDoc, serverSessionExpired } from "./13-hosted.js";
 import {
@@ -80,11 +81,11 @@ export function markDirty() {
   /* Only moves two timers (14-export.js), so it is safe on the keystroke
      path; the save itself waits for a pause in the typing. */
   scheduleAutoSave();
-  if (S.openedFile.name) { S.openedFile.dirty = true; updateFileChip(); }
-  /* A hosted document has no openedFile.name (openServerDoc() sets it to
-     null on purpose — one Save button, one home for it), so the branch
-     above never ran for it. updateHeaderFileChip() derives its hosted
-     text from the live `dirty` flag, but nothing else called it at edit
+  if (home.kind === "import") { home.dirty = true; updateFileChip(); }
+  /* A hosted document is not an import (one Save button, one home for it,
+     _home.js), so the branch above never ran for it. updateHeaderFileChip()
+     derives its hosted text from the live `dirty` flag, but nothing else
+     called it at edit
      time — the chip kept showing its last "v5, everyone sees this" text
      after an edit, until an unrelated autosave or a manual Save
      eventually refreshed it, misleading a glance at the chip into
@@ -133,7 +134,9 @@ export function noteSaveStatus(detail) {
 function saveStatusView() {
   var target = typeof autoSaveTarget === "function" ? autoSaveTarget() : null;
   var where = target === "server" ? "the server"
-    : (S.docFileHandle.handle && S.docFileHandle.handle.name) || (S.openedFile && S.openedFile.name) || "";
+    : home.kind === "file" ? (home.handle && home.handle.name) || ""
+    : home.kind === "import" ? home.name || ""
+    : "";
 
   if (typeof onServerDoc === "function" && onServerDoc() && serverSessionExpired) {
     return { text: "Not saving", cls: "warn",
@@ -148,7 +151,7 @@ function saveStatusView() {
     /* A document nobody has saved or changed yet — the seed, or a blank
        start — has nothing to report, and "Saved" over a file that does not
        exist would be a lie. */
-    if (!target && !S.docFileHandle.kind && !where) return null;
+    if (!target && home.kind !== "file" && !where) return null;
     return { text: "Saved", cls: "ok",
              title: lastSaveDetail || (where ? "Saved to " + where + "." : "Everything is saved.") };
   }
