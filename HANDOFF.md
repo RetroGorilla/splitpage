@@ -255,12 +255,17 @@ is how the writer inherits tagging/Tab/Ctrl+B/sanitising for free (§3.9).
 
 ### 3.6 The merge was dormant for months — now it runs
 
-`saveToServer()`: PUT with `baseRev`; 200 stores the new rev and
-`baseState = published`; 409 three-way-merges `(baseState, state, theirs)`
-and retries (3 rounds max). **`baseState` must be exactly what the server
-last confirmed** — any new save path sets it to what it successfully sent,
-nothing else. `reportMerge(result, {alreadySaved:true})` avoids re-queuing
-an autosave for a mid-save merge. `stashLocalWork()` runs on the
+`saveToServer()`: PUT with `baseRev` — **the document's rev, never
+`state.rev`** — 200 stores the new rev and `baseState = published`; 409
+three-way-merges `(baseState, state, theirs)` and retries (3 rounds max).
+**`baseState` must be exactly what the server last confirmed** — any new
+save path sets it to what it successfully sent, nothing else. Since #72 the
+merge paths do not write it themselves: `applyMerge()` (03-sync.js) is the
+one orchestration — snapshot, undo point, `baseState`, autosave, chips,
+toast — and the only writer of `baseState` on a merge. The sites that still
+assign it directly are all "adopt what the other side just confirmed" after
+a successful write or open. `reportMerge(result, {alreadySaved:true})`
+avoids re-queuing an autosave for a mid-save merge. `stashLocalWork()` runs on the
 lapsed-session path so unsaved edits survive; `applyStashedWork()` skips a
 stash when `splitpage-server-resume` is present.
 
@@ -562,7 +567,8 @@ indicator should give the two their own names first.
   "title": "string ≤300 chars",
   "schema": 2,                  // SCHEMA_VERSION — docId did NOT bump it (#35)
   "docId": "d0123…(32 hex)",    // /^d[0-9a-f]{32}$/, minted by migrateRows if missing
-  "rev": 0,                     // bumped per save; drives conflict detection
+  "rev": 0,                     // the in-document merge counter (max-plus-one);
+                                // conflict detection uses the server's own doc.rev
   "lastEditedBy": null, "lastEditedAt": null,
   "wordsPerMinute": 150,        // clamped 60–400
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",

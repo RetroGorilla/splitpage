@@ -1,30 +1,18 @@
 import { S } from "./_state.js";
 import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
-import { normalizeDocId, noteMergedDocId } from "./02b-doc-id.js";
-import {
-  ROW_FIELDS,
-  byId,
-  cloneState,
-  reportMerge,
-  rowContentEqual,
-  updateIdentityChip
-} from "./03-sync.js";
+import { normalizeDocId } from "./02b-doc-id.js";
+import { ROW_FIELDS, byId, cloneState, rowContentEqual } from "./03-sync.js";
 import { safeImageSrc } from "./04-richtext.js";
-import { pad2, render } from "./05-render.js";
+import { pad2 } from "./05-render.js";
 import {
   normalizeTagName,
   registryKey,
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
 import { applyStashedWork, htmlToPlainText } from "./14-export.js";
-import {
-  closeFileConflict,
-  parseProjectFileState,
-  updateFileChip
-} from "./18-local-files.js";
+import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 
 /* ================= merging a local file that changed on disk =================
 
@@ -420,33 +408,37 @@ export function confirmFileMerge() {
 
   var diskCopy = cloneState(cand.theirs);
   var prevDocId = S.state.docId;
-  /* applyStashedWork (14-export.js) is the shared merge entry point: it
-     files the "Before merging your unsaved changes" snapshot, arms Undo
-     merge and runs mergeStates — the same three steps the boot-stash and
-     crash-draft paths take. */
-  var applied = applyStashedWork(migrateRows(cloneState(cand.theirs)), {
-    base: cand.base, mine: cloneState(S.state)
-  });
-  S.state = applied.state;
   /* What is on disk is this document's ancestor from here on, and the next
      Save has to write the merged version over exactly the bytes we just
      read — so the conflict guard's baseline moves with it, or the very
-     next Save would raise this same modal again. */
+     next Save would raise this same modal again. Set before the merge and
+     not after it: the two fields are one fact about the bytes that were
+     read, and the merge below is what puts the merged version on screen. */
   if (cand.home) {
     cand.home.diskBase = diskCopy;
     if (cand.lastModified) cand.home.lastModified = cand.lastModified;
   }
-  S.baseState = cloneState(diskCopy);
-  render();
-  updateIdentityChip();
-  updateFileChip();
-  /* if the disk copy's id won the merge, the history written under ours
-     follows the document to it */
-  noteMergedDocId(prevDocId);
-  if (applied.report) reportMerge(applied.report, { noAutoSave: true });
-  else markDirty();
-  showToast("Merged " + (cand.fileName || "the file on disk") + " into what you have open. " +
-    "Nothing has been saved yet — press Save when you have looked it over.", "warn", true);
+  /* applyStashedWork (14-export.js) is the shared merge entry point: it
+     files the "Before merging your unsaved changes" snapshot, arms Undo
+     merge and runs mergeStates — the same steps the boot-stash and
+     crash-draft paths take. The third argument is what applyMerge
+     (03-sync.js) does with the result: adopt it, move the history if the
+     disk copy's id won the merge, make what is on disk the new base,
+     redraw and say so. One call, no second copy of the sequence (#72). */
+  applyStashedWork(migrateRows(cloneState(cand.theirs)), {
+    base: cand.base, mine: cloneState(S.state)
+  }, {
+    newBase: cloneState(diskCopy),
+    historyFrom: prevDocId,
+    chips: true,
+    noAutoSave: true,
+    toast: {
+      text: "Merged " + (cand.fileName || "the file on disk") + " into what you have open. " +
+        "Nothing has been saved yet — press Save when you have looked it over.",
+      tone: "warn",
+      sticky: true
+    }
+  });
   mergeCandidate = null;
 }
 

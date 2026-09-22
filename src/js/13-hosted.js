@@ -4,10 +4,10 @@ import {
   copyDocHistorySafe,
   migrateDocument,
   mintDocId,
-  normalizeDocId,
-  noteMergedDocId
+  normalizeDocId
 } from "./02b-doc-id.js";
 import {
+  applyMerge,
   clearStash,
   cloneState,
   getEditorName,
@@ -410,16 +410,29 @@ async function resumeServerDoc() {
 
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) {
     if (typedDuringResume) {
-      var freshResult = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), theirs, false);
-      S.state = freshResult.merged;
-      S.baseState = cloneState(theirs);
-      render();
-      updateIdentityChip();
-      updateFileChip();
-      showToast("Signed back in — merged what you typed while " + (S.state.title || body.id) + " was reopening", "warn", true);
-      /* Same rule as the main merge below: a restore driven by a crash
-         draft (override) never publishes on its own. */
-      reportMerge(freshResult, override ? { noAutoSave: true } : undefined);
+      /* No undo point: nothing has been filed for a document that was on
+         screen for the length of a fetch, and there is no stash behind
+         this — only the keystrokes typed into the interim document, which
+         the merge keeps. Same rule as the main merge below for autosave:
+         a restore driven by a crash draft (override) never publishes on
+         its own. */
+      applyMerge({
+        base: stateAtStart,
+        mine: S.state,
+        theirs: theirs,
+        source: "server-resume",
+        newBase: cloneState(theirs),
+        chips: true,
+        noAutoSave: !!override,
+        toast: {
+          text: function () {
+            return "Signed back in — merged what you typed while " +
+              (S.state.title || body.id) + " was reopening";
+          },
+          tone: "warn",
+          sticky: true
+        }
+      });
       if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
       return true;
     }
@@ -446,56 +459,53 @@ async function resumeServerDoc() {
     mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine, false).merged;
   }
   /* TWO snapshots, and they hold different things — filing only one of
-     them was the bug. This first one captures `theirs`, the version that
-     was live a moment before the merge: it is the UNDO POINT, not the
-     recovered work. The lapsed-sign-in path does not file one (the reload
-     it came from is seconds old and the stash is still in sessionStorage);
-     a draft can be days old. Captured synchronously, like every other
-     pushSnapshot caller (invariant #39). */
-  /* The ticket is KEPT: reportMerge below unhides #merge-banner, whose
-     "Undo merge" button reads lastMergeUndo — and nothing on this path
-     assigns it (the file path gets it from applyStashedWork, which this
-     merge does not go through), so the button answered "No merge snapshot
-     to undo." with the snapshot it needed sitting one line above. */
-  var undoSnap = override ? pushSnapshot("Before merging your recovered changes", theirs) : null;
-  /* And the recovered version itself, so the draft is a version in the
-     history rather than something that existed only inside this function —
-     the same pair restoreFileDraft files (20g-drafts.js). Without it the
+     them was the bug. `undoPoint` captures `theirs`, the version that was
+     live a moment before the merge: it is the UNDO POINT, not the
+     recovered work, and applyMerge arms "Undo merge" at it, which nothing
+     on this path used to do — reportMerge unhides #merge-banner, whose
+     button reads lastMergeUndo, so it answered "No merge snapshot to
+     undo." with the snapshot it needed already filed. `keepLabel` is the
+     recovered version itself, so the draft is a version in the history
+     rather than something that existed only inside this function — the
+     same pair restoreFileDraft files (20g-drafts.js). Without it the
      pre-merge recovered document is nowhere: the draft on disk goes with
-     the first clean save after this. */
-  if (override) pushSnapshot("Your unsaved changes, recovered", mine);
-  var result = mergeStates(
-    stash.base ? migrateRows(cloneState(stash.base)) : null,
-    mine,
-    theirs,
-    !!stash.imagesStripped
-  );
-  S.state = result.merged;
-  /* if theirs won the id, the history written under mine follows it */
-  noteMergedDocId(mine.docId);
-  /* state.docId, not undoSnap.docId: noteMergedDocId may have just moved
-     this document's history to the merged id, and undoMerge compares what
-     it holds against state.docId before restoring. */
-  if (undoSnap) S.lastMergeUndo = { id: undoSnap.id, docId: S.state.docId };
-  S.baseState = cloneState(theirs);
-  render();
-  updateIdentityChip();
-  updateFileChip();
-  showToast(override
-    ? "Reopened " + (S.state.title || body.id) + " — the changes recovered from the last session were merged back in"
-    : "Signed back in — your unsaved edits were merged back in", "ok");
-  /* The lapsed-sign-in path (no override) keeps queueing the save: that
-     reload is seconds old, the user is sitting in front of it, and the
-     merged version is theirs. A CRASH-DRAFT restore is the opposite — it
-     runs at launch with nobody having touched anything — so it must not
-     publish a merge the user has not seen yet: the PUT would bump the rev
-     for every other viewer, commit conflict comments nobody has read, and
-     then clear dirty, which discards the crash draft that held the
-     pre-merge version. Splitpage never writes the user's document on its
-     own (invariant #41 / overrides §1); the file path has said so since
-     step K (restoreFileDraft's reportMerge(…, {noAutoSave:true})). The
-     user's next Save publishes it. */
-  reportMerge(result, override ? { noAutoSave: true } : undefined);
+     the first clean save after this.
+
+     The lapsed-sign-in path files neither: the reload it came from is
+     seconds old and the stash is still in sessionStorage. A draft can be
+     days old.
+
+     That path also keeps queueing the save — the user is sitting in front
+     of a seconds-old reload and the merged version is theirs. A CRASH-DRAFT
+     restore is the opposite: it runs at launch with nobody having touched
+     anything, so it must not publish a merge the user has not seen yet.
+     The PUT would bump the rev for every other viewer, commit conflict
+     comments nobody has read, and then clear dirty, which discards the
+     crash draft that held the pre-merge version. Splitpage never writes
+     the user's document on its own (invariant #41 / overrides §1); the
+     file path has said so since step K. The user's next Save publishes it. */
+  applyMerge({
+    base: stash.base || null,
+    mine: mine,
+    theirs: theirs,
+    imagesStripped: !!stash.imagesStripped,
+    source: "server-resume",
+    undoPoint: override ? theirs : null,
+    keepLabel: override ? "Your unsaved changes, recovered" : null,
+    /* if theirs won the id, the history written under mine follows it */
+    historyFrom: mine.docId,
+    newBase: cloneState(theirs),
+    chips: true,
+    noAutoSave: !!override,
+    toast: {
+      text: function () {
+        return override
+          ? "Reopened " + (S.state.title || body.id) +
+            " — the changes recovered from the last session were merged back in"
+          : "Signed back in — your unsaved edits were merged back in";
+      }
+    }
+  });
   if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
   return true;
 }
@@ -985,7 +995,13 @@ export async function saveToServer() {
   while (attempts < 3) {
     attempts++;
     if (S.serverDoc.id !== docId) return false;
-    S.state.rev = (S.state.rev || 0) + 1;
+    /* `state.rev` is NOT touched here. The rev this save is judged by is
+       the DOCUMENT's, which the server keeps and hands back (serverDoc.rev
+       below, sent as baseRev); `state.rev` is only the merge counter
+       inside the document (max-plus-one, 02-state.js). Bumping it on the
+       way out and putting it back on every failure was a second, private
+       counter that drifted from the server's on every 409 and told nobody
+       anything (#72). */
     S.state.lastEditedBy = getEditorName();
     S.state.lastEditedAt = nowIso();
     var published = cloneState(S.state);
@@ -1010,7 +1026,6 @@ export async function saveToServer() {
       return true;
     } catch (err) {
       if (S.serverDoc.id !== docId) return false;
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
 
       if (err && err.code === "conflict" && err.payload && err.payload.state) {
         /* The id this view has been writing history under, before the merge
@@ -1025,17 +1040,36 @@ export async function saveToServer() {
           serverId: docId,
           fallbackId: S.state.docId
         });
-        pushSnapshot("Before merging in someone else's changes", cloneState(S.state));
-        mergeResult = mergeStates(
-          S.baseState ? migrateRows(cloneState(S.baseState)) : null,
-          migrateRows(cloneState(S.state)),
-          theirs
-        );
-        S.state = mergeResult.merged;
-        /* if theirs won the id, the history written under ours follows it */
-        noteMergedDocId(prevDocId);
+        /* The undo point here is MINE — mid-save, what is on screen is
+           what this call was trying to publish, so that is the version
+           the merge replaces.
+
+           armUndo:false is this path's one divergence from every other
+           merge, and it is deliberate only in the sense that it is what
+           the code has always done: the snapshot is filed and "Undo merge"
+           is never pointed at it, so the button reportMerge puts on screen
+           below answers "No merge snapshot to undo." Arming it is a change
+           to what a user can do after a save conflict, not a refactor, so
+           it is left for its own issue rather than smuggled in here.
+
+           report:false because the merged version is not on the server
+           yet: the loop retries, and the 200 branch above reports it with
+           {alreadySaved:true} — so the banner can never describe a merge
+           that failed to save. */
+        mergeResult = applyMerge({
+          base: S.baseState,
+          mine: S.state,
+          theirs: theirs,
+          source: "server-conflict",
+          undoPoint: cloneState(S.state),
+          armUndo: false,
+          /* if theirs won the id, the history written under ours follows it */
+          historyFrom: prevDocId,
+          report: false
+        }).result;
+        /* Their rev, from their answer — the baseRev the retry is judged
+           against. Nothing on the client invents one. */
         S.serverDoc.rev = err.payload.rev || S.serverDoc.rev;
-        render();
         continue; /* try again against their rev */
       }
 
