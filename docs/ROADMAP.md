@@ -137,17 +137,23 @@ suites passing before and after.
    doc-id claim rules. `drafts.js` is the pattern. Delete the desktop copy
    and the drift smoke test.
 3. **#77.** One IPC channel table and one validator shared by both preloads and main.
-4. **#78.** Decide tabs vs one `BrowserWindow` per document. Recommendation: one
-   window per document. It deletes about 1,400 lines of tab plumbing, the
-   close/quit state machine, and per-tab crash guards, and issue #11 falls
-   out of it for free. This needs Adam's sign-off because it changes daily
-   interaction.
+4. **#78, decided: keep tabs.** Both reviews recommended one window per
+   document; Adam chose to keep the tab strip as the daily interaction
+   model. #76 and #77 reduce its cost without changing its shape. #11 builds
+   on the tab machinery: one `home` record (#73) per tab in the desktop
+   `source` records.
 5. **#79.** Service worker: stamp the cache name from `VERSION` in `build.mjs`,
    network-first for `index.html`, never cache `?doc=` URLs or
    `update-status.json`.
 6. **#80.** Stop committing `index.html`. Build it in CI and on release. Needs the
    CI from phase 1 and a release script change.
-7. **#81.** Code-signing certificate when budget allows, then `electron-updater`.
+7. **#81, decided: no certificate.** Personal-use project, not worth paying
+   for. The SmartScreen warning stays and the hand-rolled updater stays, so
+   #64 is the updater's final state rather than a stopgap.
+8. **#8, #86.** Voice on desktop: a small helper drives the Windows built-in
+   recogniser behind the same interface Web Speech uses (#8), and the
+   teleprompter gets an "Open in browser" option so Follow My Voice runs in
+   Chrome on any platform (#86). No bundled model.
 
 ### Phase 5: the big ones, only after phases 1 to 3
 
@@ -163,26 +169,29 @@ suites passing before and after.
    `productionEntries()`. Makes issue #53 cheap.
 4. **#85.** Structured document model (rows of text runs with marks referencing the
    registry by id). Fixes comment anchors, tag rename cost, merge
-   granularity and the three undo systems at once. Plan it only once
-   modules, unit tests and keyed rendering exist. Not scheduled.
+   granularity and the three undo systems at once. Decided: write the
+   design after #66 and #67 land, build it last, after #82 to #84.
 
 ## Open issues
 
-- **#8 Follow My Voice on desktop.** Do not bundle a local model. Either
-  keep voice browser-only and say so in the desktop UI, or drive the OS
-  recogniser (`Windows.Media.SpeechRecognition`) through a small helper.
-  Needs Adam's decision. Labelled `phase:4`, `needs-decision`, `blocked`.
+- **#8 Follow My Voice on desktop.** Decided: Windows built-in recogniser
+  plus #86 "Open in browser". Unblocked, `phase:4`.
 - **#10 Google Drive via loopback OAuth.** Right shape. Labelled `phase:4`;
   build after #73.
-- **#11 Per-tab connections.** Labelled `phase:4`, `blocked` on #78.
+- **#11 Per-tab connections.** Unblocked by the tabs decision. `phase:4`,
+  after #73.
 - **#51, #52, #53 UI polish.** Low risk, do any time. #53 gets cheaper after
   #84.
 
-## Decisions needed from Adam
+## Decisions made (2026-09-22)
 
-1. Tabs vs one window per document (#78).
-2. Whether to keep voice browser-only or use the OS recogniser (#8).
-3. Budget for a code-signing certificate (#81).
+1. **Tabs stay** (#78, closed). Against both reviews' recommendation; the
+   tab strip is how Adam works. #11 is unblocked.
+2. **Voice on desktop** (#8): Windows built-in recogniser, plus #86 "Open in
+   browser" on the teleprompter. No bundled model.
+3. **No code-signing certificate** (#81, closed as not planned). Personal
+   use does not justify the cost.
+4. **Structured document model** (#85): design after phase 2, build last.
 
 ## What was not adopted
 
@@ -192,3 +201,8 @@ suites passing before and after.
   a smaller change that keeps hosted offline working.
 - CRDTs or OT for collaboration. Neither review suggests it and the
   rev-in-presence pull is enough for a handful of people on coarse rows.
+- One `BrowserWindow` per document (both reviews). Adam keeps tabs.
+- Bundling a local speech model (issue #8's original pitch). Both reviews
+  and Adam against it.
+- `electron-updater`. Without a certificate it adds a dependency for no
+  trust gain.
