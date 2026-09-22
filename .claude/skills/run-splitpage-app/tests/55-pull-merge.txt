@@ -24,7 +24,8 @@
 #     request at all;
 #   * NO HISTORY SNAPSHOT. A pull runs whenever anybody saves; one undo
 #     point per pull would fill the fifty-entry history in under two minutes
-#     and evict the versions the user actually wants;
+#     and evict the versions the user actually wants — and so the banner
+#     reports the merge without an "Undo merge" button (#97);
 #   * a rev that moved but brought nothing new is silent — no toast, no
 #     re-render, no dirty mark;
 #   * and nothing is pulled while a save is in flight, because the merge
@@ -97,6 +98,10 @@ expect window.__hostedTest.home().rev === 4
 # It said so, naming whoever saved, and the merge banner says what moved.
 expect Array.prototype.some.call(document.querySelectorAll('.toast'), function(t){ return t.textContent.indexOf('Merged in changes from Priya Malhotra') !== -1; })
 expect !document.getElementById('merge-banner').hidden
+# ...but offers no "Undo merge": this path files no undo point, and undoing
+# a pull would mean throwing away somebody else's saved work (#97). The
+# half where a 409 had already armed one is in 54-server-conflict.txt.
+expect document.getElementById('merge-undo').hidden
 
 # --- and it filed NO undo point ------------------------------------------
 # The single most expensive thing this could get wrong: a pull happens

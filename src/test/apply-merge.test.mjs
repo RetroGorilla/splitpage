@@ -18,7 +18,9 @@
  *     normalised here so a caller can hand over whatever it is holding;
  *   - `source` names the undo point's label — three merges, three
  *     sentences, and no caller writing one out;
- *   - "Undo merge" is armed at that undo point, and is CLEARED rather
+ *   - "Undo merge" is armed at that undo point — on every path, the
+ *     409's included since #97 removed `armUndo:false` — carrying the
+ *     `source` that says which version it holds, and is CLEARED rather
  *     than left pointing at an older merge when the history store refuses
  *     the write;
  *   - nothing on screen, and above all `baseState`, is touched.
@@ -29,7 +31,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, cloneState, mergeStates } from "../js/03-sync.js";
-import { __init as historyInit, listDocHistory } from "../js/03a-history-store.js";
+import { __init as historyInit, getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 
 /* The one thing here that is NOT free to import (#92): filing an undo
    point goes through the history store, and that store's one write chain
@@ -157,7 +159,7 @@ for (const [source, label] of [
       source: source, mergeOnly: true, undoPoint: cloneState(theirs)
     });
     assert.ok(out.snapshot, "a ticket, synchronously");
-    assert.deepEqual(S.lastMergeUndo, { id: out.snapshot.id, docId: id });
+    assert.deepEqual(S.lastMergeUndo, { id: out.snapshot.id, docId: id, source: source });
 
     await out.snapshot.done;
     const listed = await listDocHistory(id);
@@ -189,19 +191,34 @@ test("keepLabel files the recovered version alongside the undo point", async () 
   assert.equal(recovered.title, "recovered");
 });
 
-test("armUndo:false files the snapshot and leaves Undo merge where it was", () => {
+test("server-conflict arms Undo merge at MINE, the version being saved (#97)", async () => {
   reset();
   const id = freshId();
   const mine = mk(id);
   mine.rows[0].audioText = "mine";
+  const theirs = mk(id);
+  theirs.rows[1].audioText = "theirs";
 
+  /* saveToServer's 409 used to pass armUndo:false: the snapshot was filed
+     and the button never pointed at it. The option is gone; the undo point
+     is armed, and it is the pre-merge document, not the merged one. */
   const out = applyMerge({
-    base: mk(id), mine: mine, theirs: mk(id),
+    base: mk(id), mine: mine, theirs: theirs,
     source: "server-conflict", mergeOnly: true,
-    undoPoint: cloneState(mine), armUndo: false
+    undoPoint: cloneState(mine)
   });
   assert.ok(out.snapshot);
-  assert.deepEqual(S.lastMergeUndo, { id: "s-earlier", docId: "d-earlier" });
+  assert.deepEqual(S.lastMergeUndo, { id: out.snapshot.id, docId: id, source: "server-conflict" });
+  assert.equal(out.state.rows[1].audioText, "theirs", "the merge took theirs");
+
+  await out.snapshot.done;
+  const listed = await listDocHistory(id);
+  const filed = listed.entries.filter(function (e) { return e.id === out.snapshot.id; });
+  assert.equal(filed.length, 1);
+  const got = await getHistorySnapshot({ docId: id, id: out.snapshot.id });
+  const held = JSON.parse(got.stateJson);
+  assert.equal(held.rows[0].audioText, "mine", "the undo point holds mine");
+  assert.equal(held.rows[1].audioText, "a2", "and not the merged document");
 });
 
 test("an undo point the store refuses clears Undo merge rather than leaving it stale", () => {
