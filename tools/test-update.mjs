@@ -4,7 +4,8 @@
  *   node tools/test-update.mjs
  *
  * No external dependencies. Tests:
- *   - updateApiUrl() precedence: env > manifest > default
+ *   - updateApiUrl() precedence: env, then the built-in default — the
+ *     local manifest gets no say (#64)
  *   - apply() backup recovery: simulate a hard-kill mid-apply and verify
  *     the next run restores from backup first
  *
@@ -14,7 +15,7 @@
  * Exits non-zero on the first failure.
  */
 
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { copyFileSync, cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
@@ -51,7 +52,6 @@ eq("default URL (no override, no manifest)", updateApiUrl(), DEFAULT_API);
 process.env.SPLITPAGE_UPDATE_API = "https://custom.api/releases/latest";
 eq("env override wins", updateApiUrl(), "https://custom.api/releases/latest");
 
-/* Test 3: manifest.updateApi is used when env is not set */
 delete process.env.SPLITPAGE_UPDATE_API;
 check("updateApiUrl() is exported and callable", typeof updateApiUrl === "function", null);
 
@@ -150,34 +150,23 @@ check("sentinel file exists before recovery", existsSync(sentinel), null);
 /* Clean up temp directory */
 rmSync(tempAppRoot, { recursive: true, force: true });
 
-/* ---------- test that updateApiUrl() reads manifest.updateApi ---------- */
+/* ---------- where the next update is looked for (#64) ----------
 
-console.log("\nupdateApiUrl() manifest reading:\n");
+   The manifest beside update.mjs arrived with the last release this copy
+   downloaded, so letting it name the update API meant one bad release could
+   redirect every future check, permanently. It is ignored now: the env var,
+   then the hard-coded default, and nothing in between.
 
-/* Create a test app with a .splitpage-release.json that has updateApi */
+   This drives the REAL update.mjs, copied into a temp root with a hostile
+   manifest beside it — the old version of this test re-implemented the
+   function in a string and then asserted against its own copy, which could
+   not have caught the change either way. */
+
+console.log("\nupdateApiUrl() ignores the manifest:\n");
+
 const testAppRoot = mkdtempSync(join(tmpdir(), "splitpage-manifest-test-"));
-writeFileSync(join(testAppRoot, "update.mjs"), `
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const ROOT = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
-
-function localManifest() {
-  try { return JSON.parse(readFileSync(join(ROOT, ".splitpage-release.json"), "utf8")); } catch { return null; }
-}
-
-export function updateApiUrl() {
-  if (process.env.SPLITPAGE_UPDATE_API) return process.env.SPLITPAGE_UPDATE_API;
-  const manifest = localManifest();
-  if (manifest?.updateApi && typeof manifest.updateApi === "string" && manifest.updateApi.startsWith("https://")) {
-    return manifest.updateApi;
-  }
-  return DEFAULT_API;
-}
-`);
-
+copyFileSync(new URL("../update.mjs", import.meta.url), join(testAppRoot, "update.mjs"));
+writeFileSync(join(testAppRoot, "VERSION"), "1.0.0\n");
 writeFileSync(join(testAppRoot, ".splitpage-release.json"), JSON.stringify({
   name: "Splitpage",
   version: "1.0.0",
@@ -187,7 +176,13 @@ writeFileSync(join(testAppRoot, ".splitpage-release.json"), JSON.stringify({
 
 const { updateApiUrl: testUpdateApiUrl } = await import(pathToFileURL(join(testAppRoot, "update.mjs")).href);
 delete process.env.SPLITPAGE_UPDATE_API;
-eq("manifest updateApi is used when env not set", testUpdateApiUrl(), MIRROR_API);
+check("a manifest naming another update API is ignored", testUpdateApiUrl() !== MIRROR_API,
+  "got " + testUpdateApiUrl());
+check("...and the built-in default is used instead",
+  testUpdateApiUrl().startsWith("https://api.github.com/repos/"), "got " + testUpdateApiUrl());
+process.env.SPLITPAGE_UPDATE_API = MIRROR_API;
+eq("...while the env var still overrides it", testUpdateApiUrl(), MIRROR_API);
+delete process.env.SPLITPAGE_UPDATE_API;
 
 rmSync(testAppRoot, { recursive: true, force: true });
 

@@ -1325,11 +1325,19 @@ async function handleStatic(req, res, url) {
   const cache = (ext === ".html" || rel === "/sw.js")
     ? "no-cache"
     : "public, max-age=3600";
-  res.writeHead(200, {
+  const headers = {
     "Content-Type": MIME[ext] || "application/octet-stream",
     "Content-Length": stat.size,
     "Cache-Control": cache
-  });
+  };
+  /* index.html carries its own Content-Security-Policy in a <meta>, written
+     by build.mjs (#65). frame-ancestors is the one directive a meta policy
+     cannot express — browsers ignore it there — so it is sent as a header
+     here, where it works: a hosted document is an editor, and an editor
+     nobody else may frame is one nobody can click-jack. The rest of the
+     policy stays in the page, so the two cannot drift. */
+  if (ext === ".html") headers["Content-Security-Policy"] = "frame-ancestors 'self'";
+  res.writeHead(200, headers);
   if (req.method === "HEAD") { res.end(); return; }
   /* Headers are already written above, so an error here can't be turned into
      a clean 4xx/5xx — the best this can do is stop that one response instead
