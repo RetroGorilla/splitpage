@@ -1423,11 +1423,15 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
       record(tag + ": Save As file parses as a .splitpage document", !!parsed && Array.isArray(parsed.rows), parsed ? "" : "parse failed");
     }
 
-    const toastsBefore = await evalPage(cdp, "document.querySelectorAll('.toast').length");
+    /* Error and warning toasts only: the answered Save As just above shows an
+       "ok" toast of its own, and on a loaded machine it can land after this
+       count is taken — which once failed this check with nothing wrong. */
+    const problemToasts = "document.querySelectorAll('.toast.error, .toast.warn').length";
+    const toastsBefore = await evalPage(cdp, problemToasts);
     const seenBeforeSaveAs = await dialogsSeen(cdp);
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     await waitForDialogAnswered(cdp, seenBeforeSaveAs); // the cancelled dialog has been consumed
-    const toastsAfter = await evalPage(cdp, "document.querySelectorAll('.toast').length");
+    const toastsAfter = await evalPage(cdp, problemToasts);
     record(tag + ": cancelled Save As shows no error toast", toastsAfter === toastsBefore, `before=${toastsBefore} after=${toastsAfter}`);
 
     // --- case 6: export via test dialogs ---
@@ -3294,10 +3298,20 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     const appRestored = await launchApp(target, { label: "dup-doc-id-restore", userDataDir });
     try {
       await waitForRows(appRestored.cdp, 20000);
-      const listing = await shell(appRestored.cdp, "listTargets", {});
-      const w = listing.windows[0];
-      const restoredA = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(aPath).toLowerCase());
-      const restoredB = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(bPath).toLowerCase());
+      /* Polled, not read once: waitForRows is satisfied by whichever tab
+         boots first, and a restored tab reports its path only once its file
+         has been routed to it — a single read on a loaded machine once
+         caught B's tab still blank. A restore that really lost B never
+         lists it, so the poll still fails on the behaviour it is for. */
+      const sameFile = (t, p) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(p).toLowerCase();
+      let w = null, restoredA = null, restoredB = null;
+      await pollNode(async () => {
+        const listing = await shell(appRestored.cdp, "listTargets", {});
+        w = listing.windows[0];
+        restoredA = w && w.tabs.find((t) => sameFile(t, aPath));
+        restoredB = w && w.tabs.find((t) => sameFile(t, bPath));
+        return !!(restoredA && restoredB);
+      }, 15000).catch(() => null);
       record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB, JSON.stringify(w));
       if (restoredA && restoredB) {
         const cdpRA = await connectTab(appRestored, restoredA.tabId);
