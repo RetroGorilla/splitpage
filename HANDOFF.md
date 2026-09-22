@@ -1071,7 +1071,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 
 ## 6. Map of the source
 
-`src/js/` (41 modules; filenames say where things live, and still set
+`src/js/` (42 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
@@ -1082,7 +1082,8 @@ evaluation order via `_entry.js`):
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
-| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId`, `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
+| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
+| `02c-blobs.js` | image blob registry (#82; not wired in yet): `intern`/`internDataUrl` (sync hash, sniff, measure), `urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`, IndexedDB `splitpage-blobs` + memory backends; record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
 | `04-richtext.js` | `walkSanitize`, html→markdown, video link cards |
