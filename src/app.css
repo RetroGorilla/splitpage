@@ -2293,8 +2293,17 @@
     /* one element overflowing sideways makes a phone browser widen the whole
        layout viewport, shrinking every line of text — the guard keeps a
        single mistake from degrading every page. The real offenders are
-       still fixed individually where found. */
-    html, body { overflow-x: hidden; }
+       still fixed individually where found.
+
+       `html` only, never `body` too: giving BOTH the root element and its
+       child a non-visible overflow-x breaks .topbar's `position: sticky`
+       (issue confirmed live — scrolling past ~600px left the header's
+       un-stuck static position at rect.top ~= -600 instead of pinned to 0,
+       taking Production/Gear/Comments/Write/Save off-screen with it, on a
+       device that never sees a mouse to scroll back up with). One overflow
+       root is enough to stop the sideways widening; two of them is what
+       confuses Chromium's sticky containing-block resolution. */
+    html { overflow-x: hidden; }
     #root { padding: 12px 12px 70px; }
 
     /* header: title full-width, chips in a row, toolbar as a flex row of
