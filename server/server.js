@@ -812,295 +812,24 @@ async function presenceRev(docId) {
   }
 }
 
-/* ---------- what a review session may write ----------
- *
- * Enforcement here is a COMPARISON, not a list of permitted operations: the
- * client sends whole documents, so the only honest question is whether the
- * document it sent differs from the stored one in ways that nothing but
- * posting a comment could have produced. Three kinds of difference are:
- *
- *   1. comments added, and replies appended to comments that were already
- *      there. Nothing that was already stored may change — not a body, not
- *      `resolved`, not an existing reply. "Authored in this request" is
- *      enforced structurally, by only ever allowing additions, rather than
- *      by trusting `author`, which is a name somebody typed into a box and
- *      not an identity this server could check.
- *   2. the `.cmt-anchor` span a new comment wraps around the words it is
- *      about. That is a genuine edit to a row's HTML — the anchor lives in
- *      the text — so a scene's visual/audio field may differ, but only by
- *      the wrapping of one of THIS request's new comment ids, and only in a
- *      way that leaves every character, tag, link, image and line break
- *      exactly where it was.
- *   3. `rev`/`lastEditedBy`/`lastEditedAt`, and `updatedAt`/`updatedBy` on a
- *      scene that gained an anchor: bookkeeping, not content.
- *
- * Everything else — title, scene text, order, status, images, the production
- * registry, people, reading speed — must arrive exactly as it is stored, or
- * the write is refused with 403 review-only and nothing is written.
- */
-
-function deepEqual(a, b) {
-  if (a === b) return true;
-  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
-  if (Array.isArray(a)) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
-    return true;
-  }
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  for (const key of keys) {
-    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-    if (!deepEqual(a[key], b[key])) return false;
-  }
-  return true;
-}
-
-function unionKeys(a, b) {
-  const out = new Set(Object.keys(a || {}));
-  for (const key of Object.keys(b || {})) out.add(key);
-  return out;
-}
-
-function refuse(reason) { return { ok: false, reason }; }
-
-/* A stored document and a client's normalised copy of it can differ by
-   absence alone. migrateRows() on the client fills every field in, so a
-   document last saved before `brollShots` existed has no such key while the
-   reviewer's copy sends `brollShots: []` — and deepEqual(undefined, []) is
-   false, so every comment on such a document came back 403 review-only
-   (#62). The same happens for any field added later, and for row keys like
-   `updatedBy: null` against a row that simply has no `updatedBy`.
-
-   Missing, null, "" and an empty array or object all say the same thing
-   here: nothing is recorded. Compare them as equal. Anything with content
-   on either side still goes through deepEqual unchanged, so this loosens
-   what "unchanged" means and never what a reviewer may change. */
-function isBlankValue(v) {
-  if (v === undefined || v === null || v === "") return true;
-  if (Array.isArray(v)) return v.length === 0;
-  if (typeof v === "object") return Object.keys(v).length === 0;
-  return false;
-}
-
-function sameOrBothBlank(a, b) {
-  if (isBlankValue(a) && isBlankValue(b)) return true;
-  return deepEqual(a, b);
-}
-
-/* Attributes as a set rather than as written, so two serialisations of the
-   same element compare equal whatever order or spacing they came out in. */
-function normalizeAttrs(attrs) {
-  const pairs = [];
-  const re = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g;
-  let m;
-  while ((m = re.exec(String(attrs || "")))) {
-    const value = m[2] === undefined ? "" : m[2].replace(/^["']|["']$/g, "");
-    pairs.push(m[1].toLowerCase() + "=" + value);
-  }
-  pairs.sort();
-  return pairs.join(" ");
-}
-
-const VOID_TAGS = new Set(["br", "img", "hr", "input", "wbr", "source", "track", "col", "area", "base", "embed", "link", "meta"]);
-
-/* Quote-aware, because a ">" inside an attribute value is serialised as
-   itself and would otherwise end the tag early. */
-function htmlTokens(html) {
-  const s = String(html == null ? "" : html);
-  const tokens = [];
-  let i = 0;
-  while (i < s.length) {
-    const lt = s.indexOf("<", i);
-    if (lt === -1) { tokens.push({ kind: "text", text: s.slice(i) }); break; }
-    if (lt > i) tokens.push({ kind: "text", text: s.slice(i, lt) });
-    let j = lt + 1;
-    let quote = "";
-    while (j < s.length) {
-      const ch = s[j];
-      if (quote) { if (ch === quote) quote = ""; }
-      else if (ch === '"' || ch === "'") quote = ch;
-      else if (ch === ">") break;
-      j++;
-    }
-    if (j >= s.length) { tokens.push({ kind: "text", text: s.slice(lt) }); break; }
-    const raw = s.slice(lt + 1, j);
-    i = j + 1;
-    if (raw.charAt(0) === "!" || raw.charAt(0) === "?") continue; /* a comment or a doctype is not content */
-    const close = raw.charAt(0) === "/";
-    const body = close ? raw.slice(1) : raw;
-    const name = (body.match(/^[a-zA-Z0-9-]+/) || [""])[0].toLowerCase();
-    if (!name) continue;
-    tokens.push({
-      kind: close ? "close" : "open",
-      name,
-      attrs: body.slice(name.length).replace(/\/\s*$/, "").trim(),
-      selfClosing: /\/\s*$/.test(body)
-    });
-  }
-  return tokens;
-}
-
-function attrValue(attrs, name) {
-  const re = new RegExp(name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s]+))", "i");
-  const m = re.exec(String(attrs || ""));
-  return m ? String(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : "";
-}
-
-/* The comment id of a `<span class="cmt-anchor" data-cmt="…">`, or "" for
-   any other element. */
-function anchorIdOf(attrs) {
-  if (attrValue(attrs, "class").split(/\s+/).indexOf("cmt-anchor") === -1) return "";
-  return attrValue(attrs, "data-cmt");
-}
-
-/* A field as the sequence of its text runs, each labelled with the inline
-   elements wrapped around it, plus <br>/<img> in place (sanitizeHtml never
-   lets a div or a p through — they come back as <br> — so there is no block
-   structure left to preserve). `dropIds` unwraps the comment anchors this
-   request is adding, which is what makes "the same words, now with a comment
-   on some of them" compare equal to what is stored.
- *
- * Deliberately blind to exactly one thing: WHERE an inline element starts and
- * stops, when the text and the labels either side are identical. Wrapping a
- * selection that crosses a <strong> boundary splits that element in two, and
- * unwrapping the anchor again cannot glue it back together — so
- * `<strong>hel</strong><strong>lo</strong>` has to compare equal to
- * `<strong>hello</strong>`. The two render the same and say the same. */
-function fieldSignature(html, dropIds) {
-  const path = [];       /* [{ name, sig, dropped }] */
-  const out = [];
-  const label = () => path.filter((p) => !p.dropped).map((p) => p.sig).join("");
-  for (const tk of htmlTokens(html)) {
-    if (tk.kind === "text") {
-      if (!tk.text) continue;
-      const key = label();
-      const last = out[out.length - 1];
-      if (last && last.kind === "text" && last.key === key) last.text += tk.text;
-      else out.push({ kind: "text", key, text: tk.text });
-      continue;
-    }
-    const sig = tk.name + (tk.attrs ? " " + normalizeAttrs(tk.attrs) : "");
-    if (tk.kind === "open") {
-      if (VOID_TAGS.has(tk.name) || tk.selfClosing) { out.push({ kind: "void", key: label(), sig }); continue; }
-      const dropped = tk.name === "span" && !!dropIds && dropIds.has(anchorIdOf(tk.attrs));
-      path.push({ name: tk.name, sig, dropped });
-      continue;
-    }
-    if (VOID_TAGS.has(tk.name)) continue;
-    for (let n = path.length - 1; n >= 0; n--) {
-      if (path[n].name === tk.name) { path.length = n; break; }
-    }
-  }
-  return out
-    .filter((item) => item.kind === "void" || item.text.length)
-    .map((item) => item.kind + "" + item.key + "" + (item.kind === "void" ? item.sig : item.text))
-    .join("");
-}
-
-function reviewComments(storedList, incomingList) {
-  const stored = Array.isArray(storedList) ? storedList : [];
-  const incoming = Array.isArray(incomingList) ? incomingList : [];
-  const byId = new Map();
-  for (const c of incoming) {
-    if (!c || typeof c !== "object") return refuse("a comment is not an object");
-    const id = String(c.id == null ? "" : c.id);
-    if (!id || byId.has(id)) return refuse("every comment needs an id of its own");
-    byId.set(id, c);
-  }
-  for (const was of stored) {
-    const id = String(was && was.id != null ? was.id : "");
-    const now = byId.get(id);
-    if (!now) return refuse("a comment that was already there may not be removed");
-    byId.delete(id); /* what is left over at the end is what this request added */
-    const wasReplies = Array.isArray(was.replies) ? was.replies : [];
-    const nowReplies = Array.isArray(now.replies) ? now.replies : [];
-    if (nowReplies.length < wasReplies.length) return refuse("a reply may not be removed");
-    for (let i = 0; i < wasReplies.length; i++) {
-      if (!deepEqual(wasReplies[i], nowReplies[i])) return refuse("a reply that was already there may not be changed");
-    }
-    const replied = nowReplies.length > wasReplies.length;
-    for (const key of unionKeys(was, now)) {
-      if (key === "replies") continue;
-      /* a thread's own timestamp moves when it is replied to, and only then */
-      if (key === "updatedAt" && replied) continue;
-      if (!sameOrBothBlank(was[key], now[key])) {
-        return refuse("a comment that was already there may not be changed (" + key + ")");
-      }
-    }
-  }
-  return { ok: true, addedIds: new Set(byId.keys()) };
-}
-
-function reviewRows(storedRows, incomingRows, addedIds) {
-  const stored = Array.isArray(storedRows) ? storedRows : [];
-  const incoming = Array.isArray(incomingRows) ? incomingRows : [];
-  if (stored.length !== incoming.length) return refuse("scenes may not be added or removed");
-  for (let i = 0; i < stored.length; i++) {
-    const was = stored[i];
-    const now = incoming[i];
-    if (!was || !now || typeof was !== "object" || typeof now !== "object") return refuse("a scene is not an object");
-    let anchored = false;
-    for (const key of unionKeys(was, now)) {
-      if (sameOrBothBlank(was[key], now[key])) continue;
-      if (key === "visualText" || key === "audioText") {
-        if (fieldSignature(was[key], null) !== fieldSignature(now[key], addedIds)) {
-          return refuse("the script may not be changed");
-        }
-        anchored = true;
-        continue;
-      }
-      if (key === "updatedAt" || key === "updatedBy") continue; /* judged below */
-      return refuse("a scene's " + key + " may not be changed");
-    }
-    /* Posting a comment stamps the scene it is on. Nothing else may. */
-    if (!anchored && (!sameOrBothBlank(was.updatedAt, now.updatedAt) ||
-                      !sameOrBothBlank(was.updatedBy, now.updatedBy))) {
-      return refuse("a scene may not be restamped without a comment landing on it");
-    }
-  }
-  return { ok: true };
-}
-
-/* rev/lastEditedBy/lastEditedAt are this document's save bookkeeping, and a
-   comment IS a save — a reviewer's name in lastEditedBy is true, not a
-   forged edit. */
-const REVIEW_BOOKKEEPING = new Set(["rev", "lastEditedBy", "lastEditedAt", "comments", "rows"]);
-
-function reviewWriteAllowed(stored, incoming) {
-  if (!stored || typeof stored !== "object") return refuse("there is nothing stored to compare against");
-  if (!incoming || typeof incoming !== "object") return refuse("bad state");
-  const comments = reviewComments(stored.comments, incoming.comments);
-  if (!comments.ok) return comments;
-  const rows = reviewRows(stored.rows, incoming.rows, comments.addedIds);
-  if (!rows.ok) return rows;
-  for (const key of unionKeys(stored, incoming)) {
-    if (REVIEW_BOOKKEEPING.has(key)) continue;
-    if (!sameOrBothBlank(stored[key], incoming[key])) return refuse(key + " may not be changed");
-  }
-  return { ok: true };
-}
-
 /* ---------- a comment, without the document around it (#71) ----------
  *
- * Everything above this line judges a reviewer's write by COMPARING two
- * whole documents, because a whole document is what the review client sends.
- * That is an expensive way to post four words: the reviewer downloads the
- * script, edits their copy of it, uploads all of it back, and the server
- * re-reads the stored one to prove that nothing but a comment moved. It also
- * fails in ways nobody can explain from the outside — #62 was a reviewer
- * seeing "review-only" because their copy carried `brollShots: []` and the
- * stored one, saved before that field existed, carried no such key.
+ * This is the ONLY way a review token writes anything. It used to be a
+ * whole-document PUT that the server accepted only if it could prove, by
+ * comparing the upload against the stored script key by key (with a
+ * hand-rolled HTML tokenizer for the scene text), that nothing but a comment
+ * had moved. That was an expensive way to post four words, and it failed in
+ * ways nobody could explain from the outside — #62 was a reviewer seeing
+ * "review-only" because their copy carried `brollShots: []` and the stored
+ * one, saved before that field existed, carried no such key. It would have
+ * broken again with every field the state ever gained.
  *
  * So: a route that takes the comment and nothing else. The reviewer never
- * holds the state to send it, the server never diffs anything, and the two
- * facts that made the comparison necessary — that a comment may only be
- * ADDED, and that nothing else in the document may move — stop being
- * assertions to prove and become the only operations this code can perform.
- *
- * The PUT path stays exactly as it was. The review client migrates to this
- * one in the browser lane, and until it has, both are live.
+ * sends the state, the server never diffs a document, and the two facts the
+ * comparison existed to prove — that a comment may only be ADDED, and that
+ * nothing else in the document may move — are no longer assertions to
+ * check but the only operations this code can perform. A review PUT is now
+ * refused outright, before its body is read (#71).
  *
  * Three things this route is careful about:
  *
@@ -1224,10 +953,133 @@ function cleanReply(input, now, fallbackAuthor) {
  *
  * The request carries that ONE field's new HTML — a scene, not a script — and
  * it is accepted only if unwrapping this comment's own anchor out of it gives
- * back exactly what is stored, character for character, tag for tag. That is
- * rule 2 of reviewWriteAllowed() applied to one field instead of to a whole
- * document, and it reuses fieldSignature() rather than growing a second
- * opinion about what "the same words" means.
+ * back the same words, links, images and line breaks as what is stored.
+ *
+ * That comparison is the one piece of the old whole-document proof that
+ * survives (#71), and it survives because this is the one question that
+ * still needs it: "is this the same scene text with a span around some of
+ * it?" cannot be answered by comparing strings. Wrapping a selection that
+ * crosses a <strong> boundary splits that element in two, and unwrapping the
+ * span cannot glue it back together; a browser may also re-serialise an
+ * element's attributes in another order. So the field is compared as a
+ * sequence of text runs, each labelled with the inline elements around it —
+ * fieldSignature() below, over the quote-aware tokenizer htmlTokens(). It
+ * looks at one field of one row and nothing else, so unlike the document
+ * compare it replaced it has no opinion about the shape of the state and
+ * nothing to rot when that shape changes.
+ */
+
+/* Attributes as a set rather than as written, so two serialisations of the
+   same element compare equal whatever order or spacing they came out in. */
+function normalizeAttrs(attrs) {
+  const pairs = [];
+  const re = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g;
+  let m;
+  while ((m = re.exec(String(attrs || "")))) {
+    const value = m[2] === undefined ? "" : m[2].replace(/^["']|["']$/g, "");
+    pairs.push(m[1].toLowerCase() + "=" + value);
+  }
+  pairs.sort();
+  return pairs.join(" ");
+}
+
+const VOID_TAGS = new Set(["br", "img", "hr", "input", "wbr", "source", "track", "col", "area", "base", "embed", "link", "meta"]);
+
+/* Quote-aware, because a ">" inside an attribute value is serialised as
+   itself and would otherwise end the tag early. */
+function htmlTokens(html) {
+  const s = String(html == null ? "" : html);
+  const tokens = [];
+  let i = 0;
+  while (i < s.length) {
+    const lt = s.indexOf("<", i);
+    if (lt === -1) { tokens.push({ kind: "text", text: s.slice(i) }); break; }
+    if (lt > i) tokens.push({ kind: "text", text: s.slice(i, lt) });
+    let j = lt + 1;
+    let quote = "";
+    while (j < s.length) {
+      const ch = s[j];
+      if (quote) { if (ch === quote) quote = ""; }
+      else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === ">") break;
+      j++;
+    }
+    if (j >= s.length) { tokens.push({ kind: "text", text: s.slice(lt) }); break; }
+    const raw = s.slice(lt + 1, j);
+    i = j + 1;
+    if (raw.charAt(0) === "!" || raw.charAt(0) === "?") continue; /* a comment or a doctype is not content */
+    const close = raw.charAt(0) === "/";
+    const body = close ? raw.slice(1) : raw;
+    const name = (body.match(/^[a-zA-Z0-9-]+/) || [""])[0].toLowerCase();
+    if (!name) continue;
+    tokens.push({
+      kind: close ? "close" : "open",
+      name,
+      attrs: body.slice(name.length).replace(/\/\s*$/, "").trim(),
+      selfClosing: /\/\s*$/.test(body)
+    });
+  }
+  return tokens;
+}
+
+function attrValue(attrs, name) {
+  const re = new RegExp(name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s]+))", "i");
+  const m = re.exec(String(attrs || ""));
+  return m ? String(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : "";
+}
+
+/* The comment id of a `<span class="cmt-anchor" data-cmt="…">`, or "" for
+   any other element. */
+function anchorIdOf(attrs) {
+  if (attrValue(attrs, "class").split(/\s+/).indexOf("cmt-anchor") === -1) return "";
+  return attrValue(attrs, "data-cmt");
+}
+
+/* A field as the sequence of its text runs, each labelled with the inline
+   elements wrapped around it, plus <br>/<img> in place (sanitizeHtml never
+   lets a div or a p through — they come back as <br> — so there is no block
+   structure left to preserve). `dropId` unwraps the one comment anchor the
+   request is adding, which is what makes "the same words, now with a comment
+   on some of them" compare equal to what is stored.
+ *
+ * Deliberately blind to exactly one thing: WHERE an inline element starts and
+ * stops, when the text and the labels either side are identical. Wrapping a
+ * selection that crosses a <strong> boundary splits that element in two, and
+ * unwrapping the anchor again cannot glue it back together — so
+ * `<strong>hel</strong><strong>lo</strong>` has to compare equal to
+ * `<strong>hello</strong>`. The two render the same and say the same. */
+function fieldSignature(html, dropId) {
+  const path = [];       /* [{ name, sig, dropped }] */
+  const out = [];
+  const label = () => path.filter((p) => !p.dropped).map((p) => p.sig).join("");
+  for (const tk of htmlTokens(html)) {
+    if (tk.kind === "text") {
+      if (!tk.text) continue;
+      const key = label();
+      const last = out[out.length - 1];
+      if (last && last.kind === "text" && last.key === key) last.text += tk.text;
+      else out.push({ kind: "text", key, text: tk.text });
+      continue;
+    }
+    const sig = tk.name + (tk.attrs ? " " + normalizeAttrs(tk.attrs) : "");
+    if (tk.kind === "open") {
+      if (VOID_TAGS.has(tk.name) || tk.selfClosing) { out.push({ kind: "void", key: label(), sig }); continue; }
+      const dropped = tk.name === "span" && !!dropId && anchorIdOf(tk.attrs) === dropId;
+      path.push({ name: tk.name, sig, dropped });
+      continue;
+    }
+    if (VOID_TAGS.has(tk.name)) continue;
+    for (let n = path.length - 1; n >= 0; n--) {
+      if (path[n].name === tk.name) { path.length = n; break; }
+    }
+  }
+  return out
+    .filter((item) => item.kind === "void" || item.text.length)
+    .map((item) => item.kind + "" + item.key + "" + (item.kind === "void" ? item.sig : item.text))
+    .join("");
+}
+
+/* Where this comment's anchor goes.
  *
  * A mismatch is NOT a refusal. Somebody else may have rewritten that scene
  * while the reviewer was typing, and in that case the anchor is stale but the
@@ -1252,10 +1104,9 @@ function placeAnchor(state, anchor, cmtId, author, now) {
   let row = null;
   for (const r of rows) if (r && typeof r === "object" && r.id === rowId) { row = r; break; }
   if (!row) return "stale";
-  if (fieldSignature(row[field], null) !== fieldSignature(html, new Set([cmtId]))) return "stale";
+  if (fieldSignature(row[field], "") !== fieldSignature(html, cmtId)) return "stale";
   row[field] = html;
-  /* Posting a comment stamps the scene it landed on, and nothing else —
-     the same rule reviewRows() enforces on the PUT path. */
+  /* Posting a comment stamps the scene it landed on, and nothing else. */
   row.updatedAt = now;
   row.updatedBy = author;
   return "ok";
@@ -1704,7 +1555,7 @@ async function handleApi(req, res, url) {
         }
         parent.replies.push(reply);
         /* A thread's own timestamp moves when it is replied to, and only
-           then — the rule reviewComments() spells out on the PUT path. */
+           then. */
         parent.updatedAt = now;
         const next = await writeCommentChange(id, open.doc, open.state, by, now);
         return sendJson(res, 200, commentAnswer(id, next, parent, { changed: true, reply }));
@@ -1757,6 +1608,12 @@ async function handleApi(req, res, url) {
   /* compare-and-set save */
   if (req.method === "PUT") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    /* A review token writes through the comment routes above and nowhere
+       else (#71). Refused outright rather than judged: there is no longer
+       any comparison here that could let one through, and refusing before
+       readBody() means a reviewer cannot make this process buffer a 25 MB
+       upload just to be told no (#74). */
+    if (role === "review") return sendJson(res, 403, { error: "review-only" });
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
@@ -1768,9 +1625,9 @@ async function handleApi(req, res, url) {
       /* The rev this is compared against, from the head line — the usual
          answer to a save is "yes, written", and answering it used to mean
          parsing the stored script in full to read one number off the front
-         of it (#74). The whole file is still read for the two cases that
-         genuinely need the state: a conflict, which hands it back to be
-         merged, and a reviewer's write, which is judged against it. */
+         of it (#74). The whole file is still read for the one case that
+         genuinely needs the state: a conflict, which hands it back to be
+         merged. */
       const meta = await readDocMeta(id);
       if (!meta) return sendJson(res, 404, { error: "not-found" });
 
@@ -1787,19 +1644,6 @@ async function handleApi(req, res, url) {
           updatedAt: current.updatedAt || null,
           updatedBy: current.updatedBy || null
         });
-      }
-
-      /* Inside the lock and after the rev check, so the version this is
-         compared against is the one that is about to be replaced — a review
-         client that hit a 409 first merges, retries, and is judged against
-         whatever it merged with rather than against a copy that has moved on. */
-      if (role === "review") {
-        const current = await readDoc(id);
-        if (!current) return sendJson(res, 404, { error: "not-found" });
-        const verdict = reviewWriteAllowed(current.state, body.state);
-        if (!verdict.ok) {
-          return sendJson(res, 403, { error: "review-only", detail: verdict.reason });
-        }
       }
 
       const doc = {

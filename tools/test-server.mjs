@@ -556,9 +556,13 @@ try {
     check("...while an editor still sees the library", (all && all.docs || []).length >= 2);
   }
 
-  /* Read, change one thing, write — the same round trip the app makes, and
-     the only way to be sure a refusal below is the review rule refusing and
-     not a stale rev conflicting. */
+  /* Read, change one thing, write — the round trip the review client used to
+     make for every comment, and that the server used to judge by comparing
+     the upload against the stored script (reviewWriteAllowed, deleted in
+     #71). A review token now writes through the comment routes and nowhere
+     else, so every one of these is refused — and refused FLAT, not by a
+     verdict: the rev is read fresh each time, so a refusal below is never a
+     stale rev conflicting, and nothing was compared to reach it. */
   async function reviewPut(mutate, token) {
     const now = await json(await fetch(docUrl, { headers: { "x-splitpage-token": token || reviewToken } }));
     const next = JSON.parse(JSON.stringify(now.state));
@@ -570,6 +574,16 @@ try {
     });
     return { status: res.status, body: await json(res) };
   }
+  /* The route the review client uses instead (#71). */
+  async function reviewPost(url, payload, token) {
+    const res = await fetch(url + "/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": token || reviewToken },
+      body: JSON.stringify(payload)
+    });
+    return { status: res.status, body: await json(res) };
+  }
+  const readAs = async (url, token) => await json(await fetch(url, { headers: { "x-splitpage-token": token || editToken } }));
 
   {
     const res = await fetch(docUrl, {
@@ -578,9 +592,11 @@ try {
     eq("a reviewer cannot delete a document", res.status, 403);
   }
 
-  /* the write a review session exists for: a comment, plus the anchor it
-     wrapped around the words it is about */
+  /* The write a review session exists for — a comment, plus the anchor it
+     wrapped around the words it is about — is refused as a PUT, and lands
+     through the comment route. */
   {
+    const before = await readAs(docUrl);
     const out = await reviewPut((st) => {
       st.comments.push(newComment("c2", "audioText"));
       st.rows[0].audioText = 'Hello <span class="cmt-anchor" data-cmt="c2">there</span>';
@@ -589,31 +605,66 @@ try {
       st.rev = 2;
       st.lastEditedBy = "Reviewer";
     });
-    eq("a reviewer may add a comment and its anchor", out.status, 200);
+    eq("a review PUT is refused even when all it adds is a comment and its anchor", out.status, 403);
+    eq("...refused as review-only", out.body && out.body.error, "review-only");
+    check("...with no verdict attached, because nothing was compared", !(out.body && out.body.detail));
+    const after = await readAs(docUrl);
+    eq("...the rev did not move", after.rev, before.rev);
+    check("...and nothing of it was written",
+      !(after.state.comments || []).some((c) => c.id === "c2") && after.state.rows[0].audioText === "Hello there");
   }
   {
-    const res = await fetch(docUrl, { headers: { "x-splitpage-token": reviewToken } });
-    const body = await json(res);
+    const out = await reviewPost(docUrl, {
+      comment: newComment("c2", "audioText"),
+      anchor: { rowId: "r1", field: "audioText", html: 'Hello <span class="cmt-anchor" data-cmt="c2">there</span>' },
+      by: "Reviewer"
+    });
+    eq("the same comment through the comment route lands", out.status, 200);
+    eq("...with its anchor placed", out.body && out.body.anchored, true);
+    const body = await readAs(docUrl, reviewToken);
     check("...and it is stored", !!(body && (body.state.comments || []).some((c) => c.id === "c2")));
   }
   {
+    /* The stored state handed straight back. The old comparison passed this
+       one; a flat refusal does not look. */
+    const out = await reviewPut(() => {});
+    eq("a review PUT that changes nothing at all is refused too", out.status, 403);
+    eq("...as review-only", out.body && out.body.error, "review-only");
+  }
+  {
+    /* And it is refused on the headers, before a byte of the body is read
+       (#74): a review token cannot make the server buffer a 25 MB upload
+       just to be told no. An answer at all is the proof. */
+    const early = await refuseBeforeBody(s4.base, "api/docs/" + created.id, "PUT",
+      { "x-splitpage-token": reviewToken });
+    eq("a review PUT is refused before its body is read", early.status, 403, early.error);
+    eq("...saying review-only", early.body && early.body.error, "review-only");
+  }
+  {
     /* The scoped token from the per-document link is a reviewer on this
-       document like any other, and the same comment write is what it is for. */
+       document like any other: the same PUT is refused, the same comment
+       goes through the comment route. */
     const out = await reviewPut((st) => {
-      st.comments.push(newComment("c2s", "audioText"));
-      /* wraps words that are already there — a reviewer anchors a comment,
-         they do not get to add text */
+      st.comments.push(newComment("c2s", "audioText", { quotedText: "Hello" }));
       st.rows[0].audioText =
         '<span class="cmt-anchor" data-cmt="c2s">Hello</span>' +
         ' <span class="cmt-anchor" data-cmt="c2">there</span>';
-      st.rows[0].updatedAt = "2026-02-01T00:00:01.000Z";
-      st.rows[0].updatedBy = "Reviewer";
-      st.lastEditedBy = "Reviewer";
     }, scopedToken);
-    eq("a per-document reviewer may comment on their own document", out.status, 200);
+    eq("a per-document reviewer's PUT to its own document is refused the same way", out.status, 403);
+    eq("...as review-only", out.body && out.body.error, "review-only");
+    const posted = await reviewPost(docUrl, {
+      comment: newComment("c2s", "audioText", { quotedText: "Hello" }),
+      /* wraps words that are already there, beside an anchor already stored */
+      anchor: {
+        rowId: "r1", field: "audioText",
+        html: '<span class="cmt-anchor" data-cmt="c2s">Hello</span> <span class="cmt-anchor" data-cmt="c2">there</span>'
+      }
+    }, scopedToken);
+    eq("...and comments on it through the comment route", posted.status, 200);
+    eq("...anchored beside the anchor already there", posted.body && posted.body.anchored, true);
   }
   {
-    /* A PUT to somebody else's document never reaches the review rule at
+    /* A PUT to somebody else's document never reaches the role rule at
        all — the scope refuses it first. */
     const now = await json(await fetch(s4.base + "api/docs/" + other.id, { headers: { "x-splitpage-token": editToken } }));
     const res = await fetch(s4.base + "api/docs/" + other.id, {
@@ -621,16 +672,18 @@ try {
       headers: { "Content-Type": "application/json", "x-splitpage-token": scopedToken },
       body: JSON.stringify({ baseRev: now.rev, state: now.state })
     });
-    eq("...and cannot comment on any other", res.status, 403);
+    eq("...and cannot write to any other", res.status, 403);
     eq("...saying which rule refused it", (await json(res) || {}).error, "wrong-document");
   }
 
   /* ---- a document saved before a field existed (#62) ----
-     reviewWriteAllowed deep-compared the stored JSON key by key against the
-     client's migrateRows()-normalised copy. A document last saved before
-     `brollShots` existed has no such key; the reviewer's client always sends
-     `brollShots: []`. deepEqual(undefined, []) is false, so every comment on
-     such a document came back 403 review-only. */
+     The deleted comparison deep-compared the stored JSON key by key against
+     the client's migrateRows()-normalised copy. A document last saved before
+     `brollShots` existed has no such key; the reviewer's client always sent
+     `brollShots: []`, and every comment on such a document came back 403
+     review-only. There is no comparison left to disagree: the PUT is
+     refused because it is a review PUT, and the comment goes through the
+     route that never sees the rest of the state. */
   {
     const legacy = fixtureState();
     delete legacy.brollShots;
@@ -646,7 +699,7 @@ try {
     const now = await json(await fetch(legacyUrl, { headers: { "x-splitpage-token": reviewToken } }));
     check("a document stored without brollShots really has none", !("brollShots" in now.state));
 
-    /* exactly what the reviewer's client sends: every field filled in by
+    /* exactly what the old reviewer's client sent: every field filled in by
        migrateRows, plus the one comment and its anchor */
     const next = JSON.parse(JSON.stringify(now.state));
     next.brollShots = [];
@@ -662,15 +715,21 @@ try {
       headers: { "Content-Type": "application/json", "x-splitpage-token": reviewToken },
       body: JSON.stringify({ baseRev: now.rev, state: next, by: "Reviewer" })
     });
-    const body = await json(res);
-    eq("a reviewer may comment on a document saved before a field existed", res.status, 200,
-       body && body.detail);
-    const back = await json(await fetch(legacyUrl, { headers: { "x-splitpage-token": reviewToken } }));
-    check("...and the comment is stored",
-      !!(back && (back.state.comments || []).some((c) => c.id === "c-legacy")));
+    eq("a review PUT on a document saved before a field existed is refused like any other",
+      res.status, 403);
 
-    /* The loosening is about absence, not about content: a field that
-       actually holds something still may not be changed. */
+    const posted = await reviewPost(legacyUrl, {
+      comment: newComment("c-legacy", "audioText"),
+      anchor: { rowId: "r1", field: "audioText", html: 'Hello <span class="cmt-anchor" data-cmt="c-legacy">there</span>' },
+      by: "Reviewer"
+    });
+    eq("...while the comment route takes the comment", posted.status, 200, posted.body && posted.body.error);
+    const back = await json(await fetch(legacyUrl, { headers: { "x-splitpage-token": reviewToken } }));
+    check("...and it is stored",
+      !!(back && (back.state.comments || []).some((c) => c.id === "c-legacy")));
+    check("...without the field the document never had being written into it",
+      !("brollShots" in back.state) && !("productionTags" in back.state));
+
     const armed = JSON.parse(JSON.stringify(back.state));
     armed.productionTags = [{ cat: "prop", name: "Kettle", owner: "", notes: "", status: "needed" }];
     const refused = await fetch(legacyUrl, {
@@ -678,24 +737,50 @@ try {
       headers: { "Content-Type": "application/json", "x-splitpage-token": reviewToken },
       body: JSON.stringify({ baseRev: back.rev, state: armed, by: "Reviewer" })
     });
-    eq("...while filling an empty field with something is still refused", refused.status, 403);
-  }
-  /* an anchor whose selection crossed a <strong> boundary: unwrapping it
-     cannot glue the element back together, so the comparison has to see the
-     two halves as the one run of text they render as */
-  {
-    const out = await reviewPut((st) => {
-      st.comments.push(newComment("c3", "visualText", { quotedText: "shot of" }));
-      st.rows[0].visualText =
-        'Wide <strong></strong><span class="cmt-anchor" data-cmt="c3"><strong>shot</strong> of</span> the kitchen';
-      st.rows[0].updatedAt = "2026-02-01T00:00:01.000Z";
-      st.rows[0].updatedBy = "Reviewer";
-    });
-    eq("an anchor that split a <strong> in two is still only an anchor", out.status, 200);
+    eq("...and filling an empty field with something is refused", refused.status, 403);
   }
 
-  /* and everything it does not exist for. Each of these changes exactly one
-     thing about the document as it stands at that moment. */
+  /* ---- the anchor check that survived (#71) ----
+     placeAnchor() still has to decide whether one field's new HTML is the
+     stored field with this comment's span around some of it, and it uses
+     the one piece of the old comparison kept for exactly that
+     (fieldSignature over htmlTokens). These are the cases it exists for. */
+  {
+    /* an anchor whose selection crossed a <strong> boundary: unwrapping it
+       cannot glue the element back together, so the comparison has to see
+       the two halves as the one run of text they render as */
+    const out = await reviewPost(docUrl, {
+      comment: newComment("c3", "visualText", { quotedText: "shot of" }),
+      anchor: {
+        rowId: "r1", field: "visualText",
+        html: 'Wide <strong></strong><span class="cmt-anchor" data-cmt="c3"><strong>shot</strong> of</span> the kitchen'
+      }
+    });
+    eq("an anchor that split a <strong> in two is still only an anchor", out.status, 200);
+    eq("...and is placed", out.body && out.body.anchored, true);
+  }
+  {
+    /* Only THIS comment's span is unwrapped before comparing. Another id's
+       span wrapped around a word that is not stored is new text, and the
+       anchor is not placed (the comment itself still lands). */
+    const stored = (await readAs(docUrl)).state.rows[0].audioText;
+    const out = await reviewPost(docUrl, {
+      comment: newComment("c4", "audioText"),
+      anchor: {
+        rowId: "r1", field: "audioText",
+        html: stored + ' <span class="cmt-anchor" data-cmt="c9">again</span>'
+      }
+    });
+    eq("an anchor that smuggles in another comment's span is not placed", out.body && out.body.anchored, false);
+    eq("...though the comment still lands", out.status, 200);
+    eq("...and the scene is exactly as it was", (await readAs(docUrl)).state.rows[0].audioText, stored);
+  }
+
+  /* And everything a review session never could do. Each of these changes
+     exactly one thing about the document as it stands at that moment. They
+     are refused flat now rather than by a comparison, and kept so that
+     anything which ever lets a review PUT through again has to come past
+     every one of them. */
   const refusals = [
     ["the script itself", (st) => { st.rows[0].audioText = "Hello there, everyone"; }],
     ["a scene's status", (st) => { st.rows[0].status = "shot"; }],
@@ -721,18 +806,29 @@ try {
     eq("a reviewer may not change " + what, out.status, 403);
     eq("...refused as review-only", out.body && out.body.error, "review-only");
   }
-  /* a reply to a thread already there IS an addition, so it is allowed */
+  /* A reply is an addition, which the old comparison allowed through PUT.
+     It is refused there now and goes through the comment route. */
   {
     const out = await reviewPut((st) => {
       st.comments[0].replies.push({ id: "rp1", author: "Reviewer", body: "agreed", createdAt: "2026-02-01T00:00:02.000Z" });
       st.comments[0].updatedAt = "2026-02-01T00:00:02.000Z";
     });
-    eq("a reviewer may reply to a comment", out.status, 200);
+    eq("a reply sent as a review PUT is refused", out.status, 403);
+    const posted = await reviewPost(docUrl, {
+      replyTo: "c1", reply: { id: "rp1", author: "Reviewer", body: "agreed" }
+    });
+    eq("...and a reviewer replies through the comment route", posted.status, 200);
   }
-  /* and the editor is untouched by all of it */
+  /* and the editor is untouched by all of it: an editor's PUT is written
+     as sent, comments and script alike, with nothing compared */
   {
-    const out = await reviewPut((st) => { st.rows[0].audioText = "Hello there, everyone"; }, editToken);
+    const out = await reviewPut((st) => {
+      st.rows[0].audioText = "Hello there, everyone";
+      st.comments[0].body = "the editor rewrote their own question";
+    }, editToken);
     eq("the editor can still change the script", out.status, 200);
+    const now = await readAs(docUrl);
+    eq("...and a comment, in the same PUT", now.state.comments[0].body, "the editor rewrote their own question");
   }
 } finally {
   s4.stop();
@@ -1617,10 +1713,11 @@ try {
     eq("...and on an id that is not one, 400", bad.status, 400);
   }
 
-  /* ---- the old path is still open ----
-     The browser lane moves reviewers over to the route above in its own
-     commit; until it has, the whole-document PUT it uses today must keep
-     working exactly as it did. */
+  /* ---- the old path is closed (#71) ----
+     The review client posts through the routes above. A whole-document PUT
+     from a review token is refused outright — even one that carries nothing
+     but a comment, which the deleted comparison used to let through — and
+     an editor's PUT of that very same state is written exactly as before. */
   {
     const now = await readDocAs(doc.id, reviewToken);
     const next = JSON.parse(JSON.stringify(now.state));
@@ -1632,16 +1729,29 @@ try {
       method: "PUT", headers: hdr(reviewToken),
       body: JSON.stringify({ baseRev: now.rev, state: next, by: "Reviewer" })
     });
-    eq("the whole-document review PUT still works beside it", res.status, 200);
+    eq("a whole-document review PUT is refused, even carrying nothing but a comment", res.status, 403);
+    eq("...saying review-only", (await json(res) || {}).error, "review-only");
+    const after = await readDocAs(doc.id, editToken);
+    eq("...the rev did not move", after.rev, now.rev);
+    check("...and the comment was not written", !(after.state.comments || []).some((c) => c.id === "put1"));
 
     const worse = JSON.parse(JSON.stringify(next));
     worse.rows[0].audioText = "a reviewer rewriting the script";
     const refused = await fetch(sCmt.base + "api/docs/" + doc.id, {
       method: "PUT", headers: hdr(reviewToken),
-      body: JSON.stringify({ baseRev: (await readDocAs(doc.id, reviewToken)).rev, state: worse })
+      body: JSON.stringify({ baseRev: after.rev, state: worse })
     });
-    eq("...and still refuses everything it always refused", refused.status, 403);
+    eq("...and so, of course, is one that rewrites the script", refused.status, 403);
     eq("...saying review-only", (await json(refused) || {}).error, "review-only");
+
+    const asEditor = await fetch(sCmt.base + "api/docs/" + doc.id, {
+      method: "PUT", headers: hdr(editToken),
+      body: JSON.stringify({ baseRev: after.rev, state: next, by: "Host" })
+    });
+    eq("an editor's PUT of that same state is written as before", asEditor.status, 200);
+    eq("...moving the rev by one", (await json(asEditor) || {}).rev, after.rev + 1);
+    check("...with the comment in it",
+      (await readDocAs(doc.id, editToken)).state.comments.some((c) => c.id === "put1"));
   }
 } finally {
   sCmt.stop();

@@ -20,8 +20,8 @@ import {
 import { pad2, render } from "./05-render.js";
 import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { reviewMode } from "./13-hosted.js";
-import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { reviewBlocked, reviewMode } from "./13-hosted.js";
+import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -161,6 +161,12 @@ function commentAssigneeCandidates() {
 export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
+  /* Assigning a thread changes a comment that is already stored, and a
+     review session has no route for that — only for adding a comment or a
+     reply, and for resolving (#71). The select is rendered disabled for
+     one; this is the guard behind it, and the render puts the select back
+     to what is actually stored. */
+  if (reviewBlocked()) { renderComments(); return; }
   S.state.comments[idx].assignee = plainText(name || "").trim().slice(0, 80);
   S.state.comments[idx].updatedAt = nowIso();
   markDirty();
@@ -499,6 +505,16 @@ export function postComment() {
   pendingComment = null;
   bodyEl.innerHTML = "";
   render();
+  sendNow();
+}
+
+/* After posting a comment or a reply. In a review session this is where
+   the comment leaves for the server (saveToServer's review branch, #71), and
+   pressing Post is the reader asking for exactly that — so an autosave that
+   an earlier failure paused does not hold it back, the same way pressing
+   Save does not wait for one. Everywhere else it is the ordinary autosave. */
+function sendNow() {
+  if (reviewMode()) resumeAutoSave();
   queueAutoSave();
 }
 
@@ -613,7 +629,7 @@ export function postReply(id) {
   delete replyDrafts[id];
   markDirty();
   render();
-  queueAutoSave();
+  sendNow();
 }
 
 export function jumpToAnchor(cmtId) {
@@ -745,17 +761,20 @@ function commentCardHtml(c) {
       (expandedReplyIds[c.id] ? replyComposerHtml(c.id) : "") +
       '<div class="comment-assign-row">' +
         '<label for="comment-assignee-' + c.id + '">Assign</label>' +
-        '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to">' +
+        '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to"' +
+          (reviewMode() ? ' disabled' : '') + '>' +
           commentAssigneeOptionsHtml(c.assignee) +
         '</select>' +
       '</div>' +
       '<div class="comment-actions">' +
-        /* A review session may add to a thread and nothing else. Resolving
-           and deleting are changes to a comment that is already stored,
-           which the server refuses from a review token (server.js's
-           "what a review session may write") — it cannot tell whose
-           comment this is, because `author` is a name somebody typed, so
-           it allows additions only. */
+        /* A review session adds to a thread and does not delete one: a
+           review token's only writes are the comment routes (#71), and
+           there is no route for a delete. Resolving HAS one (PATCH
+           …/comments/:id), and saveToServer's review branch sends a resolve
+           this view holds, but the button is not offered here yet —
+           21-events.js's click guard (REVIEW_SAFE_ACTIONS) still refuses
+           toggle-resolve from a review session, and the two have to change
+           together. */
         (reviewMode() ? '' :
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
             (c.resolved ? "Unresolve" : "Resolve") + '</button>') +

@@ -340,12 +340,23 @@ per document in `DATA_DIR`.
 - `REVIEW_PIN`/`REVIEW_KEY` are a second credential minting a second token
   with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
   role is read from the token on every request (`roleOf`), so it survives a
-  reconnect and cannot be asserted by a client; a review PUT is accepted only
-  when the state it carries differs from the stored one by added comments,
-  appended replies and the `.cmt-anchor` spans of those new comments —
-  anything else is 403 `review-only`, and an existing comment may not change
-  at all (there is no identity here to judge "mine" by). `GET /api/share`
-  hands an editor the review LINK's key, never the PIN.
+  reconnect and cannot be asserted by a client. **A review session never
+  PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply,
+  and `PATCH /api/docs/:id/comments/:cid` one resolve. A review-role PUT is
+  a flat 403 `review-only`, refused before its body is read. The whole-state
+  proof that used to decide whether a review PUT changed "only comments" —
+  `reviewWriteAllowed`, a key-by-key `deepEqual`, and the rest — is gone.
+  What survives is `htmlTokens`/`fieldSignature`, now scoped to ONE field:
+  the comments endpoint uses them to check that an anchor adds a
+  `.cmt-anchor` span and changes no words, which plain string comparison
+  cannot do (wrapping a selection across a `<strong>` splits it, and
+  attributes may re-serialise in a different order). A stale anchor is not
+  a refusal — it is dropped and the comment lands with `anchored:false`.
+  The client adopts `home.rev` from a comments response only when it is the
+  exact successor, so a collaborator's save in between is still pulled by
+  the next heartbeat. Edit-role users keep PUT for everything, comments
+  included. `GET /api/share` hands an editor the review LINK's key, never
+  the PIN.
 - `POST /api/presence` (#28) is a heartbeat and a listing in one round trip,
   in memory only, capped and swept per request, TTL 15s. It is behind the
   same gate but carries its own copy of it, because a closing tab's
