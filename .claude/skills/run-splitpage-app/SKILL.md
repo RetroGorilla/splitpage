@@ -115,6 +115,7 @@ the thing you changed is a pure function of a document.
 | `src/test/doc-id.test.mjs` | the pure half of document identity (02b-doc-id.js): the FROZEN SHA-256 vectors and `deriveDocId` golden (HANDOFF invariant #37), domain separation, `normalizeDocId` refusing to repair anything, `migrateDocument`'s file/server/fresh origins, the `mergedDocId` truth table, and `decideDuplicateLoser`'s symmetry |
 | `src/test/history-eviction.test.mjs` | `planHistoryEviction` (03a-history-store.js) — the fixtures (a)-(g) `tests/24-history.txt` used to run through `window.__historyTest.planEviction`, plus ordering, a custom `olderKey`, and garbage input |
 | `src/test/apply-merge.test.mjs` | `applyMerge`'s orchestration (03-sync.js, #72) in its `mergeOnly` mode — the mode `applyStashedWork` runs in: the undo point's label chosen by `source`, "Undo merge" armed at it and cleared rather than left stale when the store refuses the write, `armUndo:false`, `keepLabel`'s second snapshot, `unchanged` skipping the merge and the rev bump, `base`/`mine` normalised, and nothing on screen touched. Everything past `mergeOnly` reads the page and lives in the browser suites |
+| `src/test/autosave-timing.test.mjs` | `autoSaveIdleFor` (14-export.js, #70): hosted strictly slower than local rather than three pinned numbers, the local path still 2s, a target that is not `"server"` never inheriting the hosted wait by default, both idles under the max timer, and the timing object staying live — which is what lets `tests/28-autosave.txt` drive real saves at 30ms |
 
 ## The suites
 

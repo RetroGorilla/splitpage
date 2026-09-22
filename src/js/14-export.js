@@ -425,7 +425,19 @@ export var AUTOSAVE_KEY = "splitpage-autosave";
    uninterrupted typing still lands regularly — same shape as the crash
    draft writer's timing (20g-drafts.js), a few times slower because this
    one writes the user's own file. */
-export var autoSaveTiming = { idle: 2000, max: 15000 };
+export var autoSaveTiming = { idle: 2000, hostedIdle: 5000, max: 15000 };
+
+/* Hosted documents wait longer than local ones (#70). With a 2s idle, two
+   people typing at once conflict on very nearly every save, and each
+   conflict costs a whole-document 409 round trip plus a "Before merging in
+   someone else's changes" snapshot against the 50-entry history cap. A
+   local file and a crash draft have no one to contend with, so they keep
+   the 2s: the only cost there is a write nobody is waiting on. The max
+   timer is shared — it bounds how long uninterrupted typing can go
+   unsaved, which is the same question whoever else is in the document. */
+export function autoSaveIdleFor(target) {
+  return target === "server" ? autoSaveTiming.hostedIdle : autoSaveTiming.idle;
+}
 export var autoSaveIdleTimer = null;
 export var autoSaveMaxTimer = null;
 /* Why autosave has stopped writing by itself, as a sentence the indicator
@@ -489,9 +501,10 @@ export function updateAutoSaveMenu() {
    does nothing but move two timers. */
 export function scheduleAutoSave() {
   if (!autoSaveEnabled || autoSaveHalt) return;
-  if (!autoSaveTarget()) return;
+  var target = autoSaveTarget();
+  if (!target) return;
   if (autoSaveIdleTimer) clearTimeout(autoSaveIdleTimer);
-  autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.idle);
+  autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveIdleFor(target));
   if (!autoSaveMaxTimer) autoSaveMaxTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.max);
 }
 
