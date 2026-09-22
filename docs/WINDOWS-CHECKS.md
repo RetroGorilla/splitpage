@@ -55,11 +55,15 @@ executed:
 - the one gate (`ipcRefusalReason`) running under a real sender, including the
   tab strip's structural check.
 
-**#76 — shared policy modules** (in flight as this is written). Moves
-`planHistoryEviction` and the doc-id claim rules into `shared/`, deletes the
-desktop copies, and deletes smoke's `caseHistoryPlannerTwin` drift case. Also
-needs the packaged-build check below, because `main.js` will `require` a new
-directory at runtime.
+**#76 — shared policy modules.** Moved `planHistoryEviction`, the meta
+sanitiser and the doc-id claim rules into `shared/`, deleted the desktop
+copies, and deleted smoke's `caseHistoryPlannerTwin` drift case. `main.js`
+now `require`s two files out of `APP_ROOT` **at startup**, so if the app
+fails to launch at all, suspect the staging path rather than a feature.
+Watch the packaged targets especially — that half depends on `stage.mjs`
+having copied `shared/`. Also `caseAtomicSaveKeepsBirthtime` and
+`caseDuplicateDocIdAcrossTabs`, which now run against the shared
+`chooseDuplicateLoser` with no `stat` in front of it.
 
 **#64 — updater trust** (phase 1). Per #89, its `update without a checksum`
 case has never run anywhere, because it landed from Linux.
@@ -74,9 +78,11 @@ Nothing below has produced a real installer.
   root, and without it the packaged server dies on its first `require`), and
   stages `docs/help.md` as `help.md`, served at `/help.md` instead of
   `/README.md` (#80).
-- `desktop/electron-builder.yml`'s `files` list gained `ipc-channels.js` (#77)
-  and will need `shared/` (#76). **A missing entry means no bridge in the
-  packaged app** even though dev mode works.
+- `desktop/electron-builder.yml`'s `files` list gained `ipc-channels.js`
+  (#77). **A missing entry means no bridge in the packaged app** even though
+  dev mode works. `shared/` deliberately does NOT go in that list — it rides
+  on `extraResources` via `stage.mjs`, because `files` is rooted at
+  `desktop/` and would land it at a different require path than dev uses.
 - `node package.mjs` (portable zip) runs clean here and produces 14 entries
   including `docs/help.md` — but has never been unzipped and started on
   Windows. `start.bat` was rewritten as a thin wrapper when `start.ps1` was
@@ -113,8 +119,11 @@ reasons to re-run on Windows with `run-tests.ps1`:
 - `run-tests.ps1` runs them in one pass with its own orphan-process sweep,
   which is a different shape of run from 49 separate invocations.
 
-New suites worth a first Windows run: `53-service-worker.txt` (#79) and
-`54-server-conflict.txt` (#72), both written here.
+New suites worth a first Windows run: `53-service-worker.txt` (#79),
+`54-server-conflict.txt` (#72) and `55-pull-merge.txt` (#69), all written
+here. 55 drives the real 2s heartbeat rather than poking the function, so it
+is the most timing-sensitive of the three and the most worth a second
+opinion on a different machine.
 
 ---
 
@@ -123,7 +132,7 @@ New suites worth a first Windows run: `53-service-worker.txt` (#79) and
 | Item | Needs | State |
 | --- | --- | --- |
 | #77 IPC table | desktop smoke | static + read only |
-| #76 shared modules | desktop smoke, packaged build | in flight |
+| #76 shared modules | desktop smoke, packaged build | static + read only |
 | #64 checksum case | desktop smoke | never run anywhere |
 | #75 / #80 packaging | `dist:win`, `verify-dist`, unzip and start | never run |
 | #79 offline reload | by hand | unreachable by test |

@@ -265,7 +265,16 @@ one orchestration — snapshot, undo point, `baseState`, autosave, chips,
 toast — and the only writer of `baseState` on a merge. The sites that still
 assign it directly are all "adopt what the other side just confirmed" after
 a successful write or open. `reportMerge(result, {alreadySaved:true})`
-avoids re-queuing an autosave for a mid-save merge. `stashLocalWork()` runs on the
+avoids re-queuing an autosave for a mid-save merge.
+
+Since #69 the heartbeat is also a **pull** channel: `/api/presence` answers
+`{docId, rev, here}`, and when that rev moves and no save is in flight
+(`S.saveButtonBusy`, checked before the GET and again after it)
+`pullServerDoc()` GETs the document once and merges through `applyMerge`.
+No PUT, and no undo point — a pull fires whenever anybody saves, so one
+snapshot per pull would fill the 50-entry history in under two minutes.
+`pullServerDoc` therefore joins the list of `baseState` writers, via
+`applyMerge`'s `newBase`. `stashLocalWork()` runs on the
 lapsed-session path so unsaved edits survive; `applyStashedWork()` skips a
 stash when `splitpage-server-resume` is present.
 
@@ -442,13 +451,19 @@ tabs**.
   mirroring the browser's IndexedDB store; ids validated in renderer and
   main, resolved path stays inside the history root (#38).
   `ensureHistoryTable()` (`main.js:1563`) fscks first in the write queue;
-  `planHistoryEviction()` (`main.js:1721`) is a byte-for-byte copy of the
-  browser's planner, kept in sync deliberately.
+  `planHistoryEviction()` is no longer duplicated: #76 moved it, the meta
+  sanitiser and the eviction constants into `shared/history-policy.js`,
+  which both builds load — the browser through `03a-history-store.js`'s
+  re-export, main through `APP_ROOT`. The smoke case that existed only to
+  detect drift between the two copies went with them.
 - Duplicate document-id claims reassign in memory only (§4, #36).
-  `chooseDuplicateLoser(a, b)`: server home beats file home; birthtime is
-  **not** trusted between two files — `DUP_TRUST_BIRTHTIME = false`
-  (`main.js:473`, `atomicWrite` measurably moves NTFS birthtime on save) —
-  loser decided by claim order instead; the reassigned tab doesn't
+  `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
+  home beats file home; birthtime is **not** consulted between two files —
+  `atomicWrite` measurably moves NTFS birthtime on save — so the loser is
+  decided by claim order instead. #76 deleted the `DUP_TRUST_BIRTHTIME =
+  false` flag, the `stat` behind it and the deferral it forced; the verdict
+  is unchanged and `caseAtomicSaveKeepsBirthtime` stays as the guard against
+  a birthtime rule being written back in. The reassigned tab doesn't
   dirty/autosave.
 - Launch args: `--library`, `--host`, `--pin [code]`, `--data DIR`,
   `--port`, `--allow-origin`, `--tunnel user@host [...]`. Files as
@@ -844,7 +859,7 @@ evaluation order via `_entry.js`):
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, history storage + fsck + planner twin, draft headers, file dialogs, server launcher, native menus, test mode |
+| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, history storage + fsck (policy from `shared/history-policy.js`), draft headers, file dialogs, server launcher, native menus, test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |

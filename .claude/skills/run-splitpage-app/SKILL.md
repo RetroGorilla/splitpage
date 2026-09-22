@@ -113,7 +113,7 @@ the thing you changed is a pure function of a document.
 | `src/test/formats.test.mjs` | the serializer half of the two project formats (20d-formats.js): `.splitpage` having no envelope and round-tripping exactly, `parseSplitpage` refusing anything that is not ours and deliberately not migrating, the `.md` data fence outgrowing tildes in the script, the id travelling only inside the block, the last opening fence winning over a quoted decoy, a hand-edited cell winning for that cell only with its tags re-attached by name, and `noAsk` keeping the record when the scenes do not line up |
 | `src/test/markdown-table.test.mjs` | `parseMarkdownTable` (11-import.js): header-named columns wherever they sit, a header naming only one column never pointing both fields at it, escaped pipes staying in their cell, separator rows never read as data, and what `keepEmpty` does and does not resurrect |
 | `src/test/doc-id.test.mjs` | the pure half of document identity (02b-doc-id.js): the FROZEN SHA-256 vectors and `deriveDocId` golden (HANDOFF invariant #37), domain separation, `normalizeDocId` refusing to repair anything, `migrateDocument`'s file/server/fresh origins, the `mergedDocId` truth table, and `decideDuplicateLoser`'s symmetry |
-| `src/test/history-eviction.test.mjs` | `planHistoryEviction` (03a-history-store.js) — the fixtures (a)-(g) `tests/24-history.txt` used to run through `window.__historyTest.planEviction`, plus ordering, a custom `olderKey`, and garbage input |
+| `src/test/history-eviction.test.mjs` | `planHistoryEviction` (`shared/history-policy.js` since #76) — the fixtures (a)-(g) `tests/24-history.txt` used to run through `window.__historyTest.planEviction`, plus ordering, a custom `olderKey`, and garbage input |
 | `src/test/apply-merge.test.mjs` | `applyMerge`'s orchestration (03-sync.js, #72) in its `mergeOnly` mode — the mode `applyStashedWork` runs in: the undo point's label chosen by `source`, "Undo merge" armed at it and cleared rather than left stale when the store refuses the write, `armUndo:false`, `keepLabel`'s second snapshot, `unchanged` skipping the merge and the rev bump, `base`/`mine` normalised, and nothing on screen touched. Everything past `mergeOnly` reads the page and lives in the browser suites |
 | `src/test/autosave-timing.test.mjs` | `autoSaveIdleFor` (14-export.js, #70): hosted strictly slower than local rather than three pinned numbers, the local path still 2s, a target that is not `"server"` never inheriting the hosted wait by default, both idles under the max timer, and the timing object staying live — which is what lets `tests/28-autosave.txt` drive real saves at 30ms |
 
@@ -169,6 +169,7 @@ the thing you changed is a pure function of a document.
 | `tests/49-prompter-scene-mode.txt` | teleprompter scene mode (issue #26, 20-teleprompter.js): off by default and remembered per device, opening from a scene (or with the caret in one) cueing it, Next/Previous by button and by `←`/`→`, the "Scene N of M" readout, and scenes "hide shot scenes" (#25) already hides being left out of the count entirely — driven through `window.__prompterTest`'s `scenePastReadingLine`/`checkSceneBoundaryNow`/`simulateVoiceWordCursor` since a real scroll-driven auto-pause needs `requestAnimationFrame`, throttled in a background/headless window (see "What this cannot test"), and Follow My Voice needs a real microphone: the pure boundary comparison, the one-shot auto-pause firing exactly once and arming the next scene's end without re-scrolling (so Play resumes into it rather than replaying it), and the same boundary tripping from a simulated recognised-word position |
 | `tests/50-panel-resize.txt` | every side panel drag-resizable by its left edge, not just Comments (issue #50, 03b-side-panels.js): Production/Gear/B-roll default wider (520) than Comments/Gear/History (400), the same 280–720 clamp for all five, the legacy `splitpage-comments-panel-width` honoured as Comments' own initial width until it is actually dragged, double-click reset, the handle's mousedown preventing the browser's default, per-panel independence (widening one leaves the others alone and survives switching panels), `#root`'s padding-right tracking whichever panel is open at ≥1100px, and per-panel widths surviving a `goto` reload — driven with synthetic `mousedown`/`mousemove`/`mouseup` on the handle and `document`, the same way 33-drag-autoscroll.txt drives a scene drag |
 | `tests/54-server-conflict.txt` | the compare-and-set save and its 409 merge (`saveToServer`, 13-hosted.js), with `fetch` replaced for PUTs to `api/docs/` only since the harness cannot start `server/server.js`: `baseRev` taken from the server's own answers and nowhere else, `state.rev` never pre-incremented by the client (#72), both sides' edits surviving the merge onto the screen and onto the wire, the banner appearing only once the merged version is stored, the known `armUndo:false` divergence leaving "Undo merge" with nothing to undo, and the next save going out at the rev the 200 handed back |
+| `tests/55-pull-merge.txt` | the pull channel (`notePresenceRev`/`pullServerDoc`, 13-hosted.js, #69): two clients on one page — this page is client B, client A is the document on the fake server — with `fetch` replaced the way 54 replaces it, for POSTs to `api/presence`, GETs of `api/docs/doc-pull` and PUTs held open on purpose. A saves, and B sees the row inside 3s off the REAL two-second heartbeat without saving anything; B's own unsaved edit in another row survives; no PUT goes out; a beat repeating a rev makes no request at all; a rev that moved but brought nothing new leaves the rendered HTML byte-identical and says nothing; NO history snapshot is filed (the fifty-entry cap is why); and nothing is pulled while a save is in flight, nor for a beat about another document, nor for the `rev: null` a document with no head line answers with |
 
 ## The server's own tests
 
@@ -189,7 +190,10 @@ without the launch token and under `--host` **with** it, the review credential
 (#30: both roles, the link key, `/api/share`, and one PUT per kind of change a
 review session may and may not make), and presence (#28: the gate, the
 listing, the leaving beacon's body-carried token, expiry under a dialled-down
-`PRESENCE_TTL_MS`, and nothing of it ever reaching a stored document). Run it
+`PRESENCE_TTL_MS`, and nothing of it ever reaching a stored document) — plus
+the rev the beat now carries for the pull channel (#69), which is read off the
+head line and never by parsing the script, proved by a document with a good
+head line and a body no parser can read. Run it
 after any change to `server/server.js`.
 
 ### The join PIN end to end (a real server, by hand)
@@ -526,8 +530,8 @@ corrupt-JSON fresh boot) — then document id and desktop history added by
 step M (save-in-place birthtime vs. the duplicate rule, duplicate document id
 across tabs, history round-trip and relaunch, history id validation, a
 crash-after-body relaunch adopting the orphan, a corrupt `index.json`
-rebuilt by fsck, cap-driven eviction, concurrent puts, legacy migration, the
-main-vs-renderer planner twin, a newer format going read-only) — then
+rebuilt by fsck, cap-driven eviction, concurrent puts, legacy migration, a
+newer format going read-only) — then
 crash-safe drafts added by step N (crash recovery of an untitled document, a
 renderer crash of a dirty file tab, the file changed on disk while down, the
 file deleted while down, quit without saving discarding every draft, closing
