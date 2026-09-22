@@ -1504,25 +1504,68 @@ try {
     eq("...saying no-such-comment", body && body.error, "no-such-comment");
   }
 
-  /* ---- resolve ---- */
+  /* ---- resolve: an editor's, never a reviewer's ----
+     The owner's decision: reviewers never resolve or unresolve. Authorship
+     cannot be established here (an author is a typed name, and everyone on a
+     review link shares one token), so any resolve by a reviewer would be a
+     resolve of somebody else's comment. */
   {
+    const before = await readDocAs(doc.id, editToken);
     const res = await patch(doc.id, reviewToken, "n1", { resolved: true, by: "Reviewer" });
-    const body = await json(res);
-    eq("resolving is a PATCH on the one comment", res.status, 200);
-    eq("...which says so", body && body.comment && body.comment.resolved, true);
-    eq("...and records who", body && body.comment.resolvedBy, "Reviewer");
+    eq("a reviewer may not resolve a comment", res.status, 403);
+    eq("...saying reviewers-cannot-resolve", (await json(res) || {}).error, "reviewers-cannot-resolve");
+    const unres = await patch(doc.id, reviewToken, "n1", { resolved: false });
+    eq("...nor unresolve one", unres.status, 403);
+    const nonsense = await patch(doc.id, reviewToken, "n1", { resolved: "yes" });
+    eq("...and is refused on the role, not on what was sent", nonsense.status, 403);
+    const missing = await patch(doc.id, reviewToken, "nope", { resolved: true });
+    eq("...whether or not the comment is there", missing.status, 403);
+    const after = await readDocAs(doc.id, editToken);
+    eq("...and none of it moved the rev", after.rev, before.rev);
+    const n1 = after.state.comments.find((c) => c.id === "n1");
+    eq("...or resolved the comment", n1 && n1.resolved, false);
+    eq("...or named a resolver", n1 && (n1.resolvedBy || null), null);
 
-    const again = await json(await patch(doc.id, reviewToken, "n1", { resolved: true }));
+    const scoped = await json(await fetch(sCmt.base + "api/share?doc=" + doc.id, {
+      headers: { "x-splitpage-token": editToken }
+    }));
+    const scopedToken = (await joinAs({ key: scoped.reviewKey })).token;
+    const viaLink = await patch(doc.id, scopedToken, "n1", { resolved: true });
+    eq("a per-document review link's token is refused the same way", viaLink.status, 403);
+    eq("...saying reviewers-cannot-resolve", (await json(viaLink) || {}).error, "reviewers-cannot-resolve");
+
+    /* Refused before a byte of the body is read (#74): 20 MB announced,
+       twenty bytes sent. An answer at all is the proof. */
+    const early = await refuseBeforeBody(sCmt.base, "/api/docs/" + doc.id + "/comments/n1", "PATCH",
+      { "x-splitpage-token": reviewToken });
+    eq("a reviewer's resolve is refused before its body is read", early.status, 403);
+    eq("...and the rev still stands", (await readDocAs(doc.id, editToken)).rev, before.rev);
+  }
+  {
+    const res = await patch(doc.id, editToken, "n1", { resolved: true, by: "Host" });
+    const body = await json(res);
+    eq("an editor resolves with a PATCH on the one comment", res.status, 200);
+    eq("...which says so", body && body.comment && body.comment.resolved, true);
+    eq("...and records who", body && body.comment.resolvedBy, "Host");
+    const stored = await readDocAs(doc.id, editToken);
+    eq("...and it is stored resolved", stored.state.comments.find((c) => c.id === "n1").resolved, true);
+
+    const again = await json(await patch(doc.id, editToken, "n1", { resolved: true }));
     eq("resolving an already-resolved comment writes nothing", again && again.changed, false);
     eq("...and the rev stands still", again && again.rev, body.rev);
 
-    const undo = await json(await patch(doc.id, reviewToken, "n1", { resolved: false }));
-    eq("unresolving clears the resolver", undo && undo.comment.resolvedBy, null);
-    eq("...and the time with it", undo && undo.comment.resolvedAt, null);
+    const blocked = await patch(doc.id, reviewToken, "n1", { resolved: false });
+    eq("a reviewer may not unresolve an editor's resolve either", blocked.status, 403);
 
-    const missing = await patch(doc.id, reviewToken, "nope", { resolved: true });
+    const undo = await json(await patch(doc.id, editToken, "n1", { resolved: false }));
+    eq("an editor unresolves", undo && undo.comment.resolved, false);
+    eq("...which clears the resolver", undo && undo.comment.resolvedBy, null);
+    eq("...and the time with it", undo && undo.comment.resolvedAt, null);
+    eq("...and is a new rev", undo && undo.rev, body.rev + 1);
+
+    const missing = await patch(doc.id, editToken, "nope", { resolved: true });
     eq("resolving a comment that is not there is 404", missing.status, 404);
-    const nonsense = await patch(doc.id, reviewToken, "n1", { resolved: "yes" });
+    const nonsense = await patch(doc.id, editToken, "n1", { resolved: "yes" });
     eq("...and a resolve that is not a boolean is 400", nonsense.status, 400);
   }
 
@@ -1571,7 +1614,7 @@ try {
       method: "POST", headers: hdr(reviewToken), body: "{}"
     });
     eq("...and no deeper path than the one comment", deep.status, 404);
-    const badCid = await patch(doc.id, reviewToken, "not a comment id", { resolved: true });
+    const badCid = await patch(doc.id, editToken, "not a comment id", { resolved: true });
     eq("...and a comment id that is not one is 400", badCid.status, 400);
   }
 

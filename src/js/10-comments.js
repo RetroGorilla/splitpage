@@ -541,6 +541,9 @@ export function closeCommentsPanel() {
 }
 
 export function toggleResolve(id) {
+  /* Editors only (see commentCardHtml): the click guard already refuses
+     this in a review session, and this is the last door behind it. */
+  if (reviewMode()) return;
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   var c = S.state.comments[idx];
@@ -767,14 +770,15 @@ function commentCardHtml(c) {
         '</select>' +
       '</div>' +
       '<div class="comment-actions">' +
-        /* A review session adds to a thread and does not delete one: a
-           review token's only writes are the comment routes (#71), and
-           there is no route for a delete. Resolving HAS one (PATCH
-           …/comments/:id), and saveToServer's review branch sends a resolve
-           this view holds, but the button is not offered here yet —
-           21-events.js's click guard (REVIEW_SAFE_ACTIONS) still refuses
-           toggle-resolve from a review session, and the two have to change
-           together. */
+        /* A review session adds to a thread and does not delete or
+           resolve one. Its only write is POSTing a comment or a reply
+           (#71). Resolving is an editor's alone, by the owner's decision:
+           nobody's authorship can be proved (an author is a typed name and
+           reviewers share one token), so a reviewer resolving anything
+           would be resolving someone else's comment. The server refuses a
+           reviewer's PATCH (403 reviewers-cannot-resolve), 21-events.js's
+           click guard (REVIEW_SAFE_ACTIONS) refuses toggle-resolve, and
+           toggleResolve() itself does nothing in a review session. */
         (reviewMode() ? '' :
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
             (c.resolved ? "Unresolve" : "Resolve") + '</button>') +

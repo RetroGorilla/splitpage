@@ -1475,9 +1475,17 @@ async function handleApi(req, res, url) {
    * longer path than `/api/docs/:id` and would otherwise be answered as a
    * GET of the document — the extra segment silently ignored.
    *
-   * Open to both roles. An editor has PUT and does not need this, but there
-   * is nothing here an editor may not do, and a route that refuses the more
-   * privileged caller is a trap for whoever writes the client next.
+   * POST is open to both roles. An editor has PUT and does not need it, but
+   * there is nothing there an editor may not do, and a route that refuses the
+   * more privileged caller is a trap for whoever writes the client next.
+   *
+   * PATCH is an editor's only. Reviewers never resolve or unresolve a comment
+   * (the owner's decision): this server cannot tell who wrote a comment — an
+   * author is a name typed into a box, and every reviewer on a link shares
+   * the one token — so there is no "their own comment" a reviewer could be
+   * limited to, and a reviewer resolving anything would be resolving someone
+   * else's. The client already offers them no Resolve; this is the same rule
+   * held where a token alone cannot get round it.
    */
   if (parts[3] === "comments") {
     /* Nothing hangs off a comment: a reply is a POST to the collection
@@ -1491,11 +1499,16 @@ async function handleApi(req, res, url) {
     const cid = hasCid ? commentIdOf(parts[4]) : "";
     if (hasCid && !cid) return sendJson(res, 400, { error: "bad-comment-id" });
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    /* Refused on the role alone, before the body or the document is looked
+       at: which comment, and which way, make no difference to the answer. */
+    if (req.method === "PATCH" && role === "review") {
+      return sendJson(res, 403, { error: "reviewers-cannot-resolve" });
+    }
 
     /* Only now is a byte of the body read: the token was checked by the gate
-       above, the review link's scope by the check above that, and the method
-       and the path by the two lines above this one (#74). The cap is this
-       route's own — a comment, not a script. */
+       above, the review link's scope by the check above that, and the method,
+       the path and the role by the lines above this one (#74). The cap is
+       this route's own — a comment, not a script. */
     const body = await readBody(req, COMMENT_BODY);
     const now = new Date().toISOString();
     /* Cloudflare Access's word first, the client's claim second: the same
