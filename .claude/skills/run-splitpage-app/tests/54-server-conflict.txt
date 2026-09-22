@@ -1,0 +1,103 @@
+# The compare-and-set save and its 409 merge (saveToServer, 13-hosted.js).
+#
+# This is the merge the README's collaboration story rests on and the only
+# one of the three that had no suite at all: the harness serves static files
+# and cannot start server.js, so there was no 409 to be had. There is one
+# here because `fetch` is replaced for PUTs to api/docs/ only — a queue of
+# answers in, a record of exactly what was sent out — which is enough to
+# drive the whole loop and to read back the two numbers that decide whether
+# anybody's work is lost. Everything else (GET, presence, update-status)
+# still goes to the real static server.
+#
+# The rest of the session comes from window.__hostedTest.setSession(), the
+# same hook 43-review-mode.txt uses.
+#
+# What it pins down (#72):
+#   * baseRev is the DOCUMENT's rev, taken from the server's own answers and
+#     nowhere else — 3 from the session, then 4 out of the 409 body, then 5
+#     out of the 200 body;
+#   * `state.rev` is NOT pre-incremented by the client. It is the merge
+#     counter inside the document (max-plus-one, 02-state.js) and moves only
+#     when a merge moves it. The client used to bump it on the way out and
+#     put it back on every failure, which was a second, private counter that
+#     drifted from the server's on every conflict;
+#   * both sides' edits survive the merge, and the banner only appears once
+#     the merged version is actually stored (reportMerge's alreadySaved).
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;return typeof F.save === 'function';})()
+expect true
+
+# A hosted document autosaves from the first keystroke, and every one of
+# those writes would take an answer out of the queue below.
+eval (function(){ if (F.autosave.enabled()) F.autosave.toggle(); return F.autosave.enabled() === false; })()
+expect true
+
+# The fake server: PUTs to api/docs/ are recorded and answered from
+# __answers; everything else goes through to the real one.
+eval (function(){ window.__puts = []; window.__answers = []; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); if (opts && opts.method === 'PUT' && u.indexOf('api/docs/') !== -1) { window.__puts.push(JSON.parse(opts.body)); var a = window.__answers.shift(); return Promise.resolve(new Response(JSON.stringify(a.body), {status: a.status, headers: {'content-type':'application/json'}})); } return real(url, opts); }; return true; })()
+expect true
+
+# connected, editing, and this view loaded the document at the server's rev 3
+eval (function(){ window.__hostedTest.setSession({docId:'doc-409', rev: 3}); return window.__hostedTest.role(); })()
+expect 'edit'
+
+# Their version: scene 2 reworded, and a merge counter of its own that has
+# nothing to do with ours — proving the counter the retry carries is the
+# merge's max-plus-one and not something the client invented.
+eval (function(){ window.__theirs = F.clone(F.state()); window.__theirs.rows[1].audioText = 'THEIRSCENETWO'; window.__theirs.rev = 2; return window.__theirs.rows.length; })()
+
+# ours: scene 1
+caret #rows .row .audio-cell .cell-editable
+type MINESCENEONE
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('MINESCENEONE') !== -1
+
+# somebody published between our load and our write, then we win the retry
+eval (function(){ window.__revBefore = F.state().rev; window.__answers = [ {status:409, body:{error:'conflict', rev:4, state: window.__theirs}}, {status:200, body:{id:'doc-409', rev:5, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return window.__revBefore; })()
+eval (async function(){ await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 2
+
+# the compare-and-set numbers, each one the server's own
+expect window.__puts[0].baseRev === 3
+expect window.__puts[1].baseRev === 4
+
+# the document's merge counter: untouched on the way out, moved only by the
+# merge that actually happened
+expect window.__puts[0].state.rev === window.__revBefore
+expect window.__puts[1].state.rev === Math.max(window.__revBefore, 2) + 1
+expect F.state().rev === window.__puts[1].state.rev
+
+# nobody's work was lost, and what went up is what is on screen
+expect document.querySelector('#rows').textContent.indexOf('MINESCENEONE') !== -1
+expect document.querySelector('#rows').textContent.indexOf('THEIRSCENETWO') !== -1
+expect window.__puts[1].state.rows[0].audioText.indexOf('MINESCENEONE') !== -1
+expect window.__puts[1].state.rows[1].audioText.indexOf('THEIRSCENETWO') !== -1
+
+# reported only once it was stored — the banner can never describe a merge
+# that failed to save
+expect !document.getElementById('merge-banner').hidden
+
+# THE KNOWN DIVERGENCE, recorded so that fixing it has to come past this
+# line. This path files its undo snapshot ("Before merging in someone else's
+# changes") and never points lastMergeUndo at it — applyMerge's armUndo:false
+# (03-sync.js) — so the button the banner just put on screen has nothing to
+# undo. Arming it changes what a user can do after a save conflict, so #72
+# left it alone and named it instead of quietly fixing it inside a refactor.
+eval (function(){ window.__warnBefore = document.querySelectorAll('.toast.warn').length; return true; })()
+click #merge-undo
+wait document.querySelectorAll('.toast.warn').length === window.__warnBefore + 1
+expect Array.prototype.some.call(document.querySelectorAll('.toast.warn'), function(t){ return t.textContent.indexOf('No merge snapshot to undo') !== -1; })
+
+# The next save goes out against the rev the 200 handed back, and does not
+# conflict: baseState is what the server confirmed, so there is nothing left
+# to merge.
+caret #rows .row .audio-cell .cell-editable
+type AGAIN
+eval document.activeElement.blur()
+eval (async function(){ window.__answers = [ {status:200, body:{id:'doc-409', rev:6, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 3
+expect window.__puts[2].baseRev === 5
+
+quit

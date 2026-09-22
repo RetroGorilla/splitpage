@@ -2,7 +2,12 @@ import { S } from "./_state.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
-import { adoptRestoredState, mergedDocId, normalizeDocId } from "./02b-doc-id.js";
+import {
+  adoptRestoredState,
+  mergedDocId,
+  normalizeDocId,
+  noteMergedDocId
+} from "./02b-doc-id.js";
 import {
   captureSnapshot,
   getHistorySnapshot,
@@ -34,6 +39,7 @@ import {
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { driveFormatSize } from "./13-hosted.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
+import { updateFileChip } from "./18-local-files.js";
 
 /* ================= sync: identity, snapshots, merge =================
 
@@ -1013,6 +1019,123 @@ function noteMergeAutoSave(opts) {
   if (!opts.noAutoSave) { queueAutoSave(); return; }
   haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
                "Press Save once you have looked them over.");
+}
+
+/* ---- one merge orchestration, not four copies (#72) ----
+
+   Every merge in this app ran the same sequence by hand: file the undo
+   point, merge, adopt the result, let the history follow the id if theirs
+   won it, reassign `baseState`, redraw, say what happened. It was written
+   out five times — saveToServer's 409 and two of resumeServerDoc's merges
+   (13-hosted.js), applyStashedWork (14-export.js) and, through it,
+   confirmFileMerge (18a-local-merge.js) — which is five chances for one
+   copy to drift from the others, and one already had: the 409 path files
+   an undo snapshot and never arms the button that would use it. That
+   divergence is now an option with a name (`armUndo`) rather than a line
+   that is simply missing from one copy of five.
+
+   THE ONE WRITER OF `baseState` on the merge paths. The base a merge
+   measures against has to be exactly what the other side last confirmed
+   (HANDOFF §3.6); it stopped being that because six places assigned it.
+
+   What varies between callers is options, never code:
+
+     base, mine, theirs   the three documents; normalised here, so a caller
+                          hands over whatever it is holding
+     imagesStripped       the stash dropped its images to fit (stashLocalWork)
+     source               which merge this is — names the undo point's label
+     undoPoint            the state the undo snapshot captures: the version
+                          the merge REPLACES, which is `theirs` at load time
+                          and `mine` in the middle of a save. Omitted files
+                          no snapshot and leaves "Undo merge" as it was.
+     armUndo              false files the snapshot without arming Undo merge
+     keepLabel            a second snapshot, of `mine`, so a version that was
+                          recovered from somewhere is a version in the history
+                          rather than something that only existed in a function
+     unchanged            the two sides are identical, so there is nothing to
+                          merge: adopt `theirs`, and skip the snapshot, the
+                          merge and the rev bump it would carry
+     mergeOnly            merge and file the undo point, hand the result back,
+                          and change nothing on screen — applyStashedWork's
+                          three callers each do something different next
+     newBase              what `baseState` becomes; omitted leaves it alone
+     historyFrom          the id this view wrote history under before the
+                          merge, for noteMergedDocId
+     chips                refresh the identity and file chips as well
+     report               false hands the merge back unreported — the 409
+                          path reports only once the merged version is
+                          actually stored, so the banner can never describe
+                          a merge that failed to save
+     noAutoSave           reportMerge's: mark dirty, write nothing
+     toast                {text, tone, sticky}; `text` may be a function,
+                          called once the merged document is on screen
+
+   → {state, result, snapshot}. `result` is null when nothing differed. */
+var UNDO_LABELS = {
+  "server-conflict": "Before merging in someone else's changes",
+  "server-resume": "Before merging your recovered changes",
+  "stash": "Before merging your unsaved changes"
+};
+
+export function applyMerge(opts) {
+  opts = opts || {};
+  var result = null;
+  var snap = null;
+
+  if (!opts.unchanged) {
+    /* Synchronous, and the ticket is kept: the undo point has to be known
+       before anything replaces what it is a point back to (invariant #39). */
+    if (opts.undoPoint) snap = pushSnapshot(UNDO_LABELS[opts.source], opts.undoPoint);
+    if (opts.keepLabel) pushSnapshot(opts.keepLabel, opts.mine);
+    result = mergeStates(
+      opts.base ? migrateRows(cloneState(opts.base)) : null,
+      migrateRows(cloneState(opts.mine)),
+      opts.theirs,
+      !!opts.imagesStripped
+    );
+  }
+  var next = result ? result.merged : opts.theirs;
+
+  /* Asked for an undo point and the store refused it (a document too large
+     to serialise, a full quota): the button must not be left pointing at
+     some EARLIER merge of this same document, which is a version from
+     before work this one has nothing to do with. */
+  function armUndoPoint(docId) {
+    if (!opts.undoPoint || opts.armUndo === false) return;
+    S.lastMergeUndo = snap ? { id: snap.id, docId: docId } : null;
+  }
+
+  if (opts.mergeOnly) {
+    /* Nothing has been adopted yet, so the id the undo point was filed
+       under is the only one there is. The caller adopts `next` next. */
+    armUndoPoint(snap && snap.docId);
+    return { state: next, result: result, snapshot: snap };
+  }
+
+  S.state = next;
+  /* Before the undo point is armed: noteMergedDocId may have just moved
+     this document's history to the merged id, and undoMerge compares what
+     it holds against state.docId before restoring. */
+  if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
+  armUndoPoint(S.state.docId);
+  if (opts.newBase !== undefined) S.baseState = opts.newBase;
+  render();
+  if (opts.chips) { updateIdentityChip(); updateFileChip(); }
+  if (result) {
+    if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
+  } else {
+    /* Nothing merged, but `theirs` still replaced what was on screen and
+       is not what is on disk or on the server. */
+    markDirty();
+  }
+  if (opts.toast) {
+    /* `text` may be a function, called here rather than by the caller: the
+       sentence usually names the document, and its title is the MERGED
+       one — which does not exist until the lines above have run. */
+    var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
+    if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
+  }
+  return { state: next, result: result, snapshot: snap };
 }
 
 /* Reverts to the version that was live before the merge — i.e. discards the

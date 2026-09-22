@@ -10,11 +10,10 @@ import {
 } from "./02b-doc-id.js";
 import {
   RELOAD_GUARD_KEY,
+  applyMerge,
   clearStash,
   cloneState,
   getEditorName,
-  mergeStates,
-  pushSnapshot,
   readStash
 } from "./03-sync.js";
 import { htmlToMarkdown, inertBody } from "./04-richtext.js";
@@ -345,8 +344,16 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave) {
    there is nothing to clear, and the caller has already aligned the two ids
    itself under rules a stash does not have (the docIdEmbedded rule,
    DRAFT-RENDERER-API). The merge below is deliberately identical for both:
-   one three-way merge, one "Before merging" snapshot, one undo point. */
-export function applyStashedWork(loaded, override) {
+   one three-way merge, one "Before merging" snapshot, one undo point.
+
+   `apply` is the rest of applyMerge's options (03-sync.js). Without it this
+   function merges and hands the result back for the caller to adopt, which
+   is what its three callers have always wanted: the boot path (21-events.js)
+   and the crash-draft restore (20g-drafts.js) each do something different
+   with it next. With it — only confirmFileMerge (18a-local-merge.js) — the
+   same applyMerge call finishes the job instead, so the file merge is one
+   call rather than a second copy of the sequence (#72). */
+export function applyStashedWork(loaded, override, apply) {
   var stash = override || readStash();
   if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
@@ -369,24 +376,30 @@ export function applyStashedWork(loaded, override) {
 
     clearStash();
   }
+  /* applyMerge speaks in {state, result, snapshot}; this function has
+     always answered in {state, report, snapshot} and its callers read that,
+     so the two names are reconciled here rather than in three places. */
+  function through(extra) {
+    var out = applyMerge(Object.assign(
+      { theirs: loaded, source: "stash", mergeOnly: !apply }, extra, apply || {}
+    ));
+    return { state: out.state, report: out.result, snapshot: out.snapshot };
+  }
+
   /* nothing changed under us after all */
-  if (JSON.stringify(stash.mine) === JSON.stringify(loaded)) return { state: loaded, report: null, snapshot: null };
+  if (JSON.stringify(stash.mine) === JSON.stringify(loaded)) return through({ unchanged: true });
 
-  /* The capture is synchronous and hands back its ticket, so the undo
-     point is known at once — no reading the store before and after to
-     guess which entry is new. Boot never awaits snap.done (state is still
-     null while this runs); undoMerge waits for its own backup instead. The
-     explicit state means the pristine-seed skip can never drop it. */
-  var snap = pushSnapshot("Before merging your unsaved changes", migrateRows(cloneState(loaded)));
-  S.lastMergeUndo = snap ? { id: snap.id, docId: snap.docId } : null;
-
-  var result = mergeStates(
-    stash.base ? migrateRows(cloneState(stash.base)) : null,
-    migrateRows(cloneState(stash.mine)),
-    loaded,
-    !!stash.imagesStripped
-  );
-  return { state: result.merged, report: result, snapshot: snap };
+  /* The undo point is captured synchronously and its ticket kept, so it is
+     known at once — no reading the store before and after to guess which
+     entry is new. Boot never awaits snap.done (state is still null while
+     this runs); undoMerge waits for its own backup instead. The explicit
+     state means the pristine-seed skip can never drop it. */
+  return through({
+    base: stash.base || null,
+    mine: stash.mine,
+    imagesStripped: !!stash.imagesStripped,
+    undoPoint: migrateRows(cloneState(loaded))
+  });
 }
 
 /* ================= autosave =================
