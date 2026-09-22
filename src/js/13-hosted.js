@@ -1,5 +1,14 @@
 import { S } from "./_state.js";
-import { home, serverHomeId, setHome } from "./_home.js";
+import {
+  conn,
+  home,
+  homeConn,
+  normalizeServerUrl,
+  serverHomeId,
+  setConnection,
+  setHome,
+  updateConnection
+} from "./_home.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
@@ -37,6 +46,8 @@ import {
   joinServer,
   openPinDialog,
   openServersDialog,
+  shortHost,
+  tunnelCommand,
   updateConnectMenu
 } from "./20e-connect.js";
 import { closeNewTabPage } from "./20j-newtab.js";
@@ -70,10 +81,21 @@ var sharedDocId;
    the code, nothing more, and it travels in the clear over plain HTTP. A
    server on the internet still needs Access in front of it.
 
-   A page can also be pointed at a server that did not serve it —
-   `serverBase` — so a copy on disk, or one served by a different machine,
-   can open documents from someone's shared session. That needs the server
-   to allow this origin (ALLOW_ORIGINS) and, if it has one, the PIN.
+   A page can also be pointed at a server that did not serve it — its
+   connection's `serverUrl` — so a copy on disk, or one served by a
+   different machine, can open documents from someone's shared session.
+   That needs the server to allow this origin (ALLOW_ORIGINS) and, if it
+   has one, the PIN.
+
+   THE CONNECTION IS THIS TAB'S (#11). `conn` (_home.js) is the one record
+   of which server this page talks to, the token it carries there, the role
+   the server gave it and the SSH tunnel it rides on. Every tab is its own
+   page, so two tabs can be on two servers — or one on a server and one on
+   a file — at once, and pointing one somewhere else leaves the other
+   exactly where it was. Before this the base and a remembered token lived
+   in localStorage, which every tab of the origin shares: switching server
+   in one tab re-pointed the next tab to load, and a remembered token was
+   sent to whichever server happened to be current.
 
    ALL OF THIS IS BROWSER STATE — localStorage and sessionStorage, per
    browser, per person. None of it is ever written into the document, so
@@ -82,13 +104,24 @@ var sharedDocId;
    may ever be moved into `state`. Nor into update-status.json or anything
    else the static handler serves (invariant #29). */
 
-/* "" means same-origin — the server that served this page, which is the
-   normal case and the only one before this existed. */
+/* The server a FRESH page starts on: "" is same-origin, the server that
+   served this page. Written when the reader picks a server in the Servers
+   dialog; read only by a page that has no server of its own yet (below). */
 var SERVER_BASE_KEY = "splitpage-server-base";
-/* sessionStorage by default: closing the tab forgets the code, which is the
-   right default for a code someone read out to you once. "Remember on this
-   device" moves it to localStorage. */
+/* THIS tab's server, {serverUrl, tunnel}: sessionStorage, which is per tab
+   — it survives this tab's reload, and another tab switching server never
+   touches it. */
+var TAB_SERVER_KEY = "splitpage-tab-server";
+/* This tab's token, {serverUrl, token}, sessionStorage: closing the tab
+   forgets the code, which is the right default for a code someone read out
+   to you once. It names the server it was given for, so it can never be
+   sent anywhere else. (Before #11 this key held the bare token.) */
 var SERVER_TOKEN_KEY = "splitpage-server-token";
+/* "Remember on this device": {serverUrl: token} in localStorage — one per
+   server, never sent to any other. The legacy single remembered token
+   (localStorage "splitpage-server-token") is moved in here once, under the
+   base it was remembered for. */
+var REMEMBERED_TOKENS_KEY = "splitpage-server-tokens";
 /* Minted per launch by start.mjs, arrives in the URL fragment, lives only
    as long as this tab. */
 var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
@@ -97,17 +130,15 @@ var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
    they were never told — the token it buys is sessionStorage too. */
 var REVIEW_KEY_KEY = "splitpage-review-key";
 
-export var serverBase = "";
-export var serverToken = "";
 var launchToken = "";
 var reviewKey = "";
 
-/* What this browser is allowed to do here, as the SERVER sees it: "edit",
-   "review", or "" before we have asked. It is read back from /api/me every
-   time the app connects, never stored, and never inferred from anything
-   local — a review session that reconnects is still a review session, and
-   nothing on this side can promote itself by editing its own storage. */
-S.serverRole = "";
+/* What this browser is allowed to do here, as the SERVER sees it — `conn.role`:
+   "edit", "review", or "" before we have asked. It is read back from /api/me
+   every time the tab connects, never stored, and never inferred from
+   anything local — a review session that reconnects is still a review
+   session, and nothing on this side can promote itself by editing its own
+   storage. */
 
 S.serverMode = { available: false, readOnly: false, checked: false,
                    authRequired: false, reviewAvailable: false, version: null };
@@ -123,7 +154,10 @@ export function onServerDoc() { return home.kind === "server"; }
    read-only and only the comment machinery stays live. Gated on there
    being a server document open, because the same tab can still have a
    local file of its own — this browser is restricted THERE, not here. */
-export function reviewMode() { return S.serverRole === "review" && onServerDoc(); }
+export function reviewMode() {
+  var c = homeConn();
+  return !!c && c.role === "review";
+}
 
 /* A Cloudflare Access session that has expired does not fail — it answers
    200 with an HTML sign-in page. Left undetected that lands as "unexpected
@@ -139,54 +173,168 @@ function ApiError(code, message) {
 
 /* Always ends in a single slash so apiUrl() can just concatenate, and
    always carries a scheme so a typed "192.168.1.20:8791" is not resolved
-   as a relative path. */
-export function normalizeServerBase(input) {
-  var url = String(input || "").trim();
-  if (!url) return "";
-  if (!/^https?:\/\//i.test(url)) url = "http://" + url;
-  return url.replace(/\/+$/, "") + "/";
-}
+   as a relative path. The one copy is _home.js's, where the connection
+   record checks against it; this name stays for the callers that had it. */
+export var normalizeServerBase = normalizeServerUrl;
 
-function loadServerBase() {
-  try { serverBase = localStorage.getItem(SERVER_BASE_KEY) || ""; }
-  catch (e) { serverBase = ""; }   /* private browsing: same-origin only */
-}
-
-export function setServerBase(input) {
-  serverBase = normalizeServerBase(input);
+function readJsonFrom(storage, key) {
   try {
-    if (serverBase) localStorage.setItem(SERVER_BASE_KEY, serverBase);
-    else localStorage.removeItem(SERVER_BASE_KEY);
+    var raw = storage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function rememberedTokens() {
+  var map = readJsonFrom(localStorage, REMEMBERED_TOKENS_KEY);
+  return map && typeof map === "object" && !Array.isArray(map) ? map : {};
+}
+
+function writeRememberedTokens(map) {
+  try {
+    if (Object.keys(map).length) localStorage.setItem(REMEMBERED_TOKENS_KEY, JSON.stringify(map));
+    else localStorage.removeItem(REMEMBERED_TOKENS_KEY);
+  } catch (e) { /* it just won't be remembered */ }
+}
+
+/* The token "Remember on this device" kept for THIS server, or "". */
+function rememberedTokenFor(serverUrl) {
+  var t = rememberedTokens()[serverUrl];
+  return typeof t === "string" ? t : "";
+}
+
+/* The one legacy remembered token, from before tokens were kept per server.
+   It can only have belonged to the base that was current when it was
+   remembered — switching server always cleared it — so that is where it
+   goes. */
+function migrateLegacyRememberedToken() {
+  var legacy, base;
+  try {
+    legacy = localStorage.getItem(SERVER_TOKEN_KEY);
+    base = normalizeServerUrl(localStorage.getItem(SERVER_BASE_KEY) || "");
+  } catch (e) { return; }
+  if (!legacy) return;
+  var map = rememberedTokens();
+  if (!map[base]) map[base] = legacy;
+  writeRememberedTokens(map);
+  try { localStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
+}
+
+/* This tab's own token, if it was given for this server. A bare string is
+   the pre-#11 shape: one token for whatever server this tab was on, which
+   is the server this tab is loading onto now. */
+function sessionTokenFor(serverUrl) {
+  var raw;
+  try { raw = sessionStorage.getItem(SERVER_TOKEN_KEY); } catch (e) { return ""; }
+  if (!raw) return "";
+  var rec;
+  try { rec = JSON.parse(raw); } catch (e) { rec = null; }
+  if (rec && typeof rec === "object") {
+    return rec.serverUrl === serverUrl && typeof rec.token === "string" ? rec.token : "";
+  }
+  return /^[A-Za-z0-9_-]+$/.test(raw) ? raw : "";
+}
+
+function saveTabServer() {
+  try {
+    sessionStorage.setItem(TAB_SERVER_KEY, JSON.stringify({ serverUrl: conn.serverUrl, tunnel: conn.tunnel }));
+    if (conn.token) {
+      sessionStorage.setItem(SERVER_TOKEN_KEY, JSON.stringify({ serverUrl: conn.serverUrl, token: conn.token }));
+    } else {
+      sessionStorage.removeItem(SERVER_TOKEN_KEY);
+    }
   } catch (e) { /* it just won't survive a reload */ }
+}
+
+/* Where this page starts, most specific first:
+     1. desktop — the tab's own source record, handed over by main at boot
+        (TAB-BOOT-SYNC's `connection`). A restored or newly opened server
+        tab is on the server its document lives on, whatever any other tab
+        last picked. Main may also hand over the token of the tab that
+        opened this one, so opening a document in a new tab does not ask
+        for the PIN again.
+     2. this tab's own sessionStorage — a reload stays where it was.
+     3. the default a fresh page starts on (localStorage), which is
+        whatever server was last deliberately picked.
+   The token then comes from the boot record, this tab's session, or
+   "Remember on this device" for THAT server — in that order, and never
+   from anything kept for another server. */
+function loadTabConnection() {
+  migrateLegacyRememberedToken();
+  var from = null;
+  var boot = S.DESKTOP && S.DESKTOP.connection;
+  if (boot && typeof boot === "object") from = boot;
+  if (!from) {
+    var mine = readJsonFrom(sessionStorage, TAB_SERVER_KEY);
+    if (mine && typeof mine === "object") from = mine;
+  }
+  if (!from) {
+    var fallback;
+    try { fallback = localStorage.getItem(SERVER_BASE_KEY) || ""; } catch (e) { fallback = ""; }
+    from = { serverUrl: fallback };
+  }
+  var serverUrl = normalizeServerUrl(from.serverUrl);
+  var token = (typeof from.token === "string" && from.token) || sessionTokenFor(serverUrl) ||
+              rememberedTokenFor(serverUrl);
+  try {
+    setConnection({ serverUrl: serverUrl, token: token, tunnel: from.tunnel || null });
+  } catch (e) {
+    /* A tunnel or an address that no longer validates is not a reason to
+       fail the boot: same-origin, as a fresh copy would be. */
+    setConnection({});
+  }
+  saveTabServer();
+}
+
+/* Point THIS tab at `serverUrl`. The caller has already left any server
+   home (setConnection refuses otherwise). opts: {token, tunnel,
+   makeDefault}. With no token given, the one remembered for that server —
+   and only that server — is used. makeDefault also makes it where the next
+   fresh page starts; nothing else about another tab changes. */
+export function pointTabAt(serverUrl, opts) {
+  opts = opts || {};
+  var url = normalizeServerUrl(serverUrl);
+  setConnection({
+    serverUrl: url,
+    token: opts.token || rememberedTokenFor(url),
+    tunnel: opts.tunnel || null
+  });
+  saveTabServer();
+  if (opts.makeDefault) {
+    try {
+      if (url) localStorage.setItem(SERVER_BASE_KEY, url);
+      else localStorage.removeItem(SERVER_BASE_KEY);
+    } catch (e) { /* it just won't be the default */ }
+  }
+  return conn;
 }
 
 export function apiUrl(path) {
   var rel = String(path || "").replace(/^\/+/, "");
-  return serverBase ? serverBase + rel : rel;
+  return conn.serverUrl ? conn.serverUrl + rel : rel;
 }
 
-function loadServerToken() {
-  serverToken = "";
-  try { serverToken = sessionStorage.getItem(SERVER_TOKEN_KEY) || ""; } catch (e) {}
-  if (!serverToken) {
-    try { serverToken = localStorage.getItem(SERVER_TOKEN_KEY) || ""; } catch (e) {}
-  }
-}
-
+/* A token for THIS tab's server. `remember` keeps it for this server on
+   this device; not remembering forgets any copy kept for this server
+   before (and no other server's). */
 export function setServerToken(token, remember) {
-  serverToken = String(token || "");
-  try {
-    sessionStorage.setItem(SERVER_TOKEN_KEY, serverToken);
-    if (remember) localStorage.setItem(SERVER_TOKEN_KEY, serverToken);
-    else localStorage.removeItem(SERVER_TOKEN_KEY);
-  } catch (e) { /* the token still works for this page's lifetime */ }
+  updateConnection({ token: String(token || "") });
+  saveTabServer();
+  var map = rememberedTokens();
+  if (remember) map[conn.serverUrl] = conn.token;
+  else delete map[conn.serverUrl];
+  writeRememberedTokens(map);
 }
 
+/* This server stopped taking our token (or we are leaving it): forget it
+   here, in this tab's session and on this device — for this server only. */
 export function clearServerToken() {
-  serverToken = "";
-  S.serverRole = "";
-  try { sessionStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
-  try { localStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
+  updateConnection({ token: "", role: "" });
+  saveTabServer();
+  var map = rememberedTokens();
+  if (Object.prototype.hasOwnProperty.call(map, conn.serverUrl)) {
+    delete map[conn.serverUrl];
+    writeRememberedTokens(map);
+  }
 }
 
 /* ---- the review link ----
@@ -214,7 +362,7 @@ export async function apiFetch(path, opts) {
   var headers = opts.body
     ? { "Content-Type": "application/json", "Accept": "application/json" }
     : { "Accept": "application/json" };
-  if (serverToken) headers["x-splitpage-token"] = serverToken;
+  if (conn.token) headers["x-splitpage-token"] = conn.token;
   var res;
   try {
     res = await fetch(apiUrl(path), {
@@ -227,7 +375,7 @@ export async function apiFetch(path, opts) {
          proves us there, and the server never answers with
          Allow-Credentials, so asking for cookies would only turn a working
          request into a CORS failure. */
-      credentials: serverBase ? "omit" : "same-origin",
+      credentials: conn.serverUrl ? "omit" : "same-origin",
       cache: "no-store"
     });
   } catch (e) {
@@ -347,8 +495,10 @@ async function resumeServerDoc() {
   var stateAtStart = S.state ? cloneState(S.state) : null;
 
   var body;
+  var via = conn;
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
+    if (via !== conn) return false;
   } catch (err) {
     /* still signed out, or the document is gone — leave SERVER_RESUME_KEY
        (and the stash it points at) alone so a later reload can still
@@ -544,17 +694,25 @@ export async function detectServer() {
   /* A saved base is tried first and is the reason a file:// page can have
      a server at all: the old skip was "no http, no server", and that is
      only still true when nobody has pointed this copy anywhere. */
-  if (!serverBase && location.protocol === "file:") { S.serverMode.checked = true; return; }
+  if (!conn.serverUrl && location.protocol === "file:") { S.serverMode.checked = true; return; }
+  /* Which connection this probe is for. The tab can be pointed somewhere
+     else while it is in flight (the Servers dialog, or main handing this
+     tab a document on another server), and an answer from the old server
+     must not be written over the new one's. */
+  var probing = conn;
   try {
     var health = await apiFetch("api/health");
+    if (probing !== conn) return;
     S.serverMode.available = !!(health && health.ok);
     S.serverMode.readOnly = !!(health && health.readOnly);
     S.serverMode.authRequired = !!(health && health.authRequired);
     S.serverMode.reviewAvailable = !!(health && health.reviewAvailable);
     S.serverMode.version = (health && health.version) || null;
   } catch (e) {
+    if (probing !== conn) return;
     S.serverMode.available = false;
   }
+  if (probing !== conn) return;
   S.serverMode.checked = true;
   updateConnectMenu();
   /* Also on the no-server path: the share entry's enabled state and its
@@ -562,9 +720,14 @@ export async function detectServer() {
      two can never drift apart (issue #19). */
   updateServerMenu();
   if (!S.serverMode.available) {
-    if (serverBase) {
-      showToast("Could not reach " + serverBase + " — use File ▸ Servers… to pick another, " +
-        "or go back to this copy.", "warn");
+    if (conn.serverUrl) {
+      /* A server reached through an SSH forward is only there while the
+         reader's own ssh command is running — nothing here starts it
+         (20e-connect.js's SSH helper), so say which one to start. */
+      showToast("Could not reach " + conn.serverUrl +
+        (conn.tunnel ? " — is the SSH tunnel to " + conn.tunnel.userHost + " running? (" +
+          tunnelCommand(conn.tunnel) + ") Or" : " —") +
+        " use File ▸ Servers… to pick another, or go back to this copy.", "warn");
     }
     return;
   }
@@ -573,14 +736,15 @@ export async function detectServer() {
      the one it has is stale): ask before listing anything. Every route
      past here would answer 401 anyway, and a picker full of "could not
      reach the server" is a worse way to say "type the PIN". */
-  if (S.serverMode.authRequired && !serverToken) {
+  if (S.serverMode.authRequired && !conn.token) {
     /* Arrived on a review link: the key in the fragment IS the code, so
        ask the server with it rather than asking the reader for something
        they were never given. A key that is no longer good (the session was
        restarted since the link was sent) simply falls through to the
        dialog, which is the only place a code is ever typed. */
     if (reviewKey) {
-      var joined = await joinServer(serverBase, null, reviewKey);
+      var joined = await joinServer(conn.serverUrl, null, reviewKey);
+      if (probing !== conn) return;
       if (joined && joined.ok) {
         setServerToken(joined.token, false);
         finishServerDetect();
@@ -588,7 +752,8 @@ export async function detectServer() {
       }
     }
     updateServerMenu();
-    openPinDialog({ reason: "This server asks for a join PIN before it will show you anything." });
+    openPinDialog({ reason: (conn.serverUrl ? shortHost(conn.serverUrl) : "This server") +
+      " asks for a join PIN before it will show you anything." });
     return;
   }
 
@@ -602,12 +767,18 @@ export async function finishServerDetect() {
   /* Access hands us a verified email; use it for attribution so reviewers
      don't have to introduce themselves, but never overwrite a name someone
      has deliberately set for themselves. */
+  var asking = conn;
   try {
-    serverIdentity = await apiFetch("api/me");
+    var me = await apiFetch("api/me");
+    /* A tab pointed elsewhere while /api/me was in flight: that answer is
+       about a server this tab has left, and its role must not land on the
+       connection that replaced it. */
+    if (asking !== conn) return;
+    serverIdentity = me;
     /* The role rides along with identity: same answer, same round trip,
        and it comes from the token rather than from anything this page
        could have decided for itself. */
-    S.serverRole = (serverIdentity && serverIdentity.role) || "edit";
+    updateConnection({ role: (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit" });
     if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
       saveAuthorName(serverIdentity.name);
       updateIdentityChip();
@@ -635,7 +806,7 @@ function updateServerMenu() {
   /* Publishing is a write, and a review session has none. The server says
      so too (403 review-only on POST /api/docs) — this only keeps the app
      from offering something it knows will be refused. */
-  if (newBtn) newBtn.disabled = S.serverMode.readOnly || S.serverRole === "review";
+  if (newBtn) newBtn.disabled = S.serverMode.readOnly || conn.role === "review";
   /* The share entry is never hidden — it is how someone with no server yet
      finds out that sharing a live document is possible at all, and it says
      so and opens the Servers dialog rather than doing nothing. Read-only is
@@ -643,9 +814,9 @@ function updateServerMenu() {
      the reason in its tooltip. */
   var shareBtn = document.getElementById("menu-share-link");
   if (shareBtn) {
-    shareBtn.disabled = S.serverMode.available && (S.serverMode.readOnly || S.serverRole === "review");
+    shareBtn.disabled = S.serverMode.available && (S.serverMode.readOnly || conn.role === "review");
     shareBtn.title = shareBtn.disabled
-      ? (S.serverRole === "review"
+      ? (conn.role === "review"
           ? "You are viewing this session — publishing a script needs the editing code."
           : "This server is published read-only — nothing new can be put on it.")
       : "Puts this script on the connected server and copies a link to it. " +
@@ -689,12 +860,12 @@ export function reviewBlocked() {
    out — no review credential, no hosted document, or this browser is
    itself a reviewer. */
 export async function fetchReviewLink() {
-  if (!S.serverMode.available || !S.serverMode.reviewAvailable || S.serverRole === "review") return "";
+  if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
   if (!onServerDoc()) return "";
   var body;
   try { body = await apiFetch("api/share?doc=" + encodeURIComponent(home.id)); } catch (e) { return ""; }
   if (!body || !body.reviewKey) return "";
-  var base = serverBase || (location.origin + "/");
+  var base = conn.serverUrl || (location.origin + "/");
   /* The link carries the document as well as the key: the key only opens
      that one document, so landing anywhere else would be a dead end. */
   return base + "?doc=" + encodeURIComponent(body.docId || home.id) +
@@ -746,19 +917,30 @@ function renderServerPicker() {
         '</span>' +
       '</button>' +
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-      (S.serverMode.readOnly || S.serverRole === "review" ? '' :
+      (S.serverMode.readOnly || conn.role === "review" ? '' :
         '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
           escapeHtml(d.id) + '" title="Delete this document from the server">×</button>') +
     '</div>';
   }).join("");
 }
 
+/* → true once the document is on screen, false otherwise — so a caller
+   waiting to open it (a restored desktop tab, 20f-desktop.js) can tell a
+   PIN still to be typed from a document that opened. */
 export async function openServerDoc(id) {
   var body;
+  /* The document is on the server this tab was pointed at when it asked.
+     If the tab was pointed somewhere else before the answer came back, it
+     is not this tab's document any more (#11). */
+  var via = conn;
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(id));
-  } catch (err) { handleApiError(err, "Could not open that document"); return; }
-  if (!body || !body.state) { showToast("That document is empty.", "warn"); return; }
+  } catch (err) {
+    if (via !== conn) return false;
+    handleApiError(err, "Could not open that document"); return false;
+  }
+  if (via !== conn) return false;
+  if (!body || !body.state) { showToast("That document is empty.", "warn"); return false; }
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
@@ -784,6 +966,7 @@ export async function openServerDoc(id) {
   closeServerPicker();
   showToast("Opened " + (S.state.title || id) + " from the server — " + S.state.rows.length +
     " scene" + (S.state.rows.length === 1 ? "" : "s"), "ok");
+  return true;
 }
 
 /* → true once the document is on the server. The boolean is what
@@ -791,7 +974,7 @@ export async function openServerDoc(id) {
    copied for a publish that did not happen. */
 export async function publishToServer() {
   if (S.serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
-  if (S.serverRole === "review") {
+  if (conn.role === "review") {
     showToast("You are viewing this session — publishing a script needs the editing code.", "warn");
     return false;
   }
@@ -804,11 +987,15 @@ export async function publishToServer() {
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
+  var via = conn;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
       return apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
     });
   } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
+  /* Published to the server the tab WAS on; this tab has since been pointed
+     elsewhere, so the copy there is not its home. */
+  if (via !== conn) return false;
   setHome("server", { id: body.id, rev: body.rev || 1 });
   S.baseState = published;
   /* Adopted only after the server has it, like Save As. The id check keeps
@@ -846,15 +1033,15 @@ export async function publishToServer() {
    toast names what the recipient will be asked for (a join PIN, an Access
    sign-in, or nothing at all) before they get there. */
 
-/* serverBase is "" when this page was served BY the document server, in
+/* conn.serverUrl is "" when this page was served BY the document server, in
    which case the address to share is this page's own. Built through the
    URL parser so a "?doc=" already in the bar, a fragment, or a path that
    is not the root all resolve the way a browser would. */
 function serverDocShareUrl(id) {
   try {
-    return new URL("?doc=" + encodeURIComponent(id), serverBase || location.href).href;
+    return new URL("?doc=" + encodeURIComponent(id), conn.serverUrl || location.href).href;
   } catch (e) {
-    return (serverBase || "") + "?doc=" + encodeURIComponent(id);
+    return (conn.serverUrl || "") + "?doc=" + encodeURIComponent(id);
   }
 }
 
@@ -2202,9 +2389,7 @@ export function driveSignOut() {
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
-  loadServerBase();
-
-  loadServerToken();
+  loadTabConnection();
 
   readReviewKey();
 
@@ -2247,7 +2432,7 @@ export function __init() {
       S.serverMode.checked = true;
       S.serverMode.authRequired = true;
       S.serverMode.reviewAvailable = opts.reviewAvailable !== false;
-      S.serverRole = opts.role || "edit";
+      updateConnection({ role: opts.role || "edit" });
       /* `docId: null` says "not on a server document" — which leaves a
          local home exactly where it was, as zeroing serverDoc used to. */
       if (opts.docId === null) { if (home.kind === "server") setHome("none"); }
@@ -2264,7 +2449,19 @@ export function __init() {
       updateServerMenu();
       render();
     },
-    role: function () { return S.serverRole; },
+    role: function () { return conn.role; },
+    /* This tab's connection (#11), with the token reduced to whether there
+       is one — a suite has no business reading the credential itself. */
+    conn: function () {
+      return { serverUrl: conn.serverUrl, hasToken: !!conn.token, role: conn.role,
+               tunnel: conn.tunnel ? Object.assign({}, conn.tunnel) : null,
+               homeHoldsIt: home.kind === "server" && home.conn === conn };
+    },
+    /* Point this tab somewhere, as the Servers dialog does, without a
+       server to answer — for the per-tab storage the suites can watch. */
+    pointTabAt: function (url, opts) { if (home.kind === "server") setHome("none"); return pointTabAt(url, opts).serverUrl; },
+    setToken: setServerToken,
+    clearToken: clearServerToken,
     reviewMode: reviewMode,
     reviewLink: fetchReviewLink,
     /* Where the document lives (_home.js), for the suites that watch the

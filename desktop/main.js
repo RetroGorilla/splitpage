@@ -429,7 +429,9 @@ const windowsById = new Map();
    sender into the tab it belongs to without the page ever naming itself.
    pathToTabId and serverDocIdToTabId answer "is this already open?", which
    is decided by absolute path or server document id and never by docId
-   (invariant #36). */
+   (invariant #36). A server document is keyed by its server AND its id
+   (serverRouteKey, #11): tabs can be on different servers, and the same id
+   on two of them is two documents. */
 const webContentsIdToTabId = new Map();
 const pathToTabId = new Map();
 const serverDocIdToTabId = new Map();
@@ -525,7 +527,12 @@ const docClaimCleanupRegistered = new WeakSet();
    spellings of one path there are one file. Paths are resolved HERE from the
    opaque fileId: the renderer never sends one (invariant #34). */
 function homeKeyForClaim(tab) {
-  if (tab.serverKey) return "server:" + String(tab.serverKey).slice(0, 200);
+  if (tab.serverKey) {
+    /* The same id on two servers is two homes (#11). This app's own server
+       keeps the key it always had. */
+    const url = tab.source.kind === "server" && tab.source.serverUrl ? "@" + tab.source.serverUrl : "";
+    return "server:" + String(tab.serverKey).slice(0, 200) + url;
+  }
   const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
@@ -890,7 +897,9 @@ function requestDraftFlush(tab, budgetMs) {
  *    Shape (contract DESKTOP-STATE-V2):
  *      {version:2, windows:[{windowId, bounds:{x,y,width,height}|null,
  *        maximized, activeTabId, tabs:[{tabId, source, lastKnownTitle}]}]}
- *      source = {kind:'file', absPath} | {kind:'server', serverDocId} | {kind:'blank'}
+ *      source = {kind:'file', absPath}
+ *             | {kind:'server', serverDocId, serverUrl, tunnel}
+ *             | {kind:'blank'}
  *    Array order is window order and strip order. There is deliberately no
  *    docId and no draftId: a document's id lives in the document, and a
  *    tab's draft folder is named by its tabId.
@@ -955,16 +964,118 @@ function normalizeBounds(b) {
   return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
 }
 
+/* ---- PER-TAB CONNECTIONS (#11) ----------------------------------------
+
+   A server tab's source names the server its document is on, not just the
+   document's id: tabs can be on different servers, and a tab restored after
+   a relaunch has to come back on ITS server rather than on whichever one
+   some other tab picked last. The connection is the renderer's `conn`
+   (src/js/_home.js):
+
+     serverUrl  "" for this app's own document server (splitpage://app/api,
+                --library/--host), else the http(s) base the page talks to.
+     tunnel     null, or {userHost, remotePort, localPort} — the SSH forward
+                the reader runs themselves to reach that base. Host and
+                ports only, the same fields a Servers-dialog bookmark keeps.
+                Nothing here ever starts ssh for a tab: the only ssh this
+                process spawns is --tunnel's, from its own argv.
+     token      IN MEMORY ONLY, AND ONLY IN TRANSIT. When a page asks to open
+                a server document (splitpage:route-open) and main answers
+                with a NEW tab, the asking page's token is kept on that new
+                tab's record just long enough to hand it to the new page at
+                boot (TAB-BOOT-SYNC) — then it is dropped from the record.
+                The new tab does not ask for a PIN the reader already typed,
+                and main does not go on holding a credential it has no more
+                use for: from then on the page keeps its own (sessionStorage,
+                which a crash reload keeps too). A this-tab route never
+                stores one at all — that page already has it. Never written
+                to desktop-state.json, a draft header or anything else on
+                disk (invariant #29): a restored tab asks again unless the
+                reader chose "Remember on this device" for that server,
+                which is the renderer's own storage.
+     role       IN MEMORY ONLY, as the page last reported it — informational
+                (the test shell reads it). Never handed to a page: a page
+                learns its role from the server, every time.
+
+   Every field from a page is validated here; a page is not trusted to name
+   a URL main would ever open, and nothing here opens one (the teleprompter
+   refuses a remote server tab — section 9b). */
+const SERVER_URL_MAX = 2048;
+const TUNNEL_USERHOST_RE = /^[A-Za-z0-9._@:[\]-]{1,255}$/;
+const CONN_TOKEN_RE = /^[A-Za-z0-9_-]{1,256}$/;
+
+/* "" (this app's own server), the page's own normalized base unchanged, or
+   null for anything that is not one: not http(s), a user:password, a query,
+   a fragment, whitespace, or no trailing slash. Unchanged rather than
+   rebuilt so a page comparing it to its own `conn.serverUrl` gets the same
+   string back. */
+function normalizeServerUrl(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  if (typeof v !== "string" || v.length > SERVER_URL_MAX || /\s/.test(v) || !v.endsWith("/")) return null;
+  let u;
+  try { u = new URL(v); } catch { return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  if (u.username || u.password || u.search || u.hash || v.indexOf("?") !== -1 || v.indexOf("#") !== -1) return null;
+  if (!/^https?:\/\//i.test(v)) return null;
+  return v;
+}
+
+function normalizeTunnel(t) {
+  if (!t || typeof t !== "object") return null;
+  const port = (n) => Number.isInteger(n) && n >= 1 && n <= 65535;
+  if (typeof t.userHost !== "string" || !TUNNEL_USERHOST_RE.test(t.userHost) || t.userHost[0] === "-") return null;
+  if (!port(t.remotePort) || !port(t.localPort)) return null;
+  return { userHost: t.userHost, remotePort: t.remotePort, localPort: t.localPort };
+}
+
+function normalizeConnToken(t) { return typeof t === "string" && CONN_TOKEN_RE.test(t) ? t : ""; }
+function normalizeConnRole(r) { return r === "edit" || r === "review" ? r : ""; }
+
+/* The in-memory server source: what a TabRecord holds. */
+function serverSource(serverDocId, c) {
+  const o = c || {};
+  return {
+    kind: "server",
+    serverDocId,
+    serverUrl: normalizeServerUrl(o.serverUrl) || "",
+    tunnel: normalizeTunnel(o.tunnel),
+    token: normalizeConnToken(o.token),
+    role: normalizeConnRole(o.role)
+  };
+}
+
+/* The routing key for a server document: which server, and which id on it. */
+function serverRouteKey(src) {
+  return (src.serverUrl || "") + "\n" + src.serverDocId;
+}
+
+/* The PERSISTED shape — also what every v2 read produces. token and role are
+   not in it, so they cannot reach desktop-state.json however a TabRecord is
+   handed in: this is the whitelist shellStateAsV2 writes through. A server
+   source whose address does not validate comes back blank rather than
+   silently re-homed on this app's own server, where the same id would be
+   somebody else's document. A pre-#11 server source has no serverUrl at
+   all, which meant this app's own server; it still does. */
 function normalizeTabSource(src) {
   if (src && typeof src === "object") {
     if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
       return { kind: "file", absPath: src.absPath };
     }
     if (src.kind === "server" && typeof src.serverDocId === "string" && src.serverDocId) {
-      return { kind: "server", serverDocId: src.serverDocId };
+      const serverUrl = normalizeServerUrl(src.serverUrl);
+      if (serverUrl === null) return { kind: "blank" };
+      return { kind: "server", serverDocId: src.serverDocId, serverUrl, tunnel: normalizeTunnel(src.tunnel) };
     }
   }
   return { kind: "blank" };
+}
+
+/* The in-memory form of a source handed to createTab: the persisted shape,
+   plus the token and role a server source may carry in memory. */
+function liveTabSource(src) {
+  const base = normalizeTabSource(src);
+  if (base.kind !== "server") return base;
+  return serverSource(base.serverDocId, { ...base, token: src.token, role: src.role });
 }
 
 function blankDesktopWindow(extra) {
@@ -1296,7 +1407,9 @@ function shellStateAsV2() {
          (DESKTOP-STATE-V2): relaunching into a row of empty documents the
          user never asked for would be worse than losing nothing. */
       if (tab.source.kind === "blank" && !draftsHasDraft(tabId)) continue;
-      rows.push({ tabId, source: tab.source, lastKnownTitle: tab.title || "" });
+      /* normalizeTabSource is the whitelist: a server tab's in-memory token
+         and role stop here (invariant #29, #11). */
+      rows.push({ tabId, source: normalizeTabSource(tab.source), lastKnownTitle: tab.title || "" });
     }
     /* …except that a window whose tabs are ALL skipped would vanish from the
        file entirely (normalizeDesktopStateV2 drops a window with no tabs),
@@ -2860,6 +2973,10 @@ async function openPrompterInBrowser(tab) {
   const source = tab.source || { kind: "blank" };
   let url;
   if (source.kind === "server") {
+    /* A document on somebody else's server (#11) has no loopback URL here,
+       and this channel never opens one the page named. The page copies its
+       own share link instead (20f-desktop.js) and never reaches this. */
+    if (source.serverUrl) return { ok: false, code: "REMOTE_SERVER" };
     const id = typeof source.serverDocId === "string" ? source.serverDocId : "";
     if (!SERVER_DOC_ID_RE.test(id)) return { ok: false, code: "NOT_SAVED" };
     if (!documentServerPort) return { ok: false, code: "NO_SERVER" };
@@ -3371,7 +3488,7 @@ function claimRoutingKey(map, key, tabId) {
 
 function indexTabSource(tab) {
   if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
-  if (tab.source.kind === "server") claimRoutingKey(serverDocIdToTabId, tab.source.serverDocId, tab.id);
+  if (tab.source.kind === "server") claimRoutingKey(serverDocIdToTabId, serverRouteKey(tab.source), tab.id);
 }
 
 function unindexTabSource(tab) {
@@ -3466,7 +3583,7 @@ function createTab(windowId, opts) {
     windowId,
     view,
     webContentsId: view.webContents.id,
-    source: normalizeTabSource(o.source),
+    source: liveTabSource(o.source),
     fileId: null,
     title: "",
     dirty: false,
@@ -3811,11 +3928,14 @@ function routeOpenPath(absPath, opts) {
   return created ? { where: "new-tab", tabId: created.id } : null;
 }
 
-function routeOpenServerDoc(serverDocId, opts) {
+/* `c` is the calling tab's connection, {serverUrl, token, tunnel}, already
+   validated by the route-open handler: the document is on THAT server. */
+function routeOpenServerDoc(serverDocId, c, opts) {
   const o = opts || {};
   if (typeof serverDocId !== "string" || !serverDocId) return null;
+  const source = serverSource(serverDocId, c);
 
-  const existingId = serverDocIdToTabId.get(serverDocId);
+  const existingId = serverDocIdToTabId.get(serverRouteKey(source));
   const existing = existingId ? tabs.get(existingId) : null;
   if (existing) {
     activateTab(existing.id);
@@ -3827,10 +3947,12 @@ function routeOpenServerDoc(serverDocId, opts) {
   if (!w) return null;
   const target = tabs.get(o.fromTabId) || tabs.get(w.activeTabId);
   if (target && target.pristine && target.ready) {
-    target.source = { kind: "server", serverDocId };
+    /* This page already holds its own token; main keeps none for it. */
+    source.token = "";
+    target.source = source;
     indexTabSource(target);
     if (!target.view.webContents.isDestroyed()) {
-      target.view.webContents.send("splitpage:open-server-doc", { serverDocId });
+      target.view.webContents.send("splitpage:open-server-doc", payloadForSource(source));
     }
     activateTab(target.id);
     persistShellState();
@@ -3838,9 +3960,9 @@ function routeOpenServerDoc(serverDocId, opts) {
   }
 
   const created = createTab(w.id, {
-    source: { kind: "server", serverDocId },
+    source,
     launchIntent: { type: "open-server" },
-    pendingPayload: { kind: "open-server", serverDocId }
+    pendingPayload: payloadForSource(source)
   });
   return created ? { where: "new-tab", tabId: created.id } : null;
 }
@@ -4108,7 +4230,11 @@ function focusWindow(windowId) {
 function payloadForSource(source) {
   if (!source) return null;
   if (source.kind === "file") return { kind: "open-file", absPath: source.absPath };
-  if (source.kind === "server") return { kind: "open-server", serverDocId: source.serverDocId };
+  /* The server travels with the id (#11) so the page can check it is on
+     the right one; the token does not — a page gets that once, at boot. */
+  if (source.kind === "server") {
+    return { kind: "open-server", serverDocId: source.serverDocId, serverUrl: source.serverUrl || "" };
+  }
   return null;
 }
 
@@ -4161,7 +4287,11 @@ function draftSourceFromListing(listing) {
   const origin = (listing.header && listing.header.origin) || null;
   if (listing.filePath) return { kind: "file", absPath: listing.filePath };
   if (origin && origin.server && typeof origin.server.docId === "string" && origin.server.docId) {
-    return { kind: "server", serverDocId: origin.server.docId };
+    /* The draft header records the server as draftServerOrigin rebuilt it:
+       an http(s) origin+pathname, or null for this app's own server. */
+    const base = typeof origin.server.base === "string" && origin.server.base
+      ? origin.server.base.replace(/\/*$/, "/") : "";
+    return normalizeTabSource({ kind: "server", serverDocId: origin.server.docId, serverUrl: base });
   }
   return { kind: "blank" };
 }
@@ -4259,13 +4389,17 @@ function restoreSessionAtLaunch(draftInit) {
 
         if (pt.source.kind === "server") {
           /* A server that is not reachable at relaunch is not probed here
-             (the main process has no session and no PIN): the tab opens and
-             its own renderer reports the failure through a toast. */
+             (the main process has no session and no PIN): the tab opens on
+             ITS server (TAB-BOOT-SYNC's connection, #11) and its own
+             renderer reports the failure through a toast. It carries no
+             token — desktop-state.json never holds one — so a server that
+             asks for a PIN asks again, unless the reader chose "Remember on
+             this device" for that server. */
           const tab = createTab(rec.id, {
             tabId: pt.tabId,
             source: pt.source,
             launchIntent: { type: "open-server" },
-            pendingPayload: { kind: "open-server", serverDocId: pt.source.serverDocId }
+            pendingPayload: payloadForSource(pt.source)
           });
           if (tab) placed.add(tab.id);
           continue;
@@ -4938,10 +5072,23 @@ function registerIpc() {
         try { draftStore.release(tab.id); } catch { /* store not usable */ }
       }
     }
+    /* The token rides this one answer and is then dropped from the record
+       (#11): the page keeps its own from here on. */
+    const connection = tab.source.kind === "server"
+      ? { serverUrl: tab.source.serverUrl || "", token: tab.source.token || "", tunnel: tab.source.tunnel || null }
+      : null;
+    if (tab.source.kind === "server") tab.source.token = "";
     return {
       tabId: tab.id,
       windowId: tab.windowId,
       launchIntent: intent,
+      /* #11: the server a server tab's document is on, so the page's very
+         first /api/health goes to the right one, and the token route-open
+         handed over for a new tab, if any. null
+         for any other tab, which starts where a fresh page starts. Never a
+         path, never a server document id (invariant #34): the id still
+         arrives with the pending payload. */
+      connection,
       hadPriorSession,
       firstTabOfLaunch: tab.firstTabOfLaunch === true,
       hasDraftToRestore
@@ -5025,8 +5172,25 @@ function registerIpc() {
     if (hasServerKey) tab.serverKey = typeof s.serverKey === "string" && s.serverKey ? s.serverKey : null;
     if (hasFileId) tab.fileId = absPath ? s.fileId : null;
     if (hasFileId || hasServerKey) {
+      const prev = tab.source.kind === "server" ? tab.source : null;
       unindexTabSource(tab);
-      if (tab.serverKey) tab.source = { kind: "server", serverDocId: tab.serverKey };
+      if (tab.serverKey) {
+        /* Which server the document is on (#11). An older page reports no
+           serverUrl; an unusable one is not believed. Either way the
+           server this tab's source already named stays, if it is the same
+           document, and this app's own otherwise. The in-memory token
+           stays only while the server does. */
+        const reported = "serverUrl" in s ? normalizeServerUrl(s.serverUrl) : null;
+        const kept = prev && prev.serverDocId === tab.serverKey ? prev.serverUrl : "";
+        const serverUrl = reported === null ? kept : reported;
+        const sameServer = !!prev && prev.serverUrl === serverUrl;
+        tab.source = serverSource(tab.serverKey, {
+          serverUrl,
+          tunnel: "tunnel" in s ? s.tunnel : (sameServer ? prev.tunnel : null),
+          token: sameServer ? prev.token : "",
+          role: "role" in s ? s.role : (sameServer ? prev.role : "")
+        });
+      }
       else if (absPath) tab.source = { kind: "file", absPath };
       /* Both reported and both empty is the one honest "this tab holds no
          document any more" (New document, or a server document closed). */
@@ -5083,7 +5247,14 @@ function registerIpc() {
       return { where: result.where };
     }
     if (p.kind === "server") {
-      const result = routeOpenServerDoc(String(p.serverDocId || ""), { fromWindowId: tab.windowId, fromTabId: tab.id });
+      /* The connection the page is on (#11). An address that does not
+         validate is refused outright rather than routed to this app's own
+         server under the same id, which would be somebody else's document.
+         A token that does not look like one is simply not carried. */
+      const serverUrl = normalizeServerUrl(p.serverUrl);
+      if (serverUrl === null) throw new Error("route-open: not a server address");
+      const c = { serverUrl, token: p.token, tunnel: p.tunnel };
+      const result = routeOpenServerDoc(String(p.serverDocId || ""), c, { fromWindowId: tab.windowId, fromTabId: tab.id });
       if (!result) throw new Error("could not route that server document");
       return { where: result.where };
     }
@@ -5497,7 +5668,14 @@ function registerIpc() {
               dirty: !!t.dirty,
               pristine: !!t.pristine,
               isServerDoc: t.source.kind === "server",
-              path: t.source.kind === "file" ? t.source.absPath : null
+              path: t.source.kind === "file" ? t.source.absPath : null,
+              /* #11: which server, and whether main is holding a token for
+                 it — never the token itself, even here. */
+              serverDocId: t.source.kind === "server" ? t.source.serverDocId : null,
+              serverUrl: t.source.kind === "server" ? t.source.serverUrl : null,
+              tunnel: t.source.kind === "server" ? t.source.tunnel : null,
+              hasToken: t.source.kind === "server" ? !!t.source.token : false,
+              role: t.source.kind === "server" ? t.source.role : null
             } : null;
           }).filter(Boolean)
         }))

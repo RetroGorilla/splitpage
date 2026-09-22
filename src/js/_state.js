@@ -131,11 +131,8 @@ export const S = {
   /* 20e-connect declares it; 20e-connect, 20h-appdata assign it. */
   serverBookmarks: undefined,
 
-  /* 13-hosted declares it; 13-hosted, 20e-connect assign it. */
+  /* 13-hosted declares it; 13-hosted, 20e-connect, 20f-desktop assign it. */
   serverMode: undefined,
-
-  /* 13-hosted declares it; 13-hosted, 20e-connect assign it. */
-  serverRole: undefined,
 
   /* 00-prelude declares it; 00-prelude, 20-teleprompter assign it. */
   speakCursor: undefined,

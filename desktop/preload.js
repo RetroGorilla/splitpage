@@ -140,6 +140,22 @@ if (location.origin === "splitpage://app") {
   const launchIntent = boot.launchIntent && typeof boot.launchIntent === "object"
     ? { type: String(boot.launchIntent.type || "blank") }
     : { type: "blank" };
+  /* #11: a server tab's connection — the server its document is on, the
+     SSH forward it rides (host and ports), and, only for a tab another tab
+     opened, the token that tab handed over so this one does not ask for the
+     PIN again. Copied field by field as plain scalars, and frozen: the page
+     reads it once, at boot, to decide where its first request goes. */
+  const bootConn = boot.connection && typeof boot.connection === "object" ? boot.connection : null;
+  const bootTunnel = bootConn && bootConn.tunnel && typeof bootConn.tunnel === "object" ? bootConn.tunnel : null;
+  const connection = bootConn ? Object.freeze({
+    serverUrl: typeof bootConn.serverUrl === "string" ? bootConn.serverUrl : "",
+    token: typeof bootConn.token === "string" ? bootConn.token : "",
+    tunnel: bootTunnel ? Object.freeze({
+      userHost: String(bootTunnel.userHost || ""),
+      remotePort: Number(bootTunnel.remotePort),
+      localPort: Number(bootTunnel.localPort)
+    }) : null
+  }) : null;
   const hadPriorSession = boot.hadPriorSession === true;
   const firstTabOfLaunch = boot.firstTabOfLaunch === true;
   const hasDraftToRestore = boot.hasDraftToRestore === true;
@@ -163,6 +179,7 @@ if (location.origin === "splitpage://app") {
     tabId,
     windowId,
     launchIntent,
+    connection,
     hadPriorSession,
     firstTabOfLaunch,
     hasDraftToRestore,
@@ -190,7 +207,9 @@ if (location.origin === "splitpage://app") {
     /* "Open this" — main decides WHERE it lands (this tab, a tab that
        already has it, or a new one) and answers which of the three it was.
        The payload names a document by opaque file id or server document id,
-       never by path. */
+       never by path. A server document also names the server it is on and
+       carries this tab's token for it, once, so a new tab main opens for it
+       does not ask for the PIN again (#11) — main keeps that in memory only. */
     routeOpen(payload) {
       return invoke("splitpage:route-open", payload);
     },

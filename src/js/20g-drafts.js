@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { fileHome, home, importHome, setHome } from "./_home.js";
+import { conn, fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -13,7 +13,7 @@ import { cloneState, pushSnapshot, reportMerge, updateIdentityChip } from "./03-
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { onServerDoc, serverBase, serverToken } from "./13-hosted.js";
+import { onServerDoc } from "./13-hosted.js";
 import { applyStashedWork } from "./14-export.js";
 import {
   adoptProjectState,
@@ -166,7 +166,10 @@ function draftOriginOf() {
   };
   if (onServerDoc()) {
     origin.kind = "server";
-    origin.server = { base: serverBase || "", docId: home.id, rev: home.rev || 0 };
+    /* The server the document was opened through — this tab's own (#11).
+       The address only: draftServerOrigin (main.js) keeps origin+pathname
+       and drops anything else, and the token is never offered. */
+    origin.server = { base: home.conn.serverUrl || "", docId: home.id, rev: home.rev || 0 };
     return origin;
   }
   var file = fileHome();
@@ -665,7 +668,7 @@ async function restoreServerDraft(t, mine, origin) {
      document id means nothing over there, so merging would be merging into
      a stranger's script. */
   var headerBase = draftNormalizeBase(server.base);
-  if (headerBase && headerBase !== draftNormalizeBase(serverBase)) {
+  if (headerBase && headerBase !== draftNormalizeBase(conn.serverUrl)) {
     S.draftServerResume = null;
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
@@ -703,7 +706,7 @@ async function restoreServerDraft(t, mine, origin) {
      Everything else gets a bounded wait first — a resume that answers is the
      common case, and a banner that flashes up and vanishes is worse than no
      banner. */
-  var waitMs = (S.serverMode.authRequired && !serverToken) ? 0 : draftTiming.serverWait;
+  var waitMs = (S.serverMode.authRequired && !conn.token) ? 0 : draftTiming.serverWait;
   var outcome = await draftRaceTimeout(draftServerSettle.promise, waitMs);
   if (outcome === null) {
     showDraftPendingBanner(t, title);

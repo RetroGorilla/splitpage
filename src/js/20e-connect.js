@@ -1,18 +1,15 @@
 import { S } from "./_state.js";
-import { home, setHome } from "./_home.js";
+import { conn, home, setHome } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
 import {
   applyReviewMode,
-  clearServerToken,
   detectServer,
   fetchReviewLink,
   finishServerDetect,
   normalizeServerBase,
-  serverBase,
-  serverToken,
-  setServerBase,
+  pointTabAt,
   setServerToken
 } from "./13-hosted.js";
 import { deliverFile, toggleFileMenu, updateFileChip } from "./18-local-files.js";
@@ -23,6 +20,12 @@ import { renderDesktopShareInfo } from "./20f-desktop.js";
    The UI half of what 13-hosted.js made possible: the code a shared session
    asks for, the list of servers this browser knows about, and the SSH
    command for reaching one that is not on your network.
+
+   IT IS THIS TAB'S CONNECTION (#11). Each tab is its own page with its own
+   `conn` (_home.js), so "Use this server" and "Back to this copy" move the
+   tab they are clicked in and no other: a second tab on another server, or
+   on a local file, stays exactly where it is, heartbeat and all. The one
+   thing a pick changes beyond this tab is where the NEXT fresh page starts.
 
    EVERYTHING HERE IS BROWSER STATE. Bookmarks are localStorage, the join
    token is sessionStorage (localStorage only if asked), and the launch
@@ -79,9 +82,9 @@ function bookmarkById(id) {
 export function updateConnectMenu() {
   var item = document.getElementById("menu-servers");
   if (!item) return;
-  if (!serverBase) { item.textContent = "Servers…"; return; }
-  var known = S.serverBookmarks.filter(function (b) { return b.url === serverBase; })[0];
-  item.textContent = "Servers… (" + (known ? known.name : shortHost(serverBase)) + ")";
+  if (!conn.serverUrl) { item.textContent = "Servers…"; return; }
+  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
+  item.textContent = "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")";
 }
 
 export function shortHost(url) {
@@ -99,7 +102,7 @@ export function openPinDialog(opts) {
   var modal = document.getElementById("pin-modal");
   if (!modal) return;
   pinRequest = {
-    base: opts.base === undefined ? serverBase : opts.base,
+    base: opts.base === undefined ? conn.serverUrl : opts.base,
     onDone: opts.onDone || null
   };
   document.getElementById("pin-reason").textContent =
@@ -194,14 +197,20 @@ async function submitPin() {
   if (!pinRequest) return;   /* cancelled while we were waiting */
   var done = pinRequest.onDone;
   var base = pinRequest.base;
-  setServerToken(result.token, remember);
   closePinDialog();
+  /* A code for the server this tab is on is this tab's token now. A code
+     for another server (a bookmark's PIN button) is handed to whatever
+     asked for it, which points the tab there first — a token is only ever
+     set on the connection it was given for. */
+  var forThisTab = normalizeServerBase(base) === conn.serverUrl;
+  if (forThisTab) setServerToken(result.token, remember);
   /* Which code was typed decides what the session is, and the server has
      just said which — worth saying out loud, so nobody discovers it by
      finding they cannot type. */
   showToast("Joined" + (base ? " " + shortHost(base) : "") +
     (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
-  if (done) { done(); return; }
+  if (done) { done({ token: result.token, remember: remember }); return; }
+  if (!forThisTab) return;
   /* No caller waiting: this was a code asked for mid-flight, so pick the
      detection back up where it stopped. */
   if (S.serverMode.available) finishServerDetect();
@@ -269,17 +278,23 @@ async function renderReviewLink() {
 
 export function renderConnect() {
   var current = document.getElementById("connect-current");
-  if (!serverBase) {
-    current.innerHTML = "You are using <strong>this copy of Splitpage</strong>" +
+  var base = conn.serverUrl;
+  /* "This tab": since #11 that is exactly the scope of everything this
+     dialog changes, and a reader with two tabs on two servers is owed the
+     word that says so. */
+  if (!base) {
+    current.innerHTML = "This tab is using <strong>this copy of Splitpage</strong>" +
       (S.serverMode.available
         ? " and the server that opened it."
         : " on its own — documents are files you save to disk.");
   } else {
-    var known = S.serverBookmarks.filter(function (b) { return b.url === serverBase; })[0];
-    current.innerHTML = "Using <strong>" + escapeHtml(known ? known.name : shortHost(serverBase)) +
-      "</strong> — " + escapeHtml(serverBase) +
+    var known = S.serverBookmarks.filter(function (b) { return b.url === base; })[0];
+    current.innerHTML = "This tab is using <strong>" + escapeHtml(known ? known.name : shortHost(base)) +
+      "</strong> — " + escapeHtml(base) +
+      (conn.tunnel ? " through an SSH tunnel to " + escapeHtml(conn.tunnel.userHost) : "") +
       (S.serverMode.available ? "" : " <em>(not answering)</em>");
   }
+  current.setAttribute("data-server-url", base);
 
   var list = document.getElementById("connect-list");
   if (!S.serverBookmarks.length) {
@@ -287,7 +302,7 @@ export function renderConnect() {
     return;
   }
   list.innerHTML = S.serverBookmarks.map(function (b) {
-    var isCurrent = b.url === serverBase;
+    var isCurrent = b.url === conn.serverUrl;
     return '<div class="connect-row' + (isCurrent ? ' is-current' : '') +
         '" data-id="' + escapeHtml(b.id) + '">' +
       '<span class="connect-row-main">' +
@@ -356,8 +371,7 @@ async function addBookmarkFromForm() {
 
   if (joined && joined.ok) {
     /* They proved they can get in; putting them there is what they meant. */
-    setServerToken(joined.token, remember);
-    await useServer(bookmark);
+    await useServer(bookmark, { token: joined.token, remember: remember });
     return;
   }
   renderConnect();
@@ -385,24 +399,39 @@ export async function addServerBookmark(name, url, opts) {
   saveBookmarks();
   updateConnectMenu();
   if (joined && joined.ok) {
-    setServerToken(joined.token, !!opts.remember);
-    await useServer(bookmark);
+    await useServer(bookmark, { token: joined.token, remember: !!opts.remember });
   }
   return { ok: true, bookmark: bookmark, joined: !!(joined && joined.ok) };
 }
 
-/* One token at a time, for whichever server is current: pointing the app
-   somewhere else always means proving yourself there again. */
-async function useServer(bookmark) {
-  setServerBase(bookmark.url);
+/* The bookmark's SSH forward as the connection's tunnel field, or null.
+   A bookmark written by hand (or by an older copy) that does not validate
+   is a server without a tunnel note, not a reason to refuse the server. */
+function tunnelOf(bookmark) {
+  var s = bookmark && bookmark.ssh;
+  if (!s || typeof s !== "object") return null;
+  return { userHost: String(s.userHost || ""), remotePort: Number(s.remotePort), localPort: Number(s.localPort) };
+}
+
+/* Points THIS tab at a server (#11). One token per connection: the tab
+   proves itself on the server it is now on, with the code just typed
+   (opts.token) or one remembered for that same server; a token from the
+   server it left never follows it. Any other tab is untouched — its own
+   connection, its own heartbeat — and only the next fresh page starts
+   here. opts: {token, remember}. */
+async function useServer(bookmark, opts) {
+  opts = opts || {};
   /* A document on the old server is not on this one. A local home stays
      exactly where it is. */
   if (home.kind === "server") setHome("none");
-  /* The role belongs to the server that granted it, like the token: what
-     the new one says about this browser is not known until it answers. */
-  S.serverRole = "";
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
+  try {
+    pointTabAt(bookmark.url, { token: opts.token, tunnel: tunnelOf(bookmark), makeDefault: true });
+  } catch (e) {
+    pointTabAt(bookmark.url, { token: opts.token, makeDefault: true });
+  }
+  if (opts.token) setServerToken(opts.token, !!opts.remember);
   updateConnectMenu();
   renderConnect();
   await detectServer();
@@ -414,8 +443,8 @@ async function useServer(bookmark) {
   updateFileChip();
   renderConnect();
   renderReviewLink();
-  if (S.serverMode.available && !(S.serverMode.authRequired && !serverToken)) {
-    showToast("Now using " + (bookmark.name || shortHost(bookmark.url)) +
+  if (S.serverMode.available && !(S.serverMode.authRequired && !conn.token)) {
+    showToast("This tab is now using " + (bookmark.name || shortHost(bookmark.url)) +
       " — open a document from the File menu.", "ok");
   }
 }
@@ -423,21 +452,20 @@ async function useServer(bookmark) {
 async function useBookmark(id) {
   var b = bookmarkById(id);
   if (!b) return;
-  clearServerToken();
   await useServer(b);
 }
 
 /* The PIN dialog, opened deliberately rather than in response to a refusal:
-   the code for a server you have not switched to yet, or one whose code has
-   changed since. Joining is also switching — a token only ever belongs to
-   the server that is current. */
+   the code for a server this tab is not on yet, or one whose code has
+   changed since. Joining is also switching — the token goes onto the
+   connection for that server and no other. */
 function askPinFor(id) {
   var b = bookmarkById(id);
   if (!b) return;
   openPinDialog({
     base: b.url,
     reason: "Enter the join PIN for " + (b.name || shortHost(b.url)) + ".",
-    onDone: function () { useServer(b); }
+    onDone: function (joined) { useServer(b, joined); }
   });
 }
 
@@ -456,11 +484,10 @@ function removeBookmark(id) {
 }
 
 async function backToThisCopy() {
-  setServerBase("");
-  clearServerToken();
   if (home.kind === "server") setHome("none");
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
+  pointTabAt("", { makeDefault: true });
   updateConnectMenu();
   await detectServer();
   applyReviewMode();
@@ -468,7 +495,7 @@ async function backToThisCopy() {
   updateFileChip();
   renderConnect();
   renderReviewLink();
-  showToast("Back to this copy of Splitpage.", "ok");
+  showToast("This tab is back on this copy of Splitpage.", "ok");
 }
 
 /* ---- the SSH helper ----
@@ -477,9 +504,12 @@ async function backToThisCopy() {
    processes would be a far bigger hole than anything it opened. It writes
    the command out; you run it. */
 
+export function tunnelCommand(t) {
+  return "ssh -N -L " + t.localPort + ":localhost:" + t.remotePort + " " + t.userHost;
+}
+
 function sshCommandFor(bookmark) {
-  var s = bookmark.ssh;
-  return "ssh -N -L " + s.localPort + ":localhost:" + s.remotePort + " " + s.userHost;
+  return tunnelCommand(bookmark.ssh);
 }
 
 function showSshFor(id) {

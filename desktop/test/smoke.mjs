@@ -4809,6 +4809,499 @@ async function caseTeleprompterOpenInBrowserServer(target) {
   }
 }
 
+/* ----------------------------------------------------------------------
+ * 5c. Per-tab server connections (#11).
+ *
+ *     Every case here runs against REAL document servers — server/server.js
+ *     forked by this harness on free loopback ports, each with its own PIN
+ *     and its own data folder, and ALLOW_ORIGINS=splitpage://app so the
+ *     desktop page may call them cross-origin exactly as it calls a
+ *     colleague's shared session. The app itself is launched with no
+ *     --library: none of these documents is on its own server.
+ *
+ *     Tabs are connected the way a person connects them — the Servers
+ *     dialog's own form, the File menu's own "Open from the server…" picker
+ *     — so the path under test is the real one, routeOpen and all.
+ * -------------------------------------------------------------------- */
+
+const SERVER_JS = path.join(DESKTOP_DIR, "..", "server", "server.js");
+
+/* opts.port/opts.dataDir restart a server where an earlier one was — the
+   same address and documents, a new session (and so a new token). */
+async function startDocServer(pin, opts) {
+  const o = opts || {};
+  const port = o.port || await freePort();
+  const dataDir = o.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-srv-"));
+  const env = {
+    ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir,
+    ALLOW_ORIGINS: "splitpage://app"
+  };
+  if (pin) env.JOIN_PIN = pin;
+  delete env.READ_ONLY; delete env.NO_API; delete env.REVIEW_PIN; delete env.LAUNCH_TOKEN;
+  const proc = spawn(process.execPath, [SERVER_JS], { env, stdio: ["ignore", "pipe", "pipe"] });
+  let err = "";
+  proc.stderr.on("data", (d) => { err += d; });
+  const url = `http://127.0.0.1:${port}/`;
+  const up = await pollNode(async () => {
+    const r = await fetchJson(url + "api/health", {}, 2000);
+    return r.ok;
+  }, 15000).catch(() => false);
+  if (!up) { killPid(proc.pid); throw new Error("document server never came up on " + port + ": " + err); }
+  return {
+    url, port, pin, dataDir, proc,
+    async stop() {
+      killPid(proc.pid);
+      await waitForExit(proc, 5000);
+    },
+    cleanup() { rmrf(dataDir); }
+  };
+}
+
+async function joinDocServer(srv) {
+  const r = await fetchJson(srv.url + "api/join", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin: srv.pin })
+  });
+  return r.body && r.body.token;
+}
+
+async function createServerDoc(srv, token, title) {
+  const r = await fetchJson(srv.url + "api/docs", {
+    method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
+    body: JSON.stringify({ state: { title, rows: [] } })
+  });
+  return r.body && r.body.id ? r.body : null;
+}
+
+async function readServerDoc(srv, token, id) {
+  const r = await fetchJson(srv.url + "api/docs/" + encodeURIComponent(id), { headers: { "x-splitpage-token": token } });
+  return r.status === 200 ? r.body : null;
+}
+
+function serverDocHas(doc, marker) {
+  const rows = (doc && doc.state && doc.state.rows) || [];
+  return rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1);
+}
+
+/* Who else the server says is in `docId`, asked as an observer of our own —
+   a presence beat with a made-up tab id, which the server answers with
+   everyone BUT that id. */
+async function presenceOthers(srv, token, docId) {
+  const r = await fetchJson(srv.url + "api/presence", {
+    method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
+    body: JSON.stringify({ docId, id: "smoke-observer", name: "Observer", rowId: "", field: "", gone: false })
+  });
+  return r.body && Array.isArray(r.body.here) ? r.body.here : null;
+}
+
+const connOf = (cdp) => evalPage(cdp, "window.__hostedTest.conn()");
+
+/* The Servers dialog's own "add a server" form, PIN and all — which joins,
+   saves the bookmark and points THIS tab there (20e-connect.js). ssh is
+   {userHost, remotePort, localPort} to fill in the SSH fields too. */
+async function connectTabViaDialog(cdp, srv, opts) {
+  const o = opts || {};
+  const js = "(function(){" +
+    "document.querySelector('#file-menu [data-file-action=\"servers\"]').click();" +
+    "document.getElementById('connect-name').value=" + JSON.stringify(o.name || ("Srv " + srv.port)) + ";" +
+    "document.getElementById('connect-url').value=" + JSON.stringify(srv.url) + ";" +
+    "document.getElementById('connect-pin').value=" + JSON.stringify(srv.pin || "") + ";" +
+    "document.getElementById('connect-remember').checked=" + (o.remember ? "true" : "false") + ";" +
+    (o.ssh
+      ? "var t=document.getElementById('connect-ssh-toggle');t.checked=true;t.dispatchEvent(new Event('change'));" +
+        "document.getElementById('connect-ssh-userhost').value=" + JSON.stringify(o.ssh.userHost) + ";" +
+        "document.getElementById('connect-ssh-remote').value=" + JSON.stringify(String(o.ssh.remotePort)) + ";" +
+        "document.getElementById('connect-ssh-local').value=" + JSON.stringify(String(o.ssh.localPort)) + ";"
+      : "") +
+    "document.querySelector('#connect-modal [data-connect-action=\"add\"]').click(); return true; })()";
+  await evalPage(cdp, js, { awaitPromise: false });
+  const ok = await poll(cdp, "(function(){ var c = window.__hostedTest.conn(); return c.serverUrl === " +
+    JSON.stringify(srv.url) + " && c.hasToken && !document.getElementById('menu-server-open').hidden; })()", 20000)
+    .catch(() => false);
+  await evalPage(cdp, "(function(){ var b = document.querySelector('#connect-modal [data-connect-action=\"close\"]'); if (b) b.click(); return true; })()", { awaitPromise: false });
+  return !!ok;
+}
+
+/* File ▸ Open from the server…, then that document's own row in the picker
+   — which routes through main (21-events.js) with this tab's connection. */
+async function openViaPicker(cdp, docId) {
+  await evalPage(cdp, "(function(){ document.getElementById('menu-server-open').click(); return true; })()", { awaitPromise: false });
+  const sel = "#server-modal [data-action=\"server-open\"][data-id=" + JSON.stringify(docId) + "]";
+  const listed = await poll(cdp, "!!document.querySelector(" + JSON.stringify(sel) + ")", 15000).catch(() => false);
+  if (!listed) return false;
+  await evalPage(cdp, "(function(){ document.querySelector(" + JSON.stringify(sel) + ").click(); return true; })()", { awaitPromise: false });
+  return true;
+}
+
+async function saveTabNow(cdp) {
+  await evalPage(cdp, "(function(){ document.getElementById('btn-save').click(); return true; })()", { awaitPromise: false });
+  return poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!b && b.textContent.indexOf('\\u2022') === -1 && !b.disabled; })()", 15000)
+    .catch(() => false);
+}
+
+const titleExpr = (t) => "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify(t);
+
+function tabRow(listing, tabId) {
+  for (const w of listing.windows) for (const t of w.tabs) if (t.tabId === tabId) return t;
+  return null;
+}
+
+/* Two tabs, two servers, one window: each tab keeps its own connection, the
+   same document id on both servers is two documents (not "already open"),
+   each server hears only its own tab, a save goes where its document is,
+   a crashed tab comes back on ITS server although the other tab picked a
+   server since, and closing one tab leaves the other connected. */
+async function caseTwoServersSideBySide(target) {
+  const tag = target.name + " per-tab connections: two servers side by side";
+  let srvX = null, srvY = null, app = null, cdp2 = null;
+  try {
+    srvX = await startDocServer("111111");
+    srvY = await startDocServer("222222");
+    const tokX = await joinDocServer(srvX);
+    const tokY = await joinDocServer(srvY);
+    const twin = await createServerDoc(srvX, tokX, "Twin On X");
+    record(tag + ": setup — a document on server X", !!twin, JSON.stringify(twin));
+    if (!twin) return;
+    /* The same id on server Y, holding a different script: the file is
+       copied across with only its title changed, so the two servers really
+       do hold one id each. */
+    const text = fs.readFileSync(path.join(srvX.dataDir, twin.id + ".json"), "utf8").split("Twin On X").join("Twin On Y");
+    fs.writeFileSync(path.join(srvY.dataDir, twin.id + ".json"), text, "utf8");
+    const onY = await readServerDoc(srvY, tokY, twin.id);
+    record(tag + ": setup — server Y holds the SAME id with its own script",
+      !!onY && onY.state && onY.state.title === "Twin On Y", JSON.stringify(onY && onY.state && onY.state.title));
+
+    app = await launchApp(target, { label: "two-servers" });
+    const cdp1 = app.cdp;
+    await waitForRows(cdp1, 20000);
+    const tab1Id = await tabIdOfTarget(cdp1);
+
+    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX));
+    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id));
+    record(tag + ": tab 1 shows X's script", !!(await poll(cdp1, titleExpr("Twin On X"), 15000).catch(() => false)));
+
+    const tab2Id = await shell(cdp1, "createTab", {});
+    cdp2 = await connectTab(app, tab2Id);
+    await waitForRows(cdp2, 20000);
+    const fresh2 = await connOf(cdp2);
+    record(tag + ": a new tab does not inherit tab 1's token", !!fresh2 && fresh2.hasToken === false, JSON.stringify(fresh2));
+
+    record(tag + ": tab 2 joins server Y through the Servers dialog", await connectTabViaDialog(cdp2, srvY));
+    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id));
+    record(tag + ": tab 2 shows Y's script, not a switch to tab 1",
+      !!(await poll(cdp2, titleExpr("Twin On Y"), 15000).catch(() => false)));
+
+    const listing = await shell(cdp1, "listTargets", {});
+    const all = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
+    const r1 = tabRow(listing, tab1Id), r2 = tabRow(listing, tab2Id);
+    record(tag + ": still exactly two tabs — the same id on another server is another document", all === 2, "tabs=" + all);
+    record(tag + ": main's source for tab 1 names server X and the document",
+      !!r1 && r1.isServerDoc && r1.serverUrl === srvX.url && r1.serverDocId === twin.id, JSON.stringify(r1));
+    record(tag + ": main's source for tab 2 names server Y and the same id",
+      !!r2 && r2.isServerDoc && r2.serverUrl === srvY.url && r2.serverDocId === twin.id, JSON.stringify(r2));
+    record(tag + ": tab 1 is still on X after tab 2 picked Y", (await connOf(cdp1)).serverUrl === srvX.url);
+    record(tag + ": main keeps no token for a tab that routed its own document", !!r1 && !!r2 && !r1.hasToken && !r2.hasToken, JSON.stringify([r1 && r1.hasToken, r2 && r2.hasToken]));
+    record(tag + ": each tab's review-role chip follows its own server (both editors here)",
+      r1 && r1.role === "edit" && r2 && r2.role === "edit", JSON.stringify([r1 && r1.role, r2 && r2.role]));
+
+    /* The heartbeat follows the document's connection: each server hears
+       from its own tab and no other.
+
+       Under SPLITPAGE_TEST=1 no window is ever shown (invariant #33), so
+       every tab page reports document.hidden === true, and a hidden page
+       deliberately sends no heartbeat (13a-presence.js; that rule has its
+       own browser suite, 44-presence). What this case is about is WHICH
+       server a beat goes to, so each page is told it is visible — a
+       page-local override of one getter, nothing in the app — and beats
+       once straight away. */
+    const beatNow = "(function(){ Object.defineProperty(document, 'hidden', { configurable: true, get: function(){ return false; } }); " +
+      "window.__presenceTest.beat(); return true; })()";
+    await evalPage(cdp1, beatNow);
+    await evalPage(cdp2, beatNow);
+    const hereX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length ? h : null; }, 15000).catch(() => null);
+    const hereY = await pollNode(async () => { const h = await presenceOthers(srvY, tokY, twin.id); return h && h.length ? h : null; }, 15000).catch(() => null);
+    await sleep(2500);
+    const settledX = await presenceOthers(srvX, tokX, twin.id);
+    const settledY = await presenceOthers(srvY, tokY, twin.id);
+    const beatX = await evalPage(cdp1, "JSON.stringify({wanted: window.__presenceTest.wanted(), sends: window.__presenceTest.sends(), hidden: document.hidden})");
+    const beatY = await evalPage(cdp2, "JSON.stringify({wanted: window.__presenceTest.wanted(), sends: window.__presenceTest.sends(), hidden: document.hidden})");
+    record(tag + ": server X hears exactly one tab (tab 1)", !!hereX && settledX && settledX.length === 1, JSON.stringify(settledX) + " tab1=" + beatX);
+    record(tag + ": server Y hears exactly one tab (tab 2)", !!hereY && settledY && settledY.length === 1, JSON.stringify(settledY) + " tab2=" + beatY);
+
+    /* A save goes where its document lives. */
+    const m1 = "ON-X-" + Date.now(), m2 = "ON-Y-" + Date.now();
+    await addMarkerRow(cdp1, m1);
+    record(tag + ": tab 1 saves", !!(await saveTabNow(cdp1)));
+    await addMarkerRow(cdp2, m2);
+    record(tag + ": tab 2 saves", !!(await saveTabNow(cdp2)));
+    const docX = await readServerDoc(srvX, tokX, twin.id), docY = await readServerDoc(srvY, tokY, twin.id);
+    record(tag + ": tab 1's edit is on server X and not on Y", serverDocHas(docX, m1) && !serverDocHas(docY, m1));
+    record(tag + ": tab 2's edit is on server Y and not on X", serverDocHas(docY, m2) && !serverDocHas(docX, m2));
+
+    /* Tab 2 picked Y last, so Y is where a FRESH page starts. Tab 1's page
+       dies and comes back: it must come back on X, with its document. */
+    const tokenFree = !JSON.stringify(await shell(cdp2, "listTargets", {})).includes(tokX);
+    record(tag + ": the test shell's listing never carries a token", tokenFree);
+    await crashRenderer(cdp1);
+    try { cdp1.close(); } catch {}
+    const back = await pollNode(async () => {
+      const c = await connectTab(app, tab1Id);
+      try {
+        const ok = await evalPage(c, titleExpr("Twin On X"));
+        const cn = ok ? await connOf(c) : null;
+        return ok ? { cn } : null;
+      } finally { c.close(); }
+    }, 30000).catch(() => null);
+    record(tag + ": a crashed tab reloads onto ITS server (X), not the last one picked (Y), with its document",
+      !!back && back.cn.serverUrl === srvX.url, JSON.stringify(back));
+
+    /* Closing tab 1 leaves tab 2 connected. */
+    await shell(cdp2, "closeTab", { tabId: tab1Id });
+    await pollShellState(cdp2, (l) => !tabRow(l, tab1Id), 15000).catch(() => null);
+    const goneX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length === 0 ? true : null; }, 25000).catch(() => false);
+    record(tag + ": closing tab 1 takes it off server X's presence", !!goneX);
+    const c2 = await connOf(cdp2);
+    record(tag + ": tab 2 is still on server Y with its token after tab 1 closed",
+      c2.serverUrl === srvY.url && c2.hasToken === true, JSON.stringify(c2));
+    const m3 = "STILL-Y-" + Date.now();
+    await addMarkerRow(cdp2, m3);
+    record(tag + ": tab 2 still saves", !!(await saveTabNow(cdp2)));
+    const docY2 = await readServerDoc(srvY, tokY, twin.id);
+    record(tag + ": tab 2's save after tab 1 closed reached server Y", serverDocHas(docY2, m3), "rev=" + (docY2 && docY2.rev));
+    const stillY = await presenceOthers(srvY, tokY, twin.id);
+    record(tag + ": server Y still hears tab 2", !!stillY && stillY.length === 1, JSON.stringify(stillY));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    for (const s of [srvX, srvY]) if (s) { await s.stop(); s.cleanup(); }
+  }
+}
+
+/* A server tab beside a local-file tab, and a document opened from a tab
+   that is NOT pristine: it goes to a new tab that boots on the right server
+   with the token handed over (no PIN asked twice), while the file tab keeps
+   its file. What reaches desktop-state.json is the server and the id,
+   never the token or the PIN. */
+async function caseServerTabBesideFileTab(target, fixturesDir) {
+  const tag = target.name + " per-tab connections: a server tab beside a file tab";
+  const fixture = writeFixture(fixturesDir, "case-conn-file.splitpage", "Local File Doc", [["local a", "local b"]]);
+  let srv = null, app = null, cdp2 = null;
+  try {
+    srv = await startDocServer("333333");
+    const tok = await joinDocServer(srv);
+    const doc = await createServerDoc(srv, tok, "Hosted Beside");
+    record(tag + ": setup — a document on the server", !!doc);
+    if (!doc) return;
+
+    app = await launchApp(target, { label: "file-beside-server", fixtures: [fixture] });
+    const cdp1 = app.cdp;
+    await waitForRows(cdp1, 20000);
+    record(tag + ": tab 1 opens the local file", !!(await poll(cdp1, titleExpr("Local File Doc"), 20000).catch(() => false)));
+    const tab1Id = await tabIdOfTarget(cdp1);
+    const c1 = await connOf(cdp1);
+    record(tag + ": a file tab starts on no remote server", c1.serverUrl === "" && !c1.hasToken, JSON.stringify(c1));
+
+    /* The file tab joins the server itself — its FILE stays its home — and
+       opens a document from it. Not pristine, so main opens a new tab. */
+    record(tag + ": the file tab joins the server", await connectTabViaDialog(cdp1, srv));
+    record(tag + ": joining leaves the file tab on its file", !!(await evalPage(cdp1, titleExpr("Local File Doc"))));
+    await openViaPicker(cdp1, doc.id);
+    const newId = await pollNode(async () => {
+      const l = await shell(cdp1, "listTargets", {});
+      for (const w of l.windows) for (const t of w.tabs) if (t.tabId !== tab1Id && t.isServerDoc) return t.tabId;
+      return null;
+    }, 20000).catch(() => null);
+    record(tag + ": the server document opens in a NEW tab", !!newId);
+    if (!newId) return;
+    cdp2 = await connectTab(app, newId);
+    const shown = await poll(cdp2, titleExpr("Hosted Beside"), 20000).catch(() => false);
+    record(tag + ": the new tab shows the server document", !!shown);
+    const pinUp = await evalPage(cdp2, "!document.getElementById('pin-modal').hidden");
+    record(tag + ": the new tab was handed the token — no PIN asked a second time", pinUp === false);
+    const c2 = await connOf(cdp2);
+    record(tag + ": the new tab booted on the file tab's server", c2.serverUrl === srv.url && c2.hasToken, JSON.stringify(c2));
+
+    const listing = await shell(cdp1, "listTargets", {});
+    const r1 = tabRow(listing, tab1Id), r2 = tabRow(listing, newId);
+    record(tag + ": main's source for tab 1 is still the file", !!r1 && !r1.isServerDoc && r1.path === fixture, JSON.stringify(r1));
+    record(tag + ": main's source for the new tab names the server",
+      !!r2 && r2.isServerDoc && r2.serverUrl === srv.url && r2.serverDocId === doc.id, JSON.stringify(r2));
+    record(tag + ": main dropped the token once it had handed it to the new page", !!r2 && r2.hasToken === false, JSON.stringify(r2));
+
+    const mFile = "FILE-" + Date.now(), mSrv = "SRV-" + Date.now();
+    await addMarkerRow(cdp1, mFile);
+    record(tag + ": the file tab saves", !!(await saveTabNow(cdp1)));
+    await addMarkerRow(cdp2, mSrv);
+    record(tag + ": the server tab saves", !!(await saveTabNow(cdp2)));
+    const onDisk = fs.readFileSync(fixture, "utf8");
+    const onSrv = await readServerDoc(srv, tok, doc.id);
+    record(tag + ": the file tab's edit is in the file and not on the server", onDisk.includes(mFile) && !serverDocHas(onSrv, mFile));
+    record(tag + ": the server tab's edit is on the server and not in the file", serverDocHas(onSrv, mSrv) && !onDisk.includes(mSrv));
+
+    const state = await pollNode(async () => {
+      const st = readDesktopStateFile(app.userDataDir);
+      const tabsOnDisk = st ? st.windows.reduce((a, w) => a.concat(w.tabs), []) : [];
+      return tabsOnDisk.find((t) => t.tabId === newId && t.source.kind === "server") ? { st, tabsOnDisk } : null;
+    }, 15000).catch(() => null);
+    const persisted = state && state.tabsOnDisk.find((t) => t.tabId === newId);
+    record(tag + ": desktop-state.json records the server tab's server and id",
+      !!persisted && persisted.source.serverUrl === srv.url && persisted.source.serverDocId === doc.id,
+      JSON.stringify(persisted));
+    record(tag + ": desktop-state.json's server source is exactly {kind, serverDocId, serverUrl, tunnel}",
+      !!persisted && Object.keys(persisted.source).sort().join(",") === "kind,serverDocId,serverUrl,tunnel",
+      JSON.stringify(persisted && persisted.source));
+    const raw = fs.readFileSync(path.join(app.userDataDir, "desktop-state.json"), "utf8");
+    record(tag + ": neither the token nor the PIN is anywhere in desktop-state.json (invariant #29)",
+      !raw.includes(tok) && !raw.includes(srv.pin));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (srv) { await srv.stop(); srv.cleanup(); }
+  }
+}
+
+/* Session restore of server tabs on two servers. Nothing on disk holds a
+   token, so each restored tab comes back on its own server and: reconnects
+   silently where the reader chose "Remember on this device" for THAT
+   server, asks for the PIN where they did not. A token or a role planted in
+   desktop-state.json is not believed, an address that is not http(s) is
+   not restored at all, and a tunnel's host and ports come back with the tab
+   — so a tunnelled server that is down names the ssh command to start. */
+async function caseRestoreServerTabs(target) {
+  const tag = target.name + " per-tab connections: session restore of server tabs";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let srvX = null, srvY = null, app = null, cdpY = null, cdpX = null;
+  try {
+    srvX = await startDocServer("444444");
+    srvY = await startDocServer("555555");
+    const tokX = await joinDocServer(srvX), tokY = await joinDocServer(srvY);
+    const dX = await createServerDoc(srvX, tokX, "Restore On X");
+    const dY = await createServerDoc(srvY, tokY, "Restore On Y");
+    record(tag + ": setup — one document on each server", !!dX && !!dY);
+    if (!dX || !dY) return;
+    const ssh = { userHost: "me@studio.example.com", remotePort: 8791, localPort: srvY.port };
+
+    app = await launchApp(target, { label: "restore-servers-a", userDataDir });
+    const cdp1 = app.cdp;
+    await waitForRows(cdp1, 20000);
+    const tabXId = await tabIdOfTarget(cdp1);
+    record(tag + ": tab X joins X and asks to be remembered", await connectTabViaDialog(cdp1, srvX, { remember: true }));
+    await openViaPicker(cdp1, dX.id);
+    record(tag + ": tab X opens X's document", !!(await poll(cdp1, titleExpr("Restore On X"), 15000).catch(() => false)));
+    const tabYId = await shell(cdp1, "createTab", {});
+    const cdp2 = await connectTab(app, tabYId);
+    await waitForRows(cdp2, 20000);
+    record(tag + ": tab Y joins Y through an SSH bookmark, not remembered",
+      await connectTabViaDialog(cdp2, srvY, { remember: false, ssh }));
+    const cy = await connOf(cdp2);
+    record(tag + ": tab Y's connection carries the tunnel's host and ports", !!cy.tunnel && cy.tunnel.userHost === ssh.userHost && cy.tunnel.localPort === ssh.localPort, JSON.stringify(cy));
+    await openViaPicker(cdp2, dY.id);
+    record(tag + ": tab Y opens Y's document", !!(await poll(cdp2, titleExpr("Restore On Y"), 15000).catch(() => false)));
+    try { cdp2.close(); } catch {}
+
+    const st = await pollNode(async () => {
+      const s = readDesktopStateFile(userDataDir);
+      const all = s ? s.windows.reduce((a, w) => a.concat(w.tabs), []) : [];
+      const x = all.find((t) => t.tabId === tabXId), y = all.find((t) => t.tabId === tabYId);
+      return x && y && x.source.kind === "server" && y.source.kind === "server" ? { s, x, y } : null;
+    }, 15000).catch(() => null);
+    record(tag + ": both server tabs are in desktop-state.json with their servers",
+      !!st && st.x.source.serverUrl === srvX.url && st.y.source.serverUrl === srvY.url, JSON.stringify(st && [st.x.source, st.y.source]));
+    record(tag + ": the tunnel's host and ports are persisted with tab Y (never a credential)",
+      !!st && !!st.y.source.tunnel && st.y.source.tunnel.userHost === ssh.userHost &&
+      Object.keys(st.y.source.tunnel).sort().join(",") === "localPort,remotePort,userHost", JSON.stringify(st && st.y.source.tunnel));
+    await teardown(app, tag + " (first launch)");
+    app = null;
+
+    const raw1 = fs.readFileSync(path.join(userDataDir, "desktop-state.json"), "utf8");
+    record(tag + ": no token and no PIN in desktop-state.json after the quit (invariant #29)",
+      ![tokX, tokY, srvX.pin, srvY.pin].some((s) => raw1.includes(s)));
+    const draftsHit = dirContainsText(path.join(userDataDir, "drafts"), tokY) || dirContainsText(path.join(userDataDir, "drafts"), tokX);
+    record(tag + ": no token anywhere under drafts/", !draftsHit, String(draftsHit));
+
+    /* Plant what must not be believed: a token and a role on both server
+       sources, and a third tab whose address is not http(s). */
+    const planted = JSON.parse(raw1);
+    const PLANT = "f".repeat(64);
+    for (const w of planted.windows) for (const t of w.tabs) {
+      if (t.source.kind === "server") { t.source.token = PLANT; t.source.role = "edit"; }
+    }
+    const badTabId = newHexId();
+    planted.windows[0].tabs.push({ tabId: badTabId, source: { kind: "server", serverDocId: dX.id, serverUrl: "javascript:alert(1)//" }, lastKnownTitle: "Bad" });
+    writeDesktopStateFile(userDataDir, planted);
+
+    app = await launchApp(target, { label: "restore-servers-b", userDataDir });
+    cdpX = await connectTab(app, tabXId);
+    const xBack = await poll(cdpX, titleExpr("Restore On X"), 25000).catch(() => false);
+    const xPin = await evalPage(cdpX, "!document.getElementById('pin-modal').hidden");
+    record(tag + ": the remembered server's tab reconnects silently and reopens its document", !!xBack && xPin === false,
+      "pinUp=" + xPin);
+    const cx = await connOf(cdpX);
+    record(tag + ": the restored X tab is on X", cx.serverUrl === srvX.url, JSON.stringify(cx));
+
+    cdpY = await connectTab(app, tabYId);
+    const pinAsked = await poll(cdpY, "!document.getElementById('pin-modal').hidden && document.getElementById('pin-reason').textContent", 25000).catch(() => null);
+    record(tag + ": the not-remembered server's tab asks for ITS PIN, naming its server",
+      !!pinAsked && String(pinAsked).indexOf("127.0.0.1:" + srvY.port) !== -1, String(pinAsked));
+    const cY = await connOf(cdpY);
+    record(tag + ": the restored Y tab is on Y, with the tunnel it rode", cY.serverUrl === srvY.url && !!cY.tunnel && cY.tunnel.userHost === ssh.userHost, JSON.stringify(cY));
+    const listing = await shell(cdpX, "listTargets", {});
+    const rX = tabRow(listing, tabXId), rY = tabRow(listing, tabYId);
+    record(tag + ": a token planted in desktop-state.json is not believed", !!rX && !!rY && rX.hasToken === false && rY.hasToken === false,
+      JSON.stringify([rX, rY]));
+    record(tag + ": a server tab whose address is not http(s) is not restored", !tabRow(listing, badTabId));
+
+    await evalPage(cdpY, "(function(){ document.getElementById('pin-input').value=" + JSON.stringify(srvY.pin) +
+      "; document.querySelector('#pin-modal [data-connect-action=\"pin-submit\"]').click(); return true; })()", { awaitPromise: false });
+    record(tag + ": after the PIN, the Y tab reopens Y's document", !!(await poll(cdpY, titleExpr("Restore On Y"), 20000).catch(() => false)));
+    const after = readDesktopStateFile(userDataDir);
+    record(tag + ": the rewritten desktop-state.json holds no planted token", !!after && !JSON.stringify(after).includes(PLANT));
+
+    /* The tunnel rides along: with Y down, the restored tab's reload says
+       which ssh command it is waiting on. */
+    await srvY.stop();
+    await crashRenderer(cdpY);
+    try { cdpY.close(); } catch {}
+    cdpY = null;
+    const hint = await pollNode(async () => {
+      const c = await connectTab(app, tabYId);
+      try {
+        return await evalPage(c, "(function(){ var t=document.querySelectorAll('.toast'); for (var i=0;i<t.length;i++){ if (t[i].textContent.indexOf('SSH tunnel')!==-1) return t[i].textContent; } return null; })()");
+      } finally { c.close(); }
+    }, 30000).catch(() => null);
+    record(tag + ": a tunnelled server that is down names the ssh command to start",
+      !!hint && hint.indexOf("ssh -N -L " + ssh.localPort + ":localhost:" + ssh.remotePort + " " + ssh.userHost) !== -1, String(hint));
+
+    /* The host restarts their session: same address, same documents, a new
+       token. The X tab's token (remembered, and in its own session) is now
+       stale; its reload finds that out on the document request, asks for
+       the PIN, and opens the document once it is typed. */
+    await srvX.stop();
+    srvX = await startDocServer(srvX.pin, { port: srvX.port, dataDir: srvX.dataDir });
+    await crashRenderer(cdpX);
+    try { cdpX.close(); } catch {}
+    cdpX = null;
+    const stale = await pollNode(async () => {
+      const c = await connectTab(app, tabXId);
+      const up = await evalPage(c, "!document.getElementById('pin-modal').hidden").catch(() => false);
+      if (!up) { c.close(); return null; }
+      return c;
+    }, 30000).catch(() => null);
+    record(tag + ": a remembered token the restarted server no longer takes brings the PIN back", !!stale);
+    if (stale) {
+      cdpX = stale;
+      await evalPage(cdpX, "(function(){ document.getElementById('pin-input').value=" + JSON.stringify(srvX.pin) +
+        "; document.querySelector('#pin-modal [data-connect-action=\"pin-submit\"]').click(); return true; })()", { awaitPromise: false });
+      record(tag + ": after the new PIN the X tab reopens its document",
+        !!(await poll(cdpX, titleExpr("Restore On X"), 20000).catch(() => false)));
+    }
+  } finally {
+    for (const c of [cdpX, cdpY]) if (c) { try { c.close(); } catch {} }
+    if (app) { await teardown(app, tag); }
+    for (const s of [srvX, srvY]) if (s) { await s.stop(); s.cleanup(); }
+    rmrf(userDataDir);
+  }
+}
+
 async function caseWindowCloseCanary() {
   const tag = "src/js window.close() canary";
   const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
@@ -4902,6 +5395,10 @@ async function runTargetSuite(target, groupFilter) {
     // --- issue #86: the teleprompter in the browser ---
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
     ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
+    // --- issue #11: per-tab server and tunnel connections ---
+    ["per-tab connections: two servers side by side, close one", () => caseTwoServersSideBySide(target)],
+    ["per-tab connections: a server tab beside a file tab", () => caseServerTabBesideFileTab(target, fixturesDir)],
+    ["per-tab connections: session restore of server tabs", () => caseRestoreServerTabs(target)],
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {

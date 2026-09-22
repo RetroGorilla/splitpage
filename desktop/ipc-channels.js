@@ -123,6 +123,8 @@ const CHANNELS = [
   /* ---- the session and the boot reads -------------------------------- */
   { name: "splitpage:get-session-info", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:get-app-version-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: APP, refusal: null },
+  /* Its reply gained `connection` in #11: {serverUrl, token, tunnel} for a
+     server tab, null for any other. No argument, as before. */
   { name: "splitpage:tab-boot-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: APP, refusal: null },
   { name: "splitpage:is-test-mode-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: APP, refusal: false },
 
@@ -146,7 +148,16 @@ const CHANNELS = [
      handler runs. */
   { name: "splitpage:prompter-open-in-browser", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
-  /* ---- document state and routing ------------------------------------ */
+  /* ---- document state and routing ------------------------------------
+     Both payloads stay `object`: their fields are checked one by one in the
+     handler, which is stricter than a descriptor here could be. Since #11 a
+     server document carries its connection on the existing payloads rather
+     than on a channel of its own — set-document-state adds {serverUrl,
+     tunnel, role} (never a token: it fires on every edit), and route-open's
+     server kind adds {serverUrl, token, tunnel}, the token held in memory
+     for the one new tab it opens. main.js's normalizeServerUrl /
+     normalizeTunnel / normalizeConnToken are the validators; an address
+     that does not validate refuses the route outright. */
   { name: "splitpage:set-document-state", direction: "send", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:renderer-ready", direction: "send", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:route-open", direction: "invoke", argsSchema: ["object"], allowedOrigins: APP },

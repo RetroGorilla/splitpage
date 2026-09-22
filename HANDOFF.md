@@ -515,7 +515,25 @@ tabs**.
 - Launch args: `--library`, `--host`, `--pin [code]`, `--data DIR`,
   `--port`, `--allow-origin`, `--tunnel user@host [...]`. Files as
   arguments open through `routeOpenPath`; a second launch hands files to
-  the running app. Per-tab server/PIN connections not yet built (§8).
+  the running app.
+- **Per-tab server connections** (#11). A tab's connection is its own
+  page's `conn` (`src/js/_home.js`): `serverUrl` (`""` = this app's own
+  server behind `splitpage://app/api`), `token`, `role`, `tunnel`. A server
+  tab's `source` is `{kind:'server', serverDocId, serverUrl, tunnel}` and
+  routing keys it by server AND id (`serverRouteKey`), so the same id on two
+  servers is two tabs. `set-document-state` reports `serverUrl`/`tunnel`/
+  `role` (never a token). `route-open` for a server document carries the
+  asking tab's `serverUrl`, `token` and `tunnel`; a malformed address is
+  refused. The token is held in memory **only in transit** — on a new
+  tab's record until TAB-BOOT-SYNC hands it over as `connection`, then
+  dropped; a this-tab route stores none. `desktop-state.json` gets
+  `normalizeTabSource()`'s whitelist and never a token or role, so a
+  restored tab boots on its own server and asks for the PIN again unless
+  the reader chose "Remember on this device" for that server (the page's
+  own per-server localStorage map). The teleprompter's Open in browser
+  answers `REMOTE_SERVER` for a tab on someone else's server. A `tunnel` is
+  host and ports only — the SSH forward the reader runs; nothing starts
+  ssh for a tab. `--tunnel` is still its own single non-tab window.
 - Test mode: `SPLITPAGE_TEST=1` — window never shown/taskbarred, an
   unanswered dialog resolves Cancel, an uncaught main-process error exits
   to stderr instead of a modal. `SPLITPAGE_USER_DATA` gives a temp profile;
@@ -786,7 +804,10 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
     browser state, never `state`. A bookmark never carries a password, key,
-    or passphrase.
+    or passphrase. Since #11 the same holds for `desktop-state.json` and a
+    draft header: a server tab's persisted source is `{kind, serverDocId,
+    serverUrl, tunnel}` and nothing else, and a token only ever sits in
+    main's memory between a route-open and the new tab's boot.
 30. **The first-run setup wizard may only appear over a genuinely pristine
     copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
     `build.mjs`, checked by `seedCheckPasses()`) plus
@@ -876,7 +897,7 @@ evaluation order via `_entry.js`):
 | Fragment | What is in it |
 | --- | --- |
 | `_state.js` | the 54 cross-module mutable vars, as one exported object `S` |
-| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73) |
+| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11) |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `01-scene-status.js` | scene status and runtime estimates |
@@ -996,8 +1017,9 @@ tracked in the plan file, not here:
 `C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Follow My Voice on
 desktop is paused pending a fresh look (parked files under
 `.cache/voice-parked/`, plan companion `breezy-booping-toucan-VL.md` for an
-opt-in local model, not yet approved). Google Drive via loopback OAuth and
-per-tab server/tunnel connections are pitched but unbuilt.
+opt-in local model, not yet approved). Google Drive via loopback OAuth is
+pitched but unbuilt. Per-tab server/tunnel connections are built (#11,
+§3.13).
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)

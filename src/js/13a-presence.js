@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { serverHomeId } from "./_home.js";
+import { homeConn, serverHomeId } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { cssAttr } from "./04-richtext.js";
 import { getSavedAuthorName } from "./10-comments.js";
@@ -8,9 +8,7 @@ import {
   apiUrl,
   notePresenceRev,
   onServerDoc,
-  serverBase,
-  serverSessionExpired,
-  serverToken
+  serverSessionExpired
 } from "./13-hosted.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -296,7 +294,10 @@ export function __init() {
          it that way (server.js's presence route). text/plain because a
          beacon is never preflighted: any other content type simply would not
          be sent to a server on another origin. */
-      if (serverToken) payload.token = serverToken;
+      /* The connection the document was opened through (#11): this tab's
+         own, which in another tab may be another server entirely. */
+      var c = homeConn();
+      if (c && c.token) payload.token = c.token;
       var url = apiUrl("api/presence");
       var text = JSON.stringify(payload);
       try {
@@ -309,7 +310,7 @@ export function __init() {
           body: text,
           keepalive: true,
           headers: { "Content-Type": "text/plain;charset=UTF-8" },
-          credentials: serverBase ? "omit" : "same-origin"
+          credentials: c && c.serverUrl ? "omit" : "same-origin"
         });
       } catch (e) { /* the server's TTL drops this tab a few seconds later */ }
     });
