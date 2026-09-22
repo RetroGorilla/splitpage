@@ -328,7 +328,7 @@ stash when `splitpage-server-resume` is present.
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, ~600 lines. One JSON file
+`server/server.js` — plain Node, no dependencies, one file (~2,300 lines). One JSON file
 per document in `DATA_DIR`.
 
 - No identity of its own — Cloudflare Access decides who anybody is; the
@@ -386,7 +386,63 @@ per document in `DATA_DIR`.
   document and never touches one.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
-  `Cache-Control: no-store` on every response.
+  `Cache-Control: no-store` on every response except a blob's.
+- **Images are content-addressed blobs** (#82). Bytes live at
+  `DATA_DIR/blobs/<first 2 hex>/<sha256>`, written like a document (temp in
+  the same dir, fsync, rename, fsync the dir — `writeFileDurable`), global
+  across documents, never deleted (D4); a successful save or comment touches
+  the mtime of every blob it names. The list route skips `blobs/` (it only
+  reads `*.json`). `GET /api/health` carries `blobs: 1`. All three routes
+  sit behind the token gate:
+  - `GET /api/blobs/<sha>` (64 lowercase hex, else 400): raw bytes,
+    `Content-Type` sniffed (png/jpeg/gif/webp only), `Cache-Control:
+    private, max-age=31536000, immutable`, `ETag: "<sha>"` (304 on
+    `If-None-Match`), `nosniff`, `CSP: default-src 'none'; sandbox`. A file
+    whose bytes do not hash to its name is 404 and logged, not served.
+  - `PUT /api/blobs/<sha>`, raw body: READ_ONLY 403, bad sha 400, declared
+    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a reviewer over budget 429
+    `review-budget` — all four before the body is read (#74); then
+    `hash-mismatch` 400, not png/jpeg/gif/webp (SVG included) 415
+    `unsupported-type`, already stored 200 `{stored:false}`, else 201
+    `{stored:true}`.
+  - `POST /api/blobs/missing {shas:[≤2000]}` (256 KB body cap) →
+    `{missing:[…]}`, both roles, READ_ONLY too.
+  - **Who sees what.** Editors and the library-wide review token: every
+    blob. A per-document review link: the shas its document's stored state
+    names (`refsIn`, cached by doc id + rev) plus the shas it uploaded
+    itself; anything else is 404 on GET and "missing" on `/missing` whether
+    or not it exists, a PUT of such bytes is answered 201 `{stored:true}`
+    (and charged) even when they were already here, and a comment naming
+    one is 422. None of the four answers tells a link what the rest of the
+    library holds.
+  - **Reviewer budget.** Review tokens may PUT (screenshots in comments,
+    D6) up to `REVIEW_BLOB_BUDGET_BYTES` (20 MiB) per token per rolling
+    hour, each upload charged at least 4 KiB. The declared length is
+    reserved before the body and settled to what was stored; a re-send of
+    bytes the token could already see is free. The library-wide review
+    token is one budget shared by everyone holding it. Editors are
+    unmetered.
+  - `refsIn(state)` counts `imageRef.sha256` / `imageValue.sha256` anywhere
+    in the state and `data-blob="<sha>"` on any TAG in any string (comment
+    and reply bodies, row HTML) — read through `htmlTokens`, so the same
+    characters typed as words are not a ref.
+  - **422 `{error:"missing-blobs", missing}`**: a document POST or PUT whose
+    state names a sha that is not on disk, not already named by the stored
+    document, and not listed in the request's `acceptMissing` array (after
+    the token/role and the PUT's rev check, before anything is written); a
+    comment or reply POST whose body names one (no `acceptMissing` there).
+    The client uploads what is listed and retries. Legacy states carrying
+    base64 images are accepted forever; `MAX_BODY` stays 25 MB.
+  - **426 `{error:"client-too-old"}`** (D7): clients send
+    `x-splitpage-client: 2` on every API call (listed in the CORS allowed
+    headers). A document PUT without it, or with a lower number, is refused
+    before its body when the STORED document names any blob — an older
+    client cannot see those images and its save would drop them. A
+    document with no refs is still saveable by an old client; a document
+    that gains refs between the check and the write is caught by the rev
+    compare-and-set. The comments POST is NOT gated: an old client's
+    comment only appends, and its anchor HTML must match the stored field
+    tag for tag, images included, or it is dropped as stale.
 
 ### 3.8 Untagged mentions are painted, never wrapped
 
@@ -958,6 +1014,13 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
     the automatic writes again (#41). A failed or conflicted automatic save
     halts too, rather than repeating a toast or a modal every two seconds.
+52. **No durable record names a blob its store does not already hold
+    durably** (#82). An image is uploaded (and fsynced) before anything
+    that refers to it by sha is written. On the server that is the 422
+    `missing-blobs` check on document POST/PUT and on the comments POST
+    (§3.7); `acceptMissing` is the one deliberate exception, for a sha the
+    client knows is lost for good, so a missing picture can never make a
+    script unsaveable.
 
 ---
 
