@@ -29,6 +29,14 @@ import {
   stashLocalWork,
   updateIdentityChip
 } from "./03-sync.js";
+import {
+  dataUrlForSync,
+  ensureBytes,
+  intern as internBlob,
+  recordFor as blobRecordFor,
+  bytesForSync,
+  setRemoteSource
+} from "./02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
 import { render } from "./05-render.js";
@@ -52,6 +60,7 @@ import {
   updateConnectMenu
 } from "./20e-connect.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -358,18 +367,70 @@ function readReviewKey() {
   } catch (e) { /* file:// in some browsers — the key is already stored */ }
 }
 
+/* ---- what this client is, and what the server can do (#82) ----
+
+   Every API call says which generation of client made it:
+   `x-splitpage-client: 2` is a client that knows what an image reference
+   (`imageRef`, `<img data-blob>`) is. The server refuses a document PUT
+   WITHOUT it — 426 client-too-old — once the stored document names a blob,
+   because an older client would save the script back with its pictures
+   gone (D7). This page is never that client, but a later server may ask for
+   a later number, and the answer then is the same: this page is out of
+   date, reload it (flagClientTooOld).
+
+   What the SERVER can do is read off its /api/health, once per connection
+   (#11: a connection is this tab's, and pointing the tab elsewhere is a new
+   record, so a WeakMap keyed by it forgets the old server's answer by
+   itself). `blobs: 1` is a server with the blob routes; anything else —
+   including a server that has not answered yet — is sent images inline
+   (serverStateFor).
+
+   A server from before #82 that is on ANOTHER origin does not list the new
+   header in its CORS preflight, so the browser would refuse every call
+   carrying it. detectServer() tries again without it when the probe cannot
+   get through at all, and remembers for this connection that the header
+   stays off; such a server has no blob routes and no 426 either. */
+var CLIENT_HEADER = "x-splitpage-client";
+var CLIENT_GENERATION = "2";
+var serverCaps = new WeakMap();
+
+function capsOf(c) {
+  return (c && serverCaps.get(c)) || { blobs: false, noClientHeader: false, known: false };
+}
+
+function noteCaps(c, health, noClientHeader) {
+  serverCaps.set(c, {
+    blobs: !!(health && Number(health.blobs) >= 1),
+    noClientHeader: !!noClientHeader,
+    known: true
+  });
+}
+
+/* The one place that decides whether blob refs may go to this tab's server. */
+function serverTakesBlobs() {
+  return capsOf(conn).blobs;
+}
+
+function clientHeaders(headers, opts) {
+  if (conn.token) headers["x-splitpage-token"] = conn.token;
+  if (!(opts && opts.noClientHeader) && !capsOf(conn).noClientHeader) headers[CLIENT_HEADER] = CLIENT_GENERATION;
+  return headers;
+}
+
 export async function apiFetch(path, opts) {
   opts = opts || {};
-  var headers = opts.body
-    ? { "Content-Type": "application/json", "Accept": "application/json" }
-    : { "Accept": "application/json" };
-  if (conn.token) headers["x-splitpage-token"] = conn.token;
+  var headers = opts.raw
+    ? { "Content-Type": opts.contentType || "application/octet-stream", "Accept": "application/json" }
+    : opts.body
+      ? { "Content-Type": "application/json", "Accept": "application/json" }
+      : { "Accept": "application/json" };
+  clientHeaders(headers, opts);
   var res;
   try {
     res = await fetch(apiUrl(path), {
       method: opts.method || "GET",
       headers: headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
       /* Same-origin keeps the Cloudflare Access cookie flowing, which is
          the whole point of serving app and API together. Cross-origin it
          is switched off deliberately: the token in the header is what
@@ -384,6 +445,9 @@ export async function apiFetch(path, opts) {
   }
 
   var ctype = res.headers.get("content-type") || "";
+  /* An upload refused for its size by something in front of the server (a
+     proxy's own HTML 413) is still "too large", not a lapsed sign-in. */
+  if (opts.raw && res.status === 413) throw ApiError("blob-too-large", "too-large");
   if (res.redirected || (!ctype.includes("application/json") && res.status !== 204)) {
     throw ApiError("auth", "signed out");
   }
@@ -414,7 +478,16 @@ export async function apiFetch(path, opts) {
     if (body429 && body429.error === "too-many-attempts") {
       throw ApiError("pin-blocked", "too many wrong codes — wait a minute and try again");
     }
+    /* A review link's hourly allowance for images (#82): the token is
+       fine, this upload is not, and it will be again in a while. */
+    if (body429 && body429.error === "review-budget") {
+      throw ApiError("review-budget", "this link's image allowance is used up for now");
+    }
   }
+  /* The server says this page is older than the document needs (#82 D7).
+     Neither a conflict nor a sign-out: nothing to merge, nothing to type —
+     only a reload fetches a client it will take. */
+  if (res.status === 426) throw ApiError("client-too-old", "this page is out of date");
 
   var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
   if (res.status === 409) { var c = ApiError("conflict"); c.payload = body; throw c; }
@@ -425,7 +498,19 @@ export async function apiFetch(path, opts) {
      that is about something else (a comment, "no-such-comment") stays
      "404", and the comment routes read it that way (#99). */
   if (res.status === 404 && body && body.error === "not-found") throw ApiError("not-found");
-  if (!res.ok) throw ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
+  /* A write naming images the server does not hold (#82): `payload.missing`
+     is the list, which sendWithBlobs() uploads and retries. */
+  if (res.status === 422 && body && body.error === "missing-blobs") {
+    var mb = ApiError("missing-blobs", "an image in it is not on the server");
+    mb.payload = body;
+    throw mb;
+  }
+  if (opts.raw && res.status === 415) throw ApiError("blob-unsupported", (body && body.error) || "unsupported-type");
+  if (!res.ok) {
+    var ge = ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
+    ge.payload = body;
+    throw ge;
+  }
   return body;
 }
 
@@ -447,14 +532,12 @@ export var SERVER_RESUME_KEY = "splitpage-server-resume";
    simply reopened the document. */
 S.draftServerResume = null;
 
-function flagServerSessionExpired() {
-  if (serverSessionExpired) return;
-  serverSessionExpired = true;
-  /* Stash before promising anything. stashLocalWork() was written for the
-     artifact shell's forced reload and had sat unused ever since; this is
-     the same situation it was built for — the only way back is a reload,
-     and everything typed since the last save would go with it. Only claim
-     the work is safe if it actually got persisted. */
+/* Stash before promising anything. stashLocalWork() was written for the
+   artifact shell's forced reload and had sat unused ever since; this is
+   the same situation it was built for — the only way back is a reload,
+   and everything typed since the last save would go with it. Only claim
+   the work is safe if it actually got persisted. → true when it was. */
+function stashForReload() {
   var stashed = false;
   if (onServerDoc()) {
     try {
@@ -463,9 +546,36 @@ function flagServerSessionExpired() {
       if (!stashed) sessionStorage.removeItem(SERVER_RESUME_KEY);
     } catch (e) { stashed = false; }
   }
+  return stashed;
+}
+
+function flagServerSessionExpired() {
+  if (serverSessionExpired) return;
+  serverSessionExpired = true;
+  var stashed = stashForReload();
   showToast(stashed
     ? "Your sign-in expired. Reload the page to sign in again — your unsaved edits are kept and will be merged back in."
     : "Your sign-in expired. Copy anything unsaved, then reload the page to sign in again.",
+    "warn", true);
+  updateFileChip();
+}
+
+/* 426 client-too-old (#82 D7): the server will not take a save from this
+   copy of the page, because the document holds something (an image
+   reference, today) a client this old would drop. Latched like a lapsed
+   sign-in, so autosave does not ask again and again for the same answer,
+   and resolved the same way — a reload, which also fetches the newer page
+   when this one was served by that server — with the same stash, so the
+   edits since the last save are merged back in after it. */
+var clientTooOld = false;
+
+function flagClientTooOld() {
+  if (clientTooOld) return;
+  clientTooOld = true;
+  var stashed = stashForReload();
+  showToast(stashed
+    ? "This page is out of date for this server. Reload it to keep saving — your unsaved edits are kept and will be merged back in."
+    : "This page is out of date for this server. Copy anything unsaved, then reload the page to keep saving.",
     "warn", true);
   updateFileChip();
 }
@@ -695,6 +805,29 @@ function handleApiError(err, whatFailed) {
       "Ask whoever is hosting for the editing code.", "warn", true);
     return;
   }
+  if (err && err.code === "client-too-old") { flagClientTooOld(); return; }
+  /* The image answers (#82): each says what to do about the picture, not
+     about the connection, which is fine. */
+  if (err && err.code === "review-budget") {
+    showToast(whatFailed + " — this review link has used up its allowance for images for now. " +
+      "Try again in an hour, or post it without the picture.", "warn", true);
+    return;
+  }
+  if (err && err.code === "blob-too-large") {
+    showToast(whatFailed + " — an image in it is larger than the server takes (8 MB). " +
+      "Use a smaller picture.", "warn", true);
+    return;
+  }
+  if (err && err.code === "blob-unsupported") {
+    showToast(whatFailed + " — an image in it is not a PNG, JPEG, GIF or WebP, which is all the server takes.",
+      "warn", true);
+    return;
+  }
+  if (err && err.code === "missing-blobs") {
+    showToast(whatFailed + " — an image in it is no longer on this device or on the server. " +
+      "Remove it and try again.", "warn", true);
+    return;
+  }
   showToast(whatFailed + " — " + ((err && err.message) || "please try again") + ".", "error");
 }
 
@@ -709,7 +842,7 @@ export async function detectServer() {
      must not be written over the new one's. */
   var probing = conn;
   try {
-    var health = await apiFetch("api/health");
+    var health = await probeHealth(probing);
     if (probing !== conn) return;
     S.serverMode.available = !!(health && health.ok);
     S.serverMode.readOnly = !!(health && health.readOnly);
@@ -766,6 +899,27 @@ export async function detectServer() {
   }
 
   finishServerDetect();
+}
+
+/* /api/health for THIS connection, recording what the server can do
+   (capsOf, above). A cross-origin server that cannot be reached at all is
+   asked once more without the client header: a server older than #82 does
+   not allow it in its preflight, and a refused preflight looks exactly
+   like "no answer" from here. */
+async function probeHealth(probing) {
+  var health;
+  try {
+    health = await apiFetch("api/health");
+  } catch (e) {
+    if (!(e && e.code === "offline" && probing.serverUrl) || probing !== conn) throw e;
+    health = await apiFetch("api/health", { noClientHeader: true });
+    /* A server that answers `blobs` does allow the header: the first try
+       failed for some other reason, and the header stays on. */
+    if (probing === conn) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
+    return health;
+  }
+  if (probing === conn) noteCaps(probing, health, false);
+  return health;
 }
 
 /* Everything that only makes sense once we are actually allowed in. Split
@@ -1010,7 +1164,11 @@ export async function publishToServer() {
   var via = conn;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
-      return apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
+      return sendWithBlobs(published, function (sending, acceptMissing) {
+        var post = { state: sending, by: getEditorName() };
+        if (acceptMissing.length) post.acceptMissing = acceptMissing;
+        return apiFetch("api/docs", { method: "POST", body: post });
+      }, true);
     });
   } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
   /* Published to the server the tab WAS on; this tab has since been pointed
@@ -1183,6 +1341,169 @@ export async function armServerDelete(btn, id) {
   }, 2800);
 }
 
+/* ---- images on the wire (#82) ----
+
+   A state names its images by sha (`row.imageRef`, `<img data-blob>`;
+   refsIn in shared/blob-policy.js finds them all) and the bytes travel on
+   their own. The server refuses a write naming a blob it does not hold —
+   422 missing-blobs — so every write that can name one goes through
+   sendWithBlobs():
+
+     1. POST api/blobs/missing with the state's refs;
+     2. PUT api/blobs/<sha>, raw bytes, for each one missing (the bytes from
+        this page's registry, or its local store — never asked of the server
+        that has just said it lacks them);
+     3. the write itself.
+
+   A 422 anyway (the server lost one in between, or the page could not tell
+   it was missing) uploads what the answer lists and tries ONCE more. That
+   retry is not one of saveToServer's three 409 rounds: it is the same
+   write, not a merge. A sha this page has no bytes for at all — a history
+   snapshot restored after its image was lost — can only be said to be gone:
+   a document write retries with `acceptMissing` naming it, which the server
+   takes as "I know" and stores the reference as it is (the image shows as
+   unavailable, and the record is kept for when the bytes turn up). A
+   comment has no such excuse, and fails with a toast.
+
+   A server without the blob routes (health without `blobs`, or one this tab
+   has not heard from) is sent the images INLINE instead — rows carrying
+   `visualImage: data:…` and HTML images a `src="data:…"`, the form a
+   .splitpage file keeps — because it would store a ref as a key it knows
+   nothing about and could never serve the bytes behind it. What the page
+   holds is not changed: only the copy that is sent. */
+
+var MISSING_BATCH = 2000; /* the server's cap on one /missing request */
+
+function uniqueShas(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (sha) {
+    if (isSha256Hex(sha) && out.indexOf(sha) === -1) out.push(sha);
+  });
+  return out;
+}
+
+/* Which of `shas` (unique, valid) this tab's server does not hold. */
+async function blobsMissingOnServer(shas) {
+  var out = [];
+  for (var i = 0; i < shas.length; i += MISSING_BATCH) {
+    var chunk = shas.slice(i, i + MISSING_BATCH);
+    var body = await apiFetch("api/blobs/missing", { method: "POST", body: { shas: chunk } });
+    uniqueShas(body && body.missing).forEach(function (sha) {
+      if (chunk.indexOf(sha) !== -1 && out.indexOf(sha) === -1) out.push(sha);
+    });
+  }
+  return out;
+}
+
+/* Puts every listed blob the server lacks onto it, one at a time. `known`
+   says the list already IS what the server lacks (a 422's), so it is not
+   asked again. → the shas this page has no bytes for, which were not
+   sent. Throws what an upload throws (blob-too-large, blob-unsupported,
+   review-budget, offline, ...). */
+async function uploadBlobs(shas, known) {
+  var list = uniqueShas(shas);
+  if (!list.length) return [];
+  var need = known ? list : await blobsMissingOnServer(list);
+  if (!need.length) return [];
+  var absent = await ensureBytes(need, { remote: false });
+  for (var i = 0; i < need.length; i++) {
+    var sha = need[i];
+    if (absent.indexOf(sha) !== -1) continue;
+    var bytes = bytesForSync(sha);
+    var rec = blobRecordFor(sha);
+    if (!bytes || !rec) { absent.push(sha); continue; }
+    await apiFetch("api/blobs/" + sha, { method: "PUT", raw: bytes, contentType: rec.mime });
+  }
+  return absent;
+}
+
+/* An <img> tag's data-blob, the way refsIn reads it. */
+var IMG_TAG_RE = /<img\b[^>]*>/gi;
+var IMG_BLOB_ATTR_RE = /\sdata-blob\s*=\s*(?:"([0-9a-f]{64})"|'([0-9a-f]{64})'|([0-9a-f]{64})(?=[\s/>]))/i;
+var IMG_SRC_ATTR_RE = /\ssrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+
+function inlineHtmlBlobs(html) {
+  if (typeof html !== "string" || html.indexOf("data-blob") === -1) return html;
+  return html.replace(IMG_TAG_RE, function (tag) {
+    var m = IMG_BLOB_ATTR_RE.exec(tag);
+    var url = m ? dataUrlForSync(m[1] || m[2] || m[3]) : null;
+    if (!url) return tag;
+    return tag.replace(IMG_SRC_ATTR_RE, "").replace(m[0], ' src="' + url + '"');
+  });
+}
+
+/* The copy of `state` a server without blob routes is sent: every image
+   this page can find the bytes for put back inline. An image whose bytes
+   are nowhere keeps its reference — dropping it would lose the record of
+   what was there, and an older server stores the key untouched. */
+async function inlineBlobsForServer(state, refs) {
+  if (!refs.length) return state;
+  await ensureBytes(refs);
+  var out = cloneState(state);
+  (out.rows || []).forEach(function (r) {
+    if (!r || typeof r !== "object") return;
+    var url = r.imageRef && dataUrlForSync(r.imageRef.sha256);
+    if (url) { r.visualImage = url; delete r.imageRef; }
+    r.visualText = inlineHtmlBlobs(r.visualText);
+    r.audioText = inlineHtmlBlobs(r.audioText);
+  });
+  (out.comments || []).forEach(function (c) {
+    if (!c || typeof c !== "object") return;
+    c.body = inlineHtmlBlobs(c.body);
+    (c.replies || []).forEach(function (rep) { if (rep) rep.body = inlineHtmlBlobs(rep.body); });
+  });
+  return out;
+}
+
+/* One write whose state may name blobs. `send(state, acceptMissing)` makes
+   the request (it is called at most twice) and returns its promise.
+   `canAccept`: a document write, which may say a blob is gone; a comment
+   may not. Throws what the write or an upload throws; `missing-blobs`
+   when an image is gone and the write may not say so. */
+async function sendWithBlobs(state, send, canAccept) {
+  var refs = refsIn(state);
+  if (!serverTakesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
+  if (refs.length) await uploadBlobs(refs, false);
+  try {
+    return await send(state, []);
+  } catch (err) {
+    if (!(err && err.code === "missing-blobs")) throw err;
+    var absent = await uploadBlobs(err.payload && err.payload.missing, true);
+    if (absent.length && !canAccept) throw err;
+    return send(state, absent);
+  }
+}
+
+/* A blob's bytes from this tab's server, into the page's registry — the
+   registry's remote source (setRemoteSource in __init). Not apiFetch():
+   a 200 here is raw bytes, which apiFetch would read as a lapsed sign-in.
+   The answer is re-hashed by the registry's intern() before it is
+   believed; bytes that are not an image, or not THIS image, are refused
+   (null) and the image stays missing. Anything else that goes wrong —
+   offline, 404, a sign-in page — is null too: the caller shows the image
+   as unavailable, and nothing here is worth a toast. */
+export async function fetchBlob(sha) {
+  if (!isSha256Hex(sha) || !serverTakesBlobs()) return null;
+  var res;
+  try {
+    res = await fetch(apiUrl("api/blobs/" + sha), {
+      method: "GET",
+      headers: clientHeaders({ "Accept": "image/*" }),
+      /* as apiFetch, and for the same reasons */
+      credentials: conn.serverUrl ? "omit" : "same-origin"
+    });
+  } catch (e) { return null; }
+  if (!res.ok || res.redirected) return null;
+  var bytes;
+  try { bytes = new Uint8Array(await res.arrayBuffer()); } catch (e) { return null; }
+  var rec = internBlob(bytes);
+  if (!rec || rec.sha256 !== sha) {
+    if (window.console) console.warn("Image from the server refused: it is not the image " + sha);
+    return null;
+  }
+  return bytesForSync(sha);
+}
+
 /* ---- the compare-and-set save ----
 
    Returns true when the document is safely on the server. A 409 means
@@ -1191,7 +1512,7 @@ export async function armServerDelete(btn, id) {
    against their rev. Bounded, because a busy document could otherwise spin
    here forever — three rounds is far more contention than a script gets. */
 export async function saveToServer() {
-  if (serverSessionExpired) return false;
+  if (serverSessionExpired || clientTooOld) return false;
   /* A review session has no PUT: the server refuses one outright (#71).
      What it has to send is its own comments, one at a time, below. */
   if (reviewMode()) return sendReviewWrites();
@@ -1222,10 +1543,11 @@ export async function saveToServer() {
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
-        return apiFetch("api/docs/" + encodeURIComponent(docId), {
-          method: "PUT",
-          body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
-        });
+        return sendWithBlobs(published, function (sending, acceptMissing) {
+          var put = { baseRev: baseRevAtSave, state: sending, by: getEditorName() };
+          if (acceptMissing.length) put.acceptMissing = acceptMissing;
+          return apiFetch("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
+        }, true);
       });
       if (serverHomeId() !== docId) return true; /* saved, but the open document has since changed */
       home.rev = body.rev;
@@ -1523,6 +1845,26 @@ function reviewRequest(op, c) {
   return { path: path, method: "POST", body: payload, busy: "Posting your comment…" };
 }
 
+/* A comment or reply body may hold images (#82 D6): uploaded first, or
+   inlined for a server without blob routes, like a document's. Only the
+   body is looked at — the anchor's HTML has to match the stored field tag
+   for tag, so any image in it is one the server already has. `req.body`
+   itself is left as it was: adoptReviewAnswer reads the anchor back off
+   it. */
+function sendReviewRequest(req) {
+  var isReply = !!req.body.reply;
+  var probe = { comments: [{ body: isReply ? req.body.reply.body : req.body.comment.body }] };
+  return sendWithBlobs(probe, function (sending) {
+    var body = req.body;
+    if (sending !== probe) {
+      body = jsonCopy(req.body);
+      if (isReply) body.reply.body = sending.comments[0].body;
+      else body.comment.body = sending.comments[0].body;
+    }
+    return apiFetch(req.path, { method: req.method, body: body });
+  }, false);
+}
+
 /* The server's copy of the one comment an answer is about, into the base
    and onto the screen. Returns true when something visible in the script
    changed (an anchor came back out), so the caller knows to re-render. */
@@ -1583,7 +1925,10 @@ var REVIEW_REFUSALS = {
   "bad-comment": "the server could not read it as a comment",
   "bad-anchor": "the server could not read where it goes",
   "bad-comment-id": "the server could not read it as a comment",
-  "no-state": "the document on the server is empty"
+  "no-state": "the document on the server is empty",
+  "missing-blobs": "an image in it is no longer on this device or on the server",
+  "blob-too-large": "an image in it is larger than the server takes (8 MB)",
+  "blob-unsupported": "an image in it is not a PNG, JPEG, GIF or WebP"
 };
 
 /* A refusal that will be the same answer every time — keep the words on
@@ -1591,6 +1936,10 @@ var REVIEW_REFUSALS = {
    out, a PIN to type) is worth trying again. */
 function permanentReviewRefusal(err) {
   if (!err) return "";
+  /* the same picture is refused the same way every time (#82) */
+  if (err.code === "missing-blobs" || err.code === "blob-too-large" || err.code === "blob-unsupported") {
+    return REVIEW_REFUSALS[err.code];
+  }
   var reason = err.code === "conflict" ? (err.payload && err.payload.error) : err.message;
   if (err.code === "conflict" || err.code === "400" || err.code === "413" ||
       (err.code === "404" && reason === "no-such-comment")) {
@@ -1624,9 +1973,7 @@ async function sendReviewWrites() {
       var req = reviewRequest(op, c);
       var body;
       try {
-        body = await withBusyBar(req.busy, function () {
-          return apiFetch(req.path, { method: req.method, body: req.body });
-        });
+        body = await withBusyBar(req.busy, function () { return sendReviewRequest(req); });
       } catch (err) {
         if (serverHomeId() !== docId) return false;
         var why = permanentReviewRefusal(err);
@@ -1886,6 +2233,7 @@ export async function launcherFetch(path, opts) {
   opts = opts || {};
   if (!launchToken) throw ApiError("no-launcher", "this copy was not started by the launcher");
   var headers = { "Accept": "application/json", "x-splitpage-launch": launchToken };
+  headers[CLIENT_HEADER] = CLIENT_GENERATION; /* same-origin only: no preflight to refuse it */
   if (opts.body) headers["Content-Type"] = "application/json";
   var res;
   try {
@@ -2701,6 +3049,11 @@ export function driveSignOut() {
 export function __init() {
   loadTabConnection();
 
+  /* A hosted document's images come from its server when this page has
+     not got them (#82): the registry's remote source, asked only after
+     the page's own store. */
+  setRemoteSource(function (sha) { return onServerDoc() ? fetchBlob(sha) : null; });
+
   readReviewKey();
 
   sharedDocId = readSharedDocParam();
@@ -2755,6 +3108,8 @@ export function __init() {
          conflict rather than being reconciled against what the server last
          confirmed. `false` is for a suite that wants exactly that. */
       if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
+      /* what /api/health's `blobs` would have said, when a suite says it */
+      if (opts.blobs !== undefined) noteCaps(conn, { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
       updateServerMenu();
       render();
@@ -2786,6 +3141,12 @@ export function __init() {
        watches a reviewer's comment go out through the comment routes (#71)
        and be folded back in. Copies, not the live objects. */
     base: function () { return S.baseState ? cloneState(S.baseState) : null; },
-    dirty: function () { return !!S.dirty; }
+    dirty: function () { return !!S.dirty; },
+    /* Images on the wire (#82), for tests/66-hosted-blobs.txt: the real
+       health probe, what it recorded for this connection, and the blob
+       fetch helper. */
+    detect: detectServer,
+    caps: function () { return Object.assign({}, capsOf(conn)); },
+    fetchBlob: fetchBlob
   };
 }

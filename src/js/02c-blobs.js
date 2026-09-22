@@ -15,7 +15,9 @@ import { imageDims, isSha256Hex, sniffImageMime } from "../../shared/blob-policy
    ensureBytes() or persist(). The later steps connect it — migrateRows
    interning legacy data: URIs, the renderer asking for object URLs, the
    file writer re-inlining bytes, the history job persisting before it
-   writes.
+   writes. The one connection so far is the hosted client (13-hosted.js,
+   #82 P5), which installs its server fetch as the remote source
+   (setRemoteSource) and reads bytes out to upload them.
 
    Two halves, and the split is the point:
 
@@ -78,6 +80,13 @@ var blobDurable = {};
 /* In-flight work, so concurrent callers share one read or one write. */
 var blobPersisting = {};
 var blobLoading = {};
+
+/* The remote source, set once by the hosted client (13-hosted.js,
+   setRemoteSource below) — the server a hosted document's blobs live on.
+   A hook rather than an import: 02c sits below everything in the module
+   order and must not reach up into the hosted client (#66). */
+var blobRemote = null;
+var blobFetching = {};
 
 var blobBackend = null;         /* the backend in use, once chosen */
 var blobBackendPromise = null;  /* the choice, while it is being made */
@@ -292,18 +301,61 @@ function resolveBlobBackend() {
 }
 
 /* Makes sure the bytes of every listed sha are in memory, reading them
-   from the backend when they are not. Resolves with the shas still not
-   held — the ones no backend had, whose bytes came back corrupt (they are
-   re-hashed before they are believed), and anything that is not a sha at
-   all. Never rejects. */
-export function ensureBytes(shas) {
+   from the backend when they are not, and then — for what the backend did
+   not have either — from the remote source, when one is set. Resolves with
+   the shas still not held — the ones nobody had, whose bytes came back
+   corrupt (they are re-hashed before they are believed, whichever store
+   they came from), and anything that is not a sha at all. Never rejects.
+
+   opts.remote === false stops at the backend: the hosted client asks that
+   way for the bytes it is about to UPLOAD, because the server has just
+   said it lacks them and asking it again would be a wasted round trip. */
+export function ensureBytes(shas, opts) {
   var list = uniqueStrings(shas);
   var need = list.filter(function (sha) { return isSha256Hex(sha) && !blobEntries[sha]; });
   var report = function () { return list.filter(function (sha) { return !has(sha); }); };
   if (!need.length) return Promise.resolve(report());
+  var remote = !(opts && opts.remote === false);
   return resolveBlobBackend().then(function (backend) {
     return Promise.all(need.map(function (sha) { return loadBlob(backend, sha); }));
+  }).then(function () {
+    if (!remote || !blobRemote) return null;
+    return Promise.all(need.filter(function (sha) { return !blobEntries[sha]; }).map(fetchRemoteBlob));
   }).then(report, report);
+}
+
+/* ---- the remote source ----
+
+   The one door from here to a server, installed by the hosted client:
+
+     setRemoteSource(fn)   fn(sha) → Promise<Uint8Array | ArrayBuffer | null>
+                           (or null for "not from here"); null uninstalls.
+
+   It is asked only after the backend, and whatever it answers is re-hashed
+   here before it is believed — a source may also intern the bytes itself
+   (the hosted client does, to refuse a mismatch where it fetched them), in
+   which case they are simply already held. Bytes from a remote are NOT
+   marked durable: the backend does not hold them, and persist() is still
+   what puts them there. */
+export function setRemoteSource(fn) {
+  blobRemote = typeof fn === "function" ? fn : null;
+  blobFetching = {};
+}
+
+function fetchRemoteBlob(sha) {
+  if (blobFetching[sha]) return blobFetching[sha];
+  var source = blobRemote;
+  var p = Promise.resolve().then(function () { return source ? source(sha) : null; }).then(function (bytes) {
+    if (blobEntries[sha] || !bytes) return;
+    var rec = intern(bytes);
+    if (rec && rec.sha256 !== sha && window.console) {
+      console.warn("Image store: the server's blob " + sha + " failed its hash check");
+    }
+  }).then(null, blobNoop).then(function () {
+    if (blobFetching[sha] === p) delete blobFetching[sha];
+  });
+  blobFetching[sha] = p;
+  return p;
 }
 
 function loadBlob(backend, sha) {

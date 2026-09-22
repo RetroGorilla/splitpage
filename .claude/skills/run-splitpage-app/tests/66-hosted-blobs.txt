@@ -1,0 +1,174 @@
+# The hosted client's half of image blobs (#82 P5, 13-hosted.js; the server
+# half is server/server.js, tested by tools/test-server.mjs).
+#
+# Nothing in the app creates an `imageRef` yet — that is the later schema
+# switch — so the states here are given refs by hand: a row's
+# `imageRef: {sha256, width, height, mime}` and a comment body's
+# `<img data-blob="<sha>">`, with the bytes put in the page's registry
+# through window.__blobsTest (02c-blobs.js) from real canvas PNGs.
+#
+# The harness cannot start server.js, so `fetch` is replaced for every URL
+# with `api/` in it, the way 54-server-conflict.txt and 57-review-comments.txt
+# replace it: a small emulator of the routes this touches (health, me,
+# presence, blobs/missing, blobs/<sha> PUT and GET, the document PUT and the
+# comments POST), recording each call in order with its
+# `x-splitpage-client` header and its status. What it pins:
+#
+#   * every API call carries `x-splitpage-client: 2` — except to a server on
+#     another origin whose preflight refuses it (older than #82), which is
+#     asked again without it and remembered per connection;
+#   * a server whose /api/health has no `blobs` is sent images INLINE
+#     (data: URIs) and never sees a blob call; the page keeps its refs;
+#   * against a blob server a save is  missing -> PUT blob -> PUT document,
+#     in that order, and a second save uploads nothing;
+#   * a 422 missing-blobs uploads what it lists and retries once;
+#   * a 422 for bytes nobody has retries with `acceptMissing`;
+#   * a reviewer's comment with an image: missing -> PUT blob -> POST; a 429
+#     review-budget is a toast about the image allowance and the comment
+#     waits; an image nobody has is a refusal, never `acceptMissing`;
+#   * the blob fetch helper re-hashes what the server sends and refuses a
+#     body that is not the image asked for, and the registry's ensureBytes()
+#     reaches the server through it once its own store has nothing;
+#   * 426 client-too-old is "reload this page", once, with no retry loop.
+# Every `eval` is one physical line.
+
+open
+
+eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.B = window.__blobsTest; return typeof H.fetchBlob === 'function' && typeof H.caps === 'function'; })()
+expect true
+
+# A hosted document autosaves; every save here is made explicitly.
+eval (function(){ if (F.autosave.enabled()) F.autosave.toggle(); return F.autosave.enabled() === false; })()
+expect true
+
+# ---- five distinct real PNGs, in the page's registry --------------------
+eval (function(){ window.__img = {}; window.__name = {}; var mk = function(key, color, w, h){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); var url = c.toDataURL('image/png'); var rec = B.internDataUrl(url); window.__img[key] = { url: url, rec: rec, sha: rec.sha256 }; window.__name[rec.sha256] = key; }; mk('P', '#c33', 37, 23); mk('J', '#3c3', 31, 17); mk('K', '#33c', 29, 19); mk('L', '#cc3', 23, 13); mk('R', '#3cc', 19, 11); window.__b64bytes = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var a = new Uint8Array(bin.length); for (var k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k); return a; }; return Object.keys(window.__img).length; })()
+expect Object.keys(__img).every(function(k){ return __img[k].rec && __img[k].rec.mime === 'image/png' && B.has(__img[k].sha); })
+eval (function(){ window.X = 'ab'.repeat(32); window.Z = 'cd'.repeat(32); __name[X] = 'X'; __name[Z] = 'Z'; return true; })()
+
+# ---- the emulated server --------------------------------------------------
+eval (function(){ window.__srv = { all: [], calls: [], blobs: {}, serve: {}, health: { ok: true, version: 'test' }, lieMissing: 0, blobPutAnswer: null, docPutAnswer: null, corsOld: null, role: 'edit', tick: 0 }; window.__ans = function(status, body){ return new Response(JSON.stringify(body), { status: status, headers: { 'content-type': 'application/json' } }); }; window.__refs = function(st){ var out = []; var add = function(s){ if (/^[0-9a-f]{64}$/.test(s) && out.indexOf(s) === -1) out.push(s); }; var html = function(h){ if (typeof h !== 'string') return; var re = /<img\b[^>]*?\sdata-blob="([0-9a-f]{64})"/g, m; while ((m = re.exec(h))) add(m[1]); }; (st.rows || []).forEach(function(r){ if (r && r.imageRef) add(r.imageRef.sha256); html(r && r.visualText); html(r && r.audioText); }); (st.comments || []).forEach(function(c){ html(c.body); (c.replies || []).forEach(function(x){ html(x.body); }); }); return out; }; window.__hex = async function(bytes){ var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); return Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }; window.__seq = function(){ return __srv.calls.filter(function(c){ return /^api\/(blobs|docs)/.test(c.path); }).map(function(c){ return c.m + ' ' + c.path.replace(/[0-9a-f]{64}/, function(s){ return __name[s] || s.slice(0, 8); }) + ' ' + c.status; }).join(' | '); }; window.__toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('.toast'), function(t){ return t.textContent; }); }; return true; })()
+eval (function(){ var real = window.fetch.bind(window); var route = async function(u, path, m, opts, h, call){ var S2 = window.__srv; if (S2.corsOld && u.indexOf(S2.corsOld) === 0 && call.client) throw new TypeError('Failed to fetch'); if (path === 'api/health') return __ans(200, S2.health); if (path === 'api/me') return __ans(200, { name: 'Tester', role: S2.role }); if (path === 'api/presence') return __ans(200, { docId: 'doc-b', rev: H.home().rev || 0, here: [] }); if (path === 'api/blobs/missing' && m === 'POST') { var mb = JSON.parse(opts.body); call.shas = mb.shas; if (S2.lieMissing) { S2.lieMissing--; return __ans(200, { missing: [] }); } return __ans(200, { missing: mb.shas.filter(function(s){ return !S2.blobs[s]; }) }); } var bm = /^api\/blobs\/([0-9a-f]{64})$/.exec(path); if (bm && m === 'PUT') { var bytes = opts.body instanceof Uint8Array ? opts.body : new Uint8Array(opts.body); call.size = bytes.length; call.type = h['Content-Type']; if (S2.blobPutAnswer) { var a = S2.blobPutAnswer; S2.blobPutAnswer = null; return __ans(a.status, a.body); } if ((await __hex(bytes)) !== bm[1]) return __ans(400, { error: 'hash-mismatch' }); var had = !!S2.blobs[bm[1]]; S2.blobs[bm[1]] = true; return __ans(had ? 200 : 201, { stored: !had }); } if (bm && m === 'GET') { var served = S2.serve[bm[1]]; if (!served) return __ans(404, { error: 'not-found' }); return new Response(served, { status: 200, headers: { 'content-type': 'image/png' } }); } if (path === 'api/docs/doc-b/comments' && m === 'POST') { var cb = JSON.parse(opts.body); call.body = cb; var chtml = cb.reply ? cb.reply.body : cb.comment.body; var cmiss = __refs({ comments: [{ body: chtml }] }).filter(function(s){ return !S2.blobs[s]; }); if (cmiss.length) return __ans(422, { error: 'missing-blobs', missing: cmiss }); var now = new Date(Date.UTC(2030, 0, 1, 0, 0, ++S2.tick)).toISOString(); var rev = (H.home().rev || 0) + 1; var c = { id: cb.comment.id, rowId: cb.comment.rowId, field: cb.comment.field, anchorId: cb.comment.anchorId || cb.comment.id, quotedText: cb.comment.quotedText || '', author: cb.comment.author || 'Anonymous', body: cb.comment.body, resolved: false, resolvedBy: null, resolvedAt: null, assignee: '', createdAt: now, updatedAt: now, kind: 'anchor', replies: [] }; return __ans(200, { id: 'doc-b', rev: rev, updatedAt: now, updatedBy: cb.by, comment: c, changed: true, anchored: false }); } if (path === 'api/docs/doc-b' && m === 'PUT') { var pb = JSON.parse(opts.body); call.body = pb; if (S2.docPutAnswer) return __ans(S2.docPutAnswer.status, S2.docPutAnswer.body); var accept = pb.acceptMissing || []; var dmiss = __refs(pb.state).filter(function(s){ return !S2.blobs[s] && accept.indexOf(s) === -1; }); if (dmiss.length) return __ans(422, { error: 'missing-blobs', missing: dmiss }); return __ans(200, { id: 'doc-b', rev: pb.baseRev + 1, updatedAt: new Date().toISOString(), updatedBy: 'Tester' }); } return __ans(404, { error: 'not-found' }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var call = { m: opts.method || 'GET', path: u.slice(i), origin: u.slice(0, i), client: h['x-splitpage-client'] || null, status: 'threw' }; __srv.all.push(call); __srv.calls.push(call); var r = await route(u, call.path, call.m, opts, h, call); call.status = r.status; return r; }; return true; })()
+
+# ---- 1. a server without blob routes: images go inline ------------------
+eval (async function(){ __srv.health = { ok: true, version: 'test' }; await H.detect(); return JSON.stringify(H.caps()); })()
+expect H.caps().known === true && H.caps().blobs === false && H.caps().noClientHeader === false
+expect __srv.calls.some(function(c){ return c.path === 'api/health'; }) && __srv.calls.some(function(c){ return c.path === 'api/me'; })
+expect __srv.calls.every(function(c){ return c.client === '2'; })
+
+eval (function(){ H.setSession({ docId: 'doc-b', rev: 3 }); var st = F.state(); st.rows[0].imageRef = { sha256: __img.P.sha, width: 37, height: 23, mime: 'image/png' }; st.comments = st.comments || []; st.comments.push({ id: 'c-inline', rowId: st.rows[0].id, field: 'visualText', anchorId: 'c-inline', quotedText: '', author: 'Tester', body: '<p>look <img class="comment-img" data-blob="' + __img.P.sha + '" width="37" height="23" data-mime="image/png"></p>', resolved: false, resolvedBy: null, resolvedAt: null, assignee: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), kind: 'anchor', replies: [] }); __srv.calls = []; return H.caps().blobs; })()
+eval (async function(){ window.__ok1 = await F.save(); return __seq(); })()
+expect __seq() === 'PUT api/docs/doc-b 200'
+expect !__srv.calls.some(function(c){ return c.path.indexOf('api/blobs') === 0; })
+eval (function(){ window.__put1 = __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b'; })[0].body; return JSON.stringify(Object.keys(__put1.state.rows[0])); })()
+expect __put1.state.rows[0].visualImage === __img.P.url && !('imageRef' in __put1.state.rows[0])
+expect (function(){ var c = __put1.state.comments.filter(function(x){ return x.id === 'c-inline'; })[0]; return c.body.indexOf('src="' + __img.P.url + '"') !== -1 && c.body.indexOf('data-blob') === -1; })()
+expect !('acceptMissing' in __put1)
+# only the copy that was sent: the page still holds the reference
+expect F.state().rows[0].imageRef.sha256 === __img.P.sha && !F.state().rows[0].visualImage
+expect H.home().rev === 4
+
+# ---- 2. a blob server: missing -> PUT blob -> PUT document -------------
+eval (async function(){ __srv.health = { ok: true, version: 'test', blobs: 1 }; await H.detect(); __srv.calls = []; return JSON.stringify(H.caps()); })()
+expect H.caps().blobs === true
+eval (async function(){ await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/blobs/P 201 | PUT api/docs/doc-b 200'
+expect JSON.stringify(__srv.calls.filter(function(c){ return c.path === 'api/blobs/missing'; })[0].shas) === JSON.stringify([__img.P.sha])
+expect (function(){ var p = __srv.calls.filter(function(c){ return c.m === 'PUT' && c.path.indexOf('api/blobs/') === 0; })[0]; return p.size === __b64bytes(__img.P.url).length && p.type === 'image/png'; })()
+eval (function(){ window.__put2 = __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b'; })[0].body; return true; })()
+expect __put2.state.rows[0].imageRef.sha256 === __img.P.sha && !__put2.state.rows[0].visualImage
+expect __put2.state.comments.filter(function(x){ return x.id === 'c-inline'; })[0].body.indexOf('data-blob="' + __img.P.sha + '"') !== -1
+# a second save finds the image there already and uploads nothing
+eval (async function(){ __srv.calls = []; await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/docs/doc-b 200'
+
+# ---- 3. 422 missing-blobs: upload what it lists, retry once -------------
+# /missing answers "nothing missing" once (the server lost it in between)
+eval (async function(){ F.state().rows[1].imageRef = { sha256: __img.J.sha, width: 31, height: 17, mime: 'image/png' }; __srv.lieMissing = 1; __srv.calls = []; window.__revBefore3 = H.home().rev; window.__ok3 = await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/docs/doc-b 422 | PUT api/blobs/J 201 | PUT api/docs/doc-b 200'
+expect H.home().rev === __revBefore3 + 1
+expect !('acceptMissing' in __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b'; })[1].body)
+expect !__toasts().some(function(t){ return t.indexOf('kept saving') !== -1; })
+
+# ---- 4. 422 for bytes nobody has: acceptMissing --------------------------
+eval (async function(){ F.state().rows[1].imageRef = { sha256: X, width: 10, height: 10, mime: 'image/png' }; __srv.calls = []; window.__revBefore4 = H.home().rev; await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/docs/doc-b 422 | PUT api/docs/doc-b 200'
+eval (function(){ window.__puts4 = __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b'; }).map(function(c){ return c.body; }); return JSON.stringify(__puts4[1].acceptMissing); })()
+expect !('acceptMissing' in __puts4[0]) && JSON.stringify(__puts4[1].acceptMissing) === JSON.stringify([X])
+expect __puts4[1].state.rows[1].imageRef.sha256 === X
+expect H.home().rev === __revBefore4 + 1
+eval (function(){ delete F.state().rows[1].imageRef; return true; })()
+
+# ---- 5. the blob fetch helper ---------------------------------------------
+eval (function(){ __srv.serve[__img.R.sha] = __b64bytes(__img.R.url); __srv.serve[__img.P.sha] = __b64bytes(__img.R.url); __srv.serve[__img.J.sha] = new TextEncoder().encode('<!doctype html><title>sign in</title>'); B.forgetMemory(); __srv.calls = []; return !B.has(__img.R.sha) && !B.has(__img.P.sha); })()
+expect (async function(){ var b = await H.fetchBlob(__img.R.sha); return b instanceof Uint8Array && b.length === __b64bytes(__img.R.url).length && B.has(__img.R.sha); })()
+expect __srv.calls.some(function(c){ return c.m === 'GET' && c.path === 'api/blobs/' + __img.R.sha && c.client === '2'; })
+# the right status, the wrong bytes: refused, and P stays missing
+expect (async function(){ return (await H.fetchBlob(__img.P.sha)) === null && !B.has(__img.P.sha); })()
+# not an image at all (a sign-in page): refused
+expect (async function(){ return (await H.fetchBlob(__img.J.sha)) === null && !B.has(__img.J.sha); })()
+expect (async function(){ return (await H.fetchBlob('ef'.repeat(32))) === null; })()
+# the registry reaches the server after its own store, through the helper
+eval (function(){ B.forgetMemory(); __srv.calls = []; return !B.has(__img.R.sha); })()
+expect (async function(){ var m = await B.ensureBytes([__img.R.sha, __img.P.sha]); return JSON.stringify(m) === JSON.stringify([__img.P.sha]) && B.has(__img.R.sha); })()
+expect __srv.calls.filter(function(c){ return c.m === 'GET' && c.path.indexOf('api/blobs/') === 0; }).length === 2
+# no blob routes, no blob fetch
+eval (function(){ H.setSession({ docId: 'doc-b', rev: H.home().rev, blobs: false }); B.forgetMemory(); __srv.calls = []; return H.caps().blobs; })()
+expect (async function(){ return (await H.fetchBlob(__img.R.sha)) === null && __srv.calls.length === 0; })()
+# put every image back for what follows
+eval (function(){ Object.keys(__img).forEach(function(k){ B.internDataUrl(__img[k].url); }); H.setSession({ docId: 'doc-b', rev: H.home().rev, blobs: true }); return H.caps().blobs; })()
+expect Object.keys(__img).every(function(k){ return B.has(__img[k].sha); })
+
+# ---- 6. a reviewer's comment with an image: missing -> PUT -> POST ------
+eval (function(){ __srv.role = 'review'; H.setSession({ role: 'review', docId: 'doc-b', rev: H.home().rev, blobs: true }); window.__mkc = function(id, sha){ var st = F.state(); st.comments.push({ id: id, rowId: st.rows[0].id, field: 'visualText', anchorId: id, quotedText: '', author: 'Reviewer', body: '<p>here <img class="comment-img" data-blob="' + sha + '" width="10" height="10" data-mime="image/png"></p>', resolved: false, resolvedBy: null, resolvedAt: null, assignee: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), kind: 'anchor', replies: [] }); }; __mkc('c-rk', __img.K.sha); __srv.calls = []; return H.reviewMode(); })()
+eval (async function(){ await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/blobs/K 201 | POST api/docs/doc-b/comments 200'
+expect __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b/comments'; })[0].body.comment.body.indexOf('data-blob="' + __img.K.sha + '"') !== -1
+expect !__srv.calls.some(function(c){ return c.path === 'api/docs/doc-b' && c.m === 'PUT'; })
+expect H.base().comments.some(function(c){ return c.id === 'c-rk'; })
+
+# 429 review-budget: a toast about the image allowance, and the comment waits
+eval (async function(){ __mkc('c-rl', __img.L.sha); __srv.blobPutAnswer = { status: 429, body: { error: 'review-budget' } }; __srv.calls = []; await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/blobs/L 429'
+wait __toasts().some(function(t){ return t.indexOf('allowance for images') !== -1; })
+expect !__toasts().some(function(t){ return t.indexOf('sign-in expired') !== -1; })
+expect !H.base().comments.some(function(c){ return c.id === 'c-rl'; })
+# the allowance back: the same comment goes, image first
+eval (async function(){ __srv.calls = []; await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | PUT api/blobs/L 201 | POST api/docs/doc-b/comments 200'
+expect H.base().comments.some(function(c){ return c.id === 'c-rl'; })
+
+# an image nobody has: the comment is refused, never sent with acceptMissing
+eval (async function(){ __mkc('c-rz', Z); __srv.calls = []; await F.save(); return __seq(); })()
+expect __seq() === 'POST api/blobs/missing 200 | POST api/docs/doc-b/comments 422'
+expect !('acceptMissing' in __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b/comments'; })[0].body)
+wait __toasts().some(function(t){ return t.indexOf('no longer on this device') !== -1; })
+eval (async function(){ __srv.calls = []; await F.save(); return __seq(); })()
+expect __seq() === ''
+
+# ---- 7. an older server on another origin: its preflight refuses the header
+eval (async function(){ __srv.role = 'edit'; H.pointTabAt('http://old.example/'); __srv.corsOld = 'http://old.example/'; __srv.health = { ok: true, version: 'old' }; __srv.calls = []; await H.detect(); return JSON.stringify(__srv.calls.map(function(c){ return c.path + ':' + c.client + ':' + c.status; })); })()
+expect H.caps().noClientHeader === true && H.caps().blobs === false
+expect __srv.calls[0].path === 'api/health' && __srv.calls[0].client === '2' && __srv.calls[0].status === 'threw'
+expect __srv.calls[1].path === 'api/health' && __srv.calls[1].client === null && __srv.calls[1].status === 200
+expect __srv.calls.slice(1).every(function(c){ return c.origin === 'http://old.example/' && c.client === null; })
+# back home: a new connection, asked afresh, with the header
+eval (async function(){ __srv.corsOld = null; H.pointTabAt(''); __srv.health = { ok: true, version: 'test', blobs: 1 }; __srv.calls = []; await H.detect(); return JSON.stringify(H.caps()); })()
+expect H.caps().blobs === true && H.caps().noClientHeader === false
+expect __srv.calls.length > 0 && __srv.calls.every(function(c){ return c.client === '2'; })
+
+# ---- every call but the old server's carried the header ------------------
+expect __srv.all.length > 30 && __srv.all.every(function(c){ return c.origin === 'http://old.example/' || c.client === '2'; })
+
+# ---- 8. 426 client-too-old: "reload", once, no retry loop ---------------
+eval (async function(){ H.setSession({ docId: 'doc-b', rev: 9, blobs: true }); __srv.docPutAnswer = { status: 426, body: { error: 'client-too-old' } }; __srv.calls = []; window.__ok8 = await F.save(); return __seq(); })()
+expect __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b' && c.m === 'PUT'; }).length === 1
+wait __toasts().some(function(t){ return t.indexOf('This page is out of date') !== -1 && t.indexOf('Reload') !== -1; })
+expect !__toasts().some(function(t){ return t.indexOf('sign-in expired') !== -1 || t.indexOf('kept saving') !== -1; })
+expect H.home().rev === 9
+# latched: the next save asks nobody
+eval (async function(){ __srv.calls = []; await F.save(); await F.save(); return __seq(); })()
+expect __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b'; }).length === 0
+expect __toasts().filter(function(t){ return t.indexOf('This page is out of date') !== -1; }).length === 1
+
+logs
