@@ -439,38 +439,91 @@
       });
     });
 
+    /* Built by walking STATE_FIELDS (02-state.js), not from a hand-written
+       literal. Invariant #4 used to live in a comment here: a field left out
+       of that literal was destroyed on every merge, and the merge is the one
+       code path every hosted save, every stash and every file merge goes
+       through. Now a field the registry knows about cannot be left out, and
+       one it does not know about throws rather than disappearing (#60). */
+    var out = {};
+    STATE_FIELDS.forEach(function (f) {
+      switch (f.merge) {
+        case "title":    out[f.key] = mergedTitle; break;
+        /* Without this the document would come out of every server and
+           stash merge with a fresh random id, orphaning its history. */
+        case "doc-id":   out[f.key] = mergedDocId(base, mine, theirs); break;
+        case "rows":     out[f.key] = merged; break;
+        case "comments": out[f.key] = mergedComments; break;
+        /* Each of these takes base: a union with no ancestor cannot tell a
+           delete from an entry the other side simply never had, so every
+           merge resurrected whatever either of us had removed (#61). */
+        case "list-union-with-base":
+          out[f.key] = f.mergeList(base && base[f.key], mine[f.key], theirs[f.key]); break;
+        case "changed-side-wins":
+          out[f.key] = mergeChangedSideWins(f, base, mine, theirs); break;
+        case "max-plus-one":
+          out[f.key] = Math.max(theirs[f.key] || 0, mine[f.key] || 0) + 1; break;
+        case "theirs-wins":
+          out[f.key] = theirs[f.key] || mine[f.key] || null; break;
+        case "constant": out[f.key] = SCHEMA_VERSION; break;
+        default: throw new Error("no merge strategy for state field " + f.key);
+      }
+    });
+
     return {
-      merged: migrateRows({
-        title: mergedTitle,
-        /* Invariant #4: a field missing from this literal is destroyed on
-           every merge — without it every server and stash merge would hand
-           the document a fresh random id and orphan its version history. */
-        docId: mergedDocId(base, mine, theirs),
-        rows: merged,
-        comments: mergedComments,
-        people: mergePeople(mine.people, theirs.people),
-        productionTags: mergeProductionTags(mine.productionTags, theirs.productionTags),
-        brollShots: mergeBrollShots(mine.brollShots, theirs.brollShots),
-        wordsPerMinute: theirs.wordsPerMinute || mine.wordsPerMinute || DEFAULT_WPM,
-        rev: Math.max(theirs.rev || 0, mine.rev || 0) + 1,
-        lastEditedBy: theirs.lastEditedBy || mine.lastEditedBy || null,
-        lastEditedAt: theirs.lastEditedAt || mine.lastEditedAt || null,
-        schema: SCHEMA_VERSION
-      }),
+      merged: migrateRows(out),
       conflicts: conflicts,
       stats: stats
     };
   }
 
+  /* A list merge that only ever unions can never delete: whatever one side
+     removed, the other side's copy puts back on the next merge, and on
+     every merge after that, forever (#61). The row merge has had the right
+     rule since the beginning — deleted on one side and untouched on the
+     other since base means deleted — so the three list merges use it too.
+     Anything else (deleted by one of us, edited by the other) still unions,
+     which is the safe direction for a list nobody owns.
+
+     `keyOf` is the identity the list merges by; `fingerprint` is everything
+     else about an entry, so "untouched since base" is a string compare. */
+  function droppedListKeys(baseList, mineList, theirList, keyOf, fingerprint) {
+    var dropped = {};
+    /* No ancestor (a two-way merge, or a stash with nothing retained) means
+       nothing can be called a delete rather than an addition. Union, as
+       before. */
+    if (!baseList || !baseList.length) return dropped;
+    var mineBy = {}, theirBy = {};
+    (mineList || []).forEach(function (e) { var k = e && keyOf(e); if (k) mineBy[k] = e; });
+    (theirList || []).forEach(function (e) { var k = e && keyOf(e); if (k) theirBy[k] = e; });
+    baseList.forEach(function (e) {
+      var k = e && keyOf(e);
+      if (!k) return;
+      var m = mineBy[k], t = theirBy[k];
+      if (m && t) return;          /* still on both sides — not a delete */
+      if (!m && !t) return;        /* both of us dropped it; nothing to keep out */
+      if (fingerprint(m || t) === fingerprint(e)) dropped[k] = true;
+    });
+    return dropped;
+  }
+
   /* The crew list and the production registry are both append-mostly lists
      that nobody "owns" — dropping either side's would quietly lose work that
      no row diff can reconstruct (an assignment, a note, an item deliberately
-     kept after being cut from the script). Union them instead. */
-  function mergePeople(minePeople, theirPeople) {
+     kept after being cut from the script). Union them, minus whatever one of
+     us deleted and the other left alone. */
+  function mergePeople(basePeople, minePeople, theirPeople) {
+    /* Keyed by name, not id: a person is the same person to everyone
+       reading the script, and the two sides can hold different ids for one
+       name (each side minted its own on first mention). A rename is then a
+       delete plus an add, which is what it reads as in the panel too. */
+    var personKey = function (p) { return p.name ? normalizeTagName(p.name) : ""; };
+    var dropped = droppedListKeys(basePeople, minePeople, theirPeople, personKey, personKey);
     var out = [], seenId = {}, seenName = {};
     (theirPeople || []).concat(minePeople || []).forEach(function (p) {
       if (!p || !p.name) return;
       var norm = normalizeTagName(p.name);
+      if (dropped[norm]) return;
       if (seenId[p.id] || seenName[norm]) return;
       seenId[p.id] = true;
       seenName[norm] = true;
@@ -479,11 +532,18 @@
     return out;
   }
 
-  function mergeProductionTags(mineTags, theirTags) {
+  function mergeProductionTags(baseTags, mineTags, theirTags) {
+    var tagKey = function (t) { return t.name ? registryKey(t.cat, t.name) : ""; };
+    var tagPrint = function (t) {
+      return JSON.stringify([t.owner || "", t.notes || "",
+                             (tagStatus(t.status) || TAG_STATUSES[0]).id]);
+    };
+    var dropped = droppedListKeys(baseTags, mineTags, theirTags, tagKey, tagPrint);
     var out = [], byKey = {};
     (theirTags || []).forEach(function (t) {
       if (!t || !t.name) return;
       var k = registryKey(t.cat, t.name);
+      if (dropped[k]) return;
       if (byKey[k]) return;
       byKey[k] = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
                    status: (tagStatus(t.status) || TAG_STATUSES[0]).id };
@@ -492,6 +552,7 @@
     (mineTags || []).forEach(function (t) {
       if (!t || !t.name) return;
       var k = registryKey(t.cat, t.name);
+      if (dropped[k]) return;
       var existing = byKey[k];
       if (!existing) {
         byKey[k] = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
@@ -520,15 +581,23 @@
      has already been out and shot. "Needs attention" is the one flag that
      survives from either side — if one of them thinks it needs another look,
      it needs another look. */
-  function mergeBrollShots(mineShots, theirShots) {
+  function mergeBrollShots(baseShots, mineShots, theirShots) {
+    var shotKey = function (b) { return b.id || ""; };
+    /* Everything but the id, in a fixed key order so two equal shots print
+       equal whatever order their keys were written in. */
+    var shotPrint = function (b) {
+      return JSON.stringify(Object.keys(b).filter(function (k) { return k !== "id"; }).sort()
+        .map(function (k) { return [k, b[k]]; }));
+    };
+    var dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
     var out = [], byId = {};
     (theirShots || []).forEach(function (b) {
-      if (!b || !b.id || byId[b.id]) return;
+      if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
       byId[b.id] = cloneState(b);
       out.push(byId[b.id]);
     });
     (mineShots || []).forEach(function (b) {
-      if (!b || !b.id) return;
+      if (!b || !b.id || dropped[b.id]) return;
       var existing = byId[b.id];
       if (!existing) { byId[b.id] = cloneState(b); out.push(byId[b.id]); return; }
       if (!existing.owner && b.owner) existing.owner = b.owner;
@@ -539,6 +608,18 @@
       if (b.reshoot) existing.reshoot = true;
     });
     return out;
+  }
+
+  /* Reading speed was theirs-wins, silently: set it to 180 here and the next
+     merge with a server copy still on 150 put it back, with nothing to show
+     for the change (#61). Base-aware, it behaves like any other plain scalar
+     — whoever moved it off base wins, theirs if we both did — so this is the
+     strategy rather than that one field's special case. */
+  function mergeChangedSideWins(f, base, mine, theirs) {
+    var m = mine[f.key], t = theirs[f.key];
+    var fallback = f.def ? f.def() : null;
+    if (base && t === base[f.key] && m !== base[f.key]) return m || fallback;
+    return t || m || fallback;
   }
 
   /* ---- conflict stash (survives the reload the shell forces on us) ---- */
@@ -668,8 +749,6 @@
   }
 
   /* ---- version history panel ---- */
-
-  var SIDE_PANEL_IDS = ["comments-panel", "production-panel", "history-panel", "gear-panel", "broll-panel"];
 
   /* All the side panels are fixed over the same right-hand strip, so only
      one can be open at a time — opening one always closes the others first,

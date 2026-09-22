@@ -218,9 +218,11 @@ assertions are written against them:
 - **`expect` truthiness is PowerShell's, not JavaScript's** — an empty array
   is false, a one-element array is its element.
 
-**The `RESULT:` line is the contract, not the exit code.** Neither driver
-exits non-zero for a failed assertion; only a command that throws sets exit 1.
-`run-tests.ps1` greps for `RESULT:` for exactly this reason. Read the line.
+**Read the `RESULT:` line — and `driver.mjs` now agrees with it.** A failed
+assertion, or a suite that asserted nothing at all, exits 1 as well as saying
+so on that line, so CI can gate on the exit code. `driver.ps1` still only
+exits non-zero for a command that throws, which is why `run-tests.ps1` greps
+for `RESULT:` and why CI runs the Node driver.
 
 `run-tests.ps1` itself is *not* ported — there is no Linux suite runner, so
 run one suite per invocation, each with its own `--port`/`--cdp-port`.
