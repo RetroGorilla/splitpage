@@ -1703,17 +1703,20 @@
   }
 
   @media (min-width: 1100px) {
-    body.panel-open #root { padding-right: 420px; }
-    /* When the (resizable) comments panel specifically is open, match its
-       current width instead of the other panels' fixed 420px. */
-    body.panel-open:has(#comments-panel:not([hidden])) #root {
-      padding-right: calc(min(var(--comments-panel-width, 400px), 100vw) + 20px);
+    /* --open-panel-width is set from JS on body (03b-side-panels.js) as
+       whichever side panel is currently open — there is only ever one — so
+       this always matches that panel's actual width, not a fixed guess. */
+    body.panel-open #root {
+      padding-right: calc(min(var(--open-panel-width, 400px), 100vw) + 20px);
     }
   }
   .comments-panel {
     position: fixed;
     top: 0; right: 0; bottom: 0;
-    width: min(400px, 100vw);
+    /* Every panel is independently resizable — --panel-width is set from JS
+       on the panel's own element, one value per panel id, persisted per
+       viewer (03b-side-panels.js). */
+    width: min(var(--panel-width, 400px), 100vw);
     background: var(--surface);
     border-left: 1px solid var(--border);
     box-shadow: var(--shadow);
@@ -1724,14 +1727,6 @@
     transition: transform 0.18s ease;
   }
   .comments-panel[hidden] { display: none; }
-
-  /* #comments-panel alone gets a user-resizable width, driven by
-     --comments-panel-width (set from JS, persisted per viewer). Other
-     panels sharing .comments-panel (production, gear, broll, history)
-     keep the fixed width above. */
-  #comments-panel {
-    width: min(var(--comments-panel-width, 400px), 100vw);
-  }
   .comments-panel-resize-handle {
     position: absolute;
     top: 0; bottom: 0; left: -4px;
@@ -3684,6 +3679,7 @@
 </div>
 
 <div class="comments-panel" id="production-panel" hidden>
+  <div class="comments-panel-resize-handle" id="production-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Production breakdown</h2>
     <button type="button" class="modal-close" id="production-close" aria-label="Close">×</button>
@@ -3704,6 +3700,7 @@
 </div>
 
 <div class="comments-panel" id="gear-panel" hidden>
+  <div class="comments-panel-resize-handle" id="gear-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Gear</h2>
     <button type="button" class="modal-close" id="gear-close" aria-label="Close">×</button>
@@ -3730,6 +3727,7 @@
 </div>
 
 <div class="comments-panel" id="broll-panel" hidden>
+  <div class="comments-panel-resize-handle" id="broll-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>B-roll</h2>
     <button type="button" class="modal-close" id="broll-close" aria-label="Close">×</button>
@@ -3867,6 +3865,7 @@
 </div>
 
 <div class="comments-panel" id="history-panel" hidden>
+  <div class="comments-panel-resize-handle" id="history-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Version history</h2>
     <button type="button" class="modal-close" id="history-close" aria-label="Close">×</button>
@@ -6279,6 +6278,11 @@ node update.mjs           # download and verify it</code></pre>
       }
     });
     document.getElementById(id).hidden = false;
+    /* Only one panel is ever open at a time, so the width that #root's
+       padding-right should track (see body.panel-open #root in app.css)
+       is whichever one is being opened right now — set every time, not
+       just at boot (03b-side-panels.js). */
+    applySidePanelWidth(id, readSidePanelWidth(id));
     syncPanelClass();
   }
 
@@ -8806,6 +8810,148 @@ node update.mjs           # download and verify it</code></pre>
     /* the X2 write path itself: bundle.history's {docs, older} shape */
     importBundle: importHistoryBundle
   };
+  /* ================= side panel resizing ================= */
+
+  /* Every panel in SIDE_PANEL_IDS (03-sync.js) — Comments, Production,
+     Gear, B-roll, History — gets its own drag-to-resize left edge and
+     remembers its own width. This generalises what used to be just the
+     comments panel's own feature (see the removed initCommentsPanelResize()
+     that lived in 10-comments.js), so it belongs here instead of in any one
+     panel's file.
+
+     Widths live in a single JSON map in localStorage, keyed by panel id,
+     rather than one storage key per panel — one read and one write, and a
+     single corrupt entry falls back to that panel's default instead of
+     throwing (and without discarding whatever the other panels had). */
+  var SIDE_PANEL_WIDTHS_KEY = "splitpage-panel-widths";
+  /* Before every panel had its own width, the comments panel alone stored
+     one under this key. An existing value there is honoured as the comments
+     panel's initial width the first time readSidePanelWidth() runs for it —
+     see below — and from then on its width lives in the map like every
+     other panel's. */
+  var LEGACY_COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
+  var SIDE_PANEL_WIDTH_MIN = 280;
+  var SIDE_PANEL_WIDTH_MAX = 720;
+  /* Production and B-roll hold tables — item names, owners, scene lists,
+     notes — that are cramped at 400px, so they start wider. Comments, Gear
+     and History are comfortable narrow. */
+  var SIDE_PANEL_WIDTH_DEFAULTS = {
+    "comments-panel": 400,
+    "production-panel": 520,
+    "gear-panel": 400,
+    "broll-panel": 520,
+    "history-panel": 400
+  };
+
+  function sidePanelWidthDefault(id) {
+    return SIDE_PANEL_WIDTH_DEFAULTS[id] || 400;
+  }
+  function clampSidePanelWidth(w, id) {
+    if (!isFinite(w)) return sidePanelWidthDefault(id);
+    return Math.max(SIDE_PANEL_WIDTH_MIN, Math.min(SIDE_PANEL_WIDTH_MAX, Math.round(w)));
+  }
+  function readSidePanelWidthMap() {
+    try {
+      var raw = localStorage.getItem(SIDE_PANEL_WIDTHS_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === "object") ? parsed : {};
+    } catch (e) { return {}; }
+  }
+  function writeSidePanelWidthMap(map) {
+    try { localStorage.setItem(SIDE_PANEL_WIDTHS_KEY, JSON.stringify(map)); } catch (e) {}
+  }
+  function readSidePanelWidth(id) {
+    var map = readSidePanelWidthMap();
+    if (Object.prototype.hasOwnProperty.call(map, id)) {
+      var w = parseFloat(map[id]);
+      return isFinite(w) ? clampSidePanelWidth(w, id) : sidePanelWidthDefault(id);
+    }
+    if (id === "comments-panel") {
+      try {
+        var legacy = parseFloat(localStorage.getItem(LEGACY_COMMENTS_PANEL_WIDTH_KEY));
+        if (isFinite(legacy)) return clampSidePanelWidth(legacy, id);
+      } catch (e) {}
+    }
+    return sidePanelWidthDefault(id);
+  }
+  function saveSidePanelWidth(id, w) {
+    var map = readSidePanelWidthMap();
+    map[id] = clampSidePanelWidth(w, id);
+    writeSidePanelWidthMap(map);
+  }
+
+  /* Sets the panel's own width (its --panel-width, which .comments-panel in
+     app.css reads for its own `width`) and mirrors it onto body's
+     --open-panel-width. The mirror matters because the panels sit outside
+     #root in the DOM (siblings, not descendants) — a custom property set on
+     the panel itself would never reach a var() lookup on #root, since custom
+     properties only inherit down to descendants. #root's padding-right
+     (app.css, body.panel-open #root) reads --open-panel-width instead, and
+     since only one panel is ever open at a time, "the open panel's width"
+     is unambiguous. */
+  function applySidePanelWidth(id, w) {
+    var panel = document.getElementById(id);
+    if (!panel) return;
+    panel.style.setProperty("--panel-width", w + "px");
+    document.body.style.setProperty("--open-panel-width", w + "px");
+  }
+
+  function initSidePanelResize(id) {
+    var panel = document.getElementById(id);
+    var handle = document.getElementById(id + "-resize-handle");
+    if (!panel || !handle) return;
+    applySidePanelWidth(id, readSidePanelWidth(id));
+
+    var dragging = false;
+    var startX = 0;
+    var startWidth = sidePanelWidthDefault(id);
+
+    function onMove(e) {
+      if (!dragging) return;
+      var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      /* Panel is anchored to the right edge, so dragging left (negative dx)
+         widens it. */
+      var w = clampSidePanelWidth(startWidth + (startX - clientX), id);
+      applySidePanelWidth(id, w);
+    }
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove("is-dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onUp);
+      var current = parseFloat(getComputedStyle(panel).getPropertyValue("--panel-width")) || sidePanelWidthDefault(id);
+      saveSidePanelWidth(id, clampSidePanelWidth(current, id));
+    }
+    function onDown(e) {
+      dragging = true;
+      startX = e.touches ? e.touches[0].clientX : e.clientX;
+      startWidth = readSidePanelWidth(id);
+      handle.classList.add("is-dragging");
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      document.addEventListener("touchmove", onMove, { passive: false });
+      document.addEventListener("touchend", onUp);
+      /* Never let the drag start a text selection in the document, or (since
+         the handle sits right at the panel's edge, over the script area)
+         a scene drag underneath it. */
+      e.preventDefault();
+    }
+    handle.addEventListener("mousedown", onDown);
+    handle.addEventListener("touchstart", onDown, { passive: false });
+    handle.addEventListener("dblclick", function () {
+      var def = sidePanelWidthDefault(id);
+      applySidePanelWidth(id, def);
+      saveSidePanelWidth(id, def);
+    });
+  }
+
+  function initSidePanelResizeHandles() {
+    SIDE_PANEL_IDS.forEach(initSidePanelResize);
+  }
   /* ================= sanitizing rich text ================= */
 
   /* Parse untrusted HTML INERTLY. A detached <div> is still live: assigning
@@ -13764,78 +13910,9 @@ node update.mjs           # download and verify it</code></pre>
     select.value = current;
   }
 
-  /* ---- comments panel width (drag handle) ----
-     Per-viewer preference, like the sort mode above — not part of the
-     document, so it lives in localStorage rather than state. */
-  var COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
-  var COMMENTS_PANEL_WIDTH_DEFAULT = 400;
-  var COMMENTS_PANEL_WIDTH_MIN = 280;
-  var COMMENTS_PANEL_WIDTH_MAX = 720;
-
-  function clampCommentsPanelWidth(w) {
-    if (!isFinite(w)) return COMMENTS_PANEL_WIDTH_DEFAULT;
-    return Math.max(COMMENTS_PANEL_WIDTH_MIN, Math.min(COMMENTS_PANEL_WIDTH_MAX, Math.round(w)));
-  }
-  function readCommentsPanelWidth() {
-    try {
-      var raw = parseFloat(localStorage.getItem(COMMENTS_PANEL_WIDTH_KEY));
-      return isFinite(raw) ? clampCommentsPanelWidth(raw) : COMMENTS_PANEL_WIDTH_DEFAULT;
-    } catch (e) { return COMMENTS_PANEL_WIDTH_DEFAULT; }
-  }
-  function saveCommentsPanelWidth(w) {
-    try { localStorage.setItem(COMMENTS_PANEL_WIDTH_KEY, String(w)); } catch (e) {}
-  }
-  function applyCommentsPanelWidth(w) {
-    document.getElementById("comments-panel").style.setProperty("--comments-panel-width", w + "px");
-  }
-
-  function initCommentsPanelResize() {
-    var panel = document.getElementById("comments-panel");
-    var handle = document.getElementById("comments-panel-resize-handle");
-    if (!panel || !handle) return;
-    applyCommentsPanelWidth(readCommentsPanelWidth());
-
-    var dragging = false;
-    var startX = 0;
-    var startWidth = COMMENTS_PANEL_WIDTH_DEFAULT;
-
-    function onMove(e) {
-      if (!dragging) return;
-      var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      /* Panel is anchored to the right edge, so dragging left (negative dx)
-         widens it. */
-      var w = clampCommentsPanelWidth(startWidth + (startX - clientX));
-      applyCommentsPanelWidth(w);
-    }
-    function onUp() {
-      if (!dragging) return;
-      dragging = false;
-      handle.classList.remove("is-dragging");
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.removeEventListener("touchmove", onMove);
-      document.removeEventListener("touchend", onUp);
-      var current = parseFloat(getComputedStyle(panel).getPropertyValue("--comments-panel-width")) || COMMENTS_PANEL_WIDTH_DEFAULT;
-      saveCommentsPanelWidth(clampCommentsPanelWidth(current));
-    }
-    function onDown(e) {
-      dragging = true;
-      startX = e.touches ? e.touches[0].clientX : e.clientX;
-      startWidth = readCommentsPanelWidth();
-      handle.classList.add("is-dragging");
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-      document.addEventListener("touchmove", onMove, { passive: false });
-      document.addEventListener("touchend", onUp);
-      e.preventDefault();
-    }
-    handle.addEventListener("mousedown", onDown);
-    handle.addEventListener("touchstart", onDown, { passive: false });
-    handle.addEventListener("dblclick", function () {
-      applyCommentsPanelWidth(COMMENTS_PANEL_WIDTH_DEFAULT);
-      saveCommentsPanelWidth(COMMENTS_PANEL_WIDTH_DEFAULT);
-    });
-  }
+  /* Comments panel width (drag-to-resize handle) moved to
+     03b-side-panels.js — it now covers every side panel, not just this
+     one. */
 
   function formatTimestamp(iso) {
     try {
@@ -28369,7 +28446,7 @@ node update.mjs           # download and verify it</code></pre>
       if (panel.hidden) openCommentsPanel(); else closeCommentsPanel();
     });
     document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
-    initCommentsPanelResize();
+    initSidePanelResizeHandles();
     document.getElementById("comments-panel").addEventListener("change", function (e) {
       if (e.target.id === "comments-assignee-filter") { setCommentAssigneeFilter(e.target.value); return; }
       if (e.target.classList.contains("comment-assignee-select")) {

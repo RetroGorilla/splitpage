@@ -221,78 +221,9 @@
     select.value = current;
   }
 
-  /* ---- comments panel width (drag handle) ----
-     Per-viewer preference, like the sort mode above — not part of the
-     document, so it lives in localStorage rather than state. */
-  var COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
-  var COMMENTS_PANEL_WIDTH_DEFAULT = 400;
-  var COMMENTS_PANEL_WIDTH_MIN = 280;
-  var COMMENTS_PANEL_WIDTH_MAX = 720;
-
-  function clampCommentsPanelWidth(w) {
-    if (!isFinite(w)) return COMMENTS_PANEL_WIDTH_DEFAULT;
-    return Math.max(COMMENTS_PANEL_WIDTH_MIN, Math.min(COMMENTS_PANEL_WIDTH_MAX, Math.round(w)));
-  }
-  function readCommentsPanelWidth() {
-    try {
-      var raw = parseFloat(localStorage.getItem(COMMENTS_PANEL_WIDTH_KEY));
-      return isFinite(raw) ? clampCommentsPanelWidth(raw) : COMMENTS_PANEL_WIDTH_DEFAULT;
-    } catch (e) { return COMMENTS_PANEL_WIDTH_DEFAULT; }
-  }
-  function saveCommentsPanelWidth(w) {
-    try { localStorage.setItem(COMMENTS_PANEL_WIDTH_KEY, String(w)); } catch (e) {}
-  }
-  function applyCommentsPanelWidth(w) {
-    document.getElementById("comments-panel").style.setProperty("--comments-panel-width", w + "px");
-  }
-
-  function initCommentsPanelResize() {
-    var panel = document.getElementById("comments-panel");
-    var handle = document.getElementById("comments-panel-resize-handle");
-    if (!panel || !handle) return;
-    applyCommentsPanelWidth(readCommentsPanelWidth());
-
-    var dragging = false;
-    var startX = 0;
-    var startWidth = COMMENTS_PANEL_WIDTH_DEFAULT;
-
-    function onMove(e) {
-      if (!dragging) return;
-      var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      /* Panel is anchored to the right edge, so dragging left (negative dx)
-         widens it. */
-      var w = clampCommentsPanelWidth(startWidth + (startX - clientX));
-      applyCommentsPanelWidth(w);
-    }
-    function onUp() {
-      if (!dragging) return;
-      dragging = false;
-      handle.classList.remove("is-dragging");
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.removeEventListener("touchmove", onMove);
-      document.removeEventListener("touchend", onUp);
-      var current = parseFloat(getComputedStyle(panel).getPropertyValue("--comments-panel-width")) || COMMENTS_PANEL_WIDTH_DEFAULT;
-      saveCommentsPanelWidth(clampCommentsPanelWidth(current));
-    }
-    function onDown(e) {
-      dragging = true;
-      startX = e.touches ? e.touches[0].clientX : e.clientX;
-      startWidth = readCommentsPanelWidth();
-      handle.classList.add("is-dragging");
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-      document.addEventListener("touchmove", onMove, { passive: false });
-      document.addEventListener("touchend", onUp);
-      e.preventDefault();
-    }
-    handle.addEventListener("mousedown", onDown);
-    handle.addEventListener("touchstart", onDown, { passive: false });
-    handle.addEventListener("dblclick", function () {
-      applyCommentsPanelWidth(COMMENTS_PANEL_WIDTH_DEFAULT);
-      saveCommentsPanelWidth(COMMENTS_PANEL_WIDTH_DEFAULT);
-    });
-  }
+  /* Comments panel width (drag-to-resize handle) moved to
+     03b-side-panels.js — it now covers every side panel, not just this
+     one. */
 
   function formatTimestamp(iso) {
     try {

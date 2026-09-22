@@ -1669,17 +1669,20 @@
   }
 
   @media (min-width: 1100px) {
-    body.panel-open #root { padding-right: 420px; }
-    /* When the (resizable) comments panel specifically is open, match its
-       current width instead of the other panels' fixed 420px. */
-    body.panel-open:has(#comments-panel:not([hidden])) #root {
-      padding-right: calc(min(var(--comments-panel-width, 400px), 100vw) + 20px);
+    /* --open-panel-width is set from JS on body (03b-side-panels.js) as
+       whichever side panel is currently open — there is only ever one — so
+       this always matches that panel's actual width, not a fixed guess. */
+    body.panel-open #root {
+      padding-right: calc(min(var(--open-panel-width, 400px), 100vw) + 20px);
     }
   }
   .comments-panel {
     position: fixed;
     top: 0; right: 0; bottom: 0;
-    width: min(400px, 100vw);
+    /* Every panel is independently resizable — --panel-width is set from JS
+       on the panel's own element, one value per panel id, persisted per
+       viewer (03b-side-panels.js). */
+    width: min(var(--panel-width, 400px), 100vw);
     background: var(--surface);
     border-left: 1px solid var(--border);
     box-shadow: var(--shadow);
@@ -1690,14 +1693,6 @@
     transition: transform 0.18s ease;
   }
   .comments-panel[hidden] { display: none; }
-
-  /* #comments-panel alone gets a user-resizable width, driven by
-     --comments-panel-width (set from JS, persisted per viewer). Other
-     panels sharing .comments-panel (production, gear, broll, history)
-     keep the fixed width above. */
-  #comments-panel {
-    width: min(var(--comments-panel-width, 400px), 100vw);
-  }
   .comments-panel-resize-handle {
     position: absolute;
     top: 0; bottom: 0; left: -4px;
