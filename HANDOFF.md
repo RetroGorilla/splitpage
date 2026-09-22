@@ -443,6 +443,39 @@ per document in `DATA_DIR`.
     compare-and-set. The comments POST is NOT gated: an old client's
     comment only appends, and its anchor HTML must match the stored field
     tag for tag, images included, or it is dropped as stale.
+  - **The client's half** (13-hosted.js, #82 P5). `apiFetch` sends
+    `x-splitpage-client: 2` on every call (`fetchBlob` and `launcherFetch`
+    too; `joinServer` in 20e-connect.js and the presence `sendBeacon` do
+    not — neither route is gated and a beacon cannot carry headers).
+    `/api/health`'s answer is kept per connection (`capsOf(conn)`, a
+    WeakMap keyed by the `conn` record, so pointing the tab elsewhere
+    forgets it); `blobs: 1` is what lets refs go to the server
+    (`serverTakesBlobs`). A server on another origin that predates the
+    header refuses it in its preflight, which looks like "offline":
+    `probeHealth` asks once more without it and, if that answers without
+    `blobs`, leaves it off for that connection. Every write that can name a
+    blob — `saveToServer`'s PUT, `publishToServer`'s POST, a reviewer's
+    comment/reply POST (`sendReviewRequest`, body only) — goes through
+    `sendWithBlobs`: refs = `refsIn(state)`; none → the write as before; a
+    server without `blobs` → the images INLINE in the copy sent (row
+    `visualImage` data URIs, `<img src="data:…">`; the page keeps its
+    refs); otherwise `POST missing` → `PUT api/blobs/<sha>` per missing one
+    (raw bytes from the registry or the local store, `ensureBytes(…,
+    {remote:false})`) → the write. A 422 uploads what it lists and retries
+    ONCE, outside the 409 rounds; a sha with no bytes anywhere goes in
+    `acceptMissing` for a document write and is a permanent refusal for a
+    comment. `apiFetch` names the answers: `missing-blobs` (with
+    `payload.missing`), `client-too-old` (426), `review-budget` (429),
+    `blob-too-large` (413 on an upload, JSON or not), `blob-unsupported`
+    (415); `handleApiError` toasts each. 426 latches `clientTooOld` like a
+    lapsed sign-in — stash, one sticky "This page is out of date … Reload"
+    toast, no further saves — and is neither a conflict nor a sign-out.
+    Bytes come back through `fetchBlob(sha)` (its own `fetch`: a 200 is
+    raw bytes, which `apiFetch` would call signed out), re-hashed by the
+    registry's `intern` and refused on a mismatch; 13-hosted installs it
+    as 02c's remote source (`setRemoteSource`, asked by `ensureBytes` after
+    the local backend, only while a server document is open). Suite
+    `tests/66-hosted-blobs.txt`.
 
 ### 3.8 Untagged mentions are painted, never wrapped
 
@@ -1101,7 +1134,7 @@ evaluation order via `_entry.js`):
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
-| `02c-blobs.js` | image blob registry (#82; not wired in yet): `intern`/`internDataUrl` (sync hash, sniff, measure), `urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`, IndexedDB `splitpage-blobs` + memory backends; record gate and `refsIn` in `shared/blob-policy.js` |
+| `02c-blobs.js` | image blob registry (#82; not wired in yet): `intern`/`internDataUrl` (sync hash, sniff, measure), `urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`, IndexedDB `splitpage-blobs` + memory backends, `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
 | `04-richtext.js` | `walkSanitize`, html→markdown, video link cards |
@@ -1115,7 +1148,7 @@ evaluation order via `_entry.js`):
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19) |
+| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
