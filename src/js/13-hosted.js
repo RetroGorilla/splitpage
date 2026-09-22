@@ -645,7 +645,9 @@
     modal.hidden = false;
     list.innerHTML = '<div class="comments-empty">Loading…</div>';
     try {
-      var body = await apiFetch("api/docs");
+      var body = await withBusyBar("Listing the documents on the server…", function () {
+        return apiFetch("api/docs");
+      });
       serverDocs = (body && body.docs) || [];
     } catch (err) {
       list.innerHTML = '<div class="comments-empty">Could not reach the server.</div>';
@@ -740,7 +742,9 @@
     if (forkDocId) published.docId = forkDocId;
     var body;
     try {
-      body = await apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
+      body = await withBusyBar("Publishing to the server…", function () {
+        return apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
+      });
     } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
     serverDoc = { id: body.id, rev: body.rev || 1 };
     baseState = published;
@@ -958,9 +962,11 @@
       var baseRevAtSave = serverDoc.rev;
 
       try {
-        var body = await apiFetch("api/docs/" + encodeURIComponent(docId), {
-          method: "PUT",
-          body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
+        var body = await withBusyBar("Saving to the server…", function () {
+          return apiFetch("api/docs/" + encodeURIComponent(docId), {
+            method: "PUT",
+            body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
+          });
         });
         if (serverDoc.id !== docId) return true; /* saved, but the open document has since changed */
         serverDoc.rev = body.rev;

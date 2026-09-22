@@ -107,6 +107,7 @@
       if (!dragging) return;
       dragging = false;
       handle.classList.remove("is-dragging");
+      document.body.classList.remove("is-panel-resizing");
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.removeEventListener("touchmove", onMove);
@@ -119,6 +120,14 @@
       startX = e.touches ? e.touches[0].clientX : e.clientX;
       startWidth = readSidePanelWidth(id);
       handle.classList.add("is-dragging");
+      /* #root's padding-right follows the open panel's width with a
+         transition (app.css), so the document travels with the panel instead
+         of snapping while it slides. During a drag that transition is
+         exactly wrong — the width is rewritten on every mousemove, and the
+         document would trail the edge under the pointer by a fifth of a
+         second. The class is on the body because #root is the thing being
+         transitioned, and it is cleared in onUp(). */
+      document.body.classList.add("is-panel-resizing");
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
       document.addEventListener("touchmove", onMove, { passive: false });
