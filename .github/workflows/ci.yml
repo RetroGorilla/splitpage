@@ -137,3 +137,97 @@ jobs:
             server/package.json
           if-no-files-found: error
           retention-days: 30
+
+  # The desktop shell, driven for real (#89). desktop/test/smoke.mjs is the
+  # only thing that executes main.js and preload.js — every other desktop
+  # check in this file reads source text — and until #89 it could only run on
+  # the Windows machine, so changes to the IPC table, the preloads and the
+  # shared policy modules were landing from Linux against a suite nobody could
+  # execute where the change was made.
+  #
+  # Its own job, not a step in `checks`: it launches ~60 real Electron
+  # processes and takes far longer than everything above put together, and a
+  # failure here should be readable as "the desktop shell broke", separately
+  # from lint or the browser suites. Budget an hour — a full dev-target run
+  # is ~55 minutes of mostly waiting (each case boots, drives and tears down
+  # a real app, and several deliberately crash one and relaunch). The
+  # concurrency group above already cancels a superseded run, so a branch
+  # being pushed to repeatedly does not stack these up.
+  #
+  # Only the `dev` target runs. The packaged targets are Windows .exe trees
+  # that nothing on this runner builds, and smoke.mjs does not look for them
+  # off Windows. It exits 1 when it finds NO target at all, so this step
+  # cannot quietly pass by testing nothing — the failure mode #89 was about.
+  # Its summary ends with a SKIPPED list naming every check this platform
+  # could not run (today: the one MainWindowHandle probe).
+  desktop-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # main.js serves index.html out of APP_ROOT, and it is not committed
+      # (#80) — so the app has nothing to load until the root build has run.
+      - name: Install build dependencies
+        run: npm ci
+
+      - name: Build index.html and stamp sw.js
+        run: node build.mjs
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: desktop
+        env:
+          # desktop/.npmrc pins arch=arm64 for the Windows-on-ARM dev
+          # machine. Left alone it would also decide which cpu-gated
+          # optional packages npm resolves here, so the runner's own
+          # architecture wins instead — an npm_config_* env var outranks a
+          # project .npmrc.
+          npm_config_arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
+
+      # Electron 44 has no postinstall: the binary is fetched lazily, so ask
+      # for it explicitly rather than let the first launch inside the suite
+      # race a ~100 MB download against its own 30s CDP timeout.
+      #
+      # Run through node, NOT npm/npx. desktop/.npmrc pins `arch=arm64` for
+      # the Windows-on-ARM dev machine, and anything going through npm turns
+      # that into npm_config_arch — which this x64 runner would then obey and
+      # download a binary it cannot execute. Invoked directly, install.js
+      # falls back to process.arch, which is the right answer here.
+      - name: Fetch the dev Electron binary
+        run: node node_modules/electron/install.js
+        working-directory: desktop
+
+      # Electron is Chromium: it needs the same shared libraries and, having
+      # no headless mode of its own for a real BrowserWindow, a display.
+      # Playwright's dependency installer knows the package names for
+      # whatever Ubuntu the runner image is on, which a hand-written apt list
+      # here would have to keep in step with.
+      - name: Xvfb and Chromium's shared libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb
+          npx --yes playwright install-deps chromium
+
+      # Xvfb started by hand rather than `xvfb-run`, which is what a person
+      # runs locally. xvfb-run returns its own exit status when its temp-dir
+      # cleanup fails, and it does so intermittently here — measured once in
+      # two full runs — which would turn a green suite red for a reason that
+      # has nothing to do with the app. Owning the display makes this step's
+      # exit code the suite's own.
+      #
+      # The suite adds --no-sandbox for the Linux dev target itself
+      # (node_modules' chrome-sandbox is not setuid and the runner has no
+      # user namespaces to fall back on); it is scoped to that target and
+      # never reaches a packaged build.
+      - name: Desktop smoke (dev target)
+        working-directory: desktop
+        run: |
+          Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp &
+          for _ in $(seq 1 30); do [ -e /tmp/.X11-unix/X99 ] && break; sleep 1; done
+          [ -e /tmp/.X11-unix/X99 ] || { echo "::error::Xvfb never came up"; exit 1; }
+          DISPLAY=:99 node test/smoke.mjs --only-target dev

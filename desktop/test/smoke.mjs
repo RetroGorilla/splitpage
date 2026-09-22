@@ -10,6 +10,19 @@
  * Usage:
  *   node test/smoke.mjs                       # dev + both packaged unpacked exes (whichever exist)
  *   node test/smoke.mjs --exe <path to .exe>   # just that one target
+ *   node test/smoke.mjs --only-target dev      # the dev target alone
+ *
+ * On Linux there is no display, so the run needs one of its own:
+ *
+ *   xvfb-run -a node test/smoke.mjs --only-target dev
+ *
+ * The dev target runs on every platform (#89) — that is what exercises
+ * main.js and preload.js where they are actually being changed. The
+ * packaged targets are Windows-only, because dist/win-unpacked and
+ * dist/win-arm64-unpacked are the only packaged output anything builds.
+ * A handful of assertions probe Windows itself (MainWindowHandle); those
+ * are SKIPped by name off Windows and listed in the run summary, never
+ * silently dropped and never rewritten into something weaker.
  *
  * Every launch gets its own fresh temp SPLITPAGE_USER_DATA, its own free
  * --remote-debugging-port, and SPLITPAGE_NO_UPDATE_CHECK=1 unless the case
@@ -39,15 +52,41 @@ const DESKTOP_DIR = path.resolve(__dirname, "..");
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function parseCliArgs(argv) {
-  const out = { exe: null, onlyTarget: null };
+  const out = { exe: null, onlyTarget: null, onlyGroup: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--exe") out.exe = argv[++i];
     // Debugging-only, undocumented: restrict a default (no --exe) run to a
     // single named target (dev | packaged-x64 | packaged-arm64) without
     // having to comment code out. Not part of the public CLI contract.
     if (argv[i] === "--only-target") out.onlyTarget = argv[++i];
+    /* Same spirit, for one group out of ~60 when a full run is 55 minutes:
+       a case-insensitive substring of the group's name in runTargetSuite.
+       A filtered run prints a loud banner and carries "GROUP FILTER" into
+       the summary, because a partial run that read like a full one is the
+       thing this file is not allowed to do. */
+    if (argv[i] === "--only-group") out.onlyGroup = argv[++i];
   }
   return out;
+}
+
+const IS_WINDOWS = process.platform === "win32";
+
+/* The dev Electron's executable is named differently on every platform —
+   electron.exe, a bare electron, or the binary buried in Electron.app. Its
+   own installer already records which one it unpacked, in
+   node_modules/electron/path.txt, so read that rather than keep a second
+   copy of the mapping here that could drift; the per-platform names below
+   are only the fallback for a tree whose path.txt is missing. */
+function devElectronExe() {
+  const pkgDir = path.join(DESKTOP_DIR, "node_modules", "electron");
+  const distDir = path.join(pkgDir, "dist");
+  try {
+    const recorded = fs.readFileSync(path.join(pkgDir, "path.txt"), "utf8").trim();
+    if (recorded) return path.join(distDir, recorded);
+  } catch { /* not installed, or installed by something that wrote no path.txt */ }
+  if (IS_WINDOWS) return path.join(distDir, "electron.exe");
+  if (process.platform === "darwin") return path.join(distDir, "Electron.app", "Contents", "MacOS", "Electron");
+  return path.join(distDir, "electron");
 }
 
 function resolveTargets(exeOverride) {
@@ -56,13 +95,39 @@ function resolveTargets(exeOverride) {
     return [{ name: "custom:" + path.basename(abs), kind: "packaged", exe: abs }];
   }
   const targets = [];
-  const devExe = path.join(DESKTOP_DIR, "node_modules", "electron", "dist", "electron.exe");
+  const devExe = devElectronExe();
   if (fs.existsSync(devExe)) targets.push({ name: "dev", kind: "dev", exe: devExe, appPath: DESKTOP_DIR });
-  const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
-  if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
-  const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
-  if (fs.existsSync(arm64Exe)) targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
+  /* Packaged discovery stays Windows-only on purpose: dist/*-unpacked/ holds
+     Splitpage.exe and nothing builds any other packaged shape. Looking for
+     them elsewhere would only ever find nothing. */
+  if (IS_WINDOWS) {
+    const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
+    if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
+    const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
+    if (fs.existsSync(arm64Exe)) targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
+  }
   return targets;
+}
+
+/* Extra Chromium switches a target needs on THIS platform, prepended to
+   every spawn of it (launchApp's own and the three raw second-instance
+   spawns alike).
+
+   --no-sandbox, on Linux, for the DEV target only. Chromium's Linux sandbox
+   needs either a setuid chrome-sandbox helper or unprivileged user
+   namespaces; a dev tree's node_modules/electron/dist/chrome-sandbox is not
+   setuid, and the containers this suite runs in (the cloud dev container and
+   the CI runner) provide neither. Without it Electron refuses to start at
+   all, so the choice is this switch or no Linux run.
+
+   It is deliberately scoped to the dev target so it can never reach a
+   packaged binary, and it is a test-harness launch argument only — nothing
+   in main.js, electron-builder.yml or the installer passes it, so how the
+   app SHIPS is untouched. It does weaken a real boundary in the process it
+   applies to, which is why it is not applied more widely than it has to be. */
+function platformFlagsFor(target) {
+  if (target.kind === "dev" && process.platform === "linux") return ["--no-sandbox"];
+  return [];
 }
 
 async function freePort() {
@@ -630,6 +695,19 @@ async function setupTwoDirtyWindows(target, opts) {
 // a docId before any document carrying it exists.
 function randDocId() { return "d" + crypto.randomBytes(16).toString("hex"); }
 
+/* DOC-CLAIMS' homeKey for a file-backed document, predicted Node-side so a
+   case can compute the replacement id the app is about to choose without
+   asking the app for it. It mirrors main.js's own rule exactly, INCLUDING
+   the part that is platform-dependent: the resolved path is lower-cased on
+   win32 only, because an NTFS path is case-insensitive and an ext4 one is
+   not (main.js: `process.platform === "win32" ? resolved.toLowerCase() :
+   resolved`). Hard-coding the lower-case half here made the prediction
+   silently wrong everywhere but Windows. */
+function fileHomeKey(p) {
+  const resolved = path.resolve(p);
+  return "file:" + (IS_WINDOWS ? resolved.toLowerCase() : resolved);
+}
+
 // HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/ — lowercase hex keeps
 // every generated id inside that shape without thinking about it further.
 function randSnapId(prefix) {
@@ -706,7 +784,7 @@ function writeHistoryFormatOnDisk(userDataDir, version) {
 // dedicated test-shell op for "open this path".
 async function sendSecondInstanceTo(target, userDataDir, filePath) {
   const port = await freePort();
-  const flags = [`--remote-debugging-port=${port}`];
+  const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
   const args = target.kind === "dev" ? [target.appPath, ...flags, filePath] : [...flags, filePath];
   const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
   const proc = spawn(target.exe, args, { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -740,7 +818,7 @@ async function spawnAttempt(target, opts, userDataDir, port) {
     env.SPLITPAGE_TEST_DIALOGS = dialogsPath;
   }
 
-  const flags = [`--remote-debugging-port=${port}`, ...(opts.flags || [])];
+  const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`, ...(opts.flags || [])];
   if (opts.dataDir) flags.push("--data", opts.dataDir);
   const fixtures = opts.fixtures || [];
 
@@ -830,7 +908,7 @@ function waitForExit(proc, timeoutMs) {
   });
 }
 
-function psProcessesMatching(substrings) {
+function win32ProcessesMatching(substrings) {
   // Case-insensitive CommandLine contains-any-of check via Get-CimInstance,
   // exactly per the harness design note. -EncodedCommand sidesteps quoting
   // headaches from backslash-heavy Windows temp paths.
@@ -848,8 +926,85 @@ function psProcessesMatching(substrings) {
   }
 }
 
+/* The POSIX stand-in for Win32_Process: [{ pid, ppid, cmdline }] for every
+   process this user can see. /proc is preferred where it exists (Linux) —
+   no external command at all, so nothing to be missing from a minimal
+   container image — with `ps` as the fallback everywhere else (macOS).
+   `cmdline` is the same thing the Windows query matches on, which is what
+   makes "a process tagged with THIS launch's user-data dir" mean the same
+   on both: Chromium passes --user-data-dir=<dir> to every child it spawns. */
+function posixProcessTable() {
+  if (fs.existsSync("/proc")) {
+    const rows = [];
+    let entries;
+    try { entries = fs.readdirSync("/proc"); } catch { return rows; }
+    for (const entry of entries) {
+      if (!/^\d+$/.test(entry)) continue;
+      let cmdline;
+      try { cmdline = fs.readFileSync(`/proc/${entry}/cmdline`, "utf8"); } catch { continue; }
+      cmdline = cmdline.replace(/\0/g, " ").trim();
+      let ppid = 0;
+      try {
+        const stat = fs.readFileSync(`/proc/${entry}/stat`, "utf8");
+        /* field 2 is the comm, in parentheses, and may itself contain spaces
+           and parentheses — so split what follows the LAST ')': state, ppid. */
+        const after = stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/);
+        ppid = Number(after[1]) || 0;
+      } catch { /* exited between readdir and here */ }
+      rows.push({ pid: Number(entry), ppid, cmdline });
+    }
+    return rows;
+  }
+  try {
+    const out = execFileSync("ps", ["-A", "-o", "pid=,ppid=,args="], { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "ignore"] });
+    return out.split("\n").map((line) => {
+      const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+      return m ? { pid: Number(m[1]), ppid: Number(m[2]), cmdline: m[3] } : null;
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function psProcessesMatching(substrings) {
+  if (IS_WINDOWS) return win32ProcessesMatching(substrings);
+  const needles = substrings.map((s) => s.toLowerCase()).filter(Boolean);
+  if (!needles.length) return [];
+  return posixProcessTable()
+    .filter((p) => p.cmdline && needles.some((n) => p.cmdline.toLowerCase().includes(n)))
+    .map((p) => String(p.pid));
+}
+
+/* taskkill /T /F, and its POSIX equivalent. There is no single POSIX call
+   for "this process and its descendants": killing the process GROUP is the
+   usual stand-in, but these children are spawned without `detached`, so they
+   share this test runner's own group and a group kill would take the suite
+   down with them. So walk the tree from the process table and SIGKILL it
+   leaf-first, which is the order taskkill /T uses too. Scoped to one pid's
+   descendants exactly like the Windows path — never by image name, so a
+   concurrent run is never touched. */
 function killPid(pid) {
-  try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 10000 }); } catch {}
+  if (!pid || pid <= 1) return;
+  if (IS_WINDOWS) {
+    try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 10000 }); } catch {}
+    return;
+  }
+  const byParent = new Map();
+  for (const p of posixProcessTable()) {
+    if (!byParent.has(p.ppid)) byParent.set(p.ppid, []);
+    byParent.get(p.ppid).push(p.pid);
+  }
+  const tree = [];
+  const walk = (id) => {
+    for (const child of byParent.get(id) || []) {
+      if (child === id || tree.includes(child)) continue;
+      tree.push(child);
+      walk(child);
+    }
+  };
+  walk(pid);
+  for (const id of tree.reverse()) { try { process.kill(id, "SIGKILL"); } catch {} }
+  try { process.kill(pid, "SIGKILL"); } catch {}
 }
 
 // document.visibilityState reads "visible" even in TEST_MODE (backgroundThrottling:false
@@ -858,6 +1013,12 @@ function killPid(pid) {
 // window has MainWindowHandle 0. The BrowserWindow's native HWND belongs to Electron's
 // browser (main) process, not a renderer subprocess, so checking the pid we spawned is right
 // for both dev and packaged targets.
+//
+// Genuinely Windows-only, and with no honest equivalent elsewhere: the point
+// of the assertion is "nothing appeared on the developer's screen", which X11
+// cannot be asked in the same way (and under Xvfb the answer would be
+// meaningless anyway). Its one caller SKIPs it by name off Windows rather
+// than asserting something weaker that would read as the same coverage.
 function getMainWindowHandle(pid) {
   try {
     const out = execFileSync("powershell.exe", [
@@ -890,9 +1051,10 @@ async function closeBrowserGracefully(app) {
   } catch { return false; }
 }
 
-/* Always: CDP Browser.close first (the clean path), then taskkill /T /F
-   the tree as a fallback, then confirm via Win32_Process that nothing
-   naming this launch's user-data dir survives.
+/* Always: CDP Browser.close first (the clean path), then killPid's
+   force-kill of the tree as a fallback (taskkill /T /F on Windows, a
+   leaf-first SIGKILL walk on POSIX), then confirm from the process table
+   that nothing naming this launch's user-data dir survives.
 
    Also always records two checks under `tag` (case 15 in the harness
    design applies to EVERY case, so it lives here once instead of being
@@ -921,14 +1083,14 @@ async function teardown(app, tag, opts) {
   if (app.cdp) await closeBrowserGracefully(app);
   let exited = await waitForExit(app.proc, 12000);
   if (!exited) {
-    notes.push("did not exit after Browser.close; force-killed via taskkill");
+    notes.push("did not exit after Browser.close; force-killed via killPid");
     killPid(app.proc.pid);
     /* 30 s, not 10: taskkill /F is authoritative, but an x64 Electron tree
        under ARM64 emulation on a loaded machine (an installer build or the
        browser suite running alongside) can take well over 10 s to REPORT
        its exit — which once failed a case whose processes were all gone. */
     exited = await waitForExit(app.proc, 30000);
-    if (!exited) notes.push("process still reported alive after taskkill");
+    if (!exited) notes.push("process still reported alive after the force-kill");
   }
   // A packaged app's launcher exe can spawn a child renderer/utility process
   // tree under a different top pid than the one we spawned — search by the
@@ -956,6 +1118,15 @@ async function teardown(app, tag, opts) {
         app.proc.exitCode === opts.expectExitCode,
         "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
     }
+    /* The POSIX half of expectExitCode: a process that died from a real
+       signal has no exit code at all, so "how did it die" has to be asked
+       the other way round there. Same strength of assertion, named in the
+       platform's own terms — see caseHistoryCrashAfterBody's call site. */
+    if (opts.expectSignal !== undefined) {
+      record(tag + ": killed by " + opts.expectSignal,
+        app.proc.signalCode === opts.expectSignal,
+        "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
+    }
   }
   return notes;
 }
@@ -981,6 +1152,7 @@ function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch
 
 let totalChecks = 0, passedChecks = 0;
 const failureLines = [];
+const skippedLines = [];
 
 function record(name, ok, detail) {
   totalChecks++;
@@ -989,6 +1161,21 @@ function record(name, ok, detail) {
   console.log(line);
   if (!ok) failureLines.push(name + (detail ? " :: " + detail : ""));
 }
+
+/* A check or a whole group that CANNOT run here, recorded by name with the
+   reason (#89). Deliberately not counted as a pass and not counted in
+   totalChecks: a skip is absent coverage, and a run that printed the same
+   "ALL PASS - n/n" as a full one would be worse than no run at all. Every
+   skip is echoed again in the summary, so the tail of the output says what
+   this machine did not test even when nothing failed. */
+function skip(name, reason) {
+  skippedLines.push(name + " :: " + reason);
+  console.log("SKIP - " + name + " :: " + reason);
+}
+
+// The reason string every off-Windows skip in this file shares, so the
+// summary groups them at a glance.
+const WINDOWS_ONLY = "Windows-only probe (PowerShell/Win32), this run is on " + process.platform;
 
 async function guarded(name, fn) {
   try {
@@ -1734,8 +1921,13 @@ async function caseUnsavedChangesClose(target) {
     record(tag + ": dirty close with NO pre-answered dialog stays open (test-mode default = Stay)",
       stillAlive2, "exitCode=" + app2.proc.exitCode);
 
-    const handle = getMainWindowHandle(app2.proc.pid);
-    record(tag + ": no visible top-level window appeared during the whole case (MainWindowHandle=0)", handle === 0, "handle=" + handle);
+    const checkName = tag + ": no visible top-level window appeared during the whole case (MainWindowHandle=0)";
+    if (IS_WINDOWS) {
+      const handle = getMainWindowHandle(app2.proc.pid);
+      record(checkName, handle === 0, "handle=" + handle);
+    } else {
+      skip(checkName, WINDOWS_ONLY + " — MainWindowHandle has no X11 equivalent, and under Xvfb there is no real screen to have appeared on");
+    }
   } finally {
     if (app2) {
       await teardown(app2, tag + " (no pre-answered dialog)");
@@ -1989,7 +2181,7 @@ async function caseSecondInstanceRelativePath(target, fixturesDir) {
 
     const port = await freePort();
     const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
-    const flags = [`--remote-debugging-port=${port}`];
+    const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
     // Only the basename — the whole point is that this must resolve against
     // the SECOND process's cwd (fixturesDir, set below), not the first's.
     const args = target.kind === "dev" ? [target.appPath, ...flags, fixtureName] : [...flags, fixtureName];
@@ -2091,8 +2283,31 @@ async function caseTabstripOrigin(target) {
     const noReadFile = await evalPage(stripCdp, "typeof (window.splitpageTabStrip && window.splitpageTabStrip.readFile) === 'undefined'");
     record(tag + ": window.splitpageTabStrip.readFile is undefined", noReadFile === true, String(noReadFile));
 
-    const healthStatus = await evalPage(stripCdp, "fetch('splitpage://tabstrip/api/health').then(function(r){return r.status;}).catch(function(){return -1;})");
-    record(tag + ": fetch('splitpage://tabstrip/api/health') is 404", healthStatus === 404, "status=" + healthStatus);
+    /* TABSTRIP-BRIDGE asked for a 404 here: /api/* is deliberately not
+       special-cased for the strip's host in registerProtocol(), so the
+       request falls through to "not found" and the strip has no proxy to the
+       document server. Since #65 the strip's own response headers also carry
+       connect-src 'none', so the request is refused one layer EARLIER — it
+       never leaves the page, and the fetch REJECTS instead of resolving with
+       a status. That is strictly more than the original check claimed, so it
+       is asserted as what it now is (the violated directive, read off the
+       page's own securitypolicyviolation event) rather than relaxed into
+       "didn't come back 200". Nothing had run this assertion since #65
+       landed the header — that is the gap #89 is about. */
+    const apiAttempt = await evalPage(stripCdp,
+      "new Promise(function(resolve){" +
+      "  var out = { outcome: null, violated: null, blocked: null };" +
+      "  document.addEventListener('securitypolicyviolation', function(e){" +
+      "    out.violated = e.violatedDirective; out.blocked = e.blockedURI;" +
+      "  }, { once: true });" +
+      "  fetch('splitpage://tabstrip/api/health').then(" +
+      "    function(r){ out.outcome = 'status:' + r.status; }," +
+      "    function(){ out.outcome = 'refused'; });" +
+      "  setTimeout(function(){ resolve(out); }, 2000);" +
+      "})");
+    record(tag + ": fetch('splitpage://tabstrip/api/health') never leaves the strip — refused by its own connect-src 'none' (#65)",
+      !!apiAttempt && apiAttempt.outcome === "refused" && apiAttempt.violated === "connect-src",
+      JSON.stringify(apiAttempt));
   } finally {
     if (stripCdp) { try { stripCdp.close(); } catch {} }
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
@@ -2144,7 +2359,7 @@ async function caseTabRoutingRules(target, fixturesDir) {
 
   async function sendSecondInstance(fixturePath) {
     const port = await freePort();
-    const flags = [`--remote-debugging-port=${port}`];
+    const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
     const args = target.kind === "dev" ? [target.appPath, ...flags, fixturePath] : [...flags, fixturePath];
     const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
     const proc = spawn(target.exe, args, { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -2925,9 +3140,11 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
 
     // The predicted replacement id (DOC-CLAIMS' Reassignment), computed
     // independently of the app: 'd' + sha256('splitpage-dup\n'+idA+'\n'+
-    // 'file:'+absB.toLowerCase()).slice(0,32) — byte-identical to both
-    // replacementDocId (main.js) and deriveDocId (02b-doc-id.js).
-    const homeKeyB = "file:" + path.resolve(bPath).toLowerCase();
+    // fileHomeKey(absB)).slice(0,32) — byte-identical to both
+    // replacementDocId (main.js) and deriveDocId (02b-doc-id.js). See
+    // fileHomeKey for the one part of that string that is platform-
+    // dependent.
+    const homeKeyB = fileHomeKey(bPath);
     const toId = "d" + crypto.createHash("sha256")
       .update("splitpage-dup\n" + idA + "\n" + homeKeyB, "utf8").digest("hex").slice(0, 32);
 
@@ -2997,9 +3214,21 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     if (reopenTarget) {
       cdpReopen = await connectTarget(reopenTarget);
       await waitForRows(cdpReopen, 20000);
-      const reopenedId = await poll(cdpReopen, "window.__splitpageFormats.docId()", 15000).catch(() => null);
+      /* Polled for the expected id, not read once — the same shape as the
+         first reassignment assertion above, and for a sharper reason here.
+         routeOpenPath creates the tab with a pendingPayload and the renderer
+         boots a blank seed document FIRST; the file is delivered after it
+         reports ready. waitForRows is therefore satisfied while the page is
+         still showing the seed, whose own random docId is what a single read
+         catches (measured: it did, on Linux, where nothing else in the case
+         was slow enough to hide the gap). A second reassignment — the thing
+         this assertion exists to catch — settles on some OTHER id, so the
+         poll still times out and still fails. */
+      const keptItsId = await poll(cdpReopen,
+        "window.__splitpageFormats.docId() === " + JSON.stringify(toId), 15000).catch(() => null);
+      const reopenedId = await evalPage(cdpReopen, "window.__splitpageFormats.docId()").catch(() => null);
       record(tag + ": reopening B.md keeps its (already reassigned) id — no further reassignment",
-        reopenedId === toId, "reopenedId=" + reopenedId + " toId=" + toId);
+        !!keptItsId, "reopenedId=" + reopenedId + " toId=" + toId);
       const reopenedEvents = await evalPage(cdpReopen, "window.__splitpageFormats.docIdEvents()").catch(() => null);
       record(tag + ": no new copy event fires on reopen (its id no longer collides with A's)",
         Array.isArray(reopenedEvents) && reopenedEvents.length === 0, JSON.stringify(reopenedEvents));
@@ -3272,7 +3501,12 @@ async function caseHistoryCrashAfterBody(target) {
     // reports exit code 1 (no POSIX signals on Windows; libuv maps a
     // self-inflicted SIGKILL to TerminateProcess(1)) — not a code this
     // process chose, so it's pinned and explained rather than left to guess.
-    await teardown(app, tag + " (post-crash)", { expectExitCode: 1 });
+    // On POSIX the very same call in main.js is a real signal: no exit code
+    // at all, signalCode 'SIGKILL'. One event, two ways of reporting it, so
+    // the expectation is written in each platform's own terms rather than
+    // loosened to "died somehow" — which would stop noticing a main process
+    // that exited cleanly when the fault was supposed to kill it.
+    await teardown(app, tag + " (post-crash)", IS_WINDOWS ? { expectExitCode: 1 } : { expectSignal: "SIGKILL" });
     app = null;
 
     const orphanPath = historySnapPathOnDisk(userDataDir, docId, meta.id);
@@ -4411,7 +4645,7 @@ async function caseWindowCloseCanary() {
  * 6. Runner.
  * -------------------------------------------------------------------- */
 
-async function runTargetSuite(target) {
+async function runTargetSuite(target, groupFilter) {
   console.log(`\n==== target: ${target.name} (${target.exe}) ====`);
   const fixturesDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-fixtures-"));
   // Each group gets its own top-level guard: one group crashing outright
@@ -4482,7 +4716,22 @@ async function runTargetSuite(target) {
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {
-    for (const [name, fn] of groups) {
+    for (const [name, fn, opts] of groups) {
+      /* A group marked windowsOnly is named in the summary as a skip rather
+         than run and failed, or — worse — quietly dropped. Nothing in the
+         list carries the mark today: after #89 the only thing on this file
+         that Windows alone can answer is one assertion inside the
+         unsaved-changes case, which skips itself. The hook stays so the next
+         genuinely Windows-bound case is skipped loudly instead of tempting
+         somebody to weaken its assertion until it passes here. */
+      // The debugging filter first: a group this run never asked for is not
+      // "skipped because the platform cannot run it", and must not land in
+      // the summary's skip list claiming that it was.
+      if (groupFilter && !name.toLowerCase().includes(groupFilter)) continue;
+      if (opts && opts.windowsOnly && !IS_WINDOWS) {
+        skip(target.name + ": " + name + " (group)", WINDOWS_ONLY + " — " + opts.windowsOnly);
+        continue;
+      }
       try {
         await fn();
       } catch (e) {
@@ -4495,31 +4744,57 @@ async function runTargetSuite(target) {
 }
 
 async function main() {
-  const { exe, onlyTarget } = parseCliArgs(process.argv.slice(2));
+  const { exe, onlyTarget, onlyGroup } = parseCliArgs(process.argv.slice(2));
+  const groupFilter = onlyGroup ? onlyGroup.toLowerCase() : null;
   let targets = resolveTargets(exe);
   if (onlyTarget) targets = targets.filter((t) => t.name === onlyTarget);
   if (!targets.length) {
-    console.error("No target found: no desktop/node_modules/electron and no packaged dist/*-unpacked/Splitpage.exe. Nothing to test.");
+    console.error(
+      "No target found. Nothing to test.\n" +
+      "  dev:      " + devElectronExe() + " (run `npm install` in desktop/)\n" +
+      (IS_WINDOWS
+        ? "  packaged: desktop/dist/win-unpacked/Splitpage.exe, desktop/dist/win-arm64-unpacked/Splitpage.exe\n"
+        : "  packaged: Windows only — not looked for on " + process.platform + "\n"));
     process.exit(1);
   }
   console.log("Targets: " + targets.map((t) => t.name).join(", "));
+  console.log("Platform: " + process.platform + "/" + process.arch +
+    (process.platform === "linux" ? " (needs a display — run under `xvfb-run -a`)" : ""));
+  if (groupFilter) {
+    console.log("");
+    console.log("!!! GROUP FILTER --only-group " + JSON.stringify(onlyGroup) + " — a DEBUGGING run.");
+    console.log("!!! Most groups will not run at all. Whatever this prints is not coverage.");
+  }
 
   for (const target of targets) {
     try {
-      await runTargetSuite(target);
+      await runTargetSuite(target, groupFilter);
     } catch (e) {
       record(target.name + ": target suite", false, "uncaught exception: " + (e && e.stack || e));
     }
   }
 
   console.log("");
+  /* The skip list prints BEFORE the pass/fail line and on every run, passing
+     or not: the whole point of #89 is that a thinner run must not read as a
+     full one. "ALL PASS" below always carries the skip count with it. */
+  if (skippedLines.length) {
+    console.log(`SKIPPED (${skippedLines.length}) — not run here, so not covered:`);
+    skippedLines.forEach((l) => console.log("  - " + l));
+    console.log("");
+  } else {
+    console.log("SKIPPED (0) — every check in this file ran.");
+    console.log("");
+  }
+  const skipNote = (skippedLines.length ? `, ${skippedLines.length} skipped` : "") +
+    (groupFilter ? ` — PARTIAL RUN, --only-group ${JSON.stringify(onlyGroup)}` : "");
   if (passedChecks === totalChecks) {
-    console.log(`ALL PASS - ${passedChecks}/${totalChecks} desktop checks`);
+    console.log(`ALL PASS - ${passedChecks}/${totalChecks} desktop checks${skipNote}`);
     process.exit(0);
   } else {
     console.log(`FAILURES (${totalChecks - passedChecks}):`);
     failureLines.forEach((l) => console.log("  - " + l));
-    console.log(`${passedChecks}/${totalChecks} desktop checks passed`);
+    console.log(`${passedChecks}/${totalChecks} desktop checks passed${skipNote}`);
     process.exit(1);
   }
 }
