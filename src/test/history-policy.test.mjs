@@ -26,6 +26,7 @@ import {
   HISTORY_SNAP_ID_RE,
   historyClip,
   historyStampAfter,
+  historyUtf8Length,
   planHistoryEviction,
   sanitizeHistoryMeta
 } from "../../shared/history-policy.js";
@@ -172,8 +173,19 @@ test("a require() sees exactly what an import does — this file is CommonJS on 
   assert.equal(cjs.HISTORY_PER_DOC, HISTORY_PER_DOC);
   assert.deepEqual(Object.keys(cjs).sort(), [
     "HISTORY_OLDER_KEY", "HISTORY_OLDER_TTL_MS", "HISTORY_PER_DOC", "HISTORY_SNAP_ID_RE",
-    "historyClip", "historyStampAfter", "planHistoryEviction", "sanitizeHistoryMeta"
+    "historyClip", "historyOlderExpired", "historyStampAfter", "historyUtf8Length",
+    "planHistoryEviction", "sanitizeHistoryMeta"
   ]);
+});
+
+test("historyUtf8Length: UTF-8 bytes without encoding a copy (moved here from 03a, #83)", () => {
+  const enc = new TextEncoder();
+  for (const s of ["", "abc", "é", "€", "😀", "a😀b", "\u{10FFFF}", "日本語テキスト", "x".repeat(1000)]) {
+    assert.equal(historyUtf8Length(s), enc.encode(s).length, JSON.stringify(s));
+  }
+  /* A lone surrogate is what TextEncoder writes as U+FFFD: three bytes. */
+  assert.equal(historyUtf8Length("\ud800"), 3);
+  assert.equal(historyUtf8Length("\udc00x"), 4);
 });
 
 test("the module needs no DOM, no Electron and no init", () => {

@@ -125,10 +125,14 @@ for (const filename of ["server.js", "package.json"]) {
 // resolves the nearest one. blob-policy.js (#82: the image-record gate, the
 // reference walker and the image sniffer) is staged with them because the
 // desktop blob store will require it the same way (#82 P3); until then it is
-// shipped and unused.
+// shipped and unused. history-store.js (#83: the one version-history store,
+// over a backend each build supplies) requires history-policy.js and
+// doc-id-policy.js by relative path, so all three have to sit side by side
+// here; main.js requires it at startup once #83 step 3a lands, and a packaged
+// app without it would then fail at that require.
 const sharedDir = resolve(STAGE_DIR, "shared");
 await fs.mkdir(sharedDir, { recursive: true });
-for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js", "blob-policy.js"]) {
+for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js", "blob-policy.js", "history-store.js"]) {
   const data = await fs.readFile(resolve(REPO_ROOT, "shared", filename));
   await fs.writeFile(resolve(sharedDir, filename), data);
   console.log(`  shared/${filename} (${data.length} bytes)`);
