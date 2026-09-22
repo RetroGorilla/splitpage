@@ -27,9 +27,43 @@ const { contextBridge, ipcRenderer } = require("electron");
    unless the page really is the strip's own origin, and main re-checks every
    channel anyway (isTrustedTabStripSender), so neither check stands alone. */
 if (location.origin === "splitpage://tabstrip") {
+  /* And a third, which is the point of desktop/ipc-channels.js: main hands
+     this origin the rows of the channel table that name it — the nine below
+     and nothing else — and every crossing here goes through them. A
+     sandboxed preload cannot require that file (its `require` resolves
+     'electron', 'events', 'timers' and 'url', never a file off disk), so it
+     arrives the same way the window id below does, synchronously, at load.
+
+     For the strip this is worth more than it is for preload.js: the whole
+     of invariant #43 is that a compromise of this page reaches no file,
+     draft or history channel, and the table is where that is now written
+     down — as data, in one column, rather than as a check each of main's
+     sixty handlers has to remember to make. A name this origin does not
+     have throws, which takes the script down before
+     contextBridge.exposeInMainWorld below and leaves the strip with no
+     bridge at all. */
+  const channelDirections = new Map();
+  for (const entry of ipcRenderer.sendSync("splitpage:ipc-table-sync") || []) {
+    if (!channelDirections.has(entry.name)) channelDirections.set(entry.name, new Set());
+    channelDirections.get(entry.name).add(entry.direction);
+  }
+
+  const channel = (name, direction) => {
+    const directions = channelDirections.get(name);
+    if (!directions || !directions.has(direction)) {
+      throw new Error("splitpage: " + name + " (" + direction + ") is not a channel this origin may use");
+    }
+    return name;
+  };
+
+  const invoke = (name, ...args) => ipcRenderer.invoke(channel(name, "invoke"), ...args);
+  const send = (name, ...args) => ipcRenderer.send(channel(name, "send"), ...args);
+  const sendSync = (name, ...args) => ipcRenderer.sendSync(channel(name, "sendSync"), ...args);
+  const receive = (name, handler) => ipcRenderer.on(channel(name, "receive"), handler);
+
   let shellStateCallback = null;
 
-  ipcRenderer.on("splitpage:tabstrip-state", (_event, state) => {
+  receive("splitpage:tabstrip-state", (_event, state) => {
     if (shellStateCallback) shellStateCallback(state);
   });
 
@@ -38,14 +72,14 @@ if (location.origin === "splitpage://tabstrip") {
      drawing before it can tell a drag that started in this strip from one
      that arrived from another window's, and that decision happens on the
      first render, long before any round trip could answer. */
-  const windowId = ipcRenderer.sendSync("splitpage:tabstrip-window-id-sync");
+  const windowId = sendSync("splitpage:tabstrip-window-id-sync");
 
   contextBridge.exposeInMainWorld("splitpageTabStrip", {
     windowId,
     platform: process.platform,
 
     getShellState() {
-      return ipcRenderer.invoke("splitpage:tabstrip-get-state");
+      return invoke("splitpage:tabstrip-get-state");
     },
 
     onShellStateChanged(cb) {
@@ -53,32 +87,32 @@ if (location.origin === "splitpage://tabstrip") {
     },
 
     newTab() {
-      ipcRenderer.send("splitpage:tabstrip-new-tab");
+      send("splitpage:tabstrip-new-tab");
     },
 
     activateTab(tabId) {
-      ipcRenderer.send("splitpage:tabstrip-activate", tabId);
+      send("splitpage:tabstrip-activate", tabId);
     },
 
     /* The same path as Ctrl+W and a middle click: one place decides whether
        closing a tab has to ask about unsaved work. */
     closeTab(tabId) {
-      ipcRenderer.send("splitpage:tabstrip-close", tabId);
+      send("splitpage:tabstrip-close", tabId);
     },
 
     reorderTab(tabId, index) {
-      ipcRenderer.send("splitpage:tabstrip-reorder", tabId, index);
+      send("splitpage:tabstrip-reorder", tabId, index);
     },
 
     /* A tab dragged out of ANOTHER window's strip and dropped on this one.
        The target window is the sender's — the strip never names it, so a
        strip page cannot move a tab into a window it is not part of. */
     moveTabHere(tabId, dropIndex) {
-      ipcRenderer.send("splitpage:tabstrip-move-here", tabId, dropIndex);
+      send("splitpage:tabstrip-move-here", tabId, dropIndex);
     },
 
     tearOffToNewWindow(tabId, screenX, screenY) {
-      ipcRenderer.send("splitpage:tabstrip-tear-off", tabId, screenX, screenY);
+      send("splitpage:tabstrip-tear-off", tabId, screenX, screenY);
     }
   });
 }

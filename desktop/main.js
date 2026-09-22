@@ -37,6 +37,15 @@ const { spawn } = require("node:child_process");
    It is listed in electron-builder.yml's `files` so a packaged build ships it
    — requiring it without that would crash the packaged app on startup. */
 const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+/* desktop/ipc-channels.js is the one list of channels that cross this
+   process boundary, and the one validator every inbound message goes
+   through (section 14). Plain CommonJS data and pure functions, no Electron
+   dependency, so it loads here and — through splitpage:ipc-table-sync —
+   in both sandboxed preloads. Listed in electron-builder.yml's `files`, for
+   the same reason drafts.js is. */
+const {
+  APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs
+} = require("./ipc-channels");
 
 /* ---------------------------------------------------------------------
  * 0. The privileged scheme. Must be registered before `app` is ready —
@@ -4618,33 +4627,122 @@ function buildMenu() {
 }
 
 /* ---------------------------------------------------------------------
- * 14. IPC — the bridge's other half. Every handler validates the calling
- *     frame is our own app origin (or, in tunnel mode, none of these are
- *     exposed at all — see preload.js), never trusting contextIsolation
- *     alone to have kept a compromised/tunnelled renderer out.
+ * 14. IPC — the bridge's other half. Every channel this process listens on
+ *     is one row of desktop/ipc-channels.js, and every inbound message goes
+ *     through ONE gate before any handler body runs: the sender's origin
+ *     against the row's allowedOrigins, then the arguments against its
+ *     argsSchema. Nothing is registered that the table does not list, so a
+ *     channel cannot exist here and be missing from the copy of the table
+ *     the preloads read at load. None of this trusts contextIsolation alone
+ *     to have kept a compromised or tunnelled renderer out — in tunnel mode
+ *     the window gets no bridge at all (see preload.js), and a page that is
+ *     neither of our two origins is refused here as well.
  * --------------------------------------------------------------------- */
 
-function isTrustedSender(event) {
+/* Which of our origins the sender is, or null for a page that is neither.
+   The trailing slash is load-bearing: "splitpage://apple/" must not read as
+   the app. */
+function senderOriginOf(event) {
   const url = event.senderFrame && event.senderFrame.url;
-  return typeof url === "string" && url.startsWith("splitpage://app/");
+  if (typeof url !== "string") return null;
+  if (url.startsWith(APP_ORIGIN + "/")) return APP_ORIGIN;
+  if (url.startsWith(TABSTRIP_ORIGIN + "/")) return TABSTRIP_ORIGIN;
+  return null;
 }
 
-function requireTrusted(event) {
-  if (!isTrustedSender(event)) throw new Error("untrusted sender");
+function isTrustedSender(event) {
+  return senderOriginOf(event) === APP_ORIGIN;
 }
 
 /* The tab strip is a SECOND privileged origin (invariant #43), and its own
    trust check is deliberately separate from isTrustedSender above: neither
-   origin can reach the other's handlers. The URL prefix alone is not enough
-   — it also has to be a window's OWN primary webContents, so a strip page
-   somehow loaded into a view or an iframe would still pass no shell command. */
+   origin can reach the other's handlers, because no row of the table lists
+   both for anything but the table read itself. The origin alone is not
+   enough — it also has to be a window's OWN primary webContents, so a strip
+   page somehow loaded into a view or an iframe would still pass no shell
+   command. */
 function isTrustedTabStripSender(event) {
-  const url = event.senderFrame && event.senderFrame.url;
-  if (typeof url !== "string" || !url.startsWith("splitpage://tabstrip/")) return false;
+  if (senderOriginOf(event) !== TABSTRIP_ORIGIN) return false;
   for (const w of windowsById.values()) {
     if (!w.win.isDestroyed() && w.win.webContents === event.sender) return true;
   }
   return false;
+}
+
+/* THE ONE VALIDATOR. Answers null when a message may go through, or the
+   reason it may not — which is what an invoke's caller is told, and what a
+   test run prints. Fail closed, in this order: a channel nobody declared, a
+   sender from an origin the row does not list, an origin whose own trust
+   check says no, then arguments that do not match the schema.
+
+   Both trust checks survive verbatim; what changed is that they are made
+   here, once, instead of at the top of sixty handlers where the next one
+   written is the one that forgets. */
+function ipcRefusalReason(channel, event, args) {
+  if (!channel) return "unknown channel";
+  const origin = senderOriginOf(event);
+  if (!origin || !channel.allowedOrigins.includes(origin)) return "untrusted sender";
+  const trusted = origin === APP_ORIGIN ? isTrustedSender(event) : isTrustedTabStripSender(event);
+  if (!trusted) return "untrusted sender";
+  const bad = checkArgs(channel.argsSchema, args);
+  return bad ? channel.name + ": " + bad : null;
+}
+
+/* Said out loud under SPLITPAGE_TEST and nowhere else, like every other
+   thing this process reports: a refused message has always been a no-op a
+   normal launch says nothing about, and the one place it matters that it was
+   refused is a test run watching for it. */
+function logIpcRefusal(name, reason) {
+  if (TEST_MODE) console.error("[splitpage-test] ipc refused " + name + ": " + reason);
+}
+
+/* Registration goes through the table too. ipcHandle/ipcOn/ipcOnSync look
+   the row up by (name, direction) and throw at startup if there is not one,
+   so a channel registered here but never declared there cannot reach a
+   running app. ipcMain.handle and ipcMain.on are called in these three
+   functions and nowhere else in this file; desktop/test/ipc-table.test.mjs
+   holds it to that. */
+function ipcChannelRow(name, direction) {
+  const channel = channelFor(name, direction);
+  if (!channel) throw new Error(`ipc: ${name} (${direction}) is not in desktop/ipc-channels.js`);
+  return channel;
+}
+
+function ipcHandle(name, fn) {
+  const channel = ipcChannelRow(name, "invoke");
+  ipcMain.handle(name, (event, ...args) => {
+    const reason = ipcRefusalReason(channel, event, args);
+    if (reason) { logIpcRefusal(name, reason); throw new Error(reason); }
+    return fn(event, ...args);
+  });
+}
+
+function ipcOn(name, fn) {
+  const channel = ipcChannelRow(name, "send");
+  ipcMain.on(name, (event, ...args) => {
+    const reason = ipcRefusalReason(channel, event, args);
+    if (reason) { logIpcRefusal(name, reason); return; }
+    fn(event, ...args);
+  });
+}
+
+/* A sendSync caller is BLOCKED until returnValue is set, so every path out
+   of here sets one. A refusal — and a handler that threw, which would
+   otherwise leave the renderer waiting on a reply that is never coming —
+   answers with the row's declared refusal value: the same "I know nothing"
+   answer that channel's preload already falls back to. */
+function ipcOnSync(name, fn) {
+  const channel = ipcChannelRow(name, "sendSync");
+  ipcMain.on(name, (event, ...args) => {
+    const reason = ipcRefusalReason(channel, event, args);
+    if (reason) { logIpcRefusal(name, reason); event.returnValue = channel.refusal; return; }
+    try {
+      event.returnValue = fn(event, ...args);
+    } catch (err) {
+      logIpcRefusal(name, (err && err.message) || "handler failed");
+      event.returnValue = channel.refusal;
+    }
+  });
 }
 
 /* The strip's sender, as a WindowRecord. */
@@ -4687,8 +4785,16 @@ function launchIntentFor(tab) {
 }
 
 function registerIpc() {
-  ipcMain.handle("splitpage:open-file-dialog", async (event) => {
-    requireTrusted(event);
+  /* THE TABLE ITSELF, and it has to come first: a sandboxed preload cannot
+     require desktop/ipc-channels.js off disk (its `require` resolves
+     'electron', 'events', 'timers' and 'url' and nothing else), so it asks
+     here instead — synchronously, before it builds a single bridge method —
+     and exposes nothing at all if no answer comes. Only the list of channel
+     descriptions crosses, and an origin is only ever handed the rows it is
+     already allowed to use. */
+  ipcOnSync("splitpage:ipc-table-sync", (event) => channelsForOrigin(senderOriginOf(event)));
+
+  ipcHandle("splitpage:open-file-dialog", async (event) => {
     const answer = consumeTestDialogAnswer();
     let chosen;
     if (answer !== undefined) {
@@ -4708,8 +4814,7 @@ function registerIpc() {
     return await readFileEntry(id, chosen);
   });
 
-  ipcMain.handle("splitpage:save-file-dialog", async (event, options) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:save-file-dialog", async (event, options) => {
     const opts = options || {};
     const answer = consumeTestDialogAnswer();
     let chosen;
@@ -4756,15 +4861,13 @@ function registerIpc() {
     return { id, name: path.basename(chosen) };
   });
 
-  ipcMain.handle("splitpage:read-file", async (event, id) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:read-file", async (event, id) => {
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     return await readFileEntry(id, absPath);
   });
 
-  ipcMain.handle("splitpage:write-file", async (event, id, data) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:write-file", async (event, id, data) => {
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     const buffer = toBuffer(data);
@@ -4773,8 +4876,7 @@ function registerIpc() {
     return { lastModified: Math.floor(stat.mtimeMs), size: stat.size };
   });
 
-  ipcMain.handle("splitpage:stat-file", async (event, id) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:stat-file", async (event, id) => {
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     try {
@@ -4792,19 +4894,16 @@ function registerIpc() {
      returns a path (invariant #34) — an entry is named by the same opaque
      fileId it was listed with, and reopening one goes through the ordinary
      route-open above, so main still decides where it lands. */
-  ipcMain.handle("splitpage:recents-list", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:recents-list", async (event) => {
     return recentsForRenderer();
   });
 
-  ipcMain.handle("splitpage:recents-remove", async (event, fileId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:recents-remove", async (event, fileId) => {
     if (removeRecentDocumentByFileId(fileId)) await persistRecents();
     return recentsForRenderer();
   });
 
-  ipcMain.handle("splitpage:recents-clear", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:recents-clear", async (event) => {
     if (recentDocuments.length) {
       recentDocuments = [];
       await persistRecents();
@@ -4818,8 +4917,7 @@ function registerIpc() {
      splitpage:set-document-state instead of a dedicated "remember this"
      call — one report, not two paths that can drift apart. */
 
-  ipcMain.handle("splitpage:get-session-info", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:get-session-info", async (event) => {
     return {
       library: LIBRARY,
       hosting: HOSTING,
@@ -4842,9 +4940,7 @@ function registerIpc() {
   /* Synchronous: preload reads this once, at load time, to build the plain
      `appVersion` string property on window.splitpageDesktop (not a
      promise — see the bridge contract). */
-  ipcMain.on("splitpage:get-app-version-sync", (event) => {
-    event.returnValue = isTrustedSender(event) ? app.getVersion() : null;
-  });
+  ipcOnSync("splitpage:get-app-version-sync", () => app.getVersion());
 
   /* TAB-BOOT-SYNC. Synchronous for the same reason appVersion is: preload
      reads it ONCE, at load time, and the renderer's boot sequence needs the
@@ -4856,10 +4952,9 @@ function registerIpc() {
      It carries no path and no server document id: the renderer is told what
      KIND of boot this is and nothing more, so a compromised page learns
      nothing about the file system from it (invariant #34). */
-  ipcMain.on("splitpage:tab-boot-sync", (event) => {
-    if (!isTrustedSender(event)) { event.returnValue = null; return; }
+  ipcOnSync("splitpage:tab-boot-sync", (event) => {
     const tab = tabOf(event);
-    if (!tab) { event.returnValue = null; return; }
+    if (!tab) return null;
     const intent = launchIntentFor(tab);
     tab.launchIntent = intent;
     const hasDraftToRestore = intent.type === "restore-draft";
@@ -4881,7 +4976,7 @@ function registerIpc() {
         try { draftStore.release(tab.id); } catch { /* store not usable */ }
       }
     }
-    event.returnValue = {
+    return {
       tabId: tab.id,
       windowId: tab.windowId,
       launchIntent: intent,
@@ -4891,39 +4986,36 @@ function registerIpc() {
     };
   });
 
-  ipcMain.on("splitpage:open-external", (event, url) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:open-external", (event, url) => {
     if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
   });
 
   /* ---- updates -------------------------------------------------------
-     Three calls, none of which takes an argument. That is the contract:
-     the page can ask what the situation is, ask for the download to start,
-     and ask for what was downloaded to be run — it cannot say WHAT to
-     download or WHAT to run. See section 9. */
+     Four calls, none of which takes an argument. That is the contract: the
+     page can ask what the situation is, ask for the download to start, and
+     ask for what was downloaded to be run — it cannot say WHAT to download
+     or WHAT to run. It used to be a contract written in a comment; the
+     table states it (argsSchema: none, all four), so a call that carries an
+     argument is refused before it arrives. See section 9. */
 
-  ipcMain.handle("splitpage:update-status", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-status", async (event) => {
     return updateStatus;
   });
 
   /* Re-run the check on demand, for the case the launch check found nothing
      because the machine was offline at the time. */
-  ipcMain.handle("splitpage:update-check", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-check", async (event) => {
     if (SKIP_UPDATE_CHECK) return updateStatus;
     setUpdateStatus({ checking: true });
     await checkForUpdate();
     return updateStatus;
   });
 
-  ipcMain.handle("splitpage:update-download", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-download", async (event) => {
     return downloadUpdate();
   });
 
-  ipcMain.handle("splitpage:update-install", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-install", async (event) => {
     return runUpdateInstaller();
   });
 
@@ -4932,8 +5024,7 @@ function registerIpc() {
      It must be current the instant the page reports, which is why this is a
      send and not an invoke, and why nothing here returns early before the
      record is updated. */
-  ipcMain.on("splitpage:set-document-state", (event, docState) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:set-document-state", (event, docState) => {
     const tab = tabOf(event);
     if (!tab) return;
     const s = docState || {};
@@ -4997,8 +5088,7 @@ function registerIpc() {
     catch (err) { if (TEST_MODE) console.error("[splitpage-test] doc claim failed", err); }
   });
 
-  ipcMain.on("splitpage:renderer-ready", (event) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:renderer-ready", (event) => {
     const tab = tabOf(event);
     if (!tab) return;
     tab.ready = true;
@@ -5011,8 +5101,7 @@ function registerIpc() {
   /* DOCUMENT-STATE-AND-ROUTING-IPC. The renderer asks "open this", main
      decides WHERE — this tab, a tab that already has it, or a new one — and
      answers with which of the three happened so the page can tell the user. */
-  ipcMain.handle("splitpage:route-open", async (event, payload) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:route-open", async (event, payload) => {
     const tab = tabOf(event);
     if (!tab) throw new Error("unknown tab");
     const p = payload || {};
@@ -5048,8 +5137,7 @@ function registerIpc() {
      from — rather than inventing a code no contract lists. */
   const DRAFT_STORE_DOWN = { ok: false, code: "EIO" };
 
-  ipcMain.handle("splitpage:draft-write", async (event, payload) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:draft-write", async (event, payload) => {
     const tab = tabOf(event);
     if (!tab) return { ok: false, code: "NO_TAB" };
     if (!draftStore) return DRAFT_STORE_DOWN;
@@ -5070,8 +5158,7 @@ function registerIpc() {
   /* "This tab is clean at seq N": the crash draft has nothing left to protect.
      The store refuses while the tab is held, which is right — a held tab's
      "clean" may only mean its draft has not been loaded yet (invariant #40). */
-  ipcMain.handle("splitpage:draft-discard", async (event, payload) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:draft-discard", async (event, payload) => {
     const tab = tabOf(event);
     if (!tab) return { ok: false, code: "NO_TAB" };
     if (!draftStore) return DRAFT_STORE_DOWN;
@@ -5084,8 +5171,7 @@ function registerIpc() {
      until the page reports what it did with it (draft-restore-done) or the
      user throws it away, so a restore that dies halfway can start again at
      the next launch (invariant #40). */
-  ipcMain.handle("splitpage:draft-take", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:draft-take", async (event) => {
     const tab = tabOf(event);
     if (!tab || !draftStore) return null;
     const taken = await draftStore.take(tab.id);
@@ -5136,8 +5222,7 @@ function registerIpc() {
      releases the hold and lets writes rotate the draft again; 'failed' keeps
      it, so every later write of this tab is refused as HELD and the
      unrestored work survives to the next launch (DRAFT-STORE). */
-  ipcMain.on("splitpage:draft-restore-done", (event, payload) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:draft-restore-done", (event, payload) => {
     const tab = tabOf(event);
     if (!tab || !draftStore) return;
     const outcome = payload && typeof payload.outcome === "string" ? payload.outcome : "";
@@ -5160,8 +5245,7 @@ function registerIpc() {
 
   /* The reply to splitpage:draft-flush. Matched by reqId: a reply whose
      request has already been given up on resolves nothing at all. */
-  ipcMain.on("splitpage:draft-flushed", (event, reqId, result) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:draft-flushed", (event, reqId, result) => {
     const resolve = pendingDraftFlushes.get(reqId);
     if (!resolve) return;
     pendingDraftFlushes.delete(reqId);
@@ -5170,8 +5254,10 @@ function registerIpc() {
 
   /* ---- version history (HISTORY-IPC) ---------------------------------
 
-     Every channel is requireTrusted, so only splitpage://app — a document
-     page — reaches them; the tab strip, on its own origin, gets nothing.
+     Every channel lists splitpage://app and nothing else, so only a
+     document page reaches them; the tab strip, on its own origin, gets
+     nothing — and gets it from the table, not from a check each handler
+     has to remember to make.
 
      An invalid docId, snapshot id or body REJECTS the invoke rather than
      answering {ok:false}: those are not conditions the renderer can recover
@@ -5187,8 +5273,7 @@ function registerIpc() {
     return v;
   };
 
-  ipcMain.handle("splitpage:history-put", async (event, docId, meta, stateJson, protect) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-put", async (event, docId, meta, stateJson, protect) => {
     historyDocIdArg(docId);
     const clean = sanitizeHistoryMeta(meta);
     if (!clean) throw new Error("history: invalid snapshot meta");
@@ -5209,16 +5294,14 @@ function registerIpc() {
     return historyExclusive(() => historyPutLocked(docId, clean, stateJson, held));
   });
 
-  ipcMain.handle("splitpage:history-list", async (event, docId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-list", async (event, docId) => {
     /* null is "just the Older bucket, please" — the panel asks for it on a
        document that has no id yet. Anything else must be a real docId. */
     const id = docId == null ? null : historyDocIdArg(docId);
     return historyExclusive(() => historyListLocked(id));
   });
 
-  ipcMain.handle("splitpage:history-get", async (event, query, snapshotId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-get", async (event, query, snapshotId) => {
     const q = query || {};
     /* The Older bucket is reachable ONLY through older:true. A file claiming
        docId "_older" fails DOC_ID_RE and never gets near it (invariant #38). */
@@ -5237,28 +5320,24 @@ function registerIpc() {
     return historyExclusive(() => readHistorySnapshotFile(bucket, snapshotId));
   });
 
-  ipcMain.handle("splitpage:history-copy", async (event, fromDocId, toDocId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-copy", async (event, fromDocId, toDocId) => {
     historyDocIdArg(fromDocId);
     historyDocIdArg(toDocId);
     if (fromDocId === toDocId) return { ok: true, copied: 0 };
     return historyExclusive(() => historyCopyLocked(fromDocId, toDocId));
   });
 
-  ipcMain.handle("splitpage:history-touch", async (event, docId, title) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-touch", async (event, docId, title) => {
     historyDocIdArg(docId);
     await historyExclusive(() => historyTouchLocked(docId, title));
   });
 
-  ipcMain.handle("splitpage:history-import-older", async (event, entries) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-import-older", async (event, entries) => {
     if (!Array.isArray(entries)) throw new Error("history: invalid import");
     return historyExclusive(() => historyImportOlderLocked(entries));
   });
 
-  ipcMain.handle("splitpage:history-usage", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-usage", async (event) => {
     return historyExclusive(() => historyUsageLocked());
   });
 
@@ -5267,62 +5346,60 @@ function registerIpc() {
      name out — just the docIds this store already knows about, each with the
      same title/lastOpenedAt splitpage:history-list already exposes per
      document. */
-  ipcMain.handle("splitpage:history-list-docs", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-list-docs", async (event) => {
     return historyExclusive(() => historyListDocsLocked());
   });
 
   /* ---- the tab strip's channels (TABSTRIP-BRIDGE) --------------------
      A separate origin with its own trust check, and deliberately nothing
-     else: no file, draft or history handler accepts a strip sender, and
-     isTrustedSender (splitpage://app/ only) is what keeps it that way. */
+     else: no file, draft or history handler accepts a strip sender. What
+     keeps it that way is one column of desktop/ipc-channels.js — these nine
+     rows are the only ones that list splitpage://tabstrip, and the strip's
+     preload is handed exactly those nine. */
 
-  ipcMain.on("splitpage:tabstrip-window-id-sync", (event) => {
-    const w = isTrustedTabStripSender(event) ? tabStripWindowOf(event) : null;
-    event.returnValue = w ? w.id : null;
+  ipcOnSync("splitpage:tabstrip-window-id-sync", (event) => {
+    const w = tabStripWindowOf(event);
+    return w ? w.id : null;
   });
 
-  ipcMain.handle("splitpage:tabstrip-get-state", async (event) => {
-    if (!isTrustedTabStripSender(event)) throw new Error("untrusted sender");
+  ipcHandle("splitpage:tabstrip-get-state", async (event) => {
     const w = tabStripWindowOf(event);
     return w ? shellStateForWindow(w.id) : null;
   });
 
-  /* Every strip command validates its tabId as 32 hex AND as a tab that
-     actually exists — a strip page can otherwise name any string it likes. */
-  const stripTab = (event, tabId) => {
-    if (!isTrustedTabStripSender(event)) return null;
-    if (typeof tabId !== "string" || !TAB_OR_WINDOW_ID_RE.test(tabId)) return null;
-    return tabs.get(tabId) || null;
-  };
+  /* Every strip command's tabId is typed as 32 hex by the table, and the
+     gate has already refused anything else — a strip page can otherwise name
+     any string it likes. What is left for here is the half a schema cannot
+     know: whether the id names a tab that still exists. */
+  const stripTab = (_event, tabId) => tabs.get(tabId) || null;
 
-  ipcMain.on("splitpage:tabstrip-new-tab", (event) => {
-    const w = isTrustedTabStripSender(event) ? tabStripWindowOf(event) : null;
+  ipcOn("splitpage:tabstrip-new-tab", (event) => {
+    const w = tabStripWindowOf(event);
     if (w) createTab(w.id, { source: { kind: "blank" }, launchIntent: { type: "blank" } });
   });
 
-  ipcMain.on("splitpage:tabstrip-activate", (event, tabId) => {
+  ipcOn("splitpage:tabstrip-activate", (event, tabId) => {
     const tab = stripTab(event, tabId);
     if (tab) activateTab(tab.id);
   });
 
-  ipcMain.on("splitpage:tabstrip-close", (event, tabId) => {
+  ipcOn("splitpage:tabstrip-close", (event, tabId) => {
     const tab = stripTab(event, tabId);
     if (tab) requestCloseTab(tab.id);
   });
 
-  ipcMain.on("splitpage:tabstrip-reorder", (event, tabId, index) => {
+  ipcOn("splitpage:tabstrip-reorder", (event, tabId, index) => {
     const tab = stripTab(event, tabId);
     if (tab && Number.isInteger(index)) reorderTab(tab.id, index);
   });
 
-  ipcMain.on("splitpage:tabstrip-move-here", (event, tabId, dropIndex) => {
+  ipcOn("splitpage:tabstrip-move-here", (event, tabId, dropIndex) => {
     const tab = stripTab(event, tabId);
     const w = tab ? tabStripWindowOf(event) : null;
     if (tab && w) moveTabToWindow(tab.id, w.id, Number.isInteger(dropIndex) ? dropIndex : undefined);
   });
 
-  ipcMain.on("splitpage:tabstrip-tear-off", (event, tabId, screenX, screenY) => {
+  ipcOn("splitpage:tabstrip-tear-off", (event, tabId, screenX, screenY) => {
     const tab = stripTab(event, tabId);
     if (tab) tearOffToNewWindow(tab.id, Number(screenX), Number(screenY));
   });
@@ -5334,9 +5411,7 @@ function registerIpc() {
      answers the same TEST_MODE boolean that already governs every dialog
      in this process (see section 1), nothing a normal launch couldn't
      already infer by watching dialogs never appear. */
-  ipcMain.on("splitpage:is-test-mode-sync", (event) => {
-    event.returnValue = isTrustedSender(event) ? TEST_MODE : false;
-  });
+  ipcOnSync("splitpage:is-test-mode-sync", () => TEST_MODE);
 
   if (TEST_MODE) {
     /* TEST_MODE-only bridge for desktop/test/smoke.mjs. A page-initiated
@@ -5357,8 +5432,7 @@ function registerIpc() {
        user can actually do. Gated on TEST_MODE at registration, not just
        inside the handler, so the channel has no listener — and therefore
        no effect — at all in a normal launch. */
-    ipcMain.on("splitpage:test-request-close", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-request-close", (event) => {
       const tab = tabOf(event);
       const w = tab ? windowsById.get(tab.windowId) : null;
       const win = w ? w.win : BrowserWindow.fromWebContents(event.sender);
@@ -5367,8 +5441,7 @@ function registerIpc() {
 
     /* The Ctrl+W path for the calling tab, so a test can close ONE tab of a
        window without going near the window itself. */
-    ipcMain.on("splitpage:test-request-close-tab", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-request-close-tab", (event) => {
       const tab = tabOf(event);
       if (tab) requestCloseTab(tab.id);
     });
@@ -5377,8 +5450,7 @@ function registerIpc() {
        Quitting with a dirty window still has to prompt — app.quit() asks
        every open BrowserWindow to close first, which fires the same
        win.on('close') this whole fix is about. */
-    ipcMain.on("splitpage:test-request-quit", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-request-quit", (event) => {
       app.quit();
     });
 
@@ -5389,8 +5461,7 @@ function registerIpc() {
        ask about ANOTHER tab of the same run — the driving page cannot be the
        crashed one it wants to look at — and can name only a tab that exists.
        TEST_MODE only, like every hook in this block. */
-    ipcMain.handle("splitpage:test-draft-status", async (event, tabId) => {
-      requireTrusted(event);
+    ipcHandle("splitpage:test-draft-status", async (event, tabId) => {
       const named = typeof tabId === "string" && TAB_OR_WINDOW_ID_RE.test(tabId) ? tabs.get(tabId) : null;
       const tab = named || tabOf(event);
       const id = tab ? tab.id : null;
@@ -5408,8 +5479,7 @@ function registerIpc() {
        the hold, the reload, the crash-loop guard — instead of describing it.
        The page dies without unloading, which is exactly the point: whatever
        it had not written is gone, and only its draft can bring it back. */
-    ipcMain.on("splitpage:test-crash-renderer", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-crash-renderer", (event) => {
       event.sender.forcefullyCrashRenderer();
     });
 
@@ -5419,8 +5489,7 @@ function registerIpc() {
        planHistoryEviction still answers exactly what the renderer's original
        does: two copies of a policy stay honest only if something compares
        them. TEST_MODE only, like every hook in this block. */
-    ipcMain.handle("splitpage:test-history-plan", async (event, fixture) => {
-      requireTrusted(event);
+    ipcHandle("splitpage:test-history-plan", async (event, fixture) => {
       const f = fixture || {};
       return planHistoryEviction(f.docs, f.capBytes, f.nowMs, f.opts);
     });
@@ -5432,8 +5501,7 @@ function registerIpc() {
        function whether it would have been fooled by it. Asking the function
        is the assertion — reading DUP_TRUST_BIRTHTIME out of the source would
        only prove a constant's spelling. */
-    ipcMain.handle("splitpage:test-dup-loser", async (event, a, b) => {
-      requireTrusted(event);
+    ipcHandle("splitpage:test-dup-loser", async (event, a, b) => {
       const claim = (c) => ({
         docId: String((c && c.docId) || ""),
         homeKey: String((c && c.homeKey) || ""),
@@ -5451,8 +5519,7 @@ function registerIpc() {
        exercises the real paths rather than a test-only imitation of them —
        and it does it without a single real click, which is what keeps a run
        on this machine invisible (invariant #33). */
-    ipcMain.handle("splitpage:test-shell", async (event, op, args) => {
-      requireTrusted(event);
+    ipcHandle("splitpage:test-shell", async (event, op, args) => {
       const caller = tabOf(event);
       const a = args || {};
       const listTargets = () => ({

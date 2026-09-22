@@ -48,6 +48,9 @@ jobs:
       - name: Desktop drafts unit tests
         run: node desktop/test/drafts.test.mjs
 
+      - name: Desktop IPC channel table
+        run: node desktop/test/ipc-table.test.mjs
+
       - name: Server tests
         run: node tools/test-server.mjs
 
