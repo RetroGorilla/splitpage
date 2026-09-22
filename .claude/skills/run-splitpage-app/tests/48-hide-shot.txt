@@ -1,0 +1,190 @@
+# Hide shot scenes (issue #25): a reading toggle, not a document edit — every
+# scene marked Shot collapses into one "N shot scenes hidden" strip between
+# the scenes still open, remembered per device (localStorage), never dirtying
+# the document. Find & replace, comments "jump to" and tag "jump to" all
+# expand a hidden run rather than silently failing to find their target, a
+# scene that turns Shot while visible gets a short grace before it collapses,
+# and the split view, the writer and the teleprompter all agree on what is
+# currently hidden.
+#
+# Everything here drives the app the way a person would — clicks and real
+# key events — rather than reaching into `state`, which is private to the
+# app's own closure and unreachable from a driver script.
+
+open
+
+# --- a reading preference, not an edit — toggling it never dirties a clean
+#     document (checked here, before anything else has a chance to dirty it
+#     for a real reason) ---------------------------------------------------
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+key ctrl+alt KeyH
+sleep 200
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+key ctrl+alt KeyH
+sleep 200
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+
+# --- build a small fixture on top of the two seed rows: r1, r2 (r2 already
+#     carries the seed's own comment — reused below for the comments test) --
+jsclick .add-row-bar [data-action="add-row"]
+sleep 200
+jsclick .add-row-bar [data-action="add-row"]
+sleep 200
+expect document.querySelectorAll('#rows .row').length == 4
+
+# 3rd row: a real {location} tag plus a unique findable word, typed for real
+# so the tag registry and the find index both see it exactly as the app would
+caret #rows .row:nth-child(3) .audio-cell .cell-editable
+press A {studio} shot with the rare word zephyrion in it.
+sleep 500
+expect document.querySelectorAll('#rows .row:nth-child(3) .tag-anchor').length == 1
+
+# --- nothing collapses until the toggle is on -------------------------------
+jsclick #rows .row[data-id="r2"] .status-btn
+jsclick #rows .row[data-id="r2"] .status-btn
+sleep 200
+expect document.querySelector('#rows .row[data-id="r2"]').classList.contains('is-shot')
+expect document.querySelectorAll('#rows .row').length == 4
+expect document.querySelectorAll('.hidden-shot-strip').length == 0
+
+# --- File menu entry: off by default, says what is on ----------------------
+click #btn-file
+sleep 200
+expect document.getElementById('menu-hide-shot').textContent == Hide shot scenes: off
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == false
+
+jsclick #menu-hide-shot
+sleep 300
+expect document.getElementById('file-menu').hidden
+expect localStorage.getItem('splitpage-hide-shot') == 1
+
+# r2 is the only Shot scene so far: one strip, everything else still shown
+expect document.querySelectorAll('#rows .row').length == 3
+expect document.querySelectorAll('#rows .hidden-shot-strip').length == 1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1
+expect document.querySelector('#rows .row[data-id="r2"]') === null
+
+# --- the runtime chip shows remaining / total while the toggle is on -------
+expect document.getElementById('runtime-total').textContent.indexOf("/") !== -1
+
+# --- the menu label flips with it -------------------------------------------
+click #btn-file
+sleep 200
+expect document.getElementById('menu-hide-shot').textContent == Hide shot scenes: on
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == true
+jsclick #file-menu-close
+
+# --- click a strip open, then reset with the keyboard shortcut -------------
+jsclick .hidden-shot-strip
+sleep 200
+expect document.querySelectorAll('#rows .row').length == 4
+expect document.querySelectorAll('.hidden-shot-strip').length == 0
+
+# Ctrl/Cmd+Alt+H off, then on again — re-enabling starts a clean slate, so the
+# peek above does not carry over
+key ctrl+alt KeyH
+sleep 200
+expect document.querySelectorAll('#rows .row').length == 4
+key ctrl+alt KeyH
+sleep 200
+expect document.querySelectorAll('#rows .row').length == 3
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1
+
+# --- delayed hide: a scene turning Shot while visible stays put for a beat -
+# (the tagged 3rd row is still a plain .row at this position — only r2, right
+# before it, has folded into the strip so far)
+jsclick #rows .row:nth-child(3) .status-btn
+jsclick #rows .row:nth-child(3) .status-btn
+sleep 100
+expect document.querySelector('#rows .row:nth-child(3)').classList.contains('is-shot')
+# still visible right away — the click that set it must not yank it off screen
+expect document.querySelectorAll('#rows .row').length == 3
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("1 shot scene hidden") !== -1
+
+# it settles into the (now two-long, contiguous with r2) strip on its own
+wait document.querySelectorAll('#rows .row').length == 2
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("2 shot scenes hidden") !== -1
+
+# --- find & replace expands the whole hidden run to reach its match --------
+key ctrl KeyF
+sleep 200
+type zephyrion
+sleep 300
+expect document.getElementById('find-count').textContent == 1 of 1
+key Enter
+sleep 300
+expect Array.from(document.querySelectorAll('#rows .row')).some(function(r){return r.textContent.indexOf('zephyrion')!==-1;})
+expect document.querySelectorAll('.hidden-shot-strip').length == 0
+expect getSelection().toString().toLowerCase() == zephyrion
+click #find-close
+
+# --- reset, then comments "jump to" expands the run too --------------------
+key ctrl+alt KeyH
+sleep 150
+key ctrl+alt KeyH
+sleep 200
+expect document.querySelectorAll('.hidden-shot-strip').length == 1
+expect document.querySelector('.hidden-shot-strip').textContent.indexOf("2 shot scenes hidden") !== -1
+
+click #btn-comments
+wait document.querySelectorAll('.comment-card').length == 1
+click .comment-card
+wait document.querySelector('#rows .row[data-id="r2"]') !== null
+expect document.querySelectorAll('.hidden-shot-strip').length == 0
+expect document.querySelector('.cmt-anchor').classList.contains('flash')
+click #comments-panel-close
+
+# --- reset, then tag "jump to" (from an expanded Production card) expands --
+key ctrl+alt KeyH
+sleep 150
+key ctrl+alt KeyH
+sleep 200
+expect document.querySelectorAll('.hidden-shot-strip').length == 1
+
+click #btn-production
+wait document.querySelectorAll('#production-list .tag-entity').length == 1
+jsclick .tag-entity-head
+wait document.querySelectorAll('.tag-scene').length == 1
+jsclick .tag-scene
+wait Array.from(document.querySelectorAll('#rows .row')).some(function(r){return r.textContent.indexOf('zephyrion')!==-1;})
+expect document.querySelectorAll('.hidden-shot-strip').length == 0
+click #production-close
+
+# --- the writer respects it too ---------------------------------------------
+key ctrl+alt KeyH
+sleep 150
+key ctrl+alt KeyH
+sleep 200
+expect document.querySelectorAll('.hidden-shot-strip').length == 1
+
+click #btn-write
+wait document.querySelectorAll('#writer-doc .wr-block').length == 2
+expect document.querySelectorAll('#writer-doc .hidden-shot-strip').length == 1
+jsclick #writer-doc .hidden-shot-strip
+wait document.querySelectorAll('#writer-doc .wr-block').length == 4
+expect document.querySelectorAll('#writer-doc .hidden-shot-strip').length == 0
+jsclick #wr-close
+sleep 300
+
+# --- the teleprompter leaves hidden scenes out of the read ------------------
+key ctrl+alt KeyH
+sleep 150
+key ctrl+alt KeyH
+sleep 200
+click #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('prompter-content').textContent.indexOf("zephyrion") === -1
+expect document.getElementById('prompter-content').textContent.indexOf("welcome back") !== -1
+jsclick #pp-close
+
+# Per-device persistence itself (`localStorage.getItem('splitpage-hide-shot')`)
+# is already checked above, right after every toggle — the same mechanism
+# 32-prompter-mirror.txt's own goto-reload leg proves survives a reload, and
+# repeating that here would only mean reloading at the end of a suite this
+# busy, which SKILL.md's driver gotchas warn aborts the CDP socket rather
+# than proving anything about the app.
+
+quit

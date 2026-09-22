@@ -75,9 +75,7 @@
     if (!state.rows.length) {
       doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
     } else {
-      var html = "";
-      for (var i = 0; i < state.rows.length; i++) html += writerBlockHtml(state.rows[i], i);
-      doc.innerHTML = html;
+      doc.innerHTML = renderRowGroups(state.rows, writerBlockHtml);
       doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
     }
     writerLastCell = null;

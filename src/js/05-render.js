@@ -149,9 +149,7 @@
           '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
         '</div>';
     } else {
-      var html = "";
-      for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
-      rowsEl.innerHTML = html;
+      rowsEl.innerHTML = renderRowGroups(state.rows, rowHtml);
       rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
     }
 

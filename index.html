@@ -339,6 +339,29 @@
   .row.is-shot { background: color-mix(in srgb, var(--ok) 6%, transparent); }
   .row.is-shot:hover { background: color-mix(in srgb, var(--ok) 10%, transparent); }
 
+  /* --- hidden shot scenes (issue #25) --- */
+  .hidden-shot-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px;
+    padding: 7px 18px;
+    border: none;
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--ok) 8%, transparent);
+    color: var(--text-dim);
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-align: left;
+    cursor: pointer;
+  }
+  .hidden-shot-strip:hover { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--text); }
+  .hidden-shot-strip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .hidden-shot-strip .hidden-shot-hint { color: var(--text-faint); font-weight: 400; }
+  #writer-doc .hidden-shot-strip { margin: 4px 0 12px; border-radius: 8px; border-top: none; }
+
   /* --- drag to reorder --- */
   .row.is-dragging { opacity: 0.38; }
   .row.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
@@ -3208,6 +3231,13 @@
           <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
           <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
           <div class="menu-sep"></div>
+          <!-- Collapses every scene marked Shot into a thin strip — issue #25.
+               Says what is on, not what pressing it does (see menu-autosave);
+               updateHideShotMenu() (01b-hide-shot.js) keeps aria-checked and
+               the checkmark in sync. Ctrl/Cmd+Alt+H, mirrored in the desktop
+               View menu (desktop/main.js). -->
+          <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+          <div class="menu-sep"></div>
           <!-- Ctrl+F everywhere else; this entry exists because phone
                keyboards have no Ctrl -->
           <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
@@ -3969,6 +3999,7 @@ node update.mjs           # download and verify it</code></pre>
 <p><strong>Getting the narration back out.</strong> File ▸ <strong>Narration only</strong> exports the Audio column as an ordinary document — <code>.docx</code> to hand to a voice artist or carry into Word, <code>.txt</code> for anything else. One paragraph per scene, no visual column, no breakdown, no comments. That's the same shape <strong>Paste a script…</strong> reads back in its paragraph mode, so narration written elsewhere and pasted in lands one paragraph per scene — and a <code>.txt</code> exported here and re-imported gives you your scenes back, plus one extra row holding the title line, which you delete. The same button is on the writer's own bar.</p>
 <p><strong>Runtime estimate.</strong> The chip beside your name shows how long the Audio column takes to read, and each scene shows its own estimate in the gutter. Visual notes are directions, not spoken words, so they don't count. Click the chip to set your reading speed — it's saved with the file, so the estimate means the same thing to whoever opens it next.</p>
 <p><strong>Scene status.</strong> The dot in each scene's gutter cycles <strong>To do → Ready → Shot</strong>. Shot scenes are tinted, and a counter appears in the header once you've shot anything. In the teleprompter, <strong>Skip shot</strong> leaves those scenes out, so on day two you only read what's left.</p>
+<p><strong>Hide shot scenes.</strong> File ▸ <strong>Hide shot scenes</strong> (or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>) collapses every Shot scene into a thin "N shot scenes hidden" strip — click one open to see it again. The runtime chip switches to showing what's left to read alongside the total. It's a reading preference for this device, like Mirror/Flip below, so it never touches the file: changing a scene you can see to Shot gives it a moment before it collapses, and Find, comments and tag jump-to all expand a hidden scene rather than missing it. The writer and the teleprompter both honour it too.</p>
 <p><strong>Mentions you forgot to tag.</strong> Once something is in the breakdown, Splitpage watches the Visual column for it. Write "gaffer tape" into a scene without labelling it and the words get a faint dotted underline, with a small <strong>Tag gaffer tape</strong> offer below them — <kbd>Tab</kbd> takes it, or tap it on a phone. <kbd>Esc</kbd> waves it off. Nothing about the document changes until you accept, and the underline is painted over the text rather than wrapped around it, so it can't touch what you've written.</p>
 <p>This matters more than it looks: an untagged mention is a mention nothing is counting, so that item's mention count and scene list are both short — and the <strong>Shoot</strong> grouping is missing a scene it should have listed.</p>
 <p><strong>Staying with the scene.</strong> Delete or paste a large amount of text and the page follows you — it doesn't just sit where it was and let the scene you were editing scroll off somewhere else. That's the moment it's easiest to lose your place in the script, so Splitpage keeps the scene you're actually in front of you rather than leaving the page static.</p>
@@ -4550,7 +4581,18 @@ node update.mjs           # download and verify it</code></pre>
   function updateScriptStats() {
     if (!state) return;
     var totalEl = document.getElementById("runtime-total");
-    if (totalEl) totalEl.textContent = formatDuration(totalSeconds());
+    if (totalEl) {
+      /* With shot scenes hidden, the number that matters is what's left to
+         record — but the total is still worth keeping in view, so both show. */
+      if (hideShotScenes) {
+        var remaining = state.rows.reduce(function (n, r) {
+          return n + (r.status === "shot" ? 0 : rowSeconds(r));
+        }, 0);
+        totalEl.textContent = formatDuration(remaining) + " / " + formatDuration(totalSeconds());
+      } else {
+        totalEl.textContent = formatDuration(totalSeconds());
+      }
+    }
 
     var chip = document.getElementById("progress-chip");
     var text = document.getElementById("progress-text");
@@ -4607,14 +4649,168 @@ node update.mjs           # download and verify it</code></pre>
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
     var row = state.rows[idx];
+    var wasShot = row.status === "shot";
     row.status = nextRowStatus(row.status);
     stampRow(row);
     markDirty();
+    /* A scene turning Shot while the toggle is on stays visible for a beat
+       (armShotHideGrace, 01b-hide-shot.js) rather than collapsing out from
+       under the click that just changed it. Leaving Shot cancels any such
+       grace still pending — nothing left to delay. */
+    if (hideShotScenes) {
+      if (!wasShot && row.status === "shot") armShotHideGrace(row.id);
+      else if (wasShot && row.status !== "shot") clearShotHideGrace(row.id);
+    }
     /* full render only if the row isn't on screen to patch (it always is) */
     if (!paintRowStatus(row)) render();
     updateScriptStats();          /* the shot counter in the header */
     scheduleProductionRefresh();  /* the Shoot view counts shot scenes */
     queueAutoSave();
+  }
+  /* ================= hide shot scenes (issue #25) =================
+
+     A reading mode, not a document change: every scene marked Shot
+     collapses into a thin "N shot scenes hidden" strip, so a half-finished
+     script reads as what's left to record. Lives in localStorage keyed to
+     this device — like the writer's remembered text size and the
+     prompter's mirror/flip — never in `state`, so it never dirties the
+     document or travels with the file (invariant: HANDOFF's escaping rule
+     aside, a reading preference is not something the next person to open
+     this script should inherit).
+
+     `expandedShotRowIds` is the "peek" list: a row id in here is shown in
+     full even though it is Shot, either because someone clicked its hidden
+     strip open, a jump landed on it, or it only just became Shot and is
+     still in its short grace window (armShotHideGrace below). It is purely
+     in-memory UI state, rebuilt fresh from nothing every reload — there is
+     nothing here worth persisting. */
+  var HIDE_SHOT_KEY = "splitpage-hide-shot";
+  var HIDE_SHOT_GRACE_MS = 1400;
+
+  function readHideShotFlag() {
+    try { return localStorage.getItem(HIDE_SHOT_KEY) === "1"; } catch (e) { return false; }
+  }
+
+  var hideShotScenes = readHideShotFlag();
+  var expandedShotRowIds = {};
+  var shotHideTimers = {};
+
+  function isRowHiddenByShotToggle(row) {
+    return !!(hideShotScenes && row.status === "shot" && !expandedShotRowIds[row.id]);
+  }
+
+  /* The menu entry says what is on, not what pressing it does — same reason
+     updateAutoSaveMenu() (14-export.js) does it this way. */
+  function updateHideShotMenu() {
+    var item = document.getElementById("menu-hide-shot");
+    if (!item) return;
+    item.textContent = "Hide shot scenes: " + (hideShotScenes ? "on" : "off");
+    item.setAttribute("aria-checked", hideShotScenes ? "true" : "false");
+  }
+
+  function setHideShotScenes(on) {
+    on = !!on;
+    if (on === hideShotScenes) return;
+    hideShotScenes = on;
+    /* Turning it on starts a clean slate — any earlier peek is stale the
+       moment hiding is off, and re-enabling should collapse everything
+       Shot again rather than remember what used to be expanded. */
+    if (on) expandedShotRowIds = {};
+    try { localStorage.setItem(HIDE_SHOT_KEY, on ? "1" : "0"); } catch (e) {}
+    updateHideShotMenu();
+    if (state) render();
+  }
+
+  function toggleHideShotScenes() {
+    setHideShotScenes(!hideShotScenes);
+    showToast(hideShotScenes
+      ? "Hiding shot scenes — collapsed into strips you can click open."
+      : "Showing every scene again.", "ok");
+  }
+
+  /* Changing a VISIBLE scene to Shot while the toggle is on must not yank
+     it out from under the click that just landed on it — so it stays
+     expanded for a short grace window, then settles into its strip on its
+     own. Called only from cycleRowStatus (01-scene-status.js). */
+  function armShotHideGrace(rowId) {
+    expandedShotRowIds[rowId] = true;
+    if (shotHideTimers[rowId]) clearTimeout(shotHideTimers[rowId]);
+    shotHideTimers[rowId] = setTimeout(function () {
+      delete shotHideTimers[rowId];
+      delete expandedShotRowIds[rowId];
+      render();
+    }, HIDE_SHOT_GRACE_MS);
+  }
+
+  /* A scene leaving Shot status (by whatever path) has nothing left to hide
+     or to grace — drop any pending timer so a stale one can't fire later
+     and undo an expand a different action already made permanent. */
+  function clearShotHideGrace(rowId) {
+    if (shotHideTimers[rowId]) { clearTimeout(shotHideTimers[rowId]); delete shotHideTimers[rowId]; }
+  }
+
+  /* Find & replace, comments "jump to" and tag "jump to" all land on a row
+     by querying `#rows .row[data-id=...]` directly — which finds nothing
+     once that row is folded into a strip. Called before any of those
+     queries: if the row is currently hidden, expand the whole contiguous
+     run of Shot scenes it belongs to (not just the one row — a lone row
+     poking out of an otherwise-collapsed run reads as broken) and repaint
+     so the caller's own lookup succeeds right after this returns. */
+  function revealRow(rowId) {
+    if (!hideShotScenes || !state) return;
+    var idx = findRowIndex(rowId);
+    if (idx === -1 || !isRowHiddenByShotToggle(state.rows[idx])) return;
+    var start = idx, end = idx;
+    while (start > 0 && state.rows[start - 1].status === "shot") start--;
+    while (end < state.rows.length - 1 && state.rows[end + 1].status === "shot") end++;
+    for (var i = start; i <= end; i++) expandedShotRowIds[state.rows[i].id] = true;
+    render();
+  }
+
+  /* The strip itself — a real <button> so Enter/Space open it for free,
+     exactly like every other data-action control in this app. */
+  function hiddenShotStripHtml(ids) {
+    var count = ids.length;
+    var label = count + " shot scene" + (count === 1 ? "" : "s") + " hidden";
+    return '<button type="button" class="hidden-shot-strip" data-action="expand-hidden-shot" data-ids="' +
+      escapeHtml(ids.join(",")) + '" title="Click to show">' +
+        '<span class="hidden-shot-label">' + escapeHtml(label) + '</span>' +
+        '<span class="hidden-shot-hint">Click to show</span>' +
+      '</button>';
+  }
+
+  /* Expand every id named on a clicked strip — the run it represents,
+     exactly as built below. */
+  function expandHiddenShotStrip(idsAttr) {
+    if (!idsAttr) return;
+    idsAttr.split(",").forEach(function (id) { if (id) expandedShotRowIds[id] = true; });
+    render();
+  }
+
+  /* Shared by render() (05-render.js) and renderWriter() (19-writer.js): walk
+     `rows` in document order, handing each visible one to `rowRenderer(row,
+     index)` — same signature both rowHtml() and writerBlockHtml() already
+     have — and folding every contiguous run of hidden-by-toggle rows into
+     one strip. `index` is always the row's real position in the document,
+     never a "visible-only" count, so scene numbers never shift just because
+     the toggle is on. */
+  function renderRowGroups(rows, rowRenderer) {
+    var html = "";
+    var i = 0;
+    while (i < rows.length) {
+      var row = rows[i];
+      if (isRowHiddenByShotToggle(row)) {
+        var ids = [];
+        var j = i;
+        while (j < rows.length && isRowHiddenByShotToggle(rows[j])) { ids.push(rows[j].id); j++; }
+        html += hiddenShotStripHtml(ids);
+        i = j;
+      } else {
+        html += rowRenderer(row, i);
+        i++;
+      }
+    }
+    return html;
   }
   /* ================= state ================= */
 
@@ -8998,9 +9194,7 @@ node update.mjs           # download and verify it</code></pre>
           '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
         '</div>';
     } else {
-      var html = "";
-      for (var i = 0; i < state.rows.length; i++) html += rowHtml(state.rows[i], i);
-      rowsEl.innerHTML = html;
+      rowsEl.innerHTML = renderRowGroups(state.rows, rowHtml);
       rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
     }
 
@@ -11549,6 +11743,7 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function jumpToTag(rowId, key) {
+    revealRow(rowId);
     var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
     if (!row) { showToast("That scene is no longer here.", "warn"); return; }
     row.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -13182,6 +13377,7 @@ node update.mjs           # download and verify it</code></pre>
   function revealFindMatch() {
     if (findIndex < 0 || !findMatches[findIndex]) return;
     var m = findMatches[findIndex];
+    revealRow(m.rowId);
     var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
     if (!cell) return;
     var needle = findNeedle();
@@ -13733,6 +13929,24 @@ node update.mjs           # download and verify it</code></pre>
     return !!document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   }
 
+  /* anchorLiveText's fallback for a row the "hide shot scenes" toggle
+     (issue #25) has folded into a strip: the anchor is not missing, it just
+     is not rendered right now. Re-derives its text from the row's own
+     stored HTML — the same source rowHtml() would render from — so a
+     hidden comment never reads as orphaned. Returns null exactly when the
+     span really is gone, same as the DOM path. */
+  function anchorTextFromState(cmtId) {
+    if (!state) return null;
+    var cIdx = findCommentIndex(cmtId);
+    if (cIdx === -1) return null;
+    var c = state.comments[cIdx];
+    var row = state.rows[findRowIndex(c.rowId)];
+    if (!row) return null;
+    var body = inertBody(row[c.field] || "");
+    var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(cmtId) + '"]');
+    return span ? span.textContent : null;
+  }
+
   /* The `.cmt-anchor` span is editable on purpose — a comment must never
      lock the writer out of their own sentence — so the words inside it can
      drift away from `c.quotedText` without the anchor itself disappearing.
@@ -13741,7 +13955,8 @@ node update.mjs           # download and verify it</code></pre>
      Returns null when the span itself is gone (the orphaned case). */
   function anchorLiveText(cmtId) {
     var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
-    return el ? el.textContent : null;
+    if (el) return el.textContent;
+    return anchorTextFromState(cmtId);
   }
 
   function unwrapAnchorInState(rowId, field, cmtId) {
@@ -13965,6 +14180,8 @@ node update.mjs           # download and verify it</code></pre>
   }
 
   function jumpToAnchor(cmtId) {
+    var cIdx = findCommentIndex(cmtId);
+    if (cIdx !== -1) revealRow(state.comments[cIdx].rowId);
     var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
     if (!el) {
       showToast("That text is no longer in the script.", "warn");
@@ -20201,6 +20418,7 @@ node update.mjs           # download and verify it</code></pre>
     else if (action === "gdoc-import") openGdocModal();
     else if (action === "save-back") saveBackToFile();
     else if (action === "autosave") toggleAutoSave();
+    else if (action === "toggle-hide-shot") toggleHideShotScenes();
     else if (action === "history") openHistoryPanel();
     else if (action === "export-docx") exportAs("docx");
     else if (action === "export-md") exportAs("md");
@@ -20723,9 +20941,7 @@ node update.mjs           # download and verify it</code></pre>
     if (!state.rows.length) {
       doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
     } else {
-      var html = "";
-      for (var i = 0; i < state.rows.length; i++) html += writerBlockHtml(state.rows[i], i);
-      doc.innerHTML = html;
+      doc.innerHTML = renderRowGroups(state.rows, writerBlockHtml);
       doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
     }
     writerLastCell = null;
@@ -21190,8 +21406,12 @@ node update.mjs           # download and verify it</code></pre>
   function buildPrompterContent() {
     /* On day two you only want what's left. Filtering here rather than
        hiding after the fact keeps the word index — and so voice follow —
-       lined up with what is actually on screen. */
-    var source = prompterSkipShot
+       lined up with what is actually on screen. Two independent reasons to
+       leave a Shot scene out: the prompter's own "Skip shot" toggle, and
+       the app-wide "hide shot scenes" toggle (issue #25) — either one is
+       enough. */
+    var skippingShot = prompterSkipShot || hideShotScenes;
+    var source = skippingShot
       ? state.rows.filter(function (row) { return row.status !== "shot"; })
       : state.rows;
     var lineHtml = source
@@ -21207,8 +21427,8 @@ node update.mjs           # download and verify it</code></pre>
 
     var content = document.getElementById("prompter-content");
     if (!paragraphs.length) {
-      content.innerHTML = '<div class="prompter-empty">' + (prompterSkipShot
-        ? "Every scene is marked Shot — switch off Skip shot to read them again."
+      content.innerHTML = '<div class="prompter-empty">' + (skippingShot
+        ? "Every scene is marked Shot — switch off Skip shot (or Hide shot scenes) to read them again."
         : "Nothing to read yet — add some audio text first.") + '</div>';
       promptWords = [];
     } else {
@@ -26921,8 +27141,12 @@ node update.mjs           # download and verify it</code></pre>
     var statusBtn = e.target.closest('[data-action="cycle-status"]');
     if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
 
+    var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
+    if (expandShotBtn) { expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids")); return; }
+
     var jumpRowBtn = e.target.closest('[data-action="jump-row"]');
     if (jumpRowBtn) {
+      revealRow(jumpRowBtn.getAttribute("data-row"));
       var target = document.querySelector('#rows .row[data-id="' + cssAttr(jumpRowBtn.getAttribute("data-row")) + '"]');
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -27456,6 +27680,7 @@ node update.mjs           # download and verify it</code></pre>
          File menu's autosave label and the save-state indicator get their
          first values here rather than waiting for the first keystroke. */
       updateAutoSaveMenu();
+      updateHideShotMenu();
       updateSaveStatus();
 
       if (applied.report) {
@@ -27607,6 +27832,22 @@ node update.mjs           # download and verify it</code></pre>
       e.preventDefault();
       if (findOpen) { document.getElementById("find-input").select(); }
       else openFindBar();
+    });
+
+    /* ---- hide shot scenes (issue #25) ----
+       Ctrl/Cmd+Alt+H: doesn't collide with Ctrl+F (find), Ctrl+B/I/U
+       (formatting), Ctrl/Alt+Enter (split/next scene) or Ctrl+Z (undo
+       split) — see 01b-hide-shot.js for the toggle itself. Mirrored as a
+       real Electron accelerator on the View menu (desktop/main.js), which
+       Electron consumes before it ever reaches this listener there — this
+       copy is what makes the shortcut work in the plain browser build. */
+    window.addEventListener("keydown", function (e) {
+      if (!(e.ctrlKey || e.metaKey) || !e.altKey) return;
+      if (e.key !== "h" && e.key !== "H") return;
+      if (!state) return;
+      if (document.querySelector(".modal-backdrop:not([hidden])")) return;
+      e.preventDefault();
+      toggleHideShotScenes();
     });
 
     /* ---- reading speed ---- */
@@ -28110,7 +28351,9 @@ node update.mjs           # download and verify it</code></pre>
     });
     writerDocEl.addEventListener("click", function (e) {
       var gutter = e.target.closest('[data-action="writer-jump"]');
-      if (gutter) jumpFromWriterToRow(gutter.getAttribute("data-row"));
+      if (gutter) { jumpFromWriterToRow(gutter.getAttribute("data-row")); return; }
+      var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
+      if (expandShotBtn) expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids"));
     });
 
     document.getElementById("wr-save").addEventListener("click", function () { saveDoc(); });

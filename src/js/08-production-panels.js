@@ -491,6 +491,7 @@
   }
 
   function jumpToTag(rowId, key) {
+    revealRow(rowId);
     var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
     if (!row) { showToast("That scene is no longer here.", "warn"); return; }
     row.scrollIntoView({ behavior: "smooth", block: "center" });

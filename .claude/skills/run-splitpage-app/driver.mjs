@@ -495,8 +495,10 @@ const KEY_MAP = {
   keyb:      { key: "b",         code: "KeyB",      vk: 66 },
   keyi:      { key: "i",         code: "KeyI",      vk: 73 },
   keyu:      { key: "u",         code: "KeyU",      vk: 85 },
+  // Ctrl/Cmd+Alt+H: hide-shot-scenes toggle (issue #25)
+  keyh:      { key: "h",         code: "KeyH",      vk: 72 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU";
+const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH";
 
 async function pressKey(name, mods = "") {
   // PowerShell hashtable lookup is case-insensitive; the suites write `key Tab`
