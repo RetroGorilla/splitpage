@@ -112,8 +112,31 @@ export function makeDesktopHandle(entry) {
    step lands. Once it does, a tab with a crash draft still being restored
    must never report itself dirty=false/pristine=true: main would treat it
    as a document with nothing to protect. */
+/* A tab main created to open a document — launchIntent 'open-file' or
+   'open-server', which is every restored tab and every routed open — boots
+   the starter document FIRST and is handed its real one afterwards. Until
+   that arrives the starter is not this tab's document, so nothing about it
+   is reported. Main's own record is the truth in that window (invariant
+   #42): a report of the starter carries no fileId and no serverKey, which
+   main reads — correctly, for any other report — as "this tab holds no
+   document any more", and it wiped the file or server the tab was created
+   for. Quit in that window and desktop-state.json saved the tab blank, so
+   the file did not come back next launch; CI's fast runner caught it every
+   time in DOC-CLAIMS' restore check, while this container, eight times
+   slower, never once did. handedDocumentSettled() ends the wait whether the
+   document opened or failed to — a file that will not open is then
+   honestly reported as no document. */
+var awaitingHandedDocument = false;
+
+export function handedDocumentSettled() {
+  if (!awaitingHandedDocument) return;
+  awaitingHandedDocument = false;
+  notifyDesktopDocumentState();
+}
+
 export function notifyDesktopDocumentState() {
   if (!S.DESKTOP || !S.state) return;
+  if (awaitingHandedDocument) return;
   var restoring = typeof draftRestorePending !== "undefined" && draftRestorePending;
   /* Where a server document lives is part of which document it is (#11):
      the same id on two servers is two documents, and a restored tab has to
@@ -394,6 +417,9 @@ export function initDesktop() {
      open. The main process queues these until this callback is
      registered, then flushes them, so nothing launched before this line
      ran is lost. */
+  var intent = S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type;
+  awaitingHandedDocument = intent === "open-file" || intent === "open-server";
+
   S.DESKTOP.onOpenFile(function (entry) {
     function proceed() {
       var handle = makeDesktopHandle(entry);
@@ -401,7 +427,7 @@ export function initDesktop() {
         return openProjectFile(file, handle);
       }).catch(function () {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
-      });
+      }).then(handedDocumentSettled);
     }
     /* The main process queues an open-file event until this callback is
        registered, then flushes it — which can mean it fires the instant
@@ -530,15 +556,16 @@ function openPendingServerDocForTab(serverDocId) {
   }
   var retried = false;
   function openIt() {
-    if (typeof openServerDoc !== "function") return;
+    if (typeof openServerDoc !== "function") { handedDocumentSettled(); return; }
     Promise.resolve(openServerDoc(serverDocId)).then(function (ok) {
       /* A token that looked fine and was not — remembered for this server
          before it restarted, so a new session no longer takes it — is only
          found out by this request: handleApiError() has dropped it and put
          the PIN dialog up. Wait for the PIN once more rather than leave a
          restored tab empty after the reader typed it. */
-      if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); }
-    });
+      if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); return; }
+      handedDocumentSettled();
+    }, handedDocumentSettled);
   }
 
   (function waitForDetect() {
