@@ -3151,17 +3151,44 @@
     top: 0;
     z-index: 120;
     background: var(--bg);
-    transition: padding-bottom var(--dur-move) var(--ease-standard),
-                box-shadow var(--dur-move) var(--ease-standard);
+    /* Only the shadow eases here, and it is the only thing in the header
+       that does not move. Everything that DOES move is animated by
+       20i-topbar.js with a transform once the class has flipped (#52) —
+       a padding-bottom easing over 180ms while the rest of the header
+       landed in a single frame was exactly the half-moving, half-snapping
+       mix the issue was about, and it would also lie to that file, which
+       measures the new layout the instant the class changes. */
+    transition: box-shadow var(--dur-move) var(--ease-standard);
   }
+  /* The containing block for the two rows the header sheds: they are taken
+     out of flow for the length of the movement rather than out of the
+     document, and must not escape the header to do it. */
+  .topbar > div:first-child { position: relative; }
   .topbar.is-condensed {
     align-items: center;
     padding-bottom: 10px;
     margin-bottom: 12px;
     box-shadow: 0 1px 0 var(--border), 0 8px 18px rgba(0, 0, 0, 0.06);
   }
-  .topbar.is-condensed .brand-row,
-  .topbar.is-condensed .subtitle { display: none; }
+  .topbar.is-condensed:not(.is-condensing) .brand-row,
+  .topbar.is-condensed:not(.is-condensing) .subtitle { display: none; }
+  /* A `display` flip cannot fade — the reason the sidebar below reaches for
+     `allow-discrete` — but here the height those two rows occupy is the
+     whole point of condensing, so waiting out a fade before taking it back
+     would only move the snap 180ms later. .is-condensing takes them out of
+     FLOW instead: the header re-flows around them in the frame the class
+     lands (which is what 20i-topbar.js measures), and they fade from where
+     they already stood, translated back there by the same FLIP that moves
+     everything else. That file drops the class when the fade is over and
+     `display: none` above takes it from there. Expanding is the other way
+     about: they return in flow and are faded in. */
+  .topbar.is-condensing .brand-row,
+  .topbar.is-condensing .subtitle {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-exit) var(--ease-exit);
+  }
   .topbar.is-condensed .doc-title {
     font-size: 17px;
     font-weight: 700;
@@ -3180,9 +3207,15 @@
   .topbar.is-condensed .stat-chips { margin: 0; }
 
   /* A viewer who asked for less motion gets the condensed layout with no
-     transition — the point is the space it saves, not the movement. */
+     transition — the point is the space it saves, not the movement.
+     20i-topbar.js makes the same test and stands the whole movement down,
+     so .is-condensing is never applied for such a viewer either; the rule
+     below is what the header states for itself rather than something that
+     file is trusted to prevent. */
   @media (prefers-reduced-motion: reduce) {
     .topbar { transition: none; }
+    .topbar.is-condensing .brand-row,
+    .topbar.is-condensing .subtitle { transition: none; }
   }
 
   /* ---------- sidebar slide-in (BACKLOG: slide-in animation for sidebars)
@@ -3222,14 +3255,33 @@
      arrived afterwards. Same duration and same curve as the panel itself is
      all it takes for the two to read as one movement.
 
+     Two declarations rather than one, the same shape .comments-panel and
+     .comments-panel[hidden] have a few lines above, because the panel does
+     not leave the way it arrives: it comes in over --dur-enter and goes out
+     over the shorter --dur-exit. One rule here meant the document opened
+     with the panel and then went on travelling for another 60ms after the
+     panel had closed — the half of the movement nobody is watching, but two
+     speeds for one movement all the same (#53). The transition that runs is
+     the one in the AFTER-change style, so the base rule is the closing one
+     and the .panel-open rule is the opening one. That also gets switching
+     panels right: .panel-open never comes off there, so a jump from a wide
+     Production panel to a narrow Comments panel is an arrival at a new
+     width, settling once on the enter curve rather than bouncing between
+     two.
+
      Not while the panel is being dragged: --open-panel-width is rewritten on
      every mousemove there, and a 180ms transition on each of them would
      leave the document lagging a fifth of a second behind the edge the user
      is holding. is-panel-resizing (03b-side-panels.js) is on the body for
-     exactly the span of the drag. It also keeps 50-panel-resize.txt reading
-     settled numbers rather than mid-transition ones. */
+     exactly the span of the drag, and this rule is last so it outranks the
+     .panel-open one it shares a specificity with. It also keeps
+     50-panel-resize.txt reading settled numbers rather than mid-transition
+     ones. */
   @media (min-width: 1100px) {
     #root {
+      transition: padding-right var(--dur-exit) var(--ease-exit);
+    }
+    body.panel-open #root {
       transition: padding-right var(--dur-enter) var(--ease-enter);
     }
     body.is-panel-resizing #root { transition: none; }
