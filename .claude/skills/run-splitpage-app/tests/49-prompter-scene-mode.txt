@@ -73,10 +73,16 @@ expect document.getElementById('pp-play').classList.contains('is-active')
 
 # r1's own narration ends in "works." — scroll just past that word's own
 # position (the exact reading-line math cueScene used to place it there)
-eval (function(){ var scroller = document.getElementById('prompter-scroll'); var guideOffset = scroller.clientHeight / 2; var last = Array.from(document.querySelectorAll('#prompter-content .w')).find(function (w) { return w.textContent === 'works.'; }); scroller.scrollTop = last.offsetTop - guideOffset + 1; return scroller.scrollTop; })()
+# and run the boundary check IN THE SAME EVALUATION. Play has started the
+# real prompterTick rAF loop, and headless Chromium does run it (throttled,
+# not stopped): with the scroll and the check in two driver commands, a
+# frame landing between them makes prompterTick itself see the boundary,
+# pause and advance to scene 2 first, so the check then finds nothing left
+# to trip and returns false (~1 run in 10; every run with a `sleep 100`
+# between them). No animation frame can run inside one synchronous task.
+expect (function(){ var scroller = document.getElementById('prompter-scroll'); var guideOffset = scroller.clientHeight / 2; var last = Array.from(document.querySelectorAll('#prompter-content .w')).find(function (w) { return w.textContent === 'works.'; }); scroller.scrollTop = last.offsetTop - guideOffset + 1; return window.__prompterTest.checkSceneBoundaryNow(); })() == true
 
-# --- auto-pause fires once, moves the target on, and does NOT re-scroll ---
-expect window.__prompterTest.checkSceneBoundaryNow() == true
+# --- auto-pause fired once, moved the target on, and did NOT re-scroll ---
 sleep 200
 expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 4
 expect !document.getElementById('pp-play').classList.contains('is-active')
