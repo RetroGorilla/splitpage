@@ -1042,9 +1042,27 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 48. **An exported bundle contains no key matching
     `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, asserted
     before any byte is written; an import carrying one is refused.**
+    The bundle (`20h-appdata.js`) is `{format:"splitpage-app-data",
+    version:1, exportedAt, appVersion, snapshots, history:{docs:[{docId,
+    title, lastOpenedAt, snapshots:[{meta, stateJson}]}], older, truncated},
+    blobs:{"<sha256 hex>":{mime, b64}}, missingBlobs:["<sha256 hex>"],
+    bookmarks, prefs}`. `blobs` (#82) holds every image an exported
+    snapshot names (`refsIn`) whose bytes the page could get, once each;
+    `missingBlobs` the ones it could not, which the export names in a
+    warning. Blob bytes count toward `HISTORY_EXPORT_CAP_BYTES` (200 MB)
+    with the snapshot bodies. Hex keys and `mime`/`b64` cannot match the
+    regex (hex has no t/o/k/s/p/l; values are never walked).
 49. **Import merges through the history store's public write path and
     never deletes; existing preferences are never overwritten; bookmarks
-    union by URL with local winning.**
+    union by URL with local winning.** Images first: `importHistoryBundle`
+    verifies each `blobs` entry (key is a sha, strict base64, at most
+    16 MiB, sniffed PNG/JPEG/GIF/WebP with a readable size, hashes to its
+    key) and awaits the blob registry's `persist()` for the ones that pass
+    BEFORE the first history put — no imported snapshot is stored naming an
+    image the store does not already hold durably. A blob that fails is
+    dropped and reported; its snapshots still import (placeholder). A blob
+    no snapshot in the file names is ignored. A bundle without `blobs`
+    (every pre-#82 export) imports exactly as before.
 50. **The 1.0.x removal in the installer waits for the old folder to
     disappear before writing** — the old uninstaller's detached `rmdir`
     runs ~2s after it exits, into the same folder. `installer/uninstall.ps1`
@@ -1112,7 +1130,7 @@ evaluation order via `_entry.js`):
 | `20c-help.js` | in-app Help modal, coach-mark tour |
 | `20d-formats.js` | the two document formats, hand-edit reconcile |
 | `20e-connect.js` | join-PIN dialog, server bookmarks, SSH helper |
-| `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49) |
+| `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |

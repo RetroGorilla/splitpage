@@ -127,6 +127,44 @@ eval (function(){ window.__reDoc1 = window.__reExport.history.docs.filter(functi
 expect window.__reDoc1.snapshots.length === 2
 
 # =============================================================================
+# 5. images (#82 P7) on the desktop path. The image registry (02c-blobs.js)
+# is pointed at the desktop blob backend (20f-desktop.js's
+# makeDesktopBlobBackend) over the fake's blob bridge, so its bytes live in
+# the fake's _blobs — main's <userData>/blobs, as far as the page can tell.
+# One image is seeded straight into that store (never through this page's
+# memory), named by a snapshot seeded straight into the fake's history
+# together with an image whose bytes exist nowhere.
+# =============================================================================
+eval (function(){ window.B = window.__blobsTest; window.hashOf = function(u8){ var r = B.intern(u8); return r ? r.sha256 : null; }; var c = document.createElement('canvas'); c.width = 23; c.height = 11; var g = c.getContext('2d'); g.fillStyle = '#a4c'; g.fillRect(0, 0, 23, 11); window.imgUrl = c.toDataURL('image/png'); var bin = atob(imgUrl.slice(imgUrl.indexOf(',') + 1)); window.imgBytes = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) imgBytes[i] = bin.charCodeAt(i); window.imgRec = B.intern(imgBytes); window.MISS = '9f'.repeat(32); window.__d3 = did('e3'); return !!(imgRec && A.useBlobBackend && D.makeBlobBackend); })()
+expect imgRec.mime === 'image/png' && imgRec.width === 23 && imgRec.height === 11
+
+eval (async function(){ window.fakeG = D.makeFakeBackend({history: true, blobs: true, blobHash: hashOf}); D.setBackend(window.fakeG); A.useBlobBackend(D.makeBlobBackend(window.fakeG)); window.__g1 = await fakeG.blobPut(imgRec.sha256, imgBytes); B.forgetMemory(); await fakeG.historyPut(window.__d3, {id: 'simg1', label: 'Img Snap', at: new Date(4000).toISOString(), atMs: 4000, by: 'Cara', rows: 2, title: 'Image Doc', kind: 'snapshot'}, JSON.stringify({rows: [{id: 'r1', audioText: 'pic', imageRef: imgRec}, {id: 'r2', audioText: 'gone', imageRef: {sha256: MISS, width: 4, height: 4, mime: 'image/png'}}], title: 'Image Doc', docId: window.__d3})); fakeG._blobCalls.length = 0; window.__imgBundle = await A.build(); return [__g1, Object.keys(__imgBundle.blobs), __imgBundle.missingBlobs]; })()
+expect __g1.ok === true && __g1.stored === true
+expect Object.keys(__imgBundle.blobs).join(',') === imgRec.sha256
+expect __imgBundle.blobs[imgRec.sha256].mime === 'image/png' && __imgBundle.blobs[imgRec.sha256].b64 === imgUrl.slice(imgUrl.indexOf(',') + 1)
+expect JSON.stringify(__imgBundle.missingBlobs) === JSON.stringify([MISS])
+# the bytes were read through the desktop bridge, not from page memory
+expect fakeG._blobCalls.some(function(c){ return c.op === 'get' && c.sha === imgRec.sha256; })
+expect __imgBundle.history.docs.filter(function(d){ return d.docId === window.__d3; })[0].snapshots.length === 1
+# invariant #48 still holds with hex keys and base64 in the bundle
+eval (function(){ var keys = []; (function walk(v){ if (!v || typeof v !== 'object') return; if (Array.isArray(v)) { v.forEach(walk); return; } Object.keys(v).forEach(function(k){ keys.push(k); walk(v[k]); }); })(__imgBundle); window.__imgBad = keys.filter(function(k){ return /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i.test(k); }); return __imgBad; })()
+expect __imgBad.length === 0
+expect (function(){ try { A.assertNoSecrets(__imgBundle); return true; } catch (e) { return false; } })()
+
+# Import into a FRESH fake: the image must be in its blob store before the
+# first snapshot is written. Both bridge calls are wrapped to log their
+# order and what the blob store held when history was first written.
+eval (function(){ window.fakeH = D.makeFakeBackend({history: true, blobs: true, blobHash: hashOf}); D.setBackend(window.fakeH); A.useBlobBackend(D.makeBlobBackend(window.fakeH)); B.forgetMemory(); window.__order = []; var put = fakeH.blobPut, hput = fakeH.historyPut; fakeH.blobPut = function(sha){ __order.push('blob:' + sha); return put.apply(this, arguments); }; fakeH.historyPut = function(docId, meta){ __order.push('hist:' + (meta && meta.id) + ':' + (fakeH._blobs[imgRec.sha256] ? 'held' : 'absent')); return hput.apply(this, arguments); }; return true; })()
+eval (async function(){ window.__imgImport = await A.importText(JSON.stringify(window.__imgBundle)); return [__imgImport, __order]; })()
+expect __imgImport.ok === true && __imgImport.history.failed === 0
+expect __imgImport.blobs.stored === 1 && __imgImport.blobs.refused.length === 0 && __imgImport.blobs.failed.length === 0
+expect __order.indexOf('blob:' + imgRec.sha256) !== -1 && __order.indexOf('blob:' + imgRec.sha256) < __order.indexOf('hist:simg1:held')
+expect __order.filter(function(x){ return x.indexOf('hist:') === 0 && /:absent$/.test(x); }).length === 0
+expect (function(){ var e = fakeH._blobs[imgRec.sha256]; return !!e && e.mime === 'image/png' && e.bytes.length === imgBytes.length && e.bytes.every(function(b, i){ return b === imgBytes[i]; }); })()
+expect fakeH._historyDump()[window.__d3].length === 1 && fakeH._historyDump()[window.__d3][0].stateJson.indexOf(MISS) !== -1
+eval (function(){ A.useBlobBackend(null); return true; })()
+
+# =============================================================================
 # cleanup
 # =============================================================================
 eval (function(){ D.restoreBackend(); localStorage.removeItem('splitpage-server-bookmarks'); localStorage.removeItem('splitpage-comment-author'); return true; })()
