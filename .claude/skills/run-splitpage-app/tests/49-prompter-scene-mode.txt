@@ -6,8 +6,8 @@
 #
 # The scroll-driven auto-pause can't be exercised with a real
 # requestAnimationFrame loop headless (SKILL.md "What this cannot test"), so
-# window.__prompterTest (20-teleprompter.js) exposes the pure boundary check
-# and a way to run it against a scrollTop this script sets directly — a
+# window.__prompterTest (20-teleprompter.js) exposes a way to run the
+# boundary check against a scrollTop this script sets directly — a
 # simulated scroll position, exactly as intended. The same test hook stands
 # in for Follow My Voice, which needs a real microphone.
 

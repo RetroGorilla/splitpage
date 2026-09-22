@@ -581,14 +581,6 @@ function makeFakeDesktopBackend(opts) {
   var openHandler = null;
   var menuHandler = null;
   var openServerDocHandler = null;
-  /* Write-only, and deliberately kept. Every other registration slot in this
-     fake backend has a _fire* twin below that a browser suite calls;
-     onRestoreNotice is the one that does not, so nothing reads this back yet.
-     Removing the variable would mean removing onRestoreNotice() itself, and
-     20g-drafts.js calls that at boot against the real bridge — the fake has
-     to answer it. The gap belongs to the suites, not to this file. */
-  /* eslint-disable-next-line no-unused-vars -- holds the renderer's callback
-     until a _fireRestoreNotice() exists to call it; see above. */
   var restoreNoticeHandler = null;
   var reassignDocIdHandler = null;
   function newId() { return "fake" + (nextId++); }
@@ -780,6 +772,10 @@ function makeFakeDesktopBackend(opts) {
     },
     _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
     _fireOpenServerDoc: function (payload) { if (openServerDocHandler) openServerDocHandler(payload); },
+    /* Stands in for main's splitpage:restore-notice — the {skipped:[{name,
+       reason}]} a launch sends when it could not bring back one or more
+       remembered tabs, answered by initDesktop()'s onRestoreNotice. */
+    _fireRestoreNotice: function (notice) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
     /* Stands in for main's duplicate-id verdict (DOC-CLAIMS): a suite can
        hand the page the exact {fromId, toId, otherTitle} message a real
        main process would send, without two Electron tabs. */
