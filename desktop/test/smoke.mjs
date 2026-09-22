@@ -3241,8 +3241,18 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     // "quit and restore → no reassignment": a graceful teardown persists the
     // session (both tabs), then a fresh launch on the same userDataDir
     // restores it — B's id is already unique, so nothing re-fires.
+    /* Evidence for the restore assertion below, captured because it failed
+       once on CI's fast runner (A came back as an untitled pristine tab, B
+       came back fine) and could not be reproduced here in eight runs. Main's
+       own view of every tab just before the quit, and the session file the
+       quit actually wrote, are what tell a race in A's last document-state
+       report apart from a race in the write. Printed only on failure. */
+    const preQuitListing = await shell(app.cdp, "listTargets", {}).catch((e) => ({ error: String(e && e.message || e) }));
     await teardown(app, tag + " (pre-quit)");
     app = null;
+    let persistedAtQuit = null;
+    try { persistedAtQuit = JSON.parse(fs.readFileSync(path.join(userDataDir, "desktop-state.json"), "utf8")); }
+    catch (e) { persistedAtQuit = { error: String(e && e.message || e) }; }
 
     const appRestored = await launchApp(target, { label: "dup-doc-id-restore", userDataDir });
     try {
@@ -3251,7 +3261,10 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
       const w = listing.windows[0];
       const restoredA = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(aPath).toLowerCase());
       const restoredB = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(bPath).toLowerCase());
-      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB, JSON.stringify(w));
+      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB,
+        JSON.stringify(w) + (restoredA && restoredB ? "" :
+          " || before quit, main held: " + JSON.stringify(preQuitListing) +
+          " || desktop-state.json after quit: " + JSON.stringify(persistedAtQuit)));
       if (restoredA && restoredB) {
         const cdpRA = await connectTab(appRestored, restoredA.tabId);
         const cdpRB = await connectTab(appRestored, restoredB.tabId);
