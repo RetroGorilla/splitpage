@@ -43,6 +43,14 @@ jobs:
       - name: Install build dependencies
         run: npm ci
 
+      # eslint over every source tree in the repo (#68): src/js, src/test,
+      # server/, desktop/, sw.js and the .mjs tooling at the root. It runs
+      # before the build check because it is the fastest thing here and
+      # because a `no-undef` in src/js is more useful read as itself than as
+      # whatever the browser suite turns it into four steps later.
+      - name: Lint
+        run: npm run lint
+
       # index.html is generated from src/. A commit where the two disagree is
       # always a mistake — either index.html was hand-edited (and those edits
       # are about to be thrown away) or src/ changed without a rebuild. The
