@@ -18,6 +18,11 @@
  * not the parts), and the hosting files (Dockerfile, DEPLOY.md), which are a
  * different job with a different audience.
  *
+ * index.html is generated and not in the repository (#80), so the build below
+ * is not a convenience — it is the only way the file the zip needs comes to
+ * exist. Nothing here reads a checked-in copy, and a checkout that has never
+ * been built packages exactly as well as one that has.
+ *
  * The zip is written here rather than shelled out to, because this has to
  * produce the same bytes on the Windows machine that cuts releases as on a
  * Linux CI box, and neither `zip` nor Compress-Archive is on both.
@@ -43,7 +48,17 @@ const VERSION = readFileSync(join(ROOT, "VERSION"), "utf8").trim();
    every release that nothing reads and that must never be read, so it is not
    written. release.json is no longer an input to packaging. */
 
-/* ---------- build first ---------- */
+/* ---------- build first ----------
+ *
+ * Unconditional, and before anything is staged: index.html and sw.js are both
+ * build outputs (#79, #80), and the whole point of packaging is to ship what
+ * the current source says, not whatever happens to be lying in the working
+ * tree. build.mjs is the same one CI runs, so the zip and the CI artifact are
+ * built by one code path.
+ *
+ * Shelled out rather than imported because build.mjs does its work at module
+ * top level and calls process.exit() on --check; a child process keeps that
+ * behaviour (and its exit code) out of this one. */
 
 const built = spawnSync(process.execPath, [join(ROOT, "build.mjs")], { cwd: ROOT, stdio: "inherit" });
 if (built.status !== 0) {
@@ -71,6 +86,12 @@ const FILES = [
   ["start.sh", 0o755],
   ["update.mjs", 0o644],
   ["README.md", 0o644],
+  /* The user guide, shipped beside the README the same way it sits beside it
+     in the repo: README.md is the repo-facing file and links to this one, and
+     this one is what an unzipped copy's reader actually wants. It is also the
+     source the in-app Help page inside index.html was rendered from, so the
+     two can never disagree about what the app does. */
+  ["docs/help.md", 0o644],
   ["VERSION", 0o644]
 ];
 

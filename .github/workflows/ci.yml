@@ -1,9 +1,13 @@
 # CI (issue #58).
 #
 # Fifty pull requests merged with nothing gating them. This runs what a
-# contributor would run before pushing: the build check, the unit tests that
+# contributor would run before pushing: the build, the unit tests that
 # exist, the two Node test scripts, and one browser suite driven through
 # driver.mjs under Playwright's Chromium.
+#
+# Since #80 it also PRODUCES something. index.html is generated and no longer
+# committed, so this job is where a built copy comes from: the `splitpage-app`
+# artifact on a green run is what a server deploy downloads (DEPLOY.md §2).
 #
 # driver.ps1 is not run here. It is Windows and Edge only, and since #57 the
 # Node driver's exit code agrees with its own RESULT line, which is what lets
@@ -45,18 +49,32 @@ jobs:
 
       # eslint over every source tree in the repo (#68): src/js, src/test,
       # server/, desktop/, sw.js and the .mjs tooling at the root. It runs
-      # before the build check because it is the fastest thing here and
+      # before the build because it is the fastest thing here and
       # because a `no-undef` in src/js is more useful read as itself than as
       # whatever the browser suite turns it into four steps later.
       - name: Lint
         run: npm run lint
 
-      # index.html is generated from src/. A commit where the two disagree is
-      # always a mistake — either index.html was hand-edited (and those edits
-      # are about to be thrown away) or src/ changed without a rebuild. The
-      # pre-commit hook makes the same check locally, but nothing installs it.
-      - name: index.html matches src/
-        run: node build.mjs --check
+      # index.html is generated and no longer committed (#80), so there is
+      # nothing here to check it against — CI is where it gets built. Every
+      # step below this one (the browser suites especially) runs against the
+      # index.html this produces, and the artifact at the end of the job is
+      # the same file.
+      - name: Build index.html and stamp sw.js
+        run: node build.mjs
+
+      # sw.js IS committed — it cannot be inlined into the page, so it is the
+      # file you edit as well as the file that ships, and the build only
+      # stamps its cache name from VERSION. The build above has just rewritten
+      # the working copy, so a diff here means the committed sw.js was stale:
+      # a version bump that never got rebuilt, which is exactly the deploy
+      # that would reuse the previous release's cache (#79).
+      - name: sw.js is committed with the current VERSION stamp
+        run: |
+          git diff --exit-code -- sw.js || {
+            echo "::error file=sw.js::sw.js's cache name does not match VERSION — run \`node build.mjs\` and commit sw.js"
+            exit 1
+          }
 
       # The pure cores (mergeStates, migrateRows, the .splitpage and .md
       # round-trips, deriveDocId, planHistoryEviction) are unit-tested
@@ -97,3 +115,25 @@ jobs:
       # that does not boot at all (#65).
       - name: Browser suite 52 (content security policy)
         run: node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/52-csp.txt
+
+      # The built app, as the one place anybody can get it now that it is not
+      # in the repository. Exactly the set of files DEPLOY.md §2 says to copy
+      # onto the server — including the Dockerfile, so the download IS the
+      # build context and `docker build` on it needs nothing else.
+      #
+      # Last, deliberately: a run whose tests failed uploads nothing, so an
+      # artifact that exists is one every check above it passed.
+      - name: Upload the built app
+        uses: actions/upload-artifact@v4
+        with:
+          name: splitpage-app
+          path: |
+            index.html
+            sw.js
+            manifest.webmanifest
+            icon.svg
+            Dockerfile
+            server/server.js
+            server/package.json
+          if-no-files-found: error
+          retention-days: 30

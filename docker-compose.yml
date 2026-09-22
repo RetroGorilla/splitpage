@@ -4,7 +4,12 @@
 # in front of your tunnel does that job, and does it better than anything I
 # would write here. Do NOT port-forward 8791 to the internet directly.
 #
-#   docker compose up -d --build
+#   node build.mjs && docker compose up -d --build
+#
+# The build.mjs is not optional in a repository checkout: index.html is
+# generated and is not committed (#80), and `build: .` here uses the checkout
+# as the image's build context. Deploying from CI's `splitpage-app` artifact
+# instead skips it — the artifact is already built.
 #
 # NOTE: stock Unraid does not ship `docker compose` — it comes with the
 # Compose Manager plugin. If you don't have it, DEPLOY.md §2 gives the

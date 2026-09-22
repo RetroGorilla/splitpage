@@ -32,15 +32,26 @@ Follow §3 before you share the link with anyone.
 > if you installed the *Compose Manager* plugin from Community Applications.
 > The steps below use plain `docker`, which always works. If you do have
 > Compose Manager, `docker compose up -d --build` in the source folder does the
-> same thing and you can skip to §3.
+> same thing and you can skip to §3 — but note that `docker-compose.yml` lives
+> in the repository, and a repository checkout has no `index.html` to build
+> from until you run `node build.mjs` in it. Deploying from the CI artifact
+> (§2.1) avoids the question entirely.
 
 ### 2.1 Get the files onto the server
 
-> **Build first if you are copying from the repository.** `index.html` is
-> generated from the repo's own `src/` folder — run `node build.mjs` and copy
-> the *result*. A checkout that has never been built either has no
-> `index.html` or has a stale one, and the container will happily serve it.
-> `node build.mjs --check` tells you which you have.
+**Take them from CI.** `index.html` is generated and is *not* in the
+repository — every green CI run builds it and uploads the deployable set as
+an artifact called **`splitpage-app`**. On the repository's **Actions** tab,
+open the run for the commit you want to deploy, and download `splitpage-app`
+from the *Artifacts* box at the bottom of the page. GitHub hands you a zip;
+its contents are exactly what goes on the server, `Dockerfile` included, so
+the unzipped folder is already a working `docker build` context.
+
+> **Building it yourself instead.** From a checkout: `npm install` once, then
+> `node build.mjs`, and copy `index.html`, `sw.js`, `manifest.webmanifest`,
+> `icon.svg`, `Dockerfile` and `server/` yourself. A checkout that has never
+> been built has no `index.html` at all — that is normal, not a broken clone.
+> `node build.mjs --check` says whether the copy you have is current.
 >
 > The folder you make on the server below is also called `src`, which is an
 > unrelated coincidence: it holds the *built* app, not the repo's source.
@@ -48,7 +59,7 @@ Follow §3 before you share the link with anyone.
 In Windows Explorer, open `\\TOWER\appdata` (replace `TOWER` with your
 server's name — the same one you use for other shares). Create a folder
 `splitpage`, and inside it a folder `src`, then copy the whole contents of
-`splitpage-app` into `src`.
+the unzipped artifact into `src`.
 
 You should end up with:
 
@@ -60,7 +71,11 @@ You should end up with:
     sw.js
     Dockerfile
     server/server.js
+    server/package.json
 ```
+
+That is the whole build context. There is no `src/` of the repo's own on the
+server and no Node build step in the image: the app arrives already built.
 
 *If `\\TOWER\appdata` won't open*, the share isn't exported over SMB. In the
 Unraid web UI: **Shares → appdata → SMB Security Settings → Export = Yes**.
@@ -119,7 +134,8 @@ docker rm -f splitpage
 
 ### Updating later
 
-Copy the changed files into `src` again, then:
+Download the `splitpage-app` artifact from the newer CI run, copy its
+contents into `src` again (overwriting), then:
 
 ```bash
 docker rm -f splitpage && docker build -t splitpage /mnt/user/appdata/splitpage/src && docker run -d --name splitpage --restart unless-stopped -p 8791:8791 -v /mnt/user/appdata/splitpage/data:/data --user 99:100 splitpage

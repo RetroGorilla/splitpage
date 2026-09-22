@@ -6,14 +6,16 @@ description: Run, drive and test the Splitpage app in a real headless browser. U
 # Running and testing Splitpage
 
 Splitpage ships as one self-contained `index.html`, but **that file is
-generated — do not edit it.** The source is `src/` (`page.html`, `app.css`,
-`seed-state.json`, and the ES modules in `src/js/`), and `node build.mjs`
-bundles them with esbuild and inlines the result back into `index.html`.
-Run `npm install` once first — esbuild builds the bundle, jsdom lends the
-unit tests a DOM. Edit `src/`, rebuild,
-then test. A change made directly to `index.html` will look like it worked
-and be destroyed by the next build; the pre-commit hook refuses a commit
-where the two disagree.
+generated, and it is not in the repository** (#80) — do not edit it, and
+expect a fresh clone not to have one until you build it. The source is
+`src/` (`page.html`, `app.css`, `seed-state.json`, and the ES modules in
+`src/js/`) plus `docs/help.md` (rendered into the in-app Help page) and
+`VERSION`, and `node build.mjs` bundles them with esbuild and inlines the
+result back into `index.html`. Run `npm install` once first — esbuild builds
+the bundle, jsdom lends the unit tests a DOM. Edit the source, rebuild, then
+test. A change made directly to `index.html` will look like it worked and be
+destroyed by the next build — and, since it is ignored by git, will never
+show up in a diff to warn you.
 
 There are two layers. **Unit tests** over the pure cores in `src/js` run
 under `node --test` with no browser at all — `npm test`, files in

@@ -73,8 +73,9 @@ function writeOnboardKey(skipped) {
    project file never re-embeds it into the page, so on a served/installed
    copy the only way #state-data can still read as the seed is that
    nothing has replaced it — which above all means nobody has typed into
-   the seed document and saved over index.html itself (the same thing
-   .githooks/pre-commit refuses to let happen in a commit). A legacy
+   the seed document and saved over index.html itself. (A pre-commit hook
+   used to refuse that in a commit; since #80 index.html is not tracked at
+   all, so a save over it is a purely local accident.) A legacy
    .html someone mails around still carries a real #state-data of its own,
    so this gate keeps working for that case even though Phase 2 saves
    never produce one again. */

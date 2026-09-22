@@ -2715,7 +2715,7 @@
 }
 .update-bar-dismiss:hover { opacity: 1; }
 
-/* ---- Help page (README.md rendered at build time — see mdToHtml in
+/* ---- Help page (docs/help.md rendered at build time — see mdToHtml in
    build.mjs and 20c-help.js) ---- */
 .help-panel {
   max-width: 900px;

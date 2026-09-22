@@ -160,7 +160,7 @@ const STATIC_ALLOWLIST = {
   "/manifest.webmanifest": { file: "manifest.webmanifest", type: "application/manifest+json; charset=utf-8" },
   "/icon.svg": { file: "icon.svg", type: "image/svg+xml" },
   "/sw.js": { file: "sw.js", type: "text/javascript; charset=utf-8" },
-  "/README.md": { file: "README.md", type: "text/markdown; charset=utf-8" },
+  "/help.md": { file: "help.md", type: "text/markdown; charset=utf-8" },
   "/VERSION": { file: "VERSION", type: "text/plain; charset=utf-8" }
 };
 

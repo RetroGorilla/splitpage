@@ -4,10 +4,12 @@ import { SIDE_PANEL_IDS } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { toggleFileMenu } from "./18-local-files.js";
 
-/* ================= Help page (README.md) & the coach-mark tour =================
+/* ================= Help page (docs/help.md) & the coach-mark tour ============
 
-   #help-modal's body and TOC are rendered from README.md at BUILD time by
-   mdToHtml() in build.mjs — nothing here parses Markdown. This fragment
+   #help-modal's body and TOC are rendered from docs/help.md at BUILD time by
+   mdToHtml() in build.mjs — nothing here parses Markdown. (It was README.md
+   until #80, which split the user guide out so the repo's README could change
+   without rebuilding the app.) This fragment
    only wires the modal chrome, the coach-mark tour, and the two new
    File-menu items ("User guide…" / "Take the tour").
 
@@ -134,7 +136,7 @@ export var TOUR_DONE_KEY = "splitpage-tour-done";
 /* Document-agnostic on purpose (invariant #17: a hint about the document
    must never edit it, and this copy must never assume WHAT the seed
    document says either) — every sentence describes the feature, never
-   the demo script's content. Slugs are real README headings, verified
+   the demo script's content. Slugs are real docs/help.md headings, verified
    against build.mjs's slugify() rather than guessed. */
 var TOUR_STEPS = [
   {
