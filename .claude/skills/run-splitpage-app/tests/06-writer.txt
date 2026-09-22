@@ -83,8 +83,14 @@ expect document.getElementById('production-badge').textContent == 1
 
 # --- rich text, by keyboard and by the bar ----------------------------------
 # Select the last four characters of scene 1 ("now.") - the text node the tag
-# anchor left behind, hence the walk rather than firstChild.
-eval (function(){var p=document.querySelector('#writer-doc .wr-para');var w=document.createTreeWalker(p,NodeFilter.SHOW_TEXT,null);var last=null;while(w.nextNode())last=w.currentNode;var r=document.createRange();r.setStart(last,last.nodeValue.length-4);r.setEnd(last,last.nodeValue.length);var s=getSelection();s.removeAllRanges();s.addRange(r);p.focus();s.removeAllRanges();s.addRange(r);return r.toString();})()
+# anchor left behind, hence the walk rather than firstChild. That text node
+# can carry a trailing zero-width caret spot ensureTrailingCaretSpot() left
+# after the tag anchor (see 04-richtext.js) - real, invisible DOM the caret
+# needed a place to land in while "now." was typed, stripped back out by
+# syncFieldFromDom() before anything is saved. Counting the raw last four
+# characters would land on it and clip the "n" off the selection, so the
+# walk back from the end skips it rather than counting it.
+eval (function(){var p=document.querySelector('#writer-doc .wr-para');var w=document.createTreeWalker(p,NodeFilter.SHOW_TEXT,null);var last=null;while(w.nextNode())last=w.currentNode;var raw=last.nodeValue;var n=4,idx=raw.length;for(var i=raw.length-1;i>=0;i--){if(raw[i]!=='​'){n--;if(n===0){idx=i;break;}}}var r=document.createRange();r.setStart(last,idx);r.setEnd(last,raw.length);var s=getSelection();s.removeAllRanges();s.addRange(r);p.focus();s.removeAllRanges();s.addRange(r);return r.toString();})()
 key ctrl KeyB
 sleep 400
 expect document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]').classList.contains('is-active')
