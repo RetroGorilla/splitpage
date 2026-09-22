@@ -218,9 +218,8 @@ function mergeDiffModel(base, mine, theirs) {
     var m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
     var entries = [];
     ROW_FIELDS.forEach(function (f) {
-      if (f === "visualImage" || f === "imageRef") {
-        /* Compared as rowImageKey says — the sha of a ref, the URI of a
-           legacy inline picture — whichever key the row keeps it under. */
+      if (f === "imageRef") {
+        /* Compared as rowImageKey says: the sha the ref names. */
         var mi = rowImageKey(m), ti = rowImageKey(t);
         if (mi === ti) return;
         entries.push({

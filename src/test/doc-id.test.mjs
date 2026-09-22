@@ -155,6 +155,20 @@ test("migrateDocument derives a file's id from its bytes, not from today's migra
   assert.notEqual(migrateDocument(other, { kind: "file" }).docId, out.docId);
 });
 
+test("a legacy file with a picture keeps its id: the seed is read before the image is interned (#82)", () => {
+  /* migrateRows replaces visualImage with an imageRef in place; the id has
+     to come from the bytes as they were in the file, or every legacy file
+     with a picture would get a new identity (and lose its history) the
+     first time a build with blobs opened it. */
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const seed = JSON.stringify({ title: "Legacy", rows: [{ id: "r1", audioText: "one", visualImage: png }] });
+  const out = migrateDocument(JSON.parse(seed), { kind: "file" });
+  assert.equal(out.docId, deriveDocId("splitpage-file", seed));
+  assert.ok(out.rows[0].imageRef && !("visualImage" in out.rows[0]), "and the picture did become a ref");
+  const refSeed = JSON.stringify(out.rows[0].imageRef);
+  assert.notEqual(deriveDocId("splitpage-file", seed.replace('"visualImage":"' + png + '"', '"imageRef":' + refSeed)), out.docId);
+});
+
 test("migrateDocument keeps an id the file already carries", () => {
   const out = migrateDocument({ docId: ID_A, title: "T", rows: [] }, { kind: "file" });
   assert.equal(out.docId, ID_A);

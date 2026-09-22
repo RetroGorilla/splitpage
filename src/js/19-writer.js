@@ -316,7 +316,8 @@ function mergeWriterRows(intoIdx) {
   prev.audioText = a + glue + b;
   if (curHasVisual) {
     prev.visualText = cur.visualText;
-    prev.visualImage = cur.visualImage;
+    delete prev.visualImage;
+    prev.imageRef = cur.imageRef || null;
   }
   /* Same rule mergeStates() uses for two people editing at once: status is
      not a value to pick between, it is progress to accumulate. Joining a

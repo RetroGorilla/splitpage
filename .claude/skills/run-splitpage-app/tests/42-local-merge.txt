@@ -125,6 +125,40 @@ expect window.__written === 2
 click #file-conflict-cancel
 wait document.getElementById('file-conflict-modal').hidden
 
+# --- pictures (#82): both sides replaced scene 1's picture ---------------
+# A fresh project file whose scene 1 has picture A. On disk it becomes B,
+# here it becomes C. The review lists the picture, both sides drawn from
+# their refs; the merge keeps theirs live and mine as a card holding the
+# record (imageValue), and "Use my version" puts my picture back.
+eval (function(){ Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); window.B = window.__blobsTest; window.px = function(col){ var c = document.createElement('canvas'); c.width = 40; c.height = 30; var g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 40, 30); return c.toDataURL('image/png'); }; window.PA = B.internDataUrl(px('#a00')); window.PB = B.internDataUrl(px('#0a0')); window.PC = B.internDataUrl(px('#00a')); var s = F.clone(F.state()); s.rows[0].imageRef = PA; window.__pb = { name: 'pics.md', _mtime: Date.now() - 50000, _body: F.buildMarkdown(s), createWritable: async function(){ return { write: async function(d){ window.__pb._body = typeof d === 'string' ? d : await new Blob([d]).text(); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__pb._body], 'pics.md', { type: 'text/markdown', lastModified: window.__pb._mtime }); } }; return !!(PA && PB && PC); })()
+eval (function(){ return F.openFile(new File([__pb._body], 'pics.md', { type: 'text/markdown', lastModified: __pb._mtime }), __pb).then(function(){ return true; }); })()
+wait F.docFile().name === 'pics.md'
+expect F.state().rows[0].imageRef.sha256 === PA.sha256 && F.hasDiskBase() === true
+# the file carries the picture inline, twice (table cell and data block)
+expect __pb._body.split(B.dataUrlForSync(PA.sha256)).length === 3
+eval (function(){ var t = F.clone(F.state()); t.rows[0].imageRef = PB; __pb._body = F.buildMarkdown(t); __pb._mtime = Date.now() + 100000; F.state().rows[0].imageRef = PC; window.__renderTest.render(); return true; })()
+eval (function(){ F.save(); return true; })()
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+eval (function(){ window.__imgEntry = Array.prototype.filter.call(document.querySelectorAll('#merge-review-list .merge-entry'), function(x){ return x.textContent.indexOf('Visual image') !== -1; })[0] || null; return !!__imgEntry; })()
+expect __imgEntry && __imgEntry.getAttribute('data-outcome') === 'conflict'
+expect !!__imgEntry.querySelector('img.diff-img[data-blob="' + PC.sha256 + '"]') && !!__imgEntry.querySelector('img.diff-img[data-blob="' + PB.sha256 + '"]')
+wait __imgEntry.querySelectorAll('img.diff-img[src^="blob:"]').length === 2
+click #merge-review-confirm
+wait F.state().comments.some(function(c){ return c.kind === 'conflict' && c.field === 'visualImage'; })
+eval (function(){ window.__card = F.state().comments.filter(function(c){ return c.kind === 'conflict' && c.field === 'visualImage'; })[0]; return __card.id; })()
+expect F.state().rows[0].imageRef.sha256 === PB.sha256
+expect __card.imageValue.sha256 === PC.sha256 && __card.body === '' && __card.emptyValue === false
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
+jsclick #merge-review
+wait !!document.querySelector('.comment-card[data-id="' + __card.id + '"] img.comment-img[data-blob="' + PC.sha256 + '"]')
+eval (function(){ document.querySelector('.comment-card[data-id="' + __card.id + '"] [data-action="restore-conflict"]').click(); return true; })()
+wait F.state().rows[0].imageRef.sha256 === PC.sha256
+expect !F.state().comments.some(function(c){ return c.id === __card.id; })
+expect document.querySelector('#rows .row .visual-media img').getAttribute('data-blob') === PC.sha256
+eval (function(){ var p = document.getElementById('comments-close') || document.querySelector('#comments-panel [data-action="close"]'); if (p) p.click(); document.getElementById('merge-banner').hidden = true; Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); return true; })()
+
 # --- the same flow through a desktop file handle --------------------------
 # The desktop app has no File System Access API: every local file reaches
 # this code as a makeDesktopHandle() handle over the bridge, so the merge

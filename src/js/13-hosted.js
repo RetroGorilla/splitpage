@@ -17,6 +17,7 @@ import {
   normalizeDocId
 } from "./02b-doc-id.js";
 import {
+  acceptStash,
   applyMerge,
   clearStash,
   cloneState,
@@ -32,6 +33,7 @@ import {
 import {
   dataUrlForSync,
   ensureBytes,
+  inlineStateImages,
   intern as internBlob,
   recordFor as blobRecordFor,
   bytesForSync,
@@ -523,8 +525,8 @@ export var SERVER_RESUME_KEY = "splitpage-server-resume";
    draft instead of by a lapsed sign-in (20g-drafts.js arms it before
    detectServer() runs at boot). It is a var rather than a second
    sessionStorage key on purpose: the draft was read from disk, it may be far
-   bigger than sessionStorage would take, and stashLocalWork()'s quota
-   fallback strips images — which a recovered draft must not lose.
+   bigger than sessionStorage would take, and stashLocalWork() simply fails
+   on a document too big for it — which a recovered draft must not.
 
    {id, rev, base, mine, at, onDone(outcome)}. onDone is how the restore
    learns which way this went ('server-resumed' or 'not-found'); polling
@@ -673,6 +675,8 @@ async function resumeServerDoc() {
     serverId: body.id,
     fallbackId: normalizeDocId(stash && stash.mine && stash.mine.docId) || null
   });
+  /* the pictures the stash carries, and an older build's stripped images */
+  if (stash) acceptStash(stash, theirs);
   setHome("server", { id: body.id, rev: body.rev || 0 });
   S.docIdWrittenOut = true;
   resetProductionPanelState();
@@ -728,7 +732,7 @@ async function resumeServerDoc() {
     /* fold the keystrokes typed on top of the blank interim document into
        what the stash already remembers as "mine", so both survive the
        three-way merge below rather than one silently replacing the other. */
-    mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine, false).merged;
+    mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine).merged;
   }
   /* TWO snapshots, and they hold different things — filing only one of
      them was the bug. `undoPoint` captures `theirs`, the version that was
@@ -760,7 +764,6 @@ async function resumeServerDoc() {
     base: stash.base || null,
     mine: mine,
     theirs: theirs,
-    imagesStripped: !!stash.imagesStripped,
     source: "server-resume",
     undoPoint: override ? theirs : null,
     keepLabel: override ? "Your unsaved changes, recovered" : null,
@@ -1440,10 +1443,11 @@ async function inlineBlobsForServer(state, refs) {
   if (!refs.length) return state;
   await ensureBytes(refs);
   var out = cloneState(state);
+  /* rows' imageRef and image-conflict cards' imageValue, the way a
+     .splitpage file carries them (02c-blobs.js) */
+  inlineStateImages(out);
   (out.rows || []).forEach(function (r) {
     if (!r || typeof r !== "object") return;
-    var url = r.imageRef && dataUrlForSync(r.imageRef.sha256);
-    if (url) { r.visualImage = url; delete r.imageRef; }
     r.visualText = inlineHtmlBlobs(r.visualText);
     r.audioText = inlineHtmlBlobs(r.audioText);
   });

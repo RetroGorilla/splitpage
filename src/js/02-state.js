@@ -2,6 +2,8 @@ import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
+import { internDataUrl, queuePersist } from "./02c-blobs.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
   plainName,
@@ -185,7 +187,19 @@ export function migrateRows(s) {
     r.status = rowStatus(r.status) ? r.status : "todo";
     r.visualText = sanitizeHtml(legacy ? legacyMdToHtml(r.visualText || "") : (r.visualText || ""));
     r.audioText = sanitizeHtml(legacy ? legacyMdToHtml(r.audioText || "") : (r.audioText || ""));
-    r.visualImage = safeImageSrc(r.visualImage) || null;
+    /* A row's picture is `imageRef`, a record naming bytes in the image
+       registry (02c-blobs.js, #82). A legacy inline `visualImage` data:
+       URI — every file, server copy, stash and snapshot from before, and
+       every .splitpage/.md written since (they carry their images inline)
+       — is interned here, synchronously, and replaced by its record;
+       a valid one wins over whatever imageRef the row also has. Anything
+       else is no picture. The bytes are queued to be stored durably; the
+       writers that must not name an unstored blob persist them first. */
+    var legacyImage = safeImageSrc(r.visualImage);
+    var interned = legacyImage ? internDataUrl(legacyImage) : null;
+    if (interned) queuePersist([interned.sha256]);
+    r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
+    delete r.visualImage;
     /* "" rather than null: formatTimestamp(iso) blanks out on an Invalid
        Date, and new Date(null) is a VALID date (the Unix epoch) while
        new Date("") is not — null here used to render as a fabricated
@@ -234,6 +248,21 @@ export function migrateRows(s) {
     c.author = plainName(c.author);
     if (!c.updatedAt) c.updatedAt = c.createdAt || null;
     if (c.kind !== "conflict") c.kind = "anchor";
+    /* An image conflict card (mergeStates) holds the user's picture as
+       `imageValue`, a record like a row's imageRef, and an empty body;
+       the card draws the picture from the record. An older one — and a
+       file, which writes the picture back into the body for older clients
+       (inlineStateImages) — has it as an inline <img> in the body: interned
+       here the way a row's visualImage is, and taken out of the body. */
+    if (c.kind === "conflict" && c.field === "visualImage") {
+      var bodyImg = /<img\b[^>]*\ssrc="([^"]*)"/i.exec(c.body);
+      var bodyRec = bodyImg ? internDataUrl(bodyImg[1]) : null;
+      if (bodyRec) queuePersist([bodyRec.sha256]);
+      c.imageValue = bodyRec || normalizeImageRef(c.imageValue) || null;
+      c.body = "";
+    } else if ("imageValue" in c) {
+      delete c.imageValue;
+    }
     /* resolvedBy/resolvedAt/assignee (#29). Free text, like author and
        updatedBy — there are no accounts here, nothing to verify against.
        Unresolving always clears both resolve fields, which is also what

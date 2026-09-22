@@ -135,7 +135,7 @@ export function csvToRows(text) {
     out.push({
       id: makeId(),
       visualText: escapeHtml(v).replace(/\n/g, "<br>"),
-      visualImage: null,
+      imageRef: null,
       audioText: escapeHtml(a).replace(/\n/g, "<br>")
     });
   }

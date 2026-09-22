@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { makeId } from "./02-state.js";
+import { internDataUrl, persist } from "./02c-blobs.js";
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
 import { safeId, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
@@ -13,7 +14,7 @@ import { placeCaretAtTextOffset, repointCommentsForRows } from "./19-writer.js";
 export function addRow(afterId) {
   lastSplitUndo = null;
   S.lastMoveUndo = null;
-  var row = { id: makeId(), visualText: "", visualImage: null, audioText: "",
+  var row = { id: makeId(), visualText: "", imageRef: null, audioText: "",
               status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
   if (afterId) {
     var idx = findRowIndex(afterId);
@@ -83,7 +84,7 @@ export function splitRowFieldCore(cellEl) {
   S.state.rows[idx][field] = sanitizeHtml(cellEl.innerHTML);
   stampRow(S.state.rows[idx]);
 
-  var created = { id: makeId(), visualText: "", visualImage: null, audioText: "",
+  var created = { id: makeId(), visualText: "", imageRef: null, audioText: "",
                    status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
   created[field] = sanitizeHtml(holder.innerHTML);
   S.state.rows.splice(idx + 1, 0, created);
@@ -424,11 +425,19 @@ export function compressImageFile(file, maxDim, quality) {
   });
 }
 
+/* The picture goes into the image registry (02c-blobs.js, #82) and the
+   row names it by its record: state holds a few dozen bytes per image, not
+   the image. Storing the bytes durably starts at once; nothing waits on
+   it — the writers that must not name an unstored blob persist first. */
 export function handleImageFile(rowId, file) {
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
-    S.state.rows[idx].visualImage = dataUrl;
+    var rec = internDataUrl(dataUrl);
+    if (!rec) throw new Error("not a picture the registry takes");
+    persist([rec.sha256]);
+    delete S.state.rows[idx].visualImage;
+    S.state.rows[idx].imageRef = rec;
     stampRow(S.state.rows[idx]);
     markDirty();
     render();
@@ -438,7 +447,8 @@ export function handleImageFile(rowId, file) {
 export function removeImage(rowId) {
   var idx = findRowIndex(rowId);
   if (idx === -1) return;
-  S.state.rows[idx].visualImage = null;
+  delete S.state.rows[idx].visualImage;
+  S.state.rows[idx].imageRef = null;
   stampRow(S.state.rows[idx]);
   markDirty();
   render();

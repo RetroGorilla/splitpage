@@ -4076,6 +4076,68 @@ async function caseDraftCrashUntitled(target) {
   }
 }
 
+/* caseDraftCrashWithImage (#82 P2b). A picture dropped onto a scene the way
+   a person drops one (a real DragEvent carrying a File), a marker row,
+   flush, crash, relaunch. The draft names the picture by imageRef — no
+   base64 in it — and the blob folder held the bytes BEFORE the draft was
+   written (invariant 52), so the restored document shows the picture,
+   read back out of <userData>/blobs through the bridge. */
+async function caseDraftCrashWithImage(target) {
+  const tag = target.name + " draft crash-recovery: a picture comes back from the blob folder";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const marker = "MARKER-IMAGE-" + Date.now();
+  let appA = null, appB = null;
+  try {
+    appA = await launchApp(target, { label: "draft-image-crash-a", userDataDir });
+    await waitForRows(appA.cdp, 20000);
+    const tabId = await tabIdOfTarget(appA.cdp);
+
+    await addMarkerRow(appA.cdp, marker);
+    const dropExpr = "(function(){ var c = document.createElement('canvas'); c.width = 90; c.height = 60; var g = c.getContext('2d'); " +
+      "g.fillStyle = '#c33'; g.fillRect(0, 0, 90, 60); g.fillStyle = '#39f'; g.fillRect(10, 10, 40, 25); " +
+      "var u = c.toDataURL('image/png'); var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); " +
+      "for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); var dt = new DataTransfer(); " +
+      "dt.items.add(new File([b], 'frame.png', { type: 'image/png' })); var media = document.querySelectorAll('#rows .visual-media'); " +
+      "media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()";
+    await evalPage(appA.cdp, dropExpr, { awaitPromise: false });
+    const refExpr = "(function(){ var s = window.__splitpageFormats.state(); var r = s.rows[s.rows.length - 1]; " +
+      "return r.imageRef && r.imageRef.sha256 ? r.imageRef.sha256 : null; })()";
+    const sha = await poll(appA.cdp, refExpr, 10000).catch(() => null);
+    record(tag + ": the dropped picture is an imageRef on the row", typeof sha === "string" && /^[0-9a-f]{64}$/.test(sha), String(sha));
+
+    const write = await flushDraft(appA.cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+    const blobPath = sha ? "sha256/" + sha.slice(0, 2) + "/" + sha : null;
+    record(tag + ": the picture's bytes are in the blob folder", !!blobPath && blobFilesOnDisk(userDataDir).indexOf(blobPath) !== -1,
+      JSON.stringify(blobFilesOnDisk(userDataDir)));
+    const dirs = readDraftDirs(userDataDir);
+    const draftText = dirs[tabId] && dirs[tabId].current ? fs.readFileSync(path.join(dirs[tabId].dir, "current.draft"), "utf8") : "";
+    record(tag + ": the draft names the picture and carries no base64",
+      !!sha && draftText.indexOf(sha) !== -1 && draftText.indexOf("data:image") === -1, "draft " + draftText.length + " bytes");
+
+    const crashed = await crashApp(appA);
+    record(tag + ": crashApp actually kills the process", crashed === true);
+    appA = null;
+
+    appB = await launchApp(target, { label: "draft-image-crash-b", userDataDir });
+    await waitForRows(appB.cdp, 20000);
+    const cdp = appB.cdp;
+    const gotMarker = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the marker row is restored", !!gotMarker);
+    const restoredRef = await evalPage(cdp, "(function(){ var s = window.__splitpageFormats.state(); " +
+      "return s.rows.some(function(r){ return r.imageRef && r.imageRef.sha256 === " + JSON.stringify(sha) + "; }); })()");
+    record(tag + ": the restored document still names the picture", restoredRef === true);
+    const shown = await poll(cdp, "(function(){ var i = document.querySelector('#rows .visual-media img[data-blob=\"' + " + JSON.stringify(sha) + " + '\"]'); " +
+      "return !!(i && (i.getAttribute('src') || '').indexOf('blob:') === 0 && i.complete && i.naturalWidth === 90); })()", 15000).catch(() => false);
+    record(tag + ": the restored picture renders, read from the blob folder", shown === true);
+  } finally {
+    if (appA) await teardown(appA, tag + " (first launch)");
+    /* the restored document is dirty (nothing has saved it) */
+    if (appB) await teardown(appB, tag + " (second launch)", { expectForceKill: ENDS_DIRTY });
+    rmrf(userDataDir);
+  }
+}
+
 /* caseDraftCrashDirtyFile (F1F2-01). A RENDERER crash (not a whole-process
    one) of a dirty file tab: the reloaded tab still holds the unsaved edit,
    and splitpage:test-draft-status reports hasDraft:true. */
@@ -5857,6 +5919,7 @@ async function runTargetSuite(target, groupFilter) {
     ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target)],
     // --- step N: crash-safe drafts (single and multi tab) ---
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
+    ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],
     ["draft: file deleted while down (unsaved copy)", () => caseDraftFileDeleted(target, fixturesDir)],

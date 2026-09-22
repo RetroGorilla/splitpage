@@ -2,6 +2,8 @@ import { S } from "./_state.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
+import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
+import { isSha256Hex, normalizeImageRef, refsIn } from "../../shared/blob-policy.js";
 import {
   adoptRestoredState,
   mergedDocId,
@@ -20,7 +22,7 @@ import {
   applySidePanelWidth,
   readSidePanelWidth
 } from "./03b-side-panels.js";
-import { safeId, safeImageSrc } from "./04-richtext.js";
+import { safeId } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -277,11 +279,23 @@ export function byId(list) {
   return map;
 }
 
-export var ROW_FIELDS = ["visualText", "visualImage", "audioText"];
+export var ROW_FIELDS = ["visualText", "imageRef", "audioText"];
+
+/* What a row field is compared by. Text by its HTML; the picture by the
+   sha its imageRef names (#82) — two records for the same bytes are the
+   same picture, and a record is an object, which === would never equate. */
+export function rowFieldKey(row, f) {
+  if (!row) return null;
+  if (f === "imageRef") {
+    var r = row.imageRef;
+    return r && typeof r === "object" && typeof r.sha256 === "string" ? r.sha256 : null;
+  }
+  return row[f] || null;
+}
 
 export function rowContentEqual(a, b) {
   if (!a || !b) return false;
-  return ROW_FIELDS.every(function (f) { return (a[f] || null) === (b[f] || null); });
+  return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); });
 }
 
 /* The comment-level equivalent of rowContentEqual, used the same way: to
@@ -298,16 +312,8 @@ function commentContentEqual(a, b) {
 }
 
 /* Merge `mine` and `theirs`, both descended from `base`.
-   Anything that cannot be reconciled is preserved, never dropped.
-
-   imagesStripped: true when `mine`/`base` came from stashLocalWork()'s
-   oversized-document fallback, which replaces every visualImage with a
-   sentinel that migrateRows() (correctly — safeImageSrc only ever allows a
-   real data: URI through) turns back into null. That null is indistinguishable
-   from "no image", so the normal equality-based fast paths below would
-   silently conclude "unchanged" for a row that may well have had a real
-   image swapped in locally right before the stash — see mergeRow(). */
-export function mergeStates(base, mine, theirs, imagesStripped) {
+   Anything that cannot be reconciled is preserved, never dropped. */
+export function mergeStates(base, mine, theirs) {
   var conflicts = [];
   var stats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
@@ -316,28 +322,21 @@ export function mergeStates(base, mine, theirs, imagesStripped) {
   var placed = {};
 
   function mergeRow(b, m, t) {
-    /* present on both sides — reconcile field by field */
+    /* present on both sides — reconcile field by field, each compared by
+       rowFieldKey (the picture by its sha) and taken whole from its side */
     var out = JSON.parse(JSON.stringify(t));
     var tookMine = false;
     ROW_FIELDS.forEach(function (f) {
-      var mv = m[f] || null, tv = t[f] || null, bv = b ? (b[f] || null) : null;
-      /* A stripped-and-restored visualImage is null whether or not it
-         really had an image — mv/bv equality here would be comparing two
-         unknowns, not two agreements. Skip straight to "can't reconcile"
-         whenever there's something on their side worth not silently
-         losing; if theirs is empty too, there is nothing to protect
-         either way, so let it fall through as an ordinary non-conflict. */
-      if (f === "visualImage" && imagesStripped && tv) {
-        out[f] = tv;
-        conflicts.push({ rowId: t.id, field: f, mine: null, theirs: tv });
+      var mv = rowFieldKey(m, f), tv = rowFieldKey(t, f), bv = b ? rowFieldKey(b, f) : null;
+      if (mv === tv) return;
+      if (b && mv === bv) return;                                   /* only they changed it */
+      if (b && tv === bv) {                                         /* only I changed it */
+        out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
+        tookMine = true;
         return;
       }
-      if (mv === tv) return;
-      if (b && mv === bv) { out[f] = tv; return; }          /* only they changed it */
-      if (b && tv === bv) { out[f] = mv; tookMine = true; return; }  /* only I changed it */
       /* both changed the same field: keep theirs live, keep mine intact */
-      out[f] = tv;
-      conflicts.push({ rowId: t.id, field: f, mine: mv, theirs: tv });
+      conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
     });
     /* Status isn't text to reconcile, it's progress to accumulate: if
        either of us has marked a scene shot, it has been shot. Taking the
@@ -466,19 +465,24 @@ export function mergeStates(base, mine, theirs, imagesStripped) {
     if (mine.title) conflicts.push({ rowId: null, field: "title", mine: mine.title, theirs: theirs.title });
   }
 
-  /* every unreconcilable field becomes a comment holding my version */
+  /* every unreconcilable field becomes a comment holding my version. A
+     picture is held as `imageValue`, the record itself, with an empty
+     body — the card draws it (10-comments.js), and a file writes it back
+     into the body for older clients (inlineStateImages, 02c-blobs.js).
+     The comment's field keeps the old name "visualImage" (#82 D5). */
   conflicts.forEach(function (c) {
+    var image = c.field === "imageRef";
     var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
       c.field === "title" ? "Title" : "Visual image";
     var isEmpty = !c.mine;
-    var bodyHtml = c.field === "visualImage"
-      ? (safeImageSrc(c.mine) ? '<img class="comment-img" src="' + escapeHtml(c.mine) + '">' : "")
+    var bodyHtml = image ? ""
       : c.field === "title" ? escapeHtml(c.mine || "")
       : (c.mine || "");
     mergedComments.push({
       id: makeId("c"),
       rowId: c.rowId,
-      field: c.field,
+      field: image ? "visualImage" : c.field,
+      imageValue: image ? (normalizeImageRef(c.mine) || null) : undefined,
       anchorId: null,
       quotedText: "",
       author: getEditorName(),
@@ -679,32 +683,70 @@ function mergeChangedSideWins(f, base, mine, theirs) {
   return t || m || fallback;
 }
 
-/* ---- conflict stash (survives the reload the shell forces on us) ---- */
+/* ---- conflict stash (survives the reload the shell forces on us) ----
 
-function stripImages(doc) {
-  if (!doc) return doc;
-  var copy = cloneState(doc);
-  copy.rows.forEach(function (r) { r.visualImage = r.visualImage ? "__IMAGE__" : null; });
-  return copy;
+   The stash names its pictures the way the document does, by imageRef
+   (#82). What the durable blob store does not hold yet travels with it as
+   `blobs: {sha: data URI}`, so the reload cannot lose a picture this page
+   only had in memory; what the store holds needs no copy. There is no
+   image-stripping fallback any more: a stash too big for sessionStorage is
+   not written, and the caller does not reload (it never could throw the
+   work away). */
+function stashBlobsFor(docs) {
+  var blobs = {}, any = false;
+  docs.forEach(function (d) {
+    refsIn(d).forEach(function (sha) {
+      if (blobs[sha] || isDurableSync(sha)) return;
+      var url = dataUrlForSync(sha);
+      if (url) { blobs[sha] = url; any = true; }
+    });
+  });
+  return any ? blobs : null;
 }
 
 /* Returns true only if the work is genuinely persisted. The caller MUST NOT
    force a reload on false — that would throw the work away. */
 export function stashLocalWork() {
   if (!S.state) return false;
-  function attempt(payload) {
-    try {
-      sessionStorage.setItem(STASH_KEY, JSON.stringify(payload));
-      return true;
-    } catch (e) { return false; }
+  var payload = { at: nowIso(), by: getEditorName(), base: S.baseState, mine: S.state };
+  var blobs = stashBlobsFor([S.state, S.baseState]);
+  if (blobs) payload.blobs = blobs;
+  try {
+    sessionStorage.setItem(STASH_KEY, JSON.stringify(payload));
+    return true;
+  } catch (e) { return false; }
+}
+
+/* Makes a stash (or a crash draft handed over as one) ready to merge:
+   its carried `blobs` interned — each re-hashed, so a copy that is not
+   what its key says is simply not the picture — and, for ONE RELEASE, the
+   stash an older build wrote when the document was too big: every image
+   replaced by the sentinel "__IMAGE__" with `imagesStripped` set. Whether
+   such a row's picture changed cannot be known, so it takes `theirs`'s
+   picture for that row (the old merge raised an empty conflict card and
+   kept theirs; the card had nothing in it to restore). Changes the stash
+   in place and returns it. */
+export function acceptStash(stash, theirs) {
+  if (!stash || typeof stash !== "object") return stash;
+  if (stash.blobs && typeof stash.blobs === "object") {
+    Object.keys(stash.blobs).forEach(function (sha) {
+      if (isSha256Hex(sha) && typeof stash.blobs[sha] === "string") internDataUrl(stash.blobs[sha]);
+    });
   }
-  var meta = { at: nowIso(), by: getEditorName() };
-  if (attempt({ at: meta.at, by: meta.by, base: S.baseState, mine: S.state })) return true;
-  /* too big for sessionStorage — drop the images, which are the bulk, and
-     keep the text. Image fields then merge as "unknown" rather than being lost. */
-  if (attempt({ at: meta.at, by: meta.by, base: stripImages(S.baseState),
-                mine: stripImages(S.state), imagesStripped: true })) return true;
-  return false;
+  if (stash.imagesStripped) {
+    var theirRows = byId(theirs && Array.isArray(theirs.rows) ? theirs.rows : []);
+    [stash.mine, stash.base].forEach(function (doc) {
+      if (!doc || !Array.isArray(doc.rows)) return;
+      doc.rows.forEach(function (r) {
+        if (!r || r.visualImage !== "__IMAGE__") return;
+        var t = theirRows[r.id];
+        delete r.visualImage;
+        r.imageRef = t && t.imageRef ? JSON.parse(JSON.stringify(t.imageRef)) : null;
+      });
+    });
+    delete stash.imagesStripped;
+  }
+  return stash;
 }
 
 export function clearStash() {
@@ -1093,7 +1135,6 @@ function noteMergeAutoSave(opts) {
 
      base, mine, theirs   the three documents; normalised here, so a caller
                           hands over whatever it is holding
-     imagesStripped       the stash dropped its images to fit (stashLocalWork)
      source               which merge this is — names the undo point's label
      undoPoint            the state the undo snapshot captures: the version
                           the merge REPLACES, which is `theirs` at load time
@@ -1155,8 +1196,7 @@ export function applyMerge(opts) {
     result = mergeStates(
       opts.base ? migrateRows(cloneState(opts.base)) : null,
       migrateRows(cloneState(opts.mine)),
-      opts.theirs,
-      !!opts.imagesStripped
+      opts.theirs
     );
   }
   var next = result ? result.merged : opts.theirs;

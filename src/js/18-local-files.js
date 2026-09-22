@@ -9,7 +9,8 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { ensureBytes, rowImageShas } from "./02c-blobs.js";
+import { ensureBytes, missingInlineImages } from "./02c-blobs.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
   openHistoryPanel,
@@ -53,6 +54,7 @@ import {
   toMarkdownDoc,
   toMarkdownTableDoc,
   toggleAutoSave,
+  warnImagesLeftOut,
   zipWrite
 } from "./14-export.js";
 import {
@@ -178,9 +180,9 @@ export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
   /* Every builder below is synchronous and reads pictures through
      rowImageBytes/rowImageDataUrl (02c-blobs.js), which only answer for
-     bytes already in memory — so fetch any a ref names first (#82). A
+     bytes already in memory — so fetch any the document names first (#82). A
      document with no refs asks for nothing and opens no store. */
-  await ensureBytes(rowImageShas(S.state.rows));
+  await ensureBytes(refsIn(S.state));
   if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
   if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
@@ -200,7 +202,11 @@ export async function buildFileData(kind, baseName, opts) {
   /* standaloneHtmlFor (02b-doc-id.js) leaves the document id out: this
      export is a copy handed to someone else, and carrying the id would make
      it a duplicate of this document the moment both are open. */
-  if (kind === "html") return { data: standaloneHtmlFor(S.state), filename: baseName + ".html" };
+  if (kind === "html") {
+    /* inline, like a .splitpage (#82): say so if a picture could not be */
+    warnImagesLeftOut(missingInlineImages(S.state).length, baseName + ".html");
+    return { data: standaloneHtmlFor(S.state), filename: baseName + ".html" };
+  }
   if (kind === "md" && opts.allowImageBundle) {
     /* A script with no pictures stays a single plain-text .md, same as
        always. One with pictures ships as a small zip instead — the .md
