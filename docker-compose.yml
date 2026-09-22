@@ -40,3 +40,10 @@ services:
       - READ_ONLY=0
       # Raise if you embed a lot of images in one script (bytes).
       - MAX_BODY_BYTES=26214400
+      # Set to 1 only if nothing but the tunnel can reach this port. It makes
+      # the join-PIN rate limit count X-Forwarded-For instead of the socket,
+      # which behind a tunnel is one address for everybody — so one stranger's
+      # ten wrong guesses lock the whole house out. It is a request header like
+      # any other, though, so anything that CAN reach the port directly can
+      # write what it likes in it. DEPLOY.md §5 has the long version.
+      - TRUST_PROXY=0

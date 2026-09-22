@@ -20,7 +20,9 @@ WORKDIR /app
 # The app the browser downloads. Kept in its own directory so STATIC_DIR can
 # never accidentally expose the server source or the data volume.
 COPY index.html manifest.webmanifest icon.svg sw.js ./public/
-COPY server/server.js ./server/server.js
+# server.js is CommonJS, and package.json beside it says so out loud — a
+# "type": "module" anywhere above it in a tree would otherwise stop it running.
+COPY server/server.js server/package.json ./server/
 
 # Created here so the path exists even when no volume is mounted — that way a
 # quick `docker run` with no -v still works for a smoke test.
