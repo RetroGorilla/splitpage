@@ -198,6 +198,11 @@
         if (retarget && docFileHandle === retarget) rememberLastFileHandle(targetHandle);
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         var docIdAfterSave = state.docId;
+        /* What this file now says the document is — the ancestor a later
+           "Merge them" measures both sides against (18a-local-merge.js).
+           Set beside lastModified because the two are one fact: the state
+           and the timestamp of the bytes that are on disk right now. */
+        if (homeAtWrite && stillOurs) homeAtWrite.diskBase = published;
         try {
           var afterFile = await targetHandle.getFile();
           if (homeAtWrite && docFileHandle === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;

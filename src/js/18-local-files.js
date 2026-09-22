@@ -228,7 +228,11 @@
      docIdEmbedded is read BEFORE migrateDocument(), which always leaves a
      valid id behind — see parseMarkdownProject (20d-formats.js) for the same
      ordering and for why a draft restore has to know the difference. */
-  async function parseProjectFileState(file) {
+  /* `opts.noAsk` forwards to applyMarkdownProject: a caller that is only
+     asking "what document is in this file?" — the merge review's probe
+     (18a-local-merge.js) — must not raise the row-count modal at the user,
+     who has not asked for anything yet. It takes the same answer Esc does. */
+  async function parseProjectFileState(file, opts) {
     var kind = fileKindFromName(file.name);
     if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
 
@@ -277,7 +281,7 @@
     }
     if (!project) return null;
     /* awaits the row-count question when the table and the record disagree */
-    var reconciled = await applyMarkdownProject(project);
+    var reconciled = await applyMarkdownProject(project, opts);
     return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
   }
 
@@ -312,8 +316,14 @@
     state = newState;
     baseState = cloneState(state);
     /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
-       there is no handle to ask — a plain <input type=file> open. */
-    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null, name: file.name };
+       there is no handle to ask — a plain <input type=file> open.
+       `diskBase` is the document exactly as this file last said it was: the
+       common ancestor "Merge them" needs to do a true three-way merge if the
+       file later changes under us (18a-local-merge.js). It rides on the home
+       record so it is dropped the moment the document's home changes, and
+       moves with it on every successful write (saveDoc, 14-export.js). */
+    docFileHandle = { handle: handle || null, kind: kind, lastModified: file.lastModified || null,
+                      name: file.name, diskBase: cloneState(state) };
     /* A hosted document and a local file are two homes for one Save button
        (§3.1). Opening a server document already clears the file side; this
        is the other half, which was missing — open a file while a hosted
@@ -660,11 +670,22 @@
     return { ok: true };
   }
 
-  /* Which flow popped the conflict modal, so its three buttons (reload /
-     overwrite / save-as-a-copy) know whether to act on the import re-save
-     path's `openedFile` or the project-save path's `docFileHandle`. Set by
-     showFileConflict(), read by 21-events.js's button wiring. */
+  /* Which flow popped the conflict modal, so its buttons (reload /
+     overwrite / save-as-a-copy / merge) know whether to act on the import
+     re-save path's `openedFile` or the project-save path's `docFileHandle`.
+     Set by showFileConflict(), read by 21-events.js's button wiring. */
   var fileConflictCtx = { kind: "import" };
+  /* Bumped by every showFileConflict() and by closeFileConflict(), so a
+     modal still waiting on its merge probe never opens over a later one, or
+     after the user has already answered. */
+  var fileConflictShowToken = 0;
+
+  /* Which home record this conflict is about, read off fileConflictCtx the
+     same way each of the modal's buttons reads it — "Merge them" needs the
+     answer while the modal is going up, before any button is pressed. */
+  function fileConflictHome() {
+    return fileConflictCtx && fileConflictCtx.kind === "project" ? docFileHandle : openedFile;
+  }
 
   async function saveBackToFile(opts) {
     if (!openedFile.name) return;
@@ -731,6 +752,8 @@
       document.getElementById("file-conflict-detail").textContent =
         "Could not check whether " + fileName + " is still there — it may have been moved, " +
         "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
+      /* nothing readable to merge with */
+      resetMergeOffer();
       document.getElementById("file-conflict-modal").hidden = false;
       return;
     }
@@ -740,11 +763,28 @@
     document.getElementById("file-conflict-detail").textContent =
       fileName + " changed on disk at " + when +
       ", after you opened it here. Saving now would overwrite that version.";
-    document.getElementById("file-conflict-modal").hidden = false;
+    /* "Merge them" is revealed only once that version has been read back as
+       a document — a file this app cannot parse has nothing to merge
+       (18a-local-merge.js). The modal waits for that answer before it
+       opens: the row is right-aligned, so a button appearing a moment
+       after the others would shove them sideways under the pointer. The
+       read is local and takes milliseconds; should it ever not answer, the
+       four choices the modal has always had go up on their own. */
+    var token = ++fileConflictShowToken;
+    var show = function () {
+      if (token !== fileConflictShowToken) return;   /* superseded or closed */
+      document.getElementById("file-conflict-modal").hidden = false;
+    };
+    var probe = offerFileMerge(currentFile, fileConflictHome());
+    var timer = setTimeout(show, 1500);
+    probe.then(function () { clearTimeout(timer); show(); },
+               function () { clearTimeout(timer); show(); });
   }
 
   function closeFileConflict() {
+    fileConflictShowToken++;
     document.getElementById("file-conflict-modal").hidden = true;
+    resetMergeOffer();
   }
 
   async function reloadFileFromDisk() {

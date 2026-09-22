@@ -922,6 +922,19 @@ Adding or deleting whole scene rows is the one thing Splitpage will not
 guess at: it asks whether to keep its own record or rebuild the scenes from
 your table.
 
+If the file changed **while it was still open here** — you edited it in
+another window, someone emailed a revision back, a sync client caught up —
+Splitpage says so when you Save rather than overwriting it, and offers to
+**Merge them**. That opens a review pane listing every field the two versions
+disagree about, side by side, with the changed words highlighted: titles,
+scene text, statuses, breakdown items, crew and b-roll. Nothing is written to
+the file and nothing changes on screen until you press **Merge them** again at
+the bottom of it — Cancel puts you back to the other choices, having changed
+nothing. Confirming keeps both sides' edits where they touched different
+things; where you both changed the same line, the file's version goes into the
+script and yours is kept as a comment flagged **Unmerged edit**, exactly as on
+a server. The merged script sits on screen, unsaved, until you press Save.
+
 ### Sending it to someone who has nothing installed
 
 **File ▸ Export a copy ▸ Standalone HTML (.html)** writes one self-contained
