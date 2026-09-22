@@ -229,7 +229,7 @@ test("productionTags: an unknown category or status falls back, a nameless tag i
    nothing, exactly as the comment says it must not. Either the default
    goes or the back-fill moves in front of it; both are a behaviour change
    this issue (#67, tests only) must not make on its own. */
-test.todo("productionTags: a file saved before the registry existed is back-filled from the script", () => {
+test("productionTags: a file saved before the registry existed is back-filled from the script", () => {
   const s = migrateRows({
     schema: 2, title: "T",
     rows: [{ id: "r1", audioText: 'Bring the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span>.' }]
