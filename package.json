@@ -1,0 +1,14 @@
+{
+  "name": "splitpage",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Build tooling for Splitpage. The app itself has no runtime dependencies; esbuild is the one build-time dependency (see build.mjs).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

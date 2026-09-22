@@ -7,8 +7,9 @@ description: Run, drive and test the Splitpage app in a real headless browser. U
 
 Splitpage ships as one self-contained `index.html`, but **that file is
 generated — do not edit it.** The source is `src/` (`page.html`, `app.css`,
-`seed-state.json`, and the numbered fragments in `src/js/`), and
-`node build.mjs` inlines them back into `index.html`. Edit `src/`, rebuild,
+`seed-state.json`, and the ES modules in `src/js/`), and `node build.mjs`
+bundles them with esbuild and inlines the result back into `index.html`.
+Run `npm install` once first — esbuild is the one devDependency. Edit `src/`, rebuild,
 then test. A change made directly to `index.html` will look like it worked
 and be destroyed by the next build; the pre-commit hook refuses a commit
 where the two disagree.

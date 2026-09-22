@@ -14,10 +14,20 @@ visual/audio editor with a teleprompter, review comments, and a production
 breakdown for props/locations/cast/VFX/sound.
 
 - **Edit `src/`, never `index.html`.** Source is `src/page.html` (shell),
-  `src/app.css`, `src/seed-state.json` (demo document), and `src/js/` — 22+
-  numbered fragments sharing one closure as a single IIFE; filename order is
-  load order. `node build.mjs` inlines them into `index.html`;
-  `node build.mjs --check` fails a commit where they disagree.
+  `src/app.css`, `src/seed-state.json` (demo document), and `src/js/` — 41 ES
+  modules with explicit `import`/`export` (#66; they were fragments of one
+  IIFE until then). Filename order is still evaluation order, but it is
+  pinned by hand now, not by concatenation: no module does anything at
+  evaluation time except declare functions, and `_entry.js` calls each
+  module's `__init()` in filename order. `node build.mjs` bundles them with
+  esbuild and inlines the result into `index.html`; `node build.mjs --check`
+  fails a commit where they disagree. Run `npm install` once first — esbuild
+  is the one devDependency.
+- **Two files carry what one closure used to.** `src/js/_state.js` holds the
+  57 `var`s that are written from a module other than the one declaring them:
+  an ESM import binding is read-only, so they are properties of one exported
+  object `S`. `src/js/_entry.js` is the bundle entry and the evaluation
+  order.
 - **The shipped app must stay one self-contained file.** Save writes
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
   spliced into `#state-data` (`buildPublishHtml`, `PAGE_SHELL`). That's why
@@ -484,10 +494,11 @@ appear for `BUSY_SHOW_DELAY_MS` (250ms) — a bar that flashes up for 30ms
 reads as a glitch, so most exports on most scripts show nothing at all.
 
 It is **`withBusyBar`, not `withBusy`**: `20e-connect.js` already declares
-`withBusy(button, label, work)`, and the fragments share one function scope,
-so the later file simply wins. That is the general hazard of this layout —
-scan `src/js/` for duplicate declarations before naming any new top-level
-function or var.
+`withBusy(button, label, work)`, and the fragments shared one function scope,
+so the later file simply won. #66 ended that whole class of hazard — modules
+have their own scope and a collision is now an esbuild error rather than a
+silent last-one-wins — but the two names are still distinct functions and
+still mean different things.
 
 That scan turns up one pre-existing collision worth knowing about, left
 alone here because it is outside a motion change and the suites are green
@@ -734,11 +745,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 
 ## 6. Map of the source
 
-`src/js/` (~18,400 lines, 32 fragments; filenames say where things live):
+`src/js/` (41 modules; filenames say where things live, and still set
+evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
 | --- | --- |
-| `00-prelude.js` | opens the IIFE, `PAGE_SHELL`, module-wide vars |
+| `_state.js` | the 57 cross-module mutable vars, as one exported object `S` |
+| `_entry.js` | the bundle entry: calls every module's `__init()` in order |
+| `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId`, `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
@@ -774,7 +788,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |
-| `21-events.js` | all event wiring, `init()`, closes the IIFE |
+| `21-events.js` | all event wiring, `init()` |
 
 **Desktop files** (optional; the web app runs without them):
 
@@ -816,10 +830,14 @@ test.
 Main still edits `index.html` directly. Split main's `index.html` on the
 same boundaries `src/` was cut on; prove the splitter reproduces this
 branch's `src/` byte-for-byte from the merge base first; cut main's JS into
-the same fragments by matching each base fragment's first line as a unique
+the same pieces by matching each base piece's first line as a unique
 anchor; `git merge-file` each piece against its base; normalise trailing
 newlines first; rebuild and read every **removal** in the diff against
 main's `index.html` — a removal you can't name is main's work being dropped.
+
+Since #66 the bundled `index.html` is minified, so this recipe no longer
+applies to anything built from this branch: the two sides are no longer the
+same shape of text. Re-derive it if it is ever needed again.
 
 ---
 

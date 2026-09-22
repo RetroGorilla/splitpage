@@ -15,35 +15,40 @@
    signal. The listener is passive and coalesced into an animation frame:
    scroll fires far more often than the class needs to change.
 --------------------------------------------------------------------------- */
-(function setupCondensingTopbar() {
-  const topbar = document.querySelector(".topbar");
-  if (!topbar) return;
 
-  const ENTER_AT = 64;
-  const LEAVE_AT = 24;
-  let condensed = false;
-  let queued = false;
+/* Eval-time work for this module. _entry.js calls every module's __init()
+   in filename order — the order these statements used to run in. */
+export function __init() {
+  (function setupCondensingTopbar() {
+    const topbar = document.querySelector(".topbar");
+    if (!topbar) return;
 
-  function applyCondensedState() {
-    queued = false;
-    const y = window.scrollY || document.documentElement.scrollTop || 0;
-    if (!condensed && y > ENTER_AT) {
-      condensed = true;
-      topbar.classList.add("is-condensed");
-    } else if (condensed && y < LEAVE_AT) {
-      condensed = false;
-      topbar.classList.remove("is-condensed");
+    const ENTER_AT = 64;
+    const LEAVE_AT = 24;
+    let condensed = false;
+    let queued = false;
+
+    function applyCondensedState() {
+      queued = false;
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      if (!condensed && y > ENTER_AT) {
+        condensed = true;
+        topbar.classList.add("is-condensed");
+      } else if (condensed && y < LEAVE_AT) {
+        condensed = false;
+        topbar.classList.remove("is-condensed");
+      }
     }
-  }
 
-  function onScroll() {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(applyCondensedState);
-  }
+    function onScroll() {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(applyCondensedState);
+    }
 
-  window.addEventListener("scroll", onScroll, { passive: true });
-  /* Reloading part-way down a document restores the scroll offset, so settle
-     the state once at boot rather than waiting for the first scroll. */
-  applyCondensedState();
-})();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    /* Reloading part-way down a document restores the scroll offset, so settle
+       the state once at boot rather than waiting for the first scroll. */
+    applyCondensedState();
+  })();
+}
