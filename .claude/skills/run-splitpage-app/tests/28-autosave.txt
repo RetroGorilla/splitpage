@@ -76,6 +76,13 @@ sleep 300
 expect window.__written === 0
 expect document.getElementById('save-status').textContent === 'Unsaved changes'
 expect document.getElementById('save-status').title.indexOf('Autosave is off') !== -1
+# a discrete action writes nothing either — a status click goes through
+# queueAutoSave(), the path that used to ignore the preference and write
+eval (function(){window.__statusBefore = document.querySelector('#rows .row [data-action="cycle-status"]').outerHTML;document.querySelector('#rows .row [data-action="cycle-status"]').click();return true;})()
+wait document.querySelector('#rows .row [data-action="cycle-status"]').outerHTML !== window.__statusBefore
+sleep 300
+expect window.__written === 0
+expect document.getElementById('save-status').textContent === 'Unsaved changes'
 # the preference is remembered, not just held
 expect localStorage.getItem('splitpage-autosave') === '0'
 # and a manual Save still writes

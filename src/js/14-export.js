@@ -438,7 +438,8 @@ export function applyStashedWork(loaded, override, apply) {
    keystroke would serialize and re-write the whole document tens of times
    a sentence.
 
-   Both are gated the same way (autoSaveTarget below) and both go through
+   Both are gated the same way (the autosave preference, then
+   autoSaveTarget below) and both go through
    saveDoc({auto:true}), which writes exactly what a manual Save writes and
    differs only in what it says about it: no "Saved to …" toast per pause
    in the typing — the save-state indicator beside the Save button
@@ -584,6 +585,13 @@ export function resumeAutoSave() {
 var saveInFlight = false;
 var saveQueued = false;
 export function queueAutoSave() {
+  /* Off means off for a discrete action too, not only for typing. This
+     used to check only WHERE to write, so with autosave off every add,
+     move, status click, comment, find-and-replace and history restore still
+     wrote the file at once. Every caller marks the document dirty first,
+     so skipping here leaves the change on screen as unsaved work — the
+     indicator and the unload guard cover it until the user saves. */
+  if (!autoSaveEnabled) return;
   if (!autoSaveTarget()) return;
   if (autoSaveHalt) return;
   /* A pending timer would fire into a document this call is already

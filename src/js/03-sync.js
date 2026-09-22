@@ -149,7 +149,8 @@ var RESTORE_BACKUP_ATTEMPTS = 3;
    `opts.local` leaves the restored version on screen and dirty instead of
    writing it straight away — markDirty() still arms the ordinary idle
    autosave, so the autosave preference decides when it goes, not this
-   call. queueAutoSave() writes whether autosave is on or off. undoMerge
+   call. (With autosave on, queueAutoSave() writes at once; with it off,
+   neither path writes until the user saves.) undoMerge
    passes it after a save conflict: there the version being replaced is
    already safe on the server, and the write this would force is the one
    that takes a collaborator's work back out of it for everybody. */

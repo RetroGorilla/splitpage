@@ -1165,7 +1165,9 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     installed 1.0.x, which is exactly who this macro runs for:
     `desktop/build/installer.nsh` keeps it.
 51. **Autosave writes only where the user has already sent this document,
-    and only work they have seen.** `autoSaveTarget()` (14-export.js) is the
+    only work they have seen, and only while it is on.** With autosave off,
+    neither path writes — not typing (`scheduleAutoSave`) and not a discrete
+    action (`queueAutoSave`); both check the preference first. `autoSaveTarget()` (14-export.js) is the
     single gate: a file handle the user picked, or the server — never a
     picker, never a download. Anything that puts work on screen the user has
     not reviewed (a crash-draft restore's merge, `reportMerge`'s
