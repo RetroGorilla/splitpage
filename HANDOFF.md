@@ -118,8 +118,13 @@ only exits non-zero for a command that throws, so read its `RESULT:` line.
 build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
 `desktop/test/ipc-table.test.mjs`, `tools/test-server.mjs`,
 `tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
-It is not the full regression run — that is still `run-tests.ps1` on
-Windows, or `driver.mjs` one suite at a time here.
+A second job, `desktop-smoke`, runs `desktop/test/smoke.mjs --only-target
+dev` against an Xvfb display (#89) — that is where `main.js` and `preload.js`
+are actually executed, ~487 checks of it. It is its own job because it
+launches ~60 real Electron processes and takes ~55 minutes, far longer than
+everything else together. It is not the
+full regression run — that is still `run-tests.ps1` on Windows, or
+`driver.mjs` one suite at a time here, plus the packaged targets.
 
 Since #80 CI also **produces** the app. It builds `index.html` and uploads
 it, with `sw.js`, `manifest.webmanifest`, `icon.svg`, the server and the
@@ -138,11 +143,15 @@ go stale, and a script saved into your local `index.html` is an ignored,
 untracked file that `git add` will not pick up. `git config core.hooksPath`
 is no longer part of setting this repo up.
 
-What still needs the Windows machine: `desktop/test/smoke.mjs` (hardcoded
-`.exe` paths, `Win32_Process`/`MainWindowHandle` probes), `npm run dist:win`,
-`verify-dist.mjs`, and anything touching a packaged binary. `build.mjs
---check`, `desktop/test/drafts.test.mjs` and `tools/test-server.mjs` already
-run anywhere.
+What still needs the Windows machine: `npm run dist:win`, `verify-dist.mjs`,
+NSIS, and anything touching a packaged binary — plus, inside
+`desktop/test/smoke.mjs`, the packaged `dist/*-unpacked/Splitpage.exe`
+targets and the one `MainWindowHandle` probe. The **dev target of the
+desktop smoke suite runs anywhere** since #89, which is what matters: it is
+the only thing that executes `main.js` and `preload.js`. `build.mjs --check`,
+`desktop/test/drafts.test.mjs`, `desktop/test/ipc-table.test.mjs` and
+`tools/test-server.mjs` already ran anywhere before that. The running list of
+what is genuinely left is `docs/WINDOWS-CHECKS.md`.
 
 **Desktop shell:** `desktop/test/smoke.mjs` drives a real Electron window
 over CDP — the only thing exercising `main.js`/`preload.js`. Always launch
@@ -155,9 +164,36 @@ node test/smoke.mjs                    # dev + every packaged exe in dist/
 node test/smoke.mjs --only-target dev  # dev only, fastest loop
 ```
 
+On Linux (#89) the same dev target runs, and CI runs it on every pull
+request. It needs a display of its own and, on a first checkout, an explicit
+fetch of the Electron binary — Electron 44 has no postinstall, and going
+through npm would obey `desktop/.npmrc`'s ARM64 pin and fetch a build this
+machine cannot execute:
+
+```bash
+node build.mjs                           # main.js serves index.html from APP_ROOT
+cd desktop
+npm ci
+node node_modules/electron/install.js    # NOT npx — see .npmrc
+xvfb-run -a node test/smoke.mjs --only-target dev
+```
+
+The suite adds `--no-sandbox` itself, for the Linux dev target only:
+`node_modules/electron/dist/chrome-sandbox` is not setuid and these
+containers have no user namespaces to fall back on, so Electron will not
+start without it. It is a harness launch argument and reaches nothing that
+ships. Every check the platform cannot answer is printed as a `SKIP` line and
+listed again under `SKIPPED (n)` at the end of the run, above the pass line —
+so a thinner run never reads like a full one.
+
+A full dev-target run is ~55 minutes. `--only-group <text>` (debugging only,
+same spirit as `--only-target`) runs just the matching groups; it prints a
+banner and tags the summary `PARTIAL RUN`, so a one-case run can never be
+mistaken for the suite.
+
 Dev Electron is pinned to native ARM64 (`desktop/.npmrc`, `arch=arm64`); a
-plain `npm install` in `desktop/` fetches the right one. Never run
-`npm run dist`/`dist:win` outside a deliberate release build.
+plain `npm install` in `desktop/` on the Windows machine fetches the right
+one. Never run `npm run dist`/`dist:win` outside a deliberate release build.
 `desktop/drafts.test.mjs` unit-tests `desktop/drafts.js` directly, no
 Electron. `tools/test-server.mjs` drives real `server.js` processes.
 
@@ -480,7 +516,12 @@ tabs**.
 - `desktop/test/smoke.mjs`: Node built-ins only, drives real window(s) over
   CDP. Covers boot/security/save/export/update plus the tabs surface,
   route-open dedupe, one-dialog-per-quit, session restore, crash
-  reload/loop, duplicate-id reassignment, crash-safe drafts.
+  reload/loop, duplicate-id reassignment, crash-safe drafts. Runs on
+  Windows and Linux since #89 — the dev target on both (under a virtual
+  display on Linux), the packaged `.exe` targets on Windows only. macOS is
+  written for but unrun. A check this platform cannot answer prints `SKIP`
+  and is listed again in the run summary; it is never quietly dropped and
+  never rewritten weaker.
 
 ### 3.14 Motion is a token layer, and `render()` stays synchronous
 
