@@ -37,6 +37,10 @@ const { spawn } = require("node:child_process");
    It is listed in electron-builder.yml's `files` so a packaged build ships it
    — requiring it without that would crash the packaged app on startup. */
 const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+/* desktop/prompter-share.js: the loopback listener behind the teleprompter's
+   "Open in browser" (issue #86, section 9b). Plain Node, no Electron, in
+   electron-builder.yml's `files` for the same reason drafts.js is. */
+const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 /* desktop/ipc-channels.js is the one list of channels that cross this
    process boundary, and the one validator every inbound message goes
    through (section 14). Plain CommonJS data and pure functions, no Electron
@@ -116,6 +120,7 @@ const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
    window close once passed for "the debug port goes dead on the first
    close" while popping error dialogs on Adam's desktop every test run. */
 const TEST_MODE = process.env.SPLITPAGE_TEST === "1";
+const testExternalOpens = [];
 if (TEST_MODE) {
   /* uncaughtException/unhandledRejection are registered further down (see
      the "winning instance" block below), not here — the crash handler needs
@@ -137,6 +142,13 @@ if (TEST_MODE) {
   dialog.showSaveDialogSync = () => undefined;
   dialog.showSaveDialog = async () => ({ canceled: true, filePath: "" });
   dialog.showErrorBox = (title, content) => console.error("[splitpage-test] error box: " + title + " — " + content);
+
+  /* A browser window is as much "on the screen of the person whose machine
+     it is" as a dialog, and the teleprompter's Open in browser (section 9b)
+     exists to open one. Recorded instead, in order, for the test-shell
+     driver's 'externalOpens' op: the URL main WOULD have handed the OS is
+     the assertion, since no test can watch a real default browser start. */
+  shell.openExternal = async (url) => { testExternalOpens.push(String(url)); };
 }
 
 /* ---------------------------------------------------------------------
@@ -2780,6 +2792,113 @@ function runUpdateInstaller() {
 }
 
 /* ---------------------------------------------------------------------
+ * 9b. The teleprompter, in the browser (issue #86).
+ *
+ *     Follow My Voice needs the Web Speech API, which fails inside Electron
+ *     (#8) and works in Chrome and Edge. So the teleprompter can hand the
+ *     script to the default browser, starting straight in the prompter.
+ *     The desktop tab stays open and stays the place the script is edited;
+ *     the browser is a copy to read from.
+ *
+ *     THE SAME CONTRACT AS THE UPDATE BRIDGE (invariant #28). The page asks,
+ *     with no argument at all (splitpage:prompter-open-in-browser, argsSchema
+ *     NONE): "open what I am showing in the browser". It never names the URL
+ *     to open, the file to read or the server to point at. Main answers from
+ *     what it already holds about the CALLING tab — its TabRecord, the
+ *     authority every close and routing decision reads (invariant #42):
+ *
+ *       a file tab    source.absPath, which main registered itself when the
+ *                     file was opened or saved (invariant #34). Its bytes
+ *                     are read HERE, off disk, and served from memory by
+ *                     desktop/prompter-share.js on a loopback port; the URL
+ *                     is that listener's own, with a fresh 256-bit token.
+ *       a server tab  source.serverDocId on the document server THIS process
+ *                     runs (documentServerPort): http://127.0.0.1:<port>/
+ *                     ?doc=<id>&teleprompter=1. The id is checked against
+ *                     the server's own id shape before it goes anywhere near
+ *                     a URL.
+ *
+ *     The worst a compromised page can do with this channel is make main
+ *     open, in the user's browser, a loopback page of this app showing a
+ *     document the user already has open — nothing it names, nothing
+ *     off-box, no file of its choosing.
+ *
+ *     UNSAVED WORK IS REFUSED, not guessed at. The browser reads what is on
+ *     disk (or on the server), so a tab main knows to be dirty answers
+ *     UNSAVED_CHANGES and a tab with nowhere to live answers NOT_SAVED. The
+ *     page saves first when that needs no dialog and says why when it would
+ *     (openPrompterInBrowser, 20f-desktop.js).
+ * --------------------------------------------------------------------- */
+
+/* The server's own document-id shape (server/server.js ID_RE), repeated
+   rather than required because server.js is the utility process's code, not
+   this one's. A serverKey the page reported that does not fit it never
+   becomes part of a URL. */
+const SERVER_DOC_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+let prompterShare = null;
+function prompterShareInstance() {
+  if (!prompterShare) {
+    prompterShare = createPrompterShare({
+      staticAllowlist: STATIC_ALLOWLIST,
+      /* The same containment check the protocol handler makes: entry.file is
+         a literal from STATIC_ALLOWLIST, never request text. */
+      readStatic: (entry) => {
+        const absPath = path.join(APP_ROOT, entry.file);
+        if (!absPath.startsWith(APP_ROOT)) return Promise.reject(new Error("outside APP_ROOT"));
+        return fsp.readFile(absPath);
+      },
+      cspHeader: readAppCsp
+    });
+  }
+  return prompterShare;
+}
+
+async function openPrompterInBrowser(tab) {
+  if (!tab) return { ok: false, code: "NO_TAB" };
+  if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
+  const source = tab.source || { kind: "blank" };
+  let url;
+  if (source.kind === "server") {
+    const id = typeof source.serverDocId === "string" ? source.serverDocId : "";
+    if (!SERVER_DOC_ID_RE.test(id)) return { ok: false, code: "NOT_SAVED" };
+    if (!documentServerPort) return { ok: false, code: "NO_SERVER" };
+    url = `http://127.0.0.1:${documentServerPort}/?doc=${encodeURIComponent(id)}&teleprompter=1`;
+  } else if (source.kind === "file") {
+    const absPath = source.absPath;
+    if (!isShareableName(absPath)) return { ok: false, code: "NOT_A_PROJECT" };
+    let text;
+    try {
+      const st = await fsp.stat(absPath);
+      if (!st.isFile()) return { ok: false, code: "READ_FAILED" };
+      if (st.size > MAX_SCRIPT_BYTES) return { ok: false, code: "TOO_LARGE" };
+      text = await fsp.readFile(absPath, "utf8");
+    } catch {
+      return { ok: false, code: "READ_FAILED" };
+    }
+    /* Re-read after the awaits: the tab may have closed, or gone dirty, while
+       the file was being read. A share for a closed tab would never be
+       revoked by forgetTab. */
+    if (!tabs.has(tab.id)) return { ok: false, code: "NO_TAB" };
+    if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
+    try {
+      url = await prompterShareInstance().publish(tab.id, path.basename(absPath), text);
+    } catch (err) {
+      if (TEST_MODE) process.stderr.write(`[splitpage] prompter share failed: ${err && err.stack || err}\n`);
+      return { ok: false, code: "SERVE_FAILED" };
+    }
+  } else {
+    return { ok: false, code: "NOT_SAVED" };
+  }
+  try {
+    await shell.openExternal(url);
+  } catch {
+    return { ok: false, code: "OPEN_FAILED" };
+  }
+  return { ok: true, kind: source.kind };
+}
+
+/* ---------------------------------------------------------------------
  * 10. protocol.handle — the whole of what the window is allowed to load.
  * --------------------------------------------------------------------- */
 
@@ -3301,6 +3420,8 @@ function forgetTab(tabId) {
   unindexTabSource(tab);
   webContentsIdToTabId.delete(tab.webContentsId);
   tabs.delete(tabId);
+  /* A tab's browser copy of its script (section 9b) goes with the tab. */
+  if (prompterShare) prompterShare.revoke(tabId);
   const w = windowsById.get(tab.windowId);
   if (w) {
     const i = w.tabIds.indexOf(tabId);
@@ -4392,6 +4513,11 @@ function buildMenu() {
       { label: "Comments", accelerator: "CmdOrCtrl+Alt+C", click: () => sendMenuCommand("toggle-comments") },
       { label: "Write", click: () => sendMenuCommand("write") },
       { label: "Present", click: () => sendMenuCommand("present") },
+      /* Issue #86: Follow My Voice runs in Chrome/Edge and not in here (#8),
+         so this reads the same script from the default browser. The page
+         decides whether it needs saving first (20f-desktop.js); main decides
+         what URL that is (section 9b). */
+      { label: "Present in Browser (Follow My Voice)", click: () => sendMenuCommand("prompter-open-in-browser") },
       { type: "separator" },
       /* Issue #25: collapses scenes marked Shot into a thin strip. The
          renderer owns the on/off state (per-device localStorage, not this
@@ -4853,6 +4979,14 @@ function registerIpc() {
 
   ipcHandle("splitpage:update-install", async () => {
     return runUpdateInstaller();
+  });
+
+  /* ---- the teleprompter in the browser (section 9b, issue #86) --------
+     No argument, like the four above and for the same reason: the page asks
+     for what it is showing to be opened in the browser, and main decides
+     from the calling tab's own record what that is and where it lives. */
+  ipcHandle("splitpage:prompter-open-in-browser", async (event) => {
+    return openPrompterInBrowser(tabOf(event));
   });
 
   /* The TabRecord is main's copy of what the page is showing, and it is the
@@ -5401,6 +5535,15 @@ function registerIpc() {
         }
         case "listTargets":
           return listTargets();
+        /* Every URL main would have handed the OS's default browser this
+           run (TEST_MODE stubs shell.openExternal, section 1), oldest first. */
+        case "externalOpens":
+          return testExternalOpens.slice();
+        /* What the teleprompter's loopback listener is holding (section 9b):
+           listening or not, its port, and which tabs have a live share —
+           never a token or a script. */
+        case "prompterShareStatus":
+          return prompterShare ? prompterShare.status() : { listening: false, port: null, shares: [] };
         default:
           throw new Error("test-shell: unknown op " + op);
       }
@@ -5592,6 +5735,10 @@ app.on("will-quit", () => {
   }
   killDocumentServer();
   killTunnel();
+  /* Every script shared with the browser (section 9b) lives only in this
+     process's memory; closing the listener here is tidiness, not cleanup —
+     there is nothing on disk to remove, on this path or on a crash. */
+  if (prompterShare) prompterShare.closeAll();
   /* The app is really going, in one piece. Recording that is what lets the
      next launch tell "you quit" from "you were killed": a session.json still
      saying 'running' at startup means the previous run died, and its drafts

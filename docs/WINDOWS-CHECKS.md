@@ -204,6 +204,17 @@ that proves #76's `shared/` staging and #77's `files` entry.
   proxies are "no temp file left behind" and head-line consistency.
 - **Follow My Voice** (#8). Microphone capture is blocked in an agent sandbox,
   so this can never be verified end to end by any Claude session.
+- **Teleprompter "Open in browser"** (#86). The smoke suite replaces
+  `shell.openExternal` with a recorder in test mode, so it proves the URL
+  main would open and the script it would serve — not that a real default
+  browser launches. By hand, in the desktop app: open a saved script, then
+  View ▸ **Present in Browser (Follow My Voice)**. The default browser should
+  open straight into the teleprompter with the same text. Then start Follow
+  My Voice and read aloud — this is the one way Follow My Voice works from
+  the desktop app until #8 lands. It needs Chrome or Edge; Firefox has no
+  Web Speech, and the page says so. Also try it on an unsaved new document:
+  it should ask you to save first, with no Save dialog popping up by
+  itself.
 
 ## 4. The browser suites, on Windows
 
@@ -238,4 +249,5 @@ opinion on a different machine.
 | #79 deploy pickup | by hand | unreachable by test |
 | #74 fsync | by hand, if at all | unreachable by test |
 | #8 Follow My Voice | by hand | unreachable by any agent |
+| #86 Open in browser | by hand, desktop app | URL and served script verified; real browser launch unverified |
 | browser suites | `run-tests.ps1` | pass on Linux |

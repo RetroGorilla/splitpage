@@ -763,6 +763,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     neither takes an argument: the renderer can ask for the update to be
     fetched and run, but never names the URL to fetch or the file to
     execute (main picked both from the release it checked).
+    `splitpage:prompter-open-in-browser` (#86) follows the same rule: no
+    arguments at all. Main builds the loopback URL from the calling tab's
+    own record — the path it registered, or the server document id it
+    holds — so a compromised page can at worst open a loopback page of this
+    app showing a document that tab already has open. The script is served
+    from memory by `desktop/prompter-share.js` behind a 256-bit token in the
+    URL fragment and a Host-header check; no temp file is ever written, so
+    a crash leaves nothing on disk.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is

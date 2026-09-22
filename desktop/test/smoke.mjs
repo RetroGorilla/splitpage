@@ -4623,6 +4623,192 @@ async function caseTornOffDirtyTabCrashRestoresOnce(target) {
   }
 }
 
+/* ----------------------------------------------------------------------
+ * Issue #86: the teleprompter's "Open in browser".
+ *
+ * No test can watch a real default browser start, so TEST_MODE stubs
+ * shell.openExternal (main.js section 1) and records every URL it WOULD have
+ * opened; __testShell('externalOpens') reads them back. What IS real here:
+ * main choosing what to share from the tab's own record, the file read off
+ * disk, the loopback listener (desktop/prompter-share.js) answering over
+ * real HTTP, the save-first path, and the share going away with its tab.
+ * The browser page's own half (reading #script=, opening the prompter) is
+ * the browser suite 58-prompter-open-in-browser.txt.
+ * -------------------------------------------------------------------- */
+
+const PROMPTER_URL_RE = /^http:\/\/127\.0\.0\.1:(\d+)\/\?teleprompter=1#script=([0-9a-f]{64})$/;
+
+/* fetch() will not send a Host header of the caller's choosing, which is the
+   whole point of this probe — a DNS-rebinding page's request names the
+   attacker's host — so it goes over node:http instead. */
+function statusWithHost(port, pathname, hostHeader) {
+  return new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, path: pathname, method: "GET",
+      headers: { host: hostHeader, connection: "close" } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on("error", () => resolve(null));
+    req.setTimeout(8000, () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
+async function externalOpens(cdp) {
+  return (await shell(cdp, "externalOpens", {})) || [];
+}
+
+async function waitForExternalOpens(cdp, count, timeoutMs) {
+  return pollNode(async () => {
+    const list = await externalOpens(cdp);
+    return list.length >= count ? list : null;
+  }, timeoutMs || 15000).catch(() => null);
+}
+
+async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
+  const tag = target.name + " teleprompter: open in browser (file)";
+  const marker = "PROMPTER-MARKER-" + Date.now();
+  const fixturePath = writeFixture(fixturesDir, "prompter-open.splitpage", "Prompter — 🎬 Browser",
+    [["Wide shot", "The first line the reader says out loud."], ["Close up", "A second line — with an em dash."]]);
+  let app = null;
+  try {
+    /* No dialog answers at all: any native dialog this flow raised would be
+       answered Cancel, and counted by testDialogsSeen. */
+    app = await launchApp(target, { label: "prompter-open", fixtures: [fixturePath] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — 🎬 Browser"), 20000);
+    const dialogsBefore = await dialogsSeen(cdp);
+
+    // --- the bridge takes no argument, and hands back no URL ------------
+    const bridgeArity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInBrowser === 'function' && window.splitpageDesktop.openPrompterInBrowser.length");
+    record(tag + ": the bridge has openPrompterInBrowser() and it takes no argument", bridgeArity === 0, "length=" + bridgeArity);
+
+    // --- A: a clean file tab, from the View menu ------------------------
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const opens1 = await waitForExternalOpens(cdp, 1);
+    record(tag + ": View ▸ Present in Browser asks the OS to open exactly one URL", !!opens1 && opens1.length === 1, JSON.stringify(opens1));
+    const m1 = opens1 && PROMPTER_URL_RE.exec(opens1[0]);
+    record(tag + ": the URL is main's own loopback listener, ?teleprompter=1, token in the fragment", !!m1, opens1 ? opens1[0] : "");
+    const toastOk = await toastContaining(cdp, "Opened in your browser", 10000);
+    record(tag + ": the page says it opened, and that this window stays open", !!toastOk && toastOk.indexOf("stays open") !== -1, String(toastOk));
+
+    let port1 = null, token1 = null;
+    if (m1) {
+      port1 = Number(m1[1]); token1 = m1[2];
+      const base = `http://127.0.0.1:${port1}`;
+      const page = await fetch(base + "/?teleprompter=1").then(async (r) => ({ status: r.status, text: await r.text() })).catch(() => null);
+      record(tag + ": the listener serves the app page the desktop runs", !!page && page.status === 200 && page.text.indexOf('id="prompter"') !== -1,
+        page ? "status=" + page.status : "no answer");
+      const sw = await fetch(base + "/sw.js").then((r) => r.status).catch(() => null);
+      record(tag + ": no service worker is offered on that origin", sw === 404, "status=" + sw);
+      const script = await fetchJson(base + "/prompter-script/" + token1).catch(() => null);
+      const onDisk = fs.readFileSync(fixturePath, "utf8");
+      record(tag + ": the shared script is the saved file, byte for byte, under its own name",
+        !!script && script.status === 200 && script.body && script.body.text === onDisk && script.body.name === "prompter-open.splitpage",
+        script ? "status=" + script.status + " name=" + (script.body && script.body.name) : "no answer");
+      record(tag + ": the shared script is served no-store", !!script && script.headers.get("cache-control") === "no-store",
+        script ? String(script.headers.get("cache-control")) : "");
+      const forged = await statusWithHost(port1, "/prompter-script/" + token1, "rebind.example:" + port1);
+      record(tag + ": a request naming another Host is refused", forged === 403, "status=" + forged);
+    }
+
+    // --- B: dirty, from the teleprompter's own button -------------------
+    await addMarkerRow(cdp, marker);
+    const dirtyNow = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()", 10000).catch(() => false);
+    record(tag + ": setup — the tab is dirty", !!dirtyNow);
+    await evalPage(cdp, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
+    await poll(cdp, "!document.getElementById('prompter').hidden", 10000);
+    const btn = await evalPage(cdp, "(function(){ var b = document.getElementById('pp-voice'); return { text: b.textContent, disabled: b.disabled }; })()");
+    record(tag + ": on desktop the voice button reads 'Open in browser to use Follow My Voice' and is enabled",
+      !!btn && btn.text === "Open in browser to use Follow My Voice" && btn.disabled === false, JSON.stringify(btn));
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    const opens2 = await waitForExternalOpens(cdp, 2);
+    record(tag + ": the button saves first, then opens the browser", !!opens2 && opens2.length === 2, JSON.stringify(opens2));
+    const onDisk2 = fs.readFileSync(fixturePath, "utf8");
+    record(tag + ": the save landed on disk before the browser was asked", onDisk2.indexOf(marker) !== -1);
+    record(tag + ": no native dialog was raised by any of it", (await dialogsSeen(cdp)) === dialogsBefore);
+    const m2 = opens2 && opens2[1] && PROMPTER_URL_RE.exec(opens2[1]);
+    if (m2) {
+      const base2 = `http://127.0.0.1:${m2[1]}`;
+      const script2 = await fetchJson(base2 + "/prompter-script/" + m2[2]).catch(() => null);
+      record(tag + ": the browser gets the text just saved", !!script2 && script2.status === 200 && script2.body.text === onDisk2 && script2.body.text.indexOf(marker) !== -1,
+        script2 ? "status=" + script2.status : "no answer");
+      record(tag + ": same stable origin both times", Number(m2[1]) === port1, "ports " + port1 + " / " + m2[1]);
+      const stale = await fetch(base2 + "/prompter-script/" + token1).then((r) => r.status).catch(() => null);
+      record(tag + ": the tab's previous share is gone — one copy per tab, not one per click", stale === 404, "status=" + stale);
+    } else {
+      record(tag + ": the second URL has the listener's shape", false, opens2 ? String(opens2[1]) : "none");
+    }
+    const voiceStatus = await poll(cdp, "(function(){ var t = document.getElementById('pp-voice-status').textContent; return t.indexOf('Opened in your browser') !== -1 ? t : null; })()", 10000).catch(() => null);
+    record(tag + ": the prompter's status line says so too", !!voiceStatus, String(voiceStatus));
+
+    // --- C: the share goes with its tab ---------------------------------
+    const tab1Id = await tabIdOfTarget(cdp);
+    const status1 = await shell(cdp, "prompterShareStatus", {});
+    record(tag + ": main holds exactly one share, for this tab", !!status1 && status1.listening === true &&
+      status1.shares.length === 1 && status1.shares[0] === tab1Id, JSON.stringify(status1));
+    const witnessId = await shell(cdp, "createTab", {});
+    const witness = await connectTab(app, witnessId);
+    await waitForRows(witness, 20000);
+    await fireShell(cdp, "closeTab", { tabId: tab1Id });
+    const closed = port1 ? await pollNode(() => portClosed(port1, "127.0.0.1"), 15000).catch(() => false) : false;
+    record(tag + ": closing the tab drops its share and the listener closes", closed === true, "port=" + port1);
+    const status2 = await shell(witness, "prompterShareStatus", {});
+    record(tag + ": main holds no share afterwards", !!status2 && status2.listening === false && status2.shares.length === 0, JSON.stringify(status2));
+
+    // --- D: a document with nowhere to live is not saved behind the back -
+    const pristineBefore = await dialogsSeen(witness);
+    await evalPage(witness, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const saveFirst = await toastContaining(witness, "Save this script first", 10000);
+    record(tag + ": an unsaved new document is told to save first", !!saveFirst, String(saveFirst));
+    await sleep(500);
+    record(tag + ": ... and no Save dialog appears for it", (await dialogsSeen(witness)) === pristineBefore);
+    const opens3 = await externalOpens(witness);
+    record(tag + ": ... and nothing is opened in the browser", opens3.length === 2, JSON.stringify(opens3.length));
+    /* The first tab's connection died with it; teardown drives the witness. */
+    try { cdp.close(); } catch { /* already gone */ }
+    app.cdp = witness;
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+async function caseTeleprompterOpenInBrowserServer(target) {
+  const tag = target.name + " teleprompter: open in browser (--library server document)";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  const marker = "PROMPTER-SERVER-" + Date.now();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "prompter-server", flags: ["--library"], dataDir });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "fetch('/api/health').then(function(r){return r.status;})", 15000);
+    const created = await evalPage(cdp,
+      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
+      "body: JSON.stringify({ state: { title: 'Prompter Server Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
+    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
+    if (!created || !created.id) return;
+    await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
+    const opened = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Prompter Server Doc'", 15000).catch(() => false);
+    record(tag + ": setup — the tab shows the server document", !!opened);
+
+    await addMarkerRow(cdp, marker);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const opens = await waitForExternalOpens(cdp, 1);
+    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+    const expected = `http://127.0.0.1:${info && info.port}/?doc=${created.id}&teleprompter=1`;
+    record(tag + ": the URL is this app's own document server, ?doc=<id>&teleprompter=1", !!opens && opens[0] === expected,
+      JSON.stringify(opens) + " expected " + expected);
+    const doc = info && info.port ? await fetchJson(`http://127.0.0.1:${info.port}/api/docs/${created.id}`) : null;
+    const rows = doc && doc.body && doc.body.state && doc.body.state.rows || [];
+    record(tag + ": the unsaved edit was saved to the server before the browser was asked",
+      rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1), "rows=" + rows.length);
+    const status = await shell(cdp, "prompterShareStatus", {});
+    record(tag + ": a server document needs no loopback share at all", !!status && status.listening === false && status.shares.length === 0, JSON.stringify(status));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(dataDir);
+  }
+}
+
 async function caseWindowCloseCanary() {
   const tag = "src/js window.close() canary";
   const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
@@ -4713,6 +4899,9 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: renderer crash of a clean tab (J-1)", () => caseRendererCrashRestores(target)],
     ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target)],
     ["draft: a torn-off dirty tab crashes and restores exactly once", () => caseTornOffDirtyTabCrashRestoresOnce(target)],
+    // --- issue #86: the teleprompter in the browser ---
+    ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
+    ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {

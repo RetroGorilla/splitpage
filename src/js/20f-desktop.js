@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { home, serverHomeId } from "./_home.js";
+import { fileHome, home, serverHomeId } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
 import {
@@ -14,8 +14,8 @@ import {
 } from "./03a-history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { openServerDoc, serverToken } from "./13-hosted.js";
-import { concatBytes, strBytes } from "./14-export.js";
+import { openServerDoc, serverBase, serverToken } from "./13-hosted.js";
+import { concatBytes, saveDoc, strBytes } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
@@ -149,6 +149,10 @@ var DESKTOP_HEADER_BUTTONS = {
 };
 
 function runDesktopMenuCommand(cmd) {
+  /* View ▸ Present in Browser — not a button anywhere in #file-menu, and it
+     does not need one: the teleprompter's own Follow My Voice button runs
+     the same function on desktop (20-teleprompter.js). */
+  if (cmd === "prompter-open-in-browser") { openPrompterInBrowser(); return; }
   var btnId = DESKTOP_HEADER_BUTTONS[cmd];
   if (btnId) {
     var btn = document.getElementById(btnId);
@@ -163,6 +167,97 @@ function runDesktopMenuCommand(cmd) {
   /* An unrecognized command from the native menu has nothing to run —
      the menu and this map are meant to agree, and a mismatch here (an
      older build's menu, say) should never take the app down over it. */
+}
+
+/* ---- the teleprompter in the browser (issue #86) ----
+
+   Follow My Voice fails inside Electron (#8) and works in Chrome and Edge,
+   so on desktop the teleprompter's voice button and View ▸ Present in
+   Browser hand the script to the default browser instead. The bridge call
+   takes NO argument (invariant #28, desktop/main.js section 9b): this page
+   never says which file, which server or which URL — main reads all of
+   that off this tab's own record and opens the browser itself. What this
+   page owns is the one thing main cannot do: making sure what is on disk
+   (or on the server) is what is on screen, because that is what the
+   browser will read.
+
+   UNSAVED WORK. Saved first, silently, when the save needs no question —
+   the document already has a file of its own on disk, or lives on this
+   app's server — because that is exactly the write autosave would make
+   anyway. When it WOULD need a question (a script never saved, an import,
+   an old .html that must be re-saved as .md), nothing is saved: the person
+   is told to press Save first. A native Save dialog springing up because
+   someone clicked a teleprompter button is a surprise, and a dialog they
+   cancel leaves nothing for the browser to read anyway. */
+var prompterBrowserBusy = false;
+
+export function canOpenPrompterInBrowser() {
+  return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInBrowser === "function");
+}
+
+var PROMPTER_BROWSER_MESSAGES = {
+  NOT_SAVED: "Save this script first (Ctrl+S), then try again — the browser reads the saved copy.",
+  SAVE_FAILED: "The save didn't go through, so the browser would show an older version. Save, then try again.",
+  UNSAVED_CHANGES: "The save didn't go through, so the browser would show an older version. Save, then try again.",
+  NOT_A_PROJECT: "Only a Splitpage script (.md or .splitpage) can be opened in the browser. Save it as one first.",
+  READ_FAILED: "Couldn't read the saved file — it may have moved. Save it again, then try again.",
+  TOO_LARGE: "This script is too large to hand to the browser.",
+  NO_SERVER: "The server this script lives on isn't running here any more.",
+  SERVE_FAILED: "Couldn't open the script in your browser.",
+  OPEN_FAILED: "Couldn't open your browser.",
+  NO_TAB: "Couldn't open the script in your browser."
+};
+
+function prompterBrowserResult(ok, message, kind) {
+  showToast(message, kind || (ok ? "ok" : "warn"), !ok);
+  return { ok: ok, message: message };
+}
+
+/* A hosted document on a server somebody else runs (File ▸ Servers…): main
+   has no document server of its own to point the browser at, and must not
+   be handed a URL by this page. The link is this page's to give out,
+   exactly as Share already does, so it goes to the clipboard instead. */
+async function copyPrompterLinkForRemoteServer(id) {
+  var link;
+  try { link = new URL("?doc=" + encodeURIComponent(id) + "&teleprompter=1", serverBase).href; }
+  catch (e) { return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NO_SERVER); }
+  var copied;
+  try { await navigator.clipboard.writeText(link); copied = true; } catch (e) { copied = false; }
+  return prompterBrowserResult(copied, copied
+    ? "This script is on another server — link copied. Paste it into Chrome or Edge to read it with Follow My Voice."
+    : "This script is on another server. Open this in Chrome or Edge to read it with Follow My Voice: " + link,
+    copied ? "ok" : "warn");
+}
+
+export async function openPrompterInBrowser() {
+  if (!canOpenPrompterInBrowser()) return { ok: false, message: "" };
+  if (prompterBrowserBusy) return { ok: false, message: "" };
+  prompterBrowserBusy = true;
+  try {
+    if (!S.state) return prompterBrowserResult(false, "Still loading…");
+    var serverId = serverHomeId();
+    if (serverId && serverBase) return await copyPrompterLinkForRemoteServer(serverId);
+    var fh = fileHome();
+    var onDisk = !!(fh && fh.handle && fh.handle._desktopId);
+    if (!onDisk && !serverId) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
+    if (S.dirty) {
+      /* A legacy .html's first Save is a Save As (14-export.js) — a dialog. */
+      if (onDisk && fh.format === "html") return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
+      await saveDoc();
+      if (S.dirty) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
+    }
+    var answer;
+    try { answer = await S.DESKTOP.openPrompterInBrowser(); }
+    catch (e) { answer = { ok: false, code: "OPEN_FAILED" }; }
+    if (answer && answer.ok) {
+      return prompterBrowserResult(true,
+        "Opened in your browser. Follow My Voice needs Chrome or Edge — this window stays open for editing.");
+    }
+    var code = answer && answer.code;
+    return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES[code] || PROMPTER_BROWSER_MESSAGES.OPEN_FAILED);
+  } finally {
+    prompterBrowserBusy = false;
+  }
 }
 
 /* ---- Servers dialog: "you are sharing this session" ----
@@ -558,6 +653,15 @@ function makeFakeDesktopBackend(opts) {
       return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
     },
     openExternal: function () {},
+    /* The teleprompter's Open in browser (issue #86). Argument-free, like
+       the real bridge; records what this page had told main about itself
+       at the moment it asked (the real handler reads exactly that), and
+       answers whatever a test armed in _prompterAnswer. */
+    openPrompterInBrowser: function () {
+      this._prompterCalls = (this._prompterCalls || 0) + 1;
+      this._prompterDocState = this._lastDocState || null;
+      return Promise.resolve(this._prompterAnswer || { ok: true, kind: "file" });
+    },
 
     /* ---- crash drafts (DRAFT-IPC-AND-SHAPES bridge members) ---- */
     writeDraft: function (payload) {

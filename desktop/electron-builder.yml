@@ -28,6 +28,9 @@ files:
   # read it over splitpage:ipc-table-sync, so a packaged build without it is
   # an app with no bridge at all — same reason drafts.js is listed.
   - ipc-channels.js
+  # The teleprompter's loopback listener (issue #86). main.js requires it at
+  # startup, so it has to ship for the same reason drafts.js does.
+  - prompter-share.js
   - package.json
 
 extraResources:

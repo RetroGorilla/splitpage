@@ -357,6 +357,15 @@ if (location.origin === "splitpage://app") {
 
     onUpdateStatus(cb) {
       updateStatusCallback = cb;
+    },
+
+    /* ---- the teleprompter in the browser (main.js section 9b) -----------
+       Argument-free for the same reason the update calls are: the page asks
+       for what it is showing to be opened in the default browser, and main
+       decides what that is and what URL reaches it. Answers {ok:true, kind}
+       or {ok:false, code} — never the URL. */
+    openPrompterInBrowser() {
+      return invoke("splitpage:prompter-open-in-browser");
     }
   };
 
