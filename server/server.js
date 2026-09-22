@@ -322,7 +322,12 @@ function corsHeaders(req) {
     "Access-Control-Allow-Origin": origin,
     "Vary": "Origin",
     "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
+    /* PATCH is here for the one comment resolve route (#71). A preflight
+       that does not name a method is a preflight that fails, and a route
+       added without its method named here works from the app and from
+       nowhere else — which is a bug nobody meets until the day somebody
+       sets ALLOW_ORIGINS. */
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
   };
 }
 
@@ -1165,6 +1170,244 @@ function reviewWriteAllowed(stored, incoming) {
   return { ok: true };
 }
 
+/* ---------- a comment, without the document around it (#71) ----------
+ *
+ * Everything above this line judges a reviewer's write by COMPARING two
+ * whole documents, because a whole document is what the review client sends.
+ * That is an expensive way to post four words: the reviewer downloads the
+ * script, edits their copy of it, uploads all of it back, and the server
+ * re-reads the stored one to prove that nothing but a comment moved. It also
+ * fails in ways nobody can explain from the outside — #62 was a reviewer
+ * seeing "review-only" because their copy carried `brollShots: []` and the
+ * stored one, saved before that field existed, carried no such key.
+ *
+ * So: a route that takes the comment and nothing else. The reviewer never
+ * holds the state to send it, the server never diffs anything, and the two
+ * facts that made the comparison necessary — that a comment may only be
+ * ADDED, and that nothing else in the document may move — stop being
+ * assertions to prove and become the only operations this code can perform.
+ *
+ * The PUT path stays exactly as it was. The review client migrates to this
+ * one in the browser lane, and until it has, both are live.
+ *
+ * Three things this route is careful about:
+ *
+ *   1. it reads the stored document INSIDE the document's lock and appends
+ *      to what it finds there. There is no baseRev and no compare-and-set,
+ *      because there is nothing to conflict over: two reviewers commenting
+ *      in the same second queue behind each other and both comments land.
+ *      A read-modify-write outside the lock would have the second one
+ *      overwrite the first, which is the exact failure the whole-document
+ *      PUT had to hand a 409 back to avoid;
+ *   2. it is idempotent by comment id. A client that posts, loses the
+ *      answer to a dropped connection and posts again gets the comment it
+ *      already has and the rev it is already at, not a second copy of its
+ *      own comment;
+ *   3. it bounds every field on the way in. The server has no DOM and does
+ *      not sanitise HTML — it never has, on any route; the client does that
+ *      on the way in and on the way out (migrateRows is the only door).
+ *      What this adds is a SHAPE: a comment that reaches storage from here
+ *      has the keys a comment has, sized the way a comment is sized, and
+ *      carries no other key at all.
+ */
+
+/* One comment, with at most a pasted screenshot inside it and at most one
+   scene field's worth of HTML beside it for the anchor. Deliberately its own
+   cap rather than MAX_BODY: MAX_BODY is 25 MB because a whole script full of
+   embedded images has to fit through PUT, and the entire point of this route
+   is that a reviewer never sends one (#71, #74). Equally deliberately not
+   SMALL_BODY, which is sized for a PIN: a comment with a screenshot pasted
+   into it is a normal comment and must not be refused. */
+const COMMENT_BODY = 512 * 1024;
+const COMMENT_HTML_MAX = 256 * 1024;   /* one comment body, or one anchored field */
+const COMMENT_NAME_MAX = 80;           /* matches the client's plainName() */
+const COMMENT_QUOTE_MAX = 2000;
+/* Bounds on the document rather than on the request: a reviewer who is
+   allowed to append forever is a reviewer who can grow a script past the
+   25 MB it can be saved in, one legitimate comment at a time. */
+const DOC_COMMENTS_MAX = 2000;
+const COMMENT_REPLIES_MAX = 500;
+
+/* Names, quotes and assignees are plain text and only ever rendered as text,
+   exactly as on the client (plainText/plainName in 04-richtext.js): markup
+   stripped, control characters dropped, bounded. */
+function commentText(value, max) {
+  return String(value == null ? "" : value)
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim()
+    .slice(0, max);
+}
+
+/* A comment id ends up in a CSS attribute selector and in a `data-cmt`
+   attribute in someone else's browser, so it is whitelisted rather than
+   sanitised — the same reasoning as a document id, and the same character
+   set the client's safeId() leaves behind. */
+function commentIdOf(value) {
+  const id = String(value == null ? "" : value);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : "";
+}
+
+/* The comment as it will be stored, or null for anything that is not one.
+ *
+ * Built key by key rather than copied and cleaned, so a field this server
+ * has never heard of cannot arrive through here. `resolved` is hard-coded
+ * false and the timestamps are this process's clock: a comment is born
+ * unresolved, and when it was posted is something the server knows and the
+ * poster only claims.
+ */
+function cleanComment(input, now, fallbackAuthor) {
+  if (!input || typeof input !== "object") return null;
+  const id = commentIdOf(input.id);
+  if (!id) return null;
+  const body = typeof input.body === "string" ? input.body : "";
+  if (!body || body.length > COMMENT_HTML_MAX) return null;
+  /* A title comment is the merge's document-level conflict card: it belongs
+     to no row, and the client's migrateRows nulls its rowId and anchorId to
+     keep it from being folded into one. Every other comment names a row. */
+  const onTitle = input.field === "title";
+  const rowId = commentIdOf(input.rowId);
+  if (!onTitle && !rowId) return null;
+  return {
+    id,
+    rowId: onTitle ? null : rowId,
+    field: onTitle ? "title"
+      : (input.field === "visualText" || input.field === "visualImage") ? input.field : "audioText",
+    anchorId: onTitle ? null : (commentIdOf(input.anchorId) || id),
+    quotedText: commentText(input.quotedText, COMMENT_QUOTE_MAX),
+    author: commentText(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
+    body,
+    resolved: false,
+    resolvedBy: null,
+    resolvedAt: null,
+    assignee: commentText(input.assignee, COMMENT_NAME_MAX),
+    createdAt: now,
+    updatedAt: now,
+    kind: input.kind === "conflict" ? "conflict" : "anchor",
+    replies: []
+  };
+}
+
+function cleanReply(input, now, fallbackAuthor) {
+  if (!input || typeof input !== "object") return null;
+  const id = commentIdOf(input.id);
+  if (!id) return null;
+  const body = typeof input.body === "string" ? input.body : "";
+  if (!body || body.length > COMMENT_HTML_MAX) return null;
+  return {
+    id,
+    author: commentText(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
+    body,
+    createdAt: now
+  };
+}
+
+/* ---------- the anchor ----------
+ *
+ * The one place a comment touches the script itself: the `.cmt-anchor` span
+ * wrapped around the words it is about lives in the row's HTML, so posting a
+ * comment on a phrase is genuinely an edit to that phrase's field.
+ *
+ * The request carries that ONE field's new HTML — a scene, not a script — and
+ * it is accepted only if unwrapping this comment's own anchor out of it gives
+ * back exactly what is stored, character for character, tag for tag. That is
+ * rule 2 of reviewWriteAllowed() applied to one field instead of to a whole
+ * document, and it reuses fieldSignature() rather than growing a second
+ * opinion about what "the same words" means.
+ *
+ * A mismatch is NOT a refusal. Somebody else may have rewritten that scene
+ * while the reviewer was typing, and in that case the anchor is stale but the
+ * comment is not: it still names its row, its field and the words it quoted,
+ * so it still lands and still opens the right scene. Losing a reviewer's
+ * paragraph because a word moved would be the worse answer by far. The
+ * response says which happened, in `anchored`.
+ *
+ * Returns "none" (nothing was asked for), "ok" (placed), "stale" (the scene
+ * has moved on) or "bad" (not an anchor at all — that one IS a refusal,
+ * because it is a client sending nonsense rather than a document changing).
+ */
+function placeAnchor(state, anchor, cmtId, author, now) {
+  if (anchor === undefined || anchor === null) return "none";
+  if (typeof anchor !== "object") return "bad";
+  const field = anchor.field;
+  if (field !== "visualText" && field !== "audioText") return "bad";
+  const rowId = commentIdOf(anchor.rowId);
+  const html = anchor.html;
+  if (!rowId || typeof html !== "string" || html.length > COMMENT_HTML_MAX) return "bad";
+  const rows = Array.isArray(state.rows) ? state.rows : [];
+  let row = null;
+  for (const r of rows) if (r && typeof r === "object" && r.id === rowId) { row = r; break; }
+  if (!row) return "stale";
+  if (fieldSignature(row[field], null) !== fieldSignature(html, new Set([cmtId]))) return "stale";
+  row[field] = html;
+  /* Posting a comment stamps the scene it landed on, and nothing else —
+     the same rule reviewRows() enforces on the PUT path. */
+  row.updatedAt = now;
+  row.updatedBy = author;
+  return "ok";
+}
+
+/* The document a comment write leaves behind. Built fresh from `id`, `state`
+   and the new rev exactly as PUT builds it, so both paths store the same
+   shape, and written through writeDoc() so the head line is regenerated from
+   the state that is actually going to disk and the fsync discipline is the
+   same one every other save gets (#74).
+
+   `lastEditedBy`/`lastEditedAt` move with it. A comment IS a save — a
+   reviewer's name there is true, not a forged edit — and it is what makes
+   the client's "opened the latest version, last edited by …" honest. The
+   state's own `rev` is left alone: that is the client's merge counter
+   (max-plus-one, 02-state.js), and the rev this API compares against is the
+   document's, which is bumped here. */
+async function writeCommentChange(id, doc, state, by, now) {
+  if (by) {
+    state.lastEditedBy = by;
+    state.lastEditedAt = now;
+  }
+  const next = {
+    id,
+    rev: (doc.rev || 0) + 1,
+    state,
+    updatedAt: now,
+    updatedBy: by || doc.updatedBy || null
+  };
+  await writeDoc(next);
+  return next;
+}
+
+/* The stored document, ready to be appended to, or a refusal to send back.
+   A document with no `comments` array is not an error and never was — one
+   saved before comments existed simply has none (#62's lesson: absence is
+   not disagreement). */
+async function openForComment(id) {
+  const doc = await readDoc(id);
+  if (!doc) return { error: { status: 404, body: { error: "not-found" } } };
+  const state = doc.state;
+  if (!state || typeof state !== "object") {
+    return { error: { status: 409, body: { error: "no-state" } } };
+  }
+  if (!Array.isArray(state.comments)) state.comments = [];
+  return { doc, state };
+}
+
+function findComment(state, cid) {
+  for (const c of state.comments) if (c && typeof c === "object" && c.id === cid) return c;
+  return null;
+}
+
+/* What every answer from this route looks like: the new rev, who it is now
+   attributed to, and the stored comment — so the client adopts the server's
+   copy (its bounded author, its server clock) instead of keeping its own. */
+function commentAnswer(id, doc, comment, extra) {
+  return Object.assign({
+    id,
+    rev: doc.rev || 0,
+    updatedAt: doc.updatedAt || null,
+    updatedBy: doc.updatedBy || null,
+    comment
+  }, extra || {});
+}
+
 /* ---------- API ---------- */
 
 async function handleApi(req, res, url) {
@@ -1434,6 +1677,135 @@ async function handleApi(req, res, url) {
   if (role === "review") {
     const scope = reviewScopeOf(req);
     if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
+  }
+
+  /* ---------- comments, on their own (#71) ----------
+   *
+   *   POST  /api/docs/:id/comments            a new comment, or a reply
+   *   PATCH /api/docs/:id/comments/:commentId resolve or unresolve one
+   *
+   * Above the read and save routes because `/api/docs/:id/comments` is a
+   * longer path than `/api/docs/:id` and would otherwise be answered as a
+   * GET of the document — the extra segment silently ignored.
+   *
+   * Open to both roles. An editor has PUT and does not need this, but there
+   * is nothing here an editor may not do, and a route that refuses the more
+   * privileged caller is a trap for whoever writes the client next.
+   */
+  if (parts[3] === "comments") {
+    /* Nothing hangs off a comment: a reply is a POST to the collection
+       carrying `replyTo`, not a path of its own. A deeper path is not a
+       method this route lacks, it is a route that is not here. */
+    if (parts.length > 5) return sendJson(res, 404, { error: "not-found" });
+    const hasCid = parts[4] !== undefined;
+    if (!((req.method === "POST" && !hasCid) || (req.method === "PATCH" && hasCid))) {
+      return sendJson(res, 405, { error: "method-not-allowed" });
+    }
+    const cid = hasCid ? commentIdOf(parts[4]) : "";
+    if (hasCid && !cid) return sendJson(res, 400, { error: "bad-comment-id" });
+    if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+
+    /* Only now is a byte of the body read: the token was checked by the gate
+       above, the review link's scope by the check above that, and the method
+       and the path by the two lines above this one (#74). The cap is this
+       route's own — a comment, not a script. */
+    const body = await readBody(req, COMMENT_BODY);
+    const now = new Date().toISOString();
+    /* Cloudflare Access's word first, the client's claim second: the same
+       order PUT uses for `updatedBy`, and for the same reason — one is an
+       identity this process was handed and the other is a name in a box. */
+    const by = who.name || commentText(body && body.by, COMMENT_NAME_MAX);
+
+    if (req.method === "PATCH") {
+      if (!body || typeof body.resolved !== "boolean") {
+        return sendJson(res, 400, { error: "bad-resolve" });
+      }
+      const resolved = body.resolved;
+      return withDocLock(id, async () => {
+        const open = await openForComment(id);
+        if (open.error) return sendJson(res, open.error.status, open.error.body);
+        const comment = findComment(open.state, cid);
+        if (!comment) return sendJson(res, 404, { error: "no-such-comment" });
+        /* Already the way it is being asked for: answer with the document as
+           it stands rather than writing a new rev that changes nothing. Two
+           people clicking Resolve on the same card is one resolve. */
+        if (comment.resolved === resolved) {
+          return sendJson(res, 200, commentAnswer(id, open.doc, comment, { changed: false }));
+        }
+        comment.resolved = resolved;
+        comment.updatedAt = now;
+        /* Unresolving clears both fields, exactly as the client's
+           toggleResolve does — a resolver's name next to a comment that is
+           not resolved is worse than no name at all. */
+        comment.resolvedBy = resolved ? (by || "Anonymous") : null;
+        comment.resolvedAt = resolved ? now : null;
+        const next = await writeCommentChange(id, open.doc, open.state, by, now);
+        return sendJson(res, 200, commentAnswer(id, next, comment, { changed: true }));
+      });
+    }
+
+    /* A reply to a comment that is already there. Distinguished by carrying
+       `reply`, not by a route of its own: it is the same append, under the
+       same lock, to the same document, and one route is one place to get
+       that right. */
+    if (body && body.reply !== undefined) {
+      const parentId = commentIdOf(body.replyTo);
+      const reply = cleanReply(body.reply, now, by);
+      if (!parentId || !reply) return sendJson(res, 400, { error: "bad-comment" });
+      return withDocLock(id, async () => {
+        const open = await openForComment(id);
+        if (open.error) return sendJson(res, open.error.status, open.error.body);
+        const parent = findComment(open.state, parentId);
+        if (!parent) return sendJson(res, 404, { error: "no-such-comment" });
+        if (!Array.isArray(parent.replies)) parent.replies = [];
+        for (const r of parent.replies) {
+          if (r && r.id === reply.id) {
+            return sendJson(res, 200, commentAnswer(id, open.doc, parent, { changed: false }));
+          }
+        }
+        if (parent.replies.length >= COMMENT_REPLIES_MAX) {
+          return sendJson(res, 409, { error: "too-many-replies" });
+        }
+        parent.replies.push(reply);
+        /* A thread's own timestamp moves when it is replied to, and only
+           then — the rule reviewComments() spells out on the PUT path. */
+        parent.updatedAt = now;
+        const next = await writeCommentChange(id, open.doc, open.state, by, now);
+        return sendJson(res, 200, commentAnswer(id, next, parent, { changed: true, reply }));
+      });
+    }
+
+    const comment = cleanComment(body && body.comment, now, by);
+    if (!comment) return sendJson(res, 400, { error: "bad-comment" });
+    /* Judged before the lock is taken: nonsense is nonsense whatever the
+       document says, and there is no reason to queue behind a save to find
+       out. Whether it is a REPEAT can only be judged inside. */
+    if (body.anchor !== undefined && body.anchor !== null && typeof body.anchor !== "object") {
+      return sendJson(res, 400, { error: "bad-anchor" });
+    }
+    return withDocLock(id, async () => {
+      const open = await openForComment(id);
+      if (open.error) return sendJson(res, open.error.status, open.error.body);
+      const already = findComment(open.state, comment.id);
+      if (already) {
+        /* The same comment, posted twice: a client that never saw its
+           answer. Hand back the one that is stored and the rev it is at.
+           Not 409 — from where the client is standing this worked, and it
+           did. */
+        return sendJson(res, 200, commentAnswer(id, open.doc, already, { changed: false, anchored: false }));
+      }
+      if (open.state.comments.length >= DOC_COMMENTS_MAX) {
+        return sendJson(res, 409, { error: "too-many-comments" });
+      }
+      const placed = placeAnchor(open.state, body.anchor, comment.id, comment.author, now);
+      if (placed === "bad") return sendJson(res, 400, { error: "bad-anchor" });
+      open.state.comments.push(comment);
+      const next = await writeCommentChange(id, open.doc, open.state, by, now);
+      return sendJson(res, 200, commentAnswer(id, next, comment, {
+        changed: true,
+        anchored: placed === "ok"
+      }));
+    });
   }
 
   /* read */
