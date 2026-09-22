@@ -22,6 +22,7 @@ import {
   HISTORY_SNAP_ID_RE,
   historyClip,
   historyStampAfter,
+  historyUtf8Length,
   planHistoryEviction,
   sanitizeHistoryMeta
 } from "../../shared/history-policy.js";
@@ -32,6 +33,7 @@ export {
   HISTORY_PER_DOC,
   HISTORY_SNAP_ID_RE,
   historyStampAfter,
+  historyUtf8Length,
   planHistoryEviction,
   sanitizeHistoryMeta
 };
@@ -122,21 +124,9 @@ function historyNow() {
   return historyNowOverride != null ? historyNowOverride : Date.now();
 }
 
-/* UTF-8 byte length without allocating a copy of a multi-megabyte string.
-   sizeBytes means the same thing here and on desktop disk, so a cap and a
-   "bytes equal the sum" check agree across backends. */
-export function historyUtf8Length(str) {
-  var n = 0, c, i;
-  for (i = 0; i < str.length; i++) {
-    c = str.charCodeAt(i);
-    if (c < 0x80) n += 1;
-    else if (c < 0x800) n += 2;
-    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length &&
-             str.charCodeAt(i + 1) >= 0xdc00 && str.charCodeAt(i + 1) <= 0xdfff) { n += 4; i++; }
-    else n += 3;
-  }
-  return n;
-}
+/* historyUtf8Length — UTF-8 byte length without copying the string — is
+   shared/history-policy.js's (#83), imported and re-exported at the top of
+   this file so 20f-desktop.js keeps importing it from here. */
 
 function isQuotaError(e) {
   return !!e && (e.name === "QuotaExceededError" || e.code === 22 || e.name === "NS_ERROR_DOM_QUOTA_REACHED");

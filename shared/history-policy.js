@@ -58,6 +58,42 @@ function historyClip(v, n) {
   return String(v == null ? "" : v).slice(0, n);
 }
 
+/* UTF-8 byte length without allocating a copy of a multi-megabyte string.
+   sizeBytes means the same thing in every store — IndexedDB, desktop disk,
+   memory — so a cap and a "bytes equal the sum" check agree across them.
+   Moved here from src/js/03a-history-store.js (#83), which re-exports it. */
+function historyUtf8Length(str) {
+  var n = 0, c, i;
+  for (i = 0; i < str.length; i++) {
+    c = str.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length &&
+             str.charCodeAt(i + 1) >= 0xdc00 && str.charCodeAt(i + 1) <= 0xdfff) { n += 4; i++; }
+    else n += 3;
+  }
+  return n;
+}
+
+/* THE Older-expiry predicate (#83) — list(), get(), the importOlder that
+   finds a dead bucket, and the planner's expiry sweep all ask this one.
+
+   A NON-POSITIVE (or missing, or non-numeric) expiresAt is "not stamped",
+   never "expired since 1970". This is the desktop store's rule, and the one
+   that survives: a bucket rebuilt without its index (a crash between a
+   migration's body writes and its index write) comes back with expiresAt 0,
+   and reading 0 as expired hid the whole migrated history from every list
+   while the planner — which always guarded its sweep with `expiresAt > 0` —
+   refused to delete it: invisible, undeletable, still counted against the
+   cap. The browser store's old copy read 0 as expired; it goes with #83. */
+function historyOlderExpired(rec, nowMs) {
+  if (!rec || rec.expiresAt == null) return false;
+  var expiresAt = Number(rec.expiresAt);
+  if (!isFinite(expiresAt) || expiresAt <= 0) return false;
+  var now = Number(nowMs);
+  return isFinite(now) && now >= expiresAt;
+}
+
 /* SnapshotMeta (HISTORY-STORAGE), rebuilt from plain values with every
    length clamped. Returns null when the id is unusable, which is what makes
    an invalid meta a rejected put on either backend. Deliberately carries no
@@ -174,7 +210,7 @@ function planHistoryEviction(docs, capBytes, nowMs, opts) {
     }
     return false;
   }
-  if (older && older.expiresAt > 0 && now >= older.expiresAt) {
+  if (older && historyOlderExpired(older, now)) {
     while (dropOldest(older, false)) { /* the whole bucket */ }
   }
   list.forEach(function (e) {
@@ -198,7 +234,9 @@ module.exports = {
   HISTORY_PER_DOC,
   HISTORY_SNAP_ID_RE,
   historyClip,
+  historyOlderExpired,
   historyStampAfter,
+  historyUtf8Length,
   planHistoryEviction,
   sanitizeHistoryMeta
 };
