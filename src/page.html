@@ -480,7 +480,7 @@
 </div>
 
 <div class="modal-backdrop" id="file-conflict-modal" hidden>
-  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
+  <div class="modal-panel conflict-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
     <div class="modal-header">
       <h2 id="file-conflict-title">That file changed on disk</h2>
       <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close">×</button>
@@ -491,8 +491,33 @@
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="file-conflict-cancel">Cancel</button>
         <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
+        <!-- Shown only once the copy on disk has been read back as a
+             document there is something to merge with (18a-local-merge.js). -->
+        <button type="button" class="btn" id="file-conflict-merge" hidden>Merge them</button>
         <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
         <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Every field the two versions disagree about, side by side, BEFORE
+     mergeStates() runs and before anything is written (18a-local-merge.js).
+     Opens over the conflict modal, so Cancel puts its four original choices
+     straight back with nothing changed. -->
+<div class="modal-backdrop" id="merge-review-modal" hidden>
+  <div class="modal-panel merge-review-panel" role="dialog" aria-modal="true" aria-labelledby="merge-review-title">
+    <div class="modal-header">
+      <h2 id="merge-review-title">What's different</h2>
+      <button type="button" class="modal-close" id="merge-review-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint" id="merge-review-detail"></p>
+    <div id="merge-review-list"></div>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="merge-review-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="merge-review-confirm">Merge them</button>
       </div>
     </div>
   </div>
