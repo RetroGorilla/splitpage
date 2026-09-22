@@ -192,7 +192,7 @@ function renderRecents(entries) {
 
 async function refreshRecents() {
   if (!recentsSupported()) return;
-  var entries = [];
+  var entries;
   try { entries = await S.DESKTOP.listRecents(); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);
 }
@@ -205,7 +205,7 @@ async function refreshRecents() {
    silently. */
 async function openRecent(fileId) {
   if (!fileId || !recentsSupported()) return;
-  var entry = null;
+  var entry;
   try {
     var r = await S.DESKTOP.routeOpen({ kind: "file", fileId: fileId });
     if (!r || r.where !== "this-tab") {
@@ -231,14 +231,14 @@ async function forgetRecent(fileId) {
      one of these re-checks the bridge rather than trusting the button's
      existence. */
   if (!fileId || !recentsSupported() || typeof S.DESKTOP.removeRecent !== "function") return;
-  var entries = [];
+  var entries;
   try { entries = await S.DESKTOP.removeRecent(fileId); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
 async function clearRecents() {
   if (!recentsSupported() || typeof S.DESKTOP.clearRecents !== "function") return;
-  var entries = [];
+  var entries;
   try { entries = await S.DESKTOP.clearRecents(); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);
 }
@@ -267,7 +267,7 @@ async function newTabEligibleForAutoShow() {
     if ((S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
         S.DESKTOP.hasDraftToRestore) return false;
   } else {
-    var handle = null;
+    var handle;
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
@@ -279,7 +279,7 @@ async function newTabEligibleForAutoShow() {
 }
 
 async function maybeAutoShowNewTabPage() {
-  var eligible = false;
+  var eligible;
   try { eligible = await newTabEligibleForAutoShow(); } catch (e) { eligible = false; }
   if (eligible) openNewTabPage();
 }

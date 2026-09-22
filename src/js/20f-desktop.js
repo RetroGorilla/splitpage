@@ -177,14 +177,14 @@ function runDesktopMenuCommand(cmd) {
 export async function renderDesktopShareInfo() {
   var el = document.getElementById("desktop-share-info");
   if (!el || !S.DESKTOP) return;
-  var info = null;
+  var info;
   try { info = await S.DESKTOP.getSessionInfo(); } catch (e) { info = null; }
   if (!info || !info.hosting) { el.hidden = true; el.innerHTML = ""; return; }
   var lanUrls = info.lanUrls || [];
   var addrs = lanUrls.length
     ? lanUrls.map(function (u) { return '<div class="connect-share-url">' + escapeHtml(u) + "</div>"; }).join("")
     : '<div class="modal-hint">No network address found yet — check this computer is on a network.</div>';
-  var pinHtml = "";
+  var pinHtml;
   if (info.pin) {
     pinHtml = '<div class="connect-share-pin">Join PIN:<strong>' + escapeHtml(info.pin) + "</strong></div>" +
       '<p class="modal-hint">This code travels in the clear over plain HTTP — fine on your own ' +
@@ -440,6 +440,14 @@ function makeFakeDesktopBackend(opts) {
   var openHandler = null;
   var menuHandler = null;
   var openServerDocHandler = null;
+  /* Write-only, and deliberately kept. Every other registration slot in this
+     fake backend has a _fire* twin below that a browser suite calls;
+     onRestoreNotice is the one that does not, so nothing reads this back yet.
+     Removing the variable would mean removing onRestoreNotice() itself, and
+     20g-drafts.js calls that at boot against the real bridge — the fake has
+     to answer it. The gap belongs to the suites, not to this file. */
+  /* eslint-disable-next-line no-unused-vars -- holds the renderer's callback
+     until a _fireRestoreNotice() exists to call it; see above. */
   var restoreNoticeHandler = null;
   var reassignDocIdHandler = null;
   function newId() { return "fake" + (nextId++); }

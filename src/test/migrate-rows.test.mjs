@@ -71,7 +71,7 @@ test("a stray non-object in a list never takes the whole load down", () => {
 test("rows: script, iframe and event handlers never survive", () => {
   const s = doc({ rows: [{
     id: "r1",
-    audioText: '<b>keep</b><script>alert(1)<\/script><img src=x onerror="alert(1)">',
+    audioText: '<b>keep</b><script>alert(1)</script><img src=x onerror="alert(1)">',
     visualText: '<iframe src="https://evil.test"></iframe><em>fine</em>'
   }] });
   const row = s.rows[0];
@@ -176,7 +176,7 @@ test("comments: an unresolved comment never shows a resolver", () => {
 test("comments: bodies and replies are sanitised, authors are plain text", () => {
   const c = doc({ comments: [{
     id: "c1", rowId: "r1",
-    body: '<b>hi</b><script>x<\/script>',
+    body: '<b>hi</b><script>x</script>',
     author: "<b>Sam</b>",
     quotedText: "<i>quoted</i>",
     replies: [null, { id: "rp1", body: '<em>ok</em><img src=x onerror=y>', author: "" }]

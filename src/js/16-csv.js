@@ -62,7 +62,11 @@ export function buildCsv() {
 
 function parseCsv(text) {
   var rows = [], row = [], field = "", inQuotes = false;
-  var src = String(text || "").replace(/^﻿/, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+  /* A literal U+FEFF used to sit inside that first regex, invisible in the
+     source. Escaped now; the character it matches is unchanged. */
+  /* eslint-disable-next-line no-control-regex -- C0 controls are what a CSV
+     field must not carry into a row. */
+  var src = String(text || "").replace(/^\uFEFF/, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
   for (var i = 0; i < src.length; i++) {
     var ch = src[i];
     if (inQuotes) {
@@ -98,7 +102,7 @@ export function csvToRows(text) {
   var table = parseCsv(text);
   if (!table.length) return [];
   /* find the visual/audio columns from a header row if there is one */
-  var vi = 0, ai = 1, start = 0;
+  var vi, ai, start = 0;
   var head = table[0].map(function (c) { return c.trim().toLowerCase(); });
   var hv = head.findIndex(function (c) { return /^(visual|video|picture|image|shot|action)s?$/.test(c); });
   var ha = head.findIndex(function (c) { return /^(audio|voice|vo|narration|dialogue|script|line)s?\b/.test(c); });

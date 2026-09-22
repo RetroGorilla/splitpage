@@ -445,10 +445,6 @@ export function autoSaveTarget() {
   return "file";
 }
 
-function autoSaveLive() {
-  return autoSaveEnabled && !autoSaveHalt && !!autoSaveTarget();
-}
-
 function setAutoSaveEnabled(on) {
   autoSaveEnabled = !!on;
   try { localStorage.setItem(AUTOSAVE_KEY, autoSaveEnabled ? "1" : "0"); } catch (e) {}
@@ -890,12 +886,13 @@ export async function zipRead(arrayBuffer) {
 export function htmlToPlainText(html) {
   if (!html) return "";
   var c = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
-  return (c.textContent || "").replace(/ /g, " ").trim();
+  return (c.textContent || "").replace(/\u00A0/g, " ").trim();
 }
 
 export function xmlEscape(s) {
   return String(s == null ? "" : s)
     /* C0 controls (except tab/LF/CR) are illegal in XML 1.0 */
+    /* eslint-disable-next-line no-control-regex -- see the line above. */
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -909,7 +906,7 @@ export function htmlToRuns(html) {
   (function walk(node, fmt) {
     Array.prototype.forEach.call(node.childNodes, function (child) {
       if (child.nodeType === 3) {
-        var t = (child.nodeValue || "").replace(/ /g, " ");
+        var t = (child.nodeValue || "").replace(/\u00A0/g, " ");
         if (t) runs.push({ text: t, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href });
         return;
       }

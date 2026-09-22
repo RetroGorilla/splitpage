@@ -821,6 +821,8 @@ function draftScalarString(v, max) {
   /* C0 controls and DEL: everything below U+0020 (newline included) plus
      U+007F. Written as \x escapes deliberately — a literal control character
      in this source would be invisible to anyone reading it. */
+  /* eslint-disable-next-line no-control-regex -- stripping control characters
+     is the function's job; the class is written out above. */
   const clean = v.replace(/[\x00-\x1f\x7f]/g, "").slice(0, max);
   return clean || null;
 }
@@ -1112,7 +1114,7 @@ function normalizeDesktopStateV2(raw) {
 let desktopStateSynthesized = null; // {text, state}
 
 function readDesktopStateV2() {
-  let text = null;
+  let text;
   try { text = fs.readFileSync(stateFilePath(), "utf8"); } catch { text = null; }
   if (desktopStateSynthesized && desktopStateSynthesized.text === text) {
     return structuredClone(desktopStateSynthesized.state);
@@ -1764,7 +1766,7 @@ async function readHistorySnapshotFile(bucket, snapId) {
   if (nl1 === -1 || text.slice(0, nl1).trim() !== HISTORY_SNAP_MAGIC) return null;
   const nl2 = text.indexOf("\n", nl1 + 1);
   if (nl2 === -1) return null;
-  let parsed = null;
+  let parsed;
   try { parsed = JSON.parse(text.slice(nl1 + 1, nl2)); } catch { return null; }
   const meta = sanitizeHistoryMeta(parsed);
   if (!meta) return null;
@@ -1841,7 +1843,7 @@ async function fsckHistoryBucket(bucket) {
     const m = HISTORY_SNAP_FILE_RE.exec(name);
     if (!m) continue;
     const file = path.join(dir, name);
-    let diskBytes = 0;
+    let diskBytes;
     try { diskBytes = (await fsp.stat(file)).size; } catch { continue; }
     bodies.set(m[1], { file, diskBytes });
   }
@@ -2606,7 +2608,7 @@ function updateApiUrl() {
 function isAllowedDownloadHost(urlString) {
   let parsed;
   try { parsed = new URL(urlString); } catch { return false; }
-  let api = null;
+  let api;
   try { api = new URL(updateApiUrl()); } catch { api = null; }
   if (api && parsed.origin === api.origin) return true;
   if (parsed.protocol !== "https:") return false;
@@ -2984,19 +2986,6 @@ const TABSTRIP_CSP = [
   "form-action 'none'",
   "frame-ancestors 'none'"
 ].join("; ");
-
-function contentTypeFor(ext) {
-  const table = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".webmanifest": "application/manifest+json; charset=utf-8",
-    ".svg": "image/svg+xml",
-    ".md": "text/markdown; charset=utf-8",
-    ".txt": "text/plain; charset=utf-8"
-  };
-  return table[ext] || "application/octet-stream";
-}
 
 function registerProtocol() {
   protocol.handle("splitpage", async (request) => {
@@ -4894,7 +4883,7 @@ function registerIpc() {
      returns a path (invariant #34) — an entry is named by the same opaque
      fileId it was listed with, and reopening one goes through the ordinary
      route-open above, so main still decides where it lands. */
-  ipcHandle("splitpage:recents-list", async (event) => {
+  ipcHandle("splitpage:recents-list", async () => {
     return recentsForRenderer();
   });
 
@@ -4903,7 +4892,7 @@ function registerIpc() {
     return recentsForRenderer();
   });
 
-  ipcHandle("splitpage:recents-clear", async (event) => {
+  ipcHandle("splitpage:recents-clear", async () => {
     if (recentDocuments.length) {
       recentDocuments = [];
       await persistRecents();
@@ -4917,7 +4906,7 @@ function registerIpc() {
      splitpage:set-document-state instead of a dedicated "remember this"
      call — one report, not two paths that can drift apart. */
 
-  ipcHandle("splitpage:get-session-info", async (event) => {
+  ipcHandle("splitpage:get-session-info", async () => {
     return {
       library: LIBRARY,
       hosting: HOSTING,
@@ -4998,24 +4987,24 @@ function registerIpc() {
      table states it (argsSchema: none, all four), so a call that carries an
      argument is refused before it arrives. See section 9. */
 
-  ipcHandle("splitpage:update-status", async (event) => {
+  ipcHandle("splitpage:update-status", async () => {
     return updateStatus;
   });
 
   /* Re-run the check on demand, for the case the launch check found nothing
      because the machine was offline at the time. */
-  ipcHandle("splitpage:update-check", async (event) => {
+  ipcHandle("splitpage:update-check", async () => {
     if (SKIP_UPDATE_CHECK) return updateStatus;
     setUpdateStatus({ checking: true });
     await checkForUpdate();
     return updateStatus;
   });
 
-  ipcHandle("splitpage:update-download", async (event) => {
+  ipcHandle("splitpage:update-download", async () => {
     return downloadUpdate();
   });
 
-  ipcHandle("splitpage:update-install", async (event) => {
+  ipcHandle("splitpage:update-install", async () => {
     return runUpdateInstaller();
   });
 
@@ -5337,7 +5326,7 @@ function registerIpc() {
     return historyExclusive(() => historyImportOlderLocked(entries));
   });
 
-  ipcHandle("splitpage:history-usage", async (event) => {
+  ipcHandle("splitpage:history-usage", async () => {
     return historyExclusive(() => historyUsageLocked());
   });
 
@@ -5346,7 +5335,7 @@ function registerIpc() {
      name out — just the docIds this store already knows about, each with the
      same title/lastOpenedAt splitpage:history-list already exposes per
      document. */
-  ipcHandle("splitpage:history-list-docs", async (event) => {
+  ipcHandle("splitpage:history-list-docs", async () => {
     return historyExclusive(() => historyListDocsLocked());
   });
 
@@ -5450,7 +5439,7 @@ function registerIpc() {
        Quitting with a dirty window still has to prompt — app.quit() asks
        every open BrowserWindow to close first, which fires the same
        win.on('close') this whole fix is about. */
-    ipcOn("splitpage:test-request-quit", (event) => {
+    ipcOn("splitpage:test-request-quit", () => {
       app.quit();
     });
 

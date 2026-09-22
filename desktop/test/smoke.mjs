@@ -83,7 +83,7 @@ async function freePort() {
 async function fetchJson(url, opts, timeoutMs) {
   const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs || 8000) });
   const text = await res.text();
-  let body = null;
+  let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   return { status: res.status, ok: res.ok, headers: res.headers, body };
 }
@@ -358,7 +358,7 @@ function readDraftDirs(userDataDir) {
     if (!ent.isDirectory()) continue;
     if (ent.name === "corrupt" || ent.name.indexOf(".trash-") === 0 || ent.name.indexOf(".tmp-") === 0) continue;
     const tabDir = path.join(draftsRoot, ent.name);
-    let files = [];
+    let files;
     try { files = fs.readdirSync(tabDir); } catch { continue; }
     out[ent.name] = {
       dir: tabDir,
@@ -488,13 +488,13 @@ function dirContainsText(dir, needle) {
   let found = null;
   (function walk(d) {
     if (found) return;
-    let entries = [];
+    let entries;
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const ent of entries) {
       if (found) return;
       const p = path.join(d, ent.name);
       if (ent.isDirectory()) { walk(p); continue; }
-      let text = "";
+      let text;
       try { text = fs.readFileSync(p, "utf8"); } catch { continue; }
       if (text.indexOf(needle) !== -1) { found = p; return; }
     }
@@ -812,7 +812,7 @@ async function launchApp(target, opts) {
       killPid(proc.pid);
       await waitForExit(proc, 10000);
       if (attempt >= maxAttempts) {
-        throw new Error("launchApp: CDP never came up after " + attempt + " attempt(s) on " + target.name + ": " + (lastErr && lastErr.message || lastErr));
+        throw new Error("launchApp: CDP never came up after " + attempt + " attempt(s) on " + target.name + ": " + (lastErr && lastErr.message || lastErr), { cause: e });
       }
       // else: loop retries with a fresh freePort() and a fresh spawn.
     }
@@ -1027,7 +1027,7 @@ function writeFixture(dir, name, title, rowPairs) {
  *    profile per the "every launch is isolated" rule.
  * -------------------------------------------------------------------- */
 
-async function caseBootAndSecurity(target, fixturesDir) {
+async function caseBootAndSecurity(target) {
   const tag = target.name + " boot+security";
   let app = null;
   try {
@@ -2354,7 +2354,7 @@ async function caseQuitTwoWindowsDirty(target) {
   let ctx = null;
   try {
     ctx = await setupTwoDirtyWindows(target, { label: "quit-2-windows-dirty", dialogs: ["review", "confirm"] });
-    const { app, cdp1, cdp2, cdp3 } = ctx;
+    const { app, cdp1, cdp3 } = ctx;
 
     await dirtyTabForTest(cdp1); // window1
     await dirtyTabForTest(cdp3); // window2
@@ -4443,7 +4443,7 @@ async function caseTornOffDirtyTabCrashRestoresOnce(target) {
 async function caseWindowCloseCanary() {
   const tag = "src/js window.close() canary";
   const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
-  let files = [];
+  let files;
   try {
     files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".js"));
   } catch (e) {
@@ -4471,7 +4471,7 @@ async function runTargetSuite(target) {
   // target. Groups already tear down their own launches in their own
   // finally blocks; this only protects the group sequencing.
   const groups = [
-    ["open/boot/security", () => caseBootAndSecurity(target, fixturesDir)],
+    ["open/boot/security", () => caseBootAndSecurity(target)],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],

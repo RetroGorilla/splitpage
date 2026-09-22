@@ -347,7 +347,7 @@ export async function parseProjectFileState(file, opts) {
     return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
   }
 
-  var project = null;
+  var project;
   try {
     project = parseMarkdownProject(text);
   } catch (e) {
@@ -506,7 +506,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   if (kind === "splitpage" || kind === "html") kind = null;
   if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
-  var newRows = null, newTitle = null;
+  var newRows, newTitle = null;
   /* Unzipping and walking a long .docx is the slowest thing the app does
      on the open path, and it used to run with the interface completely
      still. The bar only appears if the parse is actually slow enough to
@@ -668,7 +668,7 @@ export async function openLocalFile() {
 }
 
 export function mimeForFilename(filename) {
-  var ext = (/\.([a-z0-9]+)$/i.exec(filename || "") || [, ""])[1].toLowerCase();
+  var ext = (/\.([a-z0-9]+)$/i.exec(filename || "") || ["", ""])[1].toLowerCase();
   if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (ext === "csv") return "text/csv";
   if (ext === "md" || ext === "markdown") return "text/markdown";
@@ -690,7 +690,7 @@ export async function deliverFile(filename, data, opts) {
   opts = opts || {};
   if (S.DESKTOP) {
     try {
-      var ext = (/\.([a-z0-9]+)$/i.exec(filename) || [, ""])[1].toLowerCase();
+      var ext = (/\.([a-z0-9]+)$/i.exec(filename) || ["", ""])[1].toLowerCase();
       var picked = await S.DESKTOP.saveFileDialog({
         suggestedName: filename,
         filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]

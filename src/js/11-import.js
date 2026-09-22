@@ -302,7 +302,7 @@ var IMPORT_SCAN_KEY = "splitpage-import-scans";
    unanswered question should leave the b-roll list working rather than
    second-class (#21) — and a no, once given, keeps. */
 function importScanPrefs() {
-  var saved = null;
+  var saved;
   try { saved = JSON.parse(localStorage.getItem(IMPORT_SCAN_KEY) || "{}"); } catch (e) { saved = null; }
   return saved && typeof saved === "object" ? saved : {};
 }

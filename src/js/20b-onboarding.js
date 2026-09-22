@@ -42,7 +42,7 @@ import { draftRestorePending } from "./20g-drafts.js";
 export var ONBOARD_KEY = "splitpage-onboarding";
 
 function readOnboardKey() {
-  var raw = null;
+  var raw;
   try { raw = localStorage.getItem(ONBOARD_KEY); } catch (e) { return null; }
   if (!raw) return null;
   try {
@@ -99,7 +99,6 @@ export function seedCheckPasses() {
 /* ---- the wizard itself ---- */
 
 var onboardStep = 1;
-var onboardWork = null; /* "solo" | "host" | "join" | null */
 var onboardReturnFocus = null;
 var launcherInfoState = "unloaded"; /* "unloaded" | "loading" | "done" */
 
@@ -107,7 +106,6 @@ function onboardModal() { return document.getElementById("onboarding-modal"); }
 
 function resetOnboardUi() {
   onboardStep = 1;
-  onboardWork = null;
   launcherInfoState = "unloaded";
   var hostPanel = document.getElementById("onboard-host-panel");
   var joinPanel = document.getElementById("onboard-join-panel");
@@ -148,8 +146,7 @@ function renderOnboardStep() {
 /* Anything that opens over the whole screen closes the side panels first
    (invariant #16) — closeSidePanelsForHelp() (20c-help.js) already does
    exactly this and is reused rather than duplicated. */
-function openOnboarding(opts) {
-  opts = opts || {};
+function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
   if (typeof closeSidePanelsForHelp === "function") closeSidePanelsForHelp();
@@ -252,7 +249,7 @@ async function loadLauncherInfo() {
     renderLauncherInfoBody(desktopInstallHtml());
     return;
   }
-  var info = null;
+  var info;
   try { info = await launcherFetch("api/launcher/info"); }
   catch (e) { info = null; }
   launcherInfoState = "done";
@@ -279,7 +276,6 @@ async function registerLauncher() {
 /* ---- step 3: how you'll be working ---- */
 
 function selectOnboardWork(kind) {
-  onboardWork = kind;
   var cards = document.querySelectorAll("#onboard-work-cards .onboard-card");
   for (var i = 0; i < cards.length; i++) {
     var is = cards[i].getAttribute("data-onboard-work") === kind;
@@ -422,7 +418,7 @@ async function onboardEligibleForAutoShow() {
         (S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
         S.DESKTOP.hasDraftToRestore) return false;
   } else {
-    var handle = null;
+    var handle;
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
@@ -436,9 +432,9 @@ async function onboardEligibleForAutoShow() {
 }
 
 async function maybeAutoShowOnboarding() {
-  var eligible = false;
+  var eligible;
   try { eligible = await onboardEligibleForAutoShow(); } catch (e) { eligible = false; }
-  if (eligible) openOnboarding({ auto: true });
+  if (eligible) openOnboarding();
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

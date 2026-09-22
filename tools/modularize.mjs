@@ -260,7 +260,7 @@ for (const stmt of topStatements) {
 }
 for (const frag of perFragment) if (frag.indented === null) frag.indented = true;
 
-let prevEndByFrag = new Map();
+const prevEndByFrag = new Map();
 for (const stmt of topStatements) {
   const fi = fragIndexOf(stmt.range[0]);
   const frag = perFragment[fi];
@@ -375,7 +375,6 @@ for (const frag of perFragment) {
     dedents.push({ start: at, end: at + width, text: "" });
   }
 
-  const inMove = (e) => moves.some((m) => e.start >= m.start && e.end <= m.end);
   const movedChunks = moves.map((m) => {
     const inside = frag.edits.concat(dedents).filter((e) => e.start >= m.start && e.end <= m.end);
     return applyEdits(src.slice(m.start, m.end), inside, m.start).replace(/^[ \t]+/, "");
@@ -386,7 +385,7 @@ for (const frag of perFragment) {
     .concat(removals)
     .concat(dedents.filter((e) => !inRemoval(e)));
   let bodyText = applyEdits(src.slice(frag.span.start, frag.span.end), bodyEdits, base);
-  bodyText = bodyText.replace(/^[\s﻿]+/, "").replace(/[ \t\n]+$/, "");
+  bodyText = bodyText.replace(/^[\s\uFEFF]+/, "").replace(/[ \t\n]+$/, "");
 
   const lines = [];
   if (frag.needsState) lines.push('import { ' + STATE + ' } from "./_state.js";');

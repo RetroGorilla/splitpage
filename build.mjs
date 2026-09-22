@@ -176,6 +176,9 @@ function mdInline(text) {
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
   text = text.replace(/&lt;kbd&gt;/g, "<kbd>").replace(/&lt;\/kbd&gt;/g, "</kbd>");
+  /* eslint-disable-next-line no-control-regex -- the NUL is the sentinel the
+     code-span pass at the top of this function wrote; it is chosen precisely
+     because README prose can never contain one. */
   text = text.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => "<code>" + codeSpans[i] + "</code>");
   return text;
 }
@@ -260,7 +263,7 @@ function mdToHtml(markdown) {
   const toc = []; /* { li: "<li>...", subs: ["<li>...", ...] } — one per h2 */
   let i = 0;
   while (i < lines.length) {
-    let line = lines[i];
+    const line = lines[i];
 
     if (!line.trim()) { i++; continue; }
 
@@ -448,6 +451,8 @@ const APP_SCRIPT_OPEN = '<script id="app-logic">';
    (08c-broll.js used one as a key separator), and it is escaped there now —
    this normalisation is the guard that stops the next one being a puzzle. */
 function asParsed(text) {
+  /* eslint-disable-next-line no-control-regex -- matching a NUL is the entire
+     point: this is the rewrite the HTML parser makes, reproduced. */
   return text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "\uFFFD");
 }
 

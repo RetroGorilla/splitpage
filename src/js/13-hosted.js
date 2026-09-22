@@ -373,7 +373,7 @@ async function resumeServerDoc() {
        it belong to the merge below — the draft already carries everything
        that stash held, and a stash left over from a different document must
        survive for its own resume. */
-    var samePending = null;
+    var samePending;
     try {
       var rawPending = sessionStorage.getItem(SERVER_RESUME_KEY);
       samePending = rawPending ? JSON.parse(rawPending) : null;
@@ -921,7 +921,7 @@ export async function publishAndCopyShareLink() {
    address bar must not throw them away. The parameter is stripped either
    way, so a reload is an ordinary reload of whatever is on screen. */
 function readSharedDocParam() {
-  var id = "";
+  var id;
   try { id = new URLSearchParams(location.search).get("doc") || ""; } catch (e) { id = ""; }
   if (!id) return "";
   try {
@@ -1128,6 +1128,14 @@ export async function launcherFetch(path, opts) {
    Splitpage has no backend of its own to hold either credential, so
    whoever uses this pastes their own, once, in a small setup form. They
    are kept in localStorage only — never sent anywhere but Google's APIs. */
+
+/* `google` is the namespace Google Identity Services installs on window when
+   loadGisScript() below has finished injecting accounts.google.com/gsi/client
+   — a real runtime global that no import can declare, which is why it is
+   named here rather than left to no-undef (#68). Every use is behind either
+   an awaited loadGisScript() or a `window.google &&` guard; there is no code
+   path that touches it before the script has run. */
+/* global google -- injected at runtime by Google Identity Services; see above */
 
 var DRIVE_KEY_STORE = "splitpage-drive-api-key";
 var DRIVE_CLIENT_STORE = "splitpage-drive-client-id";
