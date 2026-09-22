@@ -356,19 +356,27 @@ node start.mjs --host --pin --review-pin
 ```
 
 The launcher prints a second address — the same one with `#review=…` on the end
-— and a second six-digit code beside it. Either one opens the document to be
+— and a second six-digit code beside it. Either one opens the session to be
 **read and commented on**: the script renders, the teleprompter and every export
 work, comments and replies can be added, and nothing else can change. Fields are
-not editable, the header says *Viewing · comments only*, and **File ▸ Servers…**
-has a **Copy review link** button for handing the address on. `--share-readonly`
+not editable and the header says *Viewing · comments only*. `--share-readonly`
 is the same thing with both codes generated for you.
+
+Those two are the *session's* credential: the code you read out covers every
+script on the server, because you chose it before any of them was open. The
+link **File ▸ Servers…** offers is narrower, and is the one to send. Open the
+script you want read, press **Copy review link**, and the address you get opens
+that one script and no other — the key is minted for it, and the server refuses
+the rest of your library to anyone holding it. The button is there only while a
+script is open on the server, because there is nothing to make a link to
+otherwise.
 
 The refusal is your computer's, not the page's: the server compares what a
 review session sends against what it has stored and accepts only added comments
 and replies, so it does not matter what the other person's copy of Splitpage
 lets them click, or what they type into their browser's console. They cannot
 resolve or delete anyone's comments either. Restarting your session invalidates
-the review link and both codes.
+every review link and both codes.
 
 ## Connecting to a server
 
@@ -450,8 +458,11 @@ up to date even though the main repository is private.
 
 The desktop app does the same thing without a launcher: it checks at startup,
 and its Download button fetches the installer for your platform and
-architecture inside the app. When it has finished the button becomes **Install
-and restart**, which runs the installer and closes Splitpage. The release page
+architecture inside the app. The download is checked against the `SHA256SUMS`
+published with that release, and a release that published none is **not
+installed** — the app says so rather than running a file it cannot vouch for.
+When a download has finished and matched, the button becomes **Install and
+restart**, which runs the installer and closes Splitpage. The release page
 only gets offered when a release has no installer your machine can run.
 
 **Updates install on restart, never while the app is open.** Downloading is

@@ -11,7 +11,12 @@
      keystroke landed in the meantime — the button stays visibly disabled
      either way, so the mismatch is purely cosmetic, but it reads as "the
      save already finished (or never started)" to anyone watching it. */
-  var saveInFlight = false;
+  /* Deliberately NOT called saveInFlight: 14-export.js has its own
+     autosave mutex under that name, and because the fragments concatenate
+     into one closure the two `var`s hoisted to a single binding, so the
+     button label and the autosave lock silently shared state (issue #59).
+     This one is only ever about what the two Save buttons say. */
+  var saveButtonBusy = false;
 
   function setSaveButtons(text, disabled) {
     ["btn-save", "wr-save"].forEach(function (id) {
@@ -56,7 +61,7 @@
        to cost work, since the document is large enough to still be writing.
        noteDraftChange() is O(1) and only moves a timer (20g-drafts.js). */
     if (DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
-    if (!saveInFlight) setSaveButtons("Save •");
+    if (!saveButtonBusy) setSaveButtons("Save •");
     /* Only moves two timers (14-export.js), so it is safe on the keystroke
        path; the save itself waits for a pause in the typing. */
     scheduleAutoSave();
@@ -119,7 +124,7 @@
       return { text: "Not saving", cls: "warn",
                title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
     }
-    if (saveInFlight) {
+    if (saveButtonBusy) {
       return { text: "Saving…", cls: "busy",
                title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
     }

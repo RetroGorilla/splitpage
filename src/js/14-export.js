@@ -43,7 +43,7 @@
       if (retarget && !wrote && docFileHandle === retarget) docFileHandle = prevDocFileHandle;
       retarget = null;
     }
-    saveInFlight = true;
+    saveButtonBusy = true;
     setSaveButtons("Saving…", true);
 
     /* A hosted document saves to the server, not to disk. "Save As" still
@@ -62,7 +62,7 @@
                        "Press Save to try again.");
         }
       } finally {
-        saveInFlight = false;
+        saveButtonBusy = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
       }
       return;
@@ -129,7 +129,7 @@
         });
         if (!pickedDesktop) {
           state.rev = Math.max(0, (state.rev || 1) - 1);
-          saveInFlight = false;
+          saveButtonBusy = false;
           setSaveButtons(dirty ? "Save •" : "Save", false);
           return;
         }
@@ -163,7 +163,7 @@
                                  " changed on disk since it was opened. Press Save to sort it out.");
           else showFileConflict(targetHandle.name, check.current, { kind: "project" });
           state.rev = Math.max(0, (state.rev || 1) - 1);
-          saveInFlight = false;
+          saveButtonBusy = false;
           setSaveButtons(dirty ? "Save •" : "Save", false);
           return;
         }
@@ -179,7 +179,7 @@
         /* before setSaveButtons, whose identity sync would otherwise adopt
            the never-written file as this document's home for a moment */
         undoRetarget();
-        saveInFlight = false;
+        saveButtonBusy = false;
         setSaveButtons(dirty ? "Save •" : "Save", false);
         return;
       }
@@ -245,7 +245,7 @@
          rejects (a OneDrive lock, Controlled Folder Access, a failed IPC
          write). Undone before setSaveButtons syncs identity. */
       undoRetarget();
-      saveInFlight = false;
+      saveButtonBusy = false;
       setSaveButtons(dirty ? "Save •" : "Save", false);
     }
   }
@@ -477,7 +477,11 @@
 
   /* serialize auto-saves so two quick ones (e.g. posting a comment right
      after resolving another, or a timer landing on top of either) never
-     overlap */
+     overlap. Private to queueAutoSave: the flag the two Save buttons read is
+     saveButtonBusy (12-dirty-toast.js). Until #59 both were called
+     saveInFlight and the fragments' shared scope hoisted them into one bit,
+     so saveDoc() cleared this latch on its own way out and the
+     serialization the comment describes was never actually held. */
   var saveInFlight = false;
   var saveQueued = false;
   function queueAutoSave() {
@@ -487,6 +491,11 @@
        writing; queueing is this function's own job from here. */
     clearAutoSaveTimers();
     if (saveInFlight) { saveQueued = true; return; }
+    /* Some other saveDoc() caller — a manual Save, a save from an action —
+       is already writing. saveQueued is drained by the chain below and
+       nothing else, so latching here would drop this write entirely; come
+       back on the ordinary idle timer instead. */
+    if (saveButtonBusy) { scheduleAutoSave(); return; }
     saveInFlight = true;
     /* The catch matters more than it looks: without it, one rejected save
        leaves saveInFlight stuck true and every later auto-save is silently

@@ -1,7 +1,7 @@
   /* ================= side panel resizing ================= */
 
-  /* Every panel in SIDE_PANEL_IDS (03-sync.js) — Comments, Production,
-     Gear, B-roll, History — gets its own drag-to-resize left edge and
+  /* Every panel in SIDE_PANEL_IDS — Comments, Production, Gear, B-roll,
+     History — gets its own drag-to-resize left edge and
      remembers its own width. This generalises what used to be just the
      comments panel's own feature (see the removed initCommentsPanelResize()
      that lived in 10-comments.js), so it belongs here instead of in any one
@@ -30,6 +30,15 @@
     "broll-panel": 520,
     "history-panel": 400
   };
+
+  /* The one list of side panels, and it is the defaults map's own keys so a
+     panel cannot be added to one and forgotten in the other. It used to be
+     written out three times under three names — SIDE_PANEL_IDS in
+     03-sync.js, HELP_SIDE_PANEL_IDS in 20c-help.js and these keys (#59).
+     The fragments share one scope, so 03-sync.js and 20c-help.js read this
+     binding directly; every use is inside a function that runs long after
+     all the fragments have. */
+  var SIDE_PANEL_IDS = Object.keys(SIDE_PANEL_WIDTH_DEFAULTS);
 
   function sidePanelWidthDefault(id) {
     return SIDE_PANEL_WIDTH_DEFAULTS[id] || 400;

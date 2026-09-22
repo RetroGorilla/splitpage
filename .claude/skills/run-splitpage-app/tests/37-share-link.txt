@@ -91,7 +91,9 @@ eval (function(){ window.__html = F0.buildStandaloneHtml(); return window.__html
 expect window.__html.indexOf(F0.docId()) === -1
 # (the string "doc=" DOES appear in the export — it carries a copy of the app,
 # and that is the source of serverDocShareUrl itself. What matters is that no
-# id and no server address is baked into the DOCUMENT it carries.)
-expect window.__html.indexOf('"docId"') === -1
+# id and no server address is baked into the DOCUMENT it carries — so the
+# field name is looked for in the #state-data block, not in the app beside it.)
+eval (function(){window.__stateBlock=function(html){var open='<script id="state-data" type="application/json">';var i=html.indexOf(open);if(i===-1)return '';var j=html.indexOf('<'+'/script>',i);return html.slice(i+open.length,j);};return 'hooked';})()
+expect window.__stateBlock(window.__html).indexOf('"docId"') === -1
 
 quit

@@ -1417,7 +1417,8 @@ async function startTinyUpdateServer() {
    The "installer" is a few KB of deterministic bytes, never executed: this
    case stops at "downloaded and verified". Running it is what
    runUpdateInstaller does, and a test must never install anything. */
-async function startTinyReleaseServer() {
+async function startTinyReleaseServer(opts) {
+  const noSums = !!(opts && opts.noSums);
   const arch = process.arch === "arm64" ? "arm64" : "x64";
   const ext = process.platform === "win32" ? "exe" : (process.platform === "darwin" ? "dmg" : "AppImage");
   const assetName = `SplitpageDesktopSetup-99.0.0-${arch}.${ext}`;
@@ -1440,10 +1441,14 @@ async function startTinyReleaseServer() {
     res.end(JSON.stringify({
       tag_name: "v99.0.0",
       html_url: "https://example.com/r",
-      assets: [
-        { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
-        { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
-      ]
+      assets: noSums
+        /* A release that published no checksum at all — see
+           caseUpdateNoChecksum. */
+        ? [{ name: assetName, size: payload.length, browser_download_url: base + "/asset" }]
+        : [
+          { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
+          { name: "SHA256SUMS", size: 64, browser_download_url: base + "/sums" }
+        ]
     }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -1539,6 +1544,51 @@ async function caseUpdateDownload(target) {
     const install = await evalPage(app.cdp, "window.splitpageDesktop.installUpdate()");
     record(tag + ": installing is refused in test mode, not performed",
       !!install && install.ok === true && install.testMode === true, JSON.stringify(install));
+  } finally {
+    if (app) {
+      await teardown(app, tag);
+      rmrf(app.userDataDir);
+    }
+    await new Promise((resolve) => mini.server.close(resolve));
+  }
+}
+
+/* A release with no published checksum is REFUSED (#64).
+
+   The downloaded file is the one thing this app will execute and it is not
+   code-signed, so the checksum is the whole chain of trust. It used to be
+   optional: no SHA256SUMS asset meant the download was simply accepted, on
+   the strength of HTTPS to GitHub alone. Same fixture as the case above,
+   minus the sums asset. */
+async function caseUpdateNoChecksum(target) {
+  const tag = target.name + " update without a checksum";
+  const mini = await startTinyReleaseServer({ noSums: true });
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "update-no-sums", allowUpdateCheck: true, updateApi: mini.url });
+    await waitForRows(app.cdp, 20000);
+
+    const status = await poll(app.cdp,
+      "window.splitpageDesktop.getUpdateStatus().then(function(s){ return s.checking ? null : s; })", 20000);
+    record(tag + ": the launch check still finds the release", !!status && status.updateAvailable === true, JSON.stringify(status));
+
+    const result = await evalPage(app.cdp, "window.splitpageDesktop.downloadUpdate()");
+    record(tag + ": the download is refused", !!result && result.ok === false, JSON.stringify(result));
+    record(tag + ": ...saying it has no published checksum",
+      !!result && String(result.message || "").indexOf("checksum") !== -1, JSON.stringify(result));
+
+    const after = await evalPage(app.cdp, "window.splitpageDesktop.getUpdateStatus()");
+    const dl = (after && after.download) || {};
+    record(tag + ": ...and the state is failed, never ready", dl.state === "failed", JSON.stringify(dl));
+
+    /* Nothing executable is left behind: "ready" is the only state that lets
+       the file be run, and a refused download is cleaned off disk. */
+    const stillThere = fs.existsSync(path.join(app.userDataDir, "updates", mini.assetName));
+    record(tag + ": ...and the file it fetched is not left on disk", !stillThere);
+
+    const install = await evalPage(app.cdp, "window.splitpageDesktop.installUpdate()");
+    record(tag + ": installing it is refused outright",
+      !!install && install.ok === false && install.error === "not-downloaded", JSON.stringify(install));
   } finally {
     if (app) {
       await teardown(app, tag);
@@ -4432,6 +4482,7 @@ async function runTargetSuite(target) {
     ["--host with no --pin (warning)", () => caseHostModeNoPinWarning(target)],
     ["update status", () => caseUpdateStatus(target)],
     ["update download", () => caseUpdateDownload(target)],
+    ["update without a checksum", () => caseUpdateNoChecksum(target)],
     ["unsaved-changes close", () => caseUnsavedChangesClose(target)],
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
     ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],

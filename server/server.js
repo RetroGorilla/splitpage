@@ -84,12 +84,81 @@ const REVIEW_KEY = String(process.env.REVIEW_KEY || "");
 const REVIEW_ACTIVE = !!(JOIN_PIN && (REVIEW_PIN || REVIEW_KEY) && REVIEW_PIN !== JOIN_PIN);
 const REVIEW_TOKEN = crypto.randomBytes(32).toString("hex");
 
+/* ---------- per-document review links (#63) ----------
+ *
+ * REVIEW_PIN and REVIEW_KEY above are the operator's own, chosen at launch
+ * before any document exists: they are a credential for this LIBRARY, and
+ * the launcher prints them saying so.
+ *
+ * The link the app offers is a different thing. It is asked for from inside
+ * an open document and it reads as "share THIS script", so it gets a key of
+ * its own, minted per document and remembered here — the token it mints
+ * carries the document id with it, and the list, read and save routes hold
+ * it to that one document. Before this, every review credential read every
+ * document on the server and listed the picker; a link meant for one script
+ * was a key to the whole library.
+ *
+ * In memory, per process, exactly like the session token: restarting the
+ * server invalidates every link, which is the same trade the join PIN makes.
+ * Minted once per document and reused, so handing the link out twice does
+ * not quietly invalidate the copy already sent.
+ */
+const reviewGrantsByDoc = new Map();   /* docId -> { key, token } */
+const reviewGrantsByKey = new Map();   /* key   -> { docId, token } */
+const reviewScopeByToken = new Map();  /* token -> docId */
+const REVIEW_GRANT_MAX = 500;
+
+function reviewGrantFor(docId) {
+  let grant = reviewGrantsByDoc.get(docId);
+  if (grant) return grant;
+  /* A library nobody prunes would otherwise grow one grant per document
+     ever shared, for as long as the process runs. Oldest first: Map keeps
+     insertion order, and the oldest link is the one least likely to still
+     be in somebody's inbox. */
+  if (reviewGrantsByDoc.size >= REVIEW_GRANT_MAX) {
+    const oldest = reviewGrantsByDoc.keys().next().value;
+    const gone = reviewGrantsByDoc.get(oldest);
+    reviewGrantsByDoc.delete(oldest);
+    if (gone) { reviewGrantsByKey.delete(gone.key); reviewScopeByToken.delete(gone.token); }
+  }
+  grant = {
+    key: crypto.randomBytes(24).toString("hex"),
+    token: crypto.randomBytes(32).toString("hex")
+  };
+  reviewGrantsByDoc.set(docId, grant);
+  reviewGrantsByKey.set(grant.key, { docId, token: grant.token });
+  reviewScopeByToken.set(grant.token, docId);
+  return grant;
+}
+
+/* Which document a review token is confined to, or "" for the launch-wide
+   credential, which the operator set deliberately and which is not confined
+   to anything. */
+function reviewScopeOfToken(token) {
+  return reviewScopeByToken.get(String(token || "")) || "";
+}
+
+function reviewScopeOf(req) {
+  return reviewScopeOfToken(req.headers["x-splitpage-token"] || "");
+}
+
 /* Origins allowed to call this API from another page — a comma list, empty
-   (the default) meaning same-origin only. A copy of the app opened from disk
-   sends `Origin: null`, so the literal entry `null` is what lets a portable
-   copy talk to a server; see DEPLOY.md for why that is broader than it looks. */
+   (the default) meaning same-origin only.
+
+   The literal entry `null` used to be accepted, so that a copy of the app
+   opened from disk (which sends `Origin: null`) could talk to a server. It
+   is no longer: `null` is not one origin, it is what every sandboxed iframe
+   on every site on the internet sends, so allowing it allowed all of them
+   (#63). A portable copy served over http:// has a real origin to name here;
+   one opened from file:// has to be served instead. */
 const ALLOW_ORIGINS = String(process.env.ALLOW_ORIGINS || "")
-  .split(",").map((s) => s.trim()).filter(Boolean);
+  .split(",").map((s) => s.trim()).filter(Boolean)
+  .filter((o) => {
+    if (o !== "null") return true;
+    console.warn("[splitpage] ALLOW_ORIGINS=null is ignored — `null` is the origin every " +
+                 "sandboxed iframe sends, not one site. Name the origin the copy is served from.");
+    return false;
+  });
 
 /* Set by start.mjs, per launch, for the wizard's "install this copy" step.
    Absent (a Docker deployment, or a server started by hand) the launcher
@@ -194,6 +263,11 @@ function roleOfToken(given) {
   const token = String(given == null ? "" : given);
   if (sameToken(token, SESSION_TOKEN)) return "edit";
   if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return "review";
+  /* A per-document review link's own token (#63). A plain Map lookup rather
+     than a timing-safe compare of every grant in turn: the key space is 256
+     bits of randomness, and walking the whole map per request would be both
+     slower and, with hundreds of grants, no more constant-time than this. */
+  if (REVIEW_ACTIVE && reviewScopeByToken.has(token)) return "review";
   return null;
 }
 
@@ -659,6 +733,30 @@ function unionKeys(a, b) {
 
 function refuse(reason) { return { ok: false, reason }; }
 
+/* A stored document and a client's normalised copy of it can differ by
+   absence alone. migrateRows() on the client fills every field in, so a
+   document last saved before `brollShots` existed has no such key while the
+   reviewer's copy sends `brollShots: []` — and deepEqual(undefined, []) is
+   false, so every comment on such a document came back 403 review-only
+   (#62). The same happens for any field added later, and for row keys like
+   `updatedBy: null` against a row that simply has no `updatedBy`.
+
+   Missing, null, "" and an empty array or object all say the same thing
+   here: nothing is recorded. Compare them as equal. Anything with content
+   on either side still goes through deepEqual unchanged, so this loosens
+   what "unchanged" means and never what a reviewer may change. */
+function isBlankValue(v) {
+  if (v === undefined || v === null || v === "") return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v).length === 0;
+  return false;
+}
+
+function sameOrBothBlank(a, b) {
+  if (isBlankValue(a) && isBlankValue(b)) return true;
+  return deepEqual(a, b);
+}
+
 /* Attributes as a set rather than as written, so two serialisations of the
    same element compare equal whatever order or spacing they came out in. */
 function normalizeAttrs(attrs) {
@@ -795,7 +893,7 @@ function reviewComments(storedList, incomingList) {
       if (key === "replies") continue;
       /* a thread's own timestamp moves when it is replied to, and only then */
       if (key === "updatedAt" && replied) continue;
-      if (!deepEqual(was[key], now[key])) {
+      if (!sameOrBothBlank(was[key], now[key])) {
         return refuse("a comment that was already there may not be changed (" + key + ")");
       }
     }
@@ -813,7 +911,7 @@ function reviewRows(storedRows, incomingRows, addedIds) {
     if (!was || !now || typeof was !== "object" || typeof now !== "object") return refuse("a scene is not an object");
     let anchored = false;
     for (const key of unionKeys(was, now)) {
-      if (deepEqual(was[key], now[key])) continue;
+      if (sameOrBothBlank(was[key], now[key])) continue;
       if (key === "visualText" || key === "audioText") {
         if (fieldSignature(was[key], null) !== fieldSignature(now[key], addedIds)) {
           return refuse("the script may not be changed");
@@ -825,7 +923,8 @@ function reviewRows(storedRows, incomingRows, addedIds) {
       return refuse("a scene's " + key + " may not be changed");
     }
     /* Posting a comment stamps the scene it is on. Nothing else may. */
-    if (!anchored && (!deepEqual(was.updatedAt, now.updatedAt) || !deepEqual(was.updatedBy, now.updatedBy))) {
+    if (!anchored && (!sameOrBothBlank(was.updatedAt, now.updatedAt) ||
+                      !sameOrBothBlank(was.updatedBy, now.updatedBy))) {
       return refuse("a scene may not be restamped without a comment landing on it");
     }
   }
@@ -846,7 +945,7 @@ function reviewWriteAllowed(stored, incoming) {
   if (!rows.ok) return rows;
   for (const key of unionKeys(stored, incoming)) {
     if (REVIEW_BOOKKEEPING.has(key)) continue;
-    if (!deepEqual(stored[key], incoming[key])) return refuse(key + " may not be changed");
+    if (!sameOrBothBlank(stored[key], incoming[key])) return refuse(key + " may not be changed");
   }
   return { ok: true };
 }
@@ -890,8 +989,21 @@ async function handleApi(req, res, url) {
       pinFailures.delete(ip);
       return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit" });
     }
-    /* Either half of the review credential: the code someone was read out,
-       or the key carried by a review link (start.mjs mints it per launch). */
+    /* A per-document review link (#63): its key names one document, and the
+       token it hands back is held to that document by every route below.
+       Checked before the launch-wide credential so a link always wins over
+       the library-wide one, never the other way round. */
+    if (REVIEW_ACTIVE && body && typeof body.key === "string") {
+      const grant = reviewGrantsByKey.get(body.key);
+      if (grant) {
+        pinFailures.delete(ip);
+        return sendJson(res, 200, { token: grant.token, role: "review", docId: grant.docId });
+      }
+    }
+    /* Either half of the LIBRARY-wide review credential: the code someone
+       was read out, or the key the launcher printed. Deliberately not
+       confined to one document — the operator set it before any document
+       existed and the launcher says as much when it prints it. */
     if (REVIEW_ACTIVE && ((REVIEW_PIN && sameSecret(body && body.pin, REVIEW_PIN)) ||
                           (REVIEW_KEY && sameSecret(body && body.key, REVIEW_KEY)))) {
       pinFailures.delete(ip);
@@ -992,9 +1104,20 @@ async function handleApi(req, res, url) {
      serves (invariant #29). */
   if (parts[1] === "share" && req.method === "GET") {
     if (role !== "edit") return sendJson(res, 403, { error: "review-only" });
+    if (!REVIEW_ACTIVE) return sendJson(res, 200, { reviewAvailable: false, reviewKey: "", docId: "" });
+    /* `?doc=<id>` asks for a link to THAT script, which is what the app
+       offers and what a reader is being handed. Without one there is nothing
+       to scope a link to, and the launch-wide credential is the operator's
+       to hand out, not this route's — so it is refused rather than quietly
+       answered with a key to the whole library (#63). */
+    const wanted = url.searchParams.get("doc") || "";
+    if (!isValidId(wanted)) return sendJson(res, 400, { error: "bad-id" });
+    if (!(await readDoc(wanted))) return sendJson(res, 404, { error: "not-found" });
+    const grant = reviewGrantFor(wanted);
     return sendJson(res, 200, {
-      reviewAvailable: REVIEW_ACTIVE,
-      reviewKey: REVIEW_ACTIVE ? REVIEW_KEY : ""
+      reviewAvailable: true,
+      reviewKey: grant.key,
+      docId: wanted
     });
   }
 
@@ -1004,6 +1127,13 @@ async function handleApi(req, res, url) {
 
   /* list */
   if (!id && req.method === "GET") {
+    /* A review link names one document, so the picker it can list is that
+       one document — not the library (#63). */
+    const scope = role === "review" ? reviewScopeOf(req) : "";
+    if (scope) {
+      const only = await readDoc(scope).catch(() => null);
+      return sendJson(res, 200, { docs: only ? [summarise(only)] : [] });
+    }
     let names;
     try {
       names = await fsp.readdir(DATA_DIR);
@@ -1061,6 +1191,15 @@ async function handleApi(req, res, url) {
   }
 
   if (!isValidId(id)) return sendJson(res, 400, { error: "bad-id" });
+
+  /* A per-document review link reaches that document and no other, on every
+     method — reading one, commenting on one and deleting one were all gated
+     on holding a token, not on which document the token was minted for
+     (#63). The launch-wide review credential has no scope and is unchanged. */
+  if (role === "review") {
+    const scope = reviewScopeOf(req);
+    if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
+  }
 
   /* read */
   if (req.method === "GET") {
@@ -1186,11 +1325,19 @@ async function handleStatic(req, res, url) {
   const cache = (ext === ".html" || rel === "/sw.js")
     ? "no-cache"
     : "public, max-age=3600";
-  res.writeHead(200, {
+  const headers = {
     "Content-Type": MIME[ext] || "application/octet-stream",
     "Content-Length": stat.size,
     "Cache-Control": cache
-  });
+  };
+  /* index.html carries its own Content-Security-Policy in a <meta>, written
+     by build.mjs (#65). frame-ancestors is the one directive a meta policy
+     cannot express — browsers ignore it there — so it is sent as a header
+     here, where it works: a hosted document is an editor, and an editor
+     nobody else may frame is one nobody can click-jack. The rest of the
+     policy stays in the page, so the two cannot drift. */
+  if (ext === ".html") headers["Content-Security-Policy"] = "frame-ancestors 'self'";
+  res.writeHead(200, headers);
   if (req.method === "HEAD") { res.end(); return; }
   /* Headers are already written above, so an error here can't be turned into
      a clean 4xx/5xx — the best this can do is stop that one response instead
@@ -1274,7 +1421,7 @@ async function start() {
       /* Never the PIN itself: this stream is inherited by the launcher and
          may end up in a log file. That it is set is all anyone needs here. */
       console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
-      if (REVIEW_ACTIVE) console.log("[splitpage] a review credential is set — it opens documents to read and comment on, nothing else");
+      if (REVIEW_ACTIVE) console.log("[splitpage] a review credential is set — it opens EVERY document here to read and comment on, nothing else. The link Splitpage itself offers is per-document.");
       else if (REVIEW_PIN || REVIEW_KEY) {
         console.log("[splitpage] the review credential was IGNORED — it is the same as the join PIN");
       }

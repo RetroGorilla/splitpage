@@ -223,9 +223,11 @@
   /* ---- the review link ----
 
      Offered beside the addresses because that is what it is: another address
-     for this same session, one that opens it to be read and commented on and
-     nothing else. Hidden unless this launch actually has a review credential
-     and this browser is an editor here — a reviewer has nothing to hand on.
+     for the script you have open, one that opens it to be read and commented
+     on and nothing else. Hidden unless this launch actually has a review
+     credential, a document is open on the server to make a link TO (the key
+     is minted per document — see fetchReviewLink, #63), and this browser is
+     an editor here — a reviewer has nothing to hand on.
      Async and last, so a server that is slow to answer never holds up the
      dialog itself. */
   var reviewLinkUrl = "";
@@ -235,10 +237,10 @@
     if (!box) return;
     reviewLinkUrl = await fetchReviewLink();
     if (!reviewLinkUrl) { box.hidden = true; box.innerHTML = ""; return; }
-    box.innerHTML = '<div class="connect-add-title">Share it to read and comment</div>' +
-      '<p class="modal-hint">Whoever opens this can read the script, present it and export it, ' +
-      'and leave comments — the server refuses every other change, whatever their copy of ' +
-      'Splitpage lets them click.</p>' +
+    box.innerHTML = '<div class="connect-add-title">Share this script to read and comment</div>' +
+      '<p class="modal-hint">Whoever opens this can read this one script, present it and export it, ' +
+      'and leave comments — the server refuses every other change, and every other document, ' +
+      'whatever their copy of Splitpage lets them click.</p>' +
       '<div class="connect-share-url">' + escapeHtml(reviewLinkUrl) + '</div>' +
       '<div class="modal-row">' +
         '<span class="modal-hint">Restarting the session invalidates it, like the PIN.</span>' +

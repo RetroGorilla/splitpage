@@ -18,6 +18,7 @@
  */
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -319,6 +320,95 @@ const PARTS = [
   ["//{{APP_JS}}", appJs]
 ];
 
+/* ---------- the Content Security Policy (#65) ----------
+
+   Substituted last, because the one directive that cannot be written by hand
+   is the hash of the app's own inline script — which does not exist until
+   every other marker has been filled in.
+
+   What each directive is holding back, in a page whose whole job is to parse
+   somebody else's script file and put it in a contenteditable:
+
+   default-src 'self'   everything not named below, from this page's own
+                        origin only. Under file:// that origin matches almost
+                        nothing, which is the right default for a copy opened
+                        by double-clicking it.
+   script-src           the inline app, by the SHA-256 of its body, plus
+                        'self' for sw.js. Nothing else runs: not an injected
+                        <script>, not an onerror= on a pasted <img>, not a
+                        javascript: href sanitizeHtml missed.
+   style-src            'unsafe-inline' because the app sets style attributes
+                        (the drag ghost, panel widths, the teleprompter's
+                        transform), and Google Fonts for the one stylesheet.
+   font-src             the same, plus data: for anything embedded.
+   img-src              'self' data: blob: — every image in a document is a
+                        data: URI (safeImageSrc allows nothing else) and
+                        exports build blob: URLs.
+   connect-src          this origin, and any http(s) server the user points
+                        File > Servers... at, which is a documented feature
+                        and includes a LAN address over plain http. Narrower
+                        than '*': ws:, data: and the rest stay refused.
+   object-src 'none'    the app has no plugins.
+   frame-src 'self'     the app never creates a frame; 24-history.txt does,
+                        to run a second copy of the app in this origin and
+                        race it against the first over one IndexedDB store.
+                        'none' would be tidier and buys nothing: walkSanitize
+                        drops an <iframe> from every untrusted path, so the
+                        only way to get one into this page is to be running
+                        script in it already.
+   worker-src 'self'    the service worker that makes a hosted copy work
+                        offline, and nothing else. Named explicitly, or it
+                        falls back to child-src and from there to default-src.
+   base-uri 'self'      an injected <base> cannot re-point every relative URL
+                        on the page.
+   form-action 'none'   the app has no <form> at all.
+
+   frame-ancestors is deliberately absent: browsers ignore it in a meta
+   policy. desktop/main.js adds it to the header it serves, where it works. */
+const CSP_DIRECTIVES = (scriptHash) => [
+  "default-src 'self'",
+  `script-src 'self' 'sha256-${scriptHash}'`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self' https: http:",
+  "object-src 'none'",
+  "frame-src 'self'",
+  "worker-src 'self'",
+  "base-uri 'self'",
+  "form-action 'none'"
+];
+
+const APP_SCRIPT_OPEN = '<script id="app-logic">';
+
+/* The hash has to be taken over exactly the characters the browser will treat
+   as the script's body — everything between the open tag's ">" and the
+   closing tag, newlines included, AFTER the two rewrites the HTML parser
+   makes to script data on the way in. Both are silent and both are
+   length-preserving in UTF-16, so getting them wrong produces a policy that
+   looks right, hashes to something else, and refuses to run the app.
+
+   A raw NUL in a source file is the one that actually happened
+   (08c-broll.js used one as a key separator), and it is escaped there now —
+   this normalisation is the guard that stops the next one being a puzzle. */
+function asParsed(text) {
+  return text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "\uFFFD");
+}
+
+export function inlineScriptBody(html) {
+  const i = html.indexOf(APP_SCRIPT_OPEN);
+  if (i === -1) throw new Error("the app's inline script is missing from src/page.html");
+  const from = i + APP_SCRIPT_OPEN.length;
+  const j = html.indexOf("</" + "script>", from);
+  if (j === -1) throw new Error("the app's inline script is never closed");
+  return html.slice(from, j);
+}
+
+export function buildCsp(html) {
+  const hash = createHash("sha256").update(asParsed(inlineScriptBody(html)), "utf8").digest("base64");
+  return CSP_DIRECTIVES(hash).join("; ");
+}
+
 function build() {
   let html = src("page.html");
   for (const [marker, load] of PARTS) {
@@ -327,7 +417,8 @@ function build() {
        contain "$&" or "$1", which replace() would expand. */
     html = html.split(marker).join(chomp(load()));
   }
-  return html;
+  if (!html.includes("{{CSP}}")) throw new Error("marker {{CSP}} missing from src/page.html");
+  return html.split("{{CSP}}").join(buildCsp(html));
 }
 
 const out = join(ROOT, "index.html");

@@ -622,19 +622,29 @@
     return true;
   }
 
-  /* The address to hand to someone who should only read and comment: this
-     server's own, with the launch's review key in the fragment. Asked for at
-     the moment it is wanted rather than held — it is a credential, it
-     belongs to this launch, and a page whose owner never opens the Servers
-     dialog never learns it at all. "" whenever there is nothing to hand out
-     (no review credential, or this browser is itself a reviewer). */
+  /* The address to hand to someone who should only read and comment on THIS
+     script: this server's own, with a key minted for this document in the
+     fragment. Asked for at the moment it is wanted rather than held — it is
+     a credential, and a page whose owner never opens the Servers dialog
+     never learns it at all.
+
+     It needs a document open on the server, because the key is per-document
+     now (#63): before, one launch-wide key opened every script on the
+     server and listed the picker, while the dialog offered it as a way to
+     share the one you were looking at. "" whenever there is nothing to hand
+     out — no review credential, no hosted document, or this browser is
+     itself a reviewer. */
   async function fetchReviewLink() {
     if (!serverMode.available || !serverMode.reviewAvailable || serverRole === "review") return "";
+    if (!onServerDoc()) return "";
     var body;
-    try { body = await apiFetch("api/share"); } catch (e) { return ""; }
+    try { body = await apiFetch("api/share?doc=" + encodeURIComponent(serverDoc.id)); } catch (e) { return ""; }
     if (!body || !body.reviewKey) return "";
     var base = serverBase || (location.origin + "/");
-    return base + "#review=" + body.reviewKey;
+    /* The link carries the document as well as the key: the key only opens
+       that one document, so landing anywhere else would be a dead end. */
+    return base + "?doc=" + encodeURIComponent(body.docId || serverDoc.id) +
+           "#review=" + body.reviewKey;
   }
 
   /* ---- the picker ---- */
