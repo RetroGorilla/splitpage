@@ -1312,9 +1312,14 @@ export async function saveToServer() {
 
 /* ---- a reviewer's writes (#71) ----
 
-   A review token writes through two routes and nothing else:
-   POST api/docs/:id/comments (a new comment, or a reply) and
-   PATCH api/docs/:id/comments/:cid (resolve / unresolve). The server
+   A review token writes through one route and nothing else:
+   POST api/docs/:id/comments (a new comment, or a reply). It never
+   resolves or unresolves — the owner's decision, since authorship cannot be
+   established (an author is a typed name, and reviewers share one token),
+   so a reviewer's resolve would always be a resolve of somebody else's
+   comment. The server answers a reviewer's PATCH
+   api/docs/:id/comments/:cid with 403 reviewers-cannot-resolve, and
+   nothing here sends one. The server
    refuses a review PUT outright — it used to diff the whole uploaded script
    against the stored one to prove only a comment had moved, and that proof
    is gone. So saveToServer() never PUTs from a review session; it comes
@@ -1324,8 +1329,10 @@ export async function saveToServer() {
    path it always was, ending somewhere else.
 
    WHAT TO SEND is what this view holds that the server has not confirmed:
-   a comment in S.state that S.baseState does not have, a reply its thread
-   in the base does not have, a resolve the base does not agree with.
+   a comment in S.state that S.baseState does not have, and a reply its
+   thread in the base does not have. A resolved flag that differs from the
+   base is not sent — it is put back to the base's (dropLocalResolves), so
+   a review session never shows a resolve the server does not have.
    S.baseState is what the server last confirmed (HANDOFF §3.6), so the
    difference IS the outbox — which is why a comment typed while offline, or
    carried across a reload in the stash, goes out on the next save without
@@ -1337,7 +1344,7 @@ export async function saveToServer() {
    WHAT COMES BACK is adopted, not kept alongside: the server builds the
    stored comment itself (its clock, its bounded author), so the stored copy
    replaces ours in S.state and goes into S.baseState, keeping only what
-   this view has not sent yet (a reply still to go, a resolve still to go).
+   this view has not sent yet (a reply still to go).
    Only the one comment the answer is about is folded in (with, for a placed
    anchor, the one field its span sits in and that scene's stamp) — nothing
    else of the document changes on either side, so a later merge still sees
@@ -1398,7 +1405,7 @@ function rowIn(state, id) {
 function jsonCopy(v) { return JSON.parse(JSON.stringify(v)); }
 
 /* The next thing this view holds that the server has not confirmed, in
-   document order: a comment before its replies, a reply before a resolve. */
+   document order: a comment before its replies. */
 function nextReviewWrite() {
   var base = (S.baseState && S.baseState.comments) || [];
   var list = (S.state && S.state.comments) || [];
@@ -1419,10 +1426,29 @@ function nextReviewWrite() {
       var rkey = "r:" + c.id + ":" + (r && r.id);
       if (r && !had[r.id] && !reviewRefused[rkey]) return { kind: "reply", id: c.id, replyId: r.id, key: rkey };
     }
-    var xkey = "x:" + c.id + ":" + !!c.resolved;
-    if (!!c.resolved !== !!was.resolved && !reviewRefused[xkey]) return { kind: "resolve", id: c.id, key: xkey };
   }
   return null;
+}
+
+/* A reviewer cannot resolve (see above), so a resolved flag this view holds
+   that the server does not — only ever from a stash or a copy made before
+   that rule — goes back to what the server confirmed rather than sitting on
+   screen as if it had been saved. → true when anything changed. */
+function dropLocalResolves() {
+  var base = (S.baseState && S.baseState.comments) || [];
+  var changed = false;
+  ((S.state && S.state.comments) || []).forEach(function (c) {
+    if (!c || c.kind === "conflict") return;
+    var bi = commentIndexIn(base, c.id);
+    var was = bi === -1 ? null : base[bi];
+    var wasResolved = !!(was && was.resolved);
+    if (!!c.resolved === wasResolved) return;
+    c.resolved = wasResolved;
+    c.resolvedBy = was ? (was.resolvedBy || null) : null;
+    c.resolvedAt = was ? (was.resolvedAt || null) : null;
+    changed = true;
+  });
+  return changed;
 }
 
 /* One field's HTML as the server should see it: this comment's span in
@@ -1473,14 +1499,6 @@ function dropLocalAnchor(c) {
 function reviewRequest(op, c) {
   var path = "api/docs/" + encodeURIComponent(home.id) + "/comments";
   var by = getEditorName();
-  if (op.kind === "resolve") {
-    return {
-      path: path + "/" + encodeURIComponent(c.id),
-      method: "PATCH",
-      body: { resolved: !!c.resolved, by: by },
-      busy: c.resolved ? "Resolving…" : "Reopening…"
-    };
-  }
   if (op.kind === "reply") {
     var reply = null;
     (c.replies || []).forEach(function (r) { if (r && r.id === op.replyId) reply = r; });
@@ -1511,7 +1529,6 @@ function adoptReviewAnswer(op, sent, body) {
   var stored = body.comment;
   var baseList = S.baseState.comments || (S.baseState.comments = []);
   var bi = commentIndexIn(baseList, stored.id);
-  var wasResolved = bi === -1 ? false : !!baseList[bi].resolved;
   if (bi === -1) baseList.push(jsonCopy(stored));
   else baseList[bi] = jsonCopy(stored);
 
@@ -1525,12 +1542,7 @@ function adoptReviewAnswer(op, sent, body) {
     next.replies.forEach(function (r) { if (r) have[r.id] = true; });
     /* replies still to go stay, after the ones the server has */
     (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
-    /* and so does a resolve still to go */
-    if (op.kind !== "resolve" && !!local.resolved !== wasResolved) {
-      next.resolved = local.resolved;
-      next.resolvedBy = local.resolvedBy;
-      next.resolvedAt = local.resolvedAt;
-    }
+    /* the resolved flag is the server's: a reviewer never has one to send */
     list[si] = next;
   }
 
@@ -1593,7 +1605,8 @@ async function sendReviewWrites() {
   /* openServerDoc() always sets one; without it there is no telling what
      the server has already confirmed, so nothing is sent. */
   if (!S.baseState) return false;
-  var redraw = false;
+  /* nothing to send for it, and nothing to keep showing either */
+  var redraw = dropLocalResolves();
   var sentAny = false;
   var sentKeys = {};
   reviewWriting = true;
@@ -1618,8 +1631,7 @@ async function sendReviewWrites() {
         var why = permanentReviewRefusal(err);
         if (why) {
           reviewRefused[op.key] = true;
-          showToast((op.kind === "resolve" ? "That could not be marked resolved" :
-                     op.kind === "reply" ? "Your reply could not be posted" :
+          showToast((op.kind === "reply" ? "Your reply could not be posted" :
                      "Your comment could not be posted") +
                     " — " + why + ". It stays on this screen only, so copy anything you need.",
                     "warn", true);
@@ -1631,7 +1643,6 @@ async function sendReviewWrites() {
           return false;
         }
         handleApiError(err, op.kind === "reply" ? "Could not post your reply" :
-                            op.kind === "resolve" ? "Could not change that comment" :
                             "Could not post your comment");
         return false;
       }
@@ -1650,7 +1661,7 @@ async function sendReviewWrites() {
   var refusedHere = false;
   (S.state.comments || []).forEach(function (c) {
     if (!c) return;
-    if (reviewRefused["c:" + c.id] || reviewRefused["x:" + c.id + ":" + !!c.resolved]) refusedHere = true;
+    if (reviewRefused["c:" + c.id]) refusedHere = true;
     (c.replies || []).forEach(function (r) { if (r && reviewRefused["r:" + c.id + ":" + r.id]) refusedHere = true; });
   });
   if (!refusedHere) clearDirty();

@@ -348,9 +348,19 @@ per document in `DATA_DIR`.
   with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
   role is read from the token on every request (`roleOf`), so it survives a
   reconnect and cannot be asserted by a client. **A review session never
-  PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply,
-  and `PATCH /api/docs/:id/comments/:cid` one resolve. A review-role PUT is
-  a flat 403 `review-only`, refused before its body is read. The whole-state
+  PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply
+  from either role. **Reviewers never resolve or unresolve** (owner's
+  decision): `PATCH /api/docs/:id/comments/:cid` is editor-only, and a
+  review-role PATCH is a flat 403 `reviewers-cannot-resolve`, refused before
+  its body is read. Authorship cannot be established — an author is a typed
+  name and every reviewer on a link shares one token — so any resolve by a
+  reviewer would be a resolve of somebody else's comment. The review client
+  never sends a PATCH (a stray local resolve is put back to the server's,
+  `dropLocalResolves` in 13-hosted.js), offers no Resolve button, and the
+  click guard plus `toggleResolve()` itself refuse one. No client sends the
+  PATCH today: editors resolve through PUT like every other edit. A
+  review-role PUT is a flat 403 `review-only`, refused before its body is
+  read. The whole-state
   proof that used to decide whether a review PUT changed "only comments" —
   `reviewWriteAllowed`, a key-by-key `deepEqual`, and the rest — is gone.
   What survives is `htmlTokens`/`fieldSignature`, now scoped to ONE field:

@@ -4,11 +4,15 @@
 # The review token used to write by PUTting the whole script back and having
 # the server prove, by diffing it against the stored one, that only a comment
 # had moved. The server now refuses a review PUT outright, so the review
-# client sends one comment, one reply or one resolve at a time:
+# client sends one comment or one reply at a time:
 #   POST  api/docs/:id/comments              a comment (+ its anchor) or a reply
-#   PATCH api/docs/:id/comments/:commentId   resolve / unresolve
 # and folds the stored copy the server answers with back into S.state and
-# S.baseState (saveToServer's review branch, 13-hosted.js).
+# S.baseState (saveToServer's review branch, 13-hosted.js). It never sends
+#   PATCH api/docs/:id/comments/:commentId   resolve / unresolve
+# — reviewers never resolve or unresolve (the owner's decision: authorship
+# cannot be established, so a reviewer's resolve would be of somebody else's
+# comment), and the real server answers a reviewer's PATCH with 403
+# reviewers-cannot-resolve, as the emulator below does.
 #
 # The harness serves static files and cannot start server.js, so `fetch` is
 # replaced the way tests/54-server-conflict.txt and 55-pull-merge.txt replace
@@ -16,12 +20,16 @@
 # canned answers — it builds the stored comment itself on its own clock (the
 # year 2030, so an adopted copy is unmistakable), bumps the rev, places the
 # anchor only when unwrapping it gives back exactly the stored field, and
-# answers a PUT with 403 review-only, which is what the real one now does.
+# answers a PUT with 403 review-only and a PATCH with 403
+# reviewers-cannot-resolve, which is what the real one now does.
 # What the real server checks is tools/test-server.mjs; what this pins is
 # what the page does with the answers:
 #
 #   * NO PUT, ever, from a review session — not on posting, not from the
 #     autosave timers the anchor's own markDirty arms, not on pressing Save;
+#   * NO PATCH, ever, from a review session: a resolve found in its state
+#     (only ever from an old stash) is not sent, and goes back to the
+#     server's;
 #   * the request is one comment, never the document;
 #   * the server's copy is adopted, not kept alongside ours;
 #   * THE REV. An answer at exactly (our rev + 1) is ours alone, so home.rev
@@ -49,7 +57,7 @@ expect true
 # posted" in a known order without a real beat landing between them.
 eval (function(){ window.__srv = { rev: 3, state: null, puts: [], posts: [], patches: [], gets: 0, beats: 0, tick: 0, fail: null, hideRev: null, lastBy: 'Host' }; return true; })()
 eval (function(){ window.__ans = function(status, body){ return Promise.resolve(new Response(JSON.stringify(body), {status: status, headers: {'content-type':'application/json'}})); }; window.__norm = function(h){ var t = document.createElement('template'); t.innerHTML = h || ''; return t.innerHTML; }; window.__find = function(list, id){ for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }; window.__now = function(){ return new Date(Date.UTC(2030, 0, 1, 0, 0, ++window.__srv.tick)).toISOString(); }; return true; })()
-eval (function(){ window.__comments = function(u, m, b){ var S2 = window.__srv, st = S2.state, now; if (S2.fail) { var f = S2.fail; S2.fail = null; if (f === 'offline') return Promise.reject(new TypeError('Failed to fetch')); return window.__ans(f.status, f.body); } if (m === 'PATCH') { S2.patches.push({url: u, body: b}); var pc = window.__find(st.comments, decodeURIComponent(u.split('/').pop())); if (!pc) return window.__ans(404, {error: 'no-such-comment'}); if (pc.resolved === b.resolved) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: pc, changed: false}); now = window.__now(); pc.resolved = b.resolved; pc.updatedAt = now; pc.resolvedBy = b.resolved ? (b.by || 'Anonymous') : null; pc.resolvedAt = b.resolved ? now : null; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: pc, changed: true}); } S2.posts.push(b); if (b.reply) { var parent = window.__find(st.comments, b.replyTo); if (!parent) return window.__ans(404, {error: 'no-such-comment'}); if (window.__find(parent.replies, b.reply.id)) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: parent, changed: false}); now = window.__now(); var rp = {id: b.reply.id, author: b.reply.author || 'Anonymous', body: b.reply.body, createdAt: now}; parent.replies.push(rp); parent.updatedAt = now; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: parent, changed: true, reply: rp}); } var already = window.__find(st.comments, b.comment.id); if (already) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: already, changed: false, anchored: false}); now = window.__now(); var c = {id: b.comment.id, rowId: b.comment.rowId, field: b.comment.field, anchorId: b.comment.anchorId || b.comment.id, quotedText: b.comment.quotedText || '', author: b.comment.author || 'Anonymous', body: b.comment.body, resolved: false, resolvedBy: null, resolvedAt: null, assignee: b.comment.assignee || '', createdAt: now, updatedAt: now, kind: 'anchor', replies: []}; var anchored = false; if (b.anchor) { var row = window.__find(st.rows, b.anchor.rowId); var t = document.createElement('template'); t.innerHTML = b.anchor.html; var sp = t.content.querySelector('.cmt-anchor[data-cmt=\"' + c.id + '\"]'); if (sp) { while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp); sp.remove(); } if (row && sp && window.__norm(t.innerHTML) === window.__norm(row[b.anchor.field])) { row[b.anchor.field] = b.anchor.html; row.updatedAt = now; row.updatedBy = c.author; anchored = true; } } st.comments.push(c); S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: c, changed: true, anchored: anchored}); }; return true; })()
+eval (function(){ window.__comments = function(u, m, b){ var S2 = window.__srv, st = S2.state, now; if (S2.fail) { var f = S2.fail; S2.fail = null; if (f === 'offline') return Promise.reject(new TypeError('Failed to fetch')); return window.__ans(f.status, f.body); } if (m === 'PATCH') { S2.patches.push({url: u, body: b}); if (!window.__editorPutsOk) return window.__ans(403, {error: 'reviewers-cannot-resolve'}); var pc = window.__find(st.comments, decodeURIComponent(u.split('/').pop())); if (!pc) return window.__ans(404, {error: 'no-such-comment'}); if (pc.resolved === b.resolved) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: pc, changed: false}); now = window.__now(); pc.resolved = b.resolved; pc.updatedAt = now; pc.resolvedBy = b.resolved ? (b.by || 'Anonymous') : null; pc.resolvedAt = b.resolved ? now : null; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: pc, changed: true}); } S2.posts.push(b); if (b.reply) { var parent = window.__find(st.comments, b.replyTo); if (!parent) return window.__ans(404, {error: 'no-such-comment'}); if (window.__find(parent.replies, b.reply.id)) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: parent, changed: false}); now = window.__now(); var rp = {id: b.reply.id, author: b.reply.author || 'Anonymous', body: b.reply.body, createdAt: now}; parent.replies.push(rp); parent.updatedAt = now; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: parent, changed: true, reply: rp}); } var already = window.__find(st.comments, b.comment.id); if (already) return window.__ans(200, {id: 'doc-rv', rev: S2.rev, comment: already, changed: false, anchored: false}); now = window.__now(); var c = {id: b.comment.id, rowId: b.comment.rowId, field: b.comment.field, anchorId: b.comment.anchorId || b.comment.id, quotedText: b.comment.quotedText || '', author: b.comment.author || 'Anonymous', body: b.comment.body, resolved: false, resolvedBy: null, resolvedAt: null, assignee: b.comment.assignee || '', createdAt: now, updatedAt: now, kind: 'anchor', replies: []}; var anchored = false; if (b.anchor) { var row = window.__find(st.rows, b.anchor.rowId); var t = document.createElement('template'); t.innerHTML = b.anchor.html; var sp = t.content.querySelector('.cmt-anchor[data-cmt=\"' + c.id + '\"]'); if (sp) { while (sp.firstChild) sp.parentNode.insertBefore(sp.firstChild, sp); sp.remove(); } if (row && sp && window.__norm(t.innerHTML) === window.__norm(row[b.anchor.field])) { row[b.anchor.field] = b.anchor.html; row.updatedAt = now; row.updatedBy = c.author; anchored = true; } } st.comments.push(c); S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: now, updatedBy: b.by, comment: c, changed: true, anchored: anchored}); }; return true; })()
 eval (function(){ window.__editorPutsOk = false; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); opts = opts || {}; var m = opts.method || 'GET'; var S2 = window.__srv; if (m === 'POST' && u.indexOf('api/presence') !== -1) { S2.beats++; return window.__ans(200, {docId: 'doc-rv', rev: S2.hideRev != null ? S2.hideRev : S2.rev, here: []}); } if (u.indexOf('api/docs/doc-rv/comments') !== -1) return window.__comments(u, m, JSON.parse(opts.body)); if (m === 'PUT' && u.indexOf('api/docs/') !== -1) { var pb = JSON.parse(opts.body); S2.puts.push(pb); if (!window.__editorPutsOk) return window.__ans(403, {error: 'review-only'}); S2.state = pb.state; S2.rev++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, updatedAt: new Date().toISOString(), updatedBy: 'Host'}); } if (u.indexOf('api/docs/doc-rv') !== -1) { S2.gets++; return window.__ans(200, {id: 'doc-rv', rev: S2.rev, state: S2.state, updatedAt: new Date().toISOString(), updatedBy: S2.lastBy}); } return real(url, opts); }; return true; })()
 
 # --- a review session on a hosted document at the server's rev 3 -----------
@@ -178,20 +186,30 @@ wait H.home().rev === window.__srv.rev
 expect F.state().comments.filter(function(c){return c.kind === 'conflict';}).length === 0
 expect F.state().comments.some(function(c){return c.id === window.__c3;})
 
-# --- 5. resolve (PATCH) ------------------------------------------------------
-# The Resolve button is not offered to a review session yet (21-events.js's
-# click guard refuses toggle-resolve), so the resolve is put into the state
-# directly, which is where the button would put it; Save sends it.
+# --- 5. no resolve, ever (no PATCH) -----------------------------------------
+# Reviewers never resolve or unresolve. The card offers no Resolve, the click
+# guard refuses toggle-resolve (tests/43-review-mode.txt), and a resolve that
+# is in the state anyway — the shape a stash from an older copy would carry —
+# is not sent on Save: no PATCH, no PUT, the rev does not move, and the
+# comment goes back to the server's (unresolved) copy rather than showing a
+# resolve the server does not have.
+jsclick #btn-comments
+sleep 400
+expect document.querySelectorAll('#comments-list .comment-card').length >= 3
+expect document.querySelectorAll('#comments-list [data-action="toggle-resolve"]').length === 0
+jsclick #comments-panel-close
+sleep 200
 eval (function(){ var c = F.state().comments.filter(function(x){return x.id === window.__c1;})[0]; c.resolved = true; c.resolvedBy = 'Rita Reviewer'; c.resolvedAt = new Date().toISOString(); return true; })()
-eval (async function(){ window.__revAt = H.home().rev; await F.save(); return window.__srv.patches.length; })()
-expect window.__srv.patches.length === 1
-expect /\/comments\/[A-Za-z0-9_-]+$/.test(window.__srv.patches[0].url)
-expect window.__srv.patches[0].url.split('/').pop() === window.__c1
-expect window.__srv.patches[0].body.resolved === true
-expect Object.keys(window.__srv.patches[0].body).sort().join(',') === 'by,resolved'
-expect H.home().rev === window.__revAt + 1
-expect H.base().comments.filter(function(c){return c.id === window.__c1;})[0].resolved === true
+eval (async function(){ window.__revAt = H.home().rev; window.__srvRevAt = window.__srv.rev; await F.save(); return window.__srv.patches.length; })()
+expect window.__srv.patches.length === 0
 expect window.__srv.puts.length === 0
+expect window.__srv.rev === window.__srvRevAt
+expect H.home().rev === window.__revAt
+expect window.__srv.state.comments.filter(function(c){return c.id === window.__c1;})[0].resolved === false
+expect F.state().comments.filter(function(c){return c.id === window.__c1;})[0].resolved === false
+expect !F.state().comments.filter(function(c){return c.id === window.__c1;})[0].resolvedBy
+expect H.base().comments.filter(function(c){return c.id === window.__c1;})[0].resolved === false
+expect H.dirty() === false
 
 # --- 6. a post that does not arrive, then does ------------------------------
 # No answer at all. The reply stays where it is, the page says so, and the
@@ -232,9 +250,10 @@ eval (async function(){ await F.save(); return window.__srv.posts.length; })()
 expect window.__srv.posts.length === window.__postsAt
 expect window.__srv.puts.length === 0
 
-# --- nothing the autosave timers did in the meantime was a PUT --------------
+# --- nothing the autosave timers did in the meantime was a PUT or a PATCH ---
 sleep 6000
 expect window.__srv.puts.length === 0
+expect window.__srv.patches.length === 0
 
 # --- an editor on the same document still saves with PUT --------------------
 eval (function(){ window.__editorPutsOk = true; H.setSession({role: 'edit', docId: 'doc-rv', rev: window.__srv.rev}); window.__srv.state = F.clone(F.state()); window.__postsAt = window.__srv.posts.length; window.__patchesAt = window.__srv.patches.length; return H.role(); })()
