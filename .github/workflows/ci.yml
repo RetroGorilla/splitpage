@@ -31,6 +31,13 @@ jobs:
       # Not /opt: the runner user cannot write there. driver.mjs reads this
       # variable to find a chromium-* directory before it falls back to PATH.
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
+      # which is what Chromium's sandbox needs to start. Without this the
+      # browser launches, dies before it listens, and every suite fails with
+      # "no CDP page target" — the same symptom as picking the wrong binary.
+      # Safe here and nowhere else: a throwaway runner loading only this
+      # repo's own files. driver.mjs passes these straight to the browser.
+      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
       - uses: actions/checkout@v4
 
@@ -54,13 +61,24 @@ jobs:
       - name: Updater tests
         run: node tools/test-update.mjs
 
-      # The browser suites need a Chromium. driver.mjs looks in
-      # PLAYWRIGHT_BROWSERS_PATH for a chromium-* directory before it falls
-      # back to whatever is on PATH, so install Playwright's there and point
-      # it at the same place the cloud container uses. Only the browser is
-      # installed, not the test runner — nothing here imports Playwright.
+      # The browser suites need a Chromium. driver.mjs can find Playwright's
+      # on its own, but "found the wrong one" fails as a wall of CDP errors
+      # that names no cause — the runner's /usr/bin/chromium is a snap that
+      # starts and never opens a debugging port. So resolve it here instead,
+      # fail loudly with a directory listing if it is not where expected, and
+      # hand the exact path to the driver. Only the browser is installed, not
+      # the test runner: nothing in this repo imports Playwright.
       - name: Install Chromium
-        run: npx --yes playwright install --with-deps chromium
+        run: |
+          npx --yes playwright install --with-deps chromium
+          exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
+          if [ -z "$exe" ]; then
+            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH — Playwright's layout may have changed again"
+            ls -R "$PLAYWRIGHT_BROWSERS_PATH" | head -60
+            exit 1
+          fi
+          echo "using $exe"
+          echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
 
       # Suite 01 is the boot-and-type path everything else rests on: if this
       # fails the app does not start. The rest of the suites are a full
