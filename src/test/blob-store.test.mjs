@@ -29,7 +29,14 @@ import {
   revokeObjectUrls,
   setBackend,
   urlForSync,
-  backendInfo
+  backendInfo,
+  blobImgHtml,
+  rowImage,
+  rowImageBytes,
+  rowImageDataUrl,
+  rowImageKey,
+  rowImageShas,
+  rowImageUrl
 } from "../js/02c-blobs.js";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
@@ -305,3 +312,93 @@ test("ensureBytes and persist never reject, even when the backend throws", async
   assert.deepEqual(await persist([a, nowhere]), [a, nowhere]);
   setBackend(createMemoryBackend());
 });
+
+/* ---- a row's picture (#82 P2a) ---- */
+
+/* jsdom has no object URLs; these tests need urlForSync to answer. */
+function withObjectUrls(fn) {
+  const orig = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  let n = 0;
+  URL.createObjectURL = () => "blob:test/row-" + (++n);
+  URL.revokeObjectURL = () => {};
+  try { return fn(); } finally {
+    URL.createObjectURL = orig.create;
+    URL.revokeObjectURL = orig.revoke;
+  }
+}
+
+test("rowImage reads a legacy data: URI and an imageRef, and the legacy one wins", () => {
+  setBackend(createMemoryBackend());
+  const bytes = png(12, 8);
+  const rec = intern(bytes);
+  const url = "data:image/png;base64," + b64(bytes);
+  assert.equal(rowImage(null), null);
+  assert.equal(rowImage({ id: "r" }), null);
+  assert.equal(rowImage({ visualImage: null, imageRef: null }), null);
+  assert.deepEqual(rowImage({ visualImage: url }), { ref: null, dataUrl: url });
+  assert.deepEqual(rowImage({ imageRef: rec }), { ref: rec, dataUrl: null });
+  assert.deepEqual(rowImage({ visualImage: url, imageRef: { ...rec, sha256: "a".repeat(64) } }), { ref: null, dataUrl: url },
+    "a valid inline picture wins over a ref, as migrateRows decides it");
+  assert.equal(rowImage({ imageRef: { ...rec, sha256: rec.sha256.toUpperCase() } }), null, "an invalid ref is no picture");
+  assert.equal(rowImage({ imageRef: { ...rec, mime: "image/svg+xml" } }), null);
+  assert.equal(rowImage({ visualImage: "javascript:alert(1)" }), null);
+  assert.deepEqual(rowImage({ imageRef: { ...rec, extra: 1 } }), { ref: rec, dataUrl: null }, "the ref comes back normalized");
+});
+
+test("rowImageUrl / Key / DataUrl / Bytes answer for either form, synchronously", () => withObjectUrls(() => {
+  setBackend(createMemoryBackend());
+  const bytes = png(14, 9);
+  const rec = intern(bytes);
+  const url = "data:image/png;base64," + b64(bytes);
+  const legacy = { visualImage: url };
+  const ref = { imageRef: rec };
+  const absent = { imageRef: { sha256: "c".repeat(64), width: 3, height: 3, mime: "image/png" } };
+
+  assert.equal(rowImageUrl(legacy), url);
+  assert.equal(rowImageUrl(ref), urlForSync(rec.sha256));
+  assert.match(rowImageUrl(ref), /^blob:/);
+  assert.equal(rowImageUrl(absent), null, "bytes not here: nothing to show yet");
+  assert.equal(rowImageUrl({}), null);
+
+  assert.equal(rowImageKey(legacy), url);
+  assert.equal(rowImageKey(ref), rec.sha256);
+  assert.equal(rowImageKey(absent), "c".repeat(64), "a missing picture is still a picture");
+  assert.equal(rowImageKey({}), null);
+
+  assert.equal(rowImageDataUrl(legacy), url, "a legacy URI exactly as stored");
+  assert.equal(rowImageDataUrl(ref), dataUrlForSync(rec.sha256));
+  assert.equal(rowImageDataUrl(absent), null);
+
+  const fromRef = rowImageBytes(ref);
+  assert.equal(fromRef.bytes, bytesForSync(rec.sha256));
+  assert.deepEqual([fromRef.mime, fromRef.width, fromRef.height], ["image/png", 14, 9]);
+  const fromLegacy = rowImageBytes(legacy);
+  assert.deepEqual(Array.from(fromLegacy.bytes), Array.from(bytes));
+  assert.deepEqual([fromLegacy.mime, fromLegacy.width, fromLegacy.height], ["image/png", 14, 9]);
+  const liar = rowImageBytes({ visualImage: "data:image/png;base64," + b64(jpeg(5, 4)) });
+  assert.equal(liar.mime, "image/jpeg", "the type the bytes are, not the one the URI claims");
+  const wrapped = rowImageBytes({ visualImage: "data:image/png;base64," + b64(bytes).replace(/(.{8})/g, "$1\n") });
+  assert.deepEqual(Array.from(wrapped.bytes), Array.from(bytes));
+  assert.equal(rowImageBytes(absent), null);
+  assert.equal(rowImageBytes({}), null);
+}));
+
+test("rowImageShas: the refs a list of rows names, once each, legacy ones not at all", () => {
+  const a = { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" };
+  const b = { sha256: "b".repeat(64), width: 1, height: 1, mime: "image/gif" };
+  assert.deepEqual(rowImageShas([
+    { imageRef: a }, { imageRef: b }, { imageRef: a },
+    { visualImage: "data:image/png;base64," + b64(png(1, 1)) }, {}, null, { imageRef: { sha256: "nope" } }
+  ]), [a.sha256, b.sha256]);
+  assert.deepEqual(rowImageShas(null), []);
+});
+
+test("blobImgHtml: data-blob and the box's size always, src only when the bytes are here", () => withObjectUrls(() => {
+  setBackend(createMemoryBackend());
+  const rec = intern(png(21, 13));
+  assert.equal(blobImgHtml(rec, "diff-img"),
+    '<img class="diff-img" data-blob="' + rec.sha256 + '" width="21" height="13" alt="" src="' + urlForSync(rec.sha256) + '">');
+  const absent = { sha256: "d".repeat(64), width: 5, height: 6, mime: "image/png" };
+  assert.equal(blobImgHtml(absent), '<img data-blob="' + "d".repeat(64) + '" width="5" height="6" alt="">');
+  assert.equal(blobImgHtml(absent, 'x" onerror="y'), '<img class="x&quot; onerror=&quot;y" data-blob="' + "d".repeat(64) + '" width="5" height="6" alt="">');
+}));

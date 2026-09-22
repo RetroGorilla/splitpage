@@ -2,6 +2,7 @@ import { S } from "./_state.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
+import { rowImage } from "./02c-blobs.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   cssAttr,
@@ -53,7 +54,7 @@ S.writerLastCell = null;
 
 function writerBlockHtml(row, i) {
   var visual;
-  if (row.visualImage) {
+  if (rowImage(row)) {
     var caption = truncateForPreview(htmlToPlainText(row.visualText), 42);
     visual = '<span class="wr-visual-img">▣</span> ' + escapeHtml(caption || "reference image");
   } else {
@@ -296,8 +297,8 @@ function mergeWriterRows(intoIdx) {
      see lastMoveUndo in 06-rows.js */
   S.lastMoveUndo = null;
 
-  var prevHasVisual = !!(htmlToPlainText(prev.visualText) || prev.visualImage);
-  var curHasVisual = !!(htmlToPlainText(cur.visualText) || cur.visualImage);
+  var prevHasVisual = !!(htmlToPlainText(prev.visualText) || rowImage(prev));
+  var curHasVisual = !!(htmlToPlainText(cur.visualText) || rowImage(cur));
   if (prevHasVisual && curHasVisual) {
     showToast("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
     return;
