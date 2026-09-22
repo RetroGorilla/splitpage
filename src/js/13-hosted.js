@@ -25,6 +25,7 @@ import {
   pushSnapshot,
   readStash,
   reportMerge,
+  setBaseState,
   stashLocalWork,
   updateIdentityChip
 } from "./03-sync.js";
@@ -598,7 +599,7 @@ async function resumeServerDoc() {
       return true;
     }
     S.state = theirs;
-    S.baseState = cloneState(S.state);
+    setBaseState(cloneState(S.state), "resumeServerDoc: reopened as the server has it, nothing to merge");
     clearDirty();
     render();
     updateIdentityChip();
@@ -966,7 +967,7 @@ export async function openServerDoc(id) {
   /* no fallback id: nothing this page holds is known to be this document,
      so an id-less server document derives one from its server id */
   S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
-  S.baseState = cloneState(S.state);
+  setBaseState(cloneState(S.state), "openServerDoc: the document as the server sent it");
   if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
   /* a hosted document and a local file are different homes for the same
      Save button — setHome() replaces whichever one this page had, so it
@@ -1016,7 +1017,7 @@ export async function publishToServer() {
      elsewhere, so the copy there is not its home. */
   if (via !== conn) return false;
   setHome("server", { id: body.id, rev: body.rev || 1 });
-  S.baseState = published;
+  setBaseState(published, "publishToServer: what the server just accepted");
   /* Adopted only after the server has it, like Save As. The id check keeps
      a document opened while the POST was in flight from being re-id'd. */
   if (forkDocId && S.state.docId === oldId) {
@@ -1228,7 +1229,7 @@ export async function saveToServer() {
       });
       if (serverHomeId() !== docId) return true; /* saved, but the open document has since changed */
       home.rev = body.rev;
-      S.baseState = published;
+      setBaseState(published, "saveToServer: what the server just accepted");
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
       /* reported only once the merged result is actually stored, so the
@@ -1815,7 +1816,7 @@ async function pullServerDoc(docId) {
        own pull-merge, a save that only moved `lastEditedAt`, a second
        window catching up. Take the rev, so the next beat is quiet and the
        next save is judged against it, and touch nothing else. */
-    S.baseState = cloneState(theirs);
+    setBaseState(cloneState(theirs), "pullServerDoc: their save says what ours already said");
     updateFileChip();
     return;
   }
@@ -2486,7 +2487,7 @@ export function __init() {
          a two-way merge: every field either side had touched came out a
          conflict rather than being reconciled against what the server last
          confirmed. `false` is for a suite that wants exactly that. */
-      if (onServerDoc() && opts.base !== false) S.baseState = cloneState(S.state);
+      if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
       applyReviewMode();
       updateServerMenu();
       render();

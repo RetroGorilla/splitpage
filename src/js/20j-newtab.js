@@ -3,7 +3,7 @@ import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { cloneState, updateIdentityChip } from "./03-sync.js";
+import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
@@ -117,7 +117,7 @@ function startBlankScript() {
      20f-desktop.js's open handlers wait out). */
   if (!S.state && S.initialStateReady) return S.initialStateReady.then(startBlankScript);
   S.state = blankDocumentState();
-  S.baseState = cloneState(S.state);
+  setBaseState(cloneState(S.state), "startBlankScript: a new blank document");
   /* A blank document's id has never left this page, so a first Save can
      take it with it rather than forking a new one (02b-doc-id.js). */
   S.docIdWrittenOut = false;

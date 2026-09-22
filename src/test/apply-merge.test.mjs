@@ -5,14 +5,14 @@
  * once per caller: file the undo point, merge, arm "Undo merge", adopt the
  * result, reassign `baseState`, redraw, say what happened.
  *
- * Only the `mergeOnly` half of that sequence is reachable from here, and
+ * Mostly the `mergeOnly` half of that sequence is reachable from here, and
  * deliberately so: everything after it — render(), the identity and file
  * chips, reportMerge's banner, the toast — reads the app's PAGE, and
  * src/test has a DOM but no page (see _dom.mjs). Those belong to the
  * browser suites (tests/42-local-merge.txt, 26-desktop-drafts.txt,
- * 24-history.txt). `mergeOnly` is exactly the mode applyStashedWork
- * (14-export.js) runs in on the boot-stash and crash-draft paths, so what
- * it does is worth pinning down without a browser:
+ * 24-history.txt). `mergeOnly` is the mode applyStashedWork (14-export.js)
+ * runs in when its caller adopts the result itself, so what it does is
+ * worth pinning down without a browser:
  *
  *   - the merge itself is mergeStates, unchanged, with `base` and `mine`
  *     normalised here so a caller can hand over whatever it is holding;
@@ -24,13 +24,19 @@
  *     than left pointing at an older merge when the history store refuses
  *     the write;
  *   - nothing on screen, and above all `baseState`, is touched.
+ *
+ * Past `mergeOnly`, one thing is checkable up to the render() it stops at:
+ * `awaitUndoPoint` (#96) adopting nothing — state, undo point, `baseState`
+ * — until the undo point's write has settled, and a `newBase` function read
+ * only then. And setBaseState (#96), the funnel for every write of
+ * `baseState` that is not a merge.
  */
 import "./_dom.mjs";
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
-import { applyMerge, cloneState, mergeStates } from "../js/03-sync.js";
+import { applyMerge, baseStateReason, cloneState, mergeStates, setBaseState } from "../js/03-sync.js";
 import { __init as historyInit, getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 
 /* The one thing here that is NOT free to import (#92): filing an undo
@@ -248,4 +254,102 @@ test("no undo point asked for leaves Undo merge alone", () => {
 
   applyMerge({ base: mk(id), mine: mine, theirs: mk(id), source: "server-resume", mergeOnly: true });
   assert.deepEqual(S.lastMergeUndo, { id: "s-earlier", docId: "d-earlier" });
+});
+
+/* ---- awaitUndoPoint (#96) ----
+
+   The crash-draft file merge (20g-drafts.js) used to adopt its merge by
+   hand so that it could wait, between merging and adopting, for the undo
+   point to be written — invariant #39: the version a merge replaces is ON
+   DISK before the merged one is on screen. `awaitUndoPoint` is that wait,
+   inside applyMerge. The write is held at the history store's own test gate
+   ('delay-put'), so "not adopted yet" is a state the test stands in rather
+   than a race it hopes to win.
+
+   Adopting ends in render(), which reads the page src/test does not have,
+   so the promise rejects here. What is checked is what adoption does
+   before that — which is the point: nothing moves until the write settles,
+   and everything that should has moved once it has. */
+function ticks(n) {
+  let p = Promise.resolve();
+  for (let i = 0; i < n; i++) p = p.then(() => new Promise((r) => setImmediate(r)));
+  return p;
+}
+
+test("awaitUndoPoint adopts nothing until the undo point is written", async () => {
+  reset();
+  const id = freshId();
+  const mine = mk(id);
+  mine.rows[0].audioText = "mine";
+  const theirs = mk(id);
+  theirs.rows[1].audioText = "theirs";
+  const newBase = { sentinel: "the file on disk" };
+  let baseAsked = 0;
+
+  window.__historyTest.injectFault("delay-put");
+  let p;
+  try {
+    p = applyMerge({
+      base: mk(id), mine: mine, theirs: theirs,
+      source: "stash", undoPoint: cloneState(theirs),
+      awaitUndoPoint: true,
+      newBase: function () { baseAsked++; return newBase; },
+      report: false
+    });
+    assert.equal(typeof p.then, "function", "a Promise, not the answer");
+
+    /* the write is parked at the gate: nothing may have moved */
+    await ticks(5);
+    assert.deepEqual(S.state, { sentinel: "state" });
+    assert.deepEqual(S.baseState, { sentinel: "base" });
+    assert.deepEqual(S.lastMergeUndo, { id: "s-earlier", docId: "d-earlier" });
+    assert.equal(baseAsked, 0, "newBase is not even read yet");
+
+    window.__historyTest.releaseDelayedPut();
+  } finally {
+    window.__historyTest.injectFault(null);
+  }
+  await p.then(null, () => {});
+
+  assert.equal(S.state.rows[0].audioText, "mine");
+  assert.equal(S.state.rows[1].audioText, "theirs");
+  assert.equal(S.baseState, newBase, "the function's answer, as it is");
+  assert.equal(baseAsked, 1);
+  assert.equal(baseStateReason(), "merge: stash");
+  assert.equal(S.lastMergeUndo.docId, id);
+  assert.equal(S.lastMergeUndo.source, "stash");
+
+  const listed = await listDocHistory(id);
+  const filed = listed.entries.filter((e) => e.id === S.lastMergeUndo.id);
+  assert.equal(filed.length, 1, "the undo point it waited for is in the history");
+  assert.equal(filed[0].label, "Before merging your unsaved changes");
+});
+
+test("awaitUndoPoint answers a Promise even with no undo point to wait for", async () => {
+  reset();
+  const theirs = mk(freshId());
+
+  const p = applyMerge({ theirs: theirs, source: "stash", unchanged: true, awaitUndoPoint: true, report: false });
+  assert.equal(typeof p.then, "function");
+  await p.then(null, () => {});
+  assert.equal(S.state, theirs);
+  /* no newBase: the base is left exactly as it was */
+  assert.deepEqual(S.baseState, { sentinel: "base" });
+});
+
+/* ---- setBaseState (#96) ----
+
+   Every write of `baseState` that is not a merge goes through it, so one
+   grep lists them all. It stores exactly what it is handed — its callers
+   clone, as they always have — and keeps the reason, nowhere but here. */
+test("setBaseState stores what it is given, as it is, with its reason", () => {
+  reset();
+  const doc = mk(freshId());
+  assert.equal(setBaseState(doc, "a test: adopt what was confirmed"), doc);
+  assert.equal(S.baseState, doc, "not a copy");
+  assert.equal(baseStateReason(), "a test: adopt what was confirmed");
+
+  setBaseState(null, "a test: no ancestor");
+  assert.equal(S.baseState, null);
+  assert.equal(baseStateReason(), "a test: no ancestor");
 });

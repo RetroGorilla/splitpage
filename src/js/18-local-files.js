@@ -13,6 +13,7 @@ import {
   cloneState,
   openHistoryPanel,
   pushSnapshot,
+  setBaseState,
   stampRow,
   updateIdentityChip
 } from "./03-sync.js";
@@ -392,7 +393,7 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   S.state = newState;
-  S.baseState = cloneState(S.state);
+  setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
   /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
      there is no handle to ask — a plain <input type=file> open.
      `diskBase` is the document exactly as this file last said it was: the
@@ -578,7 +579,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     S.state.title = openedTitle;
   } else {
     S.state = migrateRows({ title: openedTitle, rows: newRows });
-    S.baseState = cloneState(S.state);
+    setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
     /* The two homes of the Save button (§3.1) — the project file and the
        hosted document — both belonged to whatever was on screen a moment
        ago, and saving into either would overwrite an unrelated script.

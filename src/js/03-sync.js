@@ -99,7 +99,8 @@ export function readLegacySnapshotsRaw() {
                        reloadFileFromDisk
    None of them awaits ticket.done: a failed history write must never
    become a failed open, import or save. Only restoreSnapshot, undoMerge
-   (through it) and draft restore wait for the write.
+   (through it) and the crash-draft file merge (applyMerge's
+   awaitUndoPoint) wait for the write.
 
    With no explicit snapshotState, the untouched demo document is skipped
    (isPristineSeedDocument): opening a file into a fresh page would
@@ -1081,6 +1082,11 @@ function noteMergeAutoSave(opts) {
    THE ONE WRITER OF `baseState` on the merge paths. The base a merge
    measures against has to be exactly what the other side last confirmed
    (HANDOFF §3.6); it stopped being that because six places assigned it.
+   Since #96 that includes the boot stash (21-events.js) and the crash-draft
+   file merge (20g-drafts.js), which used to adopt applyStashedWork's result
+   by hand. Every write of it that is NOT a merge goes through setBaseState()
+   below, with its reason, so a grep for assignments to it lists the declaration,
+   this function and that one — and nothing else.
 
    What varies between callers is options, never code:
 
@@ -1101,19 +1107,34 @@ function noteMergeAutoSave(opts) {
      mergeOnly            merge and file the undo point, hand the result back,
                           and change nothing on screen — applyStashedWork's
                           three callers each do something different next
-     newBase              what `baseState` becomes; omitted leaves it alone
+     awaitUndoPoint       adopt nothing until the undo point's write has
+                          settled (invariant #39: the undo point is ON DISK
+                          before the merged version replaces what the user
+                          can see). The crash-draft file merge asks for it
+                          (20g-drafts.js); boot and the other paths do not
+                          wait. With it the answer is a Promise, always —
+                          even when no snapshot was filed.
+     newBase              what `baseState` becomes; omitted leaves it alone.
+                          A function is called at that moment instead, for
+                          a base that is not final until the merge has begun
+                          (boot: applyStashedWork gives `loaded` the stash's
+                          id first).
      historyFrom          the id this view wrote history under before the
                           merge, for noteMergedDocId
      chips                refresh the identity and file chips as well
-     report               false hands the merge back unreported — the 409
-                          path reports only once the merged version is
+     report               false hands the merge back unreported — no banner,
+                          and no dirty mark when nothing merged either. The
+                          409 path reports only once the merged version is
                           actually stored, so the banner can never describe
-                          a merge that failed to save
+                          a merge that failed to save; boot reports after
+                          its chips and menus, and adopting a stash that
+                          matched what the page loaded leaves it clean.
      noAutoSave           reportMerge's: mark dirty, write nothing
      toast                {text, tone, sticky}; `text` may be a function,
                           called once the merged document is on screen
 
-   → {state, result, snapshot}. `result` is null when nothing differed. */
+   → {state, result, snapshot} (a Promise of it with awaitUndoPoint).
+   `result` is null when nothing differed. */
 var UNDO_LABELS = {
   "server-conflict": "Before merging in someone else's changes",
   "server-resume": "Before merging your recovered changes",
@@ -1155,30 +1176,69 @@ export function applyMerge(opts) {
     return { state: next, result: result, snapshot: snap };
   }
 
-  S.state = next;
-  /* Before the undo point is armed: noteMergedDocId may have just moved
-     this document's history to the merged id, and undoMerge compares what
-     it holds against state.docId before restoring. */
-  if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
-  armUndoPoint(S.state.docId);
-  if (opts.newBase !== undefined) S.baseState = opts.newBase;
-  render();
-  if (opts.chips) { updateIdentityChip(); updateFileChip(); }
-  if (result) {
-    if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
-  } else {
-    /* Nothing merged, but `theirs` still replaced what was on screen and
-       is not what is on disk or on the server. */
-    markDirty();
+  function adopt() {
+    S.state = next;
+    /* Before the undo point is armed: noteMergedDocId may have just moved
+       this document's history to the merged id, and undoMerge compares what
+       it holds against state.docId before restoring. */
+    if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
+    armUndoPoint(S.state.docId);
+    if (opts.newBase !== undefined) {
+      baseStateWhy = "merge: " + (opts.source || "");
+      S.baseState = typeof opts.newBase === "function" ? opts.newBase() : opts.newBase;
+    }
+    render();
+    if (opts.chips) { updateIdentityChip(); updateFileChip(); }
+    if (result) {
+      if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
+    } else if (opts.report !== false) {
+      /* Nothing merged, but `theirs` still replaced what was on screen and
+         is not what is on disk or on the server. */
+      markDirty();
+    }
+    if (opts.toast) {
+      /* `text` may be a function, called here rather than by the caller: the
+         sentence usually names the document, and its title is the MERGED
+         one — which does not exist until the lines above have run. */
+      var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
+      if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
+    }
+    return { state: next, result: result, snapshot: snap };
   }
-  if (opts.toast) {
-    /* `text` may be a function, called here rather than by the caller: the
-       sentence usually names the document, and its title is the MERGED
-       one — which does not exist until the lines above have run. */
-    var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
-    if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
-  }
-  return { state: next, result: result, snapshot: snap };
+
+  if (!opts.awaitUndoPoint) return adopt();
+  /* The one place a merge waits for its snapshot (invariant #39). A write
+     that failed still settles — enqueueHistory answers {stored:false} —
+     and a failed history write must never become a failed merge. */
+  var written = snap && snap.done ? snap.done : null;
+  return Promise.resolve(written).then(null, function () {}).then(adopt);
+}
+
+/* ---- the base, when it is not a merge (#96) ----
+
+   `baseState` is the ancestor every three-way merge measures against, and
+   it has to be exactly what the other side last confirmed (HANDOFF §3.6).
+   applyMerge above sets it on a merge path. Every other write is "adopt
+   exactly what was just confirmed" after a successful save, publish or
+   open — or `null`, "there is no ancestor" — and comes through here, so
+   the whole list is one grep and each entry says why it is there.
+
+   `why` is that reason, a few words at the call site. It is kept only as
+   the last one (baseStateReason, for a unit test or a console), never
+   logged or stored. `next` is taken as it is: a caller that still holds
+   the object it passes clones it first, as every one of them always has. */
+var baseStateWhy = "";
+
+export function setBaseState(next, why) {
+  baseStateWhy = String(why || "");
+  S.baseState = next;
+  return next;
+}
+
+/* Why `baseState` last changed: setBaseState's `why`, or "merge: <source>"
+   when applyMerge set it. */
+export function baseStateReason() {
+  return baseStateWhy;
 }
 
 /* Reverts to the undo point the merge filed. Destructive enough to need a

@@ -15,7 +15,8 @@ import {
   clearStash,
   cloneState,
   getEditorName,
-  readStash
+  readStash,
+  setBaseState
 } from "./03-sync.js";
 import { htmlToMarkdown, inertBody } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
@@ -265,7 +266,7 @@ export async function saveDoc(opts) {
          user asked for it — but it stays just a file on disk. */
       var stillOurs = S.state.docId === docIdAtSave;
       var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
-      if (stillOurs) S.baseState = published;
+      if (stillOurs) setBaseState(published, "saveDoc: the bytes just written to the file");
       if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
       adoptSavedCopyDocId(forkDocId, docIdAtSave);
       var docIdAfterSave = S.state.docId;
@@ -292,7 +293,7 @@ export async function saveDoc(opts) {
       if (ok) {
         wrote = true;
         var downloadedOurs = S.state.docId === docIdAtSave;
-        if (downloadedOurs) S.baseState = published;
+        if (downloadedOurs) setBaseState(published, "saveDoc: the copy just downloaded");
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         if (downloadedOurs && S.editSeq === seqAtSave) clearDirty();
       } else {
@@ -368,12 +369,14 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave) {
    one three-way merge, one "Before merging" snapshot, one undo point.
 
    `apply` is the rest of applyMerge's options (03-sync.js). Without it this
-   function merges and hands the result back for the caller to adopt, which
-   is what its three callers have always wanted: the boot path (21-events.js)
-   and the crash-draft restore (20g-drafts.js) each do something different
-   with it next. With it — only confirmFileMerge (18a-local-merge.js) — the
-   same applyMerge call finishes the job instead, so the file merge is one
-   call rather than a second copy of the sequence (#72). */
+   function merges and hands the result back for the caller to adopt. With
+   it the same applyMerge call finishes the job instead — adopt, base, redraw,
+   report — so no caller writes out a second copy of the sequence: the file
+   merge (confirmFileMerge, 18a-local-merge.js, #72), the boot stash
+   (21-events.js) and the crash-draft file merge (20g-drafts.js, #96), the
+   last with `awaitUndoPoint`, which makes the answer a Promise. The early
+   answers below (no stash, a server document's stash) never reach
+   applyMerge, so they adopt nothing: the caller still holds `loaded`. */
 export function applyStashedWork(loaded, override, apply) {
   var stash = override || readStash();
   if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
@@ -404,7 +407,9 @@ export function applyStashedWork(loaded, override, apply) {
     var out = applyMerge(Object.assign(
       { theirs: loaded, source: "stash", mergeOnly: !apply }, extra, apply || {}
     ));
-    return { state: out.state, report: out.result, snapshot: out.snapshot };
+    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot }; }
+    /* `apply.awaitUndoPoint` makes applyMerge's answer a Promise */
+    return out && typeof out.then === "function" ? out.then(answer) : answer(out);
   }
 
   /* nothing changed under us after all */

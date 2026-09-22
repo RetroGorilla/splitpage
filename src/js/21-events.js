@@ -19,6 +19,7 @@ import {
   promptForWpm,
   reportMerge,
   restoreSnapshotFromCard,
+  setBaseState,
   undoMerge,
   updateIdentityChip
 } from "./03-sync.js";
@@ -992,10 +993,24 @@ function init() {
 
   S.state = null;
   S.initialStateReady = loadInitialState().then(function (loaded) {
-    var applied = applyStashedWork(loaded);
-    S.state = applied.state;
-    S.baseState = cloneState(applied.report ? loaded : S.state);
-    render();
+    /* A stash that survived the reload is merged into `loaded`, adopted and
+       given its base by applyMerge (03-sync.js), the one writer of
+       `baseState` on a merge path (#96). The base is what this page loaded,
+       never the merge — and read only once the merge has begun, because
+       applyStashedWork gives `loaded` the stash's id first. `report: false`
+       keeps the banner below the chips and menus, where it always was, and
+       keeps a stash that matched the page from marking it dirty. */
+    var applied = applyStashedWork(loaded, null, {
+      newBase: function () { return cloneState(loaded); },
+      report: false
+    });
+    if (S.state !== applied.state) {
+      /* No stash, or one that belongs to a server document: nothing went
+         through applyMerge, so nothing has been adopted yet. */
+      S.state = applied.state;
+      setBaseState(cloneState(S.state), "boot: the version this page loaded, nothing to merge");
+      render();
+    }
     updateIdentityChip();
     /* Same reason as syncDocIdentity() below: a fresh load never goes
        through setSaveButtons(), the funnel these two hang off, so the
