@@ -42,6 +42,10 @@ Open in Browser), #71 (reviewers write through the comments endpoints), #98
 (prompter under the topbar) and #11 (per-tab connections), plus everything
 committed after this line. #86 and #11 both change `desktop/main.js`, so the
 packaged smoke has to run again, and #86 has a by-hand check (§3).
+#82's desktop blob folder (`desktop/blob-store.js`, `main.js` §8c) adds a
+module to `electron-builder.yml`'s `files`; the packaged smoke's `blobs:`
+group is what proves it ships in the asar, and the only run where its
+rename retry and its best-effort folder fsync meet NTFS.
 
 ## Before you start
 

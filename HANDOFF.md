@@ -581,6 +581,41 @@ tabs**.
   which both builds load — the browser through `03a-history-store.js`'s
   re-export, main through `APP_ROOT`. The smoke case that existed only to
   detect drift between the two copies went with them.
+- **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
+  §8c). Images leave the document state and live in `<userData>/blobs`:
+  `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
+  own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
+  Electron, like `drafts.js`. A put checks the bytes hash to the sha, writes
+  `.tmp-<hex>` in the shard folder, fsyncs, renames (retrying a held target
+  on Windows), then fsyncs the folder best-effort (a no-op on NTFS); a sha
+  already there at the same size is `stored:false` and nothing is written.
+  A get re-hashes what it read and, on a mismatch, **deletes the file** and
+  answers null — the name is the checksum, so that file is provably not
+  anyone's bytes, and a document file still inlines every image (#82 D1) to
+  put it back. Per-sha operations are serialised, so a get that deletes a
+  damaged copy cannot race a put's good one. The launch sweeps leftover
+  `.tmp-*`; a `FORMAT` other than ours makes the store read-only (reads
+  still work, every file is checked against its own name). Nothing else
+  ever deletes (#82 D4: no GC); `list()`/`delete()` exist for a later
+  collector and no channel reaches them. The store is not image-specific —
+  #83 means to keep snapshot bodies there — so the image rule
+  (`imageBlobRefusal`: PNG/JPEG/GIF/WebP by magic, never SVG, ≤16 MiB) is
+  the **IPC door's**, exported from the same file only so main and the unit
+  test share one copy. **Channels** (all `invoke`, app origin, a new
+  `sha256` arg type in `ipc-channels.js` — 64 lowercase hex):
+  `blob-put(sha, bytes)` → `{ok, stored}` or `{ok:false, code}`
+  (`BAD_BYTES` for a string, `EMPTY`, `TOO_LARGE`, `NOT_AN_IMAGE`,
+  `HASH_MISMATCH`, `READ_ONLY`, `UNAVAILABLE`, or a write errno such as
+  `ENOSPC`); `blob-get(sha)` → `{bytes, mime}` (mime sniffed from the
+  bytes, never remembered from a put; a non-image answers null) or null;
+  `blob-missing(shas)` → the subset not held, ≤2000 shas per call, anything
+  else rejects. A store that could not be created leaves the app running:
+  puts answer `UNAVAILABLE`, gets null, every sha is missing. The renderer
+  side is `makeDesktopBlobBackend(bridge)` in `20f-desktop.js` (the page
+  registry's `get`/`put`/`missing` interface; `put` rejects with
+  `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
+  bridge calls for browser suites. The `--host` server keeps its own
+  `DATA_DIR/blobs` (#82 D9).
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -661,7 +696,8 @@ tabs**.
 - `desktop/test/smoke.mjs`: Node built-ins only, drives real window(s) over
   CDP. Covers boot/security/save/export/update plus the tabs surface,
   route-open dedupe, one-dialog-per-quit, session restore, crash
-  reload/loop, duplicate-id reassignment, crash-safe drafts. Runs on
+  reload/loop, duplicate-id reassignment, crash-safe drafts, the blob
+  folder (#82). Runs on
   Windows and Linux since #89 — the dev target on both (under a virtual
   display on Linux), the packaged `.exe` targets on Windows only. macOS is
   written for but unrun. A check this platform cannot answer prints `SKIP`
@@ -928,6 +964,15 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     modal does anyway — and can never take the credential out of the app.
     The alternative, handing the page a short-lived access token so it
     could call Drive itself, was rejected for exactly that last reason.
+    The blob folder (#82) is the fourth. The page names a blob by the
+    SHA-256 of its bytes and nothing else — `sha256` is a typed argument
+    (64 lowercase hex), so a path, a URL or a `..` is refused by the table
+    before a handler runs, and main builds `sha256/<aa>/<sha>` under its own
+    `userData`. Answers carry shas, bytes and a sniffed mime, never a path.
+    A put must hash to its sha and be a raster image, so a compromised page
+    can at worst add images to the folder (up to 16 MiB each) and read back
+    ones it already knows the sha of — it cannot name a file, read anything
+    outside the folder, or plant an SVG that a later page would render.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -1081,6 +1126,7 @@ evaluation order via `_entry.js`):
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
@@ -1091,6 +1137,7 @@ evaluation order via `_entry.js`):
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
+| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |

@@ -344,6 +344,34 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:history-list-docs");
     },
 
+    /* ---- content-addressed blobs (issue #82, main.js section 8c) ---------
+       Images live outside the document state, in <userData>/blobs, named by
+       the SHA-256 of their bytes. The page names a blob by that sha (64
+       lowercase hex) and nothing else — no path, no folder, no URL
+       (invariant #28). src/js/20f-desktop.js's makeDesktopBlobBackend turns
+       these into the page registry's backend.
+
+       blobPut(sha, bytes): the bytes must hash to the sha and be a PNG,
+       JPEG, GIF or WebP of at most 16 MiB. Answers {ok:true, stored} or
+       {ok:false, code}.
+       blobGet(sha): {bytes: Uint8Array, mime} or null.
+       blobMissing(shas): the subset of shas (at most 2000) main does not
+       hold. */
+    blobPut(sha, bytes) {
+      return invoke("splitpage:blob-put", sha, bytes);
+    },
+
+    blobGet(sha) {
+      return invoke("splitpage:blob-get", sha).then((got) => {
+        if (got && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
+        return got || null;
+      });
+    },
+
+    blobMissing(shas) {
+      return invoke("splitpage:blob-missing", shas);
+    },
+
     getSessionInfo() {
       return invoke("splitpage:get-session-info");
     },

@@ -51,6 +51,8 @@
  *   tabId       32 hex — a tab or window id
  *   docId       /^d[0-9a-f]{32}$/ — a document id (invariant #35)
  *   snapshotId  a version-history snapshot id (invariant #38)
+ *   sha256      /^[0-9a-f]{64}$/ — a content-addressed blob's name (#82):
+ *               64 lowercase hex, so it can never be a path or a URL
  *
  * `any` is not laziness: it is what a channel that must answer a bad payload
  * with a CODE rather than a rejection needs. splitpage:draft-write returns
@@ -78,6 +80,7 @@ const BOTH = [APP_ORIGIN, TABSTRIP_ORIGIN];
 const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
 const DOC_ID_RE = /^d[0-9a-f]{32}$/;
 const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
 
 const TYPES = {
   any: () => true,
@@ -91,7 +94,8 @@ const TYPES = {
   bytes: (v) => typeof v === "string" || v instanceof ArrayBuffer || ArrayBuffer.isView(v),
   tabId: (v) => typeof v === "string" && TAB_OR_WINDOW_ID_RE.test(v),
   docId: (v) => typeof v === "string" && DOC_ID_RE.test(v),
-  snapshotId: (v) => typeof v === "string" && HISTORY_SNAP_ID_RE.test(v)
+  snapshotId: (v) => typeof v === "string" && HISTORY_SNAP_ID_RE.test(v),
+  sha256: (v) => typeof v === "string" && SHA256_RE.test(v)
 };
 
 const NONE = [];
@@ -204,6 +208,18 @@ const CHANNELS = [
   { name: "splitpage:history-import-older", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
   { name: "splitpage:history-usage", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:history-list-docs", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+
+  /* ---- content-addressed blobs (issue #82, main.js § 8c) ---------------
+     Images out of the document state: the page names a blob by the SHA-256
+     of its bytes and by nothing else — never a path, never a URL, never a
+     folder (invariant #28). The sha is typed here, so a string that could
+     be a path is refused before any handler runs; blob-put's bytes must
+     hash to it and be a PNG, JPEG, GIF or WebP of at most 16 MiB (checked
+     in the handler through desktop/blob-store.js's imageBlobRefusal), and
+     blob-missing's list is at most 2000 shas, each one checked there too. */
+  { name: "splitpage:blob-put", direction: "invoke", argsSchema: ["sha256", "bytes"], allowedOrigins: APP },
+  { name: "splitpage:blob-get", direction: "invoke", argsSchema: ["sha256"], allowedOrigins: APP },
+  { name: "splitpage:blob-missing", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
 
   /* ---- main -> the document page -------------------------------------- */
   { name: "splitpage:open-file", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },

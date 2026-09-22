@@ -3853,6 +3853,139 @@ async function caseHistoryNewerFormatReadOnly(target) {
   }
 }
 
+/* ----------------------------------------------------------------------
+ * Issue #82: the content-addressed blob folder (desktop/blob-store.js,
+ * main.js § 8c), driven through the real bridge from the page.
+ * -------------------------------------------------------------------- */
+
+// A real PNG signature and a random tail: an image by its magic, and a sha
+// of its own every run.
+function blobPngBytes(n) {
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), crypto.randomBytes(n || 256)]);
+}
+function blobSha(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
+function blobBytesExpr(buf) { return "new Uint8Array(" + JSON.stringify([...buf]) + ")"; }
+
+// window.splitpageDesktop.<method>(...) in the page, where each argument is
+// already a page-side expression (blobBytesExpr for bytes, JSON otherwise).
+// A blobGet answer's bytes come back as a plain array, which is what
+// returnByValue can carry. Throws when the invoke rejects.
+async function blobCall(cdp, method, argExprs) {
+  return evalPage(cdp, "window.splitpageDesktop." + method + "(" + argExprs.join(",") + ")" +
+    ".then(function (r) { return r && r.bytes ? { mime: r.mime, isU8: r.bytes instanceof Uint8Array, bytes: Array.from(r.bytes) } : r; })");
+}
+async function blobCallRejects(cdp, method, argExprs) {
+  try { await blobCall(cdp, method, argExprs); return false; } catch { return true; }
+}
+function blobFilesOnDisk(userDataDir) {
+  const root = path.join(userDataDir, "blobs");
+  const out = [];
+  (function walk(d) {
+    let names;
+    try { names = fs.readdirSync(d); } catch { return; }
+    for (const n of names) {
+      const p = path.join(d, n);
+      if (fs.statSync(p).isDirectory()) walk(p);
+      else out.push(path.relative(root, p).split(path.sep).join("/"));
+    }
+  })(root);
+  return out.sort();
+}
+
+/* caseBlobRoundTripAndRelaunch. put/get/missing over the real bridge; the
+   on-disk layout is sha256/<aa>/<sha> with FORMAT "1"; a bad sha, a
+   mismatched body, an SVG and an oversized missing() are all refused and
+   write nothing; no answer carries a path (invariant #28); and after a
+   relaunch on the same profile the bytes are still there, byte for byte,
+   with a stray temp file from a "power cut" swept at launch. */
+async function caseBlobRoundTripAndRelaunch(target) {
+  const tag = target.name + " blobs: put/get/missing over the bridge + relaunch (#82)";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const bytes = blobPngBytes(512);
+  const sha = blobSha(bytes);
+  const absent = blobSha(blobPngBytes(16));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "blobs-roundtrip", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const bridgeHas = await evalPage(cdp, "['blobPut','blobGet','blobMissing'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; })");
+    record(tag + ": the bridge exposes blobPut, blobGet and blobMissing", bridgeHas === true, String(bridgeHas));
+
+    const put1 = await blobCall(cdp, "blobPut", [JSON.stringify(sha), blobBytesExpr(bytes)]);
+    record(tag + ": first put stores it", put1 && put1.ok === true && put1.stored === true, JSON.stringify(put1));
+    const put2 = await blobCall(cdp, "blobPut", [JSON.stringify(sha), blobBytesExpr(bytes)]);
+    record(tag + ": a second put of the same blob is a no-op (stored:false)", put2 && put2.ok === true && put2.stored === false, JSON.stringify(put2));
+
+    const got = await blobCall(cdp, "blobGet", [JSON.stringify(sha)]);
+    record(tag + ": get returns the bytes exactly, as a Uint8Array, with the sniffed mime",
+      !!got && got.isU8 === true && got.mime === "image/png" && Buffer.from(got.bytes).equals(bytes),
+      got ? JSON.stringify({ mime: got.mime, isU8: got.isU8, len: got.bytes.length }) : "null");
+    const gotAbsent = await blobCall(cdp, "blobGet", [JSON.stringify(absent)]);
+    record(tag + ": get of a sha never stored is null", gotAbsent === null, JSON.stringify(gotAbsent));
+
+    const miss = await blobCall(cdp, "blobMissing", [JSON.stringify([sha, absent, absent])]);
+    record(tag + ": missing() names only the absent sha, once", JSON.stringify(miss) === JSON.stringify([absent]), JSON.stringify(miss));
+
+    const onDisk = blobFilesOnDisk(userDataDir);
+    record(tag + ": on disk: FORMAT and sha256/<aa>/<sha>, nothing else",
+      JSON.stringify(onDisk) === JSON.stringify(["FORMAT", "sha256/" + sha.slice(0, 2) + "/" + sha]), JSON.stringify(onDisk));
+    record(tag + ": FORMAT is \"1\"", fs.readFileSync(path.join(userDataDir, "blobs", "FORMAT"), "utf8").trim() === "1", "");
+    record(tag + ": the file is exactly the bytes",
+      fs.readFileSync(path.join(userDataDir, "blobs", "sha256", sha.slice(0, 2), sha)).equals(bytes), "");
+    const answers = JSON.stringify([put1, put2, miss]);
+    record(tag + ": no answer names a path (invariant #28)",
+      !answers.includes(userDataDir) && !answers.includes("blobs") && !answers.includes(path.sep + sha), answers);
+
+    // ---- refusals: shape (the table), content (the handler) ----
+    for (const bad of [sha.toUpperCase(), sha.slice(1), "../" + sha.slice(3), "..", path.join(userDataDir, "x"), ""]) {
+      const r1 = await blobCallRejects(cdp, "blobGet", [JSON.stringify(bad)]);
+      const r2 = await blobCallRejects(cdp, "blobPut", [JSON.stringify(bad), blobBytesExpr(bytes)]);
+      record(tag + ": a bad sha " + JSON.stringify(bad.length > 40 ? bad.slice(0, 40) + "…" : bad) + " is refused by get and put", r1 && r2, "get=" + r1 + " put=" + r2);
+    }
+    const mismatch = await blobCall(cdp, "blobPut", [JSON.stringify(absent), blobBytesExpr(bytes)]);
+    record(tag + ": a body that does not hash to its sha answers HASH_MISMATCH",
+      mismatch && mismatch.ok === false && mismatch.code === "HASH_MISMATCH", JSON.stringify(mismatch));
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const svgPut = await blobCall(cdp, "blobPut", [JSON.stringify(blobSha(svg)), blobBytesExpr(svg)]);
+    record(tag + ": an SVG, even hashed right, answers NOT_AN_IMAGE",
+      svgPut && svgPut.ok === false && svgPut.code === "NOT_AN_IMAGE", JSON.stringify(svgPut));
+    const gifText = "GIF89a-but-a-string";
+    const strPut = await blobCall(cdp, "blobPut", [JSON.stringify(blobSha(Buffer.from(gifText))), JSON.stringify(gifText)]);
+    record(tag + ": a string body answers BAD_BYTES", strPut && strPut.ok === false && strPut.code === "BAD_BYTES", JSON.stringify(strPut));
+    const tooMany = await blobCallRejects(cdp, "blobMissing", ["Array.from({length: 2001}, function () { return " + JSON.stringify(absent) + "; })"]);
+    record(tag + ": missing() with more than 2000 shas rejects", tooMany, "");
+    const notShas = await blobCallRejects(cdp, "blobMissing", [JSON.stringify([absent, "../escape"])]);
+    record(tag + ": missing() with a non-sha entry rejects", notShas, "");
+    const onDiskAfter = blobFilesOnDisk(userDataDir);
+    record(tag + ": every refusal wrote nothing", JSON.stringify(onDiskAfter) === JSON.stringify(onDisk), JSON.stringify(onDiskAfter));
+
+    // ---- relaunch on the same profile ----
+    await teardown(app, tag + " (pre-relaunch)");
+    app = null;
+    // What a power cut between a put's fsync and its rename leaves behind.
+    const strayTmp = path.join(userDataDir, "blobs", "sha256", absent.slice(0, 2), ".tmp-0123456789ab");
+    fs.mkdirSync(path.dirname(strayTmp), { recursive: true });
+    fs.writeFileSync(strayTmp, blobPngBytes(16));
+    const app2 = await launchApp(target, { label: "blobs-roundtrip-relaunch", userDataDir });
+    try {
+      await waitForRows(app2.cdp, 20000);
+      const again = await blobCall(app2.cdp, "blobGet", [JSON.stringify(sha)]);
+      record(tag + ": after a relaunch, get returns the same bytes",
+        !!again && again.mime === "image/png" && Buffer.from(again.bytes).equals(bytes), again ? String(again.bytes.length) : "null");
+      const missAgain = await blobCall(app2.cdp, "blobMissing", [JSON.stringify([sha])]);
+      record(tag + ": after a relaunch, missing() says it is held", JSON.stringify(missAgain) === "[]", JSON.stringify(missAgain));
+      record(tag + ": the launch swept the stray .tmp- file", !fs.existsSync(strayTmp), strayTmp);
+    } finally {
+      await teardown(app2, tag + " (post-relaunch)");
+    }
+  } finally {
+    if (app) await teardown(app, tag);
+    rmrf(userDataDir);
+  }
+}
+
 /* "window.close() canary: grep src/js for 'window.close(' finds nothing (fs
    read in Node)." Pure source-text check — no launch, no target-dependent
    behaviour; runs once per target invocation but is cheap and idempotent. */
@@ -5706,6 +5839,8 @@ async function runTargetSuite(target, groupFilter) {
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target)],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target)],
     ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
+    // --- issue #82: the content-addressed blob folder ---
+    ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target)],
     // --- step N: crash-safe drafts (single and multi tab) ---
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
