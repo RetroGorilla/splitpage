@@ -653,6 +653,15 @@ Shot**. Shot scenes are tinted, and a counter appears in the header once
 you've shot anything. In the teleprompter, **Skip shot** leaves those
 scenes out, so on day two you only read what's left.
 
+**Hide shot scenes.** File ▸ **Hide shot scenes** (or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd>)
+collapses every Shot scene into a thin "N shot scenes hidden" strip — click
+one open to see it again. The runtime chip switches to showing what's left
+to read alongside the total. It's a reading preference for this device, like
+Mirror/Flip below, so it never touches the file: changing a scene you can see
+to Shot gives it a moment before it collapses, and Find, comments and tag
+jump-to all expand a hidden scene rather than missing it. The writer and the
+teleprompter both honour it too.
+
 **Mentions you forgot to tag.** Once something is in the breakdown, Splitpage
 watches the Visual column for it. Write "gaffer tape" into a scene without
 labelling it and the words get a faint dotted underline, with a small **Tag

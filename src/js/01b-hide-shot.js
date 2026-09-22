@@ -1,0 +1,145 @@
+  /* ================= hide shot scenes (issue #25) =================
+
+     A reading mode, not a document change: every scene marked Shot
+     collapses into a thin "N shot scenes hidden" strip, so a half-finished
+     script reads as what's left to record. Lives in localStorage keyed to
+     this device — like the writer's remembered text size and the
+     prompter's mirror/flip — never in `state`, so it never dirties the
+     document or travels with the file (invariant: HANDOFF's escaping rule
+     aside, a reading preference is not something the next person to open
+     this script should inherit).
+
+     `expandedShotRowIds` is the "peek" list: a row id in here is shown in
+     full even though it is Shot, either because someone clicked its hidden
+     strip open, a jump landed on it, or it only just became Shot and is
+     still in its short grace window (armShotHideGrace below). It is purely
+     in-memory UI state, rebuilt fresh from nothing every reload — there is
+     nothing here worth persisting. */
+  var HIDE_SHOT_KEY = "splitpage-hide-shot";
+  var HIDE_SHOT_GRACE_MS = 1400;
+
+  function readHideShotFlag() {
+    try { return localStorage.getItem(HIDE_SHOT_KEY) === "1"; } catch (e) { return false; }
+  }
+
+  var hideShotScenes = readHideShotFlag();
+  var expandedShotRowIds = {};
+  var shotHideTimers = {};
+
+  function isRowHiddenByShotToggle(row) {
+    return !!(hideShotScenes && row.status === "shot" && !expandedShotRowIds[row.id]);
+  }
+
+  /* The menu entry says what is on, not what pressing it does — same reason
+     updateAutoSaveMenu() (14-export.js) does it this way. */
+  function updateHideShotMenu() {
+    var item = document.getElementById("menu-hide-shot");
+    if (!item) return;
+    item.textContent = "Hide shot scenes: " + (hideShotScenes ? "on" : "off");
+    item.setAttribute("aria-checked", hideShotScenes ? "true" : "false");
+  }
+
+  function setHideShotScenes(on) {
+    on = !!on;
+    if (on === hideShotScenes) return;
+    hideShotScenes = on;
+    /* Turning it on starts a clean slate — any earlier peek is stale the
+       moment hiding is off, and re-enabling should collapse everything
+       Shot again rather than remember what used to be expanded. */
+    if (on) expandedShotRowIds = {};
+    try { localStorage.setItem(HIDE_SHOT_KEY, on ? "1" : "0"); } catch (e) {}
+    updateHideShotMenu();
+    if (state) render();
+  }
+
+  function toggleHideShotScenes() {
+    setHideShotScenes(!hideShotScenes);
+    showToast(hideShotScenes
+      ? "Hiding shot scenes — collapsed into strips you can click open."
+      : "Showing every scene again.", "ok");
+  }
+
+  /* Changing a VISIBLE scene to Shot while the toggle is on must not yank
+     it out from under the click that just landed on it — so it stays
+     expanded for a short grace window, then settles into its strip on its
+     own. Called only from cycleRowStatus (01-scene-status.js). */
+  function armShotHideGrace(rowId) {
+    expandedShotRowIds[rowId] = true;
+    if (shotHideTimers[rowId]) clearTimeout(shotHideTimers[rowId]);
+    shotHideTimers[rowId] = setTimeout(function () {
+      delete shotHideTimers[rowId];
+      delete expandedShotRowIds[rowId];
+      render();
+    }, HIDE_SHOT_GRACE_MS);
+  }
+
+  /* A scene leaving Shot status (by whatever path) has nothing left to hide
+     or to grace — drop any pending timer so a stale one can't fire later
+     and undo an expand a different action already made permanent. */
+  function clearShotHideGrace(rowId) {
+    if (shotHideTimers[rowId]) { clearTimeout(shotHideTimers[rowId]); delete shotHideTimers[rowId]; }
+  }
+
+  /* Find & replace, comments "jump to" and tag "jump to" all land on a row
+     by querying `#rows .row[data-id=...]` directly — which finds nothing
+     once that row is folded into a strip. Called before any of those
+     queries: if the row is currently hidden, expand the whole contiguous
+     run of Shot scenes it belongs to (not just the one row — a lone row
+     poking out of an otherwise-collapsed run reads as broken) and repaint
+     so the caller's own lookup succeeds right after this returns. */
+  function revealRow(rowId) {
+    if (!hideShotScenes || !state) return;
+    var idx = findRowIndex(rowId);
+    if (idx === -1 || !isRowHiddenByShotToggle(state.rows[idx])) return;
+    var start = idx, end = idx;
+    while (start > 0 && state.rows[start - 1].status === "shot") start--;
+    while (end < state.rows.length - 1 && state.rows[end + 1].status === "shot") end++;
+    for (var i = start; i <= end; i++) expandedShotRowIds[state.rows[i].id] = true;
+    render();
+  }
+
+  /* The strip itself — a real <button> so Enter/Space open it for free,
+     exactly like every other data-action control in this app. */
+  function hiddenShotStripHtml(ids) {
+    var count = ids.length;
+    var label = count + " shot scene" + (count === 1 ? "" : "s") + " hidden";
+    return '<button type="button" class="hidden-shot-strip" data-action="expand-hidden-shot" data-ids="' +
+      escapeHtml(ids.join(",")) + '" title="Click to show">' +
+        '<span class="hidden-shot-label">' + escapeHtml(label) + '</span>' +
+        '<span class="hidden-shot-hint">Click to show</span>' +
+      '</button>';
+  }
+
+  /* Expand every id named on a clicked strip — the run it represents,
+     exactly as built below. */
+  function expandHiddenShotStrip(idsAttr) {
+    if (!idsAttr) return;
+    idsAttr.split(",").forEach(function (id) { if (id) expandedShotRowIds[id] = true; });
+    render();
+  }
+
+  /* Shared by render() (05-render.js) and renderWriter() (19-writer.js): walk
+     `rows` in document order, handing each visible one to `rowRenderer(row,
+     index)` — same signature both rowHtml() and writerBlockHtml() already
+     have — and folding every contiguous run of hidden-by-toggle rows into
+     one strip. `index` is always the row's real position in the document,
+     never a "visible-only" count, so scene numbers never shift just because
+     the toggle is on. */
+  function renderRowGroups(rows, rowRenderer) {
+    var html = "";
+    var i = 0;
+    while (i < rows.length) {
+      var row = rows[i];
+      if (isRowHiddenByShotToggle(row)) {
+        var ids = [];
+        var j = i;
+        while (j < rows.length && isRowHiddenByShotToggle(rows[j])) { ids.push(rows[j].id); j++; }
+        html += hiddenShotStripHtml(ids);
+        i = j;
+      } else {
+        html += rowRenderer(row, i);
+        i++;
+      }
+    }
+    return html;
+  }

@@ -121,6 +121,13 @@
           <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
           <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
           <div class="menu-sep"></div>
+          <!-- Collapses every scene marked Shot into a thin strip — issue #25.
+               Says what is on, not what pressing it does (see menu-autosave);
+               updateHideShotMenu() (01b-hide-shot.js) keeps aria-checked and
+               the checkmark in sync. Ctrl/Cmd+Alt+H, mirrored in the desktop
+               View menu (desktop/main.js). -->
+          <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+          <div class="menu-sep"></div>
           <!-- Ctrl+F everywhere else; this entry exists because phone
                keyboards have no Ctrl -->
           <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>

@@ -135,6 +135,7 @@
   function revealFindMatch() {
     if (findIndex < 0 || !findMatches[findIndex]) return;
     var m = findMatches[findIndex];
+    revealRow(m.rowId);
     var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
     if (!cell) return;
     var needle = findNeedle();
