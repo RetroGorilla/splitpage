@@ -31,3 +31,7 @@ update-status.json
 
 # Build-time downloads (the bundled Node runtime). Fetched on demand.
 .cache/
+
+# npm installs. build.mjs gained one devDependency (esbuild) in #66; the
+# desktop shell has its own. Neither belongs in the repo.
+node_modules/
