@@ -684,6 +684,11 @@
       }
     });
     document.getElementById(id).hidden = false;
+    /* Only one panel is ever open at a time, so the width that #root's
+       padding-right should track (see body.panel-open #root in app.css)
+       is whichever one is being opened right now — set every time, not
+       just at boot (03b-side-panels.js). */
+    applySidePanelWidth(id, readSidePanelWidth(id));
     syncPanelClass();
   }
 
