@@ -74,9 +74,10 @@ expect F.state().wordsPerMinute === 175
 expect F.state().people.some(function(p){return p.name==='Jordan';})
 expect F.state().productionTags.length >= 2
 
-# a hand-edited .md is still parsed as one of ours, and a foreign one is not
-expect F.parseMarkdown(window.__md) !== null
-expect F.parseMarkdown('# Just a document\n\nNo data block here.\n') === null
+# (what parseMarkdown says yes and no to — one of ours, a foreign document,
+# an unreadable block, and which fence wins when a script quotes this very
+# block — is src/test/formats.test.mjs since #67. It is a pure function of
+# a string and never needed a page.)
 
 # --- one table cell edited outside Splitpage ---------------------------------
 # the table wins for that cell's text; the block wins for everything else,

@@ -365,56 +365,12 @@ expect window.__evRawB2[window.__evRawB2.length - 1].label.indexOf('evB-3.txt') 
 eval (function(){H.setCapOverride(null); H.setNow(null); return true;})()
 
 # =============================================================================
-# eviction planner fixtures (a)-(f) — planHistoryEviction is PURE, exercised
-# directly with no backend at all.
+# planHistoryEviction's own fixtures (a)-(g) used to sit here, driven through
+# window.__historyTest.planEviction even though the planner is pure and needs
+# no backend at all. They are src/test/history-eviction.test.mjs now (#67).
+# The hook itself stays: desktop/test/smoke.mjs's caseHistoryPlannerTwin drives
+# it to prove main.js's line-for-line copy still answers the same thing.
 # =============================================================================
-eval (async function(){ await H.resetForTest(); return true; })()
-
-# (a) every document trimmed to perDoc even with no cap
-eval (function(){window.__pa = H.planEviction([{docId: did('e0'), lastOpenedAt: 1, snapshots: [{id:'s1',atMs:1,sizeBytes:10},{id:'s2',atMs:2,sizeBytes:10},{id:'s3',atMs:3,sizeBytes:10},{id:'s4',atMs:4,sizeBytes:10},{id:'s5',atMs:5,sizeBytes:10}]}], Infinity, 100, {perDoc: 3}); return window.__pa;})()
-expect window.__pa.deletes.length === 2
-expect window.__pa.deletes[0].id === 's1'
-expect window.__pa.deletes[1].id === 's2'
-expect window.__pa.overCap === false
-
-# (b) an expired Older bucket is removed as a whole, even with no cap;
-# an unexpired one is kept untouched
-eval (function(){window.__pb1 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 500, snapshots: [{id:'o1',atMs:1,sizeBytes:5},{id:'o2',atMs:2,sizeBytes:5}]}], Infinity, 1000, {}); window.__pb2 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 5000, snapshots: [{id:'o1',atMs:1,sizeBytes:5},{id:'o2',atMs:2,sizeBytes:5}]}], Infinity, 1000, {}); return [window.__pb1.deletes.length, window.__pb2.deletes.length];})()
-expect window.__pb1.deletes.length === 2
-expect window.__pb2.deletes.length === 0
-
-# (c) under cap pressure, Older (unexpired) is evicted before a normal doc
-eval (function(){window.__pc = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 999999, snapshots: [{id:'o1',atMs:1,sizeBytes:50},{id:'o2',atMs:2,sizeBytes:50}]}, {docId: did('e1'), lastOpenedAt: 5, snapshots: [{id:'d1',atMs:3,sizeBytes:50},{id:'d2',atMs:4,sizeBytes:50}]}], 150, 100, {});return window.__pc;})()
-expect window.__pc.deletes.length === 1
-expect window.__pc.deletes[0].docId === '_older'
-expect window.__pc.totalAfter <= 150
-
-# (d) least-recently-opened document goes first; ties break by docId
-eval (function(){window.__pd = H.planEviction([{docId: did('e3'), lastOpenedAt: 10, snapshots: [{id:'x1',atMs:1,sizeBytes:50},{id:'x2',atMs:2,sizeBytes:50}]}, {docId: did('e2'), lastOpenedAt: 10, snapshots: [{id:'y1',atMs:1,sizeBytes:50},{id:'y2',atMs:2,sizeBytes:50}]}], 150, 100, {}); return window.__pd;})()
-expect window.__pd.deletes.length === 1
-expect window.__pd.deletes[0].docId === did('e2')
-
-# (e) a document's newest snapshot is never deleted; overCap is reported
-eval (function(){window.__pe = H.planEviction([{docId: did('e4'), lastOpenedAt: 1, snapshots: [{id:'z1',atMs:1,sizeBytes:1000}]}], 10, 100, {}); return window.__pe;})()
-expect window.__pe.deletes.length === 0
-expect window.__pe.overCap === true
-expect window.__pe.totalAfter === 1000
-
-# (f) garbage input is tolerated, never throws
-eval (function(){try { window.__pf = H.planEviction([null, {}, {docId: 42, snapshots: 'nope'}, {docId: did('e5'), snapshots: [null, {id:'ok'}, {id:'g1', atMs:'bad', sizeBytes:-5}]}], 'not a number', 'also not a number', {perDoc: -3, olderKey: 7}); window.__pfOk = true; } catch (e) { window.__pfOk = false; } return [window.__pfOk, window.__pf && window.__pf.deletes];})()
-expect window.__pfOk === true
-expect Array.isArray(window.__pf.deletes)
-
-# (g) a protected snapshot is never deleted: not as the oldest Older entry
-# under cap pressure (the next one goes instead), and not by a document's
-# oldest-first eviction, which then reports overCap rather than delete the
-# newest
-eval (function(){window.__pg1 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 999999, snapshots: [{id:'o1',atMs:1,sizeBytes:50},{id:'o2',atMs:2,sizeBytes:50}]}], 50, 100, {protect: [{docId: '_older', id: 'o1'}]}); window.__pg2 = H.planEviction([{docId: did('f3'), lastOpenedAt: 1, snapshots: [{id:'p1',atMs:1,sizeBytes:50},{id:'p2',atMs:2,sizeBytes:50},{id:'p3',atMs:3,sizeBytes:50}]}], 50, 100, {protect: [{docId: did('f3'), id: 'p1'}]}); return [window.__pg1.deletes, window.__pg2.deletes, window.__pg2.overCap];})()
-expect window.__pg1.deletes.length === 1
-expect window.__pg1.deletes[0].id === 'o2'
-expect window.__pg2.deletes.length === 1
-expect window.__pg2.deletes[0].id === 'p2'
-expect window.__pg2.overCap === true
 
 # =============================================================================
 # two same-origin instances (a hidden iframe) racing 20+20 puts on the same

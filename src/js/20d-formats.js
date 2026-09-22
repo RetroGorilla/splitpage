@@ -1,25 +1,16 @@
 import { S } from "./_state.js";
-import {
-  STATE_FIELDS,
-  legacyMdToHtml,
-  makeId,
-  migrateRows,
-  missingStateFields
-} from "./02-state.js";
+import { legacyMdToHtml, makeId, migrateRows } from "./02-state.js";
 import {
   adoptRestoredState,
-  decideDuplicateLoser,
   deriveDocId,
   docIdEmbeddedIn,
   docIdEvents,
   initDocIdentityChannel,
-  mergedDocId,
   migrateDocument,
   reassignDocId,
-  sha256Hex,
   standaloneHtmlFor
 } from "./02b-doc-id.js";
-import { cloneState, mergeStates } from "./03-sync.js";
+import { cloneState } from "./03-sync.js";
 import { plainText, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
@@ -312,22 +303,28 @@ export function __init() {
      plays on URL.createObjectURL, one level up. */
   window.__splitpageFormats = {
     buildSplitpage: buildSplitpageFile,
-    parseSplitpage: parseSplitpageFile,
     buildMarkdown: buildMarkdownProject,
+    /* parseMarkdown is here for ONE live-flow guard: 22-doc-id.txt builds a
+       legacy .md by cutting the docId line out of a real one at runtime and
+       checks the result is still one of ours before opening it. Its own
+       rules — what parses, what returns null, which fence wins — are
+       src/test/formats.test.mjs, and parseSplitpage/migrateDocument left
+       with #67 because nothing drove them but their own assertions. */
     parseMarkdown: parseMarkdownProject,
     buildStandaloneHtml: function () { return standaloneHtmlFor(S.state); },
     /* Document identity (02b-doc-id.js), for 22-doc-id.txt and friends. */
     docId: function () { return S.state ? S.state.docId : null; },
     writtenOut: function () { return S.docIdWrittenOut; },
+    /* deriveDocId stays because 22-doc-id.txt uses it as an ORACLE inside a
+       live flow — the id a losing tab re-derives for itself over the fake
+       BroadcastChannel — not because the function needs driving. Its own
+       vectors, sha256Hex's, mergedDocId's truth table, mergeStates and
+       decideDuplicateLoser left with #67: they are pure, and they are unit
+       tests now (src/test/doc-id.test.mjs, merge-states.test.mjs). */
     deriveDocId: deriveDocId,
-    sha256Hex: sha256Hex,
-    mergedDocId: mergedDocId,
-    mergeStates: mergeStates,
-    migrateDocument: migrateDocument,
     adoptRestoredState: adoptRestoredState,
     reassignDocId: reassignDocId,
     docIdEvents: docIdEvents,
-    decideDuplicateLoser: decideDuplicateLoser,
     initDocIdentityChannel: initDocIdentityChannel,
     /* `handle` is optional — a real Open never has one either — but
        19-save-conflict.txt passes a fake FileSystemFileHandle-shaped object
@@ -358,13 +355,13 @@ export function __init() {
       toggle: toggleAutoSave,
       flush: flushAutoSave
     },
+    /* Still here because __norm (17-formats.txt, 40-comment-assign-filter
+       .txt) migrates a clone of the LIVE state to compare two round trips
+       of it; migrateRows' own rules are src/test/migrate-rows.test.mjs.
+       The state field registry left with #67 — STATE_FIELDS and
+       missingStateFields never needed a page (src/test/state-fields.test
+       .mjs). */
     migrate: migrateRows,
-    /* The state field registry (#60). `stateFields` is the table itself so
-       a suite can assert a strategy exists for every field rather than just
-       that the field survived; `missingStateFields` is the check invariant
-       #4 used to be a comment about. */
-    stateFields: function () { return STATE_FIELDS; },
-    missingStateFields: missingStateFields,
     clone: cloneState,
     state: function () { return S.state; },
     docFile: function () { return { name: S.docFileHandle.handle ? S.docFileHandle.handle.name : null, kind: S.docFileHandle.kind, lastModified: S.docFileHandle.lastModified }; },

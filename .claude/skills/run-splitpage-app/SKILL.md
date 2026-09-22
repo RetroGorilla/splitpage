@@ -9,14 +9,38 @@ Splitpage ships as one self-contained `index.html`, but **that file is
 generated — do not edit it.** The source is `src/` (`page.html`, `app.css`,
 `seed-state.json`, and the ES modules in `src/js/`), and `node build.mjs`
 bundles them with esbuild and inlines the result back into `index.html`.
-Run `npm install` once first — esbuild is the one devDependency. Edit `src/`, rebuild,
+Run `npm install` once first — esbuild builds the bundle, jsdom lends the
+unit tests a DOM. Edit `src/`, rebuild,
 then test. A change made directly to `index.html` will look like it worked
 and be destroyed by the next build; the pre-commit hook refuses a commit
 where the two disagree.
 
-There is no test framework beyond this skill: a driver that serves the app,
-launches a headless browser over the Chrome DevTools Protocol, and runs
-plain-text command scripts against it.
+There are two layers. **Unit tests** over the pure cores in `src/js` run
+under `node --test` with no browser at all — `npm test`, files in
+`src/test/`, a couple of seconds, and they work on Windows, in the cloud
+container and in CI alike. **Everything else** is this skill: a driver that
+serves the app, launches a headless browser over the Chrome DevTools
+Protocol, and runs plain-text command scripts against it.
+
+Reach for the unit tests when what you changed is a pure function of a
+document — `migrateRows`, `mergeStates`, the `.splitpage`/`.md` formats,
+`parseMarkdownTable`, `deriveDocId`, `planHistoryEviction`. Reach for a
+browser suite when there is a page involved: a click, a modal, a rendered
+row, a file handle, IndexedDB, the desktop bridge. Before #67 the first
+list had no tests at all and was reached through `window.__*` hooks from a
+booted browser, which is why several suites still open a page to assert
+something that is really just arithmetic over an object.
+
+```bash
+npm test                      # src/test/*.test.mjs, no browser
+node build.mjs && node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
+```
+
+`src/test/_dom.mjs` is what makes the first one possible: the pure cores
+sanitise HTML through a real `DOMParser`, so the suites borrow a
+spec-compliant DOM (jsdom, a devDependency, never shipped) rather than
+stub one. A module that needs a *page* — `#rows`, `#state-data`, a modal —
+does not belong there.
 
 There are **two drivers and one set of scripts**. They read the same
 `tests/*.txt`, take the same commands, and print the same lines — pick by
@@ -71,6 +95,24 @@ under Gotchas.
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
 
+## The unit tests
+
+`npm test` — `node --test "src/test/*.test.mjs"`. No browser, no server, no
+build step: each file imports the module it is about straight out of
+`src/js` and calls it. Add to these rather than to a browser suite whenever
+the thing you changed is a pure function of a document.
+
+| File | Covers |
+| --- | --- |
+| `src/test/_dom.mjs` | not a suite: the jsdom bootstrap every other file imports first, and the note on why a real DOM rather than a stub |
+| `src/test/migrate-rows.test.mjs` | `migrateRows` (02-state.js), the one door every outside document comes through: garbage tolerated rather than thrown on, script/iframe/handlers stripped, only inline `data:` images accepted, statuses and ids normalised, the legacy plain-text conversion (including the stray `<` it used to eat and the link query string it used to double-encode), conflict cards never given a fake row, anchorId's fallback, dangling owners cleared, wordsPerMinute clamped, and migrating twice changing nothing |
+| `src/test/merge-states.test.mjs` | `mergeStates` (03-sync.js) — all of the retired `tests/51-merge-fields.txt` (base-aware list merges, #61, and the field registry meeting the merge, #60) plus the row, comment and title reconciliation the browser suite never reached: an edit outranking a delete both ways, a re-inserted row landing beside its surviving neighbour, status as forward progress, both-sides conflicts preserved as comment cards, resolve/assignee/reply merging, and the document id surviving a merge |
+| `src/test/state-fields.test.mjs` | the `STATE_FIELDS` registry (02-state.js, #60): every field has a strategy `mergeStates` knows, a merge keeps every field a migrated document has, nothing `migrateRows` produces is outside the table, and the shipped `src/seed-state.json` survives migration, a merge and a `.splitpage` round trip with nothing missing |
+| `src/test/formats.test.mjs` | the serializer half of the two project formats (20d-formats.js): `.splitpage` having no envelope and round-tripping exactly, `parseSplitpage` refusing anything that is not ours and deliberately not migrating, the `.md` data fence outgrowing tildes in the script, the id travelling only inside the block, the last opening fence winning over a quoted decoy, a hand-edited cell winning for that cell only with its tags re-attached by name, and `noAsk` keeping the record when the scenes do not line up |
+| `src/test/markdown-table.test.mjs` | `parseMarkdownTable` (11-import.js): header-named columns wherever they sit, a header naming only one column never pointing both fields at it, escaped pipes staying in their cell, separator rows never read as data, and what `keepEmpty` does and does not resurrect |
+| `src/test/doc-id.test.mjs` | the pure half of document identity (02b-doc-id.js): the FROZEN SHA-256 vectors and `deriveDocId` golden (HANDOFF invariant #37), domain separation, `normalizeDocId` refusing to repair anything, `migrateDocument`'s file/server/fresh origins, the `mergedDocId` truth table, and `decideDuplicateLoser`'s symmetry |
+| `src/test/history-eviction.test.mjs` | `planHistoryEviction` (03a-history-store.js) — the fixtures (a)-(g) `tests/24-history.txt` used to run through `window.__historyTest.planEviction`, plus ordering, a custom `olderKey`, and garbage input |
+
 ## The suites
 
 | File | Covers |
@@ -95,7 +137,7 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 | `tests/19-save-conflict.txt` | the on-disk conflict check for project saves (`.md`/`.splitpage`): `saveDoc()` refuses to overwrite a file that changed on disk since it was opened, the same guard `saveBackToFile()` already had for the import re-save path, driven against a fake `FileSystemFileHandle`-shaped object since no real file picker can run headless |
 | `tests/20-comment-drift.txt` | a `.cmt-anchor`'s live text drifting from `quotedText`: still jumpable with a "text changed" note and the original quote kept visible, orphaned once the span is edited down to nothing |
 | `tests/21-desktop-shim.txt` | the desktop bridge (20f-desktop.js), driven with `window.__desktopTest`'s fake backend in place of a real Electron shell: a desktop file handle round-trips non-ASCII text byte-exactly, a cancelled Save As leaves `state.rev` and the toasts alone, the on-disk-conflict guard fires when the fake file's mtime moves, the native-menu-command dispatcher reaches the same find bar and comments panel the File menu and header button do, and the app-data import menu dispatcher and merge flow |
-| `tests/22-doc-id.txt` | document identity (02b-doc-id.js): boot minting a valid id, the FROZEN SHA-256 vectors (HANDOFF invariant #37), a hostile or missing id replaced vs. a valid one kept, `reassignDocId`'s Save-As fork that never writes the user's file (overrides.md #1), a failed Save-As write not retargeting Save, identity surviving a document opened while the Save As dialog is up, exports carrying no id, a legacy `.splitpage`/`.md` re-deriving the same id on reopen, the `mergedDocId` truth table, `adoptRestoredState` keeping the id regardless of the snapshot, and the fake-BroadcastChannel duplicate-claim reassignment |
+| `tests/22-doc-id.txt` | document identity (02b-doc-id.js) *in a running page*: boot minting a valid id, `reassignDocId`'s Save-As fork that never writes the user's file (overrides.md #1), a failed Save-As write not retargeting Save, identity surviving a document opened while the Save As dialog is up, exports carrying no id, a legacy `.splitpage`/`.md` re-deriving the same id on reopen, `adoptRestoredState` keeping the id regardless of the snapshot, and the fake-BroadcastChannel duplicate-claim reassignment. The pure half — the FROZEN SHA-256 vectors (HANDOFF invariant #37), the `deriveDocId` golden, hostile-id replacement, the `mergedDocId` truth table and `decideDuplicateLoser` — is `src/test/doc-id.test.mjs` (#67) |
 | `tests/23-doc-id-reload.txt` | document identity (02b-doc-id.js) across a real page reload: a pristine boot always mints a fresh id, and ingress decides whether anything needs merging before adopting one — `goto` wipes `window`, so this is its own suite rather than a section tacked onto 22's |
 | `tests/24-history.txt` | per-document version history (03a-history-store.js + the `03-sync.js` glue): real captures via `loadFileIntoEditor`'s foreign-file push and a fixture `.splitpage` reopen (no direct `pushSnapshot` access — see build.mjs), the pristine seed never snapshotted until it's dirtied, per-document isolation and the open history panel following the active document, the newest-50 cap and call-order sorting under a frozen clock, restore backing up first and keeping the current docId, copy idempotence, the quota-always forced restore, and a document edit landing mid-backup aborting or completing the restore correctly |
 | `tests/25-history-migration.txt` | the one-time migration of the old shared `splitpage-snapshots` localStorage list into per-document history's Older bucket (`startHistoryMigration`), and the merge-undo path (`lastMergeUndo`) that rides the same store: legacy entries (including a hostile id) re-minted into Older with the legacy key removed, a repeat migration adding only what's new, a failed import or a corrupt key never deleting the legacy key, a key that changes mid-migration never left deleted unless its latest content actually made it into Older, and Older itself being shared across every document, restoring under the current document's id, and expiring as a whole 90 days after the migration |
