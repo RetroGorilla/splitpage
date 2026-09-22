@@ -2066,7 +2066,7 @@ async function caseHostModeNoPinWarning(target) {
 
 /* "tabstrip origin: on the strip target, typeof window.splitpageDesktop ===
    'undefined'; window.splitpageTabStrip.readFile is undefined;
-   fetch('splitpage://tabstrip/api/health') is 404" — TABSTRIP-BRIDGE. */
+   fetch('splitpage://tabstrip/api/health') is refused or 404" — TABSTRIP-BRIDGE. */
 async function caseTabstripOrigin(target) {
   const tag = target.name + " tabstrip origin: no file/draft/history bridge, no /api proxy";
   let app = null;
@@ -2092,7 +2092,12 @@ async function caseTabstripOrigin(target) {
     record(tag + ": window.splitpageTabStrip.readFile is undefined", noReadFile === true, String(noReadFile));
 
     const healthStatus = await evalPage(stripCdp, "fetch('splitpage://tabstrip/api/health').then(function(r){return r.status;}).catch(function(){return -1;})");
-    record(tag + ": fetch('splitpage://tabstrip/api/health') is 404", healthStatus === 404, "status=" + healthStatus);
+    /* -1 is the fetch rejecting before any request is made: the strip origin's
+       CSP carries connect-src 'none' (#65, TABSTRIP_CSP in main.js), so the
+       proxy is refused by policy rather than answered 404. Either way there is
+       no /api on this origin; anything else (a 200, a redirect) is the bug. */
+    record(tag + ": fetch('splitpage://tabstrip/api/health') is refused (CSP) or 404",
+      healthStatus === 404 || healthStatus === -1, "status=" + healthStatus);
   } finally {
     if (stripCdp) { try { stripCdp.close(); } catch {} }
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
