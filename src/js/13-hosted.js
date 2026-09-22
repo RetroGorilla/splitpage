@@ -1087,6 +1087,187 @@ export async function saveToServer() {
   return false;
 }
 
+/* ---- the pull channel (issue #69) ----
+
+   Hosted mode had no way of learning that somebody else had saved. The only
+   thing that ever told you was your OWN save coming back 409 — which ships
+   the whole document, base64 stills and all, in both directions, files a
+   snapshot into a history that holds fifty, and gives up with a toast after
+   three rounds. So a second editor's scenes arrived when you typed, not
+   when they wrote them, and the README's "live collaboration" was a save
+   conflict wearing a merge for a hat.
+
+   The channel already existed. The presence heartbeat round-trips every two
+   seconds anyway (13a-presence.js), and it now comes back carrying
+   {docId, rev} beside `here` — read off the document's head line, so no
+   script is parsed to answer it (server.js's presenceRev). When that number
+   has moved past the one this view is holding, and only then, we GET the
+   document and merge it in.
+
+   THE REV BEING COMPARED IS THE DOCUMENT'S — `S.serverDoc.rev`, the
+   compare-and-set token every PUT carries as `baseRev` and the server hands
+   back with every answer. NOT `state.rev`, which is the merge counter
+   inside the document (max-plus-one, 02-state.js), is private to the
+   client, and plays no part in conflict detection — #72 says so at length,
+   and comparing against it here would pull on a document that has not
+   changed and sit still on one that has.
+
+   NEVER DURING A SAVE. A pull that landed between saveToServer()'s
+   `cloneState(S.state)` and the PUT's answer would merge into `S.state` and
+   reassign `S.baseState`, and then the 200 branch would overwrite that base
+   with the version it published — their changes would vanish out of the
+   base and come back as a conflict on the next save. `S.saveButtonBusy`
+   (12-dirty-toast.js) is true for the whole of saveDoc(), hosted branch
+   included, which is exactly that window; it is checked before the GET and
+   again after it, because a save can start while the GET is in the air.
+
+   NO UNDO POINT, and this is the deliberate part. Every other merge path
+   files one, because each of them replaces a whole document the user might
+   want back: a save conflict, a recovered crash draft, a stash from a
+   lapsed sign-in. This one runs whenever ANYBODY saves — every few seconds
+   in a live session — and one snapshot per pull would fill the fifty-entry
+   history in under two minutes and evict the versions the user actually
+   wants (03a-history-store.js's cap). Not being able to undo the arrival of
+   somebody else's scene is a far smaller loss than losing the history, and
+   nothing is dropped either way: the three-way merge keeps this view's
+   unsaved edits, and a field both sides changed is still kept as a review
+   comment. Omitting `undoPoint` also leaves "Undo merge" pointing wherever
+   it already pointed rather than at a routine pull.
+
+   AND NO PUT. The pull publishes nothing, not even the merged result — if
+   it did, every idle viewer would write back a copy of what it had just
+   read, bumping the rev for everyone else, whose pulls would write in turn.
+   An autosave this view's own unsaved edits had already armed still runs,
+   and now goes out against the rev that just arrived instead of conflicting
+   with it, which is the whole point of the exercise.
+
+   A pull that finds nothing of theirs is silent: no render, no toast, no
+   dirty mark. It takes the rev and stops. */
+
+/* One at a time. The GET is slower than the beat that asked for it, and a
+   second pull into the middle of the first would merge against a base the
+   first is about to move. */
+var pullInFlight = false;
+
+/* Key order is not content. `theirs` has just been through
+   migrateDocument(), and `baseState` was cloned from a document that went
+   through it at some other moment, so two byte-identical documents can
+   serialise with their keys in different orders. */
+function canonicalJson(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonicalJson).join(",") + "]";
+  return "{" + Object.keys(v).sort().filter(function (k) {
+    return v[k] !== undefined;
+  }).map(function (k) {
+    return JSON.stringify(k) + ":" + canonicalJson(v[k]);
+  }).join(",") + "}";
+}
+
+/* Has the version that just arrived anything in it this view's base does
+   not already have? `rev`, `lastEditedBy` and `lastEditedAt` move on every
+   save whether or not a word changed, so they are not part of the answer;
+   everything else is, down to a reply on a comment. */
+function sameDocumentContent(a, b) {
+  if (!a || !b) return false;
+  function bare(s) {
+    var copy = cloneState(s);
+    copy.rev = 0;
+    copy.lastEditedBy = "";
+    copy.lastEditedAt = "";
+    return canonicalJson(copy);
+  }
+  return bare(a) === bare(b);
+}
+
+/* The heartbeat's answer, handed over exactly as the server sent it.
+   13a-presence.js paints badges and knows nothing about documents; every
+   decision about what a rev means is here. */
+export function notePresenceRev(body) {
+  if (!body || pullInFlight || serverSessionExpired) return;
+  var docId = S.serverDoc.id;
+  if (!docId || body.docId !== docId) return;
+  /* A document with no head line yet answers with no rev (server.js) — and
+     a rev that has not moved is the ordinary case, one comparison and out. */
+  if (typeof body.rev !== "number") return;
+  if (body.rev <= (S.serverDoc.rev || 0)) return;
+  if (S.saveButtonBusy) return;
+  pullInFlight = true;
+  pullServerDoc(docId).catch(function () {}).then(function () { pullInFlight = false; });
+}
+
+async function pullServerDoc(docId) {
+  var body;
+  try {
+    body = await apiFetch("api/docs/" + encodeURIComponent(docId));
+  } catch (err) {
+    /* Deliberately never handleApiError(), for the same reason the beat
+       that asked for it never does: a background poll nobody asked for must
+       not put a toast on screen, reload the page or open the PIN dialog. A
+       server that stopped answering, a session that lapsed, a document
+       somebody deleted — the next save says so properly. */
+    return;
+  }
+  if (!body || !body.state) return;
+  /* Everything that was true before the await is checked again after it.
+     The server picker is never disabled, so another document may have been
+     opened; and a save may have started, in which case this pull is dropped
+     and that save's own 409 does the merging instead. */
+  if (S.serverDoc.id !== docId) return;
+  if (S.saveButtonBusy) return;
+  var rev = body.rev || 0;
+  if (rev <= (S.serverDoc.rev || 0)) return;   /* a save of ours landed first */
+
+  /* Their copy came from this same server document, so an id-less one saved
+     by a client older than document ids is still THIS document: keep ours
+     rather than deriving a new one on every pull and splitting the history.
+     Same rule, and the same arguments, as saveToServer's 409. */
+  var theirs = migrateDocument(cloneState(body.state), {
+    kind: "server",
+    serverId: docId,
+    fallbackId: S.state.docId
+  });
+
+  S.serverDoc.rev = rev;
+  if (sameDocumentContent(theirs, S.baseState)) {
+    /* Somebody saved a document that says what ours already said — their
+       own pull-merge, a save that only moved `lastEditedAt`, a second
+       window catching up. Take the rev, so the next beat is quiet and the
+       next save is judged against it, and touch nothing else. */
+    S.baseState = cloneState(theirs);
+    updateFileChip();
+    return;
+  }
+
+  var prevDocId = S.state.docId;
+  var merged = applyMerge({
+    base: S.baseState,
+    mine: S.state,
+    theirs: theirs,
+    /* no undoPoint, and no source to label one with — see above */
+    historyFrom: prevDocId,
+    /* what the server last confirmed, which is what the next save's baseRev
+       is measured against (HANDOFF §3.6) */
+    newBase: cloneState(theirs),
+    chips: true,
+    report: false
+  });
+  /* reportMerge here rather than applyMerge's own `report`, for the sake of
+     `alreadySaved`: the banner and the "Review conflicts" button it offers
+     are wanted, the markDirty() and queueAutoSave() that normally follow
+     them are not. This view's own unsaved edits were already dirty and
+     already have an autosave armed; what came from them is on the server by
+     definition. Marking a CLEAN document dirty here is the loop described
+     above, in one line.
+
+     The banner's "Undo merge" has nothing to undo, because this path files
+     no snapshot. That is the same answer saveToServer's 409 gives today
+     (applyMerge's armUndo:false, pinned by tests/54-server-conflict.txt),
+     and it is the honest one here: undoing a pull would mean throwing away
+     somebody else's work, which is not what that button promises. */
+  if (merged.result) reportMerge(merged.result, { alreadySaved: true });
+  showToast("Merged in changes from " + (body.updatedBy || "someone else"), "ok");
+}
+
 /* ---- the launcher's key ----
 
    start.mjs mints one per launch and hands it over in the URL fragment,
@@ -1718,12 +1899,26 @@ export function __init() {
       S.serverDoc = opts.docId === null
         ? { id: null, rev: 0 }
         : { id: opts.docId || "doc-test", rev: opts.rev || 1 };
+      /* A hosted document that is open always has a base — openServerDoc()
+         sets one from the answer it opened with, and every merge measures
+         against it (HANDOFF §3.6). Without this the hook produced a state
+         the app itself can never be in, and a suite that merged from it got
+         a two-way merge: every field either side had touched came out a
+         conflict rather than being reconciled against what the server last
+         confirmed. `false` is for a suite that wants exactly that. */
+      if (S.serverDoc.id && opts.base !== false) S.baseState = cloneState(S.state);
       applyReviewMode();
       updateServerMenu();
       render();
     },
     role: function () { return S.serverRole; },
     reviewMode: reviewMode,
-    reviewLink: fetchReviewLink
+    reviewLink: fetchReviewLink,
+    /* The compare-and-set token, for the suites that watch the pull channel
+       take a rev off a heartbeat (#69). A copy, not the object. */
+    serverDoc: function () { return { id: S.serverDoc.id, rev: S.serverDoc.rev }; },
+    /* Hand a heartbeat's answer straight to the pull channel, so a suite can
+       drive it without waiting out a real two-second beat. */
+    noteRev: notePresenceRev
   };
 }

@@ -782,6 +782,36 @@ function presenceHandle(value) {
   return /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : "";
 }
 
+/* ---------- the rev a heartbeat carries (issue #69) ----------
+ *
+ * The beat is the only thing in hosted mode that round-trips on its own, so
+ * it is also the pull channel: it names the document's current rev and the
+ * client goes and gets the document when that number has moved past the one
+ * it is holding. Nothing else about the document is sent — the client does
+ * a normal GET, which is the one request that already knows how to hand a
+ * whole script back.
+ *
+ * readDocHead() and NOT readDocMeta(): one positional read of the first 8KB
+ * (#74), never a parse. This runs every two seconds for every tab in every
+ * open document, and parsing a script with base64 stills in it at that rate
+ * — to read one number off the front of it — is exactly what the head line
+ * was added to stop. A document written before head lines existed therefore
+ * answers with no rev at all rather than being parsed here: it has no pull
+ * channel until the next listing or the next save gives it a head line,
+ * which both do on their own.
+ *
+ * Failure is silence, not an error. A beat is a heartbeat; it must not turn
+ * a missing or unreadable file into something the other end has to handle.
+ */
+async function presenceRev(docId) {
+  try {
+    const head = await readDocHead(docId);
+    return head && typeof head.rev === "number" ? head.rev : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 /* ---------- what a review session may write ----------
  *
  * Enforcement here is a COMPARISON, not a list of permitted operations: the
@@ -1368,12 +1398,17 @@ async function handleApi(req, res, url) {
   /* Presence, before the gate only because it carries its own copy of it.
      One case forces that: the "I'm gone" beacon a closing tab sends.
      navigator.sendBeacon cannot set a header, so there the token arrives in
-     the body instead — the same credential in a different envelope, for the
-     one route that touches nothing but the in-memory map above. No token is
+     the body instead — the same credential in a different envelope, and it
+     is still gated on that credential whichever way it arrives. No token is
      still no presence, in either envelope.
 
      Both roles are here: a review viewer (#30) is someone else in the
-     document and shows up like anybody else. */
+     document and shows up like anybody else.
+
+     It reads one thing off the disk, added by #69: the document's rev, from
+     its head line, which is what makes this the pull channel as well as the
+     listing (presenceRev above). It still WRITES nothing but the in-memory
+     map, and presence is still never part of a document. */
   if (parts[1] === "presence" && req.method === "POST") {
     /* The header first, before a byte of the body is read: a caller who
        offered a token and got it wrong is refused here, not after 25 MB of
@@ -1392,25 +1427,42 @@ async function handleApi(req, res, url) {
     const me = presenceHandle(body && body.id);
     if (!isValidId(docId) || !me) return sendJson(res, 400, { error: "bad-presence" });
 
-    const now = Date.now();
-    sweepPresence(now);
-    let people = presenceByDoc.get(docId);
     if (body && body.gone) {
       /* A tab that is going away. Answering with the listing would be
-         pointless — it is not there to read it. */
-      if (people) {
-        people.delete(me);
-        if (!people.size) presenceByDoc.delete(docId);
+         pointless — it is not there to read it, and it has no use for a rev
+         either, so this one branch never touches the disk. */
+      sweepPresence(Date.now());
+      const leaving = presenceByDoc.get(docId);
+      if (leaving) {
+        leaving.delete(me);
+        if (!leaving.size) presenceByDoc.delete(docId);
       }
       return sendJson(res, 200, { ok: true });
     }
+
+    /* Before the map is touched rather than in the middle of it: this is the
+       one await in the route, and the sweep-then-mutate below has to stay
+       one uninterrupted run or another beat's sweep can drop the entry this
+       one is about to write into. */
+    const rev = await presenceRev(docId);
+    /* `docId` travels back with it so the other end can tell whether the
+       answer is about the document it still has open — the picker is never
+       disabled, so a beat sent for one document can land after another has
+       been opened. Both of the "presence is full" answers below carry it
+       too: being left out of the listing is no reason to lose the pull
+       channel as well. */
+    const answer = (here) => sendJson(res, 200, { docId, rev, here });
+
+    const now = Date.now();
+    sweepPresence(now);
+    let people = presenceByDoc.get(docId);
     if (!people) {
-      if (presenceByDoc.size >= PRESENCE_MAX_DOCS) return sendJson(res, 200, { here: [] });
+      if (presenceByDoc.size >= PRESENCE_MAX_DOCS) return answer([]);
       people = new Map();
       presenceByDoc.set(docId, people);
     }
     if (people.size >= PRESENCE_MAX_PER_DOC && !people.has(me)) {
-      return sendJson(res, 200, { here: [] });
+      return answer([]);
     }
     people.set(me, {
       name: presenceWord(body && body.name, 40),
@@ -1427,7 +1479,7 @@ async function handleApi(req, res, url) {
       if (id === me) continue;
       here.push({ id, name: who.name, rowId: who.rowId, field: who.field });
     }
-    return sendJson(res, 200, { here });
+    return answer(here);
   }
 
   /* The gate. Everything below needs the token once a PIN is set — including

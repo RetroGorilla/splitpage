@@ -1,0 +1,180 @@
+# The pull channel: a rev on the presence heartbeat, and a merge when it
+# moves (notePresenceRev / pullServerDoc, 13-hosted.js — issue #69).
+#
+# TWO CLIENTS, one page. This page is client B. Client A is the document
+# sitting on the fake server: `window.__server` is what A last saved, and
+# window.__serverRev is the rev A left behind. Nothing else about A needs
+# simulating — a second editor is only ever a rev this view has not seen.
+#
+# `fetch` is replaced the same way tests/54-server-conflict.txt replaces it,
+# and for the same reason: the harness serves static files and cannot start
+# server.js. Here it answers three things and passes everything else through
+# to the real static server — POST api/presence (the heartbeat, which is the
+# whole channel), GET api/docs/doc-pull (what the pull fetches), and PUT
+# api/docs/ (recorded, and held open on purpose, so the suite can ask what
+# happens to a pull that lands in the middle of a save).
+#
+# What it pins down:
+#   * B sees A's row within 3s of A saving, without B saving anything —
+#     driven by the REAL two-second heartbeat, not by poking the function;
+#   * B's own unsaved edit in another row survives it;
+#   * no PUT: a pull publishes nothing, not even the merged result;
+#   * the rev compared is the DOCUMENT's (serverDoc.rev, the compare-and-set
+#     token), so a beat that repeats a number costs one comparison and no
+#     request at all;
+#   * NO HISTORY SNAPSHOT. A pull runs whenever anybody saves; one undo
+#     point per pull would fill the fifty-entry history in under two minutes
+#     and evict the versions the user actually wants;
+#   * a rev that moved but brought nothing new is silent — no toast, no
+#     re-render, no dirty mark;
+#   * and nothing is pulled while a save is in flight, because the merge
+#     would be against a baseState that save is about to replace.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;return typeof F.save === 'function';})()
+expect true
+
+# A hosted document autosaves from the first keystroke, and this suite is
+# about what happens WITHOUT one.
+eval (function(){ if (F.autosave.enabled()) F.autosave.toggle(); return F.autosave.enabled() === false; })()
+expect true
+
+# The fake server. __serverRev is the number the heartbeat reports and the
+# number a GET comes back at; they are one value on purpose, because on a
+# real server they are one number in one file.
+eval (function(){ window.__gets = 0; window.__beats = 0; window.__puts = []; window.__putResolve = null; window.__serverRev = 3; window.__server = null; window.__serverBy = 'Priya Malhotra'; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); opts = opts || {}; if (opts.method === 'POST' && u.indexOf('api/presence') !== -1) { window.__beats++; return Promise.resolve(new Response(JSON.stringify({docId:'doc-pull', rev: window.__serverRev, here: []}), {status:200, headers:{'content-type':'application/json'}})); } if (opts.method === 'PUT' && u.indexOf('api/docs/') !== -1) { window.__puts.push(JSON.parse(opts.body)); return new Promise(function(done){ window.__putResolve = function(body){ window.__putResolve = null; done(new Response(JSON.stringify(body), {status:200, headers:{'content-type':'application/json'}})); }; }); } if (u.indexOf('api/docs/doc-pull') !== -1) { window.__gets++; return Promise.resolve(new Response(JSON.stringify({id:'doc-pull', rev: window.__serverRev, state: window.__server, updatedAt: new Date().toISOString(), updatedBy: window.__serverBy}), {status:200, headers:{'content-type':'application/json'}})); } return real(url, opts); }; return true; })()
+expect true
+
+# Connected, editing, this view loaded the document at the server's rev 3 —
+# and holding rev 3 as its base, which is what every merge measures against.
+eval (function(){ window.__hostedTest.setSession({docId:'doc-pull', rev: 3}); return window.__hostedTest.role(); })()
+expect 'edit'
+expect window.__hostedTest.serverDoc().rev === 3
+
+# What A and B both started from.
+eval (function(){ window.__server = F.clone(F.state()); return window.__server.rows.length; })()
+
+# --- B types, and does not save ------------------------------------------
+caret #rows .row .audio-cell .cell-editable
+type BROWONE
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('BROWONE') !== -1
+
+# --- a beat that repeats the rev costs nothing ---------------------------
+# The number has not moved, so there is no request to make. This is the
+# ordinary case, every two seconds, for the whole life of a document.
+eval (function(){ window.__g0 = window.__gets; window.__b0 = window.__beats; return 1; })()
+wait window.__beats > window.__b0
+expect window.__gets === window.__g0
+
+# --- client A saves ------------------------------------------------------
+# Scene 2 reworded and the rev moved on, exactly as a second editor's PUT
+# would have left the file.
+eval (function(){ window.__t0 = Date.now(); window.__server.rows[1].audioText = 'AROWTWO'; window.__serverRev = 4; return window.__serverRev; })()
+
+# --- ...and B sees it, from the real heartbeat, without saving -----------
+# No poke, no forced beat: the 2s timer 13a-presence.js already runs is the
+# whole transport. `wait` polls for up to 20s, so the 3s is asserted after it
+# rather than by it.
+wait document.querySelector('#rows').textContent.indexOf('AROWTWO') !== -1
+expect Date.now() - window.__t0 < 3000
+
+# B's own unsaved edit in the other row survived the merge.
+expect document.querySelector('#rows').textContent.indexOf('BROWONE') !== -1
+expect F.state().rows[0].audioText.indexOf('BROWONE') !== -1
+expect F.state().rows[1].audioText.indexOf('AROWTWO') !== -1
+
+# One GET for one rev, and NO PUT. A pull that wrote would bump the rev for
+# everybody else, whose pulls would write in turn.
+expect window.__gets === window.__g0 + 1
+expect window.__puts.length === 0
+
+# The compare-and-set token moved with it, so the save B makes later is
+# judged against A's version instead of conflicting with it.
+expect window.__hostedTest.serverDoc().rev === 4
+
+# It said so, naming whoever saved, and the merge banner says what moved.
+expect Array.prototype.some.call(document.querySelectorAll('.toast'), function(t){ return t.textContent.indexOf('Merged in changes from Priya Malhotra') !== -1; })
+expect !document.getElementById('merge-banner').hidden
+
+# --- and it filed NO undo point ------------------------------------------
+# The single most expensive thing this could get wrong: a pull happens
+# whenever anybody saves, and one snapshot per pull evicts the user's real
+# history inside two minutes. The other merge paths label theirs "Before
+# merging in someone else's changes"; this one files nothing at all.
+eval (async function(){ await window.__historyTest.idle(); var h = await window.__historyTest.listRaw(F.docId()); window.__labels = h.map(function(e){ return e.label; }).concat(window.__historyTest.pending(F.docId()).map(function(e){ return e.label; })); return JSON.stringify(window.__labels); })()
+expect window.__labels.filter(function(l){ return String(l).indexOf('Before merging') === 0; }).length === 0
+expect window.__labels.length === 0
+
+# --- the beat settles back down ------------------------------------------
+# Same rev again: no second GET for a number already held.
+eval (function(){ window.__g1 = window.__gets; window.__b1 = window.__beats; return 1; })()
+wait window.__beats > window.__b1 + 1
+expect window.__gets === window.__g1
+
+# --- a rev that moved but brought nothing is silent ----------------------
+# A save that changed no words — their own pull-merge catching up, a save
+# that only moved `lastEditedAt`, a second window of theirs. `__server` is
+# left exactly as it was and only the rev moves, which is what that looks
+# like from here. The rev is taken so the next beat is quiet; nothing else
+# happens at all. Note what is NOT the test: "the same as what is on my
+# screen". B's BROWONE is still unsaved, so the screen and the server have
+# differed all along; the question is whether anything of THEIRS is new,
+# which is a question about the base.
+eval (function(){ window.__rowsHtml = document.getElementById('rows').innerHTML; window.__serverRev = 5; return 1; })()
+wait window.__hostedTest.serverDoc().rev === 5
+expect window.__gets === window.__g1 + 1
+expect document.getElementById('rows').innerHTML === window.__rowsHtml
+expect Array.prototype.filter.call(document.querySelectorAll('.toast'), function(t){ return t.textContent.indexOf('Merged in changes') !== -1; }).length === 0
+expect window.__puts.length === 0
+# ...and it is still dirty, and still dirty for the same reason: nothing
+# about a pull marks a document dirty or clean.
+expect document.getElementById('btn-save').textContent.indexOf('•') !== -1
+
+# --- nothing is pulled while a save is in flight -------------------------
+# A pull landing between saveToServer's clone and the PUT's answer would
+# merge into `state` and reassign `baseState`, and the 200 branch would then
+# overwrite that base with what it published — their changes would drop out
+# of the base and come back as a conflict on the next save. The PUT below is
+# held open, so the whole window can be inspected from inside it.
+eval (function(){ window.__saved = F.save(); return 1; })()
+wait window.__putResolve !== null
+expect window.__puts.length === 1
+expect window.__puts[0].baseRev === 5
+
+# A: another save, mid-PUT. A has this view's version by now (it is what is
+# going up the wire in __puts[0]) and rewords scene 2 on top of it, which is
+# what a second editor who pulled and then typed leaves behind.
+eval (function(){ window.__g2 = window.__gets; window.__server = F.clone(window.__puts[0].state); window.__server.rows[1].audioText = 'AROWTWOAGAIN'; window.__serverRev = 9; window.__hostedTest.noteRev({docId:'doc-pull', rev: 9}); return 1; })()
+sleep 400
+expect window.__gets === window.__g2
+expect document.querySelector('#rows').textContent.indexOf('AROWTWOAGAIN') === -1
+
+# The save lands, and only then does the next beat pull A's newer version in.
+eval (function(){ window.__putResolve({id:'doc-pull', rev: 6, updatedAt:new Date().toISOString(), updatedBy:'Sam Okafor'}); return 1; })()
+wait window.__gets === window.__g2 + 1
+wait document.querySelector('#rows').textContent.indexOf('AROWTWOAGAIN') !== -1
+expect window.__hostedTest.serverDoc().rev === 9
+expect window.__puts.length === 1
+# the save that just landed is not undone by the pull that followed it
+expect document.querySelector('#rows').textContent.indexOf('BROWONE') !== -1
+
+# --- a beat about another document is not this document's rev ------------
+# The picker is never disabled, so an answer can arrive for a document that
+# is no longer open. It is dropped on the docId, not merged into whatever is
+# on screen now.
+eval (function(){ window.__g3 = window.__gets; window.__hostedTest.noteRev({docId:'some-other-doc', rev: 99}); return 1; })()
+sleep 300
+expect window.__gets === window.__g3
+expect window.__hostedTest.serverDoc().rev === 9
+
+# --- a document with no head line has no rev, and no pull ----------------
+# server.js answers a beat about one with rev null rather than parsing the
+# whole script to find a number. Null is not "newer".
+eval (function(){ window.__hostedTest.noteRev({docId:'doc-pull', rev: null}); return 1; })()
+sleep 300
+expect window.__gets === window.__g3
+expect window.__hostedTest.serverDoc().rev === 9
+
+quit
