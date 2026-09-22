@@ -316,6 +316,12 @@
       flush: flushAutoSave
     },
     migrate: migrateRows,
+    /* The state field registry (#60). `stateFields` is the table itself so
+       a suite can assert a strategy exists for every field rather than just
+       that the field survived; `missingStateFields` is the check invariant
+       #4 used to be a comment about. */
+    stateFields: function () { return STATE_FIELDS; },
+    missingStateFields: missingStateFields,
     clone: cloneState,
     state: function () { return state; },
     docFile: function () { return { name: docFileHandle.handle ? docFileHandle.handle.name : null, kind: docFileHandle.kind, lastModified: docFileHandle.lastModified }; },

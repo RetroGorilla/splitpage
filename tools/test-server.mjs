@@ -211,9 +211,12 @@ try {
       res.headers.get("access-control-allow-origin"), null);
   }
   {
+    /* `null` is not one site: it is what every sandboxed iframe on the web
+       sends, so it is dropped from the allowlist rather than honoured (#63).
+       s2 is started with it in ALLOW_ORIGINS on purpose. */
     const res = await fetch(s2.base + "api/health", { headers: { "Origin": "null" } });
-    eq("the literal origin `null` can be allowed, for a copy opened from disk",
-      res.headers.get("access-control-allow-origin"), "null");
+    eq("the literal origin `null` is never allowed, whatever ALLOW_ORIGINS says",
+      res.headers.get("access-control-allow-origin"), null);
   }
   {
     const res = await fetch(s2.base + "index.html", { headers: { "Origin": ORIGIN } });
@@ -446,15 +449,6 @@ try {
     const theirs = await json(await fetch(s4.base + "api/me", { headers: { "x-splitpage-token": editToken } }));
     eq("...and an editor likewise", theirs && theirs.role, "edit");
   }
-  {
-    const res = await fetch(s4.base + "api/share", { headers: { "x-splitpage-token": editToken } });
-    const body = await json(res);
-    eq("an editor can read the review link's key", res.status, 200);
-    eq("...which is this launch's, not the PIN", body && body.reviewKey, REVIEW_KEY);
-    const asReviewer = await fetch(s4.base + "api/share", { headers: { "x-splitpage-token": reviewToken } });
-    eq("a reviewer cannot — there is nothing for them to share", asReviewer.status, 403);
-  }
-
   /* create and delete are writes, and a review session has none */
   {
     const res = await fetch(s4.base + "api/docs", {
@@ -474,6 +468,71 @@ try {
     body: JSON.stringify({ state: fixtureState() })
   }));
   const docUrl = s4.base + "api/docs/" + created.id;
+
+  /* ---- the review link is per document (#63) ----
+     It used to be this launch's one key: it opened every script on the
+     server and listed the picker, while the dialog offered it as a way to
+     share the one you were looking at. */
+  const other = await json(await fetch(s4.base + "api/docs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
+    body: JSON.stringify({ state: Object.assign(fixtureState(), { title: "Another script" }) })
+  }));
+
+  let scopedKey = null, scopedToken = null;
+  {
+    const bare = await fetch(s4.base + "api/share", { headers: { "x-splitpage-token": editToken } });
+    eq("share with no document to share is refused", bare.status, 400);
+    const bogus = await fetch(s4.base + "api/share?doc=../etc", { headers: { "x-splitpage-token": editToken } });
+    eq("...and so is an id that is not one", bogus.status, 400);
+    const missing = await fetch(s4.base + "api/share?doc=nothing-here-0000", { headers: { "x-splitpage-token": editToken } });
+    eq("...and a document that does not exist is 404", missing.status, 404);
+
+    const res = await fetch(s4.base + "api/share?doc=" + created.id, { headers: { "x-splitpage-token": editToken } });
+    const body = await json(res);
+    eq("an editor can mint a review link for a document", res.status, 200);
+    eq("...which names that document", body && body.docId, created.id);
+    check("...and carries a key of its own, not this launch's",
+      !!(body && body.reviewKey && body.reviewKey !== REVIEW_KEY));
+    scopedKey = body && body.reviewKey;
+
+    const again = await json(await fetch(s4.base + "api/share?doc=" + created.id, { headers: { "x-splitpage-token": editToken } }));
+    eq("...the same key each time, so a link already sent keeps working",
+      again && again.reviewKey, scopedKey);
+
+    const asReviewer = await fetch(s4.base + "api/share?doc=" + created.id, { headers: { "x-splitpage-token": reviewToken } });
+    eq("a reviewer cannot mint one — there is nothing for them to share", asReviewer.status, 403);
+  }
+  {
+    const body = await json(await fetch(s4.base + "api/join", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: scopedKey })
+    }));
+    eq("a per-document key joins as a reviewer", body && body.role, "review");
+    eq("...and says which document it is for", body && body.docId, created.id);
+    check("...with a token of its own, not the launch-wide review token",
+      !!(body && body.token && body.token !== reviewToken));
+    scopedToken = body && body.token;
+  }
+  {
+    const mine = await fetch(s4.base + "api/docs/" + created.id, { headers: { "x-splitpage-token": scopedToken } });
+    eq("that token reads the document it was minted for", mine.status, 200);
+    const theirs = await fetch(s4.base + "api/docs/" + other.id, { headers: { "x-splitpage-token": scopedToken } });
+    const body = await json(theirs);
+    eq("...and no other", theirs.status, 403);
+    eq("...saying which rule refused it", body && body.error, "wrong-document");
+    const gone = await fetch(s4.base + "api/docs/" + other.id, {
+      method: "DELETE", headers: { "x-splitpage-token": scopedToken }
+    });
+    eq("...nor deletes one", gone.status, 403);
+  }
+  {
+    const body = await json(await fetch(s4.base + "api/docs", { headers: { "x-splitpage-token": scopedToken } }));
+    eq("the picker it can list is that one document", (body && body.docs || []).length, 1);
+    eq("...and it is the right one", body && body.docs[0] && body.docs[0].id, created.id);
+    const all = await json(await fetch(s4.base + "api/docs", { headers: { "x-splitpage-token": editToken } }));
+    check("...while an editor still sees the library", (all && all.docs || []).length >= 2);
+  }
 
   /* Read, change one thing, write — the same round trip the app makes, and
      the only way to be sure a refusal below is the review rule refusing and
@@ -514,6 +573,90 @@ try {
     const res = await fetch(docUrl, { headers: { "x-splitpage-token": reviewToken } });
     const body = await json(res);
     check("...and it is stored", !!(body && (body.state.comments || []).some((c) => c.id === "c2")));
+  }
+  {
+    /* The scoped token from the per-document link is a reviewer on this
+       document like any other, and the same comment write is what it is for. */
+    const out = await reviewPut((st) => {
+      st.comments.push(newComment("c2s", "audioText"));
+      /* wraps words that are already there — a reviewer anchors a comment,
+         they do not get to add text */
+      st.rows[0].audioText =
+        '<span class="cmt-anchor" data-cmt="c2s">Hello</span>' +
+        ' <span class="cmt-anchor" data-cmt="c2">there</span>';
+      st.rows[0].updatedAt = "2026-02-01T00:00:01.000Z";
+      st.rows[0].updatedBy = "Reviewer";
+      st.lastEditedBy = "Reviewer";
+    }, scopedToken);
+    eq("a per-document reviewer may comment on their own document", out.status, 200);
+  }
+  {
+    /* A PUT to somebody else's document never reaches the review rule at
+       all — the scope refuses it first. */
+    const now = await json(await fetch(s4.base + "api/docs/" + other.id, { headers: { "x-splitpage-token": editToken } }));
+    const res = await fetch(s4.base + "api/docs/" + other.id, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": scopedToken },
+      body: JSON.stringify({ baseRev: now.rev, state: now.state })
+    });
+    eq("...and cannot comment on any other", res.status, 403);
+    eq("...saying which rule refused it", (await json(res) || {}).error, "wrong-document");
+  }
+
+  /* ---- a document saved before a field existed (#62) ----
+     reviewWriteAllowed deep-compared the stored JSON key by key against the
+     client's migrateRows()-normalised copy. A document last saved before
+     `brollShots` existed has no such key; the reviewer's client always sends
+     `brollShots: []`. deepEqual(undefined, []) is false, so every comment on
+     such a document came back 403 review-only. */
+  {
+    const legacy = fixtureState();
+    delete legacy.brollShots;
+    delete legacy.productionTags;
+    delete legacy.rows[0].updatedBy;
+    const madeRes = await fetch(s4.base + "api/docs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
+      body: JSON.stringify({ state: legacy })
+    });
+    const made = await json(madeRes);
+    const legacyUrl = s4.base + "api/docs/" + made.id;
+    const now = await json(await fetch(legacyUrl, { headers: { "x-splitpage-token": reviewToken } }));
+    check("a document stored without brollShots really has none", !("brollShots" in now.state));
+
+    /* exactly what the reviewer's client sends: every field filled in by
+       migrateRows, plus the one comment and its anchor */
+    const next = JSON.parse(JSON.stringify(now.state));
+    next.brollShots = [];
+    next.productionTags = [];
+    next.rows[0].updatedBy = null;
+    next.comments.push(newComment("c-legacy", "audioText"));
+    next.rows[0].audioText = 'Hello <span class="cmt-anchor" data-cmt="c-legacy">there</span>';
+    next.rows[0].updatedAt = "2026-02-01T00:00:00.000Z";
+    next.rows[0].updatedBy = "Reviewer";
+    next.lastEditedBy = "Reviewer";
+    const res = await fetch(legacyUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": reviewToken },
+      body: JSON.stringify({ baseRev: now.rev, state: next, by: "Reviewer" })
+    });
+    const body = await json(res);
+    eq("a reviewer may comment on a document saved before a field existed", res.status, 200,
+       body && body.detail);
+    const back = await json(await fetch(legacyUrl, { headers: { "x-splitpage-token": reviewToken } }));
+    check("...and the comment is stored",
+      !!(back && (back.state.comments || []).some((c) => c.id === "c-legacy")));
+
+    /* The loosening is about absence, not about content: a field that
+       actually holds something still may not be changed. */
+    const armed = JSON.parse(JSON.stringify(back.state));
+    armed.productionTags = [{ cat: "prop", name: "Kettle", owner: "", notes: "", status: "needed" }];
+    const refused = await fetch(legacyUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": reviewToken },
+      body: JSON.stringify({ baseRev: back.rev, state: armed, by: "Reviewer" })
+    });
+    eq("...while filling an empty field with something is still refused", refused.status, 403);
   }
   /* an anchor whose selection crossed a <strong> boundary: unwrapping it
      cannot glue the element back together, so the comparison has to see the

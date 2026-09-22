@@ -64,8 +64,25 @@ node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-spl
 It finds Playwright's Chromium under `$PLAYWRIGHT_BROWSERS_PATH` on its own.
 Google Fonts does not load there (the proxy's CA is untrusted), so the app
 falls back to generic sans/mono and **width assertions can disagree with the
-Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Neither
-driver exits non-zero for a failed assertion; read the `RESULT:` line.
+Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Since
+#57 `driver.mjs` exits 1 for a failed assertion, and for a suite that
+asserted nothing at all, which is what lets CI gate on it; `driver.ps1` still
+only exits non-zero for a command that throws, so read its `RESULT:` line.
+
+**CI** (`.github/workflows/ci.yml`, #58) runs `build.mjs --check`,
+`desktop/test/drafts.test.mjs`, `tools/test-server.mjs`,
+`tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
+It is not the full regression run — that is still `run-tests.ps1` on
+Windows, or `driver.mjs` one suite at a time here.
+
+**The hooks in `.githooks/` are not installed by default.** `core.hooksPath`
+is unset in a fresh clone, so the pre-commit check that keeps `index.html` in
+step with `src/` (and keeps somebody's script out of the committed demo)
+never runs until you ask for it:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 What still needs the Windows machine: `desktop/test/smoke.mjs` (hardcoded
 `.exe` paths, `Win32_Process`/`MainWindowHandle` probes), `npm run dist:win`,

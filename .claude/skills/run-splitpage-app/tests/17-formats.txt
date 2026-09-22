@@ -125,9 +125,13 @@ expect F.state().comments.some(function(c){return c.id==='ctest1';})
 # standaloneHtmlFor (02b-doc-id.js) deletes the id: this export is a copy
 # handed to someone else, not the document itself, and carrying the id would
 # make every such copy read as a duplicate of the original the moment it opens.
+eval (function(){window.__stateBlock=function(html){var open='<script id="state-data" type="application/json">';var i=html.indexOf(open);if(i===-1)return '';var j=html.indexOf('<'+'/script>',i);return html.slice(i+open.length,j);};return 'hooked';})()
 eval (function(){window.__legacy=F.buildStandaloneHtml();window.__legacyNorm=__norm(F.state());return window.__legacy.length>10000;})()
 expect window.__legacy.indexOf('<script id="state-data"') !== -1
-expect window.__legacy.indexOf('"docId"') === -1
+# The DOCUMENT the export carries has no id. Asserted on the #state-data block
+# rather than on the whole file: the export is a copy of the app as well, so
+# the app's own source may legitimately mention the field by name.
+expect window.__stateBlock(window.__legacy).indexOf('"docId"') === -1
 eval (function(){F.openFile(new File([window.__legacy],'legacy.html'));return true;})()
 wait F.docFile().kind === 'html'
 expect __norm(F.state()) === window.__legacyNorm

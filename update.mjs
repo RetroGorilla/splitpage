@@ -90,16 +90,19 @@ function localManifest() {
 }
 
 /* Resolve the update API URL in priority order:
-   1. SPLITPAGE_UPDATE_API env var (overrides everything)
-   2. updateApi from local .splitpage-release.json (if valid https URL)
-   3. Default hard-coded URL
+   1. SPLITPAGE_UPDATE_API env var (the operator's own choice, on this machine)
+   2. Default hard-coded URL
+
+   `updateApi` from the local .splitpage-release.json used to sit between
+   those two, and it must not (#64): that file arrived with the last release
+   this copy downloaded, so a single bad release could point every future
+   update check somewhere else, permanently, with nothing left to notice it.
+   Files are verified against that same zip's own hash list, which catches a
+   corrupt download and not a deliberate one. The manifest is a record of
+   what was installed, not a say in where the next one comes from.
    Exported so start.mjs can use the same resolution logic. */
 export function updateApiUrl() {
   if (process.env.SPLITPAGE_UPDATE_API) return process.env.SPLITPAGE_UPDATE_API;
-  const manifest = localManifest();
-  if (manifest?.updateApi && typeof manifest.updateApi === "string" && manifest.updateApi.startsWith("https://")) {
-    return manifest.updateApi;
-  }
   return DEFAULT_API;
 }
 

@@ -1,0 +1,95 @@
+# CI (issue #58).
+#
+# Fifty pull requests merged with nothing gating them. This runs what a
+# contributor would run before pushing: the build check, the unit tests that
+# exist, the two Node test scripts, and one browser suite driven through
+# driver.mjs under Playwright's Chromium.
+#
+# driver.ps1 is not run here. It is Windows and Edge only, and since #57 the
+# Node driver's exit code agrees with its own RESULT line, which is what lets
+# a job gate on it at all.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same branch makes the first run's answer worthless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Not /opt: the runner user cannot write there. driver.mjs reads this
+      # variable to find a chromium-* directory before it falls back to PATH.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
+      # which is what Chromium's sandbox needs to start. Without this the
+      # browser launches, dies before it listens, and every suite fails with
+      # "no CDP page target" — the same symptom as picking the wrong binary.
+      # Safe here and nowhere else: a throwaway runner loading only this
+      # repo's own files. driver.mjs passes these straight to the browser.
+      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # index.html is generated from src/. A commit where the two disagree is
+      # always a mistake — either index.html was hand-edited (and those edits
+      # are about to be thrown away) or src/ changed without a rebuild. The
+      # pre-commit hook makes the same check locally, but nothing installs it.
+      - name: index.html matches src/
+        run: node build.mjs --check
+
+      - name: Desktop drafts unit tests
+        run: node desktop/test/drafts.test.mjs
+
+      - name: Server tests
+        run: node tools/test-server.mjs
+
+      - name: Updater tests
+        run: node tools/test-update.mjs
+
+      # The browser suites need a Chromium. driver.mjs can find Playwright's
+      # on its own, but "found the wrong one" fails as a wall of CDP errors
+      # that names no cause — the runner's /usr/bin/chromium is a snap that
+      # starts and never opens a debugging port. So resolve it here instead,
+      # fail loudly with a directory listing if it is not where expected, and
+      # hand the exact path to the driver. Only the browser is installed, not
+      # the test runner: nothing in this repo imports Playwright.
+      - name: Install Chromium
+        run: |
+          npx --yes playwright install --with-deps chromium
+          exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
+          if [ -z "$exe" ]; then
+            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH — Playwright's layout may have changed again"
+            ls -R "$PLAYWRIGHT_BROWSERS_PATH" | head -60
+            exit 1
+          fi
+          echo "using $exe"
+          echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
+
+      # Suite 01 is the boot-and-type path everything else rests on: if this
+      # fails the app does not start. The rest of the suites are a full
+      # regression run and belong on a machine somebody is watching, not on
+      # every pull request — see the skill's own notes.
+      - name: Browser suite 01 (core)
+        run: node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
+
+      # The policy is only worth having if it is actually enforcing, and the
+      # hash in it is computed at build time from the app's own inline script
+      # — so a source change that forgets to rebuild shows up here as an app
+      # that does not boot at all (#65).
+      - name: Browser suite 52 (content security policy)
+        run: node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/52-csp.txt
