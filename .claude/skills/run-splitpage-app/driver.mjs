@@ -643,6 +643,10 @@ async function main() {
     if (failures > 0) summary += ` - ${failures} FAILED`;
     out1("");
     out1(summary);
+    // The RESULT line stays the contract for run-tests.ps1, but the exit code
+    // has to agree with it or a CI job built on this driver is green on red.
+    // A suite that asserted nothing counts as a failure for the same reason.
+    if (failures > 0 || checks === 0) exit = 1;
   } catch (e) {
     out1(`ERROR: ${e.message}`);
     exit = 1;

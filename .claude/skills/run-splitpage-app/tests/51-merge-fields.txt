@@ -1,0 +1,102 @@
+# The state field registry (issue #60) and base-aware list merges (issue
+# #61), both in the one place they meet: mergeStates.
+#
+# Base-aware list merges (03-sync.js): mergePeople,
+# mergeProductionTags and mergeBrollShots used to union both sides without
+# ever seeing `base`, so an entry either side deleted was resurrected by
+# every server merge, every stash merge and every file merge — forever.
+# wordsPerMinute was silently theirs-wins for the same reason.
+#
+# mergeStates is a pure function, so this drives it directly through
+# window.__splitpageFormats (20d-formats.js), the same way 22-doc-id.txt
+# drives mergedDocId. No file picker and no server needed.
+
+open
+
+eval (function(){window.F = window.__splitpageFormats; return typeof F.mergeStates === 'function' && typeof F.migrate === 'function';})()
+expect true
+
+# A three-way fixture: base has one person, one prop and one b-roll shot;
+# `mine` deletes each of them and `theirs` is base untouched.
+eval (function(){window.mk = function(){ var s = F.migrate({ title: 'M', rows: [{ id: 'r1', visualText: 'v', audioText: 'a' }], people: [{ id: 'p1', name: 'Sam' }], productionTags: [{ cat: 'prop', name: 'Kettle', owner: '', notes: '', status: 'needed' }], brollShots: [{ id: 'b1', name: 'Rooftop' }], wordsPerMinute: 150 }); return s; }; return mk().people.length;})()
+expect 1
+
+# ---- a person I deleted stays deleted --------------------------------------
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.people = []; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.people.length;})()
+expect window.__r.people.length == 0
+
+# and the other way round: they deleted, I left it alone
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); theirs.people = []; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.people.length;})()
+expect window.__r.people.length == 0
+
+# ---- a tag I deleted stays deleted -----------------------------------------
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.productionTags = []; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.productionTags.length;})()
+expect window.__r.productionTags.length == 0
+
+# ---- a b-roll shot I deleted stays deleted ---------------------------------
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.brollShots = []; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.brollShots.length;})()
+expect window.__r.brollShots.length == 0
+
+# ---- but a delete never beats a real edit on the other side ----------------
+# They marked the kettle as sourced while I deleted it: the work survives, as the union
+# always did.
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.productionTags = []; theirs.productionTags[0].status = 'have'; window.__r = F.mergeStates(base, mine, theirs).merged; return JSON.stringify(window.__r.productionTags);})()
+expect window.__r.productionTags.length == 1
+expect window.__r.productionTags[0].status === 'have'
+
+# Same for a shot they put someone's name against.
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.brollShots = []; theirs.brollShots[0].owner = 'p1'; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.brollShots.length;})()
+expect window.__r.brollShots.length == 1
+expect window.__r.brollShots[0].owner === 'p1'
+
+# ---- additions still union -------------------------------------------------
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.people.push({ id: 'p2', name: 'Ada' }); theirs.people.push({ id: 'p3', name: 'Bo' }); window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.people.map(function(p){return p.name;}).sort().join(',');})()
+expect window.__r.people.length == 3
+
+# ---- with no ancestor, nothing is a delete ---------------------------------
+# A two-way merge cannot tell "removed" from "never had", so it unions, the
+# way it always did.
+eval (function(){var mine = mk(), theirs = mk(); mine.people = []; window.__r = F.mergeStates(null, mine, theirs).merged; return window.__r.people.length;})()
+expect window.__r.people.length == 1
+
+# ---- wordsPerMinute follows whoever changed it -----------------------------
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.wordsPerMinute = 180; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.wordsPerMinute;})()
+expect window.__r.wordsPerMinute == 180
+
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); theirs.wordsPerMinute = 200; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.wordsPerMinute;})()
+expect window.__r.wordsPerMinute == 200
+
+# both changed it — theirs is the published truth, same rule as a row field
+eval (function(){var base = mk(), mine = mk(), theirs = mk(); mine.wordsPerMinute = 180; theirs.wordsPerMinute = 200; window.__r = F.mergeStates(base, mine, theirs).merged; return window.__r.wordsPerMinute;})()
+expect window.__r.wordsPerMinute == 200
+
+# ---- the state field registry (issue #60) ----------------------------------
+# Invariant #4 as an assertion rather than a comment: a top-level field left
+# out of the merge is destroyed on every merge.
+eval (function(){var empty = F.migrate({}); var merged = F.mergeStates(null, F.migrate({}), F.migrate({})).merged; window.__missing = Object.keys(empty).filter(function(k){ return !(k in merged); }); return window.__missing.join(',') || '(none)';})()
+expect window.__missing.length == 0
+
+# Nothing migrateRows produces is outside the table, and nothing in the table
+# that carries a default is missing from a migrated document.
+eval (function(){var empty = F.migrate({}); var known = {}; F.stateFields().forEach(function(f){ known[f.key] = true; }); window.__unlisted = Object.keys(empty).filter(function(k){ return !known[k]; }); return window.__unlisted.join(',') || '(none)';})()
+expect window.__unlisted.length == 0
+eval F.missingStateFields(F.migrate({})).join(',') || '(none)'
+expect F.missingStateFields(F.migrate({})).length == 0
+expect F.missingStateFields(F.state()).length == 0
+
+# Every field has a merge strategy, and every strategy is one mergeStates
+# knows — an unknown one throws rather than dropping the field silently.
+eval (function(){var ok = {'title':1,'doc-id':1,'rows':1,'comments':1,'list-union-with-base':1,'changed-side-wins':1,'max-plus-one':1,'theirs-wins':1,'constant':1}; window.__badMerge = F.stateFields().filter(function(f){ return !ok[f.merge] || (f.merge === 'list-union-with-base' && typeof f.mergeList !== 'function'); }).map(function(f){ return f.key; }); return window.__badMerge.join(',') || '(none)';})()
+expect window.__badMerge.length == 0
+
+# A merged document is still a complete document: every registry field with a
+# default comes back out of the merge too.
+eval (function(){var merged = F.mergeStates(mk(), mk(), mk()).merged; return F.missingStateFields(merged).join(',') || '(none)';})()
+expect F.missingStateFields(F.mergeStates(mk(), mk(), mk()).merged).length == 0
+
+# And a .splitpage save carries all of them, which is the third place a field
+# used to be able to go missing.
+eval (function(){var round = F.migrate(JSON.parse(F.buildSplitpage(F.state()))); return F.missingStateFields(round).join(',') || '(none)';})()
+expect F.missingStateFields(F.migrate(JSON.parse(F.buildSplitpage(F.state())))).length == 0
+
+quit

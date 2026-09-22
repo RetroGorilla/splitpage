@@ -258,11 +258,15 @@ the API cross-origin. Empty (the default) means same-origin only, which is what
 a deployment behind Access should stay. Entries match exactly and are echoed
 back one at a time; `*` is never sent, and neither is
 `Access-Control-Allow-Credentials` — so a cross-origin caller has to carry a
-join token and cannot ride on somebody's Access cookie. The literal entry
-`null` allows pages opened from `file://`, which is useful for a portable copy
-on a laptop and broad enough that it does not belong on anything facing the
-internet, since every local HTML file in every browser shares that one origin.
-Static files never carry CORS headers either way.
+join token and cannot ride on somebody's Access cookie. Static files never
+carry CORS headers either way.
+
+The literal entry `null` used to be honoured, so that a copy opened from
+`file://` could talk to a server. It is now ignored, with a line in the log
+saying so: `null` is not one site. Every page opened from `file://`, and every
+sandboxed iframe on every site on the internet, sends that same origin — so
+allowing it allowed all of them. Serve the portable copy over `http://` and
+name the origin it is served from.
 
 **Updating.** Pull the new files and `docker compose up -d --build`. Documents
 live in the mounted volume, so they are unaffected.

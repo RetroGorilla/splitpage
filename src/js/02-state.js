@@ -8,6 +8,63 @@
     }
   }
 
+  /* ---- the state field registry ----------------------------------------
+     Every top-level field a document has, in one table: what it defaults to
+     when it is missing, and how mergeStates reconciles it.
+
+     `migrateRows` fills the defaults in from here, `mergeStates`
+     (03-sync.js) builds its result by walking it, and both project writers
+     go through `migrateRows`, so a field listed here cannot be dropped from
+     a save either. That is HANDOFF invariant #4 as code rather than as a
+     warning: before this table, mergeStates ended in a hand-written object
+     literal, and a field missing from that literal was destroyed on every
+     merge — which is exactly what happened to `people` and
+     `productionTags` once already (#60). Adding a field is now one row.
+
+     `def` is the value a document without the field gets; the entries with
+     no `def` are the ones migrateRows has always had bespoke handling for
+     (docId is minted, schema is stamped) or that only a server ever sets,
+     where a defaulted null would put a key into every local save that has
+     never had one.
+
+     `merge` names the strategy; `mergeList` carries the list merge itself,
+     wrapped so the table can be built before 03-sync.js's declarations are
+     evaluated. The strategies:
+       rows / comments / title / doc-id  — computed in mergeStates itself
+       list-union-with-base — union both sides, minus what one deleted and
+                              the other left alone (#61)
+       changed-side-wins    — whoever moved it off base wins, theirs if both
+       max-plus-one         — a revision counter
+       theirs-wins          — theirs, then mine, then nothing
+       constant             — stamped, never reconciled
+  */
+  var STATE_FIELDS = [
+    { key: "title",          merge: "title",  def: function () { return ""; } },
+    { key: "docId",          merge: "doc-id" },
+    { key: "rows",           merge: "rows",     def: function () { return []; } },
+    { key: "comments",       merge: "comments", def: function () { return []; } },
+    { key: "people",         merge: "list-union-with-base", def: function () { return []; },
+      mergeList: function (b, m, t) { return mergePeople(b, m, t); } },
+    { key: "productionTags", merge: "list-union-with-base", def: function () { return []; },
+      mergeList: function (b, m, t) { return mergeProductionTags(b, m, t); } },
+    { key: "brollShots",     merge: "list-union-with-base", def: function () { return []; },
+      mergeList: function (b, m, t) { return mergeBrollShots(b, m, t); } },
+    { key: "wordsPerMinute", merge: "changed-side-wins", def: function () { return DEFAULT_WPM; } },
+    { key: "rev",            merge: "max-plus-one", def: function () { return 0; } },
+    { key: "lastEditedBy",   merge: "theirs-wins" },
+    { key: "lastEditedAt",   merge: "theirs-wins" },
+    { key: "schema",         merge: "constant" }
+  ];
+
+  /* Which registry fields a state is missing entirely. Used by the suites
+     rather than by the app: the point of the table is that this list is
+     always empty, and a check is the only thing that keeps it that way. */
+  function missingStateFields(s) {
+    return STATE_FIELDS.filter(function (f) {
+      return f.def && (!s || !(f.key in s));
+    }).map(function (f) { return f.key; });
+  }
+
   function makeId(prefix) {
     return (prefix || "r") + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
   }
@@ -76,6 +133,14 @@
        an "older than current" test instead: missing/non-numeric reads as
        the oldest possible schema (legacy), anything current or newer is not. */
     var legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;
+
+    /* Defaults first, from the one table (#60), so a field added there is
+       present on every document without a second edit here. The bespoke
+       normalisation below still has the last word — a default only fills a
+       key that is absent, and says nothing about a key holding rubbish. */
+    STATE_FIELDS.forEach(function (f) {
+      if (f.def && s[f.key] === undefined) s[f.key] = f.def();
+    });
 
     if (!Array.isArray(s.rows)) s.rows = [];
     /* Untrusted input (see the file comment above this function) can contain

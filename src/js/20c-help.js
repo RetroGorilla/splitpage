@@ -14,12 +14,12 @@
      00-prelude.js for the same reasoning), so binding listeners here
      immediately is exactly as safe as doing it from init(). */
 
-  var HELP_SIDE_PANEL_IDS = ["comments-panel", "production-panel", "gear-panel", "broll-panel", "history-panel"];
-
   /* Anything that opens over the whole screen has to close the side panels
-     first (invariant #16) — the same thing openWriter()/openPrompter() do. */
+     first (invariant #16) — the same thing openWriter()/openPrompter() do.
+     SIDE_PANEL_IDS is 03b-side-panels.js's one list; this file used to keep
+     its own copy under another name (#59). */
   function closeSidePanelsForHelp() {
-    HELP_SIDE_PANEL_IDS.forEach(function (id) {
+    SIDE_PANEL_IDS.forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.hidden = true;
     });
