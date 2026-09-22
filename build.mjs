@@ -3,7 +3,9 @@
  *
  * Source lives in src/ as separate files so it can be edited like normal code:
  * page.html (shell), app.css, seed-state.json (the demo document) and the
- * numbered ES modules in src/js/.
+ * numbered ES modules in src/js/. docs/help.md (the user guide) and VERSION
+ * are inputs too — the first is rendered into the in-app Help page, the
+ * second is stamped into both outputs.
  * The SHIPPED app is a single index.html, and that is not a packaging
  * preference — it is load-bearing. A save writes
  *   "<!doctype html>" + document.documentElement.outerHTML
@@ -18,12 +20,18 @@
  *   node build.mjs           write index.html and stamp sw.js
  *   node build.mjs --check   verify both are current (exit 1 if not)
  *
+ * index.html is NOT in the repository (#80): it is generated, it is in
+ * .gitignore, and a fresh clone has none until this runs. So --check's
+ * index.html half reports "not built yet" rather than crashing, and CI
+ * builds rather than checks — see .github/workflows/ci.yml. sw.js stays
+ * tracked, because it is the file you edit as well as the file that ships.
+ *
  * esbuild is the only dependency, and it is a build-time one: nothing it
  * produces needs a runtime, and the shipped page still has no <script src>.
  * `npm install` (or `npm ci`) before either command.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -93,13 +101,21 @@ function appJs() {
   return code;
 }
 
-/* ---- README.md -> in-app Help ----
+/* ---- docs/help.md -> in-app Help ----
  *
  * A dependency-free Markdown-to-HTML converter, just capable enough for
- * README.md's own vocabulary (headings, lists, blockquotes, pipe tables,
+ * docs/help.md's own vocabulary (headings, lists, blockquotes, pipe tables,
  * fenced code, horizontal rules, and inline code/bold/italic/links, plus a
- * few literal <kbd> tags README already writes by hand). Not a general
- * Markdown engine — anything README doesn't use isn't handled.
+ * few literal <kbd> tags the guide writes by hand). Not a general Markdown
+ * engine — anything the guide doesn't use isn't handled.
+ *
+ * The guide used to be README.md, with <!-- help:skip --> markers around the
+ * sections that are for people working on the repo rather than people using
+ * the app (#80). Splitting the two files apart retired the markers: every
+ * heading in docs/help.md is meant for the reader of the Help page, and the
+ * README can now change without rebuilding the app. An HTML comment left in
+ * this file would render as visible text, since nothing strips comments any
+ * more — keep them inside fenced code, as the export-format section does.
  *
  * Order matters (HANDOFF.md's escaping rule, applied to a build-time
  * converter rather than live text): escape HTML first, so nothing in the
@@ -159,7 +175,7 @@ function seedCheckValue() {
 
 /* Inline formatting: code spans first (so `**not bold**` inside backticks is
    protected), then links, then bold, then italic. <kbd>/</kbd> are the only
-   literal HTML README writes outside of code — everything else stays
+   literal HTML the guide writes outside of code — everything else stays
    escaped text. */
 function mdInline(text) {
   const codeSpans = [];
@@ -178,37 +194,17 @@ function mdInline(text) {
   text = text.replace(/&lt;kbd&gt;/g, "<kbd>").replace(/&lt;\/kbd&gt;/g, "</kbd>");
   /* eslint-disable-next-line no-control-regex -- the NUL is the sentinel the
      code-span pass at the top of this function wrote; it is chosen precisely
-     because README prose can never contain one. */
+     because the guide's prose can never contain one. */
   text = text.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => "<code>" + codeSpans[i] + "</code>");
   return text;
 }
 
-/* Strips everything between <!-- help:skip-start --> and <!-- help:skip-end -->
-   (developer-only sections that don't belong in the in-app Help), operating
-   on the ALREADY-ESCAPED text, so the markers themselves must be matched in
-   their escaped form. */
-function stripHelpSkipBlocks(escaped) {
-  const start = "&lt;!-- help:skip-start --&gt;";
-  const end = "&lt;!-- help:skip-end --&gt;";
-  let out = "";
-  let i = 0;
-  while (i < escaped.length) {
-    const s = escaped.indexOf(start, i);
-    if (s === -1) { out += escaped.slice(i); break; }
-    out += escaped.slice(i, s);
-    const e = escaped.indexOf(end, s);
-    if (e === -1) throw new Error("README.md: help:skip-start with no matching help:skip-end");
-    i = e + end.length;
-  }
-  return out;
-}
-
 /* Parses a run of consecutive list lines into <ul>/<ol> HTML. Lines indented
    2+ spaces and starting with "-" nest one level deep inside the preceding
-   top-level item — README only ever goes one level, so that's all this
+   top-level item — the guide only ever goes one level, so that's all this
    supports. Any other line (a wrapped physical line of the same paragraph)
    is a "lazy continuation" of whichever item/sub-item came before it, joined
-   with a space — README wraps list-item prose onto following lines without
+   with a space — the guide wraps list-item prose onto following lines without
    re-indenting it to any marker. */
 function mdList(lines) {
   const ordered = /^\d+\.\s/.test(lines[0]);
@@ -254,10 +250,10 @@ function mdTable(lines) {
 
 /* Returns { html, toc } — toc is a nested <ul> of <h2>/<h3> links, in
    document order, for #help-toc. Heading ids are "help-" + a slug of the
-   heading text, so a README anchor link and a Help deep link land on the
-   same element. */
+   heading text, so a docs/help.md anchor link and a Help deep link land on
+   the same element. */
 function mdToHtml(markdown) {
-  const escaped = stripHelpSkipBlocks(escapeHtml(markdown));
+  const escaped = escapeHtml(markdown);
   const lines = escaped.split("\n");
   const out = [];
   const toc = []; /* { li: "<li>...", subs: ["<li>...", ...] } — one per h2 */
@@ -310,7 +306,7 @@ function mdToHtml(markdown) {
     }
 
     if (/^-\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      /* A blank line normally ends a list, but README also uses blank lines
+      /* A blank line normally ends a list, but the guide also uses blank lines
          to separate ordered items that carry a trailing paragraph or nested
          bullets. So a blank line doesn't end the list by itself — only when
          nothing after it (skipping further blank lines) continues the list:
@@ -353,11 +349,11 @@ function mdToHtml(markdown) {
 }
 
 /* Computed once and reused for both markers below, rather than re-parsing
-   README.md twice. */
-let readmeHelp = null;
-function readmeHtml() {
-  if (!readmeHelp) readmeHelp = mdToHtml(readFileSync(join(ROOT, "README.md"), "utf8"));
-  return readmeHelp;
+   docs/help.md twice. */
+let helpRendered = null;
+function helpHtml() {
+  if (!helpRendered) helpRendered = mdToHtml(readFileSync(join(ROOT, "docs", "help.md"), "utf8"));
+  return helpRendered;
 }
 
 /* VERSION is one line. Two different outputs splice it in — index.html's
@@ -374,8 +370,8 @@ const PARTS = [
   ["{{SEED_CHECK}}", seedCheckValue],
   ["/*{{APP_CSS}}*/", () => src("app.css")],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
-  ["{{HELP_TOC}}", () => readmeHtml().toc],
-  ["{{README_HTML}}", () => readmeHtml().html],
+  ["{{HELP_TOC}}", () => helpHtml().toc],
+  ["{{HELP_HTML}}", () => helpHtml().html],
   ["//{{APP_JS}}", appJs]
 ];
 
@@ -523,8 +519,15 @@ const swBuilt = buildSw();
 
 if (process.argv.includes("--check")) {
   let stale = false;
-  const current = readFileSync(out, "utf8");
-  if (current === built) {
+  /* index.html is untracked and generated (#80), so "no file at all" is the
+     normal state of a fresh clone rather than a corrupt one. Said plainly
+     here, because "ENOENT: no such file or directory" is a confusing way to
+     learn that the answer is simply `node build.mjs`. */
+  const current = existsSync(out) ? readFileSync(out, "utf8") : null;
+  if (current === null) {
+    console.error("index.html has not been built yet — run `node build.mjs`");
+    stale = true;
+  } else if (current === built) {
     console.log("index.html is up to date with src/ (" + Buffer.byteLength(built) + " bytes)");
   } else {
     console.error("index.html does NOT match src/ — run `node build.mjs`");

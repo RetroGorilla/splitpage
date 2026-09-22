@@ -2,8 +2,11 @@
 
 Written 2026-08-28, condensed 2026-09-15. For whoever (or whatever) picks this up next.
 
-`README.md` is the **user-facing** doc — what the features are and how to use
-them. Read it first; this file deliberately does not repeat it.
+`docs/help.md` is the **user-facing** doc — what the features are and how to
+use them, and the file `build.mjs` renders into the in-app Help page. Read it
+first; this file deliberately does not repeat it. `README.md` is the
+repo-facing half of what used to be one file (#80): building, releasing, and
+the map of the tree.
 
 ---
 
@@ -21,8 +24,10 @@ breakdown for props/locations/cast/VFX/sound.
   evaluation time except declare functions, and `_entry.js` calls each
   module's `__init()` in filename order. `node build.mjs` bundles them with
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
-  fails a commit where they disagree. Run `npm install` once first — esbuild
-  is the one devDependency.
+  says whether the copy on disk is in step. `index.html` is **not in the
+  repository** since #80 — it is generated, it is ignored, and a fresh clone
+  has none until you build one. Run `npm install` once first — esbuild is the
+  one devDependency the build needs.
 - **The build writes two files, not one.** `index.html` and, since #79,
   `sw.js` — whose cache name is stamped from `VERSION`, which is what makes a
   deploy take effect on the next load instead of the one after it. `sw.js` is
@@ -40,7 +45,9 @@ breakdown for props/locations/cast/VFX/sound.
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
   spliced into `#state-data` (`buildPublishHtml`, `PAGE_SHELL`). That's why
   there's an inlining build step instead of `<script src>`.
-- Supporting files: `README.md`, `start.mjs` with thin `start.bat`/`start.sh`
+- Supporting files: `README.md` (repo-facing) and `docs/help.md` (the user
+  guide, and a build input — it becomes the in-app Help page), `start.mjs`
+  with thin `start.bat`/`start.sh`
   wrappers (local launcher), `update.mjs` (says whether a newer release
   exists; installs nothing), `server/server.js` + `Dockerfile` (hosted mode),
   `package.mjs` (the portable zip), `desktop/` (the Electron app and its NSIS
@@ -56,6 +63,22 @@ breakdown for props/locations/cast/VFX/sound.
 
 `start.bat` serves on `http://localhost:8791`. `file://` works for editing
 but disables PWA install, IndexedDB, and the microphone — test over http.
+
+**`index.html` is not in the repository** (#80). It is generated from `src/`,
+`docs/help.md` and `VERSION`, it is in `.gitignore`, and a fresh clone has
+none until you build one:
+
+```bash
+npm install              # once: esbuild, eslint, jsdom
+node build.mjs           # writes index.html, stamps sw.js from VERSION
+```
+
+Nothing is committed that has to be kept in step with the source any more, so
+there is no hook to install and nothing to stage after a build. `sw.js` is the
+exception and is still tracked — it cannot be inlined into the page, so it is
+the file you edit as well as the file that ships, and the build only stamps
+its cache name. Rebuild after a version bump and commit `sw.js`; CI fails if
+the committed copy's stamp has drifted from `VERSION`.
 
 Rebuild before testing any `src/` change, always:
 
@@ -91,20 +114,29 @@ Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Since
 asserted nothing at all, which is what lets CI gate on it; `driver.ps1` still
 only exits non-zero for a command that throws, so read its `RESULT:` line.
 
-**CI** (`.github/workflows/ci.yml`, #58) runs `build.mjs --check`,
-`desktop/test/drafts.test.mjs`, `tools/test-server.mjs`,
+**CI** (`.github/workflows/ci.yml`, #58) runs `npm run lint`, `node
+build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
+`desktop/test/ipc-table.test.mjs`, `tools/test-server.mjs`,
 `tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
 It is not the full regression run — that is still `run-tests.ps1` on
 Windows, or `driver.mjs` one suite at a time here.
 
-**The hooks in `.githooks/` are not installed by default.** `core.hooksPath`
-is unset in a fresh clone, so the pre-commit check that keeps `index.html` in
-step with `src/` (and keeps somebody's script out of the committed demo)
-never runs until you ask for it:
+Since #80 CI also **produces** the app. It builds `index.html` and uploads
+it, with `sw.js`, `manifest.webmanifest`, `icon.svg`, the server and the
+`Dockerfile`, as the `splitpage-app` artifact — the set of files DEPLOY.md §2
+copies onto the server, arranged so the download is itself a working `docker
+build` context. The upload is the last step, so an artifact only exists for a
+run whose checks all passed.
 
-```bash
-git config core.hooksPath .githooks
-```
+**`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
+it re-ran `build.mjs --check` against the staged tree so a commit could not
+ship a stale `index.html`, and it refused any `index.html` whose `#state-data`
+line was not byte-for-byte `.githooks/demo-state.json` — the guard against
+saving your own script into the app's own page and pushing it to GitHub.
+Untracking `index.html` retires both: there is no committed build output to
+go stale, and a script saved into your local `index.html` is an ignored,
+untracked file that `git add` will not pick up. `git config core.hooksPath`
+is no longer part of setting this repo up.
 
 What still needs the Windows machine: `desktop/test/smoke.mjs` (hardcoded
 `.exe` paths, `Win32_Process`/`MainWindowHandle` probes), `npm run dist:win`,
@@ -820,9 +852,13 @@ evaluation order via `_entry.js`):
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
 
 Other source: `src/page.html` (shell), `src/app.css` (visual),
-`src/seed-state.json` (demo document). `README.md` is a build input too —
-`build.mjs`'s `mdToHtml()` renders it into the Help modal at build time;
-developer-only sections are wrapped in `<!-- help:skip-start/end -->`.
+`src/seed-state.json` (demo document). `docs/help.md` is a build input too —
+`build.mjs`'s `mdToHtml()` renders it into the Help modal at build time. It
+was `README.md` until #80, with developer-only sections fenced off by
+`<!-- help:skip-start/end -->` markers; splitting the user guide out into its
+own file retired the markers, and means editing the repo's README no longer
+rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
+visible text on the Help page — keep any inside a fenced code block.
 
 **File-menu items owned outside `18-local-files.js`'s `handleFileMenuAction()`:**
 `20c-help.js` and `20e-connect.js` each add a capture-phase listener on

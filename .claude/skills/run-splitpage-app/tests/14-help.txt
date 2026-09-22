@@ -1,5 +1,6 @@
-# The in-app Help page — README.md rendered to HTML at build time by
+# The in-app Help page — docs/help.md rendered to HTML at build time by
 # mdToHtml() (build.mjs) and shown in #help-modal by src/js/20c-help.js.
+# (It was README.md until #80; the repo-facing sections stayed behind there.)
 
 open
 

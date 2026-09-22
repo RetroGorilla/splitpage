@@ -67,18 +67,23 @@ try {
 // Create stage directory
 await fs.mkdir(STAGE_DIR, { recursive: true });
 
-// Files to copy from repo root (the allowlist in main.js:protocol.handle())
+// Files to copy from repo root (the allowlist in main.js:protocol.handle()).
+// [source path in the repo, name inside the stage] — the two differ only for
+// the user guide, which lives in docs/ but is served flat like everything
+// else. It used to be README.md; #80 split the user-facing half out into
+// docs/help.md so that editing the repo's README no longer changes what the
+// desktop app ships.
 const files = [
-  "index.html",
-  "manifest.webmanifest",
-  "icon.svg",
-  "sw.js",
-  "README.md",
-  "VERSION"
+  ["index.html", "index.html"],
+  ["manifest.webmanifest", "manifest.webmanifest"],
+  ["icon.svg", "icon.svg"],
+  ["sw.js", "sw.js"],
+  ["docs/help.md", "help.md"],
+  ["VERSION", "VERSION"]
 ];
 
-for (const filename of files) {
-  const src = resolve(REPO_ROOT, filename);
+for (const [from, filename] of files) {
+  const src = resolve(REPO_ROOT, from);
   const dst = resolve(STAGE_DIR, filename);
   const data = await fs.readFile(src);
   await fs.writeFile(dst, data);
