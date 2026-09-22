@@ -133,6 +133,22 @@ One JSON file per script in `/mnt/user/appdata/splitpage/data`. That is the
 whole database — no index, nothing to rebuild. **Back it up by copying the
 folder.** Include it in your normal Unraid appdata backup and you are covered.
 
+Each file is written with a summary on its first line and the script on its
+second:
+
+```json
+{"id":"kitchen-ab12","rev":7,"updatedAt":"…","updatedBy":"…","title":"Kitchen","rows":9,
+"state":{ …the whole script… }}
+```
+
+It is still one JSON object — the newline is whitespace, so anything that
+reads JSON reads it unchanged. The point of the split is that the picker can
+list twenty scripts, and a save can check the revision it is replacing,
+without parsing twenty scripts in full. Documents written by an older version
+have no such line; they are read the old way and quietly rewritten with one
+the next time they are listed or saved. Each save is fsynced and renamed into
+place, so a power cut leaves the previous version, never a half-written one.
+
 ---
 
 ## 3. Put it behind Cloudflare Access — do this before sharing the link
@@ -252,6 +268,19 @@ If you do set it: the token is minted per process and held only in memory, so a
 redeploy signs everyone out; wrong PINs are limited to ten a minute per address;
 and neither the PIN nor the token is ever written to disk, logged, or served by
 the static handler.
+
+**`TRUST_PROXY=1`** tells that rate limit to count `X-Forwarded-For` instead of
+the socket. Set it when the container only ever hears from a proxy — a
+Cloudflare tunnel, nginx, or Docker's own NAT — because there every request
+arrives from the same address and the limit is one bucket for the whole house:
+one stranger's ten wrong guesses lock everybody out for a minute. Only the
+first entry of the header is read, and anything that is not an address is
+ignored.
+
+**Do not set it if anything can reach the port directly.** `X-Forwarded-For` is
+just a request header: whoever can talk to the port writes what they like in
+it, so trusting it there hands a guesser a fresh allowance per guess and turns
+the limit off. Off is the default for that reason.
 
 **`ALLOW_ORIGINS`** is a comma-separated allowlist of origins permitted to call
 the API cross-origin. Empty (the default) means same-origin only, which is what

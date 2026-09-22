@@ -61,6 +61,11 @@ const FILES = [
   ["icon.svg", 0o644],
   ["sw.js", 0o644],
   ["server/server.js", 0o644],
+  /* server.js is CommonJS and the repo root's package.json says
+     "type": "module" for the build tooling. Node resolves the nearest
+     package.json, so server/package.json has to travel with it or `node
+     server/server.js` dies on the first require(). */
+  ["server/package.json", 0o644],
   ["start.mjs", 0o644],
   ["start.bat", 0o644],
   ["start.sh", 0o755],

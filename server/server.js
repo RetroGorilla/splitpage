@@ -224,7 +224,43 @@ const PIN_WINDOW_MS = 60 * 1000;
 const PIN_MAX_FAILURES = 10;
 const pinFailures = new Map();
 
+/* ---------- who the limiter counts against ----------
+ *
+ * The socket's own address, unless TRUST_PROXY=1 says something in front of
+ * this process is rewriting it. Behind cloudflared, a reverse proxy or plain
+ * Docker NAT every request arrives from the same address, so the bucket above
+ * is one bucket for everybody: one stranger's ten wrong guesses lock the whole
+ * house out for a minute (#74).
+ *
+ * Off by default, and that default matters. X-Forwarded-For is a request
+ * header like any other — anyone talking to this port directly can write
+ * whatever they like in it, so honouring it unconditionally would hand every
+ * guesser a fresh bucket per guess and turn the limiter off. It is only worth
+ * anything when a proxy you control is the ONLY way in, which is the one case
+ * the operator is asserting by setting this.
+ *
+ * The FIRST entry, because a proxy appends: "client, proxy1, proxy2". Anything
+ * that is not plausibly an address is ignored rather than used as a key — a
+ * header of junk should fall back to the socket, not mint a bucket named after
+ * the junk.
+ */
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
+
+function forwardedIp(req) {
+  const header = req.headers["x-forwarded-for"];
+  /* Node joins a repeated header into an array; a proxy that sets it twice
+     means the same list, so read it as one. */
+  const raw = Array.isArray(header) ? header.join(",") : String(header || "");
+  const first = raw.split(",")[0].trim().replace(/^\[|\]$/g, "");
+  return IP_RE.test(first) ? first : "";
+}
+
 function clientIp(req) {
+  if (TRUST_PROXY) {
+    const forwarded = forwardedIp(req);
+    if (forwarded) return forwarded;
+  }
   return String((req.socket && req.socket.remoteAddress) || "unknown");
 }
 
@@ -372,22 +408,157 @@ async function readDoc(id) {
   }
 }
 
+/* ---------- the head line ----------
+ *
+ * A document file is written with its own summary on the first line and the
+ * state on the second:
+ *
+ *     {"id":"kitchen-ab12","rev":7,"updatedAt":"…","title":"Kitchen","rows":9,
+ *     "state":{ …the whole script… }}
+ *
+ * It is still one JSON object and still one file — the newline is whitespace
+ * JSON ignores, so `cp -r` is still the backup and readDoc() is unchanged.
+ * What it buys is that the three things nothing else needs the script for —
+ * the rev a PUT compares against, and the title and timestamp the picker
+ * lists — can be had by reading the first few hundred bytes instead of
+ * parsing 25 MB of state per document (#74). The picker used to parse every
+ * script in the library in full to draw a list of their names.
+ *
+ * Deliberately IN the file rather than in a sidecar beside it: a sidecar is a
+ * second write that a crash can land between, and a rev that disagrees with
+ * the document it describes is worse than no rev at all. This one arrives
+ * with the rename or not at all.
+ *
+ * Documents written before this existed have no head line. Every reader below
+ * falls back to a full parse for those, and the list route quietly rewrites
+ * one when it meets it, so a library upgrades itself as it is used.
+ */
+const DOC_HEAD_MAX = 8192;
+
+/* A title is as long as whoever pasted it made it, and the head line has to
+   fit in the one small read below. The copy in the summary is held short;
+   the document's own state still carries the title in full, so nothing is
+   lost — a picker entry is a line in a list, not a document. */
+const HEAD_TITLE_MAX = 512;
+
+/* The summary as it is stored: every top-level field of the document except
+   the state, plus the two things the picker wants out of the state. */
+function headOf(doc) {
+  const head = {};
+  for (const key of Object.keys(doc)) {
+    if (key !== "state") head[key] = doc[key];
+  }
+  const state = doc.state || {};
+  head.title = String(state.title || "Untitled Script").slice(0, HEAD_TITLE_MAX);
+  head.rows = Array.isArray(state.rows) ? state.rows.length : 0;
+  return head;
+}
+
+function encodeDoc(doc) {
+  const head = JSON.stringify(headOf(doc));
+  /* "{…}" + "{…}" spliced into one object: drop the head's closing brace and
+     continue it with the state on the next line. headOf always returns at
+     least title and rows, so there is never a dangling comma here. */
+  return head.slice(0, -1) + ",\n\"state\":" + JSON.stringify(doc.state) + "}";
+}
+
+/* The head line alone, or null for a document that has none (written before
+   this existed, or carrying a title longer than the read below) — in which
+   case the caller parses the whole file instead. */
+async function readDocHead(id) {
+  let handle;
+  try {
+    handle = await fsp.open(docPath(id), "r");
+  } catch (err) {
+    if (err && err.code === "ENOENT") return null;
+    throw err;
+  }
+  try {
+    const buf = Buffer.alloc(DOC_HEAD_MAX);
+    const { bytesRead } = await handle.read(buf, 0, DOC_HEAD_MAX, 0);
+    const text = buf.toString("utf8", 0, bytesRead);
+    const end = text.indexOf("\n");
+    if (end === -1) return null;
+    /* Everything before the newline, closed off: the trailing comma is the
+       one encodeDoc put there to join the head to the state. A title cannot
+       smuggle a newline in — JSON.stringify escapes it. */
+    const line = text.slice(0, end).replace(/,$/, "") + "}";
+    const head = JSON.parse(line);
+    if (!head || typeof head !== "object" || typeof head.rev !== "number") return null;
+    return head;
+  } catch (err) {
+    /* An unreadable head is never fatal: it only means this document is read
+       the old way. A corrupt file still fails loudly in readDoc(). */
+    return null;
+  } finally {
+    await handle.close().catch(() => {});
+  }
+}
+
+/* rev, title and timestamps, by whichever route is cheapest for this file. */
+async function readDocMeta(id) {
+  const head = await readDocHead(id);
+  if (head) return head;
+  const doc = await readDoc(id);
+  return doc ? headOf(doc) : null;
+}
+
+/* fsync a directory so a rename in it is on the disk and not only in the
+   page cache. Best effort: Windows cannot open a directory for reading at
+   all, and some filesystems refuse the sync — neither is a reason to fail a
+   save that has otherwise succeeded. */
+async function syncDir(dir) {
+  let handle;
+  try {
+    handle = await fsp.open(dir, "r");
+    await handle.sync();
+  } catch (err) {
+    /* nothing to do about it here */
+  } finally {
+    if (handle) await handle.close().catch(() => {});
+  }
+}
+
 /* Write to a temp file in the same directory and rename over the target.
    Rename is atomic within a filesystem, so a crash or a full disk leaves the
-   previous version intact rather than a half-written one. */
+   previous version intact rather than a half-written one.
+
+   Atomic is not the same as durable. Without the fsync below, the rename can
+   reach the disk before the bytes it points at do, and a power cut between
+   the two leaves the document there and EMPTY — the one outcome this whole
+   dance exists to prevent (#74). So: write, fsync the temp file, rename,
+   then fsync the directory that now holds the new name. */
 async function writeDoc(doc) {
   const target = docPath(doc.id);
   const tmp = target + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
-  await fsp.writeFile(tmp, JSON.stringify(doc), "utf8");
   try {
+    let handle;
+    try {
+      handle = await fsp.open(tmp, "w");
+      await handle.writeFile(encodeDoc(doc), "utf8");
+      await handle.sync();
+    } finally {
+      if (handle) await handle.close();
+    }
     await fsp.rename(tmp, target);
   } catch (err) {
     await fsp.unlink(tmp).catch(() => {});
     throw err;
   }
+  await syncDir(path.dirname(target));
 }
 
 /* ---------- http helpers ---------- */
+
+/* Is this request still sending a body nobody has read? A message the parser
+   has finished is not, and neither is a GET, which announces no body to
+   leave behind — so the common answer here is "no" and the connection is
+   kept alive as it always was. */
+function stillUploading(req) {
+  if (!req || req.complete) return false;
+  if (req.headers["transfer-encoding"]) return true;
+  return Number(req.headers["content-length"] || 0) > 0;
+}
 
 function sendJson(res, status, body, opts) {
   const payload = JSON.stringify(body);
@@ -398,11 +569,17 @@ function sendJson(res, status, body, opts) {
        stale rev would make the client think it is up to date and clobber */
     "Cache-Control": "no-store"
   };
-  /* Set when we are answering without having read the rest of the request
-     body (an over-length upload). The client is still sending; keeping the
-     connection alive would leave its unread bytes in front of the next
-     request on it, so this response ends the connection. */
-  if (opts && opts.close) headers["Connection"] = "close";
+  /* Answering without having read the rest of the request body: an
+     over-length upload, or — since #74 — any refusal that happens before
+     readBody(), which is now every gated route's 401. The client is still
+     sending; keeping the connection alive would leave its unread bytes in
+     front of the next request on it, so this response ends the connection
+     and Node discards what is still arriving.
+
+     `res.req` is Node's own back-reference to the request, which is what
+     lets this be decided here rather than at forty call sites: a route
+     added later cannot forget it, exactly as with the CORS headers below. */
+  if (stillUploading(res.req) || (opts && opts.close)) headers["Connection"] = "close";
   /* Stamped on the response object by the request handler below, where the
      request is still in scope. Doing it there rather than threading `req`
      through every sendJson() call site means a route added later cannot
@@ -413,7 +590,14 @@ function sendJson(res, status, body, opts) {
   res.end(payload);
 }
 
-function readBody(req) {
+/* Small enough for a PIN, a link key or a heartbeat, which is all the two
+   routes that read a body before they know who is asking ever carry. MAX_BODY
+   is sized for a script with images in it, and a caller who has not proved
+   anything yet has no business sending one (#74). */
+const SMALL_BODY = 8 * 1024;
+
+function readBody(req, limit) {
+  const max = limit || MAX_BODY;
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -421,7 +605,7 @@ function readBody(req) {
     req.on("data", (chunk) => {
       if (aborted) return;
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         /* Pause rather than destroy. req.destroy() tears the socket down
            immediately, so the 413 below never reaches the client and it sees
            a connection reset instead of a message telling it the document is
@@ -450,17 +634,48 @@ function readBody(req) {
 }
 
 /* A summary for the picker: enough to choose a document without shipping
-   every row of every script to build a list. */
-function summarise(doc) {
-  const state = doc.state || {};
+   every row of every script to build a list. Built from the head line when
+   there is one — which is the whole point of the head line, since drawing a
+   list of names used to mean parsing every script in the library in full. */
+function summarise(head) {
   return {
-    id: doc.id,
-    title: (state.title || "Untitled Script"),
-    rev: doc.rev || 0,
-    rows: Array.isArray(state.rows) ? state.rows.length : 0,
-    updatedAt: doc.updatedAt || null,
-    updatedBy: doc.updatedBy || null
+    id: head.id,
+    title: (head.title || "Untitled Script"),
+    rev: head.rev || 0,
+    rows: typeof head.rows === "number" ? head.rows : 0,
+    updatedAt: head.updatedAt || null,
+    updatedBy: head.updatedBy || null
   };
+}
+
+/* Documents this process has already offered a head line to. Once each: a
+   file that cannot be given a readable one — a name so long it does not fit
+   the read, a filesystem that refused the write — would otherwise be
+   rewritten by every listing for as long as the server runs. */
+const headUpgraded = new Set();
+
+/* One document's line in the picker, or null if it is not there. Reads the
+   head line; falls back to the whole file for a document saved before head
+   lines existed, and — unless this library is published read-only — rewrites
+   that document with one so the next listing is cheap. The rewrite is the
+   same content under the same lock as any other write, so it cannot race a
+   save or change what the document says. */
+async function summaryOf(id) {
+  const head = await readDocHead(id).catch(() => null);
+  if (head) return summarise(head);
+  const doc = await readDoc(id).catch(() => null);
+  if (!doc) return null;
+  if (!READ_ONLY && !headUpgraded.has(id)) {
+    headUpgraded.add(id);
+    withDocLock(id, async () => {
+      if (await readDocHead(id)) return; /* somebody rewrote it first */
+      const current = await readDoc(id);
+      /* Only ever rewrite a file that names itself: an id that disagrees
+         with its filename is not something a listing should be repairing. */
+      if (current && current.id === id) await writeDoc(current);
+    }).catch(() => { /* a listing is not the place to fail over this */ });
+  }
+  return summarise(headOf(doc));
 }
 
 /* ---------- the launcher's routes ----------
@@ -982,7 +1197,10 @@ async function handleApi(req, res, url) {
     if (recentFailures(ip).length >= PIN_MAX_FAILURES) {
       return sendJson(res, 429, { error: "too-many-attempts" });
     }
-    const body = await readBody(req);
+    /* A PIN and a link key are a few dozen bytes between them, and this is
+       the one route that anyone at all may call, so it reads a small body
+       rather than a document-sized one (#74). */
+    const body = await readBody(req, SMALL_BODY);
     /* The join PIN is checked first, so a review PIN set to the same digits
        by mistake can never take the host's own session down to read-only. */
     if (sameSecret(body && body.pin, JOIN_PIN)) {
@@ -1030,10 +1248,17 @@ async function handleApi(req, res, url) {
      Both roles are here: a review viewer (#30) is someone else in the
      document and shows up like anybody else. */
   if (parts[1] === "presence" && req.method === "POST") {
-    const body = await readBody(req);
-    const role = JOIN_PIN
-      ? (roleOf(req) || roleOfToken(body && body.token))
-      : "edit";
+    /* The header first, before a byte of the body is read: a caller who
+       offered a token and got it wrong is refused here, not after 25 MB of
+       whatever they were uploading has been buffered and parsed (#74). The
+       beacon is why the body is still consulted at all, and a beacon sets no
+       header — so the body is read with the small cap, which a heartbeat has
+       never come close to. */
+    const given = String(req.headers["x-splitpage-token"] || "");
+    const headerRole = JOIN_PIN ? roleOfToken(given) : "edit";
+    if (JOIN_PIN && given && !headerRole) return sendJson(res, 401, { error: "pin-required" });
+    const body = await readBody(req, SMALL_BODY);
+    const role = headerRole || (JOIN_PIN ? roleOfToken(body && body.token) : "edit");
     if (!role) return sendJson(res, 401, { error: "pin-required" });
 
     const docId = body && body.docId;
@@ -1080,6 +1305,13 @@ async function handleApi(req, res, url) {
 
   /* The gate. Everything below needs the token once a PIN is set — including
      /api/me, which is a name and an email address.
+
+     It is here, above every route that reads a body, on purpose: a caller
+     with no token is refused before readBody() allocates anything, so an
+     unauthenticated 25 MB upload costs this process nothing but the headers
+     it arrived with (#74). Nothing below may read a body before the check it
+     is gated on. sendJson() ends the connection when the client is still
+     sending, so the refusal is a clean 401 rather than a socket reset.
 
      JSON, deliberately: the client treats a non-JSON answer as a lapsed
      Cloudflare Access session and reloads the page to sign in again, which
@@ -1131,8 +1363,8 @@ async function handleApi(req, res, url) {
        one document — not the library (#63). */
     const scope = role === "review" ? reviewScopeOf(req) : "";
     if (scope) {
-      const only = await readDoc(scope).catch(() => null);
-      return sendJson(res, 200, { docs: only ? [summarise(only)] : [] });
+      const only = await summaryOf(scope);
+      return sendJson(res, 200, { docs: only ? [only] : [] });
     }
     let names;
     try {
@@ -1146,8 +1378,11 @@ async function handleApi(req, res, url) {
       if (!name.endsWith(".json")) continue;
       const docId = name.slice(0, -5);
       if (!isValidId(docId)) continue; /* ignore anything we did not write */
-      const doc = await readDoc(docId).catch(() => null);
-      if (doc) docs.push(summarise(doc));
+      /* The head line, not the whole script: a picker listing twenty
+         documents used to parse twenty documents in full to print their
+         names (#74). */
+      const summary = await summaryOf(docId);
+      if (summary) docs.push(summary);
     }
     docs.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
     return sendJson(res, 200, { docs });
@@ -1222,13 +1457,21 @@ async function handleApi(req, res, url) {
     if (!isFinite(baseRev) || baseRev < 0) return sendJson(res, 400, { error: "bad-base-rev" });
 
     return withDocLock(id, async () => {
-      const current = await readDoc(id);
-      if (!current) return sendJson(res, 404, { error: "not-found" });
+      /* The rev this is compared against, from the head line — the usual
+         answer to a save is "yes, written", and answering it used to mean
+         parsing the stored script in full to read one number off the front
+         of it (#74). The whole file is still read for the two cases that
+         genuinely need the state: a conflict, which hands it back to be
+         merged, and a reviewer's write, which is judged against it. */
+      const meta = await readDocMeta(id);
+      if (!meta) return sendJson(res, 404, { error: "not-found" });
 
       /* Somebody else saved since this client loaded. Hand back their whole
          version so the client can three-way merge it against the base it
          still holds, rather than either side losing work. */
-      if ((current.rev || 0) !== baseRev) {
+      if ((meta.rev || 0) !== baseRev) {
+        const current = await readDoc(id);
+        if (!current) return sendJson(res, 404, { error: "not-found" });
         return sendJson(res, 409, {
           error: "conflict",
           rev: current.rev || 0,
@@ -1243,6 +1486,8 @@ async function handleApi(req, res, url) {
          client that hit a 409 first merges, retries, and is judged against
          whatever it merged with rather than against a copy that has moved on. */
       if (role === "review") {
+        const current = await readDoc(id);
+        if (!current) return sendJson(res, 404, { error: "not-found" });
         const verdict = reviewWriteAllowed(current.state, body.state);
         if (!verdict.ok) {
           return sendJson(res, 403, { error: "review-only", detail: verdict.reason });
@@ -1251,10 +1496,10 @@ async function handleApi(req, res, url) {
 
       const doc = {
         id,
-        rev: (current.rev || 0) + 1,
+        rev: (meta.rev || 0) + 1,
         state: body.state,
         updatedAt: new Date().toISOString(),
-        updatedBy: who.name || body.by || current.updatedBy || null
+        updatedBy: who.name || body.by || meta.updatedBy || null
       };
       await writeDoc(doc);
       return sendJson(res, 200, { id, rev: doc.rev, updatedAt: doc.updatedAt, updatedBy: doc.updatedBy });
@@ -1417,6 +1662,10 @@ async function start() {
     if (READ_ONLY) console.log("[splitpage] READ-ONLY mode");
     if (NO_API) console.log("[splitpage] static only — no document API");
     if (ALLOW_ORIGINS.length) console.log("[splitpage] cross-origin calls allowed from: " + ALLOW_ORIGINS.join(", "));
+    if (TRUST_PROXY) {
+      console.log("[splitpage] TRUST_PROXY=1 — the PIN rate limit counts X-Forwarded-For, so nothing " +
+                  "but your proxy may be able to reach this port");
+    }
     if (JOIN_PIN) {
       /* Never the PIN itself: this stream is inherited by the launcher and
          may end up in a log file. That it is set is all anyone needs here. */

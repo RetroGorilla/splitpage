@@ -13,7 +13,8 @@
 
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,6 +80,9 @@ async function startServer(env) {
   return {
     base,
     port,
+    /* the documents on disk, for the tests that care what a stored file
+       actually looks like */
+    dataDir,
     stop() {
       child.kill();
       rmSync(dataDir, { recursive: true, force: true });
@@ -89,6 +93,53 @@ async function startServer(env) {
 
 async function json(res) {
   try { return await res.json(); } catch { return null; }
+}
+
+/* A request that announces a document-sized body and then sends twenty bytes
+   of it and stops, without ever ending the message. fetch() cannot express
+   that, so this is node:http directly.
+
+   It is the whole proof for "the token is checked before the body is read"
+   (#74): a server that reads first cannot answer this at all — it is still
+   waiting for 25 MB that will never arrive — so an answer here IS the
+   ordering. */
+function refuseBeforeBody(base, pathname, method, headers) {
+  return new Promise((resolve) => {
+    const url = new URL(pathname, base);
+    let done = false;
+    let timer = null;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { req.destroy(); } catch { /* already gone */ }
+      resolve(value);
+    };
+    const req = httpRequest({
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method,
+      headers: Object.assign({
+        "Content-Type": "application/json",
+        "Content-Length": String(20 * 1024 * 1024)
+      }, headers || {})
+    }, (res) => {
+      let text = "";
+      res.on("data", (c) => { text += c; });
+      const end = () => {
+        let body = null;
+        try { body = JSON.parse(text); } catch { /* not JSON */ }
+        finish({ status: res.statusCode, body, closed: res.headers.connection === "close" });
+      };
+      res.on("end", end);
+      res.on("close", end);
+      res.on("aborted", end);
+    });
+    req.on("error", (err) => finish({ status: 0, error: String(err && err.message) }));
+    req.write('{"baseRev":0,"state":{'); /* deliberately unfinished */
+    timer = setTimeout(() => finish({ status: 0, error: "no answer — the body was read first" }), 5000);
+  });
 }
 
 /* ---------- the PIN-protected server ---------- */
@@ -879,6 +930,281 @@ try {
   eq("presence on a server with no PIN needs no token", res.status, 200);
 } finally {
   s8.stop();
+}
+
+/* ---------- the PIN rate limit behind a proxy (issue #74) ----------
+ *
+ * The limiter counts failures per address, and behind cloudflared, a reverse
+ * proxy or Docker NAT every request arrives from the same one — so one
+ * stranger's ten wrong guesses used to lock out everybody in the house.
+ * TRUST_PROXY=1 says a proxy in front is rewriting the source address and
+ * that X-Forwarded-For is worth reading. Off by default, because the header
+ * is otherwise anybody's to write.
+ */
+
+const guess = (server, headers) => fetch(server.base + "api/join", {
+  method: "POST",
+  headers: Object.assign({ "Content-Type": "application/json" }, headers || {}),
+  body: JSON.stringify({ pin: "0000" })
+});
+
+const sProxyOff = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
+try {
+  for (let i = 0; i < 10; i++) await guess(sProxyOff, { "X-Forwarded-For": "1.1.1.1" });
+  const same = await guess(sProxyOff, { "X-Forwarded-For": "1.1.1.1" });
+  eq("without TRUST_PROXY, ten wrong guesses still run the address out", same.status, 429);
+  const other = await guess(sProxyOff, { "X-Forwarded-For": "2.2.2.2" });
+  eq("...and X-Forwarded-For buys a guesser nothing, because it is not trusted",
+    other.status, 429);
+} finally {
+  sProxyOff.stop();
+}
+
+const sProxyOn = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1", TRUST_PROXY: "1" });
+try {
+  check("the server says it is counting the header", sProxyOn.log.includes("TRUST_PROXY=1"), sProxyOn.log);
+  {
+    let last = null;
+    for (let i = 0; i < 10; i++) last = await guess(sProxyOn, { "X-Forwarded-For": "1.1.1.1" });
+    eq("with TRUST_PROXY, the tenth wrong guess from one client is still just wrong", last.status, 401);
+    const again = await guess(sProxyOn, { "X-Forwarded-For": "1.1.1.1" });
+    eq("...the eleventh is 429", again.status, 429);
+  }
+  {
+    const other = await guess(sProxyOn, { "X-Forwarded-For": "2.2.2.2" });
+    eq("...and the person at the next desk still gets their own ten", other.status, 401);
+  }
+  {
+    /* A proxy appends: "the client, then whoever forwarded it". The first
+       entry is the only one the client did not choose. */
+    const chain = await guess(sProxyOn, { "X-Forwarded-For": "1.1.1.1, 9.9.9.9" });
+    eq("a forwarded chain is keyed on its first entry, not its last", chain.status, 429);
+    const spoofed = await guess(sProxyOn, { "X-Forwarded-For": "2.2.2.2, 1.1.1.1" });
+    eq("...so a guesser cannot hide behind one it appended", spoofed.status, 401);
+  }
+  {
+    /* Junk is not an address and must not become a bucket of its own —
+       otherwise a guesser writes a new one on every attempt. It falls back
+       to the socket, which is what these ten fill. */
+    for (let i = 0; i < 10; i++) await guess(sProxyOn, { "X-Forwarded-For": "not an address" });
+    const junk = await guess(sProxyOn, { "X-Forwarded-For": "still not an address" });
+    eq("an unparseable X-Forwarded-For is ignored rather than trusted", junk.status, 429);
+    const bare = await guess(sProxyOn);
+    eq("...and it counted against the socket, like a request with no header at all", bare.status, 429);
+  }
+} finally {
+  sProxyOn.stop();
+}
+
+/* ---------- the token, before the body (issue #74) ----------
+ *
+ * Every gated route used to be reachable by an unauthenticated caller for as
+ * long as it took them to upload 25 MB, which was then parsed and thrown
+ * away with a 401. The refusal happens on the headers now — see
+ * refuseBeforeBody() above for why an answer at all is the proof.
+ */
+
+const sEarly = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
+try {
+  const token = (await json(await fetch(sEarly.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: PIN })
+  }))).token;
+  const made = await json(await fetch(sEarly.base + "api/docs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-splitpage-token": token },
+    body: JSON.stringify({ state: { title: "Early refusal", rows: [] } })
+  }));
+
+  {
+    const out = await refuseBeforeBody(sEarly.base, "api/docs/" + made.id, "PUT");
+    eq("a save with no token is refused before its body is read", out.status, 401, out.error);
+    eq("...saying pin-required", out.body && out.body.error, "pin-required");
+    check("...and the connection is closed, so the rest of the upload is not left in front of the next request",
+      out.closed === true);
+  }
+  {
+    const out = await refuseBeforeBody(sEarly.base, "api/docs/" + made.id, "PUT",
+      { "x-splitpage-token": "0".repeat(64) });
+    eq("a save with a wrong token likewise", out.status, 401, out.error);
+  }
+  {
+    const out = await refuseBeforeBody(sEarly.base, "api/docs", "POST");
+    eq("so is a create", out.status, 401, out.error);
+  }
+  {
+    /* Presence is the route the issue named: it reads a body before the gate
+       on purpose, because a closing tab's sendBeacon cannot set a header. A
+       caller who did offer a header and got it wrong is refused first. */
+    const out = await refuseBeforeBody(sEarly.base, "api/presence", "POST",
+      { "x-splitpage-token": "0".repeat(64) });
+    eq("presence with a wrong token header is refused before its body", out.status, 401, out.error);
+  }
+  {
+    /* And the beacon, which has no header to be judged on, is capped instead:
+       a heartbeat is a few hundred bytes and nothing unauthenticated gets to
+       send a document. */
+    const res = await fetch(sEarly.base + "api/presence", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ docId: "big-doc", id: "p1", filler: "x".repeat(32 * 1024) })
+    });
+    eq("an unauthenticated body bigger than a heartbeat is refused, not buffered", res.status, 413);
+  }
+  {
+    const res = await fetch(sEarly.base + "api/presence", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-splitpage-token": token },
+      body: JSON.stringify({ docId: "small-doc", id: "p1", name: "Sam" })
+    });
+    eq("...while a real heartbeat is unaffected", res.status, 200);
+  }
+  {
+    const res = await fetch(sEarly.base + "api/docs", { headers: { "x-splitpage-token": token } });
+    eq("and a plain GET is still answered on a connection that stays open", res.status, 200);
+    eq("...with no Connection: close", res.headers.get("connection"), "keep-alive");
+  }
+} finally {
+  sEarly.stop();
+}
+
+/* ---------- the head line (issue #74) ----------
+ *
+ * A stored document carries its own summary on its first line, so the rev a
+ * PUT compares against and the names the picker lists can be read without
+ * parsing every script in the library in full. It is in the file rather than
+ * in a sidecar beside it, so a crash cannot leave the two disagreeing, and
+ * the file is still one JSON object.
+ */
+
+function firstLine(path) {
+  return readFileSync(path, "utf8").split("\n")[0];
+}
+
+function headOfFile(path) {
+  const line = firstLine(path);
+  return JSON.parse(line.replace(/,$/, "") + "}");
+}
+
+const sHead = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
+try {
+  const token = (await json(await fetch(sHead.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: PIN })
+  }))).token;
+  const auth = { "Content-Type": "application/json", "x-splitpage-token": token };
+
+  const made = await json(await fetch(sHead.base + "api/docs", {
+    method: "POST", headers: auth,
+    body: JSON.stringify({ state: { title: "Head line", rows: [{ id: "r1" }, { id: "r2" }] } })
+  }));
+  const file = join(sHead.dataDir, made.id + ".json");
+
+  {
+    const head = headOfFile(file);
+    eq("a stored document names its rev on its first line", head.rev, 1);
+    eq("...its title", head.title, "Head line");
+    eq("...how many scenes it has", head.rows, 2);
+    check("...and when it was last written", typeof head.updatedAt === "string");
+    check("the file is still one JSON object",
+      JSON.parse(readFileSync(file, "utf8")).state.title === "Head line");
+  }
+  {
+    const res = await fetch(sHead.base + "api/docs/" + made.id, {
+      method: "PUT", headers: auth,
+      body: JSON.stringify({ baseRev: 1, state: { title: "Head line, saved", rows: [{ id: "r1" }] } })
+    });
+    eq("a save against the rev on that line is 200", res.status, 200);
+    const head = headOfFile(file);
+    eq("...and the line moves with the document", head.rev, 2);
+    eq("...including the title", head.title, "Head line, saved");
+    eq("...and the scene count", head.rows, 1);
+    /* The write is a temp file, fsynced, renamed over the target, and then
+       the directory is fsynced too — so what is left behind afterwards is
+       the document and nothing else. */
+    check("a save leaves no temp file behind",
+      !readdirSync(sHead.dataDir).some((n) => n.endsWith(".tmp")),
+      readdirSync(sHead.dataDir).join(", "));
+  }
+
+  /* ---- a document written before head lines existed ----
+     One JSON object on one line, which is what every document on every
+     server looked like until now. Nothing about it may break, and the rev a
+     PUT compares against has to come from a full parse instead. */
+  const legacy = (id, rev, title) => {
+    writeFileSync(join(sHead.dataDir, id + ".json"), JSON.stringify({
+      id,
+      rev,
+      state: { title, rows: [{ id: "r1", visualText: "", audioText: "" }], comments: [] },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      updatedBy: "Host"
+    }));
+    return join(sHead.dataDir, id + ".json");
+  };
+
+  {
+    const path = legacy("legacy-put", 3, "Saved the old way");
+    const read = await json(await fetch(sHead.base + "api/docs/legacy-put", { headers: auth }));
+    eq("a document with no head line still reads", read && read.rev, 3);
+
+    const stale = await fetch(sHead.base + "api/docs/legacy-put", {
+      method: "PUT", headers: auth,
+      body: JSON.stringify({ baseRev: 2, state: { title: "no", rows: [] } })
+    });
+    eq("...and its rev still decides a conflict", stale.status, 409);
+    const staleBody = await json(stale);
+    eq("...handing back the whole state to merge against", staleBody.state.title, "Saved the old way");
+
+    const ok = await fetch(sHead.base + "api/docs/legacy-put", {
+      method: "PUT", headers: auth,
+      body: JSON.stringify({ baseRev: 3, state: { title: "Saved the new way", rows: [] } })
+    });
+    eq("a save against it is accepted", ok.status, 200);
+    eq("...counting on from the rev it had", (await json(ok)).rev, 4);
+    eq("...and it has a head line from now on", headOfFile(path).rev, 4);
+  }
+  {
+    const path = legacy("legacy-list", 7, "Also saved the old way");
+    const body = await json(await fetch(sHead.base + "api/docs", { headers: auth }));
+    const row = (body.docs || []).find((d) => d.id === "legacy-list");
+    check("the picker lists a document with no head line", !!row, JSON.stringify(body.docs));
+    eq("...by its title", row && row.title, "Also saved the old way");
+    eq("...at its rev", row && row.rev, 7);
+    /* and the listing leaves it with a head line, so the next one is cheap.
+       The rewrite is the same content under the same lock as any other
+       write, and it happens behind the answer rather than delaying it. */
+    let head = null;
+    for (let i = 0; i < 40 && !head; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      try { head = headOfFile(path); } catch { head = null; }
+    }
+    check("...and gives it one, so the next listing is cheap", !!head);
+    eq("...without touching its rev", head && head.rev, 7);
+    eq("...or what it says", head && head.title, "Also saved the old way");
+    eq("...or when it was last written", head && head.updatedAt, "2026-01-01T00:00:00.000Z");
+  }
+} finally {
+  sHead.stop();
+}
+
+/* A published read-only library is not the place to be quietly rewriting
+   files, however good the reason. */
+const sHeadRO = await startServer({ HOST: "127.0.0.1", READ_ONLY: "1" });
+try {
+  const path = join(sHeadRO.dataDir, "legacy-frozen.json");
+  const before = JSON.stringify({
+    id: "legacy-frozen", rev: 2,
+    state: { title: "Frozen", rows: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z", updatedBy: "Host"
+  });
+  writeFileSync(path, before);
+  const body = await json(await fetch(sHeadRO.base + "api/docs"));
+  const row = (body.docs || []).find((d) => d.id === "legacy-frozen");
+  eq("a read-only library lists a document with no head line", row && row.title, "Frozen");
+  await new Promise((r) => setTimeout(r, 300));
+  eq("...and does not write one", readFileSync(path, "utf8"), before);
+} finally {
+  sHeadRO.stop();
 }
 
 console.log("");
