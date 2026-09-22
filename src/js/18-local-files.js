@@ -9,6 +9,7 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
+import { ensureBytes, rowImageShas } from "./02c-blobs.js";
 import {
   cloneState,
   openHistoryPanel,
@@ -62,7 +63,7 @@ import {
   narrationRows
 } from "./15-docx.js";
 import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildPackingListPdf, buildPdf } from "./17-pdf.js";
+import { buildPackingListPdf, buildPdf, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { showAbout } from "./20a-update.js";
 import {
@@ -175,10 +176,15 @@ function updateHeaderFileChip() {
    and extension are already fixed and must stay a text file in place. */
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
+  /* Every builder below is synchronous and reads pictures through
+     rowImageBytes/rowImageDataUrl (02c-blobs.js), which only answer for
+     bytes already in memory — so fetch any a ref names first (#82). A
+     document with no refs asks for nothing and opens no store. */
+  await ensureBytes(rowImageShas(S.state.rows));
   if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
   if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
-  if (kind === "pdf") return { data: buildPdf(), filename: baseName + ".pdf" };
+  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows)), filename: baseName + ".pdf" };
   if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };

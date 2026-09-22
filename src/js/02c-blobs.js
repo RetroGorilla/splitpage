@@ -1,6 +1,6 @@
 import { sha256Bytes } from "./02b-doc-id.js";
 import { safeImageSrc } from "./04-richtext.js";
-import { imageDims, isSha256Hex, sniffImageMime } from "../../shared/blob-policy.js";
+import { imageDims, isSha256Hex, normalizeImageRef, sniffImageMime } from "../../shared/blob-policy.js";
 
 /* ================= image blobs (issue #82) =================
 
@@ -10,14 +10,16 @@ import { imageDims, isSha256Hex, sniffImageMime } from "../../shared/blob-policy
    record and its gate); this file is where the bytes behind a record live
    while the page is open, and the door to where they are kept durably.
 
-   NOT WIRED IN YET (#82 P1). Nothing else in src/js calls this module, and
-   importing it does nothing: no database is opened until the first
-   ensureBytes() or persist(). The later steps connect it — migrateRows
-   interning legacy data: URIs, the renderer asking for object URLs, the
-   file writer re-inlining bytes, the history job persisting before it
-   writes. The one connection so far is the hosted client (13-hosted.js,
-   #82 P5), which installs its server fetch as the remote source
-   (setRemoteSource) and reads bytes out to upload them.
+   How it is wired so far: every reader of a row's picture asks rowImage()
+   and friends below rather than a row key (#82 P2a) — the renderer
+   (blobImgHtml plus the hydrator), the exports and the local merge's
+   review; the hosted client (13-hosted.js, P5) installs its server fetch
+   as the remote source (setRemoteSource) and reads bytes out to upload
+   them; the desktop shell (20f-desktop.js) installs the blob folder as the
+   backend. No database is opened until the first ensureBytes() or
+   persist() that actually has a sha to ask about. Still to come (P2b):
+   migrateRows interning legacy data: URIs, the file writers re-inlining
+   bytes, the history job and drafts persisting before they write.
 
    Two halves, and the split is the point:
 
@@ -263,6 +265,208 @@ export function dataUrlForSync(sha) {
    decides to carry the bytes inline instead. */
 export function isDurableSync(sha) {
   return has(sha) && !!blobDurable[sha] && !!(blobBackend && blobBackend.persistent);
+}
+
+/* ---- a row's picture, whichever form it is stored in ----
+
+   A row carries its picture one of two ways while #82 lands: the legacy
+   inline `visualImage` data: URI, or `imageRef` — a record naming bytes in
+   this registry. Everything that READS a row's picture (the renderer, the
+   exports, the local merge's review) asks these instead of either key, so
+   the switch from one to the other (migrateRows, P2b) changes no reader.
+
+   A legacy data: URI wins over an imageRef, as migrateRows decides it.
+   The legacy test is a prefix, not safeImageSrc: every row in `state` has
+   come through migrateRows, which already refused anything else, and the
+   renderer asks this for every row on every render. */
+function legacyImageSrc(row) {
+  var v = row.visualImage;
+  return typeof v === "string" && v.slice(0, 11) === "data:image/" ? v : null;
+}
+
+/* null, or {ref, dataUrl}: exactly one of the two is set — `ref` a
+   normalized imageRef record (its bytes may not be in memory yet),
+   `dataUrl` a legacy inline picture. */
+export function rowImage(row) {
+  if (!row || typeof row !== "object") return null;
+  var legacy = legacyImageSrc(row);
+  if (legacy) return { ref: null, dataUrl: legacy };
+  var ref = normalizeImageRef(row.imageRef);
+  return ref ? { ref: ref, dataUrl: null } : null;
+}
+
+/* What an <img src> can show for the row right now, synchronously: the
+   legacy data: URI, or the blob: URL of bytes this page holds. null when
+   there is no picture, or its bytes are not here yet (ensureBytes first —
+   or render an <img data-blob>, blobImgHtml, and let the hydrator do it). */
+export function rowImageUrl(row) {
+  var img = rowImage(row);
+  if (!img) return null;
+  return img.dataUrl || urlForSync(img.ref.sha256);
+}
+
+/* The same picture as one comparable string — the sha for a ref, the URI
+   for a legacy one — for "did the picture change". */
+export function rowImageKey(row) {
+  var img = rowImage(row);
+  return img ? (img.ref ? img.ref.sha256 : img.dataUrl) : null;
+}
+
+/* The inline data: URI form, for the writers that carry pictures inline
+   (.md, .splitpage, standalone HTML). A legacy URI is returned exactly as
+   stored. null when there is no picture or its bytes are not here. */
+export function rowImageDataUrl(row) {
+  var img = rowImage(row);
+  if (!img) return null;
+  return img.dataUrl || dataUrlForSync(img.ref.sha256);
+}
+
+/* The picture's bytes and type, synchronously, or null: no picture, bytes
+   not here, or a legacy URI that does not decode. `mime` is what the bytes
+   ARE (sniffed) for a legacy URI too — the name it was stored under can
+   lie — falling back to the declared type only when sniffing cannot tell.
+   The bytes are READ ONLY (see bytesForSync). */
+export function rowImageBytes(row) {
+  var img = rowImage(row);
+  if (!img) return null;
+  if (img.ref) {
+    var held = bytesForSync(img.ref.sha256);
+    return held ? { bytes: held, mime: img.ref.mime, width: img.ref.width, height: img.ref.height } : null;
+  }
+  var url = img.dataUrl.replace(/[\t\n\r]/g, "");
+  var bytes = forgivingBase64Decode(url.slice(url.indexOf(",") + 1));
+  if (!bytes) return null;
+  var declared = /^data:(image\/[a-z0-9.+-]+)/i.exec(url);
+  var dims = imageDims(bytes);
+  return {
+    bytes: bytes,
+    mime: sniffImageMime(bytes) || (declared ? declared[1].toLowerCase() : "image/jpeg"),
+    width: dims ? dims.width : 0,
+    height: dims ? dims.height : 0
+  };
+}
+
+/* The shas of every ref'd picture in a list of rows, once each — what a
+   writer hands ensureBytes() before it reads rowImageBytes/DataUrl. */
+export function rowImageShas(rows) {
+  var out = [], seen = {};
+  (Array.isArray(rows) ? rows : []).forEach(function (row) {
+    var img = rowImage(row);
+    if (!img || !img.ref || seen[img.ref.sha256]) return;
+    seen[img.ref.sha256] = true;
+    out.push(img.ref.sha256);
+  });
+  return out;
+}
+
+/* The <img> for a ref: data-blob names the bytes, width/height reserve the
+   box before they arrive, and src is filled in right here when this page
+   already holds them — otherwise by the hydrator below, after an async
+   ensureBytes(). Synchronous, so a render can call it. `cls` is an
+   optional class list. Every value is a sha, an integer or a blob: URL
+   this page minted, but they are escaped anyway. */
+export function blobImgHtml(ref, cls) {
+  var url = urlForSync(ref.sha256);
+  return '<img' + (cls ? ' class="' + blobAttr(cls) + '"' : '') +
+    ' data-blob="' + blobAttr(ref.sha256) + '" width="' + (ref.width | 0) + '" height="' + (ref.height | 0) + '" alt=""' +
+    (url ? ' src="' + blobAttr(url) + '"' : '') + '>';
+}
+
+function blobAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ---- the hydrator ----
+
+   One MutationObserver over the whole document gives every
+   <img data-blob="<sha>"> that arrives without a src one: it asks
+   ensureBytes() (memory, then the backend, then the remote source) and
+   then sets src to the blob: URL. What nobody has is marked
+   data-blob-state="missing" with alt "Image unavailable" — the element
+   and its data-blob stay, so nothing that reads the markup back loses the
+   reference, and a later render that finds the bytes simply repaints it.
+   The renderer stays synchronous; this is the only async half. */
+var BLOB_MISSING_TEXT = "Image unavailable";
+var hydrateQueued = {};
+var hydrateScheduled = false;
+var hydrateObserver = null;
+
+function collectBlobImgs(node, into) {
+  if (!node || node.nodeType !== 1) return;
+  if (node.tagName === "IMG" && node.hasAttribute("data-blob")) into.push(node);
+  if (node.firstElementChild) {
+    var found = node.querySelectorAll("img[data-blob]");
+    for (var i = 0; i < found.length; i++) into.push(found[i]);
+  }
+}
+
+function needsHydrating(img) {
+  return img.isConnected && !img.getAttribute("src") && img.getAttribute("data-blob-state") !== "missing" &&
+    isSha256Hex(img.getAttribute("data-blob"));
+}
+
+/* Fills every listed <img data-blob> it can right now, and returns the
+   shas of those still waiting for bytes. */
+function fillBlobImgs(imgs) {
+  var waiting = [];
+  imgs.forEach(function (img) {
+    if (!needsHydrating(img)) return;
+    var sha = img.getAttribute("data-blob");
+    var url = urlForSync(sha);
+    if (url) img.setAttribute("src", url);
+    else if (waiting.indexOf(sha) === -1) waiting.push(sha);
+  });
+  return waiting;
+}
+
+export function hydrateBlobImages(root) {
+  var imgs = [];
+  collectBlobImgs(root || document.documentElement, imgs);
+  var waiting = fillBlobImgs(imgs);
+  if (!waiting.length) return Promise.resolve([]);
+  waiting.forEach(function (sha) { hydrateQueued[sha] = true; });
+  return ensureBytes(waiting).then(function (missing) {
+    waiting.forEach(function (sha) { delete hydrateQueued[sha]; });
+    var again = [];
+    collectBlobImgs(document.documentElement, again);
+    fillBlobImgs(again);
+    again.forEach(function (img) {
+      if (!needsHydrating(img) || missing.indexOf(img.getAttribute("data-blob")) === -1) return;
+      img.setAttribute("data-blob-state", "missing");
+      img.setAttribute("alt", BLOB_MISSING_TEXT);
+      img.setAttribute("title", BLOB_MISSING_TEXT);
+    });
+    return missing;
+  });
+}
+
+function scheduleHydrate(imgs) {
+  var waiting = fillBlobImgs(imgs).filter(function (sha) { return !hydrateQueued[sha]; });
+  if (!waiting.length || hydrateScheduled) return;
+  hydrateScheduled = true;
+  Promise.resolve().then(function () {
+    hydrateScheduled = false;
+    hydrateBlobImages(document.documentElement);
+  });
+}
+
+function startBlobHydrator() {
+  if (hydrateObserver || typeof MutationObserver !== "function" || !document.documentElement) return;
+  hydrateObserver = new MutationObserver(function (records) {
+    var imgs = [];
+    for (var i = 0; i < records.length; i++) {
+      var r = records[i];
+      if (r.type === "attributes") collectBlobImgs(r.target, imgs);
+      else for (var k = 0; k < r.addedNodes.length; k++) collectBlobImgs(r.addedNodes[k], imgs);
+    }
+    if (imgs.length) scheduleHydrate(imgs);
+  });
+  hydrateObserver.observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ["data-blob", "src"]
+  });
+  var initial = [];
+  collectBlobImgs(document.documentElement, initial);
+  if (initial.length) scheduleHydrate(initial);
 }
 
 /* ---- the backend ---- */
@@ -579,6 +783,7 @@ var idbBlobBackend = {
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
+  startBlobHydrator();
   /* Test backdoor, the way window.__historyTest is 03a's. Opens nothing by
      itself: the backend is chosen on the first async call. */
   window.__blobsTest = {
@@ -591,6 +796,9 @@ export function __init() {
     isDurableSync: isDurableSync,
     ensureBytes: ensureBytes,
     persist: persist,
+    rowImage: rowImage,
+    rowImageUrl: rowImageUrl,
+    hydrate: hydrateBlobImages,
     backendInfo: function () {
       return resolveBlobBackend().then(function () { return backendInfo(); });
     },

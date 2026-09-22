@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { rowImageBytes } from "./02c-blobs.js";
 import { pad2 } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -10,7 +11,7 @@ import {
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, htmlToRuns, latin1Bytes } from "./14-export.js";
-import { dataUrlToBytes, jpegSize, safeAspect } from "./15-docx.js";
+import { jpegSize, safeAspect } from "./15-docx.js";
 
 /* ================= pdf ================= */
 
@@ -100,7 +101,67 @@ function pdfWrapRuns(runs, maxWidth, size) {
   return lines;
 }
 
-export function buildPdf() {
+/* ---- pictures, as JPEG ----
+
+   This writer embeds images one way only, /Filter /DCTDecode — the image
+   stream IS a JPEG file. A PNG, GIF or WebP written the same way was a
+   stream no reader could decode: the picture silently never appeared
+   (#82 found it). So every picture is JPEG by the time buildPdf() sees it:
+   a JPEG as it is, anything else drawn onto a white canvas (PDF has no
+   use for its transparency here) and encoded — which needs the browser's
+   decoder, and is why this is async and done before buildPdf(). */
+var PDF_IMAGE_MAX_PX = 2000;
+
+function pdfJpegOf(pic) {
+  if (!pic) return Promise.resolve(null);
+  /* jpegSize: the CODED size, which is what /Width and /Height must say —
+     an EXIF-rotated record's width/height would not be. */
+  if (pic.mime === "image/jpeg") return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
+  return new Promise(function (resolve) {
+    var url;
+    try { url = URL.createObjectURL(new Blob([pic.bytes], { type: pic.mime })); } catch (e) { resolve(null); return; }
+    var img = new Image();
+    function done(v) {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      resolve(v);
+    }
+    img.onload = function () {
+      try {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var scale = Math.min(1, PDF_IMAGE_MAX_PX / Math.max(w, h, 1));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+          if (!blob) { done(null); return; }
+          blob.arrayBuffer().then(function (ab) {
+            var bytes = new Uint8Array(ab);
+            done({ bytes: bytes, size: jpegSize(bytes) });
+          }, function () { done(null); });
+        }, "image/jpeg", 0.9);
+      } catch (e) { done(null); }
+    };
+    img.onerror = function () { done(null); };
+    img.src = url;
+  });
+}
+
+/* One entry per row (by index): {bytes, size} or null. Bytes behind an
+   imageRef have to be in memory first — buildFileData awaits
+   ensureBytes() before it calls this. */
+export function pdfImagesFor(rows) {
+  return Promise.all((rows || []).map(function (row) {
+    return pdfJpegOf(rowImageBytes(row)).then(null, function () { return null; });
+  }));
+}
+
+/* `jpegs` is pdfImagesFor(S.state.rows)'s answer. Without it only
+   pictures that are already JPEG are drawn. */
+export function buildPdf(jpegs) {
   var PW = 612, PH = 792, M = 54;
   var GUT = 30, GAP = 16;
   var COLW = (PW - M * 2 - GUT - GAP) / 2;
@@ -179,10 +240,15 @@ export function buildPdf() {
     var aLines = pdfWrapRuns(htmlToRuns(row.audioText), COLW, SIZE);
 
     var imgH = 0, imgRef = null;
-    if (row.visualImage) {
+    var jpeg = jpegs ? jpegs[idx] : null;
+    if (!jpegs) {
+      var pic = rowImageBytes(row);
+      if (pic && pic.mime === "image/jpeg") jpeg = { bytes: pic.bytes, size: jpegSize(pic.bytes) };
+    }
+    if (jpeg) {
       try {
-        var bytes = dataUrlToBytes(row.visualImage);
-        var dim = safeAspect(jpegSize(bytes));
+        var bytes = jpeg.bytes;
+        var dim = safeAspect(jpeg.size);
         var name = "Im" + (images.length + 1);
         images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
         var natW = COLW, natH = COLW * dim.ratio;

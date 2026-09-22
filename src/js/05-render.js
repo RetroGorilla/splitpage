@@ -9,6 +9,7 @@ import {
 } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
+import { blobImgHtml, rowImage } from "./02c-blobs.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot } from "./04-richtext.js";
 import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
@@ -189,12 +190,19 @@ function rowGutterHtml(row, index, review) {
   );
 }
 
+/* The picture is either a legacy inline data: URI, shown as it always was,
+   or an imageRef (#82), shown through blobImgHtml: src when this page
+   already holds the bytes, otherwise data-blob alone for the hydrator
+   (02c-blobs.js) to fill in after ensureBytes. The src is part of the
+   string, so the part repaints once the bytes are here — the signature
+   stays the markup, and render() stays synchronous. */
 function rowMediaHtml(row, review) {
   var imageBlock;
-  if (row.visualImage) {
+  var img = rowImage(row);
+  if (img) {
     imageBlock =
       '<div class="image-thumb-wrap">' +
-        '<img src="' + escapeHtml(row.visualImage) + '" alt="">' +
+        (img.ref ? blobImgHtml(img.ref) : '<img src="' + escapeHtml(img.dataUrl) + '" alt="">') +
         (review ? '' :
           '<div class="image-thumb-actions">' +
             '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
@@ -209,7 +217,7 @@ function rowMediaHtml(row, review) {
         '" title="Attach a reference image — or drag one anywhere onto this scene’s visual column">' +
         '<span class="clip-icon" aria-hidden="true">📎</span>Image</button>';
   }
-  return '<div class="visual-media' + (row.visualImage ? '' : ' is-empty') + '" data-id="' +
+  return '<div class="visual-media' + (img ? '' : ' is-empty') + '" data-id="' +
     row.id + '">' + imageBlock + '</div>';
 }
 
@@ -957,6 +965,9 @@ export function __init() {
      derivations and the idle refreshes they happened in
      (07-production-tags.js). */
   window.__renderTest = {
+    /* render() itself, for a suite that has changed state by hand — the
+       image rows 65-blobs.txt gives an imageRef, say. */
+    render: render,
     counts: function () {
       var p = productionIndexStats();
       return { render: renderCalls, rowsPainted: rowsPainted, cellsPainted: cellsPainted,

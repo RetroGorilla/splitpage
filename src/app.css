@@ -553,7 +553,13 @@
     border-radius: var(--radius-sm);
   }
   .image-thumb-wrap { position: relative; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
-  .image-thumb-wrap img { display: block; width: 100%; max-height: 160px; object-fit: cover; }
+  .image-thumb-wrap img { display: block; width: 100%; height: auto; max-height: 160px; object-fit: cover; }
+  /* An image whose bytes are still being fetched (#82): the box its
+     width/height reserve, tinted, until the hydrator (02c-blobs.js) sets
+     its src — and, when nobody has the bytes, the "Image unavailable"
+     alt text in that box. Any <img data-blob>, wherever it sits. */
+  img[data-blob]:not([src]) { background: var(--surface-2); color: var(--text-dim); font-size: 12px; text-align: center; }
+  img[data-blob][data-blob-state="missing"] { min-height: 48px; border: 1px dashed var(--border); }
   .image-thumb-actions {
     position: absolute; top: 6px; right: 6px; display: flex; gap: 4px;
     opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard);

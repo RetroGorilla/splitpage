@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { escapeHtml, makeId } from "./02-state.js";
+import { rowImage, rowImageBytes } from "./02c-blobs.js";
 import { safeHref } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
@@ -175,10 +176,14 @@ export function buildDocx() {
 
   S.state.rows.forEach(function (row, idx) {
     var visual = "";
-    if (row.visualImage) {
+    /* A ref'd picture's bytes are in memory by now: buildFileData
+       (18-local-files.js) awaits ensureBytes before building. One that
+       nobody had is left out, as an unreadable one always was. */
+    var pic = rowImage(row) && rowImageBytes(row);
+    if (pic) {
       try {
-        var bytes = dataUrlToBytes(row.visualImage);
-        var dim = safeAspect(jpegSize(bytes));
+        var bytes = pic.bytes;
+        var dim = safeAspect(rowImage(row).ref ? { w: pic.width, h: pic.height } : jpegSize(bytes));
         var img = rels.addImage(bytes);
         var maxW = 2750000; /* ~2.9in in EMU, fits the cell */
         var cx = Math.round(Math.min(maxW, dim.w * 9525));

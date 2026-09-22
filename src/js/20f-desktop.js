@@ -2,6 +2,7 @@ import { S } from "./_state.js";
 import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
+import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -365,6 +366,11 @@ function wireReassignDocId() {
 export function initDesktop() {
   if (!S.DESKTOP) return;
 
+  /* Images (#82): the registry's store is the main process's blob folder.
+     Normally already done by __init() below; repeated here for a bridge
+     swapped in after it, and harmless when it is the same one. */
+  wireDesktopBlobs(S.DESKTOP);
+
   /* Google Drive (issue #10). The web build's sign-in (Google Identity
      Services) needs an http/https origin and splitpage://app can never be
      one, so on desktop the MAIN process signs in through a loopback
@@ -579,9 +585,26 @@ function openPendingServerDocForTab(serverDocId) {
    get() never rejects: a blob that is not here, or a call main refused, is
    null, and the registry then tries the next source (the server, or a
    placeholder). missing() asks in slices of 2000, the most one
-   splitpage:blob-missing takes. Nothing calls this yet; 02c-blobs.js's
-   wiring does, once it lands. */
+   splitpage:blob-missing takes.
+
+   wireDesktopBlobs() below installs it as the registry's backend — at
+   module init, before anything can ask the registry for a store, so on
+   desktop no image ever lands in the renderer's IndexedDB instead. */
 var DESKTOP_BLOB_MISSING_SLICE = 2000;
+
+/* The bridge whose blob backend the registry is using, if any. */
+var wiredBlobBridge = null;
+
+/* Points the registry (02c-blobs.js) at `bridge`'s blob folder. A bridge
+   without the blob calls changes nothing, unless the registry is still on
+   an earlier bridge's — then it goes back to choosing its own store. */
+export function wireDesktopBlobs(bridge) {
+  if (bridge && bridge === wiredBlobBridge) return;
+  var backend = makeDesktopBlobBackend(bridge);
+  if (!backend && !wiredBlobBridge) return;
+  wiredBlobBridge = backend ? bridge : null;
+  setBlobBackend(backend);
+}
 
 export function makeDesktopBlobBackend(bridge) {
   var b = bridge;
@@ -589,7 +612,11 @@ export function makeDesktopBlobBackend(bridge) {
     return null;
   }
   return {
+    /* name/persistent are what 02c-blobs.js's backend interface reads;
+       `kind` is kept for anything that already asked for it. */
+    name: "desktop",
     kind: "desktop",
+    persistent: true,
     get: function (sha) {
       return Promise.resolve()
         .then(function () { return b.blobGet(sha); })
@@ -1199,6 +1226,10 @@ function addFakeDesktopHistory(backend) {
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
+  /* As early as the bridge is known (00-prelude.js sets S.DESKTOP): the
+     registry picks its store on its first async call, and on desktop that
+     must be the blob folder, never this renderer's IndexedDB. */
+  if (S.DESKTOP) wireDesktopBlobs(S.DESKTOP);
   window.__desktopTest = {
     makeHandle: makeDesktopHandle,
     runMenuCommand: runDesktopMenuCommand,
@@ -1216,6 +1247,10 @@ export function __init() {
     initDesktop: initDesktop,
     setBackend: function (fake) {
       S.DESKTOP = fake;
+      /* A fake with the blob calls (makeFakeBackend({blobs:true})) becomes
+         the registry's store too, the way the real bridge is at boot; one
+         without them leaves the registry where it was. */
+      if (fake && typeof fake.blobPut === "function") wireDesktopBlobs(fake);
       /* initDesktop() ran at boot against the REAL bridge, which in a browser
          suite is null — so no DESKTOP callback was ever registered there.
          Swapping a fake in has to re-do the duplicate-id registration, or
@@ -1223,7 +1258,10 @@ export function __init() {
          works when nothing is listening to it. */
       wireReassignDocId();
     },
-    restoreBackend: function () { S.DESKTOP = window.splitpageDesktop || null; },
+    restoreBackend: function () {
+      S.DESKTOP = window.splitpageDesktop || null;
+      wireDesktopBlobs(S.DESKTOP);
+    },
     /* Lets desktop/test/smoke.mjs (SMOKE-HARNESS's tabIdOfTarget/shell) read
        which tab a given page is, over CDP, without any DOM UI to click on. */
     get tabId() { return S.DESKTOP && S.DESKTOP.tabId; },

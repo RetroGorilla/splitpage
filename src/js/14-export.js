@@ -9,6 +9,7 @@ import {
   normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
+import { has as hasBlob, rowImage, rowImageBytes, rowImageDataUrl } from "./02c-blobs.js";
 import {
   RELOAD_GUARD_KEY,
   applyMerge,
@@ -35,7 +36,6 @@ import {
   saveToServer,
   serverSessionExpired
 } from "./13-hosted.js";
-import { dataUrlToBytes } from "./15-docx.js";
 import {
   checkFileConflict,
   deliverFile,
@@ -688,20 +688,29 @@ function dataUrlImageExt(dataUrl) {
    writes the reference) and markdownExportImages() (which writes the
    bytes), so the two can never point at different names. */
 function markdownImagePath(row, i) {
-  return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(row.visualImage);
+  var img = rowImage(row);
+  return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(img && img.ref ? "data:" + img.ref.mime : img && img.dataUrl);
+}
+
+/* Whether the plain Markdown export shows the row's picture: a legacy
+   inline one always, a ref'd one when its bytes are here to be written
+   alongside (buildFileData awaits ensureBytes first) — a reference to a
+   file the zip does not carry would be a broken image. */
+function markdownHasPicture(row) {
+  var img = rowImage(row);
+  return !!img && (!!img.dataUrl || hasBlob(img.ref.sha256));
 }
 
 /* Every image the plain Markdown export needs to carry alongside it, as
-   real files rather than base64 text — dataUrlToBytes lives in
-   15-docx.js but every fragment shares one closure (build.mjs inlines
-   them into a single script), so it's already in scope here. */
+   real files rather than base64 text. */
 export function markdownExportImages() {
   var out = [];
   S.state.rows.forEach(function (row, i) {
-    if (!row.visualImage) return;
-    try {
-      out.push({ path: markdownImagePath(row, i), bytes: dataUrlToBytes(row.visualImage) });
-    } catch (e) { /* unreadable image data — the export just won't carry this one's picture */ }
+    /* A ref'd picture's bytes are in memory by now (buildFileData awaits
+       ensureBytes first); one nobody had, or unreadable legacy data, is
+       left out — the export just won't carry that one's picture. */
+    var pic = rowImage(row) && rowImageBytes(row);
+    if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
   });
   return out;
 }
@@ -731,7 +740,7 @@ export function toMarkdownDoc() {
   S.state.rows.forEach(function (row, i) {
     lines.push("### Scene " + pad2(i + 1));
     lines.push("");
-    if (row.visualImage) {
+    if (markdownHasPicture(row)) {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
       lines.push("");
     }
@@ -744,7 +753,7 @@ export function toMarkdownDoc() {
     if (amd) {
       lines.push(amd);
       lines.push("");
-    } else if (!vmd && !row.visualImage) {
+    } else if (!vmd && !markdownHasPicture(row)) {
       lines.push("_(blank scene)_");
       lines.push("");
     }
@@ -776,8 +785,11 @@ function mdRichTableCell(md) {
    deliberately not part of this comparison basis. */
 export function mdSceneCellSource(row, i) {
   var visual = htmlToMarkdown(row.visualText);
-  if (row.visualImage) {
-    visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
+  /* The picture inline, as it always was (#82 D2) — a legacy URI exactly as
+     stored, a ref'd one as its canonical data: URI. */
+  var image = rowImageDataUrl(row);
+  if (image) {
+    visual = "![visual for scene " + pad2(i + 1) + "](" + image + ")" + (visual ? "<br>" + visual : "");
   }
   return {
     visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),

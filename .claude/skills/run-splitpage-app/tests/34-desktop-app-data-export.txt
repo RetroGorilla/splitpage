@@ -165,6 +165,22 @@ expect fakeH._historyDump()[window.__d3].length === 1 && fakeH._historyDump()[wi
 eval (function(){ A.useBlobBackend(null); return true; })()
 
 # =============================================================================
+# 6. the registry's store IS the desktop blob folder (#82 P2a). At boot
+# 20f-desktop.js wires the real bridge in before anything can ask the
+# registry for a store; setBackend() does the same for a fake that has the
+# blob calls, so this is that wiring, driven.
+# =============================================================================
+eval (async function(){ window.fakeJ = D.makeFakeBackend({blobs: true, blobHash: hashOf}); D.setBackend(window.fakeJ); B.forgetMemory(); window.__jInfo = await B.backendInfo(); var r = B.intern(imgBytes); window.__jFailed = await B.persist([r.sha256]); return JSON.stringify([__jInfo, __jFailed]); })()
+expect __jInfo.name === 'desktop' && __jInfo.persistent === true
+expect __jFailed.length === 0 && !!fakeJ._blobs[imgRec.sha256] && B.isDurableSync(imgRec.sha256)
+expect fakeJ._blobCalls.some(function(c){ return c.op === 'put' && c.sha === imgRec.sha256; })
+# a bridge without the blob calls leaves the registry where it was; going
+# back to no bridge at all hands the choice back to the registry
+eval (async function(){ D.setBackend(D.makeFakeBackend()); window.__kInfo = await B.backendInfo(); D.restoreBackend(); window.__lInfo = await B.backendInfo(); return JSON.stringify([__kInfo, __lInfo]); })()
+expect __kInfo.name === 'desktop'
+expect __lInfo.name !== 'desktop' && !B.isDurableSync(imgRec.sha256)
+
+# =============================================================================
 # cleanup
 # =============================================================================
 eval (function(){ D.restoreBackend(); localStorage.removeItem('splitpage-server-bookmarks'); localStorage.removeItem('splitpage-comment-author'); return true; })()
