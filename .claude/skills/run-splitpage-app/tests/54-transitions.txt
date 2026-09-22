@@ -1,10 +1,12 @@
-# The header's condense/expand as one movement (#52, 20i-topbar.js + app.css).
+# The header's condense/expand as one movement (#52, 20i-topbar.js + app.css)
+# and the document keeping step with a side panel that is leaving as well as
+# arriving (#53, the #root rules in app.css).
 #
 # Animation cannot be judged headless — whether the movement READS as one
 # thing is a human's call. Its mechanics can be, and that is what this suite
 # is: the layout lands in one frame, a transform puts the pixels back, a
 # reversal cancels what was running instead of layering a second transform
-# over it, and the transitions are the ones the issue asked for.
+# over it, and the transitions are the ones the two issues asked for.
 #
 # Every mid-movement reading is taken in ONE eval into a snapshot object and
 # asserted against afterwards. A run of `expect`s straight against the live
@@ -195,5 +197,79 @@ expect window.__rules('reduced-motion', ':root').indexOf('--dur-move: 0.01ms') >
 expect window.__rules('reduced-motion', ':root').indexOf('--dur-enter: 0.01ms') >= 0
 expect window.__rules('reduced-motion', ':root').indexOf('--dur-exit: 0.01ms') >= 0
 expect window.__rules('reduced-motion', '.topbar').indexOf('transition: none') >= 0
+expect window.__rules('reduced-motion', '.comments-panel').indexOf('transition: none') >= 0
+# nothing new below 1100px: the document's own movement is declared inside the
+# same min-width as the padding it animates
+expect window.__rules('min-width: 1100px', '#root').indexOf('padding-right') >= 0
+
+# =============================================================================
+# #53 — the document travels with the panel, and on the panel's own terms in
+# BOTH directions. Closed, #root holds the closing declaration (--dur-exit,
+# the shorter one the panel leaves on); open, it holds the arriving one. One
+# rule for both is what left the document still travelling for another 60ms
+# after the panel had gone.
+# =============================================================================
+eval (function(){window.__basePad=window.__pad();return 'page gutter = '+window.__basePad+'px';})()
+expect document.body.classList.contains('panel-open') == false
+expect getComputedStyle(document.getElementById('root')).transitionProperty == padding-right
+expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.12s
+expect window.__basePad < 200
+
+jsclick #btn-production
+expect document.body.classList.contains('panel-open')
+expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.18s
+expect window.__openW() == 520
+sleep 400
+expect window.__pad() == 540
+
+# --- switching to a NARROWER panel settles once: .panel-open never comes off,
+# --- so this is an arrival at a new width rather than a departure followed by
+# --- an arrival, and every sample on the way lies inside the span between the
+# --- two widths instead of overshooting either
+jsclick #btn-comments
+expect window.__openW() == 400
+expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.18s
+sleep 40
+expect window.__pad() >= 420
+expect window.__pad() <= 540
+sleep 40
+expect window.__pad() >= 420
+expect window.__pad() <= 540
+sleep 40
+expect window.__pad() >= 420
+expect window.__pad() <= 540
+sleep 400
+expect window.__pad() == 420
+
+# --- closing reverses on the leaving curve and lands back on the page gutter
+jsclick #btn-comments
+expect document.body.classList.contains('panel-open') == false
+expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.12s
+sleep 300
+expect window.__pad() === window.__basePad
+
+# =============================================================================
+# #53 — a resize drag must not ease. --open-panel-width is rewritten on every
+# mousemove, and a 180ms transition on each of them would leave the document a
+# fifth of a second behind the edge under the pointer. Driven with synthetic
+# mousedown/mousemove/mouseup, the same way 50-panel-resize.txt drives one.
+# =============================================================================
+jsclick #btn-production
+sleep 400
+expect window.__pad() == 540
+eval (function(){document.getElementById('production-panel-resize-handle').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,clientX:880,clientY:220}));return true;})()
+expect document.getElementById('production-panel-resize-handle').classList.contains('is-dragging')
+expect document.body.classList.contains('is-panel-resizing')
+expect getComputedStyle(document.getElementById('root')).transitionDuration == 0s
+# the pointer moves 80px left, so the panel widens by 80 and the document has
+# to be there already — read in the same turn, with no sleep to ease into
+eval (function(){document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,cancelable:true,clientX:800,clientY:220}));return true;})()
+expect window.__openW() == 600
+expect window.__pad() == 620
+eval (function(){document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,clientX:800,clientY:220}));return true;})()
+expect document.getElementById('production-panel-resize-handle').classList.contains('is-dragging') == false
+expect document.body.classList.contains('is-panel-resizing') == false
+expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.18s
+expect window.__pad() == 620
 
 quit

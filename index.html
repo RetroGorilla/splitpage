@@ -3312,14 +3312,33 @@
      arrived afterwards. Same duration and same curve as the panel itself is
      all it takes for the two to read as one movement.
 
+     Two declarations rather than one, the same shape .comments-panel and
+     .comments-panel[hidden] have a few lines above, because the panel does
+     not leave the way it arrives: it comes in over --dur-enter and goes out
+     over the shorter --dur-exit. One rule here meant the document opened
+     with the panel and then went on travelling for another 60ms after the
+     panel had closed — the half of the movement nobody is watching, but two
+     speeds for one movement all the same (#53). The transition that runs is
+     the one in the AFTER-change style, so the base rule is the closing one
+     and the .panel-open rule is the opening one. That also gets switching
+     panels right: .panel-open never comes off there, so a jump from a wide
+     Production panel to a narrow Comments panel is an arrival at a new
+     width, settling once on the enter curve rather than bouncing between
+     two.
+
      Not while the panel is being dragged: --open-panel-width is rewritten on
      every mousemove there, and a 180ms transition on each of them would
      leave the document lagging a fifth of a second behind the edge the user
      is holding. is-panel-resizing (03b-side-panels.js) is on the body for
-     exactly the span of the drag. It also keeps 50-panel-resize.txt reading
-     settled numbers rather than mid-transition ones. */
+     exactly the span of the drag, and this rule is last so it outranks the
+     .panel-open one it shares a specificity with. It also keeps
+     50-panel-resize.txt reading settled numbers rather than mid-transition
+     ones. */
   @media (min-width: 1100px) {
     #root {
+      transition: padding-right var(--dur-exit) var(--ease-exit);
+    }
+    body.panel-open #root {
       transition: padding-right var(--dur-enter) var(--ease-enter);
     }
     body.is-panel-resizing #root { transition: none; }
