@@ -368,8 +368,10 @@ eval (function(){H.setCapOverride(null); H.setNow(null); return true;})()
 # planHistoryEviction's own fixtures (a)-(g) used to sit here, driven through
 # window.__historyTest.planEviction even though the planner is pure and needs
 # no backend at all. They are src/test/history-eviction.test.mjs now (#67).
-# The hook itself stays: desktop/test/smoke.mjs's caseHistoryPlannerTwin drives
-# it to prove main.js's line-for-line copy still answers the same thing.
+# The hook is gone too (#76): it only survived for desktop/test/smoke.mjs's
+# caseHistoryPlannerTwin, which held main.js's line-for-line copy of the
+# planner against the renderer's. There is one copy now — shared/history-
+# policy.js, which both builds import — so there is nothing left to compare.
 # =============================================================================
 
 # =============================================================================

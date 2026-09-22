@@ -1,16 +1,17 @@
-/* planHistoryEviction (03a-history-store.js) — what version history throws
- * away when the budget runs out.
+/* planHistoryEviction (shared/history-policy.js) — what version history
+ * throws away when the budget runs out.
  *
  * Ported from the "eviction planner fixtures (a)-(g)" block of
  * tests/24-history.txt, which booted a browser and reached this through
  * window.__historyTest.planEviction even though the comment above it
  * already said the function is PURE and needs no backend at all (#67).
  *
- * The backdoor member itself STAYS, and deliberately: desktop/test/smoke
- * .mjs drives it to prove main.js's line-for-line copy of this planner
- * still answers exactly what the renderer's does (caseHistoryPlannerTwin).
- * That is a two-implementation comparison over CDP, not a unit test, and
- * nothing here can replace it.
+ * It was imported from src/js/03a-history-store.js until #76, which moved
+ * the planner into shared/ — desktop/main.js carried a line-for-line copy
+ * of it, and a smoke case (caseHistoryPlannerTwin) ran fixtures through
+ * both over CDP to prove they had not drifted. One copy, no drift, no
+ * comparison: this suite is now the whole of the planner's coverage, and
+ * it tests the file both the browser and the desktop app actually run.
  *
  * The order the planner applies, until the total fits:
  *   1. the Older bucket once expired (always, cap or not), as a whole
@@ -23,7 +24,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planHistoryEviction } from "../js/03a-history-store.js";
+import { planHistoryEviction } from "../../shared/history-policy.js";
 
 /* 24-history.txt's did(): a canonical 32-hex document id built out of a
    two-character tag, so a fixture reads as which document it is. */

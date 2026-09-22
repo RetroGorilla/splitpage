@@ -1,0 +1,6 @@
+{
+  "name": "splitpage-shared",
+  "private": true,
+  "type": "commonjs",
+  "description": "Policy the browser bundle, the Electron main process and the node --test suites all have to agree on. CommonJS on purpose — see history-policy.js's header."
+}

@@ -376,14 +376,12 @@ if (location.origin === "splitpage://app") {
        tabs and read back what the shell thinks is open, without a real
        click, a real drag or a visible window. */
     bridge.__testShell = (op, args) => invoke("splitpage:test-shell", op, args);
-    /* Runs main's own copy of planHistoryEviction over a fixture, so a smoke
-       case can hold it against the renderer's original
-       (window.__historyTest.planEviction) and prove the two have not drifted. */
-    bridge.__testHistoryPlan = (fixture) => invoke("splitpage:test-history-plan", fixture);
     /* Runs main's real chooseDuplicateLoser (DOC-CLAIMS) over two claims the
        test invents, so a case can prove what the duplicate rule does with a
-       given pair of birthtimes instead of reading the constant that gates
-       it. Answers 'a', 'b' or null. */
+       given pair instead of reading the source. Answers 'a', 'b' or null.
+       (__testHistoryPlan sat here too, running main's copy of
+       planHistoryEviction; #76 left one shared planner and nothing to
+       compare it with.) */
     bridge.__testDupLoser = (a, b) => invoke("splitpage:test-dup-loser", a, b);
     /* What the draft store thinks of a tab: this one by default, or any tab
        of this run by id (a case that crashes a page has to ask about it from
