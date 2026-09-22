@@ -283,11 +283,20 @@ the caret can't enter one and typing/backspace can't corrupt its
 
 Which scenes a tag appears in is read live (`collectTags()`). Which items
 are tracked at all is real storage, `state.productionTags`.
-`productionEntries()` merges registry + live mentions + owner/notes/status,
-and self-heals a live tag missing a registry entry without dirtying the
-document — so bulk delete must also call `removeTag()`, or the self-heal
-puts the item back. Selection state is UI-only, never serialised. Read the
-panel through `productionEntries()`, never `collectTags()`.
+`productionEntries()` merges registry + live mentions + owner/notes/status.
+It is a pure read since #84: one production index, derived lazily and kept
+until its inputs change — each row's id and two fields, each registry
+entry's five fields, compared rather than tracked (the `contentMemo()`
+reasoning: a key that is the input cannot go stale). The badges, both
+panels, the untagged scan and Tab completion all share it, so a render or an
+idle refresh derives it once. A live tag missing a registry entry still
+*shows*; giving it the entry is `healTagRegistry()`, an explicit step with
+no dirtying, run by `render()` and the idle refresh — and by `migrateRows()`
+(`missingRegistryTags()`) for every document that comes in, so a document
+looks after load exactly as it did when the read did the healing. Bulk
+delete must still also call `removeTag()`, or the heal puts the item back.
+Selection state is UI-only, never serialised. Read the panel through
+`productionEntries()`, never `collectTags()`.
 
 ### 3.5 Comment boxes share the script's event handlers
 
@@ -763,8 +772,8 @@ use it. A transition declaration outranks `!important` in the cascade, so
 the global `[hidden] { display: none !important }` does not defeat it.
 
 **`render()` must stay synchronous.** `04a-row-motion.js` animates scene
-reorder/insert/delete/collapse with FLIP — measure, let render() do its
-innerHTML swap, measure again, put things back with a transform and animate
+reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
+`#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
 `startViewTransition()` runs its callback asynchronously, and roughly 120
 assertions across `tests/` read the DOM immediately after a click with
@@ -774,7 +783,7 @@ once, synchronously, and defers only the pixels.
 Two traps it already works around:
 
 - **Measure in document space**, not viewport space (`rect.top + scrollY`).
-  `render()` refocuses the cell that had the caret, and focusing can scroll
+  `render()` can refocus the cell that had the caret, and focusing can scroll
   the page — measured in viewport space that scroll reads as every scene in
   the document having moved, and the whole script slides on a render that
   changed nothing.
@@ -827,6 +836,56 @@ both arguably wanted — but `queueAutoSave`'s inner `saveDoc()` call clears
 the latch on its own way out, so the serialization is not held by the
 mechanism the comment describes. Anyone touching autosave or the save
 indicator should give the two their own names first.
+
+### 3.16 `render()` reconciles `#rows`; `renderRow()` repaints one row
+
+Until #84 every `render()` rebuilt all of `#rows` through `innerHTML`, so a
+structural change anywhere (add, delete, move, a comment posted, a tag
+applied) cost every row, and the focused cell came back with its caret at
+the end. Now:
+
+- **A row is five parts** — its class, gutter, visual media and two fields —
+  built by `rowParts()` in `05-render.js`. The part strings are the change
+  detection: each row element carries the parts it was last painted from
+  (an expando, never an attribute), and a part whose freshly built string is
+  identical is not touched. `rowHtml()` is those parts joined, byte for byte
+  what it always produced.
+- **`render()`** keys `#rows` by row id (a shot strip by the ids it covers —
+  `rowGroupItems()` in `01b-hide-shot.js`, the same key `04a-row-motion.js`
+  uses), reuses every element still wanted, repaints only changed parts,
+  creates new rows, drops gone ones, and moves the rest with a
+  longest-increasing-run pass that never moves the row holding focus (a
+  moved node loses focus). A focused field that was reused keeps its node,
+  its content and its caret, untouched; one whose text changed underneath it
+  is rebuilt and gets the caret at the end, as every render used to. A
+  row's own attributes and its column wrappers' classes are reset each time
+  (a drag's `draggable`/`is-dragging`, an image drag's `drag-over`), as a
+  rebuild did.
+- **`renderRow(rowId)`** is the same repaint for one row, and returns false
+  when the row is not on screen (folded into a strip) so the caller renders
+  instead. `cycleRowStatus()` uses it; `paintRowStatus()`, which mirrored
+  `rowHtml()` by hand, is gone.
+- **Typing keeps the signature current.** `syncFieldFromDom()` records that
+  the field now shows what state says (`noteFieldPainted()`), so the next
+  render leaves it alone. Only a `#rows` cell counts: the writer edits the
+  same row and the `#rows` copy is repainted when it next renders.
+- **One cell builder.** `editableCellHtml()` builds the script field, the
+  writer's paragraph and the reply box.
+- **One idle refresh.** `scheduleProductionRefresh()`, `scheduleUntaggedScan()`,
+  `scheduleBrollRefresh()` and `scheduleWriterStats()` only mark their job
+  pending on `scheduleIdleRefresh()` (`07-production-tags.js`): one 180ms
+  debounce, capped at 1s of unbroken typing, runs everything pending against
+  one production index (§3.4). They used to be four timers (180/200/220/400ms)
+  each deriving the breakdown for itself.
+
+What a rebuild used to give for free and a reconcile has to do on purpose:
+`render()` still re-applies `ensureTrailingCaretSpot()` to every field, puts
+the presence marks back (a repainted gutter or field-wrap took its mark with
+it), disarms an armed row delete, and drops a saved link-popover Range only
+if its cell is gone. `tests/67-render-perf.txt` holds the numbers: typing in a
+300-scene document renders nothing and derives the breakdown once per idle
+refresh; an insert elsewhere keeps the focused cell's node and caret and
+builds two fields.
 
 ---
 
@@ -915,11 +974,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
    (§3.2).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
 6. **Don't run document-wide scans per keystroke.** Wire expensive refreshes
-   through `scheduleProductionRefresh()` (180ms debounce); `contentMemo()`
-   keys on the field's own HTML (never stale); one scan per render.
-7. **Repaint a row, don't re-render the document** for a single-field
-   change. `cycleRowStatus()` uses `paintRowStatus()`, focus-safe — mirrors
-   `rowHtml()`'s markup.
+   through the one idle refresh (`scheduleIdleRefresh()` and its four
+   `schedule*()` wrappers, 180ms debounce, §3.16); `contentMemo()` keys on
+   the field's own HTML (never stale); the production index is derived once
+   per change (§3.4).
+7. **Repaint a row, don't re-render the document** for a single-row
+   change: `renderRow(rowId)`, which repaints only the parts whose markup
+   changed and never a field whose text did not (§3.16). `cycleRowStatus()`
+   uses it.
 8. **Escape values going into CSS attribute selectors** with `cssAttr()` —
    stripping quotes isn't enough, a backslash reads as a CSS escape.
 9. **Markdown table cells need `mdCell()`**; a raw `|` shears the row.
@@ -1138,9 +1200,9 @@ evaluation order via `_entry.js`):
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
 | `04-richtext.js` | `walkSanitize`, html→markdown, video link cards |
-| `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s innerHTML swap, measures before and after in document space, animates what moved (§3.14) |
+| `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
-| `05-render.js` | `rowHtml`, `render`, field sync, rich-text commands |
+| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |

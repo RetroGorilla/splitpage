@@ -17,7 +17,7 @@ import {
   safeImageSrc,
   sanitizeHtml
 } from "./04-richtext.js";
-import { pad2, render } from "./05-render.js";
+import { editableCellHtml, pad2, render } from "./05-render.js";
 import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
@@ -682,20 +682,14 @@ function replyComposerHtml(commentId) {
     '<div class="reply-composer" data-for="' + commentId + '">' +
       '<input type="text" class="reply-name-input" placeholder="Your name" value="' +
         escapeHtml(draft.name !== undefined ? draft.name : getSavedAuthorName()) + '" autocomplete="off">' +
-      '<div class="field-wrap" style="margin-top:6px;">' +
-        '<div class="mini-toolbar" role="toolbar" aria-label="Reply formatting">' +
-          '<button type="button" data-cmd="bold" title="Bold">B</button>' +
-          '<button type="button" data-cmd="italic" title="Italic"><i>I</i></button>' +
-          '<button type="button" data-cmd="underline" title="Underline"><u>U</u></button>' +
-          '<button type="button" data-cmd="link" title="Add link">Link</button>' +
-        '</div>' +
-        '<div class="cell-editable" contenteditable="true" data-placeholder="Write a reply…">' + (draft.body || "") + '</div>' +
-        '<div class="link-popover" hidden>' +
-          '<input type="url" placeholder="https://example.com" data-role="link-input">' +
-          '<button type="button" data-action="link-confirm">Add</button>' +
-          '<button type="button" data-action="link-cancel">Cancel</button>' +
-        '</div>' +
-      '</div>' +
+      /* The same cell builder as a script field (05-render.js) — which is
+         what gives a reply box the script's toolbar handling for free. */
+      editableCellHtml({
+        value: draft.body,
+        placeholder: "Write a reply…",
+        toolbar: "reply",
+        wrapStyle: "margin-top:6px;"
+      }) +
       '<div class="comment-actions">' +
         '<button type="button" data-action="reply-post" data-id="' + commentId + '">Post reply</button>' +
         '<button type="button" data-action="reply-cancel" data-id="' + commentId + '">Cancel</button>' +

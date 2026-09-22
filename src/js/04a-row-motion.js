@@ -1,8 +1,8 @@
 /* ================= scene row motion (FLIP) =================
 
-   render() (05-render.js) rebuilds #rows by assigning innerHTML. Every
-   scene is thrown away and written again from state, which is what makes
-   it simple and what makes every structural change teleport: reorder a
+   render() (05-render.js) makes #rows match state in one synchronous
+   pass — since #84 by reconciling the rows by id rather than rebuilding
+   them, but either way every structural change teleports: reorder a
    scene, press Alt+Up, drop a drag, delete a row, collapse a run of shot
    scenes — the document rearranges between two frames with nothing to say
    which thing went where. Alt+Up is the worst of them. You press a key
@@ -31,8 +31,8 @@
    in for a collapsed run of shot scenes (01b-hide-shot.js). A strip is
    keyed by the ids it covers, so the same run collapsing and re-collapsing
    is recognised as the same strip rather than as one leaving and another
-   arriving. */
-function rowMotionKey(el) {
+   arriving. render()'s reconcile (05-render.js) keys #rows the same way. */
+export function rowMotionKey(el) {
   if (!el || !el.classList) return null;
   if (el.classList.contains("row")) return "row:" + el.getAttribute("data-id");
   if (el.classList.contains("hidden-shot-strip")) return "strip:" + el.getAttribute("data-ids");
