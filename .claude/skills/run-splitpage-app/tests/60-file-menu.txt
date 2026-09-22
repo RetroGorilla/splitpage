@@ -1,0 +1,122 @@
+# File menu reorganised into headed, collapsible sections (issue #51): an
+# unheaded top block (Save As…, Save to file, Autosave) that never collapses,
+# then Open, Server, Export, This document and Help & settings — each a real
+# <button class="menu-section-toggle" aria-expanded="…"> heading over a
+# <div class="menu-section-body"> that carries the plain `hidden` attribute
+# when collapsed. Which sections are open is a per-device preference
+# (localStorage key splitpage-file-menu-sections), never part of the
+# document, and every item keeps the id/data-file-action/role/title/label
+# text the old flat menu gave it (see 37-share-link.txt and friends for those
+# individually).
+
+open
+
+# --- default state on a pristine boot: Open, Server, This document start
+#     expanded; Export and Help & settings start collapsed -------------------
+click #btn-file
+sleep 200
+expect document.querySelector('.menu-section-toggle[data-menu-section="open"]').getAttribute('aria-expanded') == true
+expect !document.getElementById('menu-section-open').hidden
+expect document.querySelector('.menu-section-toggle[data-menu-section="server"]').getAttribute('aria-expanded') == true
+expect !document.getElementById('menu-section-server').hidden
+expect document.querySelector('.menu-section-toggle[data-menu-section="export"]').getAttribute('aria-expanded') == false
+expect document.getElementById('menu-section-export').hidden
+expect document.querySelector('.menu-section-toggle[data-menu-section="document"]').getAttribute('aria-expanded') == true
+expect !document.getElementById('menu-section-document').hidden
+expect document.querySelector('.menu-section-toggle[data-menu-section="help"]').getAttribute('aria-expanded') == false
+expect document.getElementById('menu-section-help').hidden
+
+# the top block has no heading and is never wrapped in a collapsible section
+expect document.getElementById('menu-save-back').closest('.menu-section') === null
+expect document.getElementById('menu-autosave').closest('.menu-section') === null
+
+# --- toggling a section hides/shows its items -------------------------------
+# Export starts collapsed: its items exist in the DOM but render nowhere
+expect document.querySelector('[data-file-action="export-docx"]').getBoundingClientRect().height == 0
+jsclick .menu-section-toggle[data-menu-section="export"]
+sleep 200
+expect document.querySelector('.menu-section-toggle[data-menu-section="export"]').getAttribute('aria-expanded') == true
+expect !document.getElementById('menu-section-export').hidden
+expect document.querySelector('[data-file-action="export-docx"]').getBoundingClientRect().height > 0
+
+# collapse it again — back to hidden, same as boot
+jsclick .menu-section-toggle[data-menu-section="export"]
+sleep 200
+expect document.querySelector('.menu-section-toggle[data-menu-section="export"]').getAttribute('aria-expanded') == false
+expect document.getElementById('menu-section-export').hidden
+expect document.querySelector('[data-file-action="export-docx"]').getBoundingClientRect().height == 0
+
+# Open starts expanded: collapsing it hides its items the same way
+expect document.getElementById('menu-drive-open').getBoundingClientRect().height > 0
+jsclick .menu-section-toggle[data-menu-section="open"]
+sleep 200
+expect document.querySelector('.menu-section-toggle[data-menu-section="open"]').getAttribute('aria-expanded') == false
+expect document.getElementById('menu-drive-open').getBoundingClientRect().height == 0
+# put it back before the rest of the suite relies on the default
+jsclick .menu-section-toggle[data-menu-section="open"]
+sleep 200
+expect document.getElementById('menu-drive-open').getBoundingClientRect().height > 0
+
+# --- a UI preference, not an edit — none of this dirties the document ------
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+
+# --- the Server heading follows the same "nothing to show" rule as its own
+#     items (updateServerMenu(), 13-hosted.js). In the harness's actual
+#     disconnected state, Open from the server… / Put this script on the
+#     server ARE hidden (pre-existing behaviour), but Publish & copy a link
+#     and Servers… stay offered on purpose (each says so in its own comment
+#     in page.html) — so the heading itself does not disappear just because
+#     nothing has answered. Simulating both of those hidden too proves the
+#     heading-hiding mechanism itself works, via the window.__shareTest hook
+#     a real server-mode flip would otherwise need. ------------------------
+expect document.getElementById('menu-server-open').hidden
+expect document.getElementById('menu-server-new').hidden
+expect !document.getElementById('menu-share-link').hidden
+expect !document.getElementById('menu-servers').hidden
+expect !document.getElementById('menu-section-server-wrap').hidden
+
+eval (function(){document.getElementById('menu-share-link').hidden=true;document.getElementById('menu-servers').hidden=true;window.__shareTest.updateMenu();})()
+sleep 200
+expect document.getElementById('menu-section-server-wrap').hidden
+
+eval (function(){document.getElementById('menu-share-link').hidden=false;document.getElementById('menu-servers').hidden=false;window.__shareTest.updateMenu();})()
+sleep 200
+expect !document.getElementById('menu-section-server-wrap').hidden
+
+jsclick #file-menu-close
+
+# --- every data-file-action button the old flat menu had is still present,
+#     exactly once — the issue's own regrouping table, 32 buttons total ----
+eval (function(){var ids=["save-as","save-back","autosave","open","paste","gdoc-import","drive-open","server-open","server-publish","share-link","servers","export-docx","export-md","export-md-table","export-csv","export-breakdown","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","history","find","toggle-hide-shot","setup","tagging-help","help","tour","about","export-app-data","import-app-data"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
+expect window.__actionCounts.length == 32
+expect window.__actionCounts.every(function(n){return n===1;})
+expect window.__actionTotal == 32
+
+# --- state survives a reload: a per-device preference, not baked into the
+#     document (same pattern as 32-prompter-mirror.txt / comments sort) ----
+click #btn-file
+sleep 200
+jsclick .menu-section-toggle[data-menu-section="export"]
+jsclick .menu-section-toggle[data-menu-section="document"]
+sleep 200
+expect document.querySelector('.menu-section-toggle[data-menu-section="export"]').getAttribute('aria-expanded') == true
+expect document.querySelector('.menu-section-toggle[data-menu-section="document"]').getAttribute('aria-expanded') == false
+jsclick #file-menu-close
+
+goto /index.html
+sleep 900
+click #btn-file
+sleep 200
+expect document.querySelector('.menu-section-toggle[data-menu-section="export"]').getAttribute('aria-expanded') == true
+expect !document.getElementById('menu-section-export').hidden
+expect document.querySelector('.menu-section-toggle[data-menu-section="document"]').getAttribute('aria-expanded') == false
+expect document.getElementById('menu-section-document').hidden
+# sections nobody touched keep their hard-coded defaults
+expect document.querySelector('.menu-section-toggle[data-menu-section="open"]').getAttribute('aria-expanded') == true
+expect document.querySelector('.menu-section-toggle[data-menu-section="help"]').getAttribute('aria-expanded') == false
+
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+
+quit

@@ -2258,7 +2258,7 @@ async function caseHostModeNoPinWarning(target) {
 
 /* "tabstrip origin: on the strip target, typeof window.splitpageDesktop ===
    'undefined'; window.splitpageTabStrip.readFile is undefined;
-   fetch('splitpage://tabstrip/api/health') is 404" — TABSTRIP-BRIDGE. */
+   fetch('splitpage://tabstrip/api/health') is refused or 404" — TABSTRIP-BRIDGE. */
 async function caseTabstripOrigin(target) {
   const tag = target.name + " tabstrip origin: no file/draft/history bridge, no /api proxy";
   let app = null;

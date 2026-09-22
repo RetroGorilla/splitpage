@@ -968,6 +968,61 @@ export function toggleFileMenu(force) {
   }
 }
 
+/* ---- File-menu sections (issue #51) ----
+
+   Which headed sections are expanded is a per-device UI preference, like
+   the comments sort order (COMMENTS_SORT_KEY) or the import scan choices
+   (IMPORT_SCAN_KEY) — never part of the document, so nothing here ever
+   calls markDirty. One JSON map under one key, keyed by section id; a
+   missing or corrupt value for a given id falls back to
+   FILE_MENU_SECTION_DEFAULTS rather than failing closed or open for
+   everything at once. */
+var FILE_MENU_SECTIONS_KEY = "splitpage-file-menu-sections";
+var FILE_MENU_SECTION_DEFAULTS = { open: true, server: true, export: false, document: true, help: false };
+
+function fileMenuSectionPrefs() {
+  var saved;
+  try { saved = JSON.parse(localStorage.getItem(FILE_MENU_SECTIONS_KEY) || "{}"); } catch (e) { saved = null; }
+  return saved && typeof saved === "object" ? saved : {};
+}
+
+function fileMenuSectionExpanded(id) {
+  var saved = fileMenuSectionPrefs()[id];
+  return typeof saved === "boolean" ? saved : !!FILE_MENU_SECTION_DEFAULTS[id];
+}
+
+/* Updates the DOM (aria-expanded on the heading, `hidden` on the body,
+   which also lifts every button inside it out of the Tab order for free)
+   and, unless told not to, writes the new state back to storage.
+   initFileMenuSections() passes persist:false at boot so applying the
+   remembered state doesn't just write the same thing straight back out. */
+function applyFileMenuSection(id, expanded, persist) {
+  var toggle = document.querySelector('.menu-section-toggle[data-menu-section="' + id + '"]');
+  var body = document.getElementById("menu-section-" + id);
+  if (!toggle || !body) return;
+  toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+  body.hidden = !expanded;
+  if (persist !== false) {
+    var prefs = fileMenuSectionPrefs();
+    prefs[id] = !!expanded;
+    try { localStorage.setItem(FILE_MENU_SECTIONS_KEY, JSON.stringify(prefs)); } catch (e) { /* storage full or blocked — the menu still works, it just won't remember */ }
+  }
+}
+
+export function toggleFileMenuSection(id) {
+  applyFileMenuSection(id, !fileMenuSectionExpanded(id));
+}
+
+/* Runs once at boot — independent of the document loading, since this is
+   about the menu, not about state — so a reload lands on the same
+   sections the last visit left open rather than the hard-coded markup
+   defaults. */
+export function initFileMenuSections() {
+  Object.keys(FILE_MENU_SECTION_DEFAULTS).forEach(function (id) {
+    applyFileMenuSection(id, fileMenuSectionExpanded(id), false);
+  });
+}
+
 export function handleFileMenuAction(action) {
   toggleFileMenu(false);
   if (!S.state && action !== "history" && action !== "tagging-help"
