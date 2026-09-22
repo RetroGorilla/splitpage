@@ -1273,9 +1273,20 @@
       toggleFileMenu();
     });
     document.getElementById("file-menu").addEventListener("click", function (e) {
+      /* Section headings (issue #51) are plain buttons with no
+         data-file-action, so they never reach handleFileMenuAction() or the
+         other fragments' capture-phase listeners on this same element —
+         toggling one is not a File action. */
+      var sectionToggle = e.target.closest(".menu-section-toggle");
+      if (sectionToggle) { toggleFileMenuSection(sectionToggle.getAttribute("data-menu-section")); return; }
       var item = e.target.closest("[data-file-action]");
       if (item && !item.disabled) handleFileMenuAction(item.getAttribute("data-file-action"));
     });
+    /* Independent of the document loading — this is a per-device menu
+       preference, not document state — so it is set up right alongside the
+       rest of the File-menu wiring above rather than waiting on
+       initialStateReady below. */
+    initFileMenuSections();
     document.getElementById("file-menu-close").addEventListener("click", function (e) {
       e.stopPropagation();
       toggleFileMenu(false);
