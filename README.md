@@ -16,6 +16,31 @@ You can also work with other people: [host a shared session](#hosting-a-shared-s
 so others on your network open and edit the same scripts live, or
 [connect to a server](#connecting-to-a-server) someone else is hosting.
 
+## What's new in 2.1
+
+- **Merge a file that changed on disk.** When a script was edited outside
+  Splitpage while it was open here, the conflict dialog now offers *Merge
+  them*, with a side-by-side view of every field that differs before anything
+  is written.
+- **Review links.** A host can hand out a comment-only address: reviewers see
+  the script, use the teleprompter and exports, and add comments — but cannot
+  change a word. Enforced by the server, not just the page.
+- **Who else is here.** In a shared session, coloured initials in the top bar
+  and a dot beside the scene each person is in.
+- **Comments** record who resolved a thread and when, can be assigned to a
+  person, and the panel filters by Open / Resolved / assignee.
+- **Hide shot scenes** (Ctrl+Alt+H) collapses finished scenes so a half-done
+  script reads as what is left to record; the teleprompter skips them too.
+- **Teleprompter scene mode** plays one scene at a time, pausing at its end,
+  with Next / Previous to step between takes.
+- **Alt+Up / Alt+Down** moves the current scene without dragging.
+- **B-roll lines** are tracked whether typed, pasted or imported, and the
+  Import dialog asks what to look for in an incoming script.
+- **Better exports:** styled .docx with real headings, table styles and page
+  numbers; cleaner Markdown, with images shipped alongside instead of inline.
+- Fixes: the header stays pinned when scrolling on a phone; the installer
+  build check now proves the payload actually extracts.
+
 ## What's new in 2.0
 
 Splitpage now comes as a real Windows desktop app: its own window, tabs,
