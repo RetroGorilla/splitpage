@@ -865,7 +865,7 @@ everything else is exactly the same.
 
 ## Two shapes of Markdown export
 
-**File ▸ Export a copy** has two Markdown options. **Markdown (.md)** reads
+**File ▸ Export** has two Markdown options. **Markdown (.md)** reads
 like a script rather than a filled-in form: a `### Scene 01` heading, then
 the visual direction as an italic lead-in ahead of whatever's spoken, with
 nothing printed for a field that has nothing to say. A picture is referenced
@@ -882,7 +882,7 @@ it keeps embedding pictures inline so the single `.md` file stays complete
 on its own.
 Both carry the production breakdown and comments the same way.
 
-**File ▸ Export a copy ▸ Word (.docx)** carries the same polish: named
+**File ▸ Export ▸ Word (.docx)** carries the same polish: named
 paragraph, character and table styles, a document theme font, scene numbers
 in their own column, page numbers in the footer, and a production-breakdown
 table whose columns size themselves to what's actually in them instead of a
@@ -995,7 +995,7 @@ a server. The merged script sits on screen, unsaved, until you press Save.
 
 ### Sending it to someone who has nothing installed
 
-**File ▸ Export a copy ▸ Standalone HTML (.html)** writes one self-contained
+**File ▸ Export ▸ Standalone HTML (.html)** writes one self-contained
 page: your script with a copy of Splitpage wrapped around it. They
 double-click it and the script is there, editable, with nothing to install
 and no account. It is a far bigger file than a `.md`, so it is for sending,
@@ -1107,7 +1107,7 @@ always works regardless.
 
 - `index.html` — the whole app, and **a build output**: generated from `src/`
   by `node build.mjs`, so edit the source, not this. It is self-contained on
-  purpose (that is what makes **Export a copy ▸ Standalone HTML** possible,
+  purpose (that is what makes **Export ▸ Standalone HTML** possible,
   and what lets the app run straight off a USB stick); the only thing it
   fetches is the Google Fonts stylesheet, loaded so that a slow or
   unreachable font server cannot stop the app starting.

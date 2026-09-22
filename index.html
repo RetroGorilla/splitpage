@@ -17,7 +17,7 @@
      there for what each directive is holding back, and desktop/main.js,
      which serves this same policy as a response header so it also covers
      the tab strip's origin. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-g4RFWEK06daSi7XR8mmASs6MzIlEjHs6pqBzAthvLfk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http:; object-src 'none'; frame-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Ym+e115nA7cWJPJ60lugqA+db8XyAGqaQWTlwvR4FfU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http:; object-src 'none'; frame-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
@@ -1785,6 +1785,36 @@
     color: var(--text-faint);
     padding: 7px 10px 4px;
   }
+  /* ---- collapsible File-menu sections (issue #51) ---- */
+  .menu-section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+  /* same look as .menu-label, just inside a clickable heading row */
+  .menu-section-toggle .menu-label { padding: 5px 0; }
+  .menu-section-toggle:hover { background: var(--surface-2); }
+  .menu-section-toggle:hover .menu-label { color: var(--text); }
+  .menu-section-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .menu-section-chevron {
+    flex: none;
+    font-size: 9px;
+    color: var(--text-faint);
+    transition: transform 120ms ease;
+  }
+  .menu-section-toggle[aria-expanded="false"] .menu-section-chevron { transform: rotate(-90deg); }
+  @media (prefers-reduced-motion: reduce) {
+    .menu-section-chevron { transition: none; }
+  }
+  .menu-section-body { padding-top: 2px; }
 
   .file-chip {
     display: inline-flex;
@@ -2689,6 +2719,7 @@
        the × */
     .menu-wrap .menu { width: 300px; max-width: calc(100vw - 48px); }
     .menu-body button { padding: 11px 12px; }
+    .menu-section-toggle { padding: 6px 12px; }
 
     .add-row-btn { width: 100%; padding: 13px 0; }
 
@@ -3495,83 +3526,125 @@
             <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close">✕</button>
           </div>
           <div class="menu-body" role="none">
+          <!-- Most-used, no heading, never collapses (issue #51): the three
+               things every save touches, in the order you reach for them. -->
           <button type="button" role="menuitem" data-file-action="save-as">Save As…</button>
-          <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
-          <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
-          <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
-          <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
-          <!-- shown only when the page was served by a Splitpage document
-               server; hidden on file:// and on plain static hosting -->
-          <div class="menu-sep" id="menu-server-sep" hidden></div>
-          <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
-          <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
-          <!-- Always shown, unlike the two above: this is where you point the
-               app at a server in the first place, so it cannot wait for one
-               to answer. Handled in 20e-connect.js, not the File dispatch. -->
-          <div class="menu-sep" id="menu-connect-sep"></div>
-          <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
-          <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
           <!-- Says what is on, not what pressing it does — updateAutoSaveMenu()
                (14-export.js) rewrites the label on every change. -->
           <button type="button" role="menuitemcheckbox" aria-checked="true" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing">Autosave: on</button>
+
           <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-file-action="history">Version history…</button>
+
+          <!-- Headed, collapsible sections from here down (issue #51):
+               .menu-section-toggle is a real <button> so Enter/Space toggles
+               it and it sits in the normal Tab order; .menu-section-body
+               carries the plain `hidden` attribute when collapsed, which
+               both hides it and — for free, via the browser's own tab-order
+               rules — takes every button inside it out of Tab traversal.
+               initFileMenuSections() (18-local-files.js) sets aria-expanded
+               and `hidden` to match the remembered per-device state on boot;
+               toggleFileMenuSection() flips both on click. -->
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="open" aria-expanded="true" aria-controls="menu-section-open"><span class="menu-label">Open</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-open" role="none">
+              <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
+              <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
+              <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
+              <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <!-- Browser build only: takes history, bookmarks and prefs to the
-               desktop app. 20f-desktop.js's initDesktop hides the export
-               entry and unhides the import one there. -->
-          <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
-          <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
+
+          <!-- #menu-section-server-wrap is hidden by updateServerMenu()
+               (13-hosted.js) when every item inside it is hidden — today
+               that never quite happens, since Servers… and Publish & copy a
+               link stay offered even with nothing connected, but the section
+               follows the same "nothing to show" rule as its items rather
+               than assuming that. -->
+          <div class="menu-section" id="menu-section-server-wrap">
+            <button type="button" class="menu-section-toggle" data-menu-section="server" aria-expanded="true" aria-controls="menu-section-server" id="menu-server-section-toggle"><span class="menu-label">Server</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-server" role="none">
+              <!-- shown only when the page was served by a Splitpage document
+                   server; hidden on file:// and on plain static hosting -->
+              <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
+              <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
+              <div class="menu-sep" id="menu-server-sep" hidden></div>
+              <!-- The live counterpart of the export formats below, and
+                   deliberately next to the rest of the server tools (issue
+                   #19/#51): every export hands someone a DEAD COPY whose
+                   edits never come back, and this is the one that doesn't.
+                   It publishes to the connected server and copies the
+                   address of that one shared document. Always shown — with
+                   no server it says so and opens Servers… rather than doing
+                   nothing. 13-hosted.js. -->
+              <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
+              <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <!-- Collapses every scene marked Shot into a thin strip — issue #25.
-               Says what is on, not what pressing it does (see menu-autosave);
-               updateHideShotMenu() (01b-hide-shot.js) keeps aria-checked and
-               the checkmark in sync. Ctrl/Cmd+Alt+H, mirrored in the desktop
-               View menu (desktop/main.js). -->
-          <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="export" aria-expanded="false" aria-controls="menu-section-export"><span class="menu-label">Export</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-export" role="none" hidden>
+              <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
+              <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
+              <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
+              <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
+              <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
+              <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
+              <!-- the old save format, now an export: one self-contained page
+                   for sending a script to someone with nothing installed -->
+              <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
+              <div class="menu-sep"></div>
+              <div class="menu-label">Narration</div>
+              <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
+              <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
+              <div class="menu-sep"></div>
+              <div class="menu-label">Packing lists</div>
+              <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
+              <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <!-- Ctrl+F everywhere else; this entry exists because phone
-               keyboards have no Ctrl -->
-          <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
+
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="document" aria-expanded="true" aria-controls="menu-section-document"><span class="menu-label">This document</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-document" role="none">
+              <button type="button" role="menuitem" data-file-action="history">Version history…</button>
+              <!-- Ctrl+F everywhere else; this entry exists because phone
+                   keyboards have no Ctrl -->
+              <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
+              <!-- Collapses every scene marked Shot into a thin strip — issue
+                   #25. Says what is on, not what pressing it does (see
+                   menu-autosave); updateHideShotMenu() (01b-hide-shot.js)
+                   keeps aria-checked and the checkmark in sync. Ctrl/Cmd+
+                   Alt+H, mirrored in the desktop View menu (desktop/main.js). -->
+              <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+            </div>
+          </div>
+
           <div class="menu-sep"></div>
-          <div class="menu-label">Export a copy</div>
-          <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
-          <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
-          <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
-          <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
-          <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
-          <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
-          <!-- the old save format, now an export: one self-contained page for
-               sending a script to someone with nothing installed -->
-          <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
-          <!-- The live counterpart of the export above, and deliberately
-               next to it (issue #19): every other entry in this group hands
-               someone a DEAD COPY whose edits never come back, and this is
-               the one that doesn't. It publishes to the connected server and
-               copies the address of that one shared document. Always shown —
-               with no server it says so and opens Servers… rather than doing
-               nothing. 13-hosted.js. -->
-          <div class="menu-sep"></div>
-          <div class="menu-label">Share a live copy</div>
-          <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Export the narration</div>
-          <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
-          <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Packing lists</div>
-          <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
-          <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
-          <div class="menu-sep"></div>
-          <div class="menu-label">Help</div>
-          <button type="button" role="menuitem" data-file-action="setup">Set up Splitpage…</button>
-          <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
-          <button type="button" role="menuitem" data-file-action="help">User guide…</button>
-          <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
-          <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
+
+          <div class="menu-section">
+            <button type="button" class="menu-section-toggle" data-menu-section="help" aria-expanded="false" aria-controls="menu-section-help"><span class="menu-label">Help &amp; settings</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
+            <div class="menu-section-body" id="menu-section-help" role="none" hidden>
+              <button type="button" role="menuitem" data-file-action="setup">Set up Splitpage…</button>
+              <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
+              <button type="button" role="menuitem" data-file-action="help">User guide…</button>
+              <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
+              <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
+              <div class="menu-sep"></div>
+              <!-- Browser build only: takes history, bookmarks and prefs to
+                   the desktop app. 20f-desktop.js's initDesktop hides the
+                   export entry and unhides the import one there. -->
+              <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
+              <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
+            </div>
+          </div>
           </div>
         </div>
       </div>
@@ -4338,8 +4411,8 @@ node update.mjs           # download and verify it</code></pre>
 <ul><li><strong>Completing a tag:</strong> phone keyboards have no <kbd>Tab</kbd>, so while the dim completion is showing, <strong>tap it</strong> to accept.</li><li><strong>Find &amp; replace</strong> is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).</li><li><strong>Selecting several breakdown items:</strong> <strong>long-press</strong> a card to start, then tap cards to add or drop them. The <strong>×</strong> in the bar clears the selection.</li><li><strong>Reordering scenes:</strong> the ↑ / ↓ buttons (drag needs a mouse).</li><li><strong>New scene:</strong> the <strong>+</strong> button on any scene, or <strong>+ Add row</strong> at the bottom.</li><li><strong>Splitting a scene at the caret (Alt+Enter)</strong> is a keyboard shortcut with no phone keyboard to trigger it from — add the scene with <strong>+</strong> and move the text over by hand.</li><li>In the teleprompter the screen <strong>stays awake</strong> while you read (on browsers that support it) and releases when you close it.</li><li><strong>The writer</strong> works the same, with the scene number and its visual on a thin line above each paragraph instead of out in the margin — a phone has no margin to put them in.</li></ul>
 <p>Typing shortcuts (<code>[prop]</code> <code>{kitchen}</code> <code>~vfx~</code> <code>&lt;gear&gt;</code>), comments, status, exports, the <strong>Gear</strong> screen and its packing lists, the server features — everything else is exactly the same.</p>
 <h2 id="help-two-shapes-of-markdown-export">Two shapes of Markdown export</h2>
-<p><strong>File ▸ Export a copy</strong> has two Markdown options. <strong>Markdown (.md)</strong> reads like a script rather than a filled-in form: a <code>### Scene 01</code> heading, then the visual direction as an italic lead-in ahead of whatever's spoken, with nothing printed for a field that has nothing to say. A picture is referenced from a sibling <code>images/</code> folder instead of pasted inline as base64 — once a script has any pictures, this export becomes a small <code>.zip</code> so the folder actually travels with the <code>.md</code>. <strong>Markdown, two columns (.md)</strong> lays the same script out as a table instead, one row per scene with a Visual column next to an Audio column — the way the split view itself looks, and the way a GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side by side rather than stacked. It's also exactly the shape <strong>Paste a script…</strong> already reads back in "Two columns" mode, so a two-column Markdown export round-trips back into Splitpage with the split intact, and it keeps embedding pictures inline so the single <code>.md</code> file stays complete on its own. Both carry the production breakdown and comments the same way.</p>
-<p><strong>File ▸ Export a copy ▸ Word (.docx)</strong> carries the same polish: named paragraph, character and table styles, a document theme font, scene numbers in their own column, page numbers in the footer, and a production-breakdown table whose columns size themselves to what's actually in them instead of a fixed guess.</p>
+<p><strong>File ▸ Export</strong> has two Markdown options. <strong>Markdown (.md)</strong> reads like a script rather than a filled-in form: a <code>### Scene 01</code> heading, then the visual direction as an italic lead-in ahead of whatever's spoken, with nothing printed for a field that has nothing to say. A picture is referenced from a sibling <code>images/</code> folder instead of pasted inline as base64 — once a script has any pictures, this export becomes a small <code>.zip</code> so the folder actually travels with the <code>.md</code>. <strong>Markdown, two columns (.md)</strong> lays the same script out as a table instead, one row per scene with a Visual column next to an Audio column — the way the split view itself looks, and the way a GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side by side rather than stacked. It's also exactly the shape <strong>Paste a script…</strong> already reads back in "Two columns" mode, so a two-column Markdown export round-trips back into Splitpage with the split intact, and it keeps embedding pictures inline so the single <code>.md</code> file stays complete on its own. Both carry the production breakdown and comments the same way.</p>
+<p><strong>File ▸ Export ▸ Word (.docx)</strong> carries the same polish: named paragraph, character and table styles, a document theme font, scene numbers in their own column, page numbers in the footer, and a production-breakdown table whose columns size themselves to what's actually in them instead of a fixed guess.</p>
 <p>Neither is the same thing as <strong>Save</strong>. These are copies for reading and sharing: they carry the words, not the tagging, the comment anchors, the images or the scene statuses. Saving as <code>.md</code> writes the same two-column table <em>plus</em> Splitpage's own record of the script underneath it, so nothing is lost — see <a href="#help-saving-your-script">Saving your script</a>.</p>
 <h2 id="help-importing-a-google-doc">Importing a Google Doc</h2>
 <p><strong>File ▸ Import from Google Doc link…</strong> takes a Google Docs share link (or just the document's ID) instead of a file. Splitpage has no server and no Google sign-in of its own, so it can't read the Doc directly — instead it opens Google's own Word (.docx) export of it in a new tab, which downloads straight to your computer using whatever Google account you're signed in to in that tab. Once the download lands, bring it in the same way as any other Word file: <strong>File ▸ Open a document…</strong>. If the doc isn't shared "Anyone with the link," make sure the browser tab that opens is signed in to an account that can see it, or the download will be a Google sign-in page instead of a document.</p>
@@ -4362,7 +4435,7 @@ node update.mjs           # download and verify it</code></pre>
 <p>You can. Open it in any editor, fix a line of narration in the table, save, and reopen it in Splitpage — your edit is there. Splitpage compares the table against its own record cell by cell: a cell you did not touch keeps everything it had, and a cell you rewrote is taken from your version, with any tracked prop, location, cast, gear or sound name in it tagged again automatically. The one thing it cannot rescue is a comment that pointed at exact words in a cell you rewrote — the comment stays, along with the text it quoted, but it no longer has a place to point to and shows in the panel as no longer in the script. Changing the <code># </code> heading renames the script. Adding or deleting whole scene rows is the one thing Splitpage will not guess at: it asks whether to keep its own record or rebuild the scenes from your table.</p>
 <p>If the file changed <strong>while it was still open here</strong> — you edited it in another window, someone emailed a revision back, a sync client caught up — Splitpage says so when you Save rather than overwriting it, and offers to <strong>Merge them</strong>. That opens a review pane listing every field the two versions disagree about, side by side, with the changed words highlighted: titles, scene text, statuses, breakdown items, crew and b-roll. Nothing is written to the file and nothing changes on screen until you press <strong>Merge them</strong> again at the bottom of it — Cancel puts you back to the other choices, having changed nothing. Confirming keeps both sides' edits where they touched different things; where you both changed the same line, the file's version goes into the script and yours is kept as a comment flagged <strong>Unmerged edit</strong>, exactly as on a server. The merged script sits on screen, unsaved, until you press Save.</p>
 <h3 id="help-sending-it-to-someone-who-has-nothing-installed">Sending it to someone who has nothing installed</h3>
-<p><strong>File ▸ Export a copy ▸ Standalone HTML (.html)</strong> writes one self-contained page: your script with a copy of Splitpage wrapped around it. They double-click it and the script is there, editable, with nothing to install and no account. It is a far bigger file than a <code>.md</code>, so it is for sending, not for working in.</p>
+<p><strong>File ▸ Export ▸ Standalone HTML (.html)</strong> writes one self-contained page: your script with a copy of Splitpage wrapped around it. They double-click it and the script is there, editable, with nothing to install and no account. It is a far bigger file than a <code>.md</code>, so it is for sending, not for working in.</p>
 <p>It is a <strong>copy</strong>, though, and that is deliberate: it carries no link back here, it never connects anywhere, and whatever they type stays in their file. If you want their edits to come back, send a link instead.</p>
 <h3 id="help-sending-a-link-so-their-edits-come-back">Sending a link, so their edits come back</h3>
 <p><strong>File ▸ Publish &amp; copy a link</strong> puts this script on the server you are connected to and copies the address of it to your clipboard. Everyone who opens that link is editing the <em>same</em> document — the same shared script the rest of "Working together" describes, with saves merged rather than overwriting each other — rather than their own fork of it.</p>
@@ -4384,7 +4457,7 @@ node update.mjs           # download and verify it</code></pre>
 <p>This relies on IndexedDB, which needs a real page origin to behave reliably — it works over <code>http://</code>/<code>https://</code> (i.e. via <strong>start.bat</strong>), and may not persist across launches when the page is opened as a raw <code>file://</code> path. Either way, opening files by hand (double-click, or File ▸ Open) always works regardless.</p>
 <h2 id="help-files">Files</h2>
 <p><strong>The app</strong></p>
-<ul><li><code>index.html</code> — the whole app, and <strong>a build output</strong>: generated from <code>src/</code> by <code>node build.mjs</code>, so edit the source, not this. It is self-contained on purpose (that is what makes <strong>Export a copy ▸ Standalone HTML</strong> possible, and what lets the app run straight off a USB stick); the only thing it fetches is the Google Fonts stylesheet, loaded so that a slow or unreachable font server cannot stop the app starting.</li><li><code>src/</code> — the source. <code>page.html</code> (the shell), <code>app.css</code>, <code>seed-state.json</code> (the demo document), and <code>js/</code> — numbered fragments of one script, concatenated in filename order.</li><li><code>build.mjs</code> — inlines all of it back into <code>index.html</code>. <code>--check</code> says whether the two are in step.</li><li><code>manifest.webmanifest</code>, <code>icon.svg</code> — makes "Install app" possible.</li><li><code>sw.js</code> — a small service worker so the app shell still opens offline once you've loaded it at least once while served over <code>http://</code>.</li></ul>
+<ul><li><code>index.html</code> — the whole app, and <strong>a build output</strong>: generated from <code>src/</code> by <code>node build.mjs</code>, so edit the source, not this. It is self-contained on purpose (that is what makes <strong>Export ▸ Standalone HTML</strong> possible, and what lets the app run straight off a USB stick); the only thing it fetches is the Google Fonts stylesheet, loaded so that a slow or unreachable font server cannot stop the app starting.</li><li><code>src/</code> — the source. <code>page.html</code> (the shell), <code>app.css</code>, <code>seed-state.json</code> (the demo document), and <code>js/</code> — numbered fragments of one script, concatenated in filename order.</li><li><code>build.mjs</code> — inlines all of it back into <code>index.html</code>. <code>--check</code> says whether the two are in step.</li><li><code>manifest.webmanifest</code>, <code>icon.svg</code> — makes "Install app" possible.</li><li><code>sw.js</code> — a small service worker so the app shell still opens offline once you've loaded it at least once while served over <code>http://</code>.</li></ul>
 <p><strong>Running it</strong></p>
 <ul><li><code>start.mjs</code> — the launcher: serves the app, opens your browser, installs a staged update, and with <code>--host</code> shares the session with your network.</li><li><code>start.bat</code> / <code>start.sh</code> — the double-click and terminal ways in. <code>start.bat</code> prefers the bundled runtime, then a Node on PATH, then <code>start.ps1</code>.</li><li><code>start.ps1</code> — the zero-install fallback: a static server built on .NET's <code>HttpListener</code>, for a machine with no Node. Serves the app; cannot host.</li><li><code>update.mjs</code> — checks for a new version, verifies it, stages it. The install happens at the next launch, never while the app is open.</li><li><code>uninstall.mjs</code> / <code>uninstall.bat</code> / <code>uninstall.sh</code> — removes a portable copy, and only the files the release shipped.</li></ul>
 <p><strong>Packaging</strong></p>
@@ -16680,6 +16753,18 @@ node update.mjs           # download and verify it</code></pre>
         : "Puts this script on the connected server and copies a link to it. " +
           "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
     }
+    /* The Server section (issue #51) hides itself, heading and all, once
+       every item inside it is hidden — same "nothing to show" rule as the
+       items above rather than a fixed assumption about which of them can
+       ever go dark. Disabled is not hidden: Publish & copy a link and
+       Servers… are never hidden by this function, so in practice the
+       section stays put even with no server connected. */
+    var serverSectionWrap = document.getElementById("menu-section-server-wrap");
+    if (serverSectionWrap) {
+      var serverItems = document.querySelectorAll("#menu-section-server [data-file-action]");
+      var anyVisible = Array.prototype.some.call(serverItems, function (b) { return !b.hidden; });
+      serverSectionWrap.hidden = !anyVisible;
+    }
   }
 
   /* ---- viewing, comments only ----
@@ -21341,6 +21426,61 @@ node update.mjs           # download and verify it</code></pre>
          element, which strands the keyboard on nothing */
       btn.focus();
     }
+  }
+
+  /* ---- File-menu sections (issue #51) ----
+
+     Which headed sections are expanded is a per-device UI preference, like
+     the comments sort order (COMMENTS_SORT_KEY) or the import scan choices
+     (IMPORT_SCAN_KEY) — never part of the document, so nothing here ever
+     calls markDirty. One JSON map under one key, keyed by section id; a
+     missing or corrupt value for a given id falls back to
+     FILE_MENU_SECTION_DEFAULTS rather than failing closed or open for
+     everything at once. */
+  var FILE_MENU_SECTIONS_KEY = "splitpage-file-menu-sections";
+  var FILE_MENU_SECTION_DEFAULTS = { open: true, server: true, export: false, document: true, help: false };
+
+  function fileMenuSectionPrefs() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(FILE_MENU_SECTIONS_KEY) || "{}"); } catch (e) { saved = null; }
+    return saved && typeof saved === "object" ? saved : {};
+  }
+
+  function fileMenuSectionExpanded(id) {
+    var saved = fileMenuSectionPrefs()[id];
+    return typeof saved === "boolean" ? saved : !!FILE_MENU_SECTION_DEFAULTS[id];
+  }
+
+  /* Updates the DOM (aria-expanded on the heading, `hidden` on the body,
+     which also lifts every button inside it out of the Tab order for free)
+     and, unless told not to, writes the new state back to storage.
+     initFileMenuSections() passes persist:false at boot so applying the
+     remembered state doesn't just write the same thing straight back out. */
+  function applyFileMenuSection(id, expanded, persist) {
+    var toggle = document.querySelector('.menu-section-toggle[data-menu-section="' + id + '"]');
+    var body = document.getElementById("menu-section-" + id);
+    if (!toggle || !body) return;
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    body.hidden = !expanded;
+    if (persist !== false) {
+      var prefs = fileMenuSectionPrefs();
+      prefs[id] = !!expanded;
+      try { localStorage.setItem(FILE_MENU_SECTIONS_KEY, JSON.stringify(prefs)); } catch (e) {}
+    }
+  }
+
+  function toggleFileMenuSection(id) {
+    applyFileMenuSection(id, !fileMenuSectionExpanded(id));
+  }
+
+  /* Runs once at boot — independent of the document loading, since this is
+     about the menu, not about state — so a reload lands on the same
+     sections the last visit left open rather than the hard-coded markup
+     defaults. */
+  function initFileMenuSections() {
+    Object.keys(FILE_MENU_SECTION_DEFAULTS).forEach(function (id) {
+      applyFileMenuSection(id, fileMenuSectionExpanded(id), false);
+    });
   }
 
   function handleFileMenuAction(action) {
@@ -29376,9 +29516,20 @@ node update.mjs           # download and verify it</code></pre>
       toggleFileMenu();
     });
     document.getElementById("file-menu").addEventListener("click", function (e) {
+      /* Section headings (issue #51) are plain buttons with no
+         data-file-action, so they never reach handleFileMenuAction() or the
+         other fragments' capture-phase listeners on this same element —
+         toggling one is not a File action. */
+      var sectionToggle = e.target.closest(".menu-section-toggle");
+      if (sectionToggle) { toggleFileMenuSection(sectionToggle.getAttribute("data-menu-section")); return; }
       var item = e.target.closest("[data-file-action]");
       if (item && !item.disabled) handleFileMenuAction(item.getAttribute("data-file-action"));
     });
+    /* Independent of the document loading — this is a per-device menu
+       preference, not document state — so it is set up right alongside the
+       rest of the File-menu wiring above rather than waiting on
+       initialStateReady below. */
+    initFileMenuSections();
     document.getElementById("file-menu-close").addEventListener("click", function (e) {
       e.stopPropagation();
       toggleFileMenu(false);
