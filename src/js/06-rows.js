@@ -27,8 +27,9 @@ export function addRow(afterId) {
 
 /* Ctrl/Cmd+Enter while writing: open the next scene and land in the same
    column you were already in, so a run of scenes can be typed without
-   reaching for the mouse. render() rebuilds every row, so the new cell has
-   to be looked up afterwards rather than held across the call. */
+   reaching for the mouse. The new cell only exists once render() has
+   reconciled #rows, so it is looked up afterwards rather than held across
+   the call. */
 export function addRowAndFocus(afterId, field) {
   addRow(afterId);
   var idx = findRowIndex(afterId);

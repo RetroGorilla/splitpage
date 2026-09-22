@@ -237,6 +237,26 @@ test("productionTags: a file saved before the registry existed is back-filled fr
   assert.ok(s.productionTags.some((t) => t.name === "gaffer tape"), JSON.stringify(s.productionTags));
 });
 
+test("productionTags: a live tag missing from an existing registry is healed in, once (#84)", () => {
+  /* The registry self-heal used to happen as a side effect of the first
+     read of the breakdown after a load; it is a migration step now, so a
+     document still looks the same the moment it is on screen. An orphaned
+     entry (no live tag) is kept, and a second migration adds nothing. */
+  const s = doc({
+    rows: [{ id: "r1", audioText: 'Bring the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span> and the <span class="tag-anchor" data-tag-cat="location" data-tag-name="Roof">Roof</span>.' }],
+    productionTags: [{ cat: "prop", name: "Kettle", owner: "", notes: "", status: "have" }, { cat: "location", name: "roof" }]
+  });
+  assert.deepEqual(s.productionTags.map((t) => t.cat + ":" + t.name), ["prop:Kettle", "location:roof", "prop:gaffer tape"]);
+  assert.deepEqual(s.productionTags[2], { cat: "prop", name: "gaffer tape", owner: "", notes: "", status: "needed" });
+  const twice = migrateRows(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(twice.productionTags, s.productionTags);
+});
+
+test("productionTags: an emptied registry stays empty when nothing is tagged live", () => {
+  const s = doc({ rows: [{ id: "r1", audioText: "No tags here." }], productionTags: [] });
+  assert.deepEqual(s.productionTags, []);
+});
+
 test("productionTags: the collector the back-fill was meant to use still reads the script", () => {
   /* So the todo above is a wiring failure in migrateRows, not a claim that
      tag collection itself is broken. */

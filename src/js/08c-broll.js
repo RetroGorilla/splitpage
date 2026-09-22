@@ -16,6 +16,7 @@ import {
   isInsideTagOrLink,
   normalizeTagName,
   personById,
+  scheduleIdleRefresh,
   tagsInField
 } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -620,7 +621,6 @@ var brollGroupBy = "flat";      /* "flat" | "scene" | "location" */
 var brollExpanded = null;       /* id of the open card */
 var brollRenaming = null;
 var brollAddingPersonFor = null;
-var brollRefreshTimer = null;
 
 function openBrollPanel() {
   if (!S.state) return;
@@ -644,17 +644,18 @@ export function updateBrollBadge() {
 
 /* Reading the markers back means parsing every visual field in the script:
    cheap once, wasteful on every keystroke. Same coalescing the production
-   panel uses, and for the same reason. */
+   panel uses — the one idle refresh in 07-production-tags.js — and for the
+   same reason. */
 export function scheduleBrollRefresh() {
-  if (brollRefreshTimer) clearTimeout(brollRefreshTimer);
-  brollRefreshTimer = setTimeout(function () {
-    brollRefreshTimer = null;
-    /* Anchoring first, because it can rewrite the very markers the badge
-       and the panel are about to read back. */
-    maybeAnchorBroll();
-    updateBrollBadge();
-    renderBroll();
-  }, 400);
+  scheduleIdleRefresh("broll");
+}
+
+/* What the idle refresh runs for b-roll. Anchoring first, because it can
+   rewrite the very markers the badge and the panel are about to read back. */
+export function runBrollRefresh() {
+  maybeAnchorBroll();
+  updateBrollBadge();
+  renderBroll();
 }
 
 function brollStatusPillHtml(entry) {

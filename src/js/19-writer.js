@@ -11,6 +11,7 @@ import {
 } from "./04-richtext.js";
 import {
   applyHighlight,
+  editableCellHtml,
   isSelectionInsideTag,
   pad2,
   removeHighlight,
@@ -18,7 +19,7 @@ import {
   syncFieldFromDom
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
-import { hideTagGhost } from "./07-production-tags.js";
+import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeGearPanel, closeProductionPanel } from "./08-production-panels.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
 import { closeCommentsPanel } from "./10-comments.js";
@@ -48,7 +49,6 @@ import { mirrorFileChipToWriter } from "./18-local-files.js";
 
 export var writerOpen = false;
 var writerGutterMode = "visuals"; /* visuals | numbers | compact */
-var writerStatsTimer = null;
 S.writerLastCell = null;
 
 function writerBlockHtml(row, i) {
@@ -66,10 +66,15 @@ function writerBlockHtml(row, i) {
         '<span class="wr-num">' + pad2(i + 1) + '</span>' +
         '<span class="wr-visual">' + visual + '</span>' +
       '</div>' +
-      '<div class="wr-para cell-editable" contenteditable="true" data-id="' + id +
-        '" data-field="audioText" data-placeholder="Write what gets said…">' +
-        (row.audioText || "") +
-      '</div>' +
+      /* The same cell builder as the split view's own field (05-render.js),
+         bare: the writer has no per-paragraph toolbar. */
+      editableCellHtml({
+        className: "wr-para",
+        rowId: row.id,
+        field: "audioText",
+        value: row.audioText,
+        placeholder: "Write what gets said…"
+      }) +
     '</div>';
 }
 
@@ -114,7 +119,7 @@ export function renderWriter() {
   updateWriterStats();
 }
 
-function updateWriterStats() {
+export function updateWriterStats() {
   if (!writerOpen || !S.state) return;
   var words = 0;
   S.state.rows.forEach(function (row) { words += wordCount(row.audioText); });
@@ -124,13 +129,11 @@ function updateWriterStats() {
 }
 
 /* Same reasoning as scheduleProductionRefresh(): counting every word in
-   the document is cheap once and wasteful once per keystroke. */
+   the document is cheap once and wasteful once per keystroke — so it rides
+   the same idle refresh (07-production-tags.js). */
 export function scheduleWriterStats() {
-  if (!writerOpen || writerStatsTimer) return;
-  writerStatsTimer = setTimeout(function () {
-    writerStatsTimer = null;
-    updateWriterStats();
-  }, 200);
+  if (!writerOpen) return;
+  scheduleIdleRefresh("writerStats");
 }
 
 /* ---- caret plumbing ---- */

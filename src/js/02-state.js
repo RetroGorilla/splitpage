@@ -15,6 +15,7 @@ import {
   TAG_CATEGORIES,
   TAG_STATUSES,
   collectTagsFromRows,
+  missingRegistryTags,
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
@@ -299,6 +300,17 @@ export function migrateRows(s) {
     t.notes = plainText(t.notes).slice(0, 2000);
   });
   s.productionTags = s.productionTags.filter(function (t) { return t.name; });
+  /* ...and a registry the document already has gains an entry for any tag
+     live in its script that it lacks. This is the registry self-heal as a
+     migration step (#84): productionEntries() used to write these entries
+     itself, as a side effect of the first read after a load, so every
+     document already looked this way the moment it was on screen. Doing it
+     here keeps that, and keeps reads pure. It never resurrects anything a
+     user deleted — deleting a live item strips its labels from the script
+     too (removeTag), which is what makes it not live. */
+  missingRegistryTags(s.rows, s.productionTags).forEach(function (t) {
+    s.productionTags.push(t);
+  });
 
   /* The b-roll list (08c-broll.js). Like the production registry it is
      real storage rather than a pure read of the script, and for one more

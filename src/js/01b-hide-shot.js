@@ -108,8 +108,10 @@ export function revealRow(rowId) {
 }
 
 /* The strip itself — a real <button> so Enter/Space open it for free,
-   exactly like every other data-action control in this app. */
-function hiddenShotStripHtml(ids) {
+   exactly like every other data-action control in this app. Its markup is
+   a function of the ids it covers and nothing else, which is what lets
+   render() (05-render.js) treat "same key" as "same strip". */
+export function hiddenShotStripHtml(ids) {
   var count = ids.length;
   var label = count + " shot scene" + (count === 1 ? "" : "s") + " hidden";
   return '<button type="button" class="hidden-shot-strip" data-action="expand-hidden-shot" data-ids="' +
@@ -127,15 +129,16 @@ export function expandHiddenShotStrip(idsAttr) {
   render();
 }
 
-/* Shared by render() (05-render.js) and renderWriter() (19-writer.js): walk
-   `rows` in document order, handing each visible one to `rowRenderer(row,
-   index)` — same signature both rowHtml() and writerBlockHtml() already
-   have — and folding every contiguous run of hidden-by-toggle rows into
-   one strip. `index` is always the row's real position in the document,
-   never a "visible-only" count, so scene numbers never shift just because
-   the toggle is on. */
-export function renderRowGroups(rows, rowRenderer) {
-  var html = "";
+/* The one walk of the document both views share: `rows` in document
+   order, as a list of what #rows (or the writer) should hold — a visible
+   scene as `{row, index}`, and every contiguous run of hidden-by-toggle
+   rows folded into one `{strip: ids}`. `index` is always the row's real
+   position in the document, never a "visible-only" count, so scene
+   numbers never shift just because the toggle is on. render() (05-render.js)
+   reconciles #rows against this list by key; renderWriter() (19-writer.js)
+   still builds its paragraphs as one string through renderRowGroups(). */
+export function rowGroupItems(rows) {
+  var items = [];
   var i = 0;
   while (i < rows.length) {
     var row = rows[i];
@@ -143,14 +146,22 @@ export function renderRowGroups(rows, rowRenderer) {
       var ids = [];
       var j = i;
       while (j < rows.length && isRowHiddenByShotToggle(rows[j])) { ids.push(rows[j].id); j++; }
-      html += hiddenShotStripHtml(ids);
+      items.push({ strip: ids });
       i = j;
     } else {
-      html += rowRenderer(row, i);
+      items.push({ row: row, index: i });
       i++;
     }
   }
-  return html;
+  return items;
+}
+
+/* rowGroupItems() as one string, handing each visible row to
+   `rowRenderer(row, index)` — the writer's writerBlockHtml(). */
+export function renderRowGroups(rows, rowRenderer) {
+  return rowGroupItems(rows).map(function (item) {
+    return item.strip ? hiddenShotStripHtml(item.strip) : rowRenderer(item.row, item.index);
+  }).join("");
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
