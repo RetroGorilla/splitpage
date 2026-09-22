@@ -275,19 +275,18 @@ per document in `DATA_DIR`.
   guesses/minute cap, refusal is `401 {error:"pin-required"}` JSON.
 - CORS opt-in per origin, never carries credentials; `OPTIONS /api/*`
   answered 204 before any route runs.
-- `/api/launcher/*` is the one route that runs another program — launch
-  token in the URL fragment, `HOST === "127.0.0.1"`, fixed script path. Any
-  failing check is 404, not 401 (invariant #28). Both programs it ran are
-  now gone: `register` spawned `installer/install.ps1 -InPlace` for the Start
-  Menu entry, and `update/stage` spawned `update.mjs stage --json` for the
-  update bar's Download button. #75 deleted `installer/` and `update.mjs`'s
-  staging half, so **`server/server.js`'s `handleLauncher` and
-  `src/js/20a-update.js`'s Download button are still to be taken out.**
-  Until they are, `register` 404s on a missing script and `update/stage`
-  answers 200 with an `error` from an updater that no longer knows the verb.
-  The gating rules above stay as written: they are why a route that runs a
-  program could exist here at all, and anything that ever replaces it
-  inherits them.
+- `/api/launcher/info` is loopback-only and launch-token-gated — launch
+  token in the URL fragment, `HOST === "127.0.0.1"`. Any failing check is
+  404, not 401 (invariant #28). It answers with this process's `root`,
+  `platform` and `arch`, and the first-run wizard's step 2 uses it to name
+  the folder this copy runs from. It used to have company: `register`
+  spawned `installer/install.ps1 -InPlace` for a Start Menu entry, and
+  `update/stage` spawned `update.mjs stage --json` for the update bar's
+  Download button. #75 deleted both of those programs, so both routes went
+  with them, along with `stageUpdate()` and `installedHere()` — this server
+  no longer starts another process at all. The gating rules above stay as
+  written: they are why a route here could exist, and anything that ever
+  joins `info` inherits them.
 - `REVIEW_PIN`/`REVIEW_KEY` are a second credential minting a second token
   with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
   role is read from the token on every request (`roleOf`), so it survives a
@@ -688,11 +687,16 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     script must only ever forget what it alone added** (§3.12).
 27. **A "the registry looks corrupted" symptom from a `jsclick`-driven test
     is not proof — check `document.activeElement` first** (§3.12).
-28. **No HTTP endpoint spawns a process or installs files — except
-    `/api/launcher/*`, loopback-only and launch-token-gated** (§3.7). A
-    missing lock answers 404, not 401. `update/stage` is the second such
-    route: it downloads and verifies a release, and still installs nothing —
-    only `start.mjs` at launch does that. In the desktop app the equivalent
+28. **No HTTP endpoint spawns a process or installs files.** No exception:
+    `server/server.js` does not require `node:child_process` at all. There
+    used to be one — `/api/launcher/*`, loopback-only and launch-token-gated
+    (§3.7) — where `register` ran `installer/install.ps1` and `update/stage`
+    ran `update.mjs stage --json`. #75 deleted both of those programs and
+    both routes went with them; all that is left under `/api/launcher/` is
+    `info`, which reports this process's own `root`, `platform` and `arch`
+    and nothing else. The gate stays on it, and anything ever added beside
+    it inherits the gate: a missing lock answers 404, not 401. In the
+    desktop app the equivalent
     pair is `splitpage:update-download` / `splitpage:update-install`, and
     neither takes an argument: the renderer can ask for the update to be
     fetched and run, but never names the URL to fetch or the file to
@@ -819,7 +823,7 @@ evaluation order via `_entry.js`):
 | `18a-local-merge.js` | the on-disk conflict modal's "Merge them": the mergeable-file probe, the retained ancestor (`diskBase`), the field-by-field review pane and its word-level diff |
 | `19-writer.js` | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | teleprompter and voice follow |
-| `20a-update.js` | update notice (check, Download, Install), About box |
+| `20a-update.js` | update notice (desktop: Download/Install; portable: release-page signpost), desktop-app notice, About box |
 | `20b-onboarding.js` | first-run wizard, pristine-seed gate (invariant #30) |
 | `20c-help.js` | in-app Help modal, coach-mark tour |
 | `20d-formats.js` | the two document formats, hand-edit reconcile |

@@ -1,11 +1,10 @@
 import { S } from "./_state.js";
-import { hasLauncher, launcherFetch } from "./13-hosted.js";
 
 /* ================= updates =================
 
    This page never talks to an update server and never writes a file. It
-   reads a verdict somebody else reached and, when the user clicks, asks
-   that somebody else to act on it. There are two of them:
+   reads a verdict somebody else reached and says what it means. There are
+   two of them, and only one of them can act on it:
 
      - the desktop app: the main process checks at launch and pushes its
        status over the bridge; Download and Install are bridge calls that
@@ -14,13 +13,14 @@ import { hasLauncher, launcherFetch } from "./13-hosted.js";
 
      - the launcher (start.mjs): it writes update-status.json next to the
        app before it serves anything, and rewrites it once its background
-       check answers. Download is POST api/launcher/update/stage, which is
-       loopback-only and launch-token-gated, and which only ever DOWNLOADS
-       — the files are swapped by start.mjs at the next launch, when no
-       browser has the app open. That split is deliberate: this page is
-       served by a localhost server with no authentication, so a route that
-       replaced app files on request could be driven by any other page the
-       browser has open.
+       check answers. That file is the whole channel — the launcher CHECKS
+       and nothing more. It used to stage a release through POST
+       api/launcher/update/stage and swap the files in at the next launch.
+       #75 deleted the staging half of update.mjs; the route and this
+       bar's Download button went with it, and with them the only way this
+       copy could install anything. So the portable bar is a signpost now:
+       here is a newer version, here is the page it is on, and unzipping
+       it over the folder is the user's move to make.
 
    Absent file, file:// open, or a hosted deployment: the fetch fails or
    404s, nothing is shown, and the app behaves exactly as it did before.
@@ -90,11 +90,14 @@ function applyUpdateStatus(status) {
   renderUpdateNotice();
 }
 
-/* Only ever the app's own launcher routes, and only when this copy was
-   started by one (hasLauncher()). A hosted deployment and a file:// open
-   both answer no, and no button is offered. */
-function canStageFromLauncher() {
-  return !S.DESKTOP && typeof hasLauncher === "function" && hasLauncher();
+/* Where a newer version actually is. The launcher's status file names no
+   URL of its own — only the desktop app's bridge does (releaseUrl) — so
+   this constant is the fallback, and it is the same page the desktop-app
+   notice at the bottom of this file points at. */
+var RELEASES_URL = "https://github.com/RetroGorilla/splitpage-releases/releases/latest";
+
+function releasesUrl() {
+  return (updateStatus && (updateStatus.releaseUrl || updateStatus.desktopAppUrl)) || RELEASES_URL;
 }
 
 function formatBytes(n) {
@@ -114,7 +117,7 @@ function downloadProgressText(dl) {
   return "Downloading Splitpage " + (updateStatus.latest || "") + "\u2026 " + formatBytes(got);
 }
 
-/* ---- the two actions ---- */
+/* ---- the actions ---- */
 
 /* Desktop: fetch the installer for this machine, in-app. */
 function startDesktopDownload() {
@@ -170,42 +173,15 @@ function startDesktopInstall() {
   });
 }
 
-/* Launcher: download and verify the release into .update/. It installs on
-   the next launch — never over an app the browser has open. */
-function startLauncherStage() {
-  if (updateBusy) return;
-  updateBusy = true;
-  updateNotice = "Downloading Splitpage " + (updateStatus.latest || "") + "\u2026";
-  renderUpdateNotice();
-  launcherFetch("api/launcher/update/stage", { method: "POST" }).then(function (result) {
-    updateBusy = false;
-    updateNotice = null;
-    if (result && result.staged) {
-      /* Reflect it locally: update-status.json is only rewritten at launch,
-         so the file would still say "available" until the next one. */
-      updateStatus = Object.assign({}, updateStatus, {
-        pending: result.pending || { to: result.latest || updateStatus.latest }
-      });
-    } else if (result && result.error === "local-edits") {
-      updateNotice = "Some app files have been edited by hand, and the update would " +
-        "overwrite them, so nothing was downloaded. Move them aside, then try again.";
-    } else if (result && result.ok) {
-      updateNotice = "Splitpage is already up to date.";
-    } else {
-      updateNotice = "Could not download the update" +
-        (result && result.message ? ": " + result.message : ".");
-    }
-    renderUpdateNotice();
-  }).catch(function (err) {
-    updateBusy = false;
-    if (err && err.code === "no-launcher") {
-      updateNotice = "This copy was not started by the launcher, so it cannot update itself.";
-    } else {
-      updateNotice = "Could not download the update" +
-        (err && err.message ? ": " + err.message : ".");
-    }
-    renderUpdateNotice();
-  });
+/* Portable copy: there is nothing to press but a link. Opening the release
+   page is the whole action — no fetch, no route, no file touched. In the
+   desktop app (which reaches here only if its status somehow lacks
+   `desktop`) the link still goes through main, because a renderer never
+   hands a URL to the OS itself. */
+function openReleasesPage() {
+  var url = releasesUrl();
+  if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(url); return; }
+  window.open(url, "_blank", "noopener");
 }
 
 /* What the bar should say and offer, as data — one decision, made once,
@@ -251,25 +227,18 @@ function updateBarPlan() {
     return { text: available, action: startDesktopDownload, label: "Download" };
   }
 
-  /* Staged and waiting beats merely available: it is one restart away and
-     needs nothing from the user but closing the window. */
-  if (updateStatus.pending) {
-    return {
-      text: "Splitpage " + updateStatus.pending.to + " is ready — restart to finish installing it.",
-      action: null,
-      label: null
-    };
-  }
   if (!updateStatus.updateAvailable || !updateStatus.latest) return null;
 
-  var line = "Splitpage " + updateStatus.latest + " is available. You have " + version + ".";
-  /* With a launcher, this is one click: it downloads and verifies now, and
-     start.mjs swaps the files in at the next launch. Without one there is
-     nothing this page can do but say so. */
-  if (canStageFromLauncher()) {
-    return { text: line, action: startLauncherStage, label: "Download" };
-  }
-  return { text: line, action: null, label: null };
+  /* The portable copy cannot install this — it is updated by unzipping a
+     newer release over its folder — so the bar says where the release is
+     and what to do with it, and the button goes there. A button that
+     started a download it could not finish would be the lie this replaced. */
+  return {
+    text: "Splitpage " + updateStatus.latest + " is available. You have " + version +
+      ". Unzip the new release over this folder to update.",
+    action: openReleasesPage,
+    label: "Open release page"
+  };
 }
 
 function renderUpdateNotice() {
@@ -325,7 +294,6 @@ export function dismissUpdateNotice() {
    loadUpdateStatus()'s fetch chain: it has to show on a plain file://
    open and wherever that file 404s. */
 
-var DESKTOP_APP_RELEASES_URL = "https://github.com/RetroGorilla/splitpage-releases/releases/latest";
 var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
 
 export function renderDesktopAppNotice() {
@@ -342,7 +310,7 @@ export function renderDesktopAppNotice() {
     textEl.textContent = "The Splitpage desktop app is available — its own window, " +
       "and a version history that never runs out of browser storage.";
   }
-  var url = (updateStatus && updateStatus.desktopAppUrl) || DESKTOP_APP_RELEASES_URL;
+  var url = (updateStatus && updateStatus.desktopAppUrl) || RELEASES_URL;
   var actionBtn = document.getElementById("desktop-app-bar-action");
   if (actionBtn) {
     actionBtn.onclick = function () { window.open(url, "_blank", "noopener"); };
@@ -393,19 +361,15 @@ export function showAbout() {
     lines.push("Opened without the launcher, so updates cannot be checked from here.");
     lines.push("Start it with start.bat (Windows) or ./start.sh, or run:");
     lines.push("    node update.mjs check");
-  } else if (updateStatus.pending) {
-    lines.push("");
-    lines.push("Version " + updateStatus.pending.to + " is downloaded and verified.");
-    lines.push("Close this window and start Splitpage again to install it.");
   } else if (updateStatus.checking) {
     lines.push("");
     lines.push("Checking for updates\u2026");
   } else if (updateStatus.updateAvailable) {
     lines.push("");
     lines.push("Version " + updateStatus.latest + " is available.");
-    lines.push(canStageFromLauncher()
-      ? "Use the Download button in the update notice, then restart Splitpage."
-      : "Run  node update.mjs  to download it, then restart.");
+    lines.push("This copy does not update itself: download the new zip and");
+    lines.push("unzip it over this folder, then start Splitpage again.");
+    lines.push("    " + releasesUrl());
   } else if (updateStatus.error) {
     lines.push("");
     lines.push("Last update check failed: " + updateStatus.error);

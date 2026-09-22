@@ -73,9 +73,10 @@ in the browser version.
 ## Setting up
 
 The first time you open a fresh copy of Splitpage, a short setup wizard walks
-you through it: what Splitpage is and how saving works, whether to add this
-copy to your Start Menu (if it was started by the launcher — see
-[Installing it](#installing-it)), how you'll be working (on your own, hosting
+you through it: what Splitpage is and how saving works, where this copy lives
+and what that means — a portable folder installs nothing and uninstalls by
+being deleted, and the desktop app is the one that registers itself (see
+[Installing it](#installing-it)) — how you'll be working (on your own, hosting
 others, or joining someone else's session — see
 [Hosting a shared session](#hosting-a-shared-session) and
 [Connecting to a server](#connecting-to-a-server)), and an offer to take the
@@ -409,9 +410,10 @@ node update.mjs           # is there a newer version?
 ```
 
 The launcher checks at every launch too, and the app shows a bar when there is
-something newer. **The portable copy does not update itself**: download the
-new `splitpage-<version>.zip` and unzip it over the old folder, or install the
-desktop app, which does update itself. Update checks go to a public releases
+something newer — with an **Open release page** button, because opening that
+page is the whole of what a portable copy can do about it. **The portable copy
+does not update itself**: download the new `splitpage-<version>.zip` and unzip
+it over the old folder, or install the desktop app, which does update itself. Update checks go to a public releases
 mirror so a shipped copy can still see new versions even though the main
 repository is private.
 
