@@ -15,6 +15,44 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 if (location.origin === "splitpage://app") {
+  /* THE CHANNEL TABLE (desktop/ipc-channels.js) is the one list of channels
+     this app has, and this script is held to it twice over: here, at
+     runtime, and by desktop/test/ipc-table.test.mjs, which reads both
+     preloads and the table and fails if either names a channel the other
+     does not.
+
+     It cannot simply be required. This script runs sandboxed (sandbox: true
+     on every window and every tab view main.js makes) and a sandboxed
+     preload's `require` resolves 'electron', 'events', 'timers' and 'url' —
+     never a file off disk. So main hands this origin its own rows over
+     instead, synchronously, exactly like the three boot reads further down.
+
+     Every crossing below goes through invoke/send/sendSync/receive rather
+     than ipcRenderer directly, and a name the table does not list FOR THIS
+     ORIGIN throws. That is the fail-closed part, and it needs no branch of
+     its own: the first of those calls happens at preload time, so a table
+     that never arrived takes this script down long before
+     contextBridge.exposeInMainWorld at the bottom, and the page gets no
+     bridge at all rather than a bridge of unchecked names. */
+  const channelDirections = new Map();
+  for (const entry of ipcRenderer.sendSync("splitpage:ipc-table-sync") || []) {
+    if (!channelDirections.has(entry.name)) channelDirections.set(entry.name, new Set());
+    channelDirections.get(entry.name).add(entry.direction);
+  }
+
+  const channel = (name, direction) => {
+    const directions = channelDirections.get(name);
+    if (!directions || !directions.has(direction)) {
+      throw new Error("splitpage: " + name + " (" + direction + ") is not a channel this origin may use");
+    }
+    return name;
+  };
+
+  const invoke = (name, ...args) => ipcRenderer.invoke(channel(name, "invoke"), ...args);
+  const send = (name, ...args) => ipcRenderer.send(channel(name, "send"), ...args);
+  const sendSync = (name, ...args) => ipcRenderer.sendSync(channel(name, "sendSync"), ...args);
+  const receive = (name, handler) => ipcRenderer.on(channel(name, "receive"), handler);
+
   let openFileCallback = null;
   let menuCommandCallback = null;
   let openServerDocCallback = null;
@@ -23,30 +61,30 @@ if (location.origin === "splitpage://app") {
   let draftFlushCallback = null;
   let updateStatusCallback = null;
 
-  ipcRenderer.on("splitpage:open-file", (_event, entry) => {
+  receive("splitpage:open-file", (_event, entry) => {
     if (openFileCallback) openFileCallback(reviveFileEntry(entry));
   });
-  ipcRenderer.on("splitpage:menu-command", (_event, command) => {
+  receive("splitpage:menu-command", (_event, command) => {
     if (menuCommandCallback) menuCommandCallback(command);
   });
-  ipcRenderer.on("splitpage:open-server-doc", (_event, payload) => {
+  receive("splitpage:open-server-doc", (_event, payload) => {
     if (openServerDocCallback) openServerDocCallback(payload);
   });
-  ipcRenderer.on("splitpage:restore-notice", (_event, payload) => {
+  receive("splitpage:restore-notice", (_event, payload) => {
     if (restoreNoticeCallback) restoreNoticeCallback(payload);
   });
   /* UPDATES: main pushes the whole status object whenever it changes — the
      launch check settling, and every step of a download. Pushed rather than
      polled because the check finishes after this page has already loaded and
      read the status once. */
-  ipcRenderer.on("splitpage:update-status", (_event, status) => {
+  receive("splitpage:update-status", (_event, status) => {
     if (updateStatusCallback) updateStatusCallback(status);
   });
   /* DOC-CLAIMS: main has decided this page's document is a copy of one open
      in another tab, and is handing it a replacement identity. The payload is
      three plain values ({fromId, toId, otherTitle}) — the renderer validates
      all three again before it applies anything. */
-  ipcRenderer.on("splitpage:reassign-doc-id", (_event, payload) => {
+  receive("splitpage:reassign-doc-id", (_event, payload) => {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
   /* DRAFT-IPC-AND-SHAPES: main is asking this page to write whatever it is
@@ -54,9 +92,9 @@ if (location.origin === "splitpage://app") {
      goes back, quoting the same reqId — including when the page has no
      handler or the handler throws — because main is waiting on a budget and
      an answer that never comes costs it the whole budget for nothing. */
-  ipcRenderer.on("splitpage:draft-flush", (_event, reqId) => {
+  receive("splitpage:draft-flush", (_event, reqId) => {
     const reply = (result) => {
-      try { ipcRenderer.send("splitpage:draft-flushed", reqId, result); } catch (_) { /* main is gone */ }
+      try { send("splitpage:draft-flushed", reqId, result); } catch (_) { /* main is gone */ }
     };
     if (typeof draftFlushCallback !== "function") { reply({ ok: false, code: "NO_TAB" }); return; }
     /* The callback may return a promise (it usually does — a draft write is a
@@ -84,7 +122,7 @@ if (location.origin === "splitpage://app") {
   /* Synchronous by design: appVersion is a plain string on the exposed
      object, not a promise, and this only ever runs once, at preload time,
      before the page sees it. */
-  const appVersion = ipcRenderer.sendSync("splitpage:get-app-version-sync");
+  const appVersion = sendSync("splitpage:get-app-version-sync");
 
   /* TAB-BOOT-SYNC: also synchronous, also read exactly once at preload time.
      The renderer's boot sequence has to know what this page is FOR before it
@@ -96,7 +134,7 @@ if (location.origin === "splitpage://app") {
      A null answer means "not a tab page" (main did not recognise the sender).
      Nothing can be assumed in that case, so every field falls back to the
      quietest possible value: a blank page with no prior session. */
-  const boot = ipcRenderer.sendSync("splitpage:tab-boot-sync") || {};
+  const boot = sendSync("splitpage:tab-boot-sync") || {};
   const tabId = typeof boot.tabId === "string" ? boot.tabId : null;
   const windowId = typeof boot.windowId === "string" ? boot.windowId : null;
   const launchIntent = boot.launchIntent && typeof boot.launchIntent === "object"
@@ -112,7 +150,7 @@ if (location.origin === "splitpage://app") {
      main.js's splitpage:is-test-mode-sync), not from this script re-reading
      SPLITPAGE_TEST itself, so there is exactly one source of truth for "is
      this a test run" and preload can never disagree with main about it. */
-  const testMode = ipcRenderer.sendSync("splitpage:is-test-mode-sync");
+  const testMode = sendSync("splitpage:is-test-mode-sync");
 
   const bridge = {
     isDesktop: true,
@@ -130,23 +168,23 @@ if (location.origin === "splitpage://app") {
     hasDraftToRestore,
 
     openFileDialog() {
-      return ipcRenderer.invoke("splitpage:open-file-dialog").then(reviveFileEntry);
+      return invoke("splitpage:open-file-dialog").then(reviveFileEntry);
     },
 
     saveFileDialog(options) {
-      return ipcRenderer.invoke("splitpage:save-file-dialog", options || {});
+      return invoke("splitpage:save-file-dialog", options || {});
     },
 
     readFile(id) {
-      return ipcRenderer.invoke("splitpage:read-file", id).then(reviveFileEntry);
+      return invoke("splitpage:read-file", id).then(reviveFileEntry);
     },
 
     writeFile(id, data) {
-      return ipcRenderer.invoke("splitpage:write-file", id, data);
+      return invoke("splitpage:write-file", id, data);
     },
 
     statFile(id) {
-      return ipcRenderer.invoke("splitpage:stat-file", id);
+      return invoke("splitpage:stat-file", id);
     },
 
     /* "Open this" — main decides WHERE it lands (this tab, a tab that
@@ -154,7 +192,7 @@ if (location.origin === "splitpage://app") {
        The payload names a document by opaque file id or server document id,
        never by path. */
     routeOpen(payload) {
-      return ipcRenderer.invoke("splitpage:route-open", payload);
+      return invoke("splitpage:route-open", payload);
     },
 
     /* Recent documents (DESKTOP-RECENTS), the New Tab page's third column.
@@ -165,15 +203,15 @@ if (location.origin === "splitpage://app") {
        click reopens with no picker. All three resolve to the list as it
        stands afterwards, so the page never has to re-ask. */
     listRecents() {
-      return ipcRenderer.invoke("splitpage:recents-list");
+      return invoke("splitpage:recents-list");
     },
 
     removeRecent(fileId) {
-      return ipcRenderer.invoke("splitpage:recents-remove", fileId);
+      return invoke("splitpage:recents-remove", fileId);
     },
 
     clearRecents() {
-      return ipcRenderer.invoke("splitpage:recents-clear");
+      return invoke("splitpage:recents-clear");
     },
 
     onOpenServerDoc(cb) {
@@ -194,7 +232,7 @@ if (location.origin === "splitpage://app") {
          main.js has been holding any OS-handed files (launch argv, a
          second instance's argv, macOS 'open-file') in a queue exactly
          until this fires, then flushes them through the listener above. */
-      ipcRenderer.send("splitpage:renderer-ready");
+      send("splitpage:renderer-ready");
     },
 
     onMenuCommand(cb) {
@@ -202,7 +240,7 @@ if (location.origin === "splitpage://app") {
     },
 
     setDocumentState(state) {
-      ipcRenderer.send("splitpage:set-document-state", state);
+      send("splitpage:set-document-state", state);
     },
 
     /* ---- crash drafts (DRAFT-IPC-AND-SHAPES) ----------------------------
@@ -215,11 +253,11 @@ if (location.origin === "splitpage://app") {
        These resolve with a WriteResult rather than rejecting, so a refusal
        always arrives with a code the renderer can back off on. */
     writeDraft(payload) {
-      return ipcRenderer.invoke("splitpage:draft-write", payload);
+      return invoke("splitpage:draft-write", payload);
     },
 
     discardDraft(seq) {
-      return ipcRenderer.invoke("splitpage:draft-discard", { seq });
+      return invoke("splitpage:draft-discard", { seq });
     },
 
     /* The crash draft for THIS tab, if there is one, with the file it was
@@ -227,14 +265,14 @@ if (location.origin === "splitpage://app") {
        the page never sees it). Nothing is deleted by taking: the draft stays
        until draftRestoreDone says what happened to it. */
     takeDraft() {
-      return ipcRenderer.invoke("splitpage:draft-take").then((taken) => {
+      return invoke("splitpage:draft-take").then((taken) => {
         if (taken && taken.file) taken.file = reviveFileEntry(taken.file);
         return taken;
       });
     },
 
     draftRestoreDone(outcome) {
-      ipcRenderer.send("splitpage:draft-restore-done", { outcome });
+      send("splitpage:draft-restore-done", { outcome });
     },
 
     onDraftFlush(cb) {
@@ -253,46 +291,46 @@ if (location.origin === "splitpage://app") {
        main's eviction can skip them; src/js/03a-history-store.js fills it in
        from protectHistorySnapshot and the page never has to think about it. */
     historyPut(docId, meta, stateJson, protect) {
-      return ipcRenderer.invoke("splitpage:history-put", docId, meta, stateJson, protect || []);
+      return invoke("splitpage:history-put", docId, meta, stateJson, protect || []);
     },
 
     historyList(docId) {
-      return ipcRenderer.invoke("splitpage:history-list", docId == null ? null : docId);
+      return invoke("splitpage:history-list", docId == null ? null : docId);
     },
 
     historyGet(query, snapshotId) {
-      return ipcRenderer.invoke("splitpage:history-get", query, snapshotId);
+      return invoke("splitpage:history-get", query, snapshotId);
     },
 
     historyCopy(fromDocId, toDocId) {
-      return ipcRenderer.invoke("splitpage:history-copy", fromDocId, toDocId);
+      return invoke("splitpage:history-copy", fromDocId, toDocId);
     },
 
     historyTouch(docId, title) {
-      return ipcRenderer.invoke("splitpage:history-touch", docId, title);
+      return invoke("splitpage:history-touch", docId, title);
     },
 
     historyImportOlder(entries) {
-      return ipcRenderer.invoke("splitpage:history-import-older", entries);
+      return invoke("splitpage:history-import-older", entries);
     },
 
     historyUsage() {
-      return ipcRenderer.invoke("splitpage:history-usage");
+      return invoke("splitpage:history-usage");
     },
 
     /* Every document this store has history for — {docId, title,
        lastOpenedAt}[], Older excluded. Backs File > Export app data.. on
        desktop (20h-appdata.js / 03a-history-store.js's exportHistoryAll). */
     historyListDocs() {
-      return ipcRenderer.invoke("splitpage:history-list-docs");
+      return invoke("splitpage:history-list-docs");
     },
 
     getSessionInfo() {
-      return ipcRenderer.invoke("splitpage:get-session-info");
+      return invoke("splitpage:get-session-info");
     },
 
     openExternal(url) {
-      ipcRenderer.send("splitpage:open-external", url);
+      send("splitpage:open-external", url);
     },
 
     /* ---- updates (see main.js section 9) --------------------------------
@@ -302,19 +340,19 @@ if (location.origin === "splitpage://app") {
        checked, and knows the only path it is willing to execute. */
 
     getUpdateStatus() {
-      return ipcRenderer.invoke("splitpage:update-status");
+      return invoke("splitpage:update-status");
     },
 
     checkForUpdate() {
-      return ipcRenderer.invoke("splitpage:update-check");
+      return invoke("splitpage:update-check");
     },
 
     downloadUpdate() {
-      return ipcRenderer.invoke("splitpage:update-download");
+      return invoke("splitpage:update-download");
     },
 
     installUpdate() {
-      return ipcRenderer.invoke("splitpage:update-install");
+      return invoke("splitpage:update-install");
     },
 
     onUpdateStatus(cb) {
@@ -329,32 +367,32 @@ if (location.origin === "splitpage://app") {
        page's own window.close(), which is a different, lighter-weight
        path — see main.js's splitpage:test-request-close comment. Never
        present outside SPLITPAGE_TEST=1. */
-    bridge.__testRequestClose = () => ipcRenderer.send("splitpage:test-request-close");
-    bridge.__testRequestQuit = () => ipcRenderer.send("splitpage:test-request-quit");
+    bridge.__testRequestClose = () => send("splitpage:test-request-close");
+    bridge.__testRequestQuit = () => send("splitpage:test-request-quit");
     /* The Ctrl+W path for THIS tab, so a test can close one tab of a window
        without touching the window. */
-    bridge.__testRequestCloseTab = () => ipcRenderer.send("splitpage:test-request-close-tab");
+    bridge.__testRequestCloseTab = () => send("splitpage:test-request-close-tab");
     /* The shell driver (SMOKE-HARNESS shell()): create/activate/close/move
        tabs and read back what the shell thinks is open, without a real
        click, a real drag or a visible window. */
-    bridge.__testShell = (op, args) => ipcRenderer.invoke("splitpage:test-shell", op, args);
+    bridge.__testShell = (op, args) => invoke("splitpage:test-shell", op, args);
     /* Runs main's own copy of planHistoryEviction over a fixture, so a smoke
        case can hold it against the renderer's original
        (window.__historyTest.planEviction) and prove the two have not drifted. */
-    bridge.__testHistoryPlan = (fixture) => ipcRenderer.invoke("splitpage:test-history-plan", fixture);
+    bridge.__testHistoryPlan = (fixture) => invoke("splitpage:test-history-plan", fixture);
     /* Runs main's real chooseDuplicateLoser (DOC-CLAIMS) over two claims the
        test invents, so a case can prove what the duplicate rule does with a
        given pair of birthtimes instead of reading the constant that gates
        it. Answers 'a', 'b' or null. */
-    bridge.__testDupLoser = (a, b) => ipcRenderer.invoke("splitpage:test-dup-loser", a, b);
+    bridge.__testDupLoser = (a, b) => invoke("splitpage:test-dup-loser", a, b);
     /* What the draft store thinks of a tab: this one by default, or any tab
        of this run by id (a case that crashes a page has to ask about it from
        a different page). */
-    bridge.__testDraftStatus = (tabId) => ipcRenderer.invoke("splitpage:test-draft-status", tabId);
+    bridge.__testDraftStatus = (tabId) => invoke("splitpage:test-draft-status", tabId);
     /* Kills this page's renderer the way a real crash does, so a smoke case
        can drive main's render-process-gone path — hold, reload, crash-loop
        guard — for real. The page does not come back from this call. */
-    bridge.__testCrashRenderer = () => ipcRenderer.send("splitpage:test-crash-renderer");
+    bridge.__testCrashRenderer = () => send("splitpage:test-crash-renderer");
   }
 
   contextBridge.exposeInMainWorld("splitpageDesktop", bridge);

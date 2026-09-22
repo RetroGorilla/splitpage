@@ -16,6 +16,10 @@ files:
   - preload.js
   - tabstrip-preload.js
   - drafts.js
+  # The IPC channel table. main.js requires it at startup and both preloads
+  # read it over splitpage:ipc-table-sync, so a packaged build without it is
+  # an app with no bridge at all — same reason drafts.js is listed.
+  - ipc-channels.js
   - package.json
 
 extraResources:

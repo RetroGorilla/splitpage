@@ -96,12 +96,17 @@ for (const filename of ["index.html", "tabstrip.js", "tabstrip.css"]) {
   console.log(`  tabstrip/${filename} (${data.length} bytes)`);
 }
 
-// server/server.js (subdirectory)
+// server/ (subdirectory). package.json travels with server.js and is not
+// optional: server.js is CommonJS, the repo root's package.json says
+// "type": "module" for the build tooling, and Node resolves the nearest one.
+// Stage server.js alone next to a module-typed root and the first require()
+// throws.
 const serverDir = resolve(STAGE_DIR, "server");
 await fs.mkdir(serverDir, { recursive: true });
-const serverSrc = resolve(REPO_ROOT, "server", "server.js");
-const serverData = await fs.readFile(serverSrc);
-await fs.writeFile(resolve(serverDir, "server.js"), serverData);
-console.log(`  server/server.js (${serverData.length} bytes)`);
+for (const filename of ["server.js", "package.json"]) {
+  const data = await fs.readFile(resolve(REPO_ROOT, "server", filename));
+  await fs.writeFile(resolve(serverDir, filename), data);
+  console.log(`  server/${filename} (${data.length} bytes)`);
+}
 
 console.log(`\nStaging complete. Ready to run: npx electron-builder --config electron-builder.yml`);
