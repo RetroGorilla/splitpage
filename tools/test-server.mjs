@@ -14,7 +14,8 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1818,6 +1819,303 @@ try {
   eq("...saying read-only", body && body.error, "read-only");
 } finally {
   sCmtRO.stop();
+}
+
+/* ---------- images as content-addressed blobs (#82) ----------
+ *
+ * PUT/GET/missing under /api/blobs, the 422 a save or a comment gets for an
+ * image the server does not hold, a review link's view of the blob store
+ * (only what its document names, plus what it uploaded itself), a
+ * reviewer's upload budget, and the D7 gate that stops a client predating
+ * blob refs from saving over a document that holds some.
+ */
+const BLOB_BUDGET = 10000;   /* two small uploads (each charged at least 4096) and no third */
+const sBlob = await startServer({
+  JOIN_PIN: PIN,
+  REVIEW_PIN,
+  REVIEW_KEY,
+  ALLOW_ORIGINS: ORIGIN,
+  HOST: "127.0.0.1",
+  MAX_BLOB_BYTES: "65536",
+  REVIEW_BLOB_BUDGET_BYTES: String(BLOB_BUDGET)
+});
+
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+function pngOf(size) {
+  return Buffer.concat([PNG_SIG, randomBytes(Math.max(8, size - PNG_SIG.length))]);
+}
+function jpegOf(size) {
+  return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), randomBytes(size - 4)]);
+}
+const shaOf = (buf) => createHash("sha256").update(buf).digest("hex");
+
+try {
+  const joinAs = async (payload) => await json(await fetch(sBlob.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }));
+  const editToken = (await joinAs({ pin: PIN })).token;
+  const reviewToken = (await joinAs({ pin: REVIEW_PIN })).token;
+  const NEW = { "x-splitpage-client": "2" };
+  const hdr = (token, extra) => Object.assign({ "Content-Type": "application/json", "x-splitpage-token": token }, extra || {});
+
+  const putBlob = (token, buf, sha) => fetch(sBlob.base + "api/blobs/" + (sha || shaOf(buf)), {
+    method: "PUT",
+    headers: Object.assign({ "Content-Type": "application/octet-stream", "x-splitpage-token": token }, NEW),
+    body: buf
+  });
+  const getBlob = (token, sha, extra) => fetch(sBlob.base + "api/blobs/" + sha, {
+    headers: Object.assign({ "x-splitpage-token": token }, NEW, extra || {})
+  });
+  const missingAs = async (token, shas) => fetch(sBlob.base + "api/blobs/missing", {
+    method: "POST", headers: hdr(token, NEW), body: JSON.stringify({ shas })
+  });
+  const withImage = (title, sha, extra) => Object.assign(fixtureState(), { title }, extra || {}, {
+    rows: [Object.assign(fixtureState().rows[0], { imageRef: sha ? { sha256: sha, width: 4, height: 3, mime: "image/png" } : null })]
+  });
+  const createDoc = (state, extra) => fetch(sBlob.base + "api/docs", {
+    method: "POST", headers: hdr(editToken, NEW), body: JSON.stringify(Object.assign({ state }, extra || {}))
+  });
+  const putDoc = (docId, baseRev, state, headers, extra) => fetch(sBlob.base + "api/docs/" + docId, {
+    method: "PUT", headers: hdr(editToken, headers), body: JSON.stringify(Object.assign({ baseRev, state }, extra || {}))
+  });
+
+  {
+    const body = await json(await fetch(sBlob.base + "api/health"));
+    eq("health says this server keeps blobs", body && body.blobs, 1);
+    const pre = await fetch(sBlob.base + "api/blobs/missing", {
+      method: "OPTIONS", headers: { Origin: ORIGIN, "Access-Control-Request-Method": "POST" }
+    });
+    check("CORS lets the client-version header through",
+      (pre.headers.get("access-control-allow-headers") || "").includes("x-splitpage-client"));
+  }
+
+  /* ---- round trip ---- */
+  const one = pngOf(600);
+  const oneSha = shaOf(one);
+  {
+    const res = await putBlob(editToken, one);
+    eq("an editor's PUT of a new PNG is 201", res.status, 201);
+    eq("...stored:true", (await json(res) || {}).stored, true);
+    check("...at blobs/<aa>/<sha>", existsSync(join(sBlob.dataDir, "blobs", oneSha.slice(0, 2), oneSha)));
+    const again = await putBlob(editToken, one);
+    eq("PUT of the same bytes again is 200", again.status, 200);
+    eq("...stored:false", (await json(again) || {}).stored, false);
+  }
+  {
+    const res = await getBlob(editToken, oneSha);
+    eq("GET of it is 200", res.status, 200);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    check("...with the same bytes", bytes.equals(one));
+    eq("...Content-Type sniffed", res.headers.get("content-type"), "image/png");
+    eq("...immutable cache", res.headers.get("cache-control"), "private, max-age=31536000, immutable");
+    eq("...ETag is the sha", res.headers.get("etag"), "\"" + oneSha + "\"");
+    eq("...nosniff", res.headers.get("x-content-type-options"), "nosniff");
+    eq("...a CSP that runs nothing", res.headers.get("content-security-policy"), "default-src 'none'; sandbox");
+    const cached = await getBlob(editToken, oneSha, { "If-None-Match": "\"" + oneSha + "\"" });
+    eq("If-None-Match with the sha is 304", cached.status, 304);
+  }
+  {
+    eq("GET without a token is 401", (await fetch(sBlob.base + "api/blobs/" + oneSha)).status, 401);
+    eq("GET of an unknown sha is 404", (await getBlob(editToken, "0".repeat(64))).status, 404);
+    eq("GET of something that is not a sha is 400", (await getBlob(editToken, "ABC")).status, 400);
+    eq("...nor is upper-case hex", (await getBlob(editToken, oneSha.toUpperCase())).status, 400);
+  }
+  {
+    const jpg = jpegOf(500);
+    const res = await putBlob(editToken, jpg);
+    eq("a JPEG is stored", res.status, 201);
+    eq("...and served as image/jpeg", (await getBlob(editToken, shaOf(jpg))).headers.get("content-type"), "image/jpeg");
+  }
+
+  /* ---- refusals ---- */
+  {
+    const res = await putBlob(editToken, pngOf(300), "a".repeat(64));
+    eq("bytes that do not hash to the name are 400", res.status, 400);
+    eq("...hash-mismatch", (await json(res) || {}).error, "hash-mismatch");
+    check("...and nothing is stored under that name", !existsSync(join(sBlob.dataDir, "blobs", "aa", "a".repeat(64))));
+  }
+  {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const res = await putBlob(editToken, svg);
+    eq("an SVG is 415", res.status, 415);
+    eq("...unsupported-type", (await json(res) || {}).error, "unsupported-type");
+    const text = Buffer.from("just some text, long enough to sniff");
+    eq("so is plain text", (await putBlob(editToken, text)).status, 415);
+  }
+  {
+    const res = await putBlob(editToken, pngOf(70000));
+    eq("a blob over MAX_BLOB_BYTES is 413", res.status, 413);
+    const early = await refuseBeforeBody(sBlob.base, "api/blobs/" + "b".repeat(64), "PUT",
+      { "x-splitpage-token": editToken });
+    eq("...refused on its declared length, before the body", early.status, 413);
+  }
+
+  /* ---- missing ---- */
+  {
+    const res = await missingAs(editToken, [oneSha, "c".repeat(64), oneSha]);
+    eq("missing answers 200", res.status, 200);
+    const body = await json(res);
+    eq("...naming only what is not here", JSON.stringify(body && body.missing), JSON.stringify(["c".repeat(64)]));
+    eq("more than 2000 shas is 400", (await missingAs(editToken, new Array(2001).fill(oneSha))).status, 400);
+    eq("a non-sha in the list is 400", (await missingAs(editToken, ["nope"])).status, 400);
+  }
+
+  /* ---- the list route ignores blobs/ ---- */
+  {
+    const res = await fetch(sBlob.base + "api/docs", { headers: hdr(editToken) });
+    const body = await json(res);
+    check("blobs/ exists in DATA_DIR", readdirSync(sBlob.dataDir).includes("blobs"));
+    eq("...and the picker lists no documents for it", body && body.docs && body.docs.length, 0);
+  }
+
+  /* ---- saves naming images ---- */
+  const unknown = "d".repeat(64);
+  let refDoc = null;
+  {
+    const bad = await createDoc(withImage("Needs an upload", unknown));
+    eq("creating a document naming an unknown blob is 422", bad.status, 422);
+    const body = await json(bad);
+    eq("...missing-blobs", body && body.error, "missing-blobs");
+    eq("...naming it", JSON.stringify(body && body.missing), JSON.stringify([unknown]));
+    const ok = await createDoc(withImage("Has an image", oneSha));
+    eq("creating one naming a stored blob is 201", ok.status, 201);
+    refDoc = await json(ok);
+    const accepted = await createDoc(withImage("Knows it is gone", unknown), { acceptMissing: [unknown] });
+    eq("...and one naming a lost blob listed in acceptMissing is 201", accepted.status, 201);
+  }
+  {
+    const doc = await json(await fetch(sBlob.base + "api/docs/" + refDoc.id, { headers: hdr(editToken) }));
+    const next = JSON.parse(JSON.stringify(doc.state));
+    next.rows.push(Object.assign({}, next.rows[0], { id: "r2", imageRef: { sha256: unknown, width: 1, height: 1, mime: "image/png" } }));
+    const bad = await putDoc(refDoc.id, doc.rev, next, NEW);
+    eq("a PUT adding an unknown blob ref is 422", bad.status, 422);
+    eq("...naming just that one", JSON.stringify((await json(bad) || {}).missing), JSON.stringify([unknown]));
+    const after = await json(await fetch(sBlob.base + "api/docs/" + refDoc.id, { headers: hdr(editToken) }));
+    eq("...and nothing was written", after.rev, doc.rev);
+
+    const html = JSON.parse(JSON.stringify(doc.state));
+    html.rows[0].visualText = 'Shot <img class="comment-img" data-blob="' + "e".repeat(64) + '" data-w="1" data-h="1">';
+    const badHtml = await putDoc(refDoc.id, doc.rev, html, NEW);
+    eq("a data-blob image in a row's HTML counts too", badHtml.status, 422);
+    const text = JSON.parse(JSON.stringify(doc.state));
+    text.rows[0].audioText = 'She says data-blob="' + "e".repeat(64) + '" out loud';
+    eq("...but words that only look like one do not", (await putDoc(refDoc.id, doc.rev, text, NEW)).status, 200);
+
+    const cur = await json(await fetch(sBlob.base + "api/docs/" + refDoc.id, { headers: hdr(editToken) }));
+    const ok = await putDoc(refDoc.id, cur.rev, next, NEW, { acceptMissing: [unknown] });
+    eq("...the same PUT with acceptMissing is 200", ok.status, 200);
+    const okBody = await json(ok);
+    const again = JSON.parse(JSON.stringify(next));
+    again.title = "Renamed";
+    eq("a later PUT still naming that already-dangling ref is 200",
+      (await putDoc(refDoc.id, okBody.rev, again, NEW)).status, 200);
+  }
+
+  /* ---- legacy base64 and D7 ---- */
+  {
+    const legacy = Object.assign(fixtureState(), { title: "Old style" });
+    legacy.rows[0].visualImage = "data:image/png;base64," + pngOf(200).toString("base64");
+    const made = await json(await createDoc(legacy));
+    const res = await putDoc(made.id, made.rev, legacy, {});
+    eq("a legacy base64 PUT from a client with no version header is still accepted", res.status, 200);
+  }
+  {
+    const cur = await json(await fetch(sBlob.base + "api/docs/" + refDoc.id, { headers: hdr(editToken) }));
+    const res = await putDoc(refDoc.id, cur.rev, cur.state, {});
+    eq("D7: a PUT with no client header on a document holding refs is 426", res.status, 426);
+    eq("...client-too-old", (await json(res) || {}).error, "client-too-old");
+    eq("...as it is from client 1", (await putDoc(refDoc.id, cur.rev, cur.state, { "x-splitpage-client": "1" })).status, 426);
+    const early = await refuseBeforeBody(sBlob.base, "api/docs/" + refDoc.id, "PUT", { "x-splitpage-token": editToken });
+    eq("...refused before the body", early.status, 426);
+    eq("...while client 2 saves it", (await putDoc(refDoc.id, cur.rev, cur.state, NEW)).status, 200);
+  }
+
+  /* ---- comments naming images ---- */
+  {
+    const url = sBlob.base + "api/docs/" + refDoc.id + "/comments";
+    const post = (token, payload, headers) => fetch(url, { method: "POST", headers: hdr(token, headers), body: JSON.stringify(payload) });
+    const img = (sha) => 'look <img class="comment-img" data-blob="' + sha + '" data-w="1" data-h="1">';
+    const note = (id, body) => ({ id, rowId: "r1", field: "audioText", body, author: "Rev" });
+    const bad = await post(reviewToken, { comment: note("bi1", img("f".repeat(64))) }, NEW);
+    eq("a comment naming an image the server lacks is 422", bad.status, 422);
+    eq("...missing-blobs, naming it", JSON.stringify((await json(bad) || {}).missing), JSON.stringify(["f".repeat(64)]));
+    const ok = await post(reviewToken, { comment: note("bi2", img(oneSha)) }, NEW);
+    eq("...one naming a stored image lands", ok.status, 200);
+    const reply = await post(editToken, { replyTo: "bi2", reply: { id: "br1", body: img("f".repeat(64)) } }, NEW);
+    eq("a reply naming a missing image is 422 too", reply.status, 422);
+    const oldClient = await post(reviewToken, { comment: note("bi3", "plain words") }, {});
+    eq("an old client's text comment on a document with refs is still taken", oldClient.status, 200);
+  }
+
+  /* ---- reviewers: a review link sees only its own document's images ---- */
+  const hidden = pngOf(400);
+  const hiddenSha = shaOf(hidden);
+  eq("(a second image, named by no document)", (await putBlob(editToken, hidden)).status, 201);
+  {
+    const share = await json(await fetch(sBlob.base + "api/share?doc=" + refDoc.id, { headers: hdr(editToken) }));
+    const link = await joinAs({ key: share.reviewKey });
+    const linkToken = link.token;
+    eq("(the review link is scoped to the document)", link.docId, refDoc.id);
+
+    eq("a review link may GET an image its document names", (await getBlob(linkToken, oneSha)).status, 200);
+    const other = await getBlob(linkToken, hiddenSha);
+    eq("...but an image it does not name is 404, though it exists", other.status, 404);
+    eq("...while the library-wide review token may GET it", (await getBlob(reviewToken, hiddenSha)).status, 200);
+
+    const miss = await json(await missingAs(linkToken, [oneSha, hiddenSha]));
+    eq("missing, asked by the link, calls the image it cannot see missing",
+      JSON.stringify(miss && miss.missing), JSON.stringify([hiddenSha]));
+
+    const url = sBlob.base + "api/docs/" + refDoc.id + "/comments";
+    const img = 'shot <img class="comment-img" data-blob="' + hiddenSha + '" data-w="1" data-h="1">';
+    const probe = await fetch(url, { method: "POST", headers: hdr(linkToken, NEW),
+      body: JSON.stringify({ comment: { id: "lk1", rowId: "r1", field: "audioText", body: img, author: "Link" } }) });
+    eq("a link's comment naming an image it cannot see is 422, though it exists", probe.status, 422);
+
+    const up = await putBlob(linkToken, hidden);
+    eq("the link uploading those bytes is told 201", up.status, 201);
+    eq("...stored:true, the same as for a new image", (await json(up) || {}).stored, true);
+    eq("...after which it may GET what it uploaded", (await getBlob(linkToken, hiddenSha)).status, 200);
+    const posted = await fetch(url, { method: "POST", headers: hdr(linkToken, NEW),
+      body: JSON.stringify({ comment: { id: "lk1", rowId: "r1", field: "audioText", body: img, author: "Link" } }) });
+    eq("...and post the comment carrying it", posted.status, 200);
+  }
+
+  /* ---- a reviewer's upload budget ---- */
+  {
+    /* Twice, and first: a re-send of bytes already here is charged nothing,
+       which is why the two uploads below still both fit. */
+    eq("a reviewer re-sending bytes already here is 200", (await putBlob(reviewToken, one)).status, 200);
+    eq("...and again, charged nothing", (await putBlob(reviewToken, one)).status, 200);
+    const a = await putBlob(reviewToken, pngOf(3000));
+    eq("a reviewer's upload within the budget is 201", a.status, 201);
+    const b = await putBlob(reviewToken, pngOf(3000));
+    eq("...and a second", b.status, 201);
+    const c = await putBlob(reviewToken, pngOf(3000));
+    eq("...a third, over the budget, is 429", c.status, 429);
+    eq("...review-budget", (await json(c) || {}).error, "review-budget");
+    const early = await refuseBeforeBody(sBlob.base, "api/blobs/" + "9".repeat(64), "PUT",
+      { "x-splitpage-token": reviewToken, "Content-Length": "3000" });
+    eq("...refused before its body is read", early.status, 429);
+    eq("...while an editor is not held to it", (await putBlob(editToken, pngOf(3000))).status, 201);
+  }
+} finally {
+  sBlob.stop();
+}
+
+/* A published library stores no images either. */
+const sBlobRO = await startServer({ HOST: "127.0.0.1", READ_ONLY: "1" });
+try {
+  const out = await refuseBeforeBody(sBlobRO.base, "api/blobs/" + "a".repeat(64), "PUT", { "Content-Length": "100" });
+  eq("a read-only library refuses a blob PUT before the body", out.status, 403);
+  eq("...saying read-only", out.body && out.body.error, "read-only");
+  const miss = await fetch(sBlobRO.base + "api/blobs/missing", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shas: ["a".repeat(64)] })
+  });
+  eq("...but still answers missing", miss.status, 200);
+} finally {
+  sBlobRO.stop();
 }
 
 console.log("");
