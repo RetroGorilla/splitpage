@@ -404,6 +404,9 @@ $KeyMap = @{
   Backspace = @{ key = 'Backspace'; code = 'Backspace'; vk = 8 }
   ArrowDown = @{ key = 'ArrowDown'; code = 'ArrowDown'; vk = 40 }
   ArrowUp   = @{ key = 'ArrowUp';   code = 'ArrowUp';   vk = 38 }
+  # prompter scene-mode step keys (issue #26)
+  ArrowLeft  = @{ key = 'ArrowLeft';  code = 'ArrowLeft';  vk = 37 }
+  ArrowRight = @{ key = 'ArrowRight'; code = 'ArrowRight'; vk = 39 }
   Delete    = @{ key = 'Delete';    code = 'Delete';    vk = 46 }
   Home      = @{ key = 'Home';      code = 'Home';      vk = 36 }
   End       = @{ key = 'End';       code = 'End';       vk = 35 }
