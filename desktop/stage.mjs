@@ -13,7 +13,7 @@
 
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
-import { resolve, dirname, join } from "node:path";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -376,26 +376,14 @@ export function updateTagBadges() {
 
 /* ---- applying and editing tags ---- */
 
-function wrapRangeInTag(range, cat, name) {
-  var frag = range.extractContents();
-  var span = document.createElement("span");
-  span.className = "tag-anchor";
-  span.setAttribute("data-tag-cat", cat);
-  span.setAttribute("data-tag-name", name);
-  span.setAttribute("contenteditable", "false"); /* atomic — see the sanitizer's matching branch */
-  span.appendChild(frag);
-  range.insertNode(span);
-  return span;
-}
-
 var AUTO_TAG_MAX_LEN = 60;
 
 /* Typing shortcut: closing one of the TAG_SHORTCUTS pairs around a phrase
    you just typed turns it straight into a tag of that category — the same
-   span wrapRangeInTag() produces manually. Only live typing of the closing
-   character triggers it (never paste, import, or a merge) — see the
-   inputType/data guard below — and only within the text node that holds
-   the caret, so it can never reach across a <br> or out of the field.
+   .tag-anchor span tagFieldOccurrences() inserts by hand. Only live typing
+   of the closing character triggers it (never paste, import, or a merge) —
+   see the inputType/data guard below — and only within the text node that
+   holds the caret, so it can never reach across a <br> or out of the field.
    Done via execCommand (like Enter and Ctrl+B elsewhere in this file) so
    it lands on the native undo stack: one Ctrl+Z removes just the auto-tag
    and leaves the plain "[phrase]" text behind, which is the whole escape

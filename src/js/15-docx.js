@@ -652,7 +652,7 @@ export async function docxToRows(file) {
     };
   }
 
-  blocks.forEach(function (node, blockIdx) {
+  blocks.forEach(function (node) {
     if (node.localName === "tbl") {
       flush();
       var trs = directChildren(node, "tr");
@@ -727,7 +727,7 @@ export async function docxToRows(file) {
     }
 
     /* a paragraph wrapped entirely in brackets is a direction by convention */
-    var bracketed = /^\s*[\[(].*[\])]\s*$/.test(plain) && plain.length < 200;
+    var bracketed = /^\s*[[(].*[\])]\s*$/.test(plain) && plain.length < 200;
     if ((boldMeansVisual && isAllBoldPara(node)) || bracketed) {
       flush();
       pending = newRow({ visualText: html });
@@ -789,7 +789,7 @@ function toJpegDataUrl(dataUrl) {
 }
 
 function mimeForPath(path) {
-  var ext = (/\.([a-z0-9]+)$/i.exec(path) || [, ""])[1].toLowerCase();
+  var ext = (/\.([a-z0-9]+)$/i.exec(path) || ["", ""])[1].toLowerCase();
   if (ext === "png") return "image/png";
   if (ext === "gif") return "image/gif";
   if (ext === "webp") return "image/webp";

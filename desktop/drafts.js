@@ -536,7 +536,7 @@ function createDraftStore(opts) {
       if (cur.unsupported || readHeaderSync(previousPath, tabId).unsupported) return fail("EPERM");
     }
 
-    let baseRef = null;
+    let baseRef;
     let baseBuf = null;
     if (baseJson === null) {
       if (!rec.lastBase || !fs.existsSync(path.join(folder, rec.lastBase.file))) return fail("NEED_BASE");

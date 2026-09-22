@@ -30,6 +30,8 @@ export function safeHref(href) {
   if (typeof href !== "string") return null;
   var trimmed = href.trim();
   /* strip control characters browsers ignore when resolving a scheme */
+  /* eslint-disable-next-line no-control-regex -- deliberate: "java\\0script:"
+     resolves as javascript: in a browser, so the probe has to see past them. */
   var probe = trimmed.replace(/[\u0000-\u0020]/g, "").toLowerCase();
   if (probe.indexOf("javascript:") === 0 || probe.indexOf("vbscript:") === 0) return null;
   if (probe.indexOf("data:") === 0) return null;
@@ -39,6 +41,8 @@ export function safeHref(href) {
 
 /* names and titles are plain text — never markup */
 export function plainText(v) {
+  /* eslint-disable-next-line no-control-regex -- C0 controls, minus tab/LF/CR,
+     are exactly what a plain-text field must not carry. */
   return String(v == null ? "" : v).replace(/<[^>]*>/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 }
 
@@ -249,7 +253,7 @@ export function buildVideoCardEl(href) {
   a.setAttribute("href", href);
   a.setAttribute("target", "_blank");
   a.setAttribute("rel", "noopener");
-  var host = "";
+  var host;
   try { host = new URL(href).hostname.replace(/^www\./, ""); } catch (e) { host = href; }
   var play = document.createElement("span");
   play.className = "vec-play";

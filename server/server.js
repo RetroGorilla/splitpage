@@ -892,7 +892,13 @@ function sweepPresence(now) {
    browser, so it is bounded and whitelisted on the way in. The name is the
    one free-text field and is only ever rendered as text. */
 function presenceWord(value, max) {
-  return String(value == null ? "" : value).replace(/[ -]/g, "").trim().slice(0, max);
+  /* C0 controls and DEL. These used to be three LITERAL control bytes sitting
+     inside the character class in this file — invisible in every editor and
+     one careless re-encode away from silently changing meaning. Written as
+     \x escapes now, the same way desktop/main.js:draftScalarString already
+     wrote the identical class, and for the reason its comment gives (#68). */
+  /* eslint-disable-next-line no-control-regex -- stripping them is the job. */
+  return String(value == null ? "" : value).replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, max);
 }
 
 function presenceHandle(value) {
@@ -1234,6 +1240,8 @@ const COMMENT_REPLIES_MAX = 500;
 function commentText(value, max) {
   return String(value == null ? "" : value)
     .replace(/<[^>]*>/g, "")
+    /* eslint-disable-next-line no-control-regex -- C0 controls, minus the
+       tab/LF/CR a comment may legitimately contain, are what this strips. */
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
     .trim()
     .slice(0, max);

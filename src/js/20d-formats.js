@@ -172,7 +172,7 @@ function markdownCellToHtml(s, md) {
      in the registry has ordinary spaces in it, so leaving them would mean
      "gaffer tape" quietly failing to re-attach to text that looks
      identical. Nothing downstream wants a nbsp in rebuilt prose either. */
-  var html = sanitizeHtml(legacyMdToHtml(String(md == null ? "" : md).replace(/ /g, " ")));
+  var html = sanitizeHtml(legacyMdToHtml(String(md == null ? "" : md).replace(/\u00A0/g, " ")));
   var names = (s.productionTags || []).slice().sort(function (a, b) {
     return String(b.name || "").length - String(a.name || "").length;
   });

@@ -737,7 +737,7 @@ async function restoreFileDraft(t, mine, base, origin) {
   }
 
   var handle = makeDesktopHandle(t.file);
-  var file = null;
+  var file;
   try { file = await handle.getFile(); } catch (e) { file = null; }
   var parsed = file ? await parseProjectFileState(file) : null;
   if (!parsed || parsed.error) {
@@ -888,7 +888,7 @@ async function runDraftRestore(t) {
    tab's draft, and a restore that threw without answering would leave the
    tab permanently unable to write a new one. */
 export async function applyTakenDraft(t) {
-  var outcome = "failed";
+  var outcome;
   try {
     outcome = await runDraftRestore(t);
   } catch (e) {

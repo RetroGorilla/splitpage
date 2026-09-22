@@ -45,7 +45,7 @@ var sshShownFor = null;
 
 export function loadBookmarks() {
   S.serverBookmarks = [];
-  var raw = null;
+  var raw;
   try { raw = localStorage.getItem(SERVER_BOOKMARKS_KEY); } catch (e) { return; }
   if (!raw) return;
   try {

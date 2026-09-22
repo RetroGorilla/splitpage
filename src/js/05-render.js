@@ -258,7 +258,7 @@ export function syncFieldFromDom(cellEl) {
     /* Strips the zero-width caret spot ensureTrailingCaretSpot() may have
        appended after a trailing tag/b-roll span — it exists only to give
        the DOM a place to put the caret and must never reach stored text. */
-    var html = cellEl.innerHTML.indexOf("​") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/​/g, "");
+    var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
     if (S.state.rows[idx][field] !== html) {
       S.state.rows[idx][field] = html;
       stampRow(S.state.rows[idx]);

@@ -1405,7 +1405,7 @@ function init() {
     closeFileConflict();
     if (ctx && ctx.kind === "project") { saveDoc({ saveAs: true }); return; }
     var base = S.openedFile.name.replace(/\.[^.]+$/, "");
-    var ext = (/\.([^.]+)$/.exec(S.openedFile.name) || [, "md"])[1];
+    var ext = (/\.([^.]+)$/.exec(S.openedFile.name) || ["", "md"])[1];
     buildFileData(S.openedFile.kind, base + " (copy)").then(function (built) {
       deliverFile(base + " (copy)." + ext, built.data, { savedMsg: "Saved a separate copy" });
     });

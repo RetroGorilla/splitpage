@@ -366,10 +366,6 @@ export function commentEntries() {
   });
 }
 
-function anchorExistsInDom(cmtId) {
-  return !!document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
-}
-
 /* anchorLiveText's fallback for a row the "hide shot scenes" toggle
    (issue #25) has folded into a strip: the anchor is not missing, it just
    is not rendered right now. Re-derives its text from the row's own

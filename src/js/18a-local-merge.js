@@ -88,7 +88,7 @@ export async function offerFileMerge(currentFile, home) {
   resetMergeOffer();
   var token = mergeProbeToken;
   if (!currentFile || !S.state) return;
-  var parsed = null;
+  var parsed;
   try {
     parsed = await parseProjectFileState(currentFile, { noAsk: true });
   } catch (e) {

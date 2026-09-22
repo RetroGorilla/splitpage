@@ -250,7 +250,7 @@ function splitWriterRow(cellEl) {
    the span came from altogether.
 
    The comment is not lost either way — every lookup that matters
-   (anchorExistsInDom, jumpToAnchor, syncAnchorResolvedClasses) searches the
+   (jumpToAnchor, syncAnchorResolvedClasses, anchorLiveText) searches the
    whole document. But the panel labels it with the scene rowId names, which
    is now the wrong one, and deleteComment() calls unwrapAnchorInState()
    with that rowId, looks for the span in a row that no longer holds it,

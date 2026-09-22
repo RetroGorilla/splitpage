@@ -219,7 +219,7 @@ const s2 = await startServer({
   SPLITPAGE_UPDATE_API: "http://127.0.0.1:9/never"
 });
 
-let token = null;
+let token;
 try {
   {
     const res = await fetch(s2.base + "api/join", {
