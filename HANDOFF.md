@@ -389,6 +389,96 @@ tabs**.
   route-open dedupe, one-dialog-per-quit, session restore, crash
   reload/loop, duplicate-id reassignment, crash-safe drafts.
 
+### 3.14 Motion is a token layer, and `render()` stays synchronous
+
+`src/app.css` defines one motion vocabulary on `:root` — `--dur-press`,
+`--dur-fast`, `--dur-enter`, `--dur-exit`, `--dur-move`, plus
+`--ease-standard`/`--ease-enter`/`--ease-exit`. Every transition and
+animation in the file reads from it. Add motion by reaching for a token, not
+by picking a number: before this existed there were eight ad-hoc durations
+and `ease` almost everywhere, and nothing matched anything else.
+
+`prefers-reduced-motion` is handled **once**, by collapsing the movement
+tokens to `0.01ms` in a single `@media` block. Near-zero rather than zero so
+`transitionend`/`animationend` still fire. `--dur-flash`, `--dur-highlight`
+and `--dur-pulse` are deliberately left alone: a colour flash is not
+movement, and collapsing an *infinite* animation (`pp-rec-pulse`) towards
+zero would spin the style engine. A component only needs its own
+reduced-motion block if a duration change is not enough — dropping a
+transform, or standing an effect down entirely.
+
+Things that appear must also disappear. `[hidden]` is `display: none`, so a
+keyframe animation can only ever play one way; the pattern for an exit is
+`transition: … display <dur> allow-discrete` plus an `@starting-style` rule
+for the entrance. Side panels, the File drawer and every `.modal-backdrop`
+use it. A transition declaration outranks `!important` in the cascade, so
+the global `[hidden] { display: none !important }` does not defeat it.
+
+**`render()` must stay synchronous.** `04a-row-motion.js` animates scene
+reorder/insert/delete/collapse with FLIP — measure, let render() do its
+innerHTML swap, measure again, put things back with a transform and animate
+it away. It is FLIP and *not* the View Transitions API for one reason:
+`startViewTransition()` runs its callback asynchronously, and roughly 120
+assertions across `tests/` read the DOM immediately after a click with
+nothing in between. `withRowMotion(rowsEl, paint)` calls `paint` exactly
+once, synchronously, and defers only the pixels.
+
+Two traps it already works around:
+
+- **Measure in document space**, not viewport space (`rect.top + scrollY`).
+  `render()` refocuses the cell that had the caret, and focusing can scroll
+  the page — measured in viewport space that scroll reads as every scene in
+  the document having moved, and the whole script slides on a render that
+  changed nothing.
+- **Nothing is animated out, and do not add it back as a clone.** The
+  obvious fade-out for a departing scene is to clone it into a layer and
+  fade the clone. That was written, and removed: for the length of its fade
+  a clone is a second copy of real interface sitting in the document, where
+  every selector in the app and every assertion in `tests/` can reach it.
+  Stripping `id`/`data-id` off it is not enough — the **classes** are
+  selector hooks too. Both `.row` and `.hidden-shot-strip` are queried
+  unscoped here (`48-hide-shot.txt` asks
+  `document.querySelectorAll('.hidden-shot-strip').length == 0` to mean "the
+  run is expanded"), so a fading clone would have answered those queries
+  with a scene that no longer exists. A departure is announced by the FLIP
+  instead: everything below closes the gap, which is what actually reads as
+  "it went away".
+
+### 3.15 One loading indicator, and it waits before showing
+
+`04b-busy.js` owns the only "something is happening" affordance in the app:
+a 2px indeterminate bar at the top of the window. `withBusyBar(label, fn)`
+wraps an async operation; the result and any thrown error pass straight
+through, which matters because callers read `publishToServer()`'s
+true/false. Currently wrapped: every export (they all funnel through
+`exportAs`), publish, server save, the server document list, and the file
+parse in `loadFileIntoEditor`.
+
+Two things keep it from becoming noise. It is a **counter**, not a flag, so
+overlapping operations raise it once and drop it once. And it does not
+appear for `BUSY_SHOW_DELAY_MS` (250ms) — a bar that flashes up for 30ms
+reads as a glitch, so most exports on most scripts show nothing at all.
+
+It is **`withBusyBar`, not `withBusy`**: `20e-connect.js` already declares
+`withBusy(button, label, work)`, and the fragments share one function scope,
+so the later file simply wins. That is the general hazard of this layout —
+scan `src/js/` for duplicate declarations before naming any new top-level
+function or var.
+
+That scan turns up one pre-existing collision worth knowing about, left
+alone here because it is outside a motion change and the suites are green
+on it: **`saveInFlight` is declared three times** — `12-dirty-toast.js:14`
+(the save-state indicator) and `14-export.js:481`, whose comment
+("serialize auto-saves so two quick ones never overlap") plainly intends a
+latch private to `queueAutoSave`. One scope, so it is one bit, and
+`saveDoc()` sets and clears that same bit at `14-export.js:46`/`65`/`132`/
+`166`/`182`/`248`. The effects look accidentally benign today — an autosave
+queues behind a manual save, and the indicator lights during an autosave,
+both arguably wanted — but `queueAutoSave`'s inner `saveDoc()` call clears
+the latch on its own way out, so the serialization is not held by the
+mechanism the comment describes. Anyone touching autosave or the save
+indicator should give the two their own names first.
+
 ---
 
 ## 4. State schema
@@ -617,7 +707,7 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 
 ## 6. Map of the source
 
-`src/js/` (~18,100 lines, 30 fragments; filenames say where things live):
+`src/js/` (~18,400 lines, 32 fragments; filenames say where things live):
 
 | Fragment | What is in it |
 | --- | --- |
@@ -628,6 +718,8 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
 | `04-richtext.js` | `walkSanitize`, html→markdown, video link cards |
+| `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s innerHTML swap, measures before and after in document space, animates what moved (§3.14) |
+| `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
 | `05-render.js` | `rowHtml`, `render`, field sync, rich-text commands |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |

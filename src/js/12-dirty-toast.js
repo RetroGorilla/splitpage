@@ -171,8 +171,20 @@
     el.className = "toast" + (kind ? " " + kind : "") + (sticky ? " is-sticky" : "");
     el.textContent = msg;
     function dismiss() {
-      el.style.opacity = "0";
-      el.style.transition = "opacity 0.2s ease";
+      /* A class, not an inline style. Written inline, the fade-out was the
+         one piece of motion in the app that no stylesheet could reach: it
+         sat outside the motion tokens, and the
+         `@media (prefers-reduced-motion: reduce) { .toast { ... } }` rule in
+         app.css had nothing to apply to, so a viewer who had asked for less
+         motion got the toast's exit anyway. .is-leaving mirrors toast-in —
+         the same 6px of travel, going the other way — and collapses with
+         every other movement token.
+
+         The 220ms removal is deliberately longer than --dur-exit rather
+         than equal to it: the element has to outlive its own transition, and
+         nothing reads a toast's presence closely enough for the extra
+         100ms to matter. */
+      el.classList.add("is-leaving");
       setTimeout(function () { el.remove(); }, 220);
     }
     if (sticky) {

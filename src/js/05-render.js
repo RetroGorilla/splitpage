@@ -142,16 +142,25 @@
       ? { id: focusedCell.getAttribute("data-id"), field: focusedCell.getAttribute("data-field") }
       : null;
 
-    if (!state.rows.length) {
-      rowsEl.innerHTML =
-        '<div class="empty-state">' +
-          '<div>No rows yet. Each row pairs what is on screen with what gets said.</div>' +
-          '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
-        '</div>';
-    } else {
-      rowsEl.innerHTML = renderRowGroups(state.rows, rowHtml);
-      rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
-    }
+    /* withRowMotion (04a-row-motion.js) measures the scenes, runs the
+       callback below, measures again, and animates whatever ended up
+       somewhere else — a reorder, an Alt+Up, a dropped drag, an insert, a
+       run of shot scenes collapsing. It calls the callback synchronously and
+       exactly once, so everything after this block still sees the finished
+       DOM; only the paint is deferred. With reduced motion asked for, or on
+       a document too long to be worth measuring, it is a direct call. */
+    withRowMotion(rowsEl, function () {
+      if (!state.rows.length) {
+        rowsEl.innerHTML =
+          '<div class="empty-state">' +
+            '<div>No rows yet. Each row pairs what is on screen with what gets said.</div>' +
+            '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
+          '</div>';
+      } else {
+        rowsEl.innerHTML = renderRowGroups(state.rows, rowHtml);
+        rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
+      }
+    });
 
     if (refocus) {
       var cellEl = rowsEl.querySelector(

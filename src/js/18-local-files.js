@@ -433,6 +433,13 @@
     if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
     var newRows = null, newTitle = null;
+    /* Unzipping and walking a long .docx is the slowest thing the app does
+       on the open path, and it used to run with the interface completely
+       still. The bar only appears if the parse is actually slow enough to
+       need it (04b-busy.js), so a small .md still opens with nothing shown.
+       Raised around the parse alone — never around the file picker, where
+       the wait is the user's own. */
+    var readBusy = beginBusy("Reading " + file.name + "…");
     try {
       if (kind === "docx") {
         var parsed = await docxToRows(file);
@@ -458,6 +465,8 @@
       else if (err && (err.message === "not-a-zip" || err.message === "no-document-xml")) msg = "That doesn't look like a Word document.";
       showToast(msg, "error");
       return;
+    } finally {
+      endBusy(readBusy);
     }
 
     if (!newRows || !newRows.length) { showToast("No script rows found in that file.", "warn"); return; }
@@ -812,11 +821,19 @@
     }
   }
 
+  /* Every export in the File menu funnels through here — .docx, both
+     Markdowns, .csv, the breakdown, .pdf, standalone HTML, both narration
+     exports and both packing lists — so this is the one place that has to
+     know a long script takes a noticeable moment to build. withBusy raises
+     the top bar (04b-busy.js) only if the build actually takes long enough
+     to need it, which on a short script means nothing appears at all. */
   async function exportAs(kind) {
     var base = openedFile.name ? openedFile.name.replace(/\.[^.]+$/, "") : slugify(state.title);
     var built;
     try {
-      built = await buildFileData(kind, base, { allowImageBundle: true });
+      built = await withBusyBar("Building the " + kind.toUpperCase() + " file…", function () {
+        return buildFileData(kind, base, { allowImageBundle: true });
+      });
     } catch (e) {
       showToast("Could not build the " + kind.toUpperCase() + " file.", "error");
       return;
