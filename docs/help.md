@@ -645,6 +645,18 @@ clears the selection.
 To add a shot nobody has written a scene for yet, type it into **Add a
 shot** at the foot of the panel.
 
+**The whole list on one page.** The arrows button beside the panel's ×
+opens the **B-roll shot list** over the script — a table of every shot,
+grouped by **location** (the order a day of b-roll actually gets shot in),
+or by **scene** or **person**, with the same filter chips. Tick shots off,
+change who has them and write notes right in the table; it's the same list,
+so the panel keeps up and Ctrl+Z works the same. The scene number jumps to
+that scene. **CSV** downloads a spreadsheet with a row for every shot and a
+Props column; **Print shot list** makes a PDF of the list as it's shown —
+filter and grouping included — with a box to tick for each shot. **← Script**
+or <kbd>Esc</kbd> takes you back. On a phone the table becomes a list of
+cards.
+
 ## Writing and planning
 
 **The writer.** **✎ Write** in the header opens the Audio column on its own,

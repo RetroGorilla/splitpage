@@ -2,6 +2,7 @@ import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
+import { SIDE_PANEL_IDS } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { pad2, render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
@@ -30,12 +31,14 @@ import {
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { csvEscape } from "./16-csv.js";
+import { exportAs } from "./18-local-files.js";
 
 /* ================= the b-roll panel (#148) =================
 
    The list itself — reading the markers, the records, anchoring, the
    props a shot needs — is 08c-broll.js. This is how it is shown and
-   edited: the side panel.
+   edited: the side panel, and the full-page shot list (#150, below).
 
    One line per shot, because the question the panel is opened to answer
    is "what is still to shoot", and a card per shot answered it three at a
@@ -1066,6 +1069,7 @@ function onBrollFocusOut(e) {
 
 function onBrollKeydown(e, root) {
   var t = e.target;
+  var onPage = root.id === "broll-page";
   if (e.key === "Escape") {
     /* Escape takes back the most recent thing opened, one at a time: a
        menu, a field being edited, the selection, then the open shot —
@@ -1079,8 +1083,8 @@ function onBrollKeydown(e, root) {
     else if (t.classList.contains("broll-rename-input")) renamingId = null;
     else if (t.classList.contains("broll-person-input")) addingPersonFor = null;
     else if (t.id === "broll-bulk-input") bulkInput = null;
-    else if (Object.keys(selection).length) clearSelection();
-    else if (openId && !t.closest(".broll-page-table")) {
+    else if (!onPage && Object.keys(selection).length) clearSelection();
+    else if (!onPage && openId) {
       refocus = '.broll-row-main[data-id="' + cssAttr(openId) + '"]';
       openId = null;
     } else return;
@@ -1147,6 +1151,7 @@ export function wireBrollPanel() {
   var panel = document.getElementById("broll-panel");
   if (!panel) return;
   wireBrollRoot(panel);
+  wireBrollPage();
 
   var addBtn = document.getElementById("broll-add-save");
   if (addBtn) addBtn.addEventListener("click", addBrollFromPanel);
@@ -1177,12 +1182,277 @@ export function wireBrollPanel() {
   });
 }
 
-/* ---- the full-page shot list (#150) ---- */
+/* ---- the full-page shot list (#150) ----
 
-function loadPageView() {}
-function pageViewToSave() { return {}; }
-function renderBrollPage() {}
-function onBrollPageAction() {}
+   The same list, as a sheet: a table in a card over the whole screen,
+   grouped by location by default — the order a day of b-roll is actually
+   shot in — or by scene or by person. The panel is for keeping track while
+   writing; this is for planning the day and handing it over, with a CSV
+   and a printable PDF from its header.
+
+   It shows the same controls as the panel for what can be done on a sheet
+   — the checkbox, the assignee, the note — with the same data-action names
+   and classes, wired by the same wireBrollRoot(): an edit here is exactly
+   the edit the panel makes, with the same undo. The filter is the panel's
+   (one question, "what am I looking at", asked in two places); the page's
+   grouping is its own, since it defaults differently.
+
+   It covers the whole screen, so it closes the side panels (HANDOFF
+   invariant #16) — the b-roll panel comes back when it closes if it was
+   open — and owns the focus while it is up (invariant #19): Escape or
+   "← Script" closes it and gives the focus back to what opened it. */
+
+var PAGE_GROUPS = [
+  { id: "location", label: "Location" },
+  { id: "scene",    label: "Scene" },
+  { id: "person",   label: "Person" }
+];
+
+var pageView = { group: "location" };
+var pageReturnFocus = null;
+var pagePanelWasOpen = false;
+
+function loadPageView(saved) {
+  pageView.group = oneOf(PAGE_GROUPS, saved.pageGroup, pageView.group);
+}
+
+function pageViewToSave() {
+  return { pageGroup: pageView.group };
+}
+
+function brollPageEl() {
+  return document.getElementById("broll-page");
+}
+
+export function brollPageOpen() {
+  var page = brollPageEl();
+  return !!page && !page.hidden;
+}
+
+export function openBrollPage() {
+  var page = brollPageEl();
+  if (!page || !S.state) return;
+  pageReturnFocus = document.activeElement;
+  var panel = document.getElementById("broll-panel");
+  pagePanelWasOpen = !!panel && !panel.hidden;
+  groupMenuOpen = false;
+  menuFor = null;
+  SIDE_PANEL_IDS.forEach(function (pid) {
+    var el = document.getElementById(pid);
+    if (el) el.hidden = true;
+  });
+  syncPanelClass();
+  page.hidden = false;
+  document.body.classList.add("broll-page-open");
+  renderBrollPage();
+  var back = document.getElementById("broll-page-close");
+  if (back) back.focus();
+}
+
+/* `andThen` runs once the page is gone and before the focus goes back: a
+   jump to a scene, which wants the focus in the script instead. */
+export function closeBrollPage(andThen) {
+  var page = brollPageEl();
+  if (!page || page.hidden) return;
+  page.hidden = true;
+  document.body.classList.remove("broll-page-open");
+  if (pagePanelWasOpen) openBrollPanel();
+  if (andThen) { andThen(); return; }
+  var back = pageReturnFocus;
+  pageReturnFocus = null;
+  if (back && document.body.contains(back) && back.offsetParent !== null) back.focus();
+  else {
+    var btn = document.getElementById(pagePanelWasOpen ? "broll-open-page" : "btn-broll");
+    if (btn) btn.focus();
+  }
+}
+
+function pageSummaryText(entries) {
+  var n = filterCounts(entries);
+  return n.shot + " of " + n.all + " shot" + (n.flagged ? " · " + n.flagged + " flagged" : "");
+}
+
+function pageGroupHeadHtml(g) {
+  var done = g.items.filter(function (e) { return e.status === "shot"; }).length;
+  var title;
+  if (g.kind === "location") {
+    title = (g.none ? '' : '<span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' + brollIcon("pin", 15) + '</span>') +
+      '<span class="broll-page-group-name">' + escapeHtml(g.label) + '</span>';
+  } else if (g.kind === "scene") {
+    title = '<span class="broll-page-group-scene">' + escapeHtml(g.label) + '</span>';
+  } else if (g.kind === "added") {
+    title = '<span class="broll-page-group-name">' + escapeHtml(g.label) + '</span>';
+  } else {
+    var who = g.none ? null : personById(g.items[0].owner);
+    title = (who ? avatarHtml(who) : '') + '<span class="broll-page-group-name">' + escapeHtml(g.label) + '</span>';
+  }
+  return '<tr class="broll-page-group"><th colspan="7" scope="rowgroup"><span class="broll-page-group-in">' + title +
+    '<span class="broll-page-group-count' + (done === g.items.length ? ' is-done' : '') + '">' +
+    done + '/' + g.items.length + ' shot</span></span></th></tr>';
+}
+
+function pageRowHtml(e) {
+  var id = escapeHtml(e.id);
+  var props = e.props.map(function (p) { return p.name; }).join(", ");
+  return '<tr class="broll-page-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
+      '" data-id="' + id + '">' +
+    '<td class="broll-page-c-check">' + checkHtml(e) + '</td>' +
+    '<td class="broll-page-c-shot" data-label="Shot"><span class="broll-row-name" title="' + escapeHtml(e.name || "Untitled shot") + '">' +
+      escapeHtml(e.name || "Untitled shot") + '</span>' + rowStateIconsHtml(Object.assign({}, e, { notes: "", reshoot: false })) + '</td>' +
+    '<td class="broll-page-c-scene" data-label="Scene">' + (e.rowId
+      ? '<button type="button" class="broll-page-scene" data-action="broll-page-jump" data-id="' + id + '" title="Go to scene ' +
+          sceneLabel(e) + '">' + sceneLabel(e) + '</button>'
+      : '<span class="broll-muted" title="' + (e.orphaned ? 'No longer in the script' : 'Added here') + '">—</span>') + '</td>' +
+    '<td class="broll-page-c-props" data-label="Props" style="--prop:' + catColor("prop") + '">' +
+      (props ? '<span class="broll-page-ellipsis" title="' + escapeHtml(props) + '">' + escapeHtml(props) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
+    '<td class="broll-page-c-cuts" data-label="Cuts against">' +
+      (e.audioRef ? '<span class="broll-page-ellipsis broll-page-cuts" title="' + escapeHtml(e.audioRef) + '">' + escapeHtml(e.audioRef) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
+    '<td class="broll-page-c-owner" data-label="Assigned">' +
+      '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '">' +
+        '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
+        S.state.people.map(function (p) {
+          return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
+        }).join("") +
+      '</select></td>' +
+    '<td class="broll-page-c-note" data-label="Note">' +
+      (e.reshoot ? '<span class="broll-flag-ico" title="Flagged" aria-label="Flagged">' + brollIcon("flag", 14) + '</span>' : '') +
+      '<input type="text" class="broll-notes-input broll-page-note" data-id="' + id + '" maxlength="2000" placeholder="Add a note" ' +
+        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '" value="' + escapeHtml(e.notes) + '"></td>' +
+  '</tr>';
+}
+
+export function renderBrollPage() {
+  var page = brollPageEl();
+  if (!page || page.hidden || !S.state) return;
+  var entries = brollEntries();
+  var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
+  keepingFocus(page, function () {
+    document.getElementById("broll-page-summary").textContent = pageSummaryText(entries);
+    var sel = document.getElementById("broll-page-group");
+    if (sel) sel.value = pageView.group;
+    document.getElementById("broll-page-filters").innerHTML = filterChipsHtml(entries);
+    document.getElementById("broll-page-table").innerHTML = shown.length
+      ? '<table class="broll-page-table">' +
+          '<colgroup><col class="broll-page-w-check"><col class="broll-page-w-shot"><col class="broll-page-w-scene">' +
+          '<col class="broll-page-w-props"><col class="broll-page-w-cuts"><col class="broll-page-w-owner"><col class="broll-page-w-note"></colgroup>' +
+          '<thead><tr><th scope="col"><span class="broll-sr">Shot or to shoot</span></th><th scope="col">Shot</th><th scope="col">Scene</th>' +
+            '<th scope="col">Props</th><th scope="col">Cuts against</th><th scope="col">Assigned</th><th scope="col">Note</th></tr></thead>' +
+          brollGroups(shown, pageView.group).map(function (g) {
+            return '<tbody>' + pageGroupHeadHtml(g) + g.items.map(pageRowHtml).join("") + '</tbody>';
+          }).join("") +
+        '</table>'
+      : emptyListHtml(entries);
+  });
+}
+
+/* ---- the sheet, as files: a CSV, and a PDF to print ---- */
+
+function shotRecordForFile(e) {
+  var who = personById(e.owner);
+  return {
+    scene: e.rowId ? sceneLabel(e) : "",
+    name: e.name || "Untitled shot",
+    status: e.status === "shot" ? "Shot" : "To shoot",
+    shot: e.status === "shot",
+    flagged: !!e.reshoot,
+    location: e.location || "",
+    props: e.props.map(function (p) { return p.name; }),
+    cuts: e.audioRef || "",
+    owner: who ? who.name : "",
+    note: e.notes || "",
+    desc: e.desc || ""
+  };
+}
+
+/* One row per shot — every shot, in script order, whatever the page is
+   filtered to: a spreadsheet filters and sorts itself. Read without
+   writing anything (brollEntries(true)), since building a file must not
+   be what adds a shot to the list. */
+export function buildBrollCsv() {
+  var head = ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description"];
+  var lines = [head.join(",")];
+  brollSortedForList(brollEntries(true)).forEach(function (e) {
+    var r = shotRecordForFile(e);
+    lines.push([r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location, r.props.join("; "),
+                r.cuts, r.owner, r.note, r.desc].map(csvEscape).join(","));
+  });
+  if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
+  return "﻿" + lines.join("\r\n");
+}
+
+/* What the printed sheet shows: the page as it is — its filter and its
+   grouping — so what is printed is what was being looked at. */
+export function brollShotListForPrint() {
+  var entries = brollEntries(true);
+  var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
+  var filter = FILTERS.filter(function (f) { return f.id === view.filter; })[0];
+  var group = PAGE_GROUPS.filter(function (g) { return g.id === pageView.group; })[0];
+  return {
+    title: S.state.title || "Untitled Script",
+    summary: pageSummaryText(entries),
+    scope: (filter && filter.id !== "all" ? filter.label + ", " : "") + "by " + group.label.toLowerCase(),
+    groups: brollGroups(shown, pageView.group).map(function (g) {
+      return {
+        label: g.label,
+        done: g.items.filter(function (e) { return e.status === "shot"; }).length,
+        total: g.items.length,
+        items: g.items.map(shotRecordForFile)
+      };
+    })
+  };
+}
+
+function onBrollPageAction(action, btn) {
+  if (action === "broll-open-page") openBrollPage();
+  else if (action === "broll-page-close") closeBrollPage();
+  else if (action === "broll-page-jump") {
+    var id = btn.getAttribute("data-id");
+    closeBrollPage(function () { jumpToBrollShot(id); });
+  } else if (action === "broll-page-csv") exportAs("b-roll csv");
+  else if (action === "broll-page-print") {
+    if (!brollEntries(true).length) { showToast("There is no b-roll to print yet.", "warn"); return; }
+    exportAs("b-roll pdf");
+  }
+}
+
+function wireBrollPage() {
+  var page = brollPageEl();
+  if (!page) return;
+  wireBrollRoot(page);
+  /* the grouping is a real <select>: its change is the page's own */
+  page.addEventListener("change", function (e) {
+    if (e.target.id !== "broll-page-group") return;
+    pageView.group = oneOf(PAGE_GROUPS, e.target.value, "location");
+    saveView();
+    renderBrollPage();
+  });
+  /* A note typed in the sheet goes in on Enter, like leaving the box. */
+  page.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && e.target.classList && e.target.classList.contains("broll-page-note")) {
+      e.preventDefault();
+      e.target.blur();
+    }
+  });
+  /* Escape that nothing inside the page took (a menu, a field being
+     edited, a selection) closes it. */
+  window.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || !brollPageOpen() || e.defaultPrevented) return;
+    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
+    e.preventDefault();
+    closeBrollPage();
+  });
+  /* It owns the focus while it is up: anything that would take the focus
+     behind it — a Tab past its last control, a stray click — brings it
+     back, except a dialog or a toast opened over it. */
+  document.addEventListener("focusin", function (e) {
+    if (!brollPageOpen()) return;
+    var el = e.target;
+    if (!el || !el.closest || el.closest("#broll-page")) return;
+    if (el.closest(".modal-backdrop:not([hidden]), .toast")) return;
+    var back = document.getElementById("broll-page-close");
+    if (back) back.focus();
+  });
+}
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
@@ -1190,7 +1460,9 @@ export function __init() {
   loadView();
   /* For the browser suites: the view as remembered, and the selection. */
   window.__brollTest = {
-    view: function () { return JSON.parse(JSON.stringify(view)); },
-    selected: function () { return Object.keys(selection); }
+    view: function () { return JSON.parse(JSON.stringify(Object.assign({}, view, pageViewToSave()))); },
+    selected: function () { return Object.keys(selection); },
+    csv: buildBrollCsv,
+    printData: brollShotListForPrint
   };
 }

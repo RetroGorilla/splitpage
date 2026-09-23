@@ -3508,6 +3508,152 @@
     .broll-label { line-height: 1.4; }
   }
 
+  /* the panel head's "Open as a full page" */
+  .broll-head-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: var(--radius-sm);
+    background: none; border: 0; color: var(--text-faint); cursor: pointer;
+  }
+  .broll-head-btn:hover, .broll-head-btn:focus-visible { color: var(--text); background: var(--surface-2); }
+
+  /* ---------- the full-page shot list (08d-broll-panel.js, #150) ----------
+
+     Over the whole screen at the writer's level (145): above the side
+     panels, which it closes, and below the modals and toasts. A sheet in a
+     white card, a row per shot 46px tall. */
+  .broll-page {
+    position: fixed; inset: 0; z-index: 145;
+    background: var(--bg); color: var(--text);
+    overflow-y: auto; overflow-x: hidden;
+  }
+  body.broll-page-open { overflow: hidden; }
+  .broll-page-inner { max-width: 1240px; margin: 0 auto; padding: 18px 32px 48px; }
+  .broll-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-body); font-size: 13.5px; font-weight: 500; color: var(--text-dim);
+    background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+    padding: 6px 10px 6px 6px; margin-left: -6px; cursor: pointer;
+  }
+  .broll-back:hover, .broll-back:focus-visible { color: var(--text); background: var(--surface-2); }
+  .broll-page-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 14px 24px; margin-top: 14px; }
+  .broll-page-titles h1 { font-family: var(--font-body); font-size: 26px; font-weight: 700; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+  .broll-page-summary { margin-top: 4px; font-size: 14px; color: var(--text-dim); }
+  .broll-page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .broll-page-group-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); margin-right: 4px; }
+  .broll-page-group-pick select, .broll-page-btn {
+    font-family: var(--font-body); font-size: 13px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 7px 12px; cursor: pointer;
+  }
+  .broll-page-group-pick select { padding: 6px 8px; }
+  .broll-page-btn:hover { border-color: var(--text-faint); }
+  /* filled with the text colour, like a selected chip: dark on paper, and
+     the lightest thing on the screen in dark mode */
+  .broll-page-btn.is-dark { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 500; }
+  .broll-page-btn.is-dark:hover { opacity: 0.9; }
+  .broll-page-filters { margin: 18px 0 14px; }
+  .broll-page-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .broll-page-card .broll-empty { padding: 48px 24px; }
+  .broll-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .broll-page-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  .broll-page-w-check { width: 52px; }
+  .broll-page-w-shot { width: 25%; }
+  .broll-page-w-scene { width: 72px; }
+  .broll-page-w-props { width: 15%; }
+  .broll-page-w-cuts { width: 21%; }
+  .broll-page-w-owner { width: 150px; }
+  .broll-page-w-note { width: 20%; }
+  .broll-page-table thead th {
+    text-align: left; font-size: 12px; font-weight: 600; color: var(--text-dim);
+    padding: 11px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .broll-page-group th {
+    text-align: left; font-weight: 600; padding: 16px 12px 8px 16px;
+    border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+  }
+  .broll-page-group-in { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .broll-page-group-name { font-size: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .broll-page-group-scene { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--text); }
+  .broll-page-group-count { margin-left: 6px; font-family: var(--font-display); font-size: 12px; font-weight: 400; color: var(--text-faint); }
+  .broll-page-group-count.is-done { color: var(--ok); font-weight: 600; }
+  .broll-page-group .broll-avatar { width: 20px; height: 20px; font-size: 9.5px; }
+  .broll-page-row td {
+    height: 46px; padding: 0 10px; vertical-align: middle;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .broll-page-row:last-child td { border-bottom: 0; }
+  .broll-page-row:hover td { background: color-mix(in srgb, var(--surface-2) 40%, transparent); }
+  .broll-page-row.is-flagged td { background: var(--broll-flag-tint); }
+  .broll-page-row td.broll-page-c-check { padding: 0 2px 0 6px; }
+  .broll-page-c-shot { font-size: 14px; font-weight: 500; }
+  .broll-page-c-shot .broll-row-name { display: inline; }
+  .broll-page-row.is-shot .broll-row-name { color: var(--text-dim); }
+  .broll-page-c-shot .broll-state-ico { display: inline-flex; vertical-align: -2px; margin-left: 6px; }
+  .broll-page-scene {
+    font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--visual);
+    background: none; border: 0; padding: 4px 6px; margin-left: -6px; border-radius: 4px; cursor: pointer;
+  }
+  .broll-page-scene:hover { text-decoration: underline; background: var(--visual-soft); }
+  .broll-page-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .broll-page-cuts { font-style: italic; color: var(--text-dim); }
+  .broll-page-c-props { color: var(--text-dim); }
+  .broll-page-owner {
+    width: 100%; font-family: var(--font-body); font-size: 13px; color: var(--text);
+    background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 5px 4px; cursor: pointer;
+  }
+  .broll-page-owner:hover, .broll-page-owner:focus { border-color: var(--border); background: var(--bg); outline: none; }
+  .broll-page-c-note { position: relative; }
+  .broll-page-c-note .broll-flag-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: inline-flex; color: var(--danger); }
+  .broll-page-row.is-flagged .broll-page-note { padding-left: 24px; }
+  .broll-page-note {
+    width: 100%; font-family: var(--font-body); font-size: 13px; color: var(--text); line-height: 1.3;
+    background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 6px 6px; resize: none;
+    text-overflow: ellipsis;
+  }
+  .broll-page-note::placeholder { color: transparent; }
+  .broll-page-row:hover .broll-page-note::placeholder, .broll-page-note:focus::placeholder { color: var(--text-faint); }
+  .broll-page-note:hover { border-color: var(--border); }
+  .broll-page-note:focus { outline: none; border-color: var(--visual); background: var(--bg); }
+
+  /* A phone: the table becomes a stack of rows, each field on its own line
+     with its name beside it; nothing wider than the screen. */
+  @media (max-width: 760px) {
+    .broll-page-inner { padding: 10px 16px 40px; }
+    .broll-page-titles h1 { font-size: 22px; }
+    .broll-page-actions { width: 100%; }
+    .broll-page-group-pick select, .broll-page-note, .broll-page-owner { font-size: 16px; }
+    .broll-page-table, .broll-page-table tbody, .broll-page-table tr, .broll-page-table td, .broll-page-table th { display: block; width: 100%; }
+    .broll-page-table colgroup, .broll-page-table thead { display: none; }
+    .broll-page-group th { padding: 14px 14px 8px; }
+    .broll-page-row {
+      display: grid !important; grid-template-columns: 44px minmax(0, 1fr); column-gap: 4px;
+      padding: 8px 12px 10px 4px; border-bottom: 1px solid var(--border);
+    }
+    .broll-page-row td { height: auto; padding: 2px 0; border: 0; white-space: normal; grid-column: 2; }
+    .broll-page-row td.broll-page-c-check { grid-column: 1; grid-row: 1 / span 6; padding: 0; }
+    .broll-page-row td:not(.broll-page-c-check):not(.broll-page-c-shot) {
+      display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; font-size: 13px;
+    }
+    .broll-page-row td:not(.broll-page-c-check):not(.broll-page-c-shot)::before {
+      content: attr(data-label); color: var(--text-faint); font-size: 12.5px;
+    }
+    .broll-page-c-shot { padding-top: 9px !important; }
+    .broll-page-row td, .broll-page-row:hover td, .broll-page-row.is-flagged td { background: none; }
+    .broll-page-row.is-flagged { background: var(--broll-flag-tint); }
+    .broll-page-scene { justify-self: start; }
+    .broll-page-c-note .broll-flag-ico { position: static; transform: none; grid-column: 2; grid-row: 1; }
+    .broll-page-row.is-flagged .broll-page-note { padding-left: 6px; }
+    .broll-page-row.is-flagged .broll-page-c-note { grid-template-columns: 92px 20px minmax(0, 1fr) !important; }
+    .broll-page-row.is-flagged .broll-page-c-note .broll-flag-ico { grid-column: 2; }
+    .broll-page-row.is-flagged .broll-page-c-note .broll-page-note { grid-column: 3; }
+    .broll-page-note::placeholder { color: var(--text-faint); }
+  }
+
   /* ---------- condensing header (BACKLOG: collapse into a toolbar on scroll)
      The page itself scrolls (there is no inner scroll container), so the
      header sticks to the viewport and sheds its decorative rows once the
