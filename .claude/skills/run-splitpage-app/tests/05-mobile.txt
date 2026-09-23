@@ -82,6 +82,33 @@ expect document.querySelectorAll('.tag-entity.is-expanded').length == 1
 
 shot 05-mobile
 
+# --- the File menu is a sheet from the bottom of the screen (#145) ----------
+# The whole width, a scrim behind it, its own close button, finger-sized
+# items, and nothing past the edge. jsclick: the panel covers the topbar.
+jsclick #production-close
+sleep 300
+jsclick #btn-file
+sleep 400
+expect !document.getElementById('file-menu').hidden
+expect !document.getElementById('file-menu-backdrop').hidden
+expect getComputedStyle(document.getElementById('file-menu')).position == fixed
+expect Math.round(document.getElementById('file-menu').getBoundingClientRect().width) == 375
+expect Math.round(document.getElementById('file-menu').getBoundingClientRect().bottom) == 812
+expect document.getElementById('file-menu').getBoundingClientRect().top > 0
+expect document.getElementById('file-menu-close').getBoundingClientRect().height > 0
+expect document.querySelector('#file-menu [data-file-action="open"]').getBoundingClientRect().height >= 44
+expect document.querySelector('#file-menu .menu-foot').getBoundingClientRect().bottom <= innerHeight
+expect document.documentElement.scrollWidth <= innerWidth
+shot 05-mobile-file-menu
+jsclick #file-menu-backdrop
+sleep 300
+expect document.getElementById('file-menu').hidden
+expect document.getElementById('file-menu-backdrop').hidden
+# the panel back over the screen, for the writer's check below
+jsclick #btn-production
+sleep 400
+expect !document.getElementById('production-panel').hidden
+
 # --- the writer on a phone --------------------------------------------------
 # jsclick, not click: the production panel is covering the topbar by now.
 jsclick #btn-write

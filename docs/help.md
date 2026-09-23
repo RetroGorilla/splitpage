@@ -52,8 +52,12 @@ beta copy is offered it like any other update.
 - **Faster with long scripts:** only the scenes that changed are redrawn.
 - **Shared sessions** bring in a collaborator's saved changes without waiting
   for your next save; reviewers can only ever add comments.
-- **Resizable side panels**, a File menu in sections, and smoother header and
-  panel transitions.
+- **A new File menu** that drops down from its button: where the script is
+  kept and whether it is all saved sits on top, with Autosave as a switch;
+  every item has its shortcut beside it, and one that cannot work right now
+  says why. Save, Save a copy and Open now have their usual shortcuts in the
+  browser too.
+- **Resizable side panels**, and smoother header and panel transitions.
 - Fixes: a PDF scene with a picture and no text is no longer drawn over by
   the next scene; *Undo merge* after a save conflict puts your version back;
   File ▸ Open keeps a file's formatting; the teleprompter covers the header;
@@ -240,7 +244,7 @@ Every tab you have open comes back the next time you launch Splitpage.
 **A new tab starts on a choice, not on a document.** It asks for one of two
 things — **New script**, which is a genuinely empty script (one blank scene,
 no tags, no comments, nothing carried over), or **Open a file**, which is the
-same picker as File ▸ Open a document…. The same page shows in the browser
+same picker as File ▸ Open…. The same page shows in the browser
 app on a fresh copy nothing has been opened or saved into. It never appears
 over a document: not one you opened, not a shared session's, and not one
 coming back from a crash. If you would rather look at the example script that
@@ -815,12 +819,12 @@ the server refuses its saves rather than let it drop them. Your unsaved edits
 are kept and merged back in after the reload.
 
 None of this affects working locally. Opened from disk, the app behaves exactly
-as it always has, and **Save As** still gives you a local copy of a hosted
+as it always has, and **Save a copy…** still gives you a local copy of a hosted
 script whenever you want one.
 
 ## Google Drive files
 
-**File ▸ Google Drive files…** opens a small file manager for any publicly
+**File ▸ Import ▸ Google Drive…** opens a small file manager for any publicly
 shared Google Drive folder — browse it, download files, upload new ones,
 rename, delete, and create subfolders, right from Splitpage. It's separate
 from opening and saving your script; think of it as a way to move files in
@@ -898,6 +902,8 @@ above each scene, and panels and menus go full screen. A few things translate:
 - **Completing a tag:** phone keyboards have no <kbd>Tab</kbd>, so while the
   dim completion is showing, **tap it** to accept.
 - **Find & replace** is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).
+- **The File menu** comes up from the bottom of the screen; tap outside it,
+  or ✕, to put it away.
 - **Selecting several breakdown items:** **long-press** a card to start, then
   tap cards to add or drop them. The **×** in the bar clears the selection.
 - **Reordering scenes:** the ↑ / ↓ buttons (drag needs a mouse).
@@ -953,16 +959,65 @@ is lost — see [Saving your script](#saving-your-script).
 
 ## Importing a Google Doc
 
-**File ▸ Import from Google Doc link…** takes a Google Docs share link (or
+**File ▸ Import ▸ Google Doc link…** takes a Google Docs share link (or
 just the document's ID) instead of a file. Splitpage has no server and no
 Google sign-in of its own, so it can't read the Doc directly — instead it
 opens Google's own Word (.docx) export of it in a new tab, which downloads
 straight to your computer using whatever Google account you're signed in to
 in that tab. Once the download lands, bring it in the same way as any other
-Word file: **File ▸ Open a document…**. If the doc isn't shared "Anyone with
+Word file: **File ▸ Open…**. If the doc isn't shared "Anyone with
 the link," make sure the browser tab that opens is signed in to an account
 that can see it, or the download will be a Google sign-in page instead of a
 document.
+
+## The File menu
+
+**☰ File** drops down from its button. At the top is a card about the script
+you are in: the file it lives in (or *Not saved yet*), whether everything on
+screen is in it (*Saved 2 min ago · Markdown*), the **Autosave** switch, and
+**Save a copy…**, which writes the script to a new file of your choosing and
+leaves the one on screen where it is. While a Word, CSV or text file you
+opened is on screen, the card also offers **Save to** that file.
+
+Below it, four groups:
+
+- **New & open** — **New script** (an empty script in this tab; the one you
+  were in goes into Version history first), **Open…**, **Open recent** in the
+  desktop app, and **Import** for pasting a script, a Google Doc link or
+  Google Drive.
+- **Share** — **Publish & copy a link**, and **Servers…**.
+- **Export** — every export format.
+- **This document** — Version history, Find & replace, Hide shot scenes, and
+  in the desktop app Present in browser and Use Chromium Speech Recognition.
+
+Help, the tour, setup, About, the tagging reference and moving your app data
+between the browser and the desktop app sit along the bottom.
+
+Things that are on or off — Autosave, Hide shot scenes — are switches, and
+the menu stays open when you flip one. Something that cannot work right now
+says why underneath it (*No server connected — set one up first*) instead of
+failing when you click it.
+
+**From the keyboard:** ↑ and ↓ move through the menu, Home and End jump to
+either end, → or Enter opens Open recent or Import, ← closes it again, and
+Esc closes the menu and puts you back on the File button.
+
+### Keyboard shortcuts
+
+Shortcuts are shown beside their item in the File menu — only the ones that
+work in the app you are using. On a Mac, read <kbd>Cmd</kbd> for
+<kbd>Ctrl</kbd>.
+
+| Shortcut | Does |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save a copy… |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open… |
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find & replace |
+| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> | Hide shot scenes |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
+| <kbd>F1</kbd> | Help (desktop app) |
+| <kbd>Ctrl</kbd>+<kbd>T</kbd> | New tab (desktop app) |
 
 ## Saving your script
 
@@ -1017,7 +1072,7 @@ something is in the way (a file that changed on disk under you, a write that
 failed, a lapsed sign-in). Hover it for the detail: which file, or what to
 do about it. The writer has the same line beside its own Save button.
 
-Turn it off with **File ▸ Autosave**, and the file is written only when you
+Turn it off with the **Autosave** switch at the top of the File menu, and the file is written only when you
 press Save. The setting is remembered between launches. Either way, the
 desktop app keeps its own crash-safe copy of everything typed since the last
 save — see [Desktop app](#desktop-app).
@@ -1101,7 +1156,7 @@ stays available for 90 days before it's cleared out for good.
 A file Splitpage saved is a complete project, not just text — reopen it and
 you get everything back: scenes, comments, tags, images, title. Two ways:
 
-- **File ▸ Open a document…**, then pick the `.md` or `.splitpage` file.
+- **File ▸ Open…** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), then pick the `.md` or `.splitpage` file.
   Useful when you're already in the app and want to switch projects.
 - **Double-click a saved Standalone HTML file.** It opens straight into that
   project — that is what being self-contained means.
@@ -1114,7 +1169,7 @@ button that points nowhere yet. Nothing of the document you had open comes
 with it.
 
 If what you actually have is a **revised draft of the script you're already
-working on**, use **File ▸ Paste a script…** instead. That modal replaces (or
+working on**, use **File ▸ Import ▸ Paste a script…** instead. That modal replaces (or
 appends to) the scenes and keeps the document you're in — its breakdown
 statuses, owners and notes, its cast list, its b-roll list and its comments
 all stay where they are. It takes a `.docx`, `.md`, `.txt` or `.csv` file

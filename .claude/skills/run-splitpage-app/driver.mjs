@@ -525,8 +525,14 @@ const KEY_MAP = {
   keyh:      { key: "h",         code: "KeyH",      vk: 72 },
   // Ctrl+Y: redo, the other spelling of Ctrl+Shift+Z
   keyy:      { key: "y",         code: "KeyY",      vk: 89 },
+  // the File menu's shortcuts (#145-#147): Save / Save a copy, Open,
+  // Export…, and the command menu
+  keys:      { key: "s",         code: "KeyS",      vk: 83 },
+  keyo:      { key: "o",         code: "KeyO",      vk: 79 },
+  keye:      { key: "e",         code: "KeyE",      vk: 69 },
+  keyk:      { key: "k",         code: "KeyK",      vk: 75 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY";
+const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK";
 
 async function pressKey(name, mods = "") {
   // PowerShell hashtable lookup is case-insensitive; the suites write `key Tab`
