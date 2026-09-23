@@ -120,9 +120,9 @@ import {
 import {
   anchorBrollInLeftCell,
   maybeCaptureBroll,
-  scheduleBrollRefresh,
-  wireBrollPanel
+  scheduleBrollRefresh
 } from "./08c-broll.js";
+import { wireBrollPanel } from "./08d-broll-panel.js";
 import {
   closeFindBar,
   findOpen,
