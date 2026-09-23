@@ -4540,7 +4540,7 @@ async function caseGalleryVideoFile(target) {
     await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById('__vf').files[0]); " +
       "var media = document.querySelectorAll('#rows .visual-media'); media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
     const link = await poll(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); return l.length ? l[l.length - 1].textContent : null; })()", 10000).catch(() => null);
-    record(tag + ": the drop names the file in the scene's caption", link === "▶ take one.mp4", String(link));
+    record(tag + ": the drop names the file in the scene's caption", link === "take one.mp4", String(link));
     const statePath = await evalPage(cdp, "JSON.stringify(window.__splitpageFormats.state()).indexOf(" + JSON.stringify(dir.replace(/\\/g, "\\\\")) + ") !== -1 || JSON.stringify(window.__splitpageFormats.state()).indexOf(" + JSON.stringify(dir) + ") !== -1");
     record(tag + ": the document names the file, never where it is", statePath === false, String(statePath));
     await evalPage(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); l[l.length - 1].click(); return true; })()");

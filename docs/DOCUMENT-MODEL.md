@@ -238,10 +238,9 @@ is special. **It is the only atom.**
 - **Pasting.** A paste or a drop into a cell never puts them in it. Since
   #135 each one goes into the scene's **gallery** — its Image section — in
   the same undo entry as the pasted words (editCell's `also`): a picture
-  (by its blob ref) is added beside the ones there; a video's link goes in
-  the caption under the picture on screen, or, when the scene has no
-  picture, into a first slot of its own with a thumbnail (a video file's
-  first frame) or a placeholder. A link on a video host, a `<video>` and a
+  (by its blob ref) is added after the ones there, and so is each video,
+  as an item of its own: its link marked `poster`, with a thumbnail (a
+  video file's first frame) or none (a placeholder). A link on a video host, a `<video>` and a
   video file count (a file by its name only: its bytes and its path are not
   the document's). #124 made a comment of each instead; comments it made
   stay as they are. The gallery's shape is `imageRef` (the first picture,

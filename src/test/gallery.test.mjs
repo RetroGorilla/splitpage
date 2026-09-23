@@ -14,7 +14,7 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../js/02c-blobs.js";
 import {
-  addGalleryPicture, addGalleryVideo, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
+  addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../js/02d-gallery.js";
 import { mergeStates, rowContentEqual } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -63,27 +63,40 @@ test("migrateRows keeps a gallery, and makes it safe", () => {
   assert.deepEqual(refsIn(s).sort(), [P1.sha256, P2.sha256, P3.sha256].sort());
 });
 
-test("the slot operations: add beside, replace in place, remove, a link off", () => {
+test("the slot operations: every picture and video its own item; replace, move, remove, a link off", () => {
   const row = doc([{}]).rows[0];
-  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v1" }, 0, null), 0);
-  assert.deepEqual(rowSlots(row).map((s) => [s.ref, s.links.length]), [[null, 1]], "a placeholder with its link");
-  assert.equal(addGalleryPicture(row, P1), 0, "a picture fills the empty first slot");
-  assert.equal(addGalleryPicture(row, P2), 1, "and the next goes beside it");
-  assert.equal(addGalleryPicture(row, P1), 0, "never twice");
-  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v2" }, 1, P3), 1, "a video on a scene with pictures: a caption link, no thumbnail");
-  assert.equal(rowSlots(row).length, 2);
-  assert.deepEqual(row.moreImages[0].links, [{ href: "https://youtu.be/v2" }]);
+  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v1" }, null), 0);
+  assert.deepEqual(rowSlots(row).map((s) => [s.ref, s.links.length]), [[null, 1]], "a video with no thumbnail: a placeholder item");
+  assert.equal(addGalleryPicture(row, P1), 1, "a picture goes after it, never over it");
+  assert.equal(addGalleryPicture(row, P2), 2);
+  assert.equal(addGalleryPicture(row, P1), 1, "never twice");
+  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v2" }, P3), 3, "a video on a scene with pictures: a tile of its own, its thumbnail its picture");
+  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v1" }, null), 0, "the same video twice is one item");
+  assert.deepEqual(row.moreImages[2], { imageRef: P3, links: [{ href: "https://youtu.be/v2", poster: true }] });
   replaceGalleryPicture(row, 1, P3);
-  assert.equal(row.moreImages[0].imageRef.sha256, P3.sha256);
-  assert.deepEqual(row.moreImages[0].links, [{ href: "https://youtu.be/v2" }], "Replace keeps the caption");
+  assert.equal(rowSlots(row).length, 3, "a picture already there: the replaced slot goes");
+  moveGallerySlot(row, 2, 0);
+  assert.equal(row.imageRef.sha256, P3.sha256, "a video tile can be the cover");
+  assert.deepEqual(row.imageLinks, [{ href: "https://youtu.be/v2", poster: true }]);
+  assert.ok(removeGalleryLink(row, 1, videoLinkKey({ href: "https://youtu.be/v1", poster: true })));
+  assert.equal(rowSlots(row).length, 2, "a placeholder with no link left is nothing");
   removeGallerySlot(row, 0);
-  assert.equal(row.imageRef.sha256, P3.sha256, "the next picture moves up");
-  assert.equal(row.moreImages, undefined);
-  assert.ok(removeGalleryLink(row, 0, videoLinkKey({ href: "https://youtu.be/v2" })));
-  assert.ok(!("imageLinks" in row));
+  assert.equal(row.imageRef.sha256, P2.sha256, "the next moves up");
+  assert.ok(!("imageLinks" in row) && !("moreImages" in row));
   removeGallerySlot(row, 0);
   assert.equal(row.imageRef, null);
   assert.deepEqual(rowSlots(row), []);
+});
+
+test("a video item survives migrateRows, refsIn and a .splitpage round trip", () => {
+  const s = doc([{ imageRef: P1, moreImages: [{ links: [{ href: "https://vimeo.com/9", poster: true }] }, { links: [{ href: "https://vimeo.com/x" }] }, { imageRef: P2, links: [{ name: "a.mp4", size: 1, poster: true }] }] }]);
+  assert.deepEqual(s.rows[0].moreImages, [
+    { links: [{ href: "https://vimeo.com/9", poster: true }] },
+    { imageRef: P2, links: [{ name: "a.mp4", size: 1, poster: true }] }
+  ], "an item with neither a picture nor a video of its own is dropped");
+  assert.deepEqual(refsIn(s).sort(), [P1.sha256, P2.sha256].sort());
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  assert.deepEqual(back.rows[0].moreImages, s.rows[0].moreImages);
 });
 
 test("the merge keeps both sides' pictures and links, and either side's removals", () => {
@@ -125,17 +138,19 @@ test("a .splitpage file carries every picture inline and reads back the same gal
   assert.equal(back.rows[0].imageRef.sha256, P1.sha256);
 });
 
-test("Word: every picture in the Visual cell, the links under them, and back again", async () => {
+test("Word: every picture in the Visual cell, the video links under them, and back again as items", async () => {
   S.state = doc([
     { visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }],
-      moreImages: [{ imageRef: P2, links: [{ name: "take one.mp4", size: 3 }] }, { imageRef: P3 }] },
+      moreImages: [{ imageRef: P2 }, { links: [{ name: "take one.mp4", size: 3, poster: true }] }, { imageRef: P3 }] },
     { visualText: "▶ not a caption, just words", audioText: "Two." }
   ]);
   const parsed = await docxToRows(new File([buildDocx()], "g.docx"));
   const r0 = parsed.rows[0];
   assert.equal(r0.imageRef.sha256, P1.sha256);
-  assert.deepEqual((r0.moreImages || []).map((m) => m.imageRef.sha256), [P2.sha256, P3.sha256]);
-  assert.deepEqual(r0.imageLinks, [{ href: "https://youtu.be/abc" }, { name: "take one.mp4" }]);
+  /* the pictures, then each video as an item of its own */
+  assert.deepEqual((r0.moreImages || []).map((m) => m.imageRef ? m.imageRef.sha256 : m.links[0].href || m.links[0].name),
+    [P2.sha256, P3.sha256, "https://youtu.be/abc", "take one.mp4"]);
+  assert.ok(r0.moreImages.slice(2).every((m) => m.links.length === 1 && m.links[0].poster === true));
   assert.equal(r0.visualText.indexOf("youtu.be"), -1, "the links are not the scene's words");
   assert.ok(parsed.rows[1].visualText.indexOf("not a caption, just words") !== -1);
 });
