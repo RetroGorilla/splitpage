@@ -1,0 +1,133 @@
+# Copy, cut, paste and drop in a script cell through the document model
+# (#85, design §5, D6, D7; src/js/05c-clipboard.js).
+#
+#   * a paste of rich HTML lands formatted, sanitised, with the caret after
+#     it, as ONE undo entry;
+#   * a copy of commented words never carries the comment: pasted
+#     elsewhere, the words come and the comment stays where it was;
+#   * a cut then a paste in this tab MOVES the comment: its words carry the
+#     anchor, and the comment's row/column follow them, so its card says
+#     the new place and jumps there; a second paste of the same cut, or
+#     another tab's cut, brings no comment;
+#   * a picture or a video card pasted or dropped into a script cell is
+#     dropped, with a toast saying where pictures go;
+#   * a drop goes in through the model too.
+# The pure half is src/test/clipboard.test.mjs. Every `eval` is one
+# physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- a document with one comment, on "bravo" in scene 1's audio ------------
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = { schema: 2, title: 'Clipboard model', rows: [ { id: 'r1', visualText: 'one', audioText: 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo</span> charlie', status: 'todo' }, { id: 'r2', visualText: 'two', audioText: 'Delta echo foxtrot', status: 'todo' }, { id: 'r3', visualText: 'three', audioText: 'Golf hotel', status: 'todo' } ], comments: [ { id: 'c1', rowId: 'r1', field: 'audioText', anchorId: 'c1', quotedText: 'bravo', author: 'Ann', body: 'about bravo', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'clipboard-model.splitpage')); return true; })()
+wait F.state().title === 'Clipboard model' && document.querySelector('#rows .row[data-id="r3"]')
+eval (function(){ window.cell = function(id, field){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (field === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.st = function(id, field){ return F.state().rows.filter(function(r){ return r.id === id; })[0][field]; }; window.selectText = function(el, needle, collapseEnd){ el.focus(); var text = el.textContent; var at = text.indexOf(needle); if (at === -1) throw new Error('no ' + needle); var from = at, to = at + needle.length; if (collapseEnd === 'end') { from = to = text.length; } var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); var n, seen = 0, r = document.createRange(), a = null, b = null; while ((n = w.nextNode())) { var len = n.nodeValue.length; if (!a && from <= seen + len) { a = [n, from - seen]; } if (!b && to <= seen + len) { b = [n, to - seen]; } seen += len; } r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); }; window.clip = function(type, el, data){ var dt = new DataTransfer(); if (data) Object.keys(data).forEach(function(k){ dt.setData(k, data[k]); }); var ev = new ClipboardEvent(type, { clipboardData: dt, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return { dt: dt, prevented: ev.defaultPrevented, html: dt.getData('text/html'), text: dt.getData('text/plain') }; }; window.card = function(id){ return document.querySelector('#comments-list .comment-card[data-id="' + id + '"]'); }; return true; })()
+expect st('r1', 'audioText').indexOf('data-cmt="c1"') !== -1
+
+# ---- 1. rich HTML pastes formatted, as one undo entry ---------------------
+eval selectText(cell('r2', 'audioText'), 'echo')
+eval (function(){ U.flush(); window.__u0 = U.sizes().undo; window.__p1 = clip('paste', cell('r2', 'audioText'), { 'text/html': '<meta charset="utf-8"><p><b>BOLD</b> and <i onclick="window.__bad=1">ital</i><script>window.__bad=1</script></p>', 'text/plain': 'BOLD and ital' }); return __p1.prevented; })()
+expect __p1.prevented === true
+expect st('r2', 'audioText') === 'Delta <strong>BOLD</strong> and <em>ital</em> foxtrot'
+expect !window.__bad
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+# the caret is right after what was pasted
+expect (function(){ var s = getSelection(); if (!s.isCollapsed) return false; var r = document.createRange(); r.selectNodeContents(cell('r2', 'audioText')); r.setEnd(s.anchorNode, s.anchorOffset); return r.toString() === 'Delta BOLD and ital'; })()
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait st('r2', 'audioText') === 'Delta echo foxtrot'
+key ctrl+shift KeyZ
+wait st('r2', 'audioText') === 'Delta <strong>BOLD</strong> and <em>ital</em> foxtrot'
+
+# ---- 2. a copy of commented words never carries the comment ---------------
+eval selectText(cell('r1', 'audioText'), 'Alpha bravo')
+eval (function(){ window.__c = clip('copy', cell('r1', 'audioText')); return __c.html + ' | ' + __c.text; })()
+expect __c.prevented === true
+expect __c.text === 'Alpha bravo'
+expect __c.html === 'Alpha bravo'
+# nothing about the copy changed the document
+expect st('r1', 'audioText') === 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo</span> charlie'
+eval selectText(cell('r3', 'visualText'), '', 'end')
+eval clip('paste', cell('r3', 'visualText'), { 'text/html': __c.html, 'text/plain': __c.text }).prevented
+expect st('r3', 'visualText') === 'threeAlpha bravo'
+expect F.state().comments.length === 1
+expect F.state().comments[0].rowId === 'r1' && F.state().comments[0].field === 'audioText'
+# even the raw comment span a browser's own copy would carry is only words
+eval selectText(cell('r3', 'visualText'), '', 'end')
+eval clip('paste', cell('r3', 'visualText'), { 'text/html': ' <span class="cmt-anchor" data-cmt="c1">again</span>', 'text/plain': ' again' }).prevented
+expect st('r3', 'visualText') === 'threeAlpha bravo again'
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="c1"]').length === 1
+
+# ---- 3. cut then paste moves the comment -----------------------------------
+eval selectText(cell('r1', 'audioText'), 'bravo charlie')
+eval (function(){ window.__cut = clip('cut', cell('r1', 'audioText')); return __cut.html; })()
+expect __cut.prevented === true
+expect __cut.html.indexOf('data-splitpage-cut="') !== -1 && __cut.html.indexOf('<span class="cmt-anchor" data-cmt="c1">bravo</span>') !== -1
+expect __cut.text === 'bravo charlie'
+wait st('r1', 'audioText') === 'Alpha '
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="c1"]').length === 0
+jsclick #btn-comments
+wait card('c1')
+expect card('c1').querySelector('.comment-loc').textContent === 'Row 01 · Audio'
+eval selectText(cell('r2', 'visualText'), 'two')
+eval (function(){ U.flush(); window.__u1 = U.sizes().undo; return clip('paste', cell('r2', 'visualText'), { 'text/html': __cut.html, 'text/plain': __cut.text }).prevented; })()
+wait st('r2', 'visualText') === '<span class="cmt-anchor" data-cmt="c1">bravo</span> charlie'
+expect F.state().comments.length === 1
+expect F.state().comments[0].rowId === 'r2' && F.state().comments[0].field === 'visualText'
+expect document.querySelector('#rows .row[data-id="r2"] .visual-cell .cmt-anchor[data-cmt="c1"]') !== null
+# the card follows its words
+wait card('c1') && card('c1').querySelector('.comment-loc').textContent === 'Row 02 · Visual'
+eval U.flush()
+expect U.sizes().undo === __u1 + 1
+# a second paste of the same cut is only words: the comment has moved once
+eval selectText(cell('r3', 'audioText'), '', 'end')
+eval clip('paste', cell('r3', 'audioText'), { 'text/html': __cut.html, 'text/plain': __cut.text }).prevented
+expect st('r3', 'audioText') === 'Golf hotelbravo charlie'
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="c1"]').length === 1
+expect F.state().comments[0].rowId === 'r2'
+# another tab's cut brings no comment either
+eval selectText(cell('r3', 'audioText'), '', 'end')
+eval clip('paste', cell('r3', 'audioText'), { 'text/html': '<span data-splitpage-cut="0123456789abcdef"><span class="cmt-anchor" data-cmt="c1">!</span></span>', 'text/plain': '!' }).prevented
+expect st('r3', 'audioText') === 'Golf hotelbravo charlie!'
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="c1"]').length === 1
+# undoing the move puts the comment back where it was, words and all
+eval document.activeElement.blur()
+key ctrl KeyZ
+key ctrl KeyZ
+key ctrl KeyZ
+wait st('r2', 'visualText') === 'two'
+expect F.state().comments[0].rowId === 'r1' && F.state().comments[0].field === 'audioText'
+key ctrl KeyZ
+wait st('r1', 'audioText') === 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo</span> charlie'
+jsclick #comments-panel-close
+
+# ---- 4. pictures and video cards never land in a script cell ---------------
+eval (function(){ var c = document.createElement('canvas'); c.width = 20; c.height = 10; c.getContext('2d').fillRect(0, 0, 20, 10); window.PIC = c.toDataURL('image/png'); document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return PIC.length; })()
+eval selectText(cell('r1', 'visualText'), '', 'end')
+eval clip('paste', cell('r1', 'visualText'), { 'text/html': ' see <img src="' + PIC + '"> here <a class="video-embed-card" href="https://youtu.be/abc">Watch video</a>', 'text/plain': ' see here' }).prevented
+wait st('r1', 'visualText') === 'one see  here '
+expect document.querySelector('#rows .row[data-id="r1"] .visual-cell img') === null
+expect document.querySelector('#rows .row[data-id="r1"] .visual-cell .video-embed-card') === null
+wait Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf("Pictures and videos don't go in the script") === 0; })
+# only a picture: nothing goes in
+eval selectText(cell('r1', 'visualText'), '', 'end')
+eval clip('paste', cell('r1', 'visualText'), { 'text/html': '<img src="' + PIC + '">' }).prevented
+sleep 200
+expect st('r1', 'visualText') === 'one see  here '
+expect JSON.stringify(F.state()).indexOf('data-blob') === -1
+
+# ---- 5. a drop goes in through the model -----------------------------------
+eval (function(){ var el = cell('r3', 'visualText'); el.scrollIntoView({ block: 'center' }); var r = el.getBoundingClientRect(); var dt = new DataTransfer(); dt.setData('text/html', '<b>dropped</b><img src="' + PIC + '">'); dt.setData('text/plain', 'dropped'); var ev = new DragEvent('drop', { bubbles: true, cancelable: true, clientX: r.right - 4, clientY: r.bottom - 4, dataTransfer: dt }); el.dispatchEvent(ev); return ev.defaultPrevented; })()
+wait st('r3', 'visualText').indexOf('<strong>dropped</strong>') !== -1
+expect st('r3', 'visualText').indexOf('<img') === -1
+
+# ---- 6. a comment's own composer still takes a picture ----------------------
+jsclick #btn-comments
+wait card('c1')
+eval (function(){ card('c1').querySelector('[data-action="toggle-reply"]').click(); return true; })()
+wait document.querySelector('#comments-list .reply-composer .cell-editable')
+eval (function(){ var box = document.querySelector('#comments-list .reply-composer .cell-editable'); box.focus(); return clip('paste', box, { 'text/html': 'pic <img src="' + PIC + '">', 'text/plain': 'pic' }).prevented; })()
+wait document.querySelector('#comments-list .reply-composer .cell-editable img[data-blob]')
+
+logs
