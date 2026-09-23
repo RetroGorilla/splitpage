@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { fileHome, home, importHome, setHome } from "./_home.js";
-import { loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
+import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import { toggleHideShotScenes } from "./01b-hide-shot.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -583,7 +583,17 @@ async function loadFileIntoEditor(file, handle, opts) {
      "Draft 2 of the same script" is still a real workflow and is still
      supported; it is the Paste/Import modal (openImportModal,
      11-import.js), which keeps the breakdown, the people, the b-roll and
-     the comments and now takes a file as well as pasted text. */
+     the comments and now takes a file as well as pasted text.
+
+     `schema: SCHEMA_VERSION` because every reader above already hands back
+     HTML, not legacy Markdown: docxToRows builds escaped text plus
+     <strong>/<em>/<a>, normalizeImportedRows (.txt, a foreign .md, a Word
+     file with no table) has already run legacyMdToHtml once, and csvToRows
+     escapes each cell. Without it migrateRows reads the rows as
+     pre-rich-text and runs legacyMdToHtml a second time, which escapes the
+     markup into visible "<strong>" and every "&" into "&amp;" — and every
+     further export and reopen escaped it again. migrateRows still
+     sanitizes them either way. */
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
   if (opts.reload) {
     /* Not an open: the same document, re-read from the same file. Only
@@ -593,7 +603,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     S.state.rows = newRows;
     S.state.title = openedTitle;
   } else {
-    S.state = migrateRows({ title: openedTitle, rows: newRows });
+    S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
     setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
     /* The two homes of the Save button (§3.1) — the project file and the
        hosted document — both belonged to whatever was on screen a moment
