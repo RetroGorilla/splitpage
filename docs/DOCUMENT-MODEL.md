@@ -1,10 +1,11 @@
 # Structured document model — design (issue #85)
 
-Status: **decided; built, except the parts §10 lists as left** — the model
-(`src/js/04c-doc-model.js`), registry ids, the readers, the writers at the
-selection (`05b-cell-edit.js`, `05c-clipboard.js`), undo (`12a-undo.js`)
-and the word-level merge. Adam made the decisions in §12 on
-2026-09-23; the sections below already reflect them. The build follows §10.
+Status: **built** (2026-09-23), with the few leftovers §10 names — the
+model (`04c-doc-model.js`), registry ids, the readers, every edit of a
+script cell (`05b-cell-edit.js`, `05c-clipboard.js`, the tag panel, split
+and join), undo (`12a-undo.js`) and the word-level merge. Adam made the
+decisions in §12; the sections below reflect them. Not yet run on Windows:
+the by-hand pass in `docs/WINDOWS-CHECKS.md` covers it with the rest.
 #85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
 it.
 
@@ -543,11 +544,17 @@ until step 4.
 3. **Readers first. Done, mostly.** Word count, the plain-text, CSV,
    Word and PDF exports, the teleprompter and find/replace read cells
    through `cellOf`; find matches across formatting (never inside a tag or
-   across a b-roll key). Left on HTML, each with its reason in the code:
-   plain Markdown export (the model's fixed nesting changes the Markdown),
-   the `.md` project format, the production index and the b-roll reader.
+   across a b-roll key). So does the b-roll list (`brollInField`): the
+   same items as the HTML reader on every stored-shape cell. Left on HTML,
+   each with its reason in the code: plain Markdown export (the model's
+   fixed nesting changes the Markdown), the `.md` project format, and the
+   production index (`tagsInField` counts tag spans, one mention each; the
+   model joins two spans of one tag side by side into one run, keeps only
+   the inner of two nested tags, drops an empty one and splits one round a
+   b-roll key — shapes older copies of the app did store).
    Tests: `readers.test.mjs` (old and new readers over 1500 stored-shape
-   cells), `find-replace.test.mjs`.
+   cells), `find-replace.test.mjs`, `broll-model.test.mjs`,
+   `tag-panel-model.test.mjs`.
 4. **Writers. Done for everything done at the selection.** Not by making
    `applySteps` the only door into `S.state` — that would have meant
    rewriting all 33 write paths first — but in three parts:
@@ -564,11 +571,15 @@ until step 4.
      the caret and joining two (Backspace/Delete at a paragraph's edge) is
      `joinCells`; comments follow their marks (`syncCommentAnchors`, §3.2).
      Tests: `comment-anchors.test.mjs`, browser suite 78.
-   Still on the old paths, because they already write through
-   `sanitizeHtml` and are not at the selection: applying a tag from the
-   composer to one or all occurrences, rename/remove through the panel,
-   Replace All's HTML fallback for a cell still holding a picture — and
-   split/join of a cell still holding one, cut and joined as HTML.
+   The edits made away from the selection are model edits too: applying
+   a tag from the composer to one or all occurrences (found in the cell's
+   projection, never inside a tag or a link, across a b-roll key or a
+   comment's edge; whole words), rename and remove through the panel
+   (`retag`, the spans still renamed — D2), and the b-roll list's rename
+   and anchoring pass. Tests: `tag-panel-model.test.mjs`,
+   `broll-model.test.mjs`, browser suite 79. Still on the old paths only
+   the HTML fallback each of these keeps for a cell still holding a
+   picture (which D7's load-time move empties).
 5. **Undo stack. Done** (`12a-undo.js`), recording every edit by diffing
    after `markDirty()` rather than per path — see §7 and HANDOFF invariant
    #53. The browser's own undo is never used in a script cell.
