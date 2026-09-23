@@ -53,7 +53,7 @@ function parse(bytes) {
         return { kind: "img", name: x[5], w: +x[1], h: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2] };
       }
       if ((x = /^BT \/(F\d) ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((.*)\) Tj ET$/.exec(op))) {
-        return { kind: "text", str: x[5], x: +x[3], y: +x[4], top: +x[4] + +x[2] };
+        return { kind: "text", str: x[5], font: x[1], size: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2] };
       }
       if ((x = /^q 0\.90 0\.89 0\.86 RG 0\.5 w [\d.]+ ([-\d.]+) m /.exec(op))) return { kind: "rowrule", y: +x[1], top: +x[1] };
       if ((x = / ([-\d.]+) [\d.]+ [\d.]+ re f Q$/.exec(op))) return { kind: "fill", y: +x[1], top: +x[1] };
@@ -75,7 +75,16 @@ function checkLayout(pages) {
       /* the row's own rule, and everything after it on this page, lies
          below the picture — the next row starts under it */
       const rule = ops.findIndex((o, k) => k > i && o.kind === "rowrule");
-      assert.ok(rule > i, op.name + " has no row rule after it");
+      if (rule < 0) {
+        /* the row carries on overleaf (a picture filling its page, text
+           under it that did not fit): the rest of this page is the row's
+           own text, beside the picture or under it */
+        assert.ok(p < pages.length - 1, op.name + " has no row rule after it");
+        ops.slice(i + 1).forEach((o) => {
+          if (o.kind === "text" && o.x < op.x + op.w) assert.ok(o.top <= op.y + 0.01, o.str + " drawn over " + op.name);
+        });
+        return;
+      }
       assert.ok(ops[rule].y < op.y, op.name + "'s row rule (y=" + ops[rule].y + ") is not below its picture (bottom " + op.y + ")");
       ops.slice(rule + 1).forEach((o) => {
         if (o.top === undefined) return;
@@ -446,4 +455,201 @@ test("commentEntries() keeps its plain-text shape; pieces only when asked", () =
   assert.equal(withPieces.body, plain.body);
   assert.deepEqual(withPieces.pieces, [{ text: "One" }, { image: pic.rec.sha256 }, { text: "two three" }]);
   assert.deepEqual(withPieces.replies[0].pieces, [{ text: "plain reply" }]);
+});
+
+/* ---- where a row's rule lands ----
+
+   A chunk that finishes a row puts the row's rule 19pt under the lower
+   column's last baseline (LEAD to drawLines' end, then 6), and the fit
+   rule only kept that baseline on or above M — so a row finishing on a
+   continuation page could rule at M - 11.5, a row starting a fresh page
+   under a picture anywhere down to M - 19, a picture-only row at the
+   picture cap at M - 23.5, and a row that fitted whole by the up-front
+   `need = ... + 14` check up to 1.5pt under M. The rule was still on the
+   paper and the next row started overleaf, so nothing overlapped it; it
+   just was not inside the margin. And a picture filling its page with
+   visual text under it made the text loop bail out: the text was never
+   printed and the rule was drawn at the top of the page, across the
+   picture. */
+const COLW = (PW - M * 2 - 30 - 16) / 2;          /* 229: jpeg(229, h) is h tall */
+const AUDIO_X = M + 30 + COLW + 16;
+const ROW_TAIL = SIZE + 6, PAGE_ROOM = PH - 2 * M - 30, ROW_TOP = PH - M - 30;
+const HIGHLIGHT_DROP = 2.5;                       /* the deepest ink under a baseline: a highlight's box */
+
+/* The rows of a document, as drawn: where each starts (its number), its
+   lines (column, page, baseline), its picture and its rule. Checks as it
+   goes that every line and picture belongs to an open row and that no
+   rule is alone on its page. */
+function drawnRows(pages) {
+  const rows = [];
+  let cur = null;
+  pages.forEach((ops, p) => {
+    let drewHere = false;
+    ops.forEach((o) => {
+      if (o.kind === "text" && o.size === 8 && o.x === M && /^\d+$/.test(o.str)) {
+        assert.equal(cur, null, "row " + o.str + " starts before row " + (cur && cur.n) + " has its rule");
+        cur = { n: +o.str, page: p, y: o.y + SIZE, lines: [], pic: null };
+        rows.push(cur);
+        drewHere = true;
+      } else if (o.kind === "text" && o.size === SIZE) {
+        assert.ok(cur, "line " + o.str + " outside a row");
+        const col = o.x >= AUDIO_X - 0.01 ? "a" : "v";
+        /* one op a word: a word at the height of the column's last line is more of it */
+        const last = cur.lines.filter((l) => l.col === col).pop();
+        if (last && last.page === p && last.y === o.y) last.str += " " + o.str;
+        else cur.lines.push({ col, page: p, y: o.y, str: o.str });
+        drewHere = true;
+      } else if (o.kind === "img") {
+        assert.ok(cur, o.name + " outside a row");
+        cur.pic = { page: p, y: o.y, h: o.h };
+        drewHere = true;
+      } else if (o.kind === "rowrule") {
+        assert.ok(cur, "a rule with no row");
+        /* the rule never starts a page on its own: something of its row
+           (a line, its picture, or its number) is on the page above it */
+        assert.ok(drewHere, "row " + cur.n + "'s rule is alone at the top of page " + (p + 1));
+        cur.rulePage = p;
+        cur.ruleY = o.y;
+        cur = null;
+        drewHere = false;
+      }
+    });
+  });
+  assert.equal(cur, null, "the last row has no rule");
+  return rows;
+}
+
+/* pdfFor, with each distinct row migrated once: the sweep below builds
+   a few thousand documents out of a few dozen rows, and migrating them is
+   most of its time. Rows with no tags or comments migrate on their own
+   exactly as they do in a document. */
+const migrated = new Map();
+function rowPdf(specs) {
+  const base = migrateRows({ schema: 2, title: "Layout", comments: [], rows: [] });
+  S.state = Object.assign(base, {
+    rows: specs.map((r, i) => {
+      const key = r.v + "/" + r.a;
+      if (!migrated.has(key)) {
+        migrated.set(key, migrateRows({ schema: 2, title: "x", comments: [], rows: [{ id: "r", visualText: lines(r.v), audioText: lines(r.a), status: "todo" }] }).rows[0]);
+      }
+      return Object.assign({}, migrated.get(key), { id: "r" + i });
+    })
+  });
+  return buildPdf(specs.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
+}
+
+/* specs: [{ v, a, pic }], v and a as line counts (lines(n): one PDF line
+   each). */
+function checkRowRules(specs, label) {
+  const pages = parse(rowPdf(specs));
+  checkLayout(pages);
+  const rows = drawnRows(pages);
+  assert.equal(rows.length, specs.length, label + ": rows drawn");
+  rows.forEach((row, i) => {
+    const spec = specs[i], at = label + " row " + row.n;
+    /* the rule inside the margin */
+    assert.ok(row.ruleY >= M - 0.005, at + ": rule at y=" + row.ruleY + ", below the margin");
+    /* every line printed, in order, none under the margin */
+    ["v", "a"].forEach((col) => {
+      const ls = row.lines.filter((l) => l.col === col);
+      assert.deepEqual(ls.map((l) => l.str), Array.from({ length: spec[col] }, (_, k) => "Line " + (k + 1)), at + ": " + col + " lines");
+      ls.forEach((l) => {
+        assert.ok(l.y >= M - 0.005, at + ": " + l.str + " at y=" + l.y + ", below the margin");
+        assert.ok(l.y - HIGHLIGHT_DROP >= M - HIGHLIGHT_DROP - 0.005);
+      });
+    });
+    /* never below the rule */
+    row.lines.forEach((l) => assert.ok(l.page < row.rulePage || l.y > row.ruleY, at + ": " + l.str + " under its rule"));
+    const picH = row.pic ? row.pic.h + 8 : 0;
+    /* an empty row's rule is drawn at its top, and it needs the 14 of the
+       row gap it always had */
+    const empty = !spec.v && !spec.a && !row.pic;
+    const need = empty ? 14 : Math.max(spec.v * LEAD + picH, spec.a * LEAD) + ROW_TAIL;
+    if (row.rulePage > row.page) {
+      /* split: only a row that does not fit on a whole page is, and it
+         starts at the top of one */
+      assert.ok(Math.abs(row.y - ROW_TOP) < 0.01, at + ": split, but started at y=" + row.y + ", not the top of a page");
+      assert.ok(need > PAGE_ROOM + 0.005, at + ": split although it fits on a page (" + need + ")");
+      /* and every page but its last is full: a column carrying on to the
+         next page ends where one more line would not have fitted — or
+         would have been its last, with its rule under the margin */
+      for (let p = row.page; p < row.rulePage; p++) {
+        ["v", "a"].forEach((col) => {
+          if (!row.lines.some((l) => l.col === col && l.page > p)) return;
+          const here = row.lines.filter((l) => l.col === col && l.page === p);
+          let last;
+          if (here.length) last = here[here.length - 1].y;
+          else if (col === "v" && row.pic && row.pic.page === p) last = row.pic.y - 8 - SIZE + LEAD;  /* a line above the first that would go under it */
+          else if (col === "a" && p > row.page) return assert.fail(at + ": no audio on page " + (p + 1) + " while it carries on");
+          else last = row.y - SIZE + LEAD;
+          assert.ok(last - LEAD - LEAD - 6 < M, at + ": page " + (p + 1) + " broke the " + col + " column after y=" + last + " with room left");
+        });
+      }
+    } else {
+      /* whole: its rule is exactly ROW_TAIL under its taller column */
+      const want = empty ? row.y : row.y - need;
+      assert.ok(Math.abs(want - row.ruleY) < 0.01, at + ": rule at " + row.ruleY + ", expected " + want);
+    }
+    /* a row that starts a new page did not fit under the one before it */
+    const prev = rows[i - 1];
+    if (prev && row.page > prev.rulePage) {
+      assert.ok(prev.ruleY - 14 - need < M - 0.005, at + ": moved to page " + (row.page + 1) + " with room for it on page " + row.page);
+    }
+  });
+  return rows;
+}
+
+test("every row's rule lands on or above the bottom margin, never alone, with no row split early", () => {
+  let split = 0, carried = 0, pushed = 0, capped = 0;
+  const shapes = [];
+  for (const v of [0, 1, 2, 49, 50, 51, 100]) {
+    for (const a of [0, 1, 3, 49, 50, 51, 100]) {
+      /* 620 and 630 leave room under the picture for a line or two of
+         visual text but not for its rule; 645 for none; 5000 is capped */
+      for (const pic of [null, [229, 200], [229, 620], [229, 630], [229, 645], [229, 5000]]) {
+        shapes.push({ v, a, pic });
+      }
+    }
+  }
+  /* each short shape pushed down the first page — a line at a time over
+     its last third, where it meets the margin — and the long ones (which
+     start a fresh page wherever they are) a quarter of a page at a time */
+  for (let n = 0; n <= 52; n++) {
+    shapes.forEach((shape) => {
+      if (shape.v > 3 || shape.a > 3 ? n % 13 : n < 36 && n % 6) return;
+      const rows = checkRowRules([{ v: 0, a: n }, shape, { v: 0, a: 1 }], "n=" + n + " " + JSON.stringify(shape));
+      const row = rows[1];
+      if (row.rulePage > row.page) split++;
+      if (row.page > rows[0].page) pushed++;
+      if (row.rulePage > row.page && !row.lines.some((l) => l.page === row.page)) carried++;
+      if (row.pic && row.pic.h < Math.min(shape.pic[1], PAGE_ROOM) - 0.01) capped++;
+    });
+  }
+  assert.ok(split > 100 && pushed > 100 && carried > 0 && capped > 0, "split " + split + ", pushed " + pushed + ", carried " + carried + ", capped " + capped);
+});
+
+test("a row that finishes a page's last lines takes its last line overleaf with its rule", () => {
+  /* 50 lines fill a page to y=61.5, and a row whose last page they are
+     had its rule 19 under that, at 42.5. Now its last line goes to the
+     next page and the rule under it there. */
+  const rows = checkRowRules([{ v: 0, a: 100 }, { v: 0, a: 1 }], "100 lines");
+  const row = rows[0];
+  const pagesOf = [...new Set(row.lines.map((l) => l.page))];
+  assert.deepEqual(pagesOf.map((p) => row.lines.filter((l) => l.page === p).length), [50, 49, 1]);
+  assert.equal(row.ruleY, ROW_TOP - SIZE - LEAD - 6);
+  /* and a row that passed the old "+ 14" check with its rule 1pt under
+     the margin (starting at y=588.5, 40 lines: 588.5 - 520 - 15.5 = 53)
+     starts the next page instead */
+  const snug = checkRowRules([{ v: 0, a: 0, pic: [229, 48] }, { v: 0, a: 40 }], "snug");
+  assert.equal(snug[1].page, 1);
+  assert.equal(snug[1].rulePage, 1);
+});
+
+test("a picture that fills its page keeps its visual text, overleaf, and a picture-only row's rule stays inside the margin", () => {
+  const [, withText] = checkRowRules([{ v: 0, a: 1 }, { v: 2, a: 0, pic: [229, 5000] }, { v: 0, a: 1 }], "full picture + text");
+  assert.equal(withText.pic.h.toFixed(2), PAGE_ROOM.toFixed(2));
+  assert.deepEqual(withText.lines.map((l) => l.page), [2, 2]);
+  const [, alone] = checkRowRules([{ v: 0, a: 1 }, { v: 0, a: 0, pic: [229, 5000] }], "full picture alone");
+  assert.equal(alone.ruleY, M);
+  assert.equal(alone.pic.h.toFixed(2), (PAGE_ROOM - 8 - ROW_TAIL).toFixed(2));
 });
