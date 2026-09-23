@@ -26,8 +26,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 
 const REAL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
-const MIRROR_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+/* Some other releases API: what a hostile manifest or an operator names. */
+const OTHER_API = "https://api.github.com/repos/someone-else/splitpage-fork/releases/latest";
 
 let passed = 0;
 const failures = [];
@@ -81,19 +82,18 @@ writeFileSync(join(testAppRoot, "VERSION"), "1.0.0\n");
 writeFileSync(join(testAppRoot, ".splitpage-release.json"), JSON.stringify({
   name: "Splitpage",
   version: "1.0.0",
-  updateApi: MIRROR_API,
+  updateApi: OTHER_API,
   files: {}
 }));
 
 const testMod = await import(pathToFileURL(join(testAppRoot, "update.mjs")).href);
 const testUpdateApiUrl = testMod.updateApiUrl;
 delete process.env.SPLITPAGE_UPDATE_API;
-check("a manifest naming another update API is ignored", testUpdateApiUrl() !== MIRROR_API,
+check("a manifest naming another update API is ignored", testUpdateApiUrl() !== OTHER_API,
   "got " + testUpdateApiUrl());
-check("...and the built-in default is used instead",
-  testUpdateApiUrl().startsWith("https://api.github.com/repos/"), "got " + testUpdateApiUrl());
-process.env.SPLITPAGE_UPDATE_API = MIRROR_API;
-eq("...while the env var still overrides it", testUpdateApiUrl(), MIRROR_API);
+eq("...and the built-in default is used instead", testUpdateApiUrl(), DEFAULT_API);
+process.env.SPLITPAGE_UPDATE_API = OTHER_API;
+eq("...while the env var still overrides it", testUpdateApiUrl(), OTHER_API);
 delete process.env.SPLITPAGE_UPDATE_API;
 
 rmSync(testAppRoot, { recursive: true, force: true });
