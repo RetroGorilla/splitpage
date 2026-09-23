@@ -72,4 +72,38 @@ eval (function(){var f=document.getElementById('find-input');f.value='gaffer';f.
 sleep 600
 expect document.querySelector('.find-count').textContent == No matches
 
+# --- a match across a formatting boundary (#85) -----------------------------
+# Half plain, half bold is two text nodes, and find used to search one text
+# node at a time, so it never found the word. It searches the cell's text
+# now: found, selected on screen across both, and replaced as one.
+jsclick #find-close
+sleep 200
+caret #rows .row .visual-cell .cell-editable
+press zorb
+key ctrl KeyB
+press lix
+key ctrl KeyB
+press  now
+sleep 500
+expect (function(){var c=document.querySelector('#rows .row .visual-cell .cell-editable');var w=document.createTreeWalker(c,4),n,z=null,l=null;while((n=w.nextNode())){if(/zorb$/.test(n.nodeValue))z=n;if(/^lix/.test(n.nodeValue))l=n;}return !!(z&&l&&z!==l&&parseInt(getComputedStyle(l.parentNode).fontWeight,10)>=600&&parseInt(getComputedStyle(z.parentNode).fontWeight,10)<600);})()
+key ctrl KeyF
+sleep 300
+eval (function(){var f=document.getElementById('find-input');f.value='zorblix';f.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 400
+expect document.getElementById('find-count').textContent == 1 of 1
+jsclick #find-next
+sleep 300
+expect getSelection().toString() == zorblix
+eval (function(){var r=document.getElementById('replace-input');r.value='quux';r.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+# A person's mouse-down on Replace takes focus off the cell the match was
+# selected in; jsclick does not, so blur it first. (With the cell still
+# focused, repainting it fires its focusout, which writes the old DOM back
+# over the replacement — true before #85 too.)
+eval document.activeElement.blur()
+jsclick #find-replace
+sleep 500
+expect document.querySelector('#rows .row .visual-cell .cell-editable').textContent.indexOf('quux') !== -1
+expect document.querySelector('#rows .row .visual-cell .cell-editable').textContent.indexOf('zorb') === -1
+expect document.getElementById('find-count').textContent == No matches
+
 quit

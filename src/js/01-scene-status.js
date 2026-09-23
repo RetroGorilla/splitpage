@@ -2,9 +2,10 @@ import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { pad2, render, renderRow } from "./05-render.js";
+import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
 import { markDirty } from "./12-dirty-toast.js";
-import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { queueAutoSave } from "./14-export.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -114,9 +115,11 @@ export function __init() {
      camera operator, not words anybody reads out — so they are deliberately
      left out of the estimate. */
   /* Same reasoning as tagsInField(): the runtime estimate re-counts every row
-     on every refresh, but only the row being typed in has changed. */
+     on every refresh, but only the row being typed in has changed. The
+     words are the cell's text as the document model reads it (cellOf,
+     #85), not a parse of the markup here. */
   wordCount = contentMemo(function (html) {
-    var text = htmlToPlainText(html);
+    var text = toPlainText(cellOf(html));
     return text ? text.split(/\s+/).filter(Boolean).length : 0;
   });
 }

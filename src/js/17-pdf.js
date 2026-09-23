@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
+import { cellOf, toDocxRuns } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -10,7 +11,7 @@ import {
 } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
-import { concatBytes, htmlToRuns, latin1Bytes } from "./14-export.js";
+import { concatBytes, latin1Bytes } from "./14-export.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { sniffImageMime } from "../../shared/blob-policy.js";
 
@@ -298,8 +299,12 @@ export function buildPdf(jpegs, commentJpegs) {
   drawColumnHeaders();
 
   S.state.rows.forEach(function (row, idx) {
-    var vLines = pdfWrapRuns(htmlToRuns(row.visualText), COLW, SIZE);
-    var aLines = pdfWrapRuns(htmlToRuns(row.audioText), COLW, SIZE);
+    /* Runs from the document model (#85). Neighbours in one format that
+       the stored markup kept in separate elements come out as one run, so
+       a word split across two <strong>s is one word to wrap, never broken
+       between its halves at the end of a line. */
+    var vLines = pdfWrapRuns(toDocxRuns(cellOf(row.visualText)), COLW, SIZE);
+    var aLines = pdfWrapRuns(toDocxRuns(cellOf(row.audioText)), COLW, SIZE);
 
     var imgH = 0, imgRef = null;
     var jpeg = jpegs ? jpegs[idx] : null;
@@ -499,7 +504,7 @@ export function buildPdf(jpegs, commentJpegs) {
     var FULLW = PW - M * 2;
 
     /* split into discrete "\n" runs so pdfWrapRuns treats them as real
-       line breaks, same convention htmlToRuns() uses for <br> */
+       line breaks, same convention toDocxRuns() uses for a line break */
     function linesToRuns(str) {
       return String(str || "").split(/\r\n|\r|\n/).reduce(function (runs, line, i) {
         if (i > 0) runs.push({ text: "\n" });
