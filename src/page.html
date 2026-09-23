@@ -191,6 +191,9 @@
               <button type="button" role="menuitem" class="mi" data-file-action="save-back" id="menu-save-back" disabled><svg class="mi-icon" aria-hidden="true"><use href="#i-save"/></svg><span class="mi-text"><span class="mi-label">Save to file</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="save-as" data-keys="mod+shift+s" title="Writes this script to a new file of your choosing — the one on screen keeps its own"><svg class="mi-icon" aria-hidden="true"><use href="#i-copy"/></svg><span class="mi-text"><span class="mi-label">Save a copy…</span><span class="mi-why" hidden></span></span></button>
             </div>
+            <!-- The command menu (issue #147) — here for a keyboard with no
+                 Ctrl, and so the shortcut is written down somewhere. -->
+            <button type="button" role="menuitem" class="mi mi-command" data-file-action="command-menu" id="menu-command" data-keys="mod+k"><svg class="mi-icon" aria-hidden="true"><use href="#i-search"/></svg><span class="mi-text"><span class="mi-label">Search commands…</span><span class="mi-why" hidden></span></span></button>
 
             <div class="menu-group" role="group" aria-labelledby="fm-g-new" data-menu-group="new">
               <div class="menu-group-head" id="fm-g-new">New &amp; open</div>
@@ -468,6 +471,23 @@
         <button type="button" class="btn btn-accent" id="import-confirm">Import</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- The command menu (issue #147): Ctrl/Cmd+K, or File ▸ Search commands…
+     on a keyboard with no Ctrl. A search box over the script that finds
+     every File-menu command, each export format, the panels, Write and
+     Present by name or by a word for them, and runs the same handler the
+     menu or the button does. 18d-command-menu.js builds the list. -->
+<div class="cmdk-backdrop" id="cmdk" hidden>
+  <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Search commands">
+    <div class="cmdk-input-row">
+      <svg class="cmdk-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <input type="text" id="cmdk-input" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search commands…" aria-label="Search commands">
+      <kbd class="cmdk-esc" aria-hidden="true">Esc</kbd>
+    </div>
+    <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Commands"></div>
+    <div class="cmdk-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to run</span><span><kbd>Esc</kbd> to close</span></div>
   </div>
 </div>
 

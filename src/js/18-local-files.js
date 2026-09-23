@@ -70,6 +70,7 @@ import { buildPackingListPdf, buildPdf, pdfCommentImagesFor, pdfImagesFor } from
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
 import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
+import { openCommandMenu } from "./18d-command-menu.js";
 import { showAbout } from "./20a-update.js";
 import {
   applyMarkdownProject,
@@ -1018,6 +1019,7 @@ export function handleFileMenuAction(action) {
   else if (action === "new") startNewScript();
   else if (action === "export") openExportDialog();
   else if (action === "export-again") exportAgain();
+  else if (action === "command-menu") openCommandMenu();
   else if (action === "open") openLocalFile();
   else if (action === "paste") openImportModal();
   else if (action === "gdoc-import") openGdocModal();

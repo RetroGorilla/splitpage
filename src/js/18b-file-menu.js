@@ -294,6 +294,10 @@ export function toggleFileMenu(force, opts) {
     if (!open && opts.returnFocus) btn.focus();
     return;
   }
+  /* Asked before the menu is hidden: reading activeElement after that can
+     already find the browser has moved the focus off the hidden element
+     and onto the body. */
+  var inside = menu.contains(document.activeElement);
   menu.hidden = !open;
   if (backdrop) backdrop.hidden = !open;
   btn.setAttribute("aria-expanded", open ? "true" : "false");
@@ -306,7 +310,6 @@ export function toggleFileMenu(force, opts) {
     if (opts.focusFirst) focusItemAt(0);
     else menu.focus({ preventScroll: true });
   } else {
-    var inside = menu.contains(document.activeElement);
     closeSubmenus();
     if (inside || opts.returnFocus) btn.focus();
   }

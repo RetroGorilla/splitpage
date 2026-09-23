@@ -60,6 +60,8 @@ beta copy is offered it like any other update.
 - **One Export dialog** (Ctrl+E) for every format, with a sketch of the page
   and the file name before you export, and **Export again** for the format
   you used last.
+- **Search commands** (Ctrl+K): type a few letters of anything the File menu,
+  the panels or the export formats can do, and press Enter.
 - **Resizable side panels**, and smoother header and panel transitions.
 - Fixes: a PDF scene with a picture and no text is no longer drawn over by
   the next scene; *Undo merge* after a save conflict puts your version back;
@@ -906,7 +908,8 @@ above each scene, and panels and menus go full screen. A few things translate:
   dim completion is showing, **tap it** to accept.
 - **Find & replace** is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).
 - **The File menu** comes up from the bottom of the screen; tap outside it,
-  or ✕, to put it away.
+  or ✕, to put it away. **Search commands…** in it is the phone's way to the
+  command search.
 - **Selecting several breakdown items:** **long-press** a card to start, then
   tap cards to add or drop them. The **×** in the bar clears the selection.
 - **Reordering scenes:** the ↑ / ↓ buttons (drag needs a mouse).
@@ -996,7 +999,8 @@ Below it, four groups:
   in the desktop app Present in browser and Use Chromium Speech Recognition.
 
 Help, the tour, setup, About, the tagging reference and moving your app data
-between the browser and the desktop app sit along the bottom.
+between the browser and the desktop app sit along the bottom. **Search
+commands…**, just under the card, finds any of it by typing — see below.
 
 Things that are on or off — Autosave, Hide shot scenes — are switches, and
 the menu stays open when you flip one. Something that cannot work right now
@@ -1019,11 +1023,28 @@ work in the app you are using. On a Mac, read <kbd>Cmd</kbd> for
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save a copy… |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open… |
 | <kbd>Ctrl</kbd>+<kbd>E</kbd> | Export… |
+| <kbd>Ctrl</kbd>+<kbd>K</kbd> | Search commands… |
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find & replace |
 | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> | Hide shot scenes |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
 | <kbd>F1</kbd> | Help (desktop app) |
 | <kbd>Ctrl</kbd>+<kbd>T</kbd> | New tab (desktop app) |
+
+### Search commands
+
+<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac), or **File ▸
+Search commands…**, opens a search box over the script. Type part of what
+you want — *pdf*, *gear*, *history*, or a word for it like *teleprompter* or
+*voice over* — and the list narrows to the commands that match: everything
+in the File menu, every export format, the Production, Gear, B-roll and
+Comments panels, Write and Present. <kbd>↑</kbd>/<kbd>↓</kbd> move,
+<kbd>Enter</kbd> runs, <kbd>Esc</kbd> closes it and puts you back where you
+were, caret and all. With nothing typed, the commands you ran last on this
+computer come first.
+
+Something that cannot run right now is still listed, greyed, with the reason
+underneath — the same one the File menu gives. The box does not open over
+the teleprompter, the writer or another dialog.
 
 ## Exporting
 

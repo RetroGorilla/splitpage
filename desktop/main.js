@@ -4235,9 +4235,10 @@ function routeLaunchFile(absPath) {
  * 13. Native menu.
  *
  *    ACCELERATORS: grepped src/js for keydown handling before assigning
- *    any of these. The page intercepts two shortcuts that overlap a menu
- *    command — Ctrl/Cmd+F for Find & replace (src/js/21-events.js) and
- *    Ctrl/Cmd+E for Export… (src/js/18c-export-dialog.js). Those items'
+ *    any of these. The page intercepts three shortcuts that overlap a menu
+ *    command — Ctrl/Cmd+F for Find & replace (src/js/21-events.js),
+ *    Ctrl/Cmd+E for Export… (src/js/18c-export-dialog.js) and Ctrl/Cmd+K
+ *    for Search Commands… (src/js/18d-command-menu.js). Those items'
  *    accelerators are set for display only (registerAccelerator: false) so
  *    the keystroke still reaches the page's own handler instead of being
  *    swallowed here. The page's Ctrl/Cmd+S, +Shift+S and +O
@@ -4371,6 +4372,15 @@ function buildMenu() {
         accelerator: "CmdOrCtrl+F",
         registerAccelerator: false,
         click: () => sendMenuCommand("find")
+      },
+      /* The command menu (issue #147): the page's own Ctrl/Cmd+K
+         (src/js/18d-command-menu.js), shown here and not registered, for
+         the same reason as Find just above. */
+      {
+        label: "Search Commands…",
+        accelerator: "CmdOrCtrl+K",
+        registerAccelerator: false,
+        click: () => sendMenuCommand("command-menu")
       }
     ]
   };
