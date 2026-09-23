@@ -1470,19 +1470,16 @@ Google Cloud project only Adam can create — the by-hand check is in
 `docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
 
-**Temporary code to delete (#83).** No issue exists for this yet (as of
-#83 step 4): each item has to ship in one release first, so an upgrading
-user skips nothing.
-When the release after the one that ships #83 is being cut, open ONE issue
-for all four and delete them together: `desktop/history-v1-migrate.js` and
+**Temporary code to delete (#83) — tracked in #100.** Each item has to
+ship in one release first, so an upgrading user skips nothing. When the
+release after the one that ships #83 is being cut, delete all four
+together: `desktop/history-v1-migrate.js` and
 its call in `main.js`'s `initHistoryStore` (plus its unit suite and the
 smoke v1-migration cases); `<userData>/history/v1-backup/` (delete it at
 launch, once, from main); 03c's v1 → v2 migrator and its read-only v1
 reader (and `seedV1HistoryDb`, suite 70); and an IndexedDB v3 upgrade of
 `splitpage-history` that drops the v1 stores (`docs`, `snapMeta`,
-`snapBody`, `meta`). Until that issue exists, this paragraph and the
-"TEMPORARY"/"temporary" notes in §3.13 and the source map are where they
-are tracked.
+`snapBody`, `meta`). #100 has the full list and how to verify it.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)
