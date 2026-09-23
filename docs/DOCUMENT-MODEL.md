@@ -236,13 +236,17 @@ is special. **It is the only atom.**
 **Script cells hold no pictures or video cards (D7).**
 
 - **Pasting.** A paste or a drop into a cell never puts them in it. Since
-  #124 it **attaches** each one to the scene instead: a comment on that row
-  and column holding the picture (by its blob ref) or a video card, made by
-  whoever pasted, in the same undo entry as the pasted words (editCell's
-  `also`). A link on a video host, a `<video>` and a video file count too
-  (a file by its name only: its bytes are not the document's). Comments
-  keep both, and the scene picture is still set the normal way — an image
-  file dropped on the visual column is still that scene's picture.
+  #135 each one goes into the scene's **gallery** — its Image section — in
+  the same undo entry as the pasted words (editCell's `also`): a picture
+  (by its blob ref) is added after the ones there, and so is each video,
+  as an item of its own: its link marked `poster`, with a thumbnail (a
+  video file's first frame) or none (a placeholder). A link on a video host, a `<video>` and a
+  video file count (a file by its name only: its bytes and its path are not
+  the document's). #124 made a comment of each instead; comments it made
+  stay as they are. The gallery's shape is `imageRef` (the first picture,
+  unchanged), `imageLinks` (its caption) and `moreImages`
+  (`[{imageRef, links}]`), 02d-gallery.js; the merge takes both sides'
+  additions (a set merge, never a conflict).
 - **Existing documents.** A picture or video card already inside a cell is
   **moved into a comment on the same scene** when the document is read:
   - The comment holds the picture (by its blob ref, #82) or the link.
@@ -254,8 +258,8 @@ is special. **It is the only atom.**
     real save.
   - Nothing is lost: version history still has the original.
   - **Built:** paste and drop go through `fromHtml` with pictures and video
-    cards taken out first and attached as comments (`pasteIntoCell`,
-    05c-clipboard.js, #124), with a "Picture attached to scene N" toast
+    cards taken out first and put in the scene's gallery (`pasteIntoCell`,
+    `attachToGallery`, 05c-clipboard.js, #135), with a "Picture added to scene N" toast
     whose Undo takes back that paste's entry while it is still the last.
     `migrateRows` (02-state.js, `moveMediaOutOfCell`) does the move: the
     comment is by "Splitpage", dated the row's `updatedAt`, with an empty
@@ -753,5 +757,5 @@ words.
 | D4 | Undo after a merge | **Forget only the cells the merge touched.** |
 | D5 | Comments and undo | **Undoable until sent**: always in a local file; on a server document, until the server has it. |
 | D6 | Cut and paste of commented text | **The comment moves with the text** within the same tab. Copy never duplicates it. |
-| D7 | Pictures and video in script cells | **Kept out of the cell on paste** — since #124 attached to the scene as a comment instead of dropped. Ones already in a cell are **moved into a comment** on that scene when the document is read (§3.3). |
+| D7 | Pictures and video in script cells | **Kept out of the cell on paste** — since #135 put in the scene's gallery (its Image section; #124 attached them as comments). Ones already in a cell are **moved into a comment** on that scene when the document is read (§3.3). |
 | — | Undo also covers | Scene status, scene picture, production-panel edits (owner, notes, status, rename), the document title. |

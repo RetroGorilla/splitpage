@@ -1,0 +1,243 @@
+# Pictures and videos pasted or dropped into a scene go into its gallery,
+# the Image section (#135; 05c-clipboard.js pasteIntoCell/attachToGallery/
+# readClipboardFiles, 21-events.js insertIntoScriptCell/announceAttached,
+# 06-rows.js videoFirstFrame/grantVideoFile/openVideoFile). This replaces
+# #124's "attach as a comment": no comment is made any more.
+#   * every picture and every video is an item of its own, added after the
+#     ones there (the cover only when the gallery is empty); a video's link
+#     is a line under the gallery, never in the words;
+#   * a video link pasted on its own into a scene with no picture gives the
+#     Image section a placeholder tile with a play badge; the toast says
+#     "Video added to scene N" and its Undo takes it back;
+#   * words with a picture and a video card: the words go in, the picture
+#     and the video each a tile, all ONE undo entry; a second picture goes
+#     beside the first, and a video into a scene with pictures gets a tile
+#     of its own too;
+#   * a video link inside other words stays in them, and is added too;
+#   * a picture file (with the HTML naming it on the web) is one picture; a
+#     video file into an empty scene gets its first frame as the thumbnail
+#     (a real webm made here), with its name under it; on desktop (the fake
+#     bridge) the file is granted, and its name and its thumbnail open it;
+#   * a picture only linked to the web cannot be kept, and a toast says so;
+#   * drops: onto the words, and anywhere on the visual column — a picture
+#     added beside the others, a video file as a tile, any other file
+#     refused with a toast;
+#   * the toast's Undo refuses once something else was done.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- a document with four scenes, no pictures, no comments ---------------------
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.B = window.__blobsTest; window.D = window.__desktopTest; var doc = { schema: 2, title: 'Paste into gallery', rows: [ { id: 'r1', visualText: 'one', audioText: 'Alpha', status: 'todo' }, { id: 'r2', visualText: 'two', audioText: 'Bravo', status: 'todo' }, { id: 'r3', visualText: 'three', audioText: 'Charlie', status: 'todo' }, { id: 'r4', visualText: 'four', audioText: 'Delta', status: 'todo' } ], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'paste-gallery.splitpage')); return true; })()
+wait F.state().title === 'Paste into gallery' && document.querySelector('#rows .row[data-id="r4"]')
+eval (function(){ window.cell = function(id, field){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (field === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.row = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.st = function(id, field){ return row(id)[field]; }; window.caretEnd = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; window.dt = function(data, files){ var d = new DataTransfer(); if (data) Object.keys(data).forEach(function(k){ d.setData(k, data[k]); }); (files || []).forEach(function(f){ d.items.add(f); }); return d; }; window.paste = function(el, data, files){ var ev = new ClipboardEvent('paste', { clipboardData: dt(data, files), bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; }; window.drop = function(el, data, files){ el.scrollIntoView({ block: 'center' }); var r = el.getBoundingClientRect(); var ev = new DragEvent('drop', { bubbles: true, cancelable: true, clientX: r.right - 4, clientY: r.bottom - 4, dataTransfer: dt(data, files) }); el.dispatchEvent(ev); return ev.defaultPrevented; }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast:not(.is-leaving)'), function(t){ return t.textContent; }); }; window.clearToasts = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.png = function(w, h, color){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); var u = c.toDataURL('image/png'); var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return { url: u, bytes: b }; }; window.mark = function(){ U.flush(); window.__u = U.sizes().undo; return true; }; window.media = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .visual-media'); }; window.count = function(id){ var g = media(id).querySelector('.scene-gallery'); return g ? g.getAttribute('data-count') : null; }; window.items = function(id){ var r = row(id); var all = [{ imageRef: r.imageRef, links: r.imageLinks || [] }].concat(r.moreImages || []); if (!r.imageRef && !(r.imageLinks || []).length) all.shift(); return all.map(function(it){ var p = (it.links || []).filter(function(l){ return l.poster; })[0]; return p ? 'V:' + (p.href || p.name) + (it.imageRef ? '+frame' : '') : 'P'; }).join('|'); }; window.caption = function(id){ return Array.prototype.map.call(media(id).querySelectorAll('.scene-gallery-caption .scene-gallery-link'), function(a){ return a.textContent; }); }; return true; })()
+
+# ---- 1. a video link on its own, into a scene with no picture ------------------
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r4', 'audioText'))
+expect paste(cell('r4', 'audioText'), { 'text/plain': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }) === true
+wait !!st('r4', 'imageLinks')
+expect JSON.stringify(st('r4', 'imageLinks')) === JSON.stringify([{ href: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', poster: true }])
+expect st('r4', 'imageRef') === null
+expect st('r4', 'audioText') === 'Delta'
+# a video tile with a placeholder in the Image section, the link under it
+wait !!media('r4').querySelector('.scene-gallery-tile.is-video .scene-gallery-placeholder')
+expect !!media('r4').querySelector('.scene-gallery-tile.is-video .scene-gallery-play.is-big')
+expect caption('r4').join('|') === 'youtube.com/watch?v=dQw4w9WgXcQ'
+wait toasts().indexOf('Video added to scene 4Undo') !== -1
+expect F.state().comments.length === 0
+eval U.flush()
+expect U.sizes().undo === __u + 1
+
+# ---- 2. the toast's Undo takes it back, and redo brings it back ------------------
+jsclick #toast-host .toast-action
+wait !st('r4', 'imageLinks')
+expect media('r4').classList.contains('is-empty')
+eval document.activeElement && document.activeElement.blur()
+key ctrl+shift KeyZ
+wait !!st('r4', 'imageLinks')
+
+# ---- 3. words with a picture and a video card: one undo entry ---------------------
+eval (function(){ window.P1 = png(24, 12, '#c33'); return P1.url.length; })()
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r2', 'visualText'))
+expect paste(cell('r2', 'visualText'), { 'text/html': ' Hello <b>there</b> <img src="' + P1.url + '"> world <a class="video-embed-card" href="https://vimeo.com/76979871">Watch video</a>', 'text/plain': ' Hello there world' }) === true
+wait st('r2', 'visualText') === 'two Hello <strong>there</strong>  world '
+wait !!st('r2', 'imageRef')
+eval (function(){ window.P1SHA = st('r2', 'imageRef').sha256; return P1SHA; })()
+expect !!B.recordFor(P1SHA)
+# the picture and the video are two items, the video a tile of its own
+expect items('r2') === 'P|V:https://vimeo.com/76979871'
+wait count('r2') === '2'
+expect !!media('r2').querySelectorAll('.scene-gallery-tile')[1].querySelector('.scene-gallery-play')
+wait toasts().indexOf('Picture and video added to scene 2Undo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+eval document.activeElement && document.activeElement.blur()
+key ctrl KeyZ
+wait st('r2', 'visualText') === 'two'
+expect st('r2', 'imageRef') === null && !st('r2', 'imageLinks')
+key ctrl+shift KeyZ
+wait st('r2', 'visualText') === 'two Hello <strong>there</strong>  world ' && !!st('r2', 'imageRef')
+
+# ---- 4. a second picture goes beside the first -------------------------------------
+eval (function(){ window.P2 = png(30, 20, '#36c'); return true; })()
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r2', 'audioText'))
+expect paste(cell('r2', 'audioText'), { 'text/html': '<img src="' + P2.url + '">', 'text/plain': '' }) === true
+wait st('r2', 'moreImages') && st('r2', 'moreImages').length === 2
+expect st('r2', 'imageRef').sha256 === P1SHA
+expect items('r2') === 'P|V:https://vimeo.com/76979871|P'
+expect st('r2', 'audioText') === 'Bravo'
+wait count('r2') === '3'
+wait toasts().indexOf('Picture added to scene 2Undo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# a video into a scene with pictures: a tile of its own, after them — and
+# its line under the gallery
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r2', 'audioText'))
+expect paste(cell('r2', 'audioText'), { 'text/plain': 'https://youtu.be/second' }) === true
+wait items('r2') === 'P|V:https://vimeo.com/76979871|P|V:https://youtu.be/second'
+wait count('r2') === '4'
+expect caption('r2').join('|') === 'vimeo.com/76979871|youtu.be/second'
+wait toasts().indexOf('Video added to scene 2Undo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# the same video again is not a second tile
+eval caretEnd(cell('r2', 'audioText'))
+expect paste(cell('r2', 'audioText'), { 'text/plain': 'https://youtu.be/second' }) === true
+sleep 200
+expect count('r2') === '4'
+
+# ---- 5. a video link inside words stays in them, and is added ------------------
+eval mark()
+eval caretEnd(cell('r1', 'audioText'))
+expect paste(cell('r1', 'audioText'), { 'text/plain': ' see https://youtu.be/abc123 for the look' }) === true
+wait st('r1', 'audioText') === 'Alpha see https://youtu.be/abc123 for the look'
+wait items('r1') === 'V:https://youtu.be/abc123'
+# a link that is no video's is only words
+eval mark()
+eval caretEnd(cell('r1', 'audioText'))
+expect paste(cell('r1', 'audioText'), { 'text/plain': ' https://example.com/notes' }) === true
+wait st('r1', 'audioText') === 'Alpha see https://youtu.be/abc123 for the look https://example.com/notes'
+expect items('r1') === 'V:https://youtu.be/abc123'
+
+# ---- 6. files: a picture file, and video files (on the fake desktop bridge) --------
+eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); return true; })()
+# a real webm: a canvas recorded for a moment, so its first frame can be read
+eval (async function(){ var c = document.createElement('canvas'); c.width = 64; c.height = 48; var g = c.getContext('2d'); var rec = new MediaRecorder(c.captureStream(15), { mimeType: 'video/webm' }); var parts = []; rec.ondataavailable = function(e){ if (e.data && e.data.size) parts.push(e.data); }; var stopped = new Promise(function(r){ rec.onstop = r; }); rec.start(); var t0 = Date.now(); while (Date.now() - t0 < 700) { g.fillStyle = '#2a6'; g.fillRect(0, 0, 64, 48); g.fillStyle = '#fff'; g.fillRect((Date.now() - t0) % 40, 10, 12, 12); await new Promise(function(r){ setTimeout(r, 40); }); } rec.stop(); await stopped; window.WEBM = new Blob(parts, { type: 'video/webm' }); return WEBM.size; })()
+expect WEBM.size > 0
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r3', 'audioText'))
+expect paste(cell('r3', 'audioText'), { 'text/plain': ' rolling' }, [ new File([WEBM], "take & one's <b>3</b>.webm", { type: 'video/webm' }) ]) === true
+wait !!st('r3', 'imageLinks')
+expect st('r3', 'audioText') === 'Charlie rolling'
+expect st('r3', 'imageLinks')[0].name === "take & one's 3.webm"
+expect st('r3', 'imageLinks')[0].poster === true && st('r3', 'imageLinks')[0].size === WEBM.size
+# its first frame is the thumbnail
+expect !!st('r3', 'imageRef') && st('r3', 'imageRef').width === 64 && st('r3', 'imageRef').height === 48
+wait toasts().indexOf('Video added to scene 3Undo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# the name is text, never markup
+expect caption('r3').join() === "take & one's 3.webm"
+expect media('r3').querySelector('.scene-gallery-caption b, .scene-gallery-caption script') === null
+# granted on desktop: its name opens it, and so does Open on its tile's dialog
+wait fake._videoGrants && Object.keys(fake._videoGrants).length === 1
+eval media('r3').querySelector('.scene-gallery-caption .scene-gallery-link.is-file').click()
+wait (fake._videoOpens || []).length === 1
+eval media('r3').querySelector('.scene-gallery-tile.is-video').click()
+wait !document.getElementById('gallery-modal').hidden
+eval document.querySelector('#gallery-modal [data-gact="open"]').click()
+wait (fake._videoOpens || []).length === 2
+jsclick #gallery-close
+wait document.getElementById('gallery-modal').hidden
+# a video file whose first frame cannot be read: a placeholder tile of its own
+eval mark()
+eval caretEnd(cell('r1', 'visualText'))
+expect paste(cell('r1', 'visualText'), { 'text/plain': '' }, [ new File([new Uint8Array(2048)], 'broken.mp4', { type: 'video/mp4' }) ]) === true
+wait items('r1') === 'V:https://youtu.be/abc123|V:broken.mp4'
+expect st('r1', 'imageRef') === null
+eval D.setBackend(null)
+# a picture file with the HTML naming it on the web: one picture, nothing "lost"
+eval (function(){ window.P3 = png(30, 20, '#3a3'); return true; })()
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r1', 'audioText'))
+expect paste(cell('r1', 'audioText'), { 'text/html': '<img src="https://example.com/copied.png">' }, [ new File([P3.bytes], 'image.png', { type: 'image/png' }) ]) === true
+wait items('r1') === 'V:https://youtu.be/abc123|V:broken.mp4|P'
+wait toasts().indexOf('Picture added to scene 1Undo') !== -1
+expect toasts().every(function(t){ return t.indexOf("couldn't be added") === -1; })
+# the picture goes after the videos, never over their placeholders
+expect st('r1', 'imageRef') === null && st('r1', 'moreImages').length === 2
+# a picture only linked to the web cannot be kept, and the toast says so
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r1', 'audioText'))
+expect paste(cell('r1', 'audioText'), { 'text/html': '<img src="https://example.com/only-a-link.png">', 'text/plain': '' }) === true
+wait toasts().some(function(t){ return t.indexOf("A picture couldn't be added") === 0; })
+expect st('r1', 'moreImages').length === 2
+
+# ---- 7. drops -------------------------------------------------------------------------
+# HTML with a video card, onto the words
+eval mark()
+expect drop(cell('r4', 'visualText'), { 'text/html': '<b>shot</b> <a class="video-embed-card" href="https://www.loom.com/share/abc">Watch video</a>', 'text/plain': 'shot' }) === true
+wait st('r4', 'visualText').indexOf('<strong>shot</strong>') !== -1
+wait items('r4') === 'V:https://www.youtube.com/watch?v=dQw4w9WgXcQ|V:https://www.loom.com/share/abc'
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# a picture file onto the Image section: after the videos
+eval (function(){ window.P4 = png(18, 18, '#a3a'); return true; })()
+eval clearToasts()
+eval mark()
+expect drop(media('r4'), null, [ new File([P4.bytes], 'drop.png', { type: 'image/png' }) ]) === true
+wait items('r4') === 'V:https://www.youtube.com/watch?v=dQw4w9WgXcQ|V:https://www.loom.com/share/abc|P'
+wait toasts().indexOf('Picture added to scene 4Undo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# and a second one beside it
+eval (function(){ window.P5 = png(22, 18, '#3aa'); return true; })()
+eval mark()
+expect drop(media('r4'), null, [ new File([P5.bytes], 'drop2.png', { type: 'image/png' }) ]) === true
+wait count('r4') === '4'
+# a video file onto the Image section: a tile of its own, and a fifth item
+# makes the "+N" tile; its line joins the others, three at most
+eval mark()
+expect drop(media('r4'), null, [ new File([new Uint8Array(10)], 'broll.mov', { type: 'video/quicktime' }) ]) === true
+wait items('r4') === 'V:https://www.youtube.com/watch?v=dQw4w9WgXcQ|V:https://www.loom.com/share/abc|P|P|V:broll.mov'
+wait media('r4').querySelector('.scene-gallery-tile.is-more') && media('r4').querySelector('.scene-gallery-tile.is-more').textContent === '+2'
+expect caption('r4').length === 3
+# any other file: refused, with a toast
+eval clearToasts()
+eval (function(){ window.__before = JSON.stringify(row('r4')); return true; })()
+expect drop(media('r4'), null, [ new File(['hi'], 'notes.txt', { type: 'text/plain' }) ]) === true
+wait toasts().some(function(t){ return t.indexOf('Only pictures and video files go in') === 0; })
+expect JSON.stringify(row('r4')) === __before
+
+# ---- 8. the toast's Undo after something else: it refuses, Ctrl+Z still works -----
+eval clearToasts()
+eval caretEnd(cell('r2', 'visualText'))
+expect paste(cell('r2', 'visualText'), { 'text/plain': 'https://vimeo.com/1' }) === true
+wait document.querySelector('#toast-host .toast-action')
+eval (function(){ window.__keep = document.querySelector('#toast-host .toast-action'); window.__links = JSON.stringify(row('r2')); return true; })()
+eval caretEnd(cell('r2', 'audioText'))
+type X
+wait st('r2', 'audioText') === 'BravoX'
+eval U.flush()
+eval __keep.click()
+wait toasts().some(function(t){ return t.indexOf('Something else has changed since') === 0; })
+expect st('r2', 'audioText') === 'BravoX'
+
+# ---- 9. no comments, no pictures in the words, no bytes or blob: URLs in state -------
+expect F.state().comments.length === 0
+expect (function(){ var j = JSON.stringify(F.state()); return j.indexOf('data:image') === -1 && j.indexOf('blob:') === -1 && !/<img[^>]*\ssrc=/.test(j); })()
+expect ['r1', 'r2', 'r3', 'r4'].every(function(id){ return st(id, 'visualText').indexOf('<img') === -1 && st(id, 'audioText').indexOf('<img') === -1 && st(id, 'visualText').indexOf('video-embed-card') === -1 && st(id, 'audioText').indexOf('video-embed-card') === -1; })
+
+logs

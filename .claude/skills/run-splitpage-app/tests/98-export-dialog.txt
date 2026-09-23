@@ -55,7 +55,7 @@ expect document.getElementById('export-options').hidden
 # the footer's note, and its link to the live alternative
 expect document.querySelector('#export-modal .export-note').textContent.indexOf('Exports are copies.') === 0
 expect document.getElementById('export-share-link').textContent == Publish & copy a link
-shot 90-export-dialog
+shot 98-export-dialog
 
 # --- a format with nothing to export says so, and cannot be pressed --------
 jsclick .export-card[data-format="packing"]

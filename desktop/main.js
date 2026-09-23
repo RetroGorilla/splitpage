@@ -154,6 +154,13 @@ const testExternalOpens = [];
 /* Present in Chromium (section 9b, #123): what main WOULD have started, in
    order, as {browser, url} — never started in test mode. */
 const testChromiumLaunches = [];
+/* A video file a scene's gallery link opened (#135), by path —
+   never opened in test mode. */
+const testVideoOpens = [];
+/* The video files this run may open (#135): token -> absolute path, granted
+   only through a drop or a paste (splitpage:video-file-grant). */
+const videoFileGrants = new Map();
+const VIDEO_FILE_EXT = /\.(mp4|m4v|mov|webm|mkv|avi|ogv|wmv|mpg|mpeg|3gp)$/i;
 if (TEST_MODE) {
   /* uncaughtException/unhandledRejection are registered further down (see
      the "winning instance" block below), not here — the crash handler needs
@@ -4864,6 +4871,40 @@ function registerIpc() {
     if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
   });
 
+  /* ---- video files in a scene's gallery (#135) -----------------------
+     A caption's link to a video file dropped or pasted into a scene opens
+     that file with its own app. The page never names a path: the preload
+     reads it off the File the drop or paste gave the page
+     (webUtils.getPathForFile, which answers "" for a File a page built
+     itself) and grants it here, where it must be an absolute path to an
+     existing file with a video's extension. The answer is an opaque token;
+     video-file-open takes only a token this run handed out. Nothing is
+     written anywhere, and a relaunch forgets every grant. */
+  ipcHandle("splitpage:video-file-grant", async (event, filePath) => {
+    if (!path.isAbsolute(filePath) || !VIDEO_FILE_EXT.test(filePath)) return null;
+    let st;
+    try { st = await fsp.stat(filePath); } catch { return null; }
+    if (!st.isFile()) return null;
+    for (const [token, granted] of videoFileGrants) if (granted === filePath) return token;
+    if (videoFileGrants.size >= 1000) videoFileGrants.delete(videoFileGrants.keys().next().value);
+    const token = crypto.randomBytes(16).toString("hex");
+    videoFileGrants.set(token, filePath);
+    return token;
+  });
+
+  ipcHandle("splitpage:video-file-open", async (event, token) => {
+    const filePath = videoFileGrants.get(token);
+    if (!filePath) return { ok: false, code: "UNKNOWN" };
+    try {
+      if (!(await fsp.stat(filePath)).isFile()) return { ok: false, code: "GONE" };
+    } catch { return { ok: false, code: "GONE" }; }
+    /* TEST_MODE records it instead: no test may start a video player on
+       the screen of the person whose machine it is */
+    if (TEST_MODE) { testVideoOpens.push(filePath); return { ok: true }; }
+    const failed = await shell.openPath(filePath);
+    return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
+  });
+
   /* ---- updates -------------------------------------------------------
      Four calls, none of which takes an argument. That is the contract: the
      page can ask what the situation is, ask for the download to start, and
@@ -5633,6 +5674,9 @@ function registerIpc() {
            run (section 9b, #123), as {browser, url}, oldest first. */
         case "chromiumLaunches":
           return testChromiumLaunches.slice();
+        /* Every video file a gallery link WOULD have opened (#135), by path. */
+        case "videoFileOpens":
+          return testVideoOpens.slice();
         /* What the teleprompter's loopback listener is holding (section 9b):
            listening or not, its port, and which tabs have a live share —
            never a token or a script. */

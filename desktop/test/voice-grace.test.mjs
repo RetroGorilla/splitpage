@@ -1,15 +1,20 @@
 /* desktop/test/voice-grace.test.mjs: the grace period on Follow My Voice's
  * no-signal and too-quiet warnings (issue #117), desktop/voice/listen.ps1's
- * SplitpageVoiceGrace.
+ * SplitpageVoiceGrace, and (issue #134) SplitpageVoiceConsent's read of the
+ * microphone consent store.
  *
- * The class is C# inside listen.ps1's Add-Type block. This takes that block
- * out of the script, compiles it with Windows PowerShell's Add-Type exactly as
- * the listener does, and drives the class with a clock of its own: it never
- * calls SplitpageVoice.Start(), so no recogniser starts and no microphone is
+ * The classes are C# inside listen.ps1's Add-Type block. This takes that
+ * block out of the script, compiles it with Windows PowerShell's Add-Type
+ * exactly as the listener does, and drives them directly: it never calls
+ * SplitpageVoice.Start(), so no recogniser starts and no microphone is
  * opened (invariant #33). It also reads the default microphone's name the
  * way the listener does (issue #118), which asks Core Audio for a property
- * and does not open the device either. What the real recogniser raises, and
- * when, is docs/WINDOWS-CHECKS.md §3, by hand.
+ * and does not open the device either. SplitpageVoiceConsent.Check() is
+ * driven with a fake reader (a scriptblock cast to Func<string,string>)
+ * built from each scenario's map of registry key to value, so it never
+ * touches Microsoft.Win32.Registry either. What the real recogniser raises,
+ * and what a real Privacy & security switch does, is
+ * docs/WINDOWS-CHECKS.md §3, by hand.
  *
  * Windows only (System.Speech, powershell.exe): elsewhere it prints SKIP and
  * exits 0.
@@ -70,6 +75,19 @@ const scenarios = {
   ]
 };
 
+/* SplitpageVoiceConsent.Check (issue #134): each scenario is a map of the
+   three registry keys it reads to "Allow"/"Deny"/missing, driven through a
+   fake reader (a PowerShell scriptblock cast to Func<string,string>) so
+   this never touches the real registry. */
+const consentScenarios = {
+  allAllowed: { "hklm-all": "Allow", "hkcu-all": "Allow", "hkcu-desktop": "Allow" },
+  neverSet: {},
+  hklmDenied: { "hklm-all": "Deny", "hkcu-all": "Allow", "hkcu-desktop": "Allow" },
+  hkcuAllDenied: { "hkcu-all": "Deny", "hkcu-desktop": "Allow" },
+  hkcuDesktopDenied: { "hkcu-all": "Allow", "hkcu-desktop": "Deny" },
+  deviceWideWinsOverDesktopAllow: { "hklm-all": "Deny", "hkcu-desktop": "Allow" }
+};
+
 const listen = fs.readFileSync(path.join(here, "..", "voice", "listen.ps1"), "utf8").replace(/\r\n/g, "\n");
 const block = /-TypeDefinition @'\n([\s\S]*?)\n'@/.exec(listen);
 if (!block) {
@@ -80,9 +98,11 @@ if (!block) {
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-voice-grace-"));
 const csFile = path.join(dir, "shim.cs");
 const stepsFile = path.join(dir, "steps.json");
+const consentFile = path.join(dir, "consent.json");
 const psFile = path.join(dir, "run.ps1");
 fs.writeFileSync(csFile, block[1]);
 fs.writeFileSync(stepsFile, JSON.stringify(Object.keys(scenarios).map((k) => scenarios[k])));
+fs.writeFileSync(consentFile, JSON.stringify(Object.keys(consentScenarios).map((k) => consentScenarios[k])));
 fs.writeFileSync(psFile, [
   "$ErrorActionPreference = 'Stop'",
   "Add-Type -AssemblyName System.Speech",
@@ -102,7 +122,17 @@ fs.writeFileSync(psFile, [
   "  [Console]::Out.WriteLine(($out -join ' '))",
   "}",
   "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false",
-  "[Console]::Out.WriteLine('device:' + [SplitpageVoiceDevice]::DefaultCaptureName())"
+  "[Console]::Out.WriteLine('device:' + [SplitpageVoiceDevice]::DefaultCaptureName())",
+  // SplitpageVoiceConsent.Check(Func<string,string>) driven by a fake
+  // reader built from each scenario's map — never Microsoft.Win32.Registry.
+  `$consentAll = [IO.File]::ReadAllText('${consentFile}') | ConvertFrom-Json`,
+  "foreach ($map in $consentAll) {",
+  "  $values = @{}",
+  "  foreach ($p in $map.PSObject.Properties) { $values[$p.Name] = $p.Value }",
+  "  $reader = [Func[string,string]]{ param($key) if ($values.ContainsKey($key)) { $values[$key] } else { $null } }",
+  "  $code = [SplitpageVoiceConsent]::Check($reader)",
+  "  [Console]::Out.WriteLine('consent:' + $(if ($null -eq $code) { '-' } else { $code }))",
+  "}"
 ].join("\r\n"));
 
 const ps = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
@@ -117,6 +147,10 @@ const lines = run.stdout.trim().split(/\r?\n/);
 const got = {};
 Object.keys(scenarios).forEach((k, i) => { got[k] = (lines[i] || "").split(" "); });
 const deviceLine = lines[Object.keys(scenarios).length] || "";
+const consentGot = {};
+Object.keys(consentScenarios).forEach((k, i) => {
+  consentGot[k] = (lines[Object.keys(scenarios).length + 1 + i] || "").replace(/^consent:/, "");
+});
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -165,6 +199,24 @@ test("the default microphone's name is read without starting anything (#118)", (
   const name = deviceLine.slice("device:".length);
   assert.equal(name, name.trim());
   console.log("       default microphone: " + (name || "(none)"));
+});
+
+test("nothing denied, or never set, is not blocked (#134)", () => {
+  assert.equal(consentGot.allAllowed, "-");
+  assert.equal(consentGot.neverSet, "-");
+});
+
+test("the device-wide switch off is blocked-all, however the per-user ones read", () => {
+  assert.equal(consentGot.hklmDenied, "blocked-all");
+  assert.equal(consentGot.deviceWideWinsOverDesktopAllow, "blocked-all");
+});
+
+test("this user's own microphone switch off is blocked-all", () => {
+  assert.equal(consentGot.hkcuAllDenied, "blocked-all");
+});
+
+test("only \"let desktop apps\" off, with the rest allowed, is blocked-desktop", () => {
+  assert.equal(consentGot.hkcuDesktopDenied, "blocked-desktop");
 });
 
 const failures = [];

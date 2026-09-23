@@ -39,10 +39,14 @@ beta copy is offered it like any other update.
   Markdown readers show correctly, even where they overlap.
 - **Pictures stay out of script text.** Pasting into a script cell keeps the
   words, and a picture or video that came with them — a picture, a video
-  card, a YouTube or Vimeo link, a video file — is attached to that scene as
-  a comment ("Picture attached to scene 4", with Undo). A picture already in
-  a cell moves into a comment on that scene. Cutting text moves its comment
-  with it.
+  card, a YouTube or Vimeo link, a video file — goes into that scene's
+  **Image section** ("Picture added to scene 4", with Undo). A picture
+  already in a cell moves into a comment on that scene. Cutting text moves
+  its comment with it.
+- **A scene can hold several pictures and videos.** Its Image section shows
+  the first as a large cover with the next ones beside it and a **+N** tile
+  for the rest, and one line per video underneath. Click any of them for
+  the whole set: reorder, make one the cover, remove, add.
 - **Follow My Voice in the desktop app** through Windows' own speech
   recognition, or **Present in browser** to run the teleprompter in any
   browser, Firefox included — the desktop app does the listening. **Use
@@ -838,16 +842,35 @@ changes the label and the tracked item together.
 
 **Reference images.** The small **📎 Image** link at the top of a scene's
 visual column attaches a still — or just drag an image file from your desktop
-anywhere onto that column and drop it. Once a scene has one, hover it for
-**Replace** and **Remove**. A comment can carry a picture too (**🖼 Image**
-in the comment box), and a picture pasted into a scene or a reply is kept.
+anywhere onto that column and drop it. A scene can hold several: each one you
+add goes beside the others. With one, hover it for **Add**, **Replace** and
+**Remove**. With more, the first is a large cover with the next two or three
+beside it; a **+N** tile, showing the next one dimmed, stands for the rest.
+A video's tile has a ▶ badge (and its length on the cover, when known).
+
+Click any tile for the scene's whole gallery: a large preview with **‹ ›**,
+**Open** for a video, **Make cover** and **Remove**, and every item numbered
+below it — a dashed line marks which ones the scene shows before **+N**.
+Drag a tile to reorder, or pick one and press Shift+← / Shift+→; ← and →
+pick, Delete removes, Esc closes, and the **+** tile adds a picture. Each
+change is one Ctrl+Z, and its toast has **Undo**. A comment can carry a
+picture too (**🖼 Image** in the comment box).
+
 Pasting or dropping a picture, a video link (YouTube, Vimeo, Loom and the
-like) or a video file into a scene's words attaches it to that scene as a
-comment on that column, and a toast says so with **Undo** — the words that
-came with it go in as usual, and one Ctrl+Z takes back both. A video file is
-named in the comment rather than stored: a script does not carry videos. A
-picture that was copied only as a link to a web page can't be kept; save it
-and paste or drop the file instead.
+like) or a video file into a scene's words — or dropping it on the Image
+section — puts it in that scene's Image section, and a toast says so with
+**Undo**; the words that came with it go in as usual, and one Ctrl+Z takes
+back both. Each picture and each video is added after the ones already
+there. A video goes in the Image section, not in your words, as a tile of
+its own with a ▶ badge: its thumbnail is a video file's first frame, or a
+plain placeholder for a web link (Splitpage doesn't fetch pictures from
+video sites). Every video also gets a line under the pictures — up to three,
+then **+N more videos**. Click a line (or **Open** in the gallery) to open
+it: a web link in your browser; a video file in its own app, in the desktop
+app, as long as you dropped or pasted it since Splitpage started (the
+script keeps only its name, never the file or where it is). Hover a line
+for **×** to take it off. A picture that was copied only as a link to a web page can't
+be kept; save it and paste or drop the file instead.
 
 **Where pictures are kept.** The script itself only names each picture; the
 picture is stored once, separately, wherever the script lives:

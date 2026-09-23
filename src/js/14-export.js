@@ -17,6 +17,7 @@ import {
   rowImageDataUrl,
   rowImageKey
 } from "./02c-blobs.js";
+import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkLabel } from "./02d-gallery.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   RELOAD_GUARD_KEY,
@@ -739,6 +740,19 @@ function markdownHasPicture(row) {
   return !!img && (!!img.dataUrl || hasBlob(img.ref.sha256));
 }
 
+/* The scene's further pictures (#135) that the export can carry — their
+   bytes here — each with the sibling file it is written to:
+   images/scene-NN-2.ext, -3, … by its place in the gallery. */
+function markdownMorePictures(row, i) {
+  var out = [];
+  morePictureRefs(row).forEach(function (ref, k) {
+    var pic = pictureBytes(ref);
+    if (!pic) return;
+    out.push({ path: "images/scene-" + pad2(i + 1) + "-" + (k + 2) + "." + dataUrlImageExt("data:" + ref.mime), bytes: pic.bytes });
+  });
+  return out;
+}
+
 /* Every image the plain Markdown export needs to carry alongside it, as
    real files rather than base64 text. */
 export function markdownExportImages() {
@@ -749,6 +763,7 @@ export function markdownExportImages() {
        left out — the export just won't carry that one's picture. */
     var pic = rowImage(row) && rowImageBytes(row);
     if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
+    out = out.concat(markdownMorePictures(row, i));
   });
   return out;
 }
@@ -789,6 +804,19 @@ export function toMarkdownDoc() {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
       lines.push("");
     }
+    /* the rest of the scene's gallery and its video links (#135) */
+    var more = markdownMorePictures(row, i);
+    more.forEach(function (m, k) {
+      lines.push("![visual " + (k + 2) + " for scene " + pad2(i + 1) + "](" + m.path + ")");
+      lines.push("");
+    });
+    var vlinks = rowVideoLinks(row);
+    vlinks.forEach(function (l) {
+      lines.push(l.href
+        ? "▶ [" + videoLinkLabel(l).replace(/([[\]()])/g, "\\$1") + "](" + l.href.replace(/[()\s]/g, encodeURIComponent) + ")"
+        : "▶ " + l.name.replace(/([\\`*_[\]<>])/g, "\\$1") + " _(video file)_");
+    });
+    if (vlinks.length) lines.push("");
     var vmd = toMarkdown(cellOf(row.visualText));
     if (vmd) {
       lines.push("*Visual —* " + vmd);
@@ -798,7 +826,7 @@ export function toMarkdownDoc() {
     if (amd) {
       lines.push(amd);
       lines.push("");
-    } else if (!vmd && !markdownHasPicture(row)) {
+    } else if (!vmd && !markdownHasPicture(row) && !more.length && !vlinks.length) {
       lines.push("_(blank scene)_");
       lines.push("");
     }

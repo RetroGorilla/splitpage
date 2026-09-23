@@ -4,7 +4,8 @@ import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { normalizeDocId } from "./02b-doc-id.js";
 import { blobImgHtml, rowImage, rowImageKey } from "./02c-blobs.js";
-import { ROW_FIELDS, byId, cloneState, mergeTextField, rowContentEqual, textMergeContext } from "./03-sync.js";
+import { videoLinkLabel } from "./02d-gallery.js";
+import { GALLERY_FIELDS, ROW_FIELDS, byId, cloneState, mergeTextField, rowContentEqual, rowFieldKey, textMergeContext } from "./03-sync.js";
 import { safeImageSrc } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import {
@@ -225,6 +226,20 @@ function mergeDiffModel(base, mine, theirs) {
     var m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
     var entries = [];
     ROW_FIELDS.forEach(function (f) {
+      if (GALLERY_FIELDS[f]) {
+        /* the rest of the gallery (#135): merged as sets, both sides'
+           additions kept — the outcome is always "both" */
+        if (rowFieldKey(m, f) === rowFieldKey(t, f)) return;
+        var gm = mergeGallerySummary(m, f), gt = mergeGallerySummary(t, f);
+        var gPair = mergeDiffPairHtml(gm, gt);
+        entries.push({
+          label: f === "imageLinks" ? "Video links" : "More pictures",
+          outcome: "both",
+          mineHtml: gPair.mine,
+          theirsHtml: gPair.theirs
+        });
+        return;
+      }
       if (f === "imageRef") {
         /* Compared as rowImageKey says: the sha the ref names. */
         var mi = rowImageKey(m), ti = rowImageKey(t);
@@ -359,6 +374,17 @@ function mergeDiffPairHtml(mineText, theirText) {
   var ops = mergeDiffOps(mergeDiffTokenize(mineText), mergeDiffTokenize(theirText));
   if (!ops) return { mine: mergeDiffWholeHtml(mineText, "del"), theirs: mergeDiffWholeHtml(theirText, "add") };
   return { mine: mergeDiffSideHtml(ops, "del"), theirs: mergeDiffSideHtml(ops, "add") };
+}
+
+/* A gallery field (#135) as one line of text to diff: its pictures
+   counted, its links by what a caption shows. */
+function mergeGallerySummary(row, f) {
+  var v = row && Array.isArray(row[f]) ? row[f] : [];
+  if (f === "imageLinks") return v.map(videoLinkLabel).join(", ");
+  if (!v.length) return "";
+  var links = [];
+  v.forEach(function (it) { (it.links || []).forEach(function (l) { links.push(videoLinkLabel(l)); }); });
+  return v.length + (v.length === 1 ? " picture" : " pictures") + (links.length ? " · " + links.join(", ") : "");
 }
 
 /* A ref'd picture goes out as <img data-blob>, filled in by the hydrator

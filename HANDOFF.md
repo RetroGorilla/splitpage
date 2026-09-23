@@ -950,6 +950,10 @@ builds two fields.
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
+    // the scene's gallery (#135, 02d-gallery.js), each key absent when empty:
+    "imageName": "wide.png",
+    "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
+    "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
     "status": "todo | ready | shot", "updatedAt": "ISO", "updatedBy": "name" }],
   "comments": [{ "id": "c1", "rowId": "r1", "field": "audioText | visualText | visualImage",
     "anchorId": "c1", "quotedText": "plain text", "author": "name", "body": "sanitised HTML",
@@ -969,8 +973,9 @@ builds two fields.
 }
 ```
 
-`ROW_FIELDS = ["visualText","imageRef","audioText"]` merges as content
-(an `imageRef` compared by its sha); `rows[].status` and
+`ROW_FIELDS = ["visualText","imageRef","audioText","imageLinks","moreImages"]`
+merges as content (an `imageRef` compared by its sha; the gallery's two
+lists as sets, both sides' additions kept, never a conflict, #135); `rows[].status` and
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
 

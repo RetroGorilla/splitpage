@@ -3,6 +3,7 @@ import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
+import { migrateGallery } from "./02d-gallery.js";
 import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
@@ -289,6 +290,8 @@ export function migrateRows(s) {
     if (interned) queuePersist([interned.sha256]);
     r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
     delete r.visualImage;
+    /* the rest of the scene's gallery and its captions (#135, 02d-gallery.js) */
+    migrateGallery(r);
     /* "" rather than null: formatTimestamp(iso) blanks out on an Invalid
        Date, and new Date(null) is a VALID date (the Unix epoch) while
        new Date("") is not — null here used to render as a fabricated
