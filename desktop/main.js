@@ -3215,6 +3215,49 @@ function wireTabView(tab) {
     if (/^https?:/i.test(url)) shell.openExternal(url);
   });
 
+  /* #120: Electron shows no context menu on its own — without this,
+     right-clicking a misspelled word (or anything else) in the document
+     does nothing at all. Only this tab's own document gets one; the tab
+     strip's webContents (createTabWindow, above) and the tunnel window's
+     never get this handler, so they keep having none, per invariant #43.
+
+     Picking a suggestion calls contents.replaceMisspelling(), Chromium's
+     own text-replacement primitive: it replaces the misspelled range in
+     the focused field and fires a normal 'input' event on it exactly as
+     typing would. That is what 21-events.js's onRootInput/syncFieldFromDom
+     (script cells) and noteDraftInput (comment/reply boxes) are already
+     listening for, and 12a-undo.js's noteEdit() coalesces whatever changed
+     since the last recorded edit into one undo entry within COALESCE_MS —
+     so the replacement lands in the document model as one step and Ctrl+Z
+     restores the misspelling, with no extra wiring needed here. */
+  contents.on("context-menu", (event, params) => {
+    const template = [];
+    if (params.misspelledWord) {
+      const suggestions = params.dictionarySuggestions || [];
+      if (suggestions.length) {
+        suggestions.forEach((s) => {
+          template.push({ label: s, click: () => contents.replaceMisspelling(s) });
+        });
+      } else {
+        template.push({ label: "No spelling suggestions", enabled: false });
+      }
+      template.push({ type: "separator" });
+      template.push({
+        label: "Add to dictionary",
+        click: () => contents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+      });
+      template.push({ type: "separator" });
+    }
+    const flags = params.editFlags || {};
+    if (flags.canCut) template.push({ label: "Cut", click: () => contents.cut() });
+    if (flags.canCopy) template.push({ label: "Copy", click: () => contents.copy() });
+    if (flags.canPaste) template.push({ label: "Paste", click: () => contents.paste() });
+    if (flags.canSelectAll) template.push({ label: "Select all", click: () => contents.selectAll() });
+    if (!template.length) return;
+    const w = windowsById.get(tab.windowId);
+    Menu.buildFromTemplate(template).popup({ window: w ? w.win : undefined });
+  });
+
   /* The narrower safety net for reload/navigation, where no close event
      fires at all, and for the rare case a dirty report hasn't reached main
      yet. closeConfirmed* keeps it from asking a question already answered —
