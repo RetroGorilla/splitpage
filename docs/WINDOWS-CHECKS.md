@@ -37,20 +37,62 @@ Not run: packaged-arm64 (needs the ARM machine), an upgrade over a 1.0.x
 install (no safe old install to try it on — a VM or Windows Sandbox if ever),
 and `start.bat`'s bundled-runtime branches (the zip has no `runtime/`).
 
-**Run 2 — due.** Landed since `eb9904f`: #73 (one home record), #86 (teleprompter
-Open in Browser), #71 (reviewers write through the comments endpoints), #98
-(prompter under the topbar) and #11 (per-tab connections), plus everything
-committed after this line. #86 and #11 both change `desktop/main.js`, so the
-packaged smoke has to run again, and #86 has a by-hand check (§3).
-#82's desktop blob folder (`desktop/blob-store.js`, `main.js` §8c) adds a
-module to `electron-builder.yml`'s `files`; the packaged smoke's `blobs:`
-group is what proves it ships in the asar, and the only run where its
-rename retry and its best-effort folder fsync meet NTFS.
-#83 replaced the desktop history store: `desktop/history-fs-backend.js`,
-`desktop/history-v1-migrate.js` and `shared/history-store.js` must all ship
-(the packaged smoke's history groups prove it), and the first launch of a
-new build MOVES an existing profile's history into the new layout — a real
-profile is the one thing no test here has (§3).
+**Run 2 — Windows 11 Pro x64 (10.0.26200), at `81b8e35`.** Before #83 and
+#82's later parts. Every automated step passed.
+
+- Dev smoke 679/679, `SKIPPED (0)` (the `MainWindowHandle` probe ran), no
+  `FORCE-KILLED` list, the 15 by-design force-kills, 2.6 min.
+- `dist:win` (x64, arm64 and the combined NSIS, 2.1.0) and `verify-dist`
+  11/11. Full smoke 1358/1358 — dev and packaged-x64 — with one named skip:
+  `packaged-arm64 (whole target)` on this x64 host, as #89's finding wanted.
+  Both asars carry `google-drive.js` and `blob-store.js`.
+- `run-tests.ps1` 2808/2808 across 63 suites. Its first pass failed
+  53-service-worker on a stray, gitignored `update-status.json` a
+  `node start.mjs` run had left in the repo root; the suite no longer
+  depends on that file being absent (`454ea6f`).
+- By hand: offline reload (#79) passed again in real Edge, with the network
+  emulated offline and with the server killed. #86 "Present in Browser":
+  saving first is enforced on an unsaved script (no Save dialog pops up);
+  with a saved one, the listener came up and the app said the browser was
+  opened — but **no browser window appeared, because of this machine**:
+  http/https resolve to a Firefox ProgID with no open command (0x80070483),
+  and a plain ShellExecute of any URL opens nothing either. So the real
+  browser launch and Follow My Voice are still **unverified**. Two app bugs
+  found along the way, fixed after the run (§3): the menu item was
+  unreachable on Windows, and at 1400×864 the teleprompter's wrapped
+  control bar was mostly covered by the scroll area. #10 Drive: no client
+  ID; the unconfigured dialog names the right file and variables.
+
+**Run 2b (addendum) — same machine, at `a49c4e6`** (#82 and #83 complete).
+Every automated step passed.
+
+- `npm test` 326/326, server 405/405, every desktop unit test.
+- Dev smoke 750/750, `SKIPPED (0)`, 2.84 min. Full smoke 1500/1500 with the
+  one named arm64 skip, 5.65 min; packaged-x64 ran 42 blob and 182 history
+  checks. `blob-store.js`, `history-fs-backend.js` and
+  `history-v1-migrate.js` are in `app.asar`; `shared/history-store.js` and
+  `shared/blob-policy.js` in `resources/splitpage/shared/`.
+- `run-tests.ps1` 3039/3039 across 66 suites.
+- **#83's history move on the real profile: passed.** One document with one
+  version: the same id, label, date, 90 rows and 96530 bytes after the move;
+  the body's SHA-256 equals the old `.snap` body's; `v1-backup` holds the
+  old files byte-identical to a backup taken first; restore through the real
+  UI works. Quit and killed mid-move on a generated 114 MB profile (1230
+  bodies) at five points, and killed three times the instant `index.json`
+  appeared (two of them landed between the index write and the renames):
+  every next launch finished the move with nothing missing and no temp files
+  left.
+- **#82 pictures in the installed app: passed.** Three dropped scene
+  pictures and one comment picture live as refs in state and under
+  `blobs\sha256\`, survive quit and relaunch, and a saved `.splitpage`
+  carries all four inline — the old 2.1.0 app opens it with every picture.
+  PNGs now appear in PDF export; the run found a separate, older PDF bug —
+  a scene with a picture and no text was overdrawn by the next scene —
+  fixed after the run (§3).
+
+Still never run: packaged-arm64 (needs the ARM machine), an upgrade over a
+1.0.x install, and a real browser launch for #86 on a machine whose default
+browser works.
 
 ## Before you start
 
@@ -69,9 +111,18 @@ Then, for the desktop shell:
 ```
 cd desktop
 npm install          # .npmrc pins native ARM64; a plain install gets the right one
+node node_modules/electron/install.js  # x64 machines only — see below
 node test/smoke.mjs                    # dev + every packaged exe in dist/
 node test/smoke.mjs --only-target dev   # dev only, fastest loop
 ```
+
+**On an x64 Windows machine, `npm install` leaves no Electron binary**, and
+the dev smoke says "No target found". Electron 44 fetches its binary
+lazily, and anything routed through npm picks up `desktop/.npmrc`'s
+`arch=arm64` (it is there for the ARM machine). Run
+`node node_modules\electron\install.js` once in `desktop\`: invoked
+directly it falls back to the machine's own architecture and fetches x64.
+The ARM machine does not need this. (Found in run 2b.)
 
 Never launch the app directly — always through `smoke.mjs`'s `launchApp`, which
 sets `SPLITPAGE_TEST=1` and a temp profile.
@@ -351,9 +402,10 @@ Anything changed since then is due again in run 2.
 | #74 fsync | by hand, if at all | unreachable by test |
 | packaged-arm64 | the ARM machine | **never run** |
 | upgrade over a 1.0.x install | a VM / Windows Sandbox | **never run** |
-| #73, #71, #98, #11 | dev + packaged smoke, `run-tests.ps1` | pass on Linux; **due in run 2** |
-| #86 Open in browser | by hand, desktop app | URL and served script verified; real browser launch **due in run 2** |
-| #83 history move on a real profile | by hand, desktop app | **due in run 2** |
-| #82 pictures in the desktop app | by hand + packaged smoke | **due in run 2** |
+| #73, #71, #98, #11 | dev + packaged smoke, `run-tests.ps1` | **Windows x64, run 2** |
+| #10 Drive, packaged | packaged smoke (fake Google) | **Windows x64, run 2**; real Google sign-in never run (no client ID) |
+| #86 Open in browser | by hand, desktop app | save-first **Windows x64, run 2**; real browser launch **unverified** (that machine's default browser is broken); the menu route and the covered control bar were fixed after run 2 — re-check |
+| #83 history move on a real profile | by hand, desktop app | **Windows x64, run 2b** (incl. kills mid-move) |
+| #82 pictures in the desktop app | by hand + packaged smoke | **Windows x64, run 2b**; the PDF overlap it found was fixed after — re-check |
 | #8 Follow My Voice | by hand | unreachable by any agent |
-| browser suites | `run-tests.ps1` | pass on Linux; **Windows x64, run 1** (51 suites) |
+| browser suites | `run-tests.ps1` | pass on Linux; **Windows x64, run 2b** (66 suites, 3039 checks) |
