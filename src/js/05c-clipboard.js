@@ -276,14 +276,13 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
 
 /* A paste or a drop into a script cell, replacing the selection (or at the
    end of the cell when the selection is elsewhere). Returns
-     {done, cellEl, media, movedComments, fallback}
-   done false means the cell still holds a picture or a video card, which
-   editCell does not edit (05b-cell-edit.js): the caller inserts
-   `fallback` — {html} or {text}, already sanitised and with no comment —
-   the way it used to. */
+     {done, cellEl, media, movedComments}
+   done false means nothing went in: the cell holds a picture or a video
+   card, which editCell does not edit (05b-cell-edit.js) and which no cell
+   does since design D7. */
 export function pasteIntoCell(cellEl, html, text) {
   var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs });
-  var result = { done: true, cellEl: cellEl, media: got.media, movedComments: false, fallback: null };
+  var result = { done: true, cellEl: cellEl, media: got.media, movedComments: false };
   if (!cellLength(got.cell)) return result;
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
@@ -316,11 +315,6 @@ export function pasteIntoCell(cellEl, html, text) {
   });
   if (!fresh) {
     result.done = false;
-    /* no comment comes this way, but a pasted key follows the same rule
-       as through the model (freshBrollIds); its record is left to the
-       list's next read */
-    result.fallback = got.text !== null ? { text: got.text }
-      : { html: toHtml(stripComments(freshBrollIds(got.cell, brollIdsTaken(S.state, null, null, null, got.fromCut)).cell)) };
     return result;
   }
   result.cellEl = fresh;

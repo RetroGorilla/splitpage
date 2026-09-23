@@ -305,6 +305,14 @@ cells — gate script-only behaviour on `isScriptCell(cellEl)`. The writer's
 paragraphs are script cells too (`isScriptCell` accepts `#writer-doc`), which
 is how the writer inherits tagging/Tab/Ctrl+B/sanitising for free (§3.9).
 
+A comment or reply box (`isDraftBox`, `05d-draft-edit.js`) is edited through
+the document model like a script cell — `throughModel` in 05-render.js sends
+a format, a link or Enter to `editCell` or `editDraft` — but it is not the
+document: its pictures and video cards ride through the model as
+placeholder characters, and Ctrl+Z there is the box's own history, never the
+document's and never the browser's (invariant #55). No edit uses
+`execCommand` any more.
+
 ### 3.6 The merge was dormant for months — now it runs
 
 `saveToServer()`: PUT with `baseRev` — **the document's rev, never
@@ -497,7 +505,7 @@ longest-name-first, word boundaries **inside** the pattern
 checking neighbours after the match breaks on rejected longest-first
 alternatives and accented names. The offer re-checks
 `String(s.range) !== s.text` before accepting (a live Range can grow).
-Accepting uses `execCommand("insertHTML")`. Tab is shared with the
+Accepting is a model edit of the cell (`tagTextRange`). Tab is shared with the
 completion ghost, which wins outright. Visual column only, deliberately.
 
 ### 3.9 The writer edits rows, it does not import a document
@@ -1105,8 +1113,10 @@ bytes, #82 — nothing deletes them yet, D4).
    for anything done at the selection, the edit functions of
    `04c-doc-model.js` (`replaceText`, `setMark`, `insertText`, …) for the
    rest, `toHtml()` to write the result. Where a path still edits HTML
-   (only the fallback split/join and the tag and b-roll edits keep for a
-   cell still holding a picture), it walks the DOM, never regexes HTML.
+   (only the guards split/join and the tag and b-roll edits keep for a
+   cell still holding a picture, which none does since D7), it walks the
+   DOM, never regexes HTML. No edit uses `execCommand` (not in a comment
+   or reply box either — invariant #55).
 3. **Never touch text inside a tag** (§3.3): the model's edits keep a
    comment or link over all of a tag or none of it, and find/replace never
    matches inside one.
@@ -1412,11 +1422,22 @@ bytes, #82 — nothing deletes them yet, D4).
     its id and never copies it. A new path that copies script text between
     places does the same; the anchoring pass (08c-broll.js) re-keys any
     second key that still gets through.
+55. **A comment or reply draft owns its undo** (`05d-draft-edit.js`). Its
+    edits go through the model (`editDraft`), which the browser's own undo
+    stack never saw, so the browser's undo must never run in a draft box:
+    Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y and `beforeinput` `historyUndo` /
+    `historyRedo` are answered from the box's history and always taken. A
+    new edit path in a draft box goes through `editDraft` (or
+    `throughModel`), never `execCommand` or a bare DOM edit — either would
+    be an edit nothing can undo. A picture or video card in a draft must
+    survive every edit; `mediaTable` lifts and restores them, and a new
+    kind of object in a comment body needs a place there and in
+    `walkCell`'s atoms.
 ---
 
 ## 6. Map of the source
 
-`src/js/` (42 modules; filenames say where things live, and still set
+`src/js/` (43 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
@@ -1438,6 +1459,7 @@ evaluation order via `_entry.js`):
 | `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, …), edits, steps and `mergeCells` |
 | `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
 | `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
+| `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
 | `06-rows.js` | row add/move/drag, images |

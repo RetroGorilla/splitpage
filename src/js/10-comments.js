@@ -19,6 +19,7 @@ import {
   sanitizeHtml
 } from "./04-richtext.js";
 import { editableCellHtml, pad2, render } from "./05-render.js";
+import { resetDraftHistory } from "./05d-draft-edit.js";
 import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
@@ -529,6 +530,8 @@ export function openCommentComposer(ctx) {
   nameInput.value = getSavedAuthorName();
   var bodyEl = document.getElementById("comment-body-editable");
   bodyEl.innerHTML = "";
+  /* a new draft: the last one's edits are not this one's to undo */
+  resetDraftHistory(bodyEl);
   document.getElementById("comment-modal").hidden = false;
   /* always focus the comment body (not the name field) — the name is optional
      and defaults to "Anonymous", so it must never be where typing lands first */
@@ -547,6 +550,7 @@ export function closeCommentComposer(cancelled) {
   S.savedRangeCell = null;
   closeFieldPopovers(document.getElementById("comment-modal"));
   document.getElementById("comment-body-editable").innerHTML = "";
+  resetDraftHistory(document.getElementById("comment-body-editable"));
 }
 
 export function postComment() {
@@ -582,6 +586,7 @@ export function postComment() {
   document.getElementById("comment-modal").hidden = true;
   pendingComment = null;
   bodyEl.innerHTML = "";
+  resetDraftHistory(bodyEl);
   render();
   sendNow();
 }
