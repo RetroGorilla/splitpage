@@ -752,12 +752,11 @@ Pasting or dropping a picture, a video link (YouTube, Vimeo, Loom and the
 like) or a video file into a scene's words — or dropping it on the Image
 section — puts it in that scene's Image section, and a toast says so with
 **Undo**; the words that came with it go in as usual, and one Ctrl+Z takes
-back both. A picture is added beside any already there. A video goes in the
-Image section, not in your words: into a scene with no picture it brings a
-thumbnail of its own — a video file's first frame, or a plain video
-placeholder for a web link (Splitpage doesn't fetch pictures from video
-sites) — and into a scene that has one it goes with the picture you last
-added or picked. Every video gets a line under the pictures — up to three,
+back both. Each picture and each video is added after the ones already
+there. A video goes in the Image section, not in your words, as a tile of
+its own with a ▶ badge: its thumbnail is a video file's first frame, or a
+plain placeholder for a web link (Splitpage doesn't fetch pictures from
+video sites). Every video also gets a line under the pictures — up to three,
 then **+N more videos**. Click a line (or **Open** in the gallery) to open
 it: a web link in your browser; a video file in its own app, in the desktop
 app, as long as you dropped or pasted it since Splitpage started (the

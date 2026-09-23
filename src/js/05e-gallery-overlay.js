@@ -8,7 +8,6 @@ import {
   galleryBadgeHtml,
   gallerySlotPictureHtml,
   render,
-  setGalleryIndex,
   slotPoster,
   videoHostLabel
 } from "./05-render.js";
@@ -201,7 +200,6 @@ export function announceGalleryEdit(msg, before) {
 
 function pick(i) {
   view.sel = i;
-  setGalleryIndex(view.rowId, i);
   paint();
   var picked = modal().querySelector(".scene-gallery-grid-tile.is-selected");
   if (picked) picked.focus({ preventScroll: true });
@@ -219,7 +217,6 @@ function moveTo(from, to) {
   var rowId = view.rowId;
   if (galleryEdit(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
     view.sel = to;
-    setGalleryIndex(rowId, to);
     refreshGalleryOverlay();
   }
 }
@@ -230,7 +227,6 @@ function makeCover() {
   var rowId = view.rowId;
   if (galleryEdit(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
     view.sel = 0;
-    setGalleryIndex(rowId, 0);
     refreshGalleryOverlay();
   }
 }
@@ -244,7 +240,6 @@ function removeSelected() {
   galleryEdit(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); });
   if (view) {
     view.sel = Math.max(0, at - 1);
-    setGalleryIndex(rowId, view.sel);
     refreshGalleryOverlay();
   }
 }
