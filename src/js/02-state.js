@@ -24,7 +24,7 @@ import {
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
-import { fromHtml, toHtml } from "./04c-doc-model.js";
+import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 
@@ -382,6 +382,12 @@ export function migrateRows(s) {
     }
     c.assignee = c.assignee ? plainText(c.assignee).trim().slice(0, 80) : "";
   });
+  /* A comment points where its words are (design §3.2). Every merge comes
+     through here (mergeStates' result), and a merge can move words between
+     scenes — one side split a scene through a commented phrase while the
+     other kept the comment's old rowId — as can an older file saved before
+     split and join kept the pointer in step. */
+  syncCommentAnchors(s);
 
   /* Who's responsible for each tracked item. Deliberately just names the
      user typed — there are no accounts here and nothing is verified; it's

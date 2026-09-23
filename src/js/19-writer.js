@@ -7,10 +7,10 @@ import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   cssAttr,
   ensureTrailingCaretSpot,
-  inertBody,
   sanitizeHtml,
   storedHtmlFromDom
 } from "./04-richtext.js";
+import { cellLength, fromHtml, joinCells, projection, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import {
   applyHighlight,
   cellFormatState,
@@ -29,6 +29,7 @@ import { closeFindBar, findOpen } from "./09-find-replace.js";
 import { closeCommentsPanel } from "./10-comments.js";
 import { truncateForPreview } from "./11-import.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
+import { breakUndoCoalescing } from "./12a-undo.js";
 import { htmlToPlainText } from "./14-export.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
 
@@ -251,40 +252,6 @@ function splitWriterRow(cellEl) {
   focusWriterBlock(res.created.id, 0);
 }
 
-/* A comment is anchored twice over: by rowId, and by the .cmt-anchor span
-   living inside that row's text. Splitting a scene can carry the span into
-   the new row while rowId still names the old one; joining deletes the row
-   the span came from altogether.
-
-   The comment is not lost either way — every lookup that matters
-   (jumpToAnchor, syncAnchorResolvedClasses, anchorLiveText) searches the
-   whole document. But the panel labels it with the scene rowId names, which
-   is now the wrong one, and deleteComment() calls unwrapAnchorInState()
-   with that rowId, looks for the span in a row that no longer holds it,
-   finds nothing, and leaves a highlighted orphan in the script that nothing
-   can remove. So the pointer follows the text.
-
-   Scoped to the rows the operation actually touched: sweeping the document
-   here would be a full parse of every field of every row on every Enter. */
-export function repointCommentsForRows(rows) {
-  if (!S.state.comments || !S.state.comments.length) return;
-  rows.forEach(function (row) {
-    if (!row) return;
-    ["visualText", "audioText"].forEach(function (field) {
-      var body = inertBody(row[field] || "");
-      Array.prototype.forEach.call(body.querySelectorAll(".cmt-anchor"), function (el) {
-        var anchorId = el.getAttribute("data-cmt");
-        if (!anchorId) return;
-        S.state.comments.forEach(function (c) {
-          if ((c.anchorId || c.id) !== anchorId) return;
-          c.rowId = row.id;
-          c.field = field;
-        });
-      });
-    });
-  });
-}
-
 /* Backspace at the very start of a paragraph — and Delete at the very end
    — joins two scenes, the way they join in any word processor.
 
@@ -307,12 +274,24 @@ function mergeWriterRows(intoIdx) {
   var prevEl = document.querySelector('#writer-doc .wr-para[data-id="' + cssAttr(prev.id) + '"]');
   var joinAt = prevEl ? prevEl.textContent.length : 0;
 
+  /* whatever was typed before the key is its own undo entry; the join is
+     one of its own */
+  breakUndoCoalescing();
   var a = prev.audioText || "", b = cur.audioText || "";
   /* The caret lands *before* the joining space, so one more Backspace
      closes the two up tight — which is what someone who did not want a
      space there is about to press anyway. */
-  var glue = (a && b && !/(<br\s*\/?>|\s)$/i.test(a)) ? " " : "";
-  prev.audioText = a + glue + b;
+  if (/<img|video-embed-card/.test(a + b)) {
+    /* a paragraph still holding a picture (pasted before design D7) is not
+       one the model can hold, so its HTML is joined as it always was */
+    prev.audioText = a + ((a && b && !/(<br\s*\/?>|\s)$/i.test(a)) ? " " : "") + b;
+  } else {
+    /* Through the model (#85): the marks go with their words, and a comment
+       whose phrase a split cut in two is one anchor again (joinCells). */
+    var ca = fromHtml(a), cb = fromHtml(b);
+    var glue = cellLength(ca) && cellLength(cb) && !/\s$/.test(projection(ca)) ? " " : "";
+    prev.audioText = toHtml(joinCells(ca, cb, glue));
+  }
   if (curHasVisual) {
     prev.visualText = cur.visualText;
     delete prev.visualImage;
@@ -327,8 +306,9 @@ function mergeWriterRows(intoIdx) {
   if ((rank[cur.status] || 0) > (rank[prev.status] || 0)) prev.status = cur.status;
   stampRow(prev);
   S.state.rows.splice(intoIdx + 1, 1);
-  /* the row the anchors used to live in is gone; they are all in prev now */
-  repointCommentsForRows([prev]);
+  /* the row the comments' words came from is gone: they point where their
+     marks are now, in the same undo entry */
+  syncCommentAnchors(S.state);
   markDirty();
   renderWriter();
   focusWriterBlock(prev.id, joinAt);

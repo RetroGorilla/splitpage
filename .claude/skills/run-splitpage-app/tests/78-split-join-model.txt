@@ -1,0 +1,145 @@
+# Splitting and joining scenes through the document model (#85, design
+# §3.2; splitRowFieldCore in 06-rows.js, mergeWriterRows in 19-writer.js,
+# syncCommentAnchors in 04c-doc-model.js).
+#
+#   * a split through the middle of a commented phrase leaves the comment
+#     marked in both halves, and its card points at the first;
+#   * a split just before the phrase carries all of it, and the card
+#     follows it to the new scene;
+#   * a join brings the comment back with its words, and a phrase a split
+#     cut in two is one anchor again;
+#   * each is ONE undo entry, and Ctrl+Z puts the words AND the comment's
+#     row back.
+# The pure half is src/test/comment-anchors.test.mjs. Every `eval` is one
+# physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- a document with one comment, on "bravo charlie" in scene 1's audio ------
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = { schema: 2, title: 'Split join model', rows: [ { id: 'r1', visualText: 'one', audioText: 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo charlie</span> delta', status: 'todo' }, { id: 'r2', visualText: '', audioText: 'Echo foxtrot', status: 'todo' } ], comments: [ { id: 'c1', rowId: 'r1', field: 'audioText', anchorId: 'c1', quotedText: 'bravo charlie', author: 'Ann', body: 'about bravo', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'split-join-model.splitpage')); return true; })()
+wait F.state().title === 'Split join model' && document.querySelector('#rows .row[data-id="r2"]')
+eval (function(){ window.ORIG = 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo charlie</span> delta'; window.cell = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .audio-cell .cell-editable'); }; window.para = function(id){ return document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]'); }; window.aud = function(i){ return F.state().rows[i].audioText; }; window.c1 = function(){ return F.state().comments.filter(function(c){ return c.id === 'c1'; })[0]; }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.caretAt = function(el, offset){ el.focus(); var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); var n, seen = 0; while ((n = w.nextNode())) { if (offset <= seen + n.nodeValue.length) break; seen += n.nodeValue.length; } var r = document.createRange(); r.setStart(n, offset - seen); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return el.textContent.slice(0, offset); }; window.card = function(){ return document.querySelector('#comments-list .comment-card[data-id="c1"]'); }; window.mark = function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; }; return true; })()
+expect aud(0) === ORIG
+
+# ---- 1. Alt+Enter through the middle of the phrase -------------------------
+eval mark()
+eval caretAt(cell('r1'), 11)
+key alt Enter
+wait F.state().rows.length === 3
+eval window.__new = F.state().rows[1].id
+# both halves carry the comment; the other column stays on the first row
+expect aud(0) === 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo</span>'
+expect aud(1) === '<span class="cmt-anchor" data-cmt="c1"> charlie</span> delta'
+expect F.state().rows[0].visualText === 'one' && F.state().rows[1].visualText === ''
+# the comment points at the first of them, and its card says so
+expect c1().rowId === 'r1' && c1().field === 'audioText'
+jsclick #btn-comments
+wait card() && card().querySelector('.comment-loc').textContent === 'Row 01 · Audio'
+jsclick #comments-panel-close
+# the caret went with the words it moved
+expect document.activeElement === cell(__new)
+# one undo entry, and Ctrl+Z puts it all back
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows.length === 2
+expect aud(0) === ORIG
+expect ids() === 'r1,r2'
+expect c1().rowId === 'r1'
+
+# ---- 2. Alt+Enter just before the phrase: the comment moves -----------------
+eval mark()
+eval caretAt(cell('r1'), 6)
+key alt Enter
+wait F.state().rows.length === 3
+eval window.__new = F.state().rows[1].id
+expect aud(0) === 'Alpha '
+expect aud(1) === '<span class="cmt-anchor" data-cmt="c1">bravo charlie</span> delta'
+expect c1().rowId === __new && c1().field === 'audioText'
+jsclick #btn-comments
+wait card() && card().querySelector('.comment-loc').textContent === 'Row 02 · Audio'
+jsclick #comments-panel-close
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows.length === 2
+expect aud(0) === ORIG
+expect c1().rowId === 'r1'
+jsclick #btn-comments
+wait card() && card().querySelector('.comment-loc').textContent === 'Row 01 · Audio'
+jsclick #comments-panel-close
+# and redo moves it again
+key ctrl+shift KeyZ
+wait F.state().rows.length === 3
+expect c1().rowId === F.state().rows[1].id
+key ctrl KeyZ
+wait F.state().rows.length === 2
+
+# ---- a selection is deleted first, and the split lands where it began -------
+eval (function(){ var el = cell('r1'); caretAt(el, 6); var s = getSelection(); var r = s.getRangeAt(0); var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); var n, seen = 0; while ((n = w.nextNode())) { if (12 <= seen + n.nodeValue.length) break; seen += n.nodeValue.length; } r.setEnd(n, 12 - seen); return s.toString(); })()
+eval mark()
+key alt Enter
+wait F.state().rows.length === 3
+expect aud(0) === 'Alpha '
+expect aud(1) === '<span class="cmt-anchor" data-cmt="c1">charlie</span> delta'
+expect c1().rowId === F.state().rows[1].id
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows.length === 2
+expect aud(0) === ORIG
+expect c1().rowId === 'r1'
+
+# ---- 3. the writer: Enter before the phrase, then Backspace joins it back ---
+click #btn-write
+wait !document.getElementById('writer').hidden && para('r1')
+eval caretAt(para('r1'), 6)
+key Enter
+wait F.state().rows.length === 3
+eval window.__new = F.state().rows[1].id
+expect c1().rowId === __new
+eval mark()
+eval caretAt(para(__new), 0)
+key Backspace
+wait F.state().rows.length === 2
+# "Alpha " already ends in a space, so nothing is glued in
+expect aud(0) === ORIG
+expect c1().rowId === 'r1' && c1().field === 'audioText'
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+# Ctrl+Z takes back the join: the scene, its words and the comment's row
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows.length === 3
+expect F.state().rows[1].id === __new
+expect aud(0) === 'Alpha '
+expect aud(1) === '<span class="cmt-anchor" data-cmt="c1">bravo charlie</span> delta'
+expect c1().rowId === __new
+# ...and the split before it
+key ctrl KeyZ
+wait F.state().rows.length === 2
+expect aud(0) === ORIG
+expect c1().rowId === 'r1'
+
+# ---- 4. a phrase a split cut in two is one anchor again after the join -----
+wait para('r1')
+eval caretAt(para('r1'), 9)
+key Enter
+wait F.state().rows.length === 3
+eval window.__new = F.state().rows[1].id
+expect aud(0) === 'Alpha <span class="cmt-anchor" data-cmt="c1">bra</span>'
+expect aud(1) === '<span class="cmt-anchor" data-cmt="c1">vo charlie</span> delta'
+eval caretAt(para(__new), 0)
+key Backspace
+wait F.state().rows.length === 2
+# the joining space sits inside the comment, not between two anchors
+expect aud(0) === 'Alpha <span class="cmt-anchor" data-cmt="c1">bra vo charlie</span> delta'
+expect document.querySelectorAll('#writer-doc .cmt-anchor[data-cmt="c1"]').length === 1
+expect c1().rowId === 'r1'
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+quit
