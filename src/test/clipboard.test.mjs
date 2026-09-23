@@ -5,14 +5,18 @@
  * A copy never carries a comment. A cut does, tagged with a nonce only the
  * tab that cut knows, and a paste keeps comment marks only from HTML
  * carrying that tab's live nonce, for comments the document still has.
- * Pictures and video cards never land in a script cell. The live half — a
- * real ClipboardEvent, the undo entry, the comment card following its
- * words — is browser suite 77-clipboard-model.
+ * Pictures and video cards never land in a script cell. A pasted b-roll
+ * key gets an id of its own unless nothing in the document has its id.
+ * The live half — a real ClipboardEvent, the undo entry, the comment card
+ * following its words, the b-roll list — is browser suite
+ * 77-clipboard-model.
  */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellFromClipboard, clipboardOfCell, cutNonceIn, stripComments } from "../js/05c-clipboard.js";
+import {
+  brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments
+} from "../js/05c-clipboard.js";
 import { commentIds, fromHtml, projection, sliceCell, toHtml } from "../js/04c-doc-model.js";
 
 const cmt = (id, inner) => `<span class="cmt-anchor" data-cmt="${id}">${inner}</span>`;
@@ -101,4 +105,53 @@ test("a copied paragraph does not bring a line break with it", () => {
   assert.equal(projection(cellFromClipboard("<p>a</p><p>b</p>\n<!--EndFragment-->", "", {}).cell), "a\nb");
   /* a line break the words themselves end in stays */
   assert.equal(projection(cellFromClipboard("line<br>", "", {}).cell), "line\n");
+});
+
+/* ---- b-roll keys: a pasted key is a line of its own ---- */
+
+const KEY = (id) => `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
+const keyIds = (cell) => cell.filter((r) => r.atom).map((r) => r.id);
+const counter = () => { let n = 0; return () => "bsNew" + (++n); };
+
+test("brollIdsTaken: every key in the script, and the list's records unless a cut is moving it", () => {
+  const state = {
+    rows: [
+      { id: "r1", visualText: KEY("bsA") + " the gulls<br>" + KEY("bsB") + " drone", audioText: "said " + KEY("bsC") },
+      { id: "r2", visualText: "two", audioText: "" }
+    ],
+    brollShots: [{ id: "bsA" }, { id: "bsGone" }]
+  };
+  const ids = (t) => Object.keys(t).sort();
+  assert.deepEqual(ids(brollIdsTaken(state, "r2", "visualText", fromHtml("two"), false)), ["bsA", "bsB", "bsC", "bsGone"]);
+  /* a cut: the orphaned record's id is free for its own key to come back to */
+  assert.deepEqual(ids(brollIdsTaken(state, "r2", "visualText", fromHtml("two"), true)), ["bsA", "bsB", "bsC"]);
+  /* the cell pasted into counts as it is without the selection the paste replaces */
+  assert.deepEqual(ids(brollIdsTaken(state, "r1", "visualText", fromHtml(KEY("bsA") + " the gulls"), true)), ["bsA", "bsC"]);
+});
+
+test("freshBrollIds: a key keeps its id only when nothing has it, and never twice in one paste", () => {
+  const pasted = fromHtml(KEY("bsA") + " one<br>" + KEY("bsZ") + " two<br>" + KEY("bsZ") + " three");
+  const out = freshBrollIds(pasted, { bsA: true }, counter());
+  assert.deepEqual(keyIds(out.cell), ["bsNew1", "bsZ", "bsNew2"]);
+  assert.deepEqual(out.minted, ["bsNew1", "bsNew2"]);
+  /* only the ids change: the words, the key's letters and every mark stay */
+  assert.equal(toHtml(out.cell), KEY("bsNew1") + " one<br>" + KEY("bsZ") + " two<br>" + KEY("bsNew2") + " three");
+  assert.equal(projection(out.cell), projection(pasted));
+  /* nothing taken: the same cell back */
+  const one = fromHtml(KEY("bsA") + " one");
+  const same = freshBrollIds(one, {}, counter());
+  assert.deepEqual(same.minted, []);
+  assert.equal(toHtml(same.cell), toHtml(one));
+  /* a minted id that is itself taken is minted again */
+  const again = freshBrollIds(fromHtml(KEY("bsA")), { bsA: true, bsNew1: true }, counter());
+  assert.deepEqual(keyIds(again.cell), ["bsNew2"]);
+  /* the default mint is the b-roll one (makeId("bs")) */
+  const real = freshBrollIds(fromHtml(KEY("bsA")), { bsA: true });
+  assert.match(keyIds(real.cell)[0], /^bs[a-z0-9]+$/);
+  assert.notEqual(keyIds(real.cell)[0], "bsA");
+  /* a cut's HTML reads its key as it went: the nonce only decides what is taken */
+  const cut = clipboardOfCell(one, { keepComments: true, nonce: "n1" });
+  const got = cellFromClipboard(cut.html, cut.text, { nonce: "n1" });
+  assert.equal(got.fromCut, true);
+  assert.deepEqual(keyIds(got.cell), ["bsA"]);
 });
