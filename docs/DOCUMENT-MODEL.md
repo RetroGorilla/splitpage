@@ -6,8 +6,7 @@ script cell (`05b-cell-edit.js`, `05c-clipboard.js`, the tag panel, split
 and join), undo (`12a-undo.js`) and the word-level merge. Adam made the
 decisions in §12; the sections below reflect them. Not yet run on Windows:
 the by-hand pass in `docs/WINDOWS-CHECKS.md` covers it with the rest.
-#85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
-it.
+#85 ships in the 3.0 pre-releases (from 3.0.0-beta.1) and in 3.0.0.
 
 Line numbers are from `main` at `53eb67d`.
 
@@ -740,7 +739,7 @@ words.
 
 | | Question | Decided |
 | --- | --- | --- |
-| D0 | When | **A 3.0 pre-release first, without #85; #85 goes into the full 3.0 release.** The update check reads GitHub's `releases/latest`, which skips pre-releases, so nobody is offered the pre-release automatically. #100 (deleting #83's history migration) waits for the release **after** the full 3.0: the migration has to reach everyone who updates normally, not just pre-release testers. |
+| D0 | When | **A 3.0 pre-release first, then the full 3.0 release.** First decided as a pre-release *without* #85; changed the same day, once #85 was built: #85 is in the pre-releases from 3.0.0-beta.1, so the Windows pass runs on it before 3.0.0. The update check reads GitHub's `releases/latest`, which skips pre-releases, so nobody is offered the pre-release automatically. #100 (deleting #83's history migration) waits for the release **after** the full 3.0: the migration has to reach everyone who updates normally, not just pre-release testers. |
 | D1 | Editing engine | **Hybrid** (§5): the browser types, Splitpage does everything else. |
 | D2 | Stored format | **Keep canonical HTML** in files and on the server (§6). Runs on disk can come later as its own change. |
 | D3 | Conflict card | **My whole cell**, as today. |
