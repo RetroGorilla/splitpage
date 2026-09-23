@@ -151,6 +151,9 @@ const CHANNELS = [
      A URL, a path or a document id from the page is refused before the
      handler runs. */
   { name: "splitpage:prompter-open-in-browser", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  /* The same in an installed Chromium browser (issue #123): main picks the
+     browser from what is installed, never from the page. */
+  { name: "splitpage:prompter-open-in-chromium", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
   /* ---- Follow My Voice on desktop (issue #8, main.js § 9d) -------------
      Argument-free in the update bridge's style (invariant #28, #45): the

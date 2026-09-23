@@ -50,6 +50,11 @@ const { createGoogleDrive } = require("./google-drive");
    (issue #8, section 9d). Plain Node, no Electron, in electron-builder.yml's
    `files` for the same reason drafts.js is. */
 const { createVoiceHelper } = require("./voice-helper");
+/* desktop/chromium-browsers.js: finding an installed Chromium browser for
+   "Use Chromium Speech Recognition" (issue #123, section 9b). Plain Node, no
+   Electron, in electron-builder.yml's `files` for the same reason drafts.js
+   is. */
+const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
 /* desktop/blob-store.js: the content-addressed blob folder images live in
    since issue #82 (section 8c) — <userData>/blobs, named by SHA-256. Plain
    Node, no Electron, in electron-builder.yml's `files` for the same reason
@@ -146,6 +151,9 @@ const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
    close" while popping error dialogs on Adam's desktop every test run. */
 const TEST_MODE = process.env.SPLITPAGE_TEST === "1";
 const testExternalOpens = [];
+/* Present in Chromium (section 9b, #123): what main WOULD have started, in
+   order, as {browser, url} — never started in test mode. */
+const testChromiumLaunches = [];
 if (TEST_MODE) {
   /* uncaughtException/unhandledRejection are registered further down (see
      the "winning instance" block below), not here — the crash handler needs
@@ -2364,6 +2372,12 @@ function runUpdateInstaller() {
  *     Nothing new is exposed: the stream only starts and stops the same
  *     argument-free listener the tab's own button does, for that tab.
  *
+ *     IN CHROMIUM INSTEAD (#123). "Use Chromium Speech Recognition" shares
+ *     the same way but starts an installed Chromium browser on the URL
+ *     (desktop/chromium-browsers.js finds one; Edge ships with Windows)
+ *     rather than the default browser, with no relay: that page uses the
+ *     browser's own Web Speech. The page names no browser and no path.
+ *
  *     UNSAVED WORK IS REFUSED, not guessed at. The browser reads what is on
  *     disk (or on the server), so a tab main knows to be dirty answers
  *     UNSAVED_CHANGES and a tab with nowhere to live answers NOT_SAVED. The
@@ -2422,12 +2436,41 @@ function prompterRelaysVoice() {
   return voiceHelperInstance().available();
 }
 
-async function openPrompterInBrowser(tab) {
+/* "Use Chromium Speech Recognition" (#123): the Chromium browser to start,
+   or null. Under SPLITPAGE_TEST=1, SPLITPAGE_TEST_CHROMIUM stands in for
+   what is installed — "none", or one of chromium-browsers.js's ids — so a
+   run is the same on every machine; nothing is ever started either way. */
+async function pickChromiumBrowser() {
+  if (TEST_MODE && process.env.SPLITPAGE_TEST_CHROMIUM) {
+    const id = process.env.SPLITPAGE_TEST_CHROMIUM;
+    const name = chromiumBrowserName(id);
+    return name ? { id, name, path: "(test)" } : null;
+  }
+  try {
+    const found = await findChromiumBrowsers();
+    return found[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/* opts.chromium: start an installed Chromium browser on the URL instead of
+   the default browser (#123), with no voice relay — that page uses the
+   browser's own Web Speech, which is the point of choosing it. */
+async function openPrompterInBrowser(tab, opts) {
   if (!tab) return { ok: false, code: "NO_TAB" };
   if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
+  const chromium = !!(opts && opts.chromium);
+  let browser = null;
+  if (chromium) {
+    browser = await pickChromiumBrowser();
+    if (!browser) return { ok: false, code: "NO_CHROMIUM" };
+    if (!tabs.has(tab.id)) return { ok: false, code: "NO_TAB" };
+    if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
+  }
   const source = tab.source || { kind: "blank" };
   let url;
-  let relay = prompterRelaysVoice();
+  let relay = !chromium && prompterRelaysVoice();
   if (source.kind === "server") {
     /* A document on somebody else's server (#11) has no loopback URL here,
        and this channel never opens one the page named. The page copies its
@@ -2471,6 +2514,15 @@ async function openPrompterInBrowser(tab) {
     }
   } else {
     return { ok: false, code: "NOT_SAVED" };
+  }
+  if (browser) {
+    try {
+      if (TEST_MODE) testChromiumLaunches.push({ browser: browser.id, url });
+      else await launchChromiumBrowser(browser, url);
+    } catch {
+      return { ok: false, code: "OPEN_FAILED" };
+    }
+    return { ok: true, kind: source.kind, voice: "browser", browser: browser.name };
   }
   try {
     await shell.openExternal(url);
@@ -4340,6 +4392,12 @@ function buildMenu() {
         accelerator: "CmdOrCtrl+Shift+P",
         click: () => sendMenuCommand("prompter-open-in-browser")
       },
+      /* Issue #123: the same script in an installed Chromium browser (Edge,
+         Chrome, Brave…) whatever the default is, where the page follows with
+         the browser's own speech recognition instead of this app's (#122).
+         Like the item above, the page carries its twin in File ▸ This
+         document, since this menu bar is not drawn on Windows. */
+      { label: "Use Chromium Speech Recognition", click: () => sendMenuCommand("prompter-open-in-chromium") },
       { type: "separator" },
       /* Issue #25: collapses scenes marked Shot into a thin strip. The
          renderer owns the on/off state (per-device localStorage, not this
@@ -4822,6 +4880,12 @@ function registerIpc() {
      from the calling tab's own record what that is and where it lives. */
   ipcHandle("splitpage:prompter-open-in-browser", async (event) => {
     return openPrompterInBrowser(tabOf(event));
+  });
+  /* The same, in an installed Chromium browser rather than the default one
+     (#123). No argument either: main picks the browser from what is
+     installed, never from the page. */
+  ipcHandle("splitpage:prompter-open-in-chromium", async (event) => {
+    return openPrompterInBrowser(tabOf(event), { chromium: true });
   });
 
   /* ---- Follow My Voice (section 9d, issue #8) --------------------------
@@ -5546,6 +5610,10 @@ function registerIpc() {
            run (TEST_MODE stubs shell.openExternal, section 1), oldest first. */
         case "externalOpens":
           return testExternalOpens.slice();
+        /* Every Chromium browser Present in Chromium WOULD have started this
+           run (section 9b, #123), as {browser, url}, oldest first. */
+        case "chromiumLaunches":
+          return testChromiumLaunches.slice();
         /* What the teleprompter's loopback listener is holding (section 9b):
            listening or not, its port, and which tabs have a live share —
            never a token or a script. */

@@ -75,7 +75,8 @@ import {
   parseSplitpageFile
 } from "./20d-formats.js";
 import {
-  canOpenPrompterInBrowser, makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser
+  canOpenPrompterInBrowser, canOpenPrompterInChromium, makeDesktopHandle, notifyDesktopDocumentState,
+  openPrompterInBrowser, openPrompterInChromium
 } from "./20f-desktop.js";
 import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
@@ -994,6 +995,8 @@ export function toggleFileMenu(force) {
        the call has nothing to offer. */
     var presentBrowser = document.getElementById("menu-present-browser");
     if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
+    var presentChromium = document.getElementById("menu-present-chromium");
+    if (presentChromium) presentChromium.hidden = !canOpenPrompterInChromium();
     /* the drawer is tall and scrolls; a reopen should start at the top
        rather than wherever the last visit left it */
     var body = menu.querySelector(".menu-body");
@@ -1091,6 +1094,7 @@ export function handleFileMenuAction(action) {
   else if (action === "share-link") publishAndCopyShareLink();
   else if (action === "find") openFindBar();
   else if (action === "prompter-open-in-browser") openPrompterInBrowser();
+  else if (action === "prompter-open-in-chromium") openPrompterInChromium();
   else if (action === "export-app-data") exportAppData();
   else if (action === "import-app-data") openImportAppData();
   else if (action === "tagging-help") showTaggingHelp();

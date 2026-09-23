@@ -219,6 +219,12 @@
                    browser; the native item clicks this same button
                    (runDesktopMenuCommand, 20f-desktop.js). -->
               <button type="button" role="menuitem" data-file-action="prompter-open-in-browser" id="menu-present-browser" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app (Ctrl+Shift+P)">Present in browser (Follow My Voice)</button>
+              <!-- Desktop app only (issue #123): the in-page twin of View ▸ Use
+                   Chromium Speech Recognition — the same script in an
+                   installed Chromium browser whatever the default is, where
+                   Follow My Voice uses that browser's own recognition.
+                   Unhidden like the item above (18-local-files.js). -->
+              <button type="button" role="menuitem" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition">Use Chromium Speech Recognition</button>
             </div>
           </div>
 
