@@ -901,12 +901,14 @@ builds two fields.
   "lastEditedBy": null, "lastEditedAt": null,
   "wordsPerMinute": 150,        // clamped 60–400
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
-    "visualImage": "data: URI or null", "status": "todo | ready | shot",
-    "updatedAt": "ISO", "updatedBy": "name" }],
+    "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
+                  "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
+    "status": "todo | ready | shot", "updatedAt": "ISO", "updatedBy": "name" }],
   "comments": [{ "id": "c1", "rowId": "r1", "field": "audioText | visualText | visualImage",
     "anchorId": "c1", "quotedText": "plain text", "author": "name", "body": "sanitised HTML",
     "resolved": false, "resolvedBy": "name or null", "resolvedAt": "ISO or null",
     "assignee": "name or ''", "kind": "anchor | conflict", "createdAt": "ISO", "updatedAt": "ISO",
+    "imageValue": { /* an imageRef, or null */ },  // image conflict cards only
     "replies": [{ "id": "rp1", "author": "name", "body": "HTML", "createdAt": "ISO" }] }],
   "people": [{ "id": "p…", "name": "Jordan" }],
   "productionTags": [{ "cat": "prop | location | cast | vfx | sound", "name": "Camera Rig",
@@ -915,9 +917,48 @@ builds two fields.
 }
 ```
 
-`ROW_FIELDS = ["visualText","visualImage","audioText"]` merges as content;
-`rows[].status` and `productionTags[].status` merge by rank (further-along
-wins); `owner`/`notes` merge "filled beats empty".
+`ROW_FIELDS = ["visualText","imageRef","audioText"]` merges as content
+(an `imageRef` compared by its sha); `rows[].status` and
+`productionTags[].status` merge by rank (further-along wins);
+`owner`/`notes` merge "filled beats empty".
+
+**Images are references, not bytes** (#82). The document state never holds
+image bytes; the bytes live once, content-addressed by SHA-256, in a blob
+store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
+server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
+- A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
+  (`shared/blob-policy.js`): exactly those four fields, the type sniffed
+  from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
+  read, interned and deleted by `migrateRows()`; a valid one wins over an
+  `imageRef` on the same row. The comment `field` value `"visualImage"` keeps
+  its name (#82 D5).
+- An image inside HTML — comment and reply bodies, pasted cell HTML — is
+  `<img class="comment-img" data-blob="<sha>" data-w data-h data-mime>` with
+  **no stored `src`**. `sanitizeHtml()` interns an inline `data:` image into
+  that form, keeps a valid `data-blob` (attributes from the registry when it
+  holds the bytes), strips any `src`, and drops everything else.
+  `storedImageHtml(ref)` is the same string for HTML built outside it.
+- The hydrator (a MutationObserver in `02c-blobs.js`) gives every
+  `<img data-blob>` in the live DOM a `blob:` `src` once `ensureBytes()`
+  has the bytes (memory, then the backend, then the server); one nobody has
+  is marked `data-blob-state="missing"`, alt "Image unavailable". The mark
+  lives on the element only, so a re-render (the comments list rebuilds on
+  every change) makes a fresh `<img>` and asks again, a server included —
+  by design since P5: a picture that turns up later simply appears. Anything
+  that reads the DOM back into state without sanitising
+  (`syncFieldFromDom`) passes it through `storedHtmlFromDom()`, which strips
+  those attributes again.
+- An image conflict card (`kind:"conflict"`, `field:"visualImage"`) holds the
+  user's picture as `imageValue`; its `body` shows the same picture in the
+  stored form. `imageValue` is the source of truth: "Use my version" puts
+  it back, and the card draws it.
+- `refsIn(state)` (`shared/blob-policy.js`; the server keeps its own copy)
+  lists every sha a state names: `imageRef`, `imageValue`, and `data-blob`
+  on an `<img>` in any row, comment or reply HTML. Every writer that must
+  not name an unstored blob persists or uploads `refsIn` first (#52).
+- The crash/sign-in stash (`splitpage-conflict-stash`) names pictures by
+  ref too, and carries `blobs: {sha: data URI}` for any the durable store
+  does not hold yet; `acceptStash()` interns them on the way back in.
 
 **`docId`** (`src/js/02b-doc-id.js`, frozen `sha256Hex`/`deriveDocId`) is
 minted by `migrateRows()`, carried through `mergeStates()` via
@@ -942,11 +983,20 @@ not a backup (§3.13).
 
 **The two file formats**, both through `20d-formats.js`, entering state
 only via `migrateRows()` (#2): **`.splitpage`** is
-`JSON.stringify(migrateRows(cloneState(state)), null, 2)`, no envelope,
-byte-for-byte what the server stores and `#state-data` holds at boot (#31).
+`JSON.stringify(inlineStateImages(migrateRows(cloneState(state))), null, 2)`,
+no envelope (#31). Files carry their pictures inline, as they always have
+(#82 D1): `inlineStateImages()` turns each `imageRef` back into
+`visualImage: "data:…"`, each `<img data-blob>` into
+`<img src="data:…" class="comment-img">`, and writes an image conflict
+card's picture into its body — what an older client wrote and reads. A
+picture whose bytes nobody has stays a ref and the save says "N images
+could not be included". Standalone HTML and a server without blob routes
+get the same inline form; the page and a blob server keep the refs.
 **`.md`** is `toMarkdownTableDoc()` (title, scene table, breakdown,
 comments) followed by a fenced `~~~~splitpage` block holding the exact
-`.splitpage` bytes, fence length computed per file so a quoted example
+`.splitpage` bytes (so its images are inline there too, and a row's picture
+also inline in its Visual cell, #82 D2; HTML images are only in the block —
+the table's text never showed them), fence length computed per file so a quoted example
 can't shadow the real block. Reading reconciles hand edits cell-by-cell
 against `mdSceneCellSource()`: equal keeps the block's HTML intact,
 different rebuilds via `legacyMdToHtml()` + `sanitizeHtml()` (comment
@@ -959,7 +1009,9 @@ lossy import (#32).
 not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 `splitpage-tagging-help-dismissed`, `splitpage-files` (IndexedDB,
 `FileSystemFileHandle` for resume-on-launch), `splitpage-history`
-(IndexedDB, per-document history).
+(IndexedDB, per-document history), `splitpage-blobs` (IndexedDB, store
+`blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
+bytes, #82 — nothing deletes them yet, D4).
 
 ---
 
@@ -1081,13 +1133,17 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     `build.mjs`, checked by `seedCheckPasses()`) plus
     `localStorage["splitpage-onboarding"]` plus checks that no document is
     already loading. File ▸ "Set up Splitpage…" bypasses this deliberately.
-31. **A `.splitpage` file is exactly `migrateRows(state)`** — nothing wraps,
-    renames, or adds fields on the way to disk (§3.1, §4).
+31. **A `.splitpage` file is exactly `inlineBlobs(migrateRows(state))`** —
+    `inlineStateImages()` puts every picture's bytes back inline (§4), and
+    nothing else wraps, renames, or adds fields on the way to disk (§3.1).
+    A reader gets refs back through `migrateRows()`.
 32. **The Markdown data block is authoritative for everything the table
     cannot show; the table is authoritative for scene text only, and only
     where it differs from the block.** Don't make the table authoritative
     for a column it renders but doesn't own (`Status`); don't let a
-    row-count difference pick a side silently.
+    row-count difference pick a side silently. Both halves carry images
+    inline (#82 D2): a row's picture as a `data:` URI at the head of its
+    Visual cell AND in the data block; HTML images in the data block.
 33. **Every automated launch of the desktop app sets `SPLITPAGE_TEST=1`,
     and nothing a test does may appear on screen** (§3.13). Doesn't cover a
     renderer `alert`/`confirm` (Help ▸ About); proof of invisibility needs
@@ -1176,11 +1232,21 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     halts too, rather than repeating a toast or a modal every two seconds.
 52. **No durable record names a blob its store does not already hold
     durably** (#82). An image is uploaded (and fsynced) before anything
-    that refers to it by sha is written. On the server that is the 422
-    `missing-blobs` check on document POST/PUT and on the comments POST
-    (§3.7); `acceptMissing` is the one deliberate exception, for a sha the
-    client knows is lost for good, so a missing picture can never make a
-    script unsaveable.
+    that refers to it by sha is written; the list of what a record names
+    is always `refsIn()`.
+    - **Server half:** the 422 `missing-blobs` check on document POST/PUT
+      and on the comments POST (§3.7); `acceptMissing` is the one
+      deliberate exception, for a sha the client knows is lost for good, so
+      a missing picture can never make a script unsaveable (a comment may
+      not use it). The 426 `client-too-old` gate keeps a pre-#82 client from
+      saving over a document that names blobs, since it would drop them.
+    - **Client half:** the hosted client uploads what the server lacks
+      before the PUT, POST or comment POST (`sendWithBlobs`); the history
+      job and the desktop drafts await `persist(refsIn(state))` before they
+      write, and inline (`inlineStateJson`) any blob the store refused; the
+      stash carries non-durable blobs as `data:` URIs; app-data import
+      stores blobs before snapshots (#49); file writers inline everything
+      (#31, #32). Capture stays synchronous (#39) — only the job awaits.
 
 ---
 
@@ -1198,10 +1264,10 @@ evaluation order via `_entry.js`):
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
-| `02c-blobs.js` | image blob registry (#82; not wired in yet): `intern`/`internDataUrl` (sync hash, sniff, measure), `urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`, IndexedDB `splitpage-blobs` + memory backends, `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
+| `02c-blobs.js` | image blob registry (#82): `intern`/`internDataUrl` (sync hash, sniff, measure), `recordFor`/`urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`/`queuePersist`, a row's picture (`rowImage`, `rowImageUrl`, `rowImageBytes`, `blobImgHtml`), the file writers' `inlineStateImages`/`inlineStateJson`, the document-wide hydrator for `img[data-blob]` ("Image unavailable" when nobody has it), IndexedDB `splitpage-blobs` + memory backends (`setBackend` for the desktop folder), `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
-| `04-richtext.js` | `walkSanitize`, html→markdown, video link cards |
+| `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown, video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
@@ -1242,6 +1308,7 @@ evaluation order via `_entry.js`):
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |

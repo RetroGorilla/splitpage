@@ -143,6 +143,11 @@ docker rm -f splitpage && docker build -t splitpage /mnt/user/appdata/splitpage/
 
 Your documents live in the `data` volume, which this does not touch.
 
+Anyone with the app open while you update should reload it. A page older than
+the server can no longer save a document that has images in it: the server
+answers with "This page is out of date for this server", because an older page
+would drop the images it cannot see.
+
 ### Where your documents live
 
 One JSON file per script in `/mnt/user/appdata/splitpage/data`. That is the
@@ -495,4 +500,6 @@ default in those two files and cut a release from it.
 | "Your sign-in expired" straight after signing in | Access is returning its login page to API calls. Usually the Access application covers a *path* rather than the whole hostname — it must cover `splitpage.yourdomain.com` entirely, `/api/` included. |
 | `EACCES` in the logs | Data volume permissions — see §2. |
 | Saves fail with 413 | Document over `MAX_BODY_BYTES`, or one image over `MAX_BLOB_BYTES`. Raise it and restart. |
+| "This page is out of date for this server" | The page was loaded before the server was updated, and the document holds images. Reload the page. |
+| Pictures show as "Image unavailable" | The image files under `data/blobs/` are missing — restored from a backup that did not include `blobs/`, or copied without it. Restore `blobs/` too. |
 | Everyone shows as the same person in comments | Access isn't passing an identity, so Splitpage falls back to asking for a name. Confirm the Access app is on and the tunnel isn't bypassing it. |

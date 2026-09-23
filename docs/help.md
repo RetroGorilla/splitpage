@@ -344,6 +344,12 @@ lets them click, or what they type into their browser's console. They cannot
 resolve or delete anyone's comments either. Restarting your session invalidates
 every review link and both codes.
 
+Reviewers can put pictures in their comments, within an allowance: each
+review link or code may upload about 20 MB of images per hour (the host can
+change it with `REVIEW_BLOB_BUDGET_BYTES`). Past that, the comment waits and
+Splitpage says so; try again later, or post it without the picture. The
+server takes PNG, JPEG, GIF and WebP up to 8 MB each.
+
 ## Connecting to a server
 
 Normally the app talks to whatever served it. **File ▸ Servers…** lets it talk
@@ -655,7 +661,27 @@ changes the label and the tracked item together.
 **Reference images.** The small **📎 Image** link at the top of a scene's
 visual column attaches a still — or just drag an image file from your desktop
 anywhere onto that column and drop it. Once a scene has one, hover it for
-**Replace** and **Remove**.
+**Replace** and **Remove**. A comment can carry a picture too (**🖼 Image**
+in the comment box), and a picture pasted into a scene or a reply is kept.
+
+**Where pictures are kept.** The script itself only names each picture; the
+picture is stored once, separately, wherever the script lives:
+
+- In a browser, in that browser's own storage for the page, next to your
+  version history.
+- In the desktop app, in its app-data folder (a `blobs` folder beside
+  `history`).
+- On a server, on the server, alongside the scripts.
+
+A file you save from Splitpage — `.splitpage`, `.md` or Standalone HTML —
+still carries every picture inside it, so it opens complete anywhere,
+including in an older copy of Splitpage. If a picture can't be found (a
+version restored after its picture was lost, say), it shows as
+**Image unavailable** and the rest of the script is untouched; a save then
+tells you how many images it could not include. Splitpage looks for a
+missing picture again whenever it redraws the spot — including asking the
+server again, on a hosted script, each time the comments list is redrawn —
+so one that turns up later simply appears.
 
 **Reordering.** Drag a scene by the grip beside its number (the dots to the
 left — they brighten as you move over the row). The ↑ / ↓ buttons still work
@@ -700,6 +726,12 @@ comment flagged **Unmerged edit**. Nothing is ever silently dropped.
 If your sign-in expires while you are working, Splitpage notices, keeps your
 unsaved edits, and asks you to reload; signing back in reopens the document and
 merges them in, along with anything that changed while you were away.
+
+If the server has been updated and your open page is older than it, saving
+stops with **This page is out of date for this server** and asks you to
+reload. Do that: an older page cannot see the pictures a newer one stored, and
+the server refuses its saves rather than let it drop them. Your unsaved edits
+are kept and merged back in after the reload.
 
 None of this affects working locally. Opened from disk, the app behaves exactly
 as it always has, and **Save As** still gives you a local copy of a hosted
