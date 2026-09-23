@@ -294,10 +294,6 @@ function mergeWriterRows(intoIdx) {
   var prev = S.state.rows[intoIdx];
   var cur = S.state.rows[intoIdx + 1];
   if (!prev || !cur) return;
-  /* one of the two rows a pending move-undo names is about to disappear —
-     see lastMoveUndo in 06-rows.js */
-  S.lastMoveUndo = null;
-
   var prevHasVisual = !!(htmlToPlainText(prev.visualText) || rowImage(prev));
   var curHasVisual = !!(htmlToPlainText(cur.visualText) || rowImage(cur));
   if (prevHasVisual && curHasVisual) {
