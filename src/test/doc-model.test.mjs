@@ -16,7 +16,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  addComment, applySteps, cellLength, commentIds, commentRange, deleteRange, fromHtml, insertBrollKey,
+  addComment, applySteps, cellLength, cellOf, tagNameOf, commentIds, commentRange, deleteRange, fromHtml, insertBrollKey,
   insertText, invertSteps, joinCells, marksAt, mergeCells, normalizeCell, projection, removeComment,
   replaceText, retag, sameCell, setMark, sliceCell, splitCell, tagIds, toDocxRuns, toHtml, toMarkdown,
   toPlainText, touchedCells
@@ -404,4 +404,14 @@ test("merge: a rewrite too big to diff on both sides is one conflict, not a hang
   assert.equal(res.conflict, true);
   assert.deepEqual(res.cell, big("t"));
   assert.equal(merged(big("o"), big("m"), big("m")).conflict, false);
+});
+
+test("cellOf: fromHtml, cached by the HTML itself", () => {
+  const html = "a <strong>b</strong> " + tagSpan("prop", "Mug", "mug");
+  const c = cellOf(html);
+  assert.deepEqual(c, fromHtml(html));
+  assert.equal(cellOf(html), c, "the same array for the same HTML");
+  assert.deepEqual(tagNameOf(c[2].marks.tag), { cat: "prop", name: "Mug" });
+  assert.equal(tagNameOf("t_abc"), null);
+  assert.deepEqual(cellOf(null), []);
 });
