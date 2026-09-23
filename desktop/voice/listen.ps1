@@ -6,6 +6,9 @@
 # nothing downloaded, no model shipped with the app) and writes what it hears
 # to stdout, one JSON object per line:
 #
+#   {"type":"device","name":"..."}       the microphone it listens to, just
+#                                        before start, when Windows names it
+#                                        (issue #118)
 #   {"type":"start","lang":"en-US"}      listening
 #   {"type":"interim","text":"..."}      a guess that may still change
 #   {"type":"final","text":"..."}        a phrase the recogniser settled on
@@ -46,8 +49,82 @@ try {
   Add-Type -ReferencedAssemblies System.Speech -TypeDefinition @'
 using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Speech.Recognition;
 using System.Text;
+
+// Which microphone SetInputToDefaultAudioDevice listens to (issue #118).
+// System.Speech does not say, so this asks Windows' Core Audio for the
+// default capture endpoint (eCapture, eConsole — the one the wave mapper,
+// and so SAPI, records from) and reads its friendly name, e.g.
+// "Microphone (USB Audio Device)". Reading a property does not open the
+// device. Null when there is no such device or anything fails: the page
+// then just says "Listening".
+public static class SplitpageVoiceDevice {
+  [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+  class MMDeviceEnumerator { }
+
+  [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IMMDeviceEnumerator {
+    void EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
+    void GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
+  }
+
+  [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IMMDevice {
+    void Activate(ref Guid iid, int clsCtx, IntPtr activationParams, out IntPtr iface);
+    void OpenPropertyStore(int stgmAccess, out IPropertyStore properties);
+  }
+
+  [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IPropertyStore {
+    void GetCount(out int count);
+    void GetAt(int index, out PropertyKey key);
+    void GetValue(ref PropertyKey key, out PropVariant value);
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  struct PropertyKey {
+    public Guid FormatId;
+    public int PropertyId;
+  }
+
+  // Big enough for a PROPVARIANT on x86 (16 bytes) and x64 (24).
+  [StructLayout(LayoutKind.Explicit, Size = 24)]
+  struct PropVariant {
+    [FieldOffset(0)] public ushort Type;
+    [FieldOffset(8)] public IntPtr Pointer;
+  }
+
+  [DllImport("ole32.dll")]
+  static extern int PropVariantClear(ref PropVariant value);
+
+  const int ECapture = 1, EConsole = 0, StgmRead = 0;
+  const ushort VtLpwstr = 31;
+
+  public static string DefaultCaptureName() {
+    try {
+      var devices = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+      IMMDevice device;
+      devices.GetDefaultAudioEndpoint(ECapture, EConsole, out device);
+      IPropertyStore store;
+      device.OpenPropertyStore(StgmRead, out store);
+      // PKEY_Device_FriendlyName
+      var key = new PropertyKey { FormatId = new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), PropertyId = 14 };
+      PropVariant value;
+      store.GetValue(ref key, out value);
+      try {
+        if (value.Type != VtLpwstr || value.Pointer == IntPtr.Zero) return null;
+        string name = Marshal.PtrToStringUni(value.Pointer);
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+      } finally {
+        PropVariantClear(ref value);
+      }
+    } catch (Exception) {
+      return null;
+    }
+  }
+}
 
 // When no-signal and too-quiet are worth saying (issue #117). The recogniser
 // raises NoSignal the moment it starts, while the room is still quiet, and
@@ -173,6 +250,8 @@ public static class SplitpageVoice {
       if (e.Error != null) Emit("error", "code", "recognizer-failed");
     };
     engine.RecognizeAsync(RecognizeMode.Multiple);
+    string mic = SplitpageVoiceDevice.DefaultCaptureName();
+    if (mic != null) Emit("device", "name", mic);
     Emit("start", "lang", pick.Culture.Name);
     // no-signal is due by the clock, not by another event: the recogniser
     // may never raise it again after the first time.

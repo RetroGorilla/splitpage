@@ -12,6 +12,10 @@
  *   junk              lines the parser must drop, then one good final line
  *   crash             start, then exits 3 at once
  *   stubborn          start, then ignores stdin closing (must be killed)
+ *
+ * With FAKE_VOICE_DEVICE set, every mode that starts says {"type":"device"}
+ * with that name first, as listen.ps1 does when Windows names the
+ * microphone (issue #118).
  */
 const mode = process.env.FAKE_VOICE_MODE || "listen";
 const text = process.env.FAKE_VOICE_TEXT || "hello world";
@@ -21,6 +25,7 @@ if (mode === "no-recognizer") {
   say({ type: "error", code: "no-recognizer" });
   process.exit(2);
 }
+if (process.env.FAKE_VOICE_DEVICE) say({ type: "device", name: process.env.FAKE_VOICE_DEVICE });
 if (mode === "stubborn") {
   say({ type: "start", lang: "en-US" });
   process.stdin.resume();

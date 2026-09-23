@@ -19,9 +19,11 @@
  *
  * WHAT COMES BACK (invariant #46). Only what this file rebuilds from the
  * helper's line: a type from a fixed list, a session number main assigned,
- * and one of text (a string, capped), code (a short lower-case word) or
- * lang (a culture name). Anything else on the line is dropped. The page
- * treats the text as words to match against the script, never as markup.
+ * and one of text (a string, capped), code (a short lower-case word), lang
+ * (a culture name) or name (the microphone's, capped, no control
+ * characters — issue #118). Anything else on the line is dropped. The page
+ * treats the text as words to match against the script, and the name as
+ * text to show, never as markup.
  *
  * ONE LISTENER AT A TIME (invariant #47). There is one microphone. A second
  * tab starting takes it over: the first tab is told its session ended
@@ -40,10 +42,11 @@
 
 const { spawn: nodeSpawn } = require("node:child_process");
 
-const EVENT_TYPES = new Set(["start", "interim", "final", "warning", "error"]);
+const EVENT_TYPES = new Set(["device", "start", "interim", "final", "warning", "error"]);
 const CODE_RE = /^[a-z][a-z-]{0,31}$/;
 const LANG_RE = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8}){0,3}$/;
 const MAX_TEXT = 2000;
+const MAX_NAME = 120;
 const MAX_LINE = 64 * 1024;
 const KILL_AFTER_MS = 2000;
 
@@ -58,6 +61,11 @@ function parseHelperLine(line) {
   if (raw.type === "interim" || raw.type === "final") {
     if (typeof raw.text !== "string") return null;
     event.text = raw.text.slice(0, MAX_TEXT);
+  } else if (raw.type === "device") {
+    if (typeof raw.name !== "string") return null;
+    const name = raw.name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME);
+    if (!name) return null;
+    event.name = name;
   } else if (raw.type === "start") {
     if (typeof raw.lang === "string" && LANG_RE.test(raw.lang)) event.lang = raw.lang;
   } else {
