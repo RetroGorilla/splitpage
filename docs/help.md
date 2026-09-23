@@ -18,9 +18,9 @@ so others on your network open and edit the same scripts live, or
 
 ## What's new in 3.0
 
-3.0.0-beta.1 is a pre-release. Copies on 2.1 are not offered it: download it
-from the releases page. When 3.0.0 itself ships, a beta copy is offered it
-like any other update.
+3.0.0-beta.2 is a pre-release. Copies on 2.1 and on an earlier beta are not
+offered it: download it from the releases page. When 3.0.0 itself ships, a
+beta copy is offered it like any other update.
 
 - **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
   formatting, tags, pasting, splitting, joining, moving and deleting scenes,
