@@ -187,6 +187,30 @@ expect F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).l
 expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('LOCALWORD beta gamma DISKWORD') !== -1
 eval (function(){ document.getElementById('merge-banner').hidden = true; Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); return true; })()
 
+# --- one word, linked somewhere different on each side --------------------
+# A link both sides put on the same word is a conflict like any other: the
+# pane lists it as one (and says it is the link), the merge keeps the file's
+# link with every other change combined, and my whole cell goes on a card.
+# It used to be listed as "combined" and my link was simply gone.
+eval (function(){ var s = F.clone(F.state()); s.rows[0].audioText = 'read the docs today'; window.__pl = { name: 'links.md', _mtime: Date.now() - 50000, _body: F.buildMarkdown(s), createWritable: async function(){ return { write: async function(d){ window.__pl._body = typeof d === 'string' ? d : await new Blob([d]).text(); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__pl._body], 'links.md', { type: 'text/markdown', lastModified: window.__pl._mtime }); } }; return true; })()
+eval (function(){ return F.openFile(new File([__pl._body], 'links.md', { type: 'text/markdown', lastModified: __pl._mtime }), __pl).then(function(){ return true; }); })()
+wait F.docFile().name === 'links.md'
+expect F.state().rows[0].audioText === 'read the docs today' && F.hasDiskBase() === true
+eval (function(){ window.__cards1 = F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length; var t = F.clone(F.state()); t.rows[0].audioText = 'read the <a href="https://disk.example/" target="_blank" rel="noopener">docs</a> today'; __pl._body = F.buildMarkdown(t); __pl._mtime = Date.now() + 100000; F.state().rows[0].audioText = 'read the <a href="https://local.example/" target="_blank" rel="noopener">docs</a> tomorrow'; window.__renderTest.render(); return true; })()
+eval (function(){ F.save(); return true; })()
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+eval (function(){ window.__linkEntry = Array.prototype.filter.call(document.querySelectorAll('#merge-review-list .merge-entry'), function(x){ return x.textContent.indexOf('tomorrow') !== -1; })[0] || null; return !!__linkEntry; })()
+expect __linkEntry && __linkEntry.getAttribute('data-outcome') === 'conflict'
+expect __linkEntry.querySelector('.merge-entry-outcome').textContent.indexOf('Linked or tagged differently') !== -1
+click #merge-review-confirm
+wait F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length === __cards1 + 1
+expect F.state().rows[0].audioText.indexOf('https://disk.example/') !== -1 && F.state().rows[0].audioText.indexOf('tomorrow') !== -1
+expect F.state().rows[0].audioText.indexOf('https://local.example/') === -1
+expect F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).pop().body.indexOf('https://local.example/') !== -1
+eval (function(){ document.getElementById('merge-banner').hidden = true; Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); return true; })()
+
 # --- the same flow through a desktop file handle --------------------------
 # The desktop app has no File System Access API: every local file reaches
 # this code as a makeDesktopHandle() handle over the bridge, so the merge

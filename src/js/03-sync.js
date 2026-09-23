@@ -321,8 +321,9 @@ function commentContentEqual(a, b) {
    one side and fix a typo on the other and the cell was a conflict, with
    my whole cell on an "Unmerged edit" card. Now each side is read into the
    document model (04c-doc-model.js) and merged there, a word at a time
-   (mergeCells): only the same words changed differently on both sides are
-   a conflict, and that conflict is handled exactly as before (design D3).
+   (mergeCells): only the same words changed differently on both sides, or
+   given a different link or tag on both sides, are a conflict, and that
+   conflict is handled exactly as before (design D3).
 
    Each side's HTML names a tag by (category, name), and each side is read
    through ITS OWN registry, so a tag renamed on one side resolves to the
@@ -411,7 +412,9 @@ function refitCell(html, side, ctx) {
    difference that matters), "mine" / "theirs" (only that side changed it),
    "merged" (both did, and both sets of changes are in html) or "conflict"
    (both changed the same words: html is theirs, and the caller keeps mine
-   on a card). mergeRow() below and the on-disk merge review
+   on a card — or, with `marks: true`, both put a different link or tag on
+   the same words: html is the merged cell, with their link or tag there,
+   and mine still goes on a card). mergeRow() below and the on-disk merge review
    (18a-local-merge.js) both decide by this, so the review says exactly
    what the merge will do. */
 export function mergeTextField(base, mine, theirs, ctx) {
@@ -441,9 +444,19 @@ export function mergeTextField(base, mine, theirs, ctx) {
   /* Both changed it and the changes fit together. Where the result is
      simply one side's cell (the other's change was already in it), that
      side's own HTML goes in rather than a rewrite of it. */
-  if (sameCell(r.cell, T.cell)) return { html: refitCell(tv, "theirs", ctx), outcome: "theirs" };
-  if (sameCell(r.cell, M.cell)) return { html: refitCell(mv, "mine", ctx), outcome: "mine" };
-  return { html: toHtml(r.cell, { tagOf: ctx.out.tagOf }), outcome: "merged" };
+  var res = sameCell(r.cell, T.cell) ? { html: refitCell(tv, "theirs", ctx), outcome: "theirs" }
+    : sameCell(r.cell, M.cell) ? { html: refitCell(mv, "mine", ctx), outcome: "mine" }
+    : { html: toHtml(r.cell, { tagOf: ctx.out.tagOf }), outcome: "merged" };
+  if (!r.markConflicts) return res;
+  /* Both sides put a different link, or a different tag, on the same
+     characters (formatting never counts: bold is on or off, and either
+     side's toggle is simply kept). The merged cell stays live, with their
+     link or tag on those characters, but mine would be lost without a
+     trace — so it is a conflict like any other: my whole cell goes on the
+     card (design D3). `marks` says why, for the on-disk review's wording;
+     `withMine` says my other edits are in the live cell, which counts the
+     row as one I edited. */
+  return { html: res.html, outcome: "conflict", marks: true, withMine: res.outcome !== "theirs" };
 }
 
 /* Merge `mine` and `theirs`, both descended from `base`.
@@ -472,10 +485,11 @@ export function mergeStates(base, mine, theirs) {
       if (f !== "imageRef") {
         var r = mergeTextField(b ? (b[f] == null ? "" : b[f]) : undefined, m[f], t[f], textCtx);
         if (r.html !== (t[f] == null ? "" : String(t[f]))) out[f] = r.html;
-        if (r.outcome === "mine" || r.outcome === "merged") tookMine = true;
+        if (r.outcome === "mine" || r.outcome === "merged" || r.withMine) tookMine = true;
         if (r.outcome === "theirs" || r.outcome === "merged" || r.outcome === "conflict") tookTheirs = true;
-        /* both changed the same words: keep theirs live, keep my whole
-           cell intact on a card (design D3) */
+        /* both changed the same words, or linked or tagged them
+           differently: keep theirs live, keep my whole cell intact on a
+           card (design D3) */
         if (r.outcome === "conflict") conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
         return;
       }

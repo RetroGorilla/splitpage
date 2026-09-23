@@ -877,7 +877,11 @@ export function touchedCells(steps) {
    2. Tokens neither side changed keep their characters, and each
       character's marks are merged one mark at a time: whichever side
       changed a mark wins; both changed it differently -> theirs, reported
-      in markConflicts.
+      in markConflicts. Only a link or a tag can be set differently (one
+      per character); formatting is on or off, so it never counts. The
+      document merge (mergeTextField, 03-sync.js) treats a count above
+      zero as a conflict: this cell stays live, my whole cell goes on a
+      card.
    3. A stretch only one side changed takes that side. Both changed it the
       same way: that. Differently: theirs, and conflict is true — the
       caller keeps theirs live and puts my whole cell on a conflict card

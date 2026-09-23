@@ -26,6 +26,7 @@ import {
 } from "../js/03-sync.js";
 import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../js/02c-blobs.js";
 import { S } from "../js/_state.js";
+import { changedBetween } from "../js/12a-undo.js";
 
 /* The fixture 51-merge-fields.txt used: one person, one prop, one b-roll
    shot, one row, a non-default reading speed. Rebuilt per call — mergeStates
@@ -495,6 +496,115 @@ test("a formatting change on one side and a text change on the other: both", () 
   assert.equal(res.merged.rows[0].audioText, "a <strong>quick</strong> brown dog");
   assert.equal(res.conflicts.length, 0);
   assert.equal(res.stats.rowsFromMe, 1);
+});
+
+/* ---- a link or a tag both sides set differently ----
+   mergeCells keeps theirs on those characters and counts it in
+   markConflicts; that used to go nowhere, so my link or tag vanished
+   without a card. Now it is a conflict like any other: the merged cell
+   stays live (their link or tag, everything else combined), my whole cell
+   goes on the card (design D3). */
+const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+
+test("both set a different link on the same word: the merged cell is live, a card holds mine", () => {
+  const base = cellDoc("see the docs for more");
+  const mine = cellDoc("see the " + link("https://mine.example/", "docs") + " for more");
+  const theirs = cellDoc("see the " + link("https://theirs.example/", "docs") + " for more");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, theirs.rows[0].audioText, "their link stays live");
+  assert.equal(res.conflicts.length, 1);
+  assert.equal(res.conflicts[0].field, "audioText");
+  const card = res.merged.comments.find((c) => c.kind === "conflict");
+  assert.equal(card.rowId, "r1");
+  assert.equal(card.conflictField, "Audio");
+  assert.equal(card.body, mine.rows[0].audioText, "the card holds my whole cell, my link in it");
+  assert.equal(res.stats.rowsFromMe, 0);
+  assert.equal(res.stats.rowsFromThem, 1);
+});
+
+test("different links on one word and different words edited elsewhere: both words live, a card for my link", () => {
+  const base = cellDoc("see the docs for more");
+  const mine = cellDoc("see the " + link("https://mine.example/", "docs") + " for more");
+  const theirs = cellDoc("see the " + link("https://theirs.example/", "docs") + " for less");
+  const mine2 = cellDoc("look at the " + link("https://mine.example/", "docs") + " for more");
+  const res = mergeStates(base, mine2, theirs);
+  assert.equal(res.merged.rows[0].audioText, "look at the " + link("https://theirs.example/", "docs") + " for less",
+    "everything else merged; their link on the word both linked");
+  assert.equal(res.conflicts.length, 1);
+  assert.equal(res.merged.comments.find((c) => c.kind === "conflict").body, mine2.rows[0].audioText);
+  /* my words are in the live cell: the row counts as one I edited */
+  assert.equal(res.stats.rowsFromMe, 1);
+  /* the cell-level answer the on-disk review reads */
+  const ctx = textMergeContext(base, mine, theirs);
+  const r = mergeTextField(base.rows[0].audioText, mine.rows[0].audioText, theirs.rows[0].audioText, ctx);
+  assert.equal(r.outcome, "conflict");
+  assert.equal(r.marks, true);
+});
+
+test("both set a different tag on the same word: theirs is live, a card holds mine", () => {
+  const base = cellDoc("pour the mug out now");
+  const mine = cellDoc("pour the " + span("prop", "Mug", "mug") + " out now");
+  const theirs = cellDoc("pour the " + span("prop", "Cup", "mug") + " out now");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, theirs.rows[0].audioText);
+  assert.equal(res.conflicts.length, 1);
+  assert.equal(res.merged.comments.find((c) => c.kind === "conflict").body, mine.rows[0].audioText);
+  /* both registry entries survive the merge, so "Use my version" can
+     restore my span and still find its item */
+  assert.deepEqual(res.merged.productionTags.map((x) => x.name).sort(), ["Cup", "Mug"]);
+});
+
+test("one side links a word, the other edits a different word: both, no card", () => {
+  const base = cellDoc("see the docs for more");
+  const mine = cellDoc("see the " + link("https://mine.example/", "docs") + " for more");
+  const theirs = cellDoc("see the docs for less");
+  for (const [m, t] of [[mine, theirs], [theirs, mine]]) {
+    const res = mergeStates(base, cloneState(m), cloneState(t));
+    assert.equal(res.merged.rows[0].audioText, "see the " + link("https://mine.example/", "docs") + " for less");
+    assert.equal(res.conflicts.length, 0);
+    assert.equal(res.merged.comments.length, 0, "no Unmerged edit card");
+  }
+});
+
+test("both set the same link on a word: no card, whatever else changed", () => {
+  const base = cellDoc("see the docs for more");
+  const mine = cellDoc("see the " + link("https://same.example/", "docs") + " for more");
+  let res = mergeStates(base, mine, cloneState(mine));
+  assert.equal(res.merged.rows[0].audioText, mine.rows[0].audioText);
+  assert.equal(res.conflicts.length, 0);
+  /* the same link, and a word edited on their side too: still merges */
+  const theirs = cellDoc("see the " + link("https://same.example/", "docs") + " for less");
+  res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, theirs.rows[0].audioText);
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.merged.comments.length, 0);
+});
+
+test("a link conflict touches only its own cell, so undo forgets only that one (design D4)", () => {
+  const two = (a1, a2) => migrateRows({ title: "R", schema: 2, rows: [{ id: "r1", audioText: a1 }, { id: "r2", audioText: a2 }] });
+  const base = two("see the docs", "second scene");
+  const mine = two("see the " + link("https://mine.example/", "docs"), "second scene, mine");
+  const theirs = two("see the " + link("https://theirs.example/", "docs"), "second scene");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.conflicts.length, 1);
+  const touched = changedBetween(mine, res.merged);
+  assert.deepEqual(Object.keys(touched.rowFields), ["r1\u0000audioText"],
+    "my edit in the other scene is untouched, so its undo entry survives");
+  assert.equal(touched.structure, false);
+});
+
+test("formatting both sides toggled on the same word is never a conflict", () => {
+  const base = cellDoc("a quick brown fox");
+  const mine = cellDoc("one <strong>quick</strong> brown fox");
+  const theirs = cellDoc("a <em>quick</em> brown dog");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, "one <strong><em>quick</em></strong> brown dog");
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.merged.comments.length, 0);
+  const ctx = textMergeContext(base, mine, theirs);
+  const r = mergeTextField(base.rows[0].audioText, mine.rows[0].audioText, theirs.rows[0].audioText, ctx);
+  assert.equal(r.outcome, "merged");
+  assert.equal(r.marks, undefined);
 });
 
 test("a re-serialisation is not a change: the same content, nested differently", () => {
