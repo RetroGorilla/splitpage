@@ -23,6 +23,7 @@ import {
   openPrompterInBrowser
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
 import { onRootClick } from "./21-events.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -518,6 +519,11 @@ export function updateVoiceAvailability() {
       btn.disabled = true;
       setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, "");
     }
+  } else if (hasVoiceRelay()) {
+    /* Opened from the desktop app, which listens for this page (#122,
+       _voice-relay.js): no Web Speech needed, so any browser will do. */
+    btn.disabled = false;
+    if (!S.voiceFollowActive && !S.voiceStarting) setVoiceStatus("", "");
   } else if (!SpeechRecognitionCtor) {
     btn.disabled = true;
     setVoiceStatus("Voice follow needs Chrome or Edge.", "");
@@ -658,7 +664,9 @@ export async function startVoiceFollow() {
     });
     return;
   }
-  if (!desktop && !SpeechRecognitionCtor) return;
+  /* Opened from the desktop app with its listener relayed (#122). */
+  var relayed = !desktop && hasVoiceRelay();
+  if (!desktop && !relayed && !SpeechRecognitionCtor) return;
   /* recognition.start() is async and voiceFollowActive only flips in onstart,
      so without this a second click builds a second recognizer and orphans the
      first — an invisible live microphone session. */
@@ -687,7 +695,7 @@ export async function startVoiceFollow() {
   /* Not on desktop: Windows' listener opens the microphone itself, in its
      own process, and a second capture here would only light a second
      recording indicator. */
-  if (!desktop && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  if (!desktop && !relayed && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setVoiceStatus("Asking for the microphone…", "");
     try {
       S.voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -710,7 +718,9 @@ export async function startVoiceFollow() {
   }
 
   try {
-    S.recognition = desktop ? createDesktopRecognition() : new SpeechRecognitionCtor();
+    S.recognition = desktop ? createDesktopRecognition()
+      : relayed ? createRelayRecognition()
+      : new SpeechRecognitionCtor();
   } catch (e) {
     S.voiceStarting = false;
     releaseVoiceStream();
@@ -721,8 +731,8 @@ export async function startVoiceFollow() {
   S.recognition.interimResults = true;
   S.recognition.lang = "en-US";
 
-  if (desktop) {
-    setVoiceStatus("Starting Windows speech recognition…", "");
+  if (desktop || relayed) {
+    setVoiceStatus(relayed ? "Starting speech recognition in the Splitpage desktop app…" : "Starting Windows speech recognition…", "");
     S.recognition.onwarning = function (e) {
       /* "clear": the listener hears the microphone again (issue #117). Only
          a warning still on screen gives way — anything since stays. */
@@ -764,7 +774,7 @@ export async function startVoiceFollow() {
     S.voiceStarting = false;
     if (e.error === "no-speech" || e.error === "aborted") return;
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-      setVoiceStatus(desktop
+      setVoiceStatus(desktop || relayed
         ? "Microphone blocked — let desktop apps use it in Settings › Privacy & security › Microphone, then try again."
         : "Microphone blocked — allow it for this site (the icon at the right of the address bar), then try again.", "error");
       S.voiceFollowActive = false;
@@ -779,6 +789,11 @@ export async function startVoiceFollow() {
       /* Windows' listener could not run at all. Starting it again would
          only fail the same way, forty times. */
       setVoiceStatus("Windows speech recognition couldn't start. Present in Browser still works.", "error");
+      S.voiceFollowActive = false;
+    } else if (e.error === "relay-lost") {
+      /* The desktop app this page listens through (#122) closed, or shared
+         a newer copy of the script. Reconnecting would not bring it back. */
+      setVoiceStatus("Lost the Splitpage desktop app — open the teleprompter from it again to follow your voice.", "error");
       S.voiceFollowActive = false;
     } else if (e.error === "audio-capture") {
       setVoiceStatus("No microphone was found.", "error");
@@ -896,11 +911,17 @@ function readPrompterLaunch() {
   try { wanted = new URLSearchParams(location.search).get("teleprompter") === "1"; } catch (e) { wanted = false; }
   var m = /(?:^#|&)script=([0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
   var token = m ? m[1] : "";
+  /* The desktop app's listener, relayed (#122, _voice-relay.js). Read with
+     the launch it came with, and remembered for a reload of this tab. */
+  var v = /(?:^#|&)voice=(\d{1,5}-[0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
+  if (wanted || token) setVoiceRelay(v ? v[1] : "");
+  else setVoiceRelay(null);
   if (wanted || token) {
     try {
       var url = new URL(location.href);
       url.searchParams.delete("teleprompter");
-      var rest = (url.hash || "").replace(/(^#|&)script=[0-9a-f]{64}/, "$1").replace(/^#&/, "#");
+      var rest = (url.hash || "").replace(/(^#|&)script=[0-9a-f]{64}/, "$1").replace(/^#&/, "#")
+        .replace(/(^#|&)voice=\d{1,5}-[0-9a-f]{64}/, "$1").replace(/^#&/, "#");
       if (rest === "#") rest = "";
       history.replaceState(null, "", url.pathname + url.search + rest);
     } catch (e) { /* the launch is already in hand; the bar keeping it is cosmetic */ }

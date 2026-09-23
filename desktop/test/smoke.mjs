@@ -5461,6 +5461,102 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
   }
 }
 
+/* Follow My Voice relayed to Present in Browser (issue #122, main.js section
+   9b). With a listener (the fake, as above), the URL main opens carries a
+   voice relay beside the script, and a browser page's EventSource on it is
+   what starts and stops main's listener — driven here over node:http as the
+   browser would, since no test can drive a real Firefox. The page's half is
+   the browser suite 87-voice-relay.txt. */
+function openRelayStream(port, pathname) {
+  return new Promise((resolve) => {
+    const events = [];
+    const req = http.request({ host: "127.0.0.1", port, path: pathname, method: "GET",
+      headers: { host: `127.0.0.1:${port}`, accept: "text/event-stream" } }, (res) => {
+      let buf = "";
+      const ended = new Promise((r) => res.on("close", r));
+      res.setEncoding("utf8");
+      res.on("data", (d) => {
+        buf += d;
+        let i;
+        while ((i = buf.indexOf("\n\n")) !== -1) {
+          const block = buf.slice(0, i); buf = buf.slice(i + 2);
+          if (block.startsWith("data: ")) { try { events.push(JSON.parse(block.slice(6))); } catch { /* not ours */ } }
+        }
+      });
+      resolve({ status: res.statusCode, type: res.headers["content-type"], events, ended, close: () => req.destroy() });
+    });
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
+
+async function caseTeleprompterVoiceRelay(target, fixturesDir) {
+  const tag = target.name + " teleprompter: Follow My Voice relayed to the browser";
+  const fixturePath = writeFixture(fixturesDir, "prompter-relay.splitpage", "Prompter — relay",
+    [["Wide shot", "The first line the reader says out loud."]]);
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "prompter-relay",
+      fixtures: [fixturePath],
+      env: {
+        SPLITPAGE_TEST_VOICE_HELPER: path.join(__dirname, "fake-voice-helper.mjs"),
+        FAKE_VOICE_TEXT: "the first line the reader says"
+      }
+    });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — relay"), 20000);
+    const tab1Id = await tabIdOfTarget(cdp);
+
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const opens = await waitForExternalOpens(cdp, 1);
+    const m = opens && /^http:\/\/127\.0\.0\.1:(\d+)\/\?teleprompter=1#script=([0-9a-f]{64})&voice=(\d+)-([0-9a-f]{64})$/.exec(opens[0]);
+    record(tag + ": the URL carries a voice relay beside the script, on the same listener", !!m && m[1] === m[3] && m[2] !== m[4],
+      opens ? opens[0] : "none");
+    const toast = await toastContaining(cdp, "listens through this app", 10000);
+    record(tag + ": the page says Follow My Voice there listens through this app", !!toast, String(toast));
+    if (!m) return;
+    const port = Number(m[1]);
+    const st0 = await shell(cdp, "voiceStatus", {});
+    record(tag + ": nothing listens until the browser asks", !!st0 && st0.running === false, JSON.stringify(st0));
+
+    const stream = await openRelayStream(port, "/prompter-voice/" + m[4]);
+    record(tag + ": the relay answers as an event stream", !!stream && stream.status === 200 && /^text\/event-stream/.test(stream.type || ""),
+      stream ? stream.status + " " + stream.type : "no answer");
+    if (!stream) return;
+    const heard = await pollNode(async () => stream.events.some((e) => e.type === "final") ? stream.events : null, 15000).catch(() => null);
+    record(tag + ": what the listener hears arrives down the stream (start, interim, final)",
+      !!heard && heard[0].type === "start" && heard.some((e) => e.type === "interim") &&
+      heard.some((e) => e.type === "final" && e.text === "the first line the reader says"), JSON.stringify(heard));
+    const st1 = await shell(cdp, "voiceStatus", {});
+    record(tag + ": main runs one listener, for this tab's browser copy", !!st1 && st1.running === true && st1.tabId === "relay:" + tab1Id,
+      JSON.stringify(st1));
+    const share1 = await shell(cdp, "prompterShareStatus", {});
+    record(tag + ": the share holds one relay stream", !!share1 && share1.voiceStreams === 1, JSON.stringify(share1));
+
+    stream.close();
+    const stopped = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
+    record(tag + ": the browser closing the stream stops main's listener", !!stopped, JSON.stringify(stopped));
+
+    // --- the tab going away ends the relay, and its listener, with it ---
+    const again = await openRelayStream(port, "/prompter-voice/" + m[4]);
+    await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running ? st : null; }, 10000).catch(() => null);
+    const witnessId = await shell(cdp, "createTab", {});
+    const witness = await connectTab(app, witnessId);
+    await waitForRows(witness, 20000);
+    await fireShell(cdp, "closeTab", { tabId: tab1Id });
+    const ended = again ? await Promise.race([again.ended.then(() => true), sleep(10000).then(() => false)]) : false;
+    record(tag + ": closing the desktop tab ends its browser copy's relay", ended === true);
+    const gone = await pollNode(async () => { const st = await shell(witness, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
+    record(tag + ": ... and stops the listener", !!gone, JSON.stringify(gone));
+    try { cdp.close(); } catch { /* already gone */ }
+    app.cdp = witness;
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
 /* Without a listener (every automated run that does not name the fake, and
    any machine that is not Windows) the button keeps Present in Browser. */
 async function caseTeleprompterOpenInBrowserServer(target) {
@@ -6377,6 +6473,7 @@ async function runTargetSuite(target, groupFilter) {
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
     ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
     ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
+    ["teleprompter: voice relay to Present in Browser (fake listener)", () => caseTeleprompterVoiceRelay(target, fixturesDir)],
     // --- issue #10: Google Drive through a loopback OAuth redirect ---
     ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
     ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],
