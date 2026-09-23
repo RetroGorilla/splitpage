@@ -8,7 +8,9 @@ import {
   plainText,
   sanitizeHtml
 } from "./04-richtext.js";
+import { projection, replaceWithBrollKey } from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
+import { domToPos, editCell } from "./05b-cell-edit.js";
 import { focusRowField } from "./06-rows.js";
 import {
   contentMemo,
@@ -313,7 +315,8 @@ function brollUnshotCount() {
 /* ---- capturing a marker as it is typed ----
 
    Same shape as maybeAutoTagShortcut: only ever fires on live typing of
-   the closing character, and goes in through execCommand so one Ctrl+Z
+   the closing character, and goes in as an edit of the cell's model (#85,
+   design §5), an undo entry of its own after the typing's, so one Ctrl+Z
    takes the marker back off and leaves the words "B-roll:" behind — the
    escape hatch for anyone who meant to write that literally. */
 function brollAtLineStart(node) {
@@ -360,33 +363,59 @@ export function maybeCaptureBroll(e, cellEl) {
      colon. */
   if (!m || m[0].length !== head.length) return;
 
+  /* The words typed so far on the line — the caret's text node from its
+     start, indentation and all — become the key, and the caret goes just
+     after it, outside the contenteditable="false" span (inside it, every
+     character of the shot's description would be typed into something that
+     refuses to take it). The model has to read the same words there, or it
+     is not used. */
+  var id = makeId("bs"), keyText = m[1] + m[2];
+  var taken = false;
+  editCell(cellEl, function (cell) {
+    var from = domToPos(cellEl, node, 0), to = domToPos(cellEl, node, offset);
+    if (from === null || to === null) return null;
+    if (projection(cell).slice(from, to) !== head.replace(/\u200B/g, "")) return null;
+    var r = replaceWithBrollKey(cell, from, to, id, keyText);
+    /* The shot's record, made here rather than left to the next read of
+       the list (brollEntries makes it for any key it has no record for,
+       with the same fields): made there, it would be an undo entry of its
+       own after this one, and the first Ctrl+Z would take back a record
+       nobody can see instead of the key. The name and description are the
+       line's, filled in by that same read. */
+    var row = brollRow(cellEl.getAttribute("data-id"));
+    newBrollRecord({ id: id, audioRef: brollSeedRef(row), location: brollSeedLocation(row) });
+    taken = true;
+    return { cell: r.cell, sel: { from: r.end, to: r.end } };
+  });
+  if (!taken) {
+    /* the model could not take it (a picture or a video card in the cell,
+       see editCell): the key straight into the DOM, as before */
+    execInsertBrollKey(node, offset, id, keyText);
+    syncFieldFromDom(cellEl);
+  }
+  scheduleBrollRefresh();
+}
+
+function execInsertBrollKey(node, offset, id, keyText) {
+  var sel = window.getSelection();
   var wrapRange = document.createRange();
   wrapRange.setStart(node, 0);
   wrapRange.setEnd(node, offset);
   sel.removeAllRanges();
   sel.addRange(wrapRange);
-  document.execCommand("insertHTML", false, brollKeyHtml(makeId("bs"), m[1] + m[2]) + " ");
-
-  /* Land the caret explicitly after the marker. The browser leaves it
-     INSIDE the span it just inserted, and the span is contenteditable
-     ="false" — so without this every character of the shot's description
-     is typed into something that refuses to take it, and silently goes
-     nowhere. The tag shortcut does the same thing for the same reason. */
+  document.execCommand("insertHTML", false, brollKeyHtml(id, keyText) + " ");
+  /* The browser leaves the caret INSIDE the span it just inserted: put it
+     after. */
   var afterSel = window.getSelection();
-  if (afterSel.rangeCount) {
-    var landed = afterSel.getRangeAt(0).startContainer;
-    var keyEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".broll-key");
-    if (keyEl) {
-      var out = document.createRange();
-      out.setStartAfter(keyEl);
-      out.collapse(true);
-      afterSel.removeAllRanges();
-      afterSel.addRange(out);
-    }
-  }
-
-  syncFieldFromDom(cellEl);
-  scheduleBrollRefresh();
+  if (!afterSel.rangeCount) return;
+  var landed = afterSel.getRangeAt(0).startContainer;
+  var keyEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".broll-key");
+  if (!keyEl) return;
+  var out = document.createRange();
+  out.setStartAfter(keyEl);
+  out.collapse(true);
+  afterSel.removeAllRanges();
+  afterSel.addRange(out);
 }
 
 /* contenteditable="false" for the same reason a tag is atomic: the caret
