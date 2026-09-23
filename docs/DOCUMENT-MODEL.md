@@ -1,6 +1,7 @@
 # Structured document model — design (issue #85)
 
-Status: **decided, not built.** Adam made the decisions in §12 on
+Status: **decided; step 1 of §10 built** (`src/js/04c-doc-model.js`,
+nothing in the app calls it yet). Adam made the decisions in §12 on
 2026-09-23; the sections below already reflect them. The build follows §10.
 #85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
 it.
@@ -99,8 +100,12 @@ atomic inline object, the b-roll key:
 | `tag` | registry id | **at most one tag per run** — nested tags have no meaning |
 | `cmt` | array of comment ids, sorted | comments may overlap |
 
-**Line breaks** are `"\n"` inside `text`. No other control character is
-allowed. ` ` is normalised to a space. ZWSP never enters the model.
+**Line breaks** are `"\n"` inside `text`; a line feed inside an HTML text
+node shows as a space (`white-space: normal`) and is read as one. No other
+control character but tab is allowed. ZWSP never enters the model. A
+no-break space **stays** — it is how two typed spaces survive `white-space:
+normal` — and every reader treats it as a space (as `htmlToPlainText`
+already does).
 
 **Canonical form** is enforced by `normalizeCell()`:
 
@@ -109,6 +114,10 @@ allowed. ` ` is normalised to a space. ZWSP never enters the model.
 - `cmt` is sorted and de-duplicated
 - marks equal to `false`, `null` or `[]` are removed
 - a `tag` or `cmt` id that doesn't resolve is removed
+- across each stretch of one tag, `cmt` becomes the union and `href` the
+  first one found: a tag is one unit, so a comment or link covers all of it
+  or none of it — which is also what lets `toHtml` nest a tag inside its
+  comments and links without ever splitting it
 
 Two cells with the same content are then the same JSON. That is what makes
 comparison, merge and memoisation keys trivial.
@@ -177,13 +186,19 @@ is special. **It is the only atom.**
 
 ## 4. Operations
 
-Nothing outside one module writes a cell. `src/js/doc-model.js`
+Nothing outside one module writes a cell. `src/js/04c-doc-model.js`
 (pure, unit-tested under `node --test` like the other pure cores) exports:
 
 - **Constructors and converters**
   - `fromHtml(html)` parses a sanitised HTML cell into runs. This is the
     migration path and the paste path.
-  - `toHtml(runs)` renders for the editor and the stored format (§6).
+  - `toHtml(runs)` renders for the editor and the stored format (§6). Its
+    elements always nest in one order — each comment, the link, the tag,
+    then highlight, bold, italic, underline, strike — and stay open across
+    neighbouring runs that share them. So the output is canonical and a
+    fixed point of `sanitizeHtml`, and `fromHtml(toHtml(c))` is `c`.
+  - Until step 2, `fromHtml` takes `tagId(cat, name)` and `toHtml`
+    `tagOf(id)`; without them a tag's id is `t:<cat>:<name>`.
   - `toPlainText`, `toMarkdown` and `toDocxRuns` replace `htmlToPlainText`,
     `htmlToMarkdown` and `htmlToRuns`.
 - **Positions.** A position in a cell is a character offset into its
@@ -198,11 +213,15 @@ Nothing outside one module writes a cell. `src/js/doc-model.js`
   - `replaceText(cell, from, to, text)` keeps the marks of the replaced
     range's first run
   - `insertBrollKey`
-- **Steps.** Every document change is a list of steps, e.g.
-  `{op:"cell", rowId, field, before, after}`, `{op:"rows", …}`,
-  `{op:"registry", …}` or `{op:"comment", …}`. One step list is one undo
-  entry. `applySteps(state, steps)` is the only function that changes
-  `S.state`. `invertSteps` gives undo.
+- **Steps.** Every document change is a list of steps. A step carries the
+  value before and after in whatever form the state holds it (a cell's is
+  its HTML, D2): `{op:"rowField", rowId, key, before, after}` for a cell,
+  status or picture; `{op:"docField", key, before, after}` for the title,
+  the registry, comments; `insertRow` / `deleteRow` / `moveRow`. One step
+  list is one undo entry. `applySteps(state, steps)` returns a new state
+  and refuses (throws, changing nothing) a step whose `before` is not what
+  the state holds. `invertSteps` gives undo; `touchedCells` gives the cells
+  a list touches, for D4.
 
 Invariant #10 ("sanitise anything reconstructed") becomes "anything entering
 the document goes through `fromHtml` or an edit function". Both can only
@@ -338,13 +357,17 @@ sides:
 
 1. Equal models: done. Only one side changed: take it (as today).
 2. Both changed:
-   - tokenise each side's plain-text projection into words and b-roll keys
+   - tokenise each side's plain-text projection into words, single
+     whitespace characters and b-roll keys
    - three-way merge the token sequences (diff3, the same algorithm as
      `git merge-file`)
-   - then merge marks per token: a mark added or removed on one side is
+   - then merge marks per character of the words neither side changed: a mark added or removed on one side is
      applied to the result, and if both sides set the same mark to
      different values, theirs wins and it is reported
-3. Only overlapping token ranges changed on both sides are a conflict. For
+3. Only overlapping token ranges changed on both sides are a conflict. A
+   rewrite so large on both sides that the word diff would need more than
+   4 million table cells (a few thousand words each) is treated as one
+   conflicting change instead. For
    those, theirs stays live, and the conflict card holds **my version of
    the whole cell**, as today (D3). "Use my version" restores it as one
    undoable step.
@@ -379,12 +402,19 @@ can no longer disagree.
 Each step ships on its own, with the suites green, and changes no behaviour
 until step 4.
 
-1. **`doc-model.js`, pure.** Types, `normalizeCell`, `fromHtml`/`toHtml`
-   round trip, positions, edit functions, steps and their inverses,
-   tokenised diff3. Unit tests, including a round trip of every row of
-   every browser suite's fixtures and of the demo document:
-   `toHtml(fromHtml(x))` must equal `sanitizeHtml(x)`, up to the tag-id
-   attribute.
+1. **`04c-doc-model.js`, pure. Done.** Types, `normalizeCell`,
+   `fromHtml`/`toHtml`, positions, edit functions, steps and their inverses,
+   tokenised diff3. `src/test/doc-model.test.mjs` checks, on a fixture of
+   every construct the sanitiser keeps, the demo document and 400 seeded
+   random cells: `toHtml` is a fixed point of `sanitizeHtml`;
+   `fromHtml(toHtml(c))` is `normalizeCell(c)`; a cell's text is what its
+   stored HTML shows; `toPlainText` / `toMarkdown` / `toDocxRuns` equal
+   `htmlToPlainText` / `htmlToMarkdown` / `htmlToRuns` of `toHtml(c)`.
+   (`toHtml(fromHtml(x))` is not `sanitizeHtml(x)` byte for byte: the
+   sanitiser keeps whatever nesting it was given, `<em><strong>` or
+   `<strong><em>`, and `toHtml` always writes one. The first save of an old
+   cell through the model changes its string, not its content — which is
+   why merge compares models, not strings, from step 6.)
 2. **Registry ids.** `productionTags[].id`, `data-tag-id` on spans, rename
    and remove through ids. Existing behaviour, new keys.
 3. **Readers first.** Exports, word count, the production index, b-roll,
