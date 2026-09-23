@@ -632,7 +632,9 @@ leaves the words in the script alone.
 mention, type it into **Add prop** in the shot's details: pick one the
 script already tracks, or type a new name and it's added to the breakdown as
 a Prop, the way the Gear box adds things. Each prop shows how far along it
-is (Needed, Sourcing, Have it, Returned), and renaming it in the Production
+is — on the list, a dot before its name: a hollow ring for Needed, orange
+for Sourcing, teal for Have it, grey for Returned (hover it for the word);
+in the details, the word itself — and renaming it in the Production
 panel renames it here too. The breakdown CSV lists the b-roll shots that
 need each prop, and so does the Props packing list.
 

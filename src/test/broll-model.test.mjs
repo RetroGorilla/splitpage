@@ -627,6 +627,7 @@ test("the printed shot list is a PDF of the shots as shown, flagged ones marked"
   assert.ok(text.includes("(the red mug on the sill) Tj"));
   assert.ok(text.includes("(drone over the pier) Tj"));
   assert.ok(text.includes("(FLAGGED  \u0097  ) Tj"), "FLAGGED in front of the note");
-  assert.ok(text.includes("Props: Red mug"));
+  /* the PDF string escapes its parentheses */
+  assert.ok(text.includes("Props: Red mug \\(have it\\)"), "each prop with its status in words");
   assert.match(text, /\/Count 1 >>/);
 });

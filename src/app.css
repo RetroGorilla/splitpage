@@ -3335,6 +3335,18 @@
   .broll-meta-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
   .broll-meta-props { flex: 1 1 auto; display: block; overflow: hidden; text-overflow: ellipsis; }
   .broll-meta-props .broll-prop-ico { display: inline-block; vertical-align: -2px; margin-right: 4px; color: var(--prop, var(--text-faint)); }
+  /* a prop's breakdown status, before its name (#149): Needed a hollow
+     ring, Sourcing the Audio orange, Have it the Visual teal, Returned
+     filled dim — the same colours TAG_STATUSES gives the chips */
+  .broll-prop-item { white-space: nowrap; }
+  .broll-st-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin: 0 4px 0 1px; vertical-align: 0.5px; box-sizing: border-box;
+  }
+  .broll-st-dot.is-needed { border: 1.5px solid var(--text-faint); background: transparent; }
+  .broll-st-dot.is-sourcing { background: var(--audio); }
+  .broll-st-dot.is-have { background: var(--visual); }
+  .broll-st-dot.is-returned { background: var(--text-dim); }
   .broll-avatar {
     flex: none; width: 16px; height: 16px; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center;

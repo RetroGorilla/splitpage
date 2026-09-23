@@ -47,6 +47,9 @@ expect document.querySelectorAll('#broll-page .broll-page-row').length === 8
 expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-page-row'), function(r){ var h = r.getBoundingClientRect().height; return h >= 45 && h <= 48; })
 expect getComputedStyle(document.querySelector('#broll-page .broll-page-card')).borderTopLeftRadius === '12px'
 expect prow('bs1').querySelector('.broll-page-c-props').textContent === 'Fishing nets, Drone'
+expect Array.prototype.map.call(prow('bs1').querySelectorAll('.broll-page-c-props .broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Have it|Needed'
+expect prow('bs3').querySelector('.broll-page-c-props .broll-st-dot').classList.contains('is-sourcing')
+expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(193, 70, 28)'
 expect prow('bs1').querySelector('.broll-page-c-cuts').textContent.indexOf('Every morning') === 0
 expect prow('bs1').querySelector('.broll-page-scene').textContent === '01'
 expect prow('bs2').classList.contains('is-flagged') && !prow('bs4').classList.contains('is-flagged')
@@ -119,6 +122,8 @@ expect window.__pdf.indexOf('hands mending a net') !== -1 && window.__pdf.indexO
 eval document.documentElement.setAttribute('data-theme', 'dark')
 expect getComputedStyle(document.getElementById('broll-page')).backgroundColor === 'rgb(22, 19, 15)'
 expect getComputedStyle(prow('bs2').querySelector('td')).backgroundColor !== 'rgb(255, 247, 245)'
+expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(255, 133, 82)'
+expect getComputedStyle(prow('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(86, 214, 188)'
 shot 92-broll-page-dark
 eval document.documentElement.setAttribute('data-theme', 'light')
 
@@ -131,6 +136,7 @@ expect !document.body.classList.contains('broll-page-open')
 wait (document.querySelector('#broll-list .broll-row[data-id="bs4"] .broll-check') || { getAttribute: function(){ return ''; } }).getAttribute('aria-checked') === 'true'
 
 # ---- 9. the Scene link jumps to the scene and closes the page ----------
+sleep 400
 click #broll-open-page
 wait !document.getElementById('broll-page').hidden
 click #broll-page .broll-page-row[data-id="bs5"] .broll-page-scene
