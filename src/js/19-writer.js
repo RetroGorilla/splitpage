@@ -13,12 +13,14 @@ import {
 } from "./04-richtext.js";
 import {
   applyHighlight,
+  cellFormatState,
   editableCellHtml,
   isSelectionInsideTag,
   pad2,
   removeHighlight,
   render,
-  syncFieldFromDom
+  syncFieldFromDom,
+  toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
@@ -385,27 +387,39 @@ export function onWriterFormat(btn) {
   if (!cellEl || !cellEl.isConnected) return;
   var cmd = btn.getAttribute("data-cmd");
   cellEl.focus();
-  if (cmd === "highlight") {
-    if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
-    else applyHighlight();
-  } else {
-    try { document.execCommand(cmd); } catch (err) { return; }
+  /* A paragraph is a row field, so the format is an edit of its model like
+     the split view's (toggleCellFormat, 05-render.js); only a paragraph
+     still holding a picture, which the model has no place for, falls back
+     to the browser's commands. */
+  if (!toggleCellFormat(cellEl, cmd)) {
+    if (cmd === "highlight") {
+      if (isSelectionInsideTag(cellEl, "MARK")) removeHighlight(cellEl);
+      else applyHighlight();
+    } else {
+      try { document.execCommand(cmd); } catch (err) { return; }
+    }
+    syncFieldFromDom(cellEl);
   }
-  syncFieldFromDom(cellEl);
   updateWriterFormatState();
 }
 
 export function updateWriterFormatState() {
   var live = writerOpen && S.writerLastCell && S.writerLastCell.isConnected;
+  /* the model's answer (cellFormatState), or the browser's for a paragraph
+     the model does not edit */
+  var model = live ? cellFormatState(S.writerLastCell) : null;
   ["bold", "italic", "underline"].forEach(function (cmd) {
     var btn = document.querySelector('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
     if (!btn) return;
     var on = false;
-    if (live) { try { on = document.queryCommandState(cmd); } catch (e) {} }
+    if (model) on = !!model[cmd];
+    else if (live) { try { on = document.queryCommandState(cmd); } catch (e) {} }
     btn.classList.toggle("is-active", on);
   });
   var hi = document.querySelector('.writer-bar .wr-fmt[data-cmd="highlight"]');
-  if (hi) hi.classList.toggle("is-active", !!(live && isSelectionInsideTag(S.writerLastCell, "MARK")));
+  if (hi) {
+    hi.classList.toggle("is-active", model ? !!model.highlight : !!(live && isSelectionInsideTag(S.writerLastCell, "MARK")));
+  }
 }
 
 /* The button shows the mode it is currently in and cycles on click — the

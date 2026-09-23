@@ -467,8 +467,10 @@ export function marksAt(cell, pos) {
 }
 
 /* Typing carries formatting on (bold stays bold) but never a tag, a
-   comment or a link: those end where they end. */
-function typingMarks(cell, pos) {
+   comment or a link: those end where they end. Exported for the editor's
+   toolbar state and its pending marks (05-render.js): what a character
+   typed at pos would carry. */
+export function typingMarks(cell, pos) {
   var m = marksAt(cell, pos);
   delete m.tag;
   delete m.cmt;
@@ -543,6 +545,66 @@ export function setMark(cell, from, to, name, value) {
     else chars[i] = { ch: c.ch, marks: next };
   }
   return implode(chars);
+}
+
+/* ---- the editor's formatting edits (design §5: a format and a line
+   break are model edits, not execCommand) ---- */
+
+/* Does every character of [from, to) carry mark `name`? Only the
+   characters a reader sees as text count: a line break has no look of its
+   own to be bold or not, and a b-roll key is not the words being
+   formatted — so a selection over two separately bolded lines still reads
+   as bold. False for a range holding no such character. */
+export function markThroughout(cell, from, to, name) {
+  var chars = explode(cell);
+  from = clamp(cell, from);
+  to = clamp(cell, to);
+  var seen = false;
+  for (var i = Math.min(from, to); i < Math.max(from, to); i++) {
+    var c = chars[i];
+    if (c.atom || c.ch === "\n") continue;
+    if (!c.marks[name]) return false;
+    seen = true;
+  }
+  return seen;
+}
+
+/* A toolbar button or Ctrl+B over a selection: already bold throughout
+   comes off, anything less goes on over all of it — so bolding across the
+   edge of an existing bold run makes one run, never a checkerboard. */
+export function toggleMark(cell, from, to, name) {
+  return setMark(cell, from, to, name, !markThroughout(cell, from, to, name));
+}
+
+/* Enter / Shift+Enter over [from, to): the range replaced by a line break,
+   as {cell, pos} with pos just after the break.
+
+   At the very end of the cell there is nothing after the break to give the
+   new last line a box (a trailing <br> renders no line), so it goes in
+   twice with pos between the two — the sentinel the browser's own
+   insertLineBreak adds, which the next thing typed then sits in front of.
+
+   The break carries formatting on the way typing does (bold keeps going on
+   the next line). A comment or a link only where the text on both sides of
+   it is in the same one: a break typed inside a commented phrase stays
+   inside its one anchor, and one typed at its edge does not stretch it. */
+export function breakLine(cell, from, to) {
+  from = clamp(cell, from);
+  to = clamp(cell, to);
+  if (to < from) { var x = from; from = to; to = x; }
+  var rest = deleteRange(cell, from, to);
+  var chars = explode(rest);
+  var marks = typingMarks(rest, from);
+  var prev = chars[from - 1], next = chars[from];
+  if (prev && next) {
+    var pm = prev.atom ? prev.atom.marks : prev.marks;
+    var nm = next.atom ? next.atom.marks : next.marks;
+    if (pm.href && pm.href === nm.href) marks.href = pm.href;
+    var cmt = (pm.cmt || []).filter(function (id) { return (nm.cmt || []).indexOf(id) !== -1; });
+    if (cmt.length) marks.cmt = cmt;
+  }
+  var text = from === chars.length ? "\n\n" : "\n";
+  return { cell: insertText(rest, from, text, marks), pos: from + 1 };
 }
 
 function editComment(cell, from, to, id, add) {
