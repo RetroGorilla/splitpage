@@ -8,10 +8,11 @@
 # toggle is decided by the model (every character already has it -> off),
 # the selection survives the repaint, and each is one undo entry. With
 # nothing selected, B/I/U applies to what is typed next. A cell still
-# holding a picture, and a comment composer (not a document cell), keep the
-# browser's commands. The
-# pure core is src/test/doc-model.test.mjs ("the editor's formatting
-# edits").
+# holding a picture (none does since design D7) is left alone: nothing
+# edits it behind the model's back. A comment composer is not a document
+# cell but goes through the model too (05d-draft-edit.js; its own suite is
+# 80-draft-edit.txt). The pure core is src/test/doc-model.test.mjs ("the
+# editor's formatting edits").
 #
 # Every `eval` is one physical line (the driver splits on newlines).
 
@@ -143,25 +144,29 @@ sleep 200
 expect vis().indexOf('the <br>Xend<br>next') === 0
 
 # --- a cell still holding a picture: the model has no place for it (design
-# D7), so editCell declines and the browser's commands still do the work ---
+# D7), so editCell declines. None does any more — every document is read
+# through migrateRows, which moves them into comments; this one is put
+# there by hand — and nothing else edits it: no execCommand fallback. The
+# words and the picture stay exactly as they were. ---------------------------
 eval (function(){ var r = F.state().rows[1]; r.visualText = 'pic <img class="comment-img" data-blob="' + 'a'.repeat(64) + '" data-w="4" data-h="3" data-mime="image/png"> words'; window.__renderTest.render(); return true; })()
 eval (function(){ var c = document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable'); var t = c.lastChild; var r = document.createRange(); r.setStart(t, t.nodeValue.indexOf('words')); r.setEnd(t, t.nodeValue.indexOf('words') + 5); c.focus(); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); })()
 key ctrl KeyB
 sleep 200
 eval document.activeElement.blur()
 sleep 200
-expect F.state().rows[1].visualText.indexOf('<strong>words</strong>') !== -1
+expect F.state().rows[1].visualText.indexOf('<strong>') === -1
+expect F.state().rows[1].visualText.indexOf('words') !== -1
 expect F.state().rows[1].visualText.indexOf('<img') !== -1
 eval (function(){ var c = document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
 key Enter
-press end
 sleep 200
 eval document.activeElement.blur()
 sleep 200
-expect F.state().rows[1].visualText.indexOf('<br>end') !== -1
+expect F.state().rows[1].visualText.indexOf('<br>') === -1
 expect F.state().rows[1].visualText.indexOf('<img') !== -1
 
-# --- a comment composer is not a document cell: the browser's own bold ------
+# --- a comment composer is not a document cell, but its bold is the model's
+# too, and its own Ctrl+Z takes it back (80-draft-edit.txt has the rest) -----
 eval selText(cellA(), 0, 3)
 jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="comment"]
 sleep 300
@@ -169,7 +174,11 @@ expect !document.getElementById('comment-modal').hidden
 eval (function(){ var b = document.getElementById('comment-body-editable'); b.focus(); document.execCommand('insertText', false, 'a note'); var r = document.createRange(); r.selectNodeContents(b); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return b.textContent; })()
 key ctrl KeyB
 sleep 100
-expect /<b>|<strong>|font-weight/.test(document.getElementById('comment-body-editable').innerHTML)
+expect document.getElementById('comment-body-editable').innerHTML.indexOf('<strong>a note</strong>') === 0
+key ctrl KeyZ
+sleep 100
+expect document.getElementById('comment-body-editable').innerHTML === 'a note'
+expect aud().indexOf('a note') === -1
 key Escape
 sleep 300
 expect document.getElementById('comment-modal').hidden

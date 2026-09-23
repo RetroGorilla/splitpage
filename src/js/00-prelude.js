@@ -80,7 +80,6 @@ export async function loadLastFileHandle() {
 S.pendingImageRowId = null;
 S.savedRange = null;
 S.savedRangeCell = null;
-export var HIGHLIGHT_COLOR = "#FCE38A";
 
 S.prompterOpen = false;
 S.prompterPlaying = false;
