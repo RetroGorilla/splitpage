@@ -1,0 +1,214 @@
+# The b-roll panel and the full-page shot list in a review session (#30,
+# #148, #150; src/js/08d-broll-panel.js): the list to read, not to change.
+#
+# A reviewer's edits to the list are never kept by the server, so before
+# this they looked as if they had worked and were then lost. Now:
+#
+#   * the checkbox, the status, the flag and the assignee are drawn
+#     disabled (their values still readable); the note is read-only; the
+#     location picker, + Person, Add prop, a prop's ×, the Cuts against
+#     pencil and the ⋯ menu are not drawn; Add a shot and the bulk bar are
+#     hidden, and Ctrl+click opens a line like a plain click and selects nothing;
+#   * a control forced back into the page is refused by the panel's own
+#     click, change, focusout and Enter handlers, with the "Viewing only"
+#     toast, and the record is left as it was — the guard, not the CSS,
+#     and not the body class either;
+#   * opening a shot, the filter chips, the Group menu, Go to scene, and on
+#     the full page its grouping, CSV and Print shot list all still work;
+#   * the same document as an editor gets every control back.
+# Like 43-review-mode.txt, the role comes from window.__hostedTest.setSession
+# (the harness cannot start server.js). Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ try { localStorage.removeItem('splitpage-broll-view'); } catch (e) {} window.__blobs = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) return; return c.apply(this, arguments); }; return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Harbour town", "rows": [{"id": "r1", "visualText": "Host at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Harbour\" contenteditable=\"false\">harbour</span> wall.<br><span class=\"broll-key\" data-broll-id=\"bs1\" contenteditable=\"false\">B-roll:</span> gulls wheeling over the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Fishing nets\" contenteditable=\"false\">nets</span><br>wide, then tight on one bird<br><span class=\"broll-key\" data-broll-id=\"bs2\" contenteditable=\"false\">B-roll:</span> boats coming in at dawn", "audioText": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "status": "todo"}, {"id": "r2", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs3\" contenteditable=\"false\">B-roll:</span> steam off the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> in the caf\u00e9 window", "audioText": "Inside, the caf\u00e9 has been open since five, and the kettle has not stopped once.", "status": "todo"}, {"id": "r3", "visualText": "Interview, two shot.<br><span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span> hands mending a net<br><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span> the ice machine at the market", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "todo"}, {"id": "r4", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs6\" contenteditable=\"false\">B-roll:</span> the lighthouse at blue hour", "audioText": "And when the light goes, the lighthouse takes over.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}, {"id": "p2", "name": "Ada Brenner"}], "productionTags": [{"cat": "prop", "name": "Fishing nets", "status": "have"}, {"cat": "prop", "name": "Kettle", "status": "sourcing"}, {"cat": "prop", "name": "Drone", "status": "needed"}, {"cat": "location", "name": "Harbour"}, {"cat": "location", "name": "Fish market"}], "brollShots": [{"id": "bs1", "name": "gulls wheeling over the nets", "status": "shot", "location": "Harbour", "owner": "p1", "audioRef": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "props": [{"name": "Drone"}]}, {"id": "bs2", "name": "boats coming in at dawn", "status": "unshot", "reshoot": true, "notes": "Too late last time, the light was gone.", "location": "Harbour", "owner": "p2"}, {"id": "bs3", "name": "steam off the kettle in the caf\u00e9 window", "status": "shot", "location": "Caf\u00e9", "owner": "p1"}, {"id": "bs4", "name": "hands mending a net", "status": "unshot", "location": "Harbour", "props": [{"name": "Fishing nets"}]}, {"id": "bs5", "name": "the ice machine at the market", "status": "unshot", "location": "Fish market", "owner": "p2"}, {"id": "bs6", "name": "the lighthouse at blue hour", "status": "shot", "location": "Headland"}, {"id": "bs7", "name": "Establisher of the street, blue hour", "status": "unshot", "origin": "list"}, {"id": "bs8", "name": "Crowd at the fish auction", "status": "unshot", "origin": "list", "location": "Fish market", "notes": "Ask the harbourmaster first."}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; })()
+wait F.state().title === 'Harbour town' && document.querySelector('#rows .row[data-id="r4"]')
+eval (function(){ window.rec = function(id){ return F.state().brollShots.filter(function(r){ return r.id === id; })[0]; }; window.row = function(id){ return document.querySelector('#broll-list .broll-row[data-id="' + id + '"]'); }; window.card = function(){ return document.querySelector('#broll-list .broll-card'); }; window.toasted = function(){ return document.getElementById('toast-host').textContent.indexOf('Viewing only') !== -1; }; window.untoast = function(){ document.getElementById('toast-host').textContent = ''; return true; }; window.list = function(){ return JSON.stringify(F.state().brollShots); }; return true; })()
+
+# ---- 1. a review session -------------------------------------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 300
+expect window.__hostedTest.reviewMode() === true
+jsclick #btn-broll
+wait document.querySelectorAll('#broll-list .broll-row').length === 8
+sleep 600
+# everything below is measured against this: the list, and whether the
+# page thinks it holds anything to save
+eval (function(){ window.__list0 = list(); window.__dirty0 = window.__hostedTest.dirty(); return window.__dirty0; })()
+
+# ---- 2. the lines: every tick disabled, and still saying which are shot --
+expect document.querySelectorAll('#broll-list .broll-check').length === 8
+expect document.querySelectorAll('#broll-list .broll-check:disabled').length === 8
+expect document.querySelectorAll('#broll-list .broll-check[aria-checked="true"]').length === 3
+expect row('bs1').querySelector('.broll-check').title === 'Shot'
+expect getComputedStyle(row('bs1').querySelector('.broll-check')).cursor === 'default'
+# Add a shot and the bulk bar live in the panel shell: hidden
+expect document.getElementById('broll-add').offsetParent === null
+expect document.getElementById('broll-bulk').offsetParent === null
+# ...while the summary, the chips and Go to scene are all there
+expect document.querySelector('#broll-controls .broll-summary-line').textContent === '3 of 8 shots in the can'
+expect document.querySelectorAll('#broll-list .broll-row-go').length === 6
+
+# ---- 3. the filter and the grouping are the reader's, so they work -------
+click #broll-controls .broll-chip[data-filter="unshot"]
+wait document.querySelectorAll('#broll-list .broll-row').length === 5
+click #broll-controls .broll-group-btn
+wait !!document.querySelector('#broll-controls .broll-group-menu')
+click #broll-controls .broll-menu-item[data-group="location"]
+wait document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'Group: Location'
+click #broll-controls .broll-chip[data-filter="all"]
+wait document.querySelectorAll('#broll-list .broll-row').length === 8
+click #broll-controls .broll-group-btn
+wait !!document.querySelector('#broll-controls .broll-group-menu')
+click #broll-controls .broll-menu-item[data-group="scene"]
+wait document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'Group: Scene'
+expect untoast() && !toasted()
+
+# ---- 4. an open shot: every value, and nothing to change it with ---------
+click #broll-list .broll-row-main[data-id="bs2"]
+wait !!card()
+expect card().getAttribute('data-id') === 'bs2'
+expect card().querySelectorAll('.broll-seg button').length === 2
+expect card().querySelectorAll('.broll-seg button:disabled').length === 2
+expect card().querySelector('.broll-seg button.is-active').getAttribute('data-status') === 'unshot'
+expect card().querySelector('.broll-flag-btn').disabled && card().querySelector('.broll-flag-btn').classList.contains('is-active')
+expect card().querySelector('.broll-flag-btn').textContent.trim() === 'Flagged'
+expect !card().querySelector('.broll-picker') && !card().querySelector('.broll-loc-input')
+expect card().querySelector('.broll-static').textContent.trim() === 'Harbour'
+expect card().querySelector('.broll-owner-select').disabled
+expect card().querySelector('.broll-owner-select').value === 'p2'
+expect !card().querySelector('[data-action="broll-person-new"]')
+expect !card().querySelector('.broll-prop-input') && !card().querySelector('.broll-prop-remove')
+expect !card().querySelector('[data-action="broll-ref-edit"]')
+expect !card().querySelector('[data-action="broll-menu"]')
+expect card().querySelector('.broll-notes-input').readOnly === true
+expect card().querySelector('.broll-notes-input').value === 'Too late last time, the light was gone.'
+shot 93-broll-review-card
+# a shot with hand-added props shows them, with no × to take them off
+click #broll-list .broll-row-main[data-id="bs1"]
+wait card() && card().getAttribute('data-id') === 'bs1'
+expect card().querySelectorAll('.broll-prop-chip').length === 2
+expect card().querySelectorAll('.broll-prop-remove').length === 0
+
+# ---- 5. Ctrl+click: no selection (no bulk bar to use it), the line opened -
+eval (function(){ var el = document.querySelector('#broll-list .broll-row-main[data-id="bs4"]'); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })); return true; })()
+sleep 200
+expect window.__brollTest.selected().length === 0
+expect document.getElementById('broll-bulk').innerHTML === ''
+expect document.querySelectorAll('#broll-list .broll-row.is-selected').length === 0
+expect card().getAttribute('data-id') === 'bs4'
+
+# ---- 6. forced back in, each control is refused by its handler -----------
+# The tick: disabled, so the only way to click it is to take that off —
+# which is exactly what the click guard has to survive.
+eval (function(){ untoast(); var b = row('bs4').querySelector('.broll-check'); b.disabled = false; b.click(); return true; })()
+sleep 200
+expect toasted()
+expect rec('bs4').status === 'unshot'
+# Flag, and a Delete button the reviewer never had
+eval (function(){ untoast(); var b = card().querySelector('.broll-flag-btn'); b.disabled = false; b.click(); return true; })()
+sleep 200
+expect toasted()
+expect !rec("bs4").reshoot
+eval (function(){ untoast(); var d = document.createElement('button'); d.type = 'button'; d.id = 'forced-delete'; d.setAttribute('data-action', 'broll-delete'); d.setAttribute('data-id', 'bs7'); card().appendChild(d); return true; })()
+jsclick #forced-delete
+sleep 200
+expect toasted()
+expect !!rec('bs7')
+# the assignee: a change event from a select made live again
+eval (function(){ untoast(); var s = card().querySelector('.broll-owner-select'); s.disabled = false; s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+sleep 200
+expect toasted()
+expect (rec('bs4').owner || '') === ''
+expect card().querySelector('.broll-owner-select').value === '' && card().querySelector('.broll-owner-select').disabled
+# the note: typed into anyway and left — nothing is committed
+eval (function(){ var t = card().querySelector('.broll-notes-input'); t.readOnly = false; t.focus(); t.value = 'a reviewer was here'; t.blur(); return true; })()
+sleep 200
+expect (rec('bs4').notes || '') === ''
+# Add a shot: hidden, but its button and its Enter both still refuse
+eval (function(){ untoast(); document.getElementById('broll-add-input').value = 'A reviewer shot'; document.getElementById('broll-add-save').click(); return true; })()
+sleep 200
+expect toasted()
+eval (function(){ untoast(); var i = document.getElementById('broll-add-input'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true; })()
+sleep 200
+expect toasted()
+expect F.state().brollShots.length === 8
+
+# ---- 7. the body class is a symptom, not the source ---------------------
+eval (function(){ document.body.classList.remove('is-review'); return true; })()
+click #broll-controls .broll-chip[data-filter="all"]
+sleep 200
+expect document.querySelectorAll('#broll-list .broll-check:disabled').length === 8
+eval (function(){ untoast(); var b = row('bs5').querySelector('.broll-check'); b.disabled = false; b.click(); return true; })()
+sleep 200
+expect toasted()
+expect rec('bs5').status === 'unshot'
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 300
+
+# ---- 8. Go to scene still goes there ------------------------------------
+jsclick #broll-list .broll-row-go[data-id="bs5"]
+sleep 300
+expect document.activeElement && document.activeElement.closest && document.activeElement.closest('.row') && document.activeElement.closest('.row').getAttribute('data-id') === 'r3'
+expect untoast() && !toasted()
+
+# ---- 9. the full page: a sheet to read, group, download and print --------
+jsclick #broll-open-page
+wait !document.getElementById('broll-page').hidden
+wait document.querySelectorAll('#broll-page .broll-page-row').length === 8
+expect document.querySelectorAll('#broll-page .broll-check:disabled').length === 8
+expect document.querySelectorAll('#broll-page .broll-page-owner:disabled').length === 8
+expect document.querySelectorAll('#broll-page .broll-page-note').length === 8
+expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-page-note'), function(n){ return n.readOnly && !n.placeholder; })
+expect document.querySelector('#broll-page .broll-page-row[data-id="bs2"] .broll-page-note').value === 'Too late last time, the light was gone.'
+shot 93-broll-review-page
+# its grouping and the shared filter work
+eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'person'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait !!Array.prototype.filter.call(document.querySelectorAll('#broll-page .broll-page-group-name'), function(n){ return n.textContent === 'Unassigned'; }).length
+click #broll-page-filters .broll-chip[data-filter="flagged"]
+wait document.querySelectorAll('#broll-page .broll-page-row').length === 1
+click #broll-page-filters .broll-chip[data-filter="all"]
+wait document.querySelectorAll('#broll-page .broll-page-row').length === 8
+# a note typed on the sheet, forced editable and left: not kept
+eval (function(){ var n = document.querySelector('#broll-page .broll-page-row[data-id="bs6"] .broll-page-note'); n.readOnly = false; n.focus(); n.value = 'mine now'; n.blur(); return true; })()
+sleep 200
+expect (rec('bs6').notes || '') === ''
+eval (function(){ untoast(); var b = document.querySelector('#broll-page .broll-page-row[data-id="bs6"] .broll-check'); b.disabled = false; b.click(); return true; })()
+sleep 200
+expect toasted()
+expect rec('bs6').status === 'shot'
+# CSV and Print shot list: files, not edits
+expect untoast()
+click #broll-page [data-action="broll-page-csv"]
+wait window.__blobs.length === 1
+eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
+expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description'
+expect window.__csv.length === 9
+click #broll-page [data-action="broll-page-print"]
+wait window.__blobs.length === 2
+expect window.__blobs[1].type === 'application/pdf'
+expect !toasted()
+# the Scene link jumps and closes the sheet
+jsclick #broll-page .broll-page-row[data-id="bs4"] [data-action="broll-page-jump"]
+wait document.getElementById('broll-page').hidden
+sleep 300
+expect document.activeElement.closest('.row').getAttribute('data-id') === 'r3'
+
+# ---- 10. after all that, the list is exactly as the server sent it -------
+expect list() === window.__list0
+expect window.__hostedTest.dirty() === window.__dirty0
+
+# ---- 11. the same document as an editor: everything is back --------------
+eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
+sleep 300
+wait document.querySelectorAll('#broll-list .broll-check:disabled').length === 0
+expect document.querySelectorAll('#broll-list .broll-check').length === 8
+expect document.getElementById('broll-add').offsetParent !== null
+wait !!card()
+expect !card().querySelector('.broll-owner-select').disabled
+expect !!card().querySelector('.broll-prop-input')
+expect !!card().querySelector('[data-action="broll-menu"]')
+expect card().querySelector('.broll-notes-input').readOnly === false
+click #broll-list .broll-row[data-id="bs4"] .broll-check
+wait rec('bs4').status === 'shot'

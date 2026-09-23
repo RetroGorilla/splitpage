@@ -2672,7 +2672,8 @@
   body.is-review #btn-write,
   body.is-review #find-replace,
   body.is-review #find-replace-all,
-  body.is-review .gear-quickadd { display: none; }
+  body.is-review .gear-quickadd,
+  body.is-review .broll-bulk { display: none; }
   /* Not a button any more, just the colour: keep the dot where it was. */
   .status-btn.is-static { cursor: default; }
   body.is-review .cell-editable { cursor: text; }
@@ -4386,6 +4387,25 @@
   .broll-page-row:hover .broll-page-note::placeholder, .broll-page-note:focus::placeholder { color: var(--text-faint); }
   .broll-page-note:hover { border-color: var(--border); }
   .broll-page-note:focus { outline: none; border-color: var(--visual); background: var(--bg); }
+
+  /* A review session (#30, 08d-broll-panel.js): the tick, the status, the
+     flag and the assignee are drawn disabled and the notes read-only, so
+     the value stays readable, at full strength rather than greyed, with
+     nothing about it that looks clickable. */
+  .broll-check:disabled, .broll-seg button:disabled, .broll-flag-btn:disabled { cursor: default; }
+  .broll-check:disabled:not([aria-checked="true"]):hover .broll-check-box { border-color: var(--text-faint); }
+  .broll-seg button:disabled:not(.is-active):hover { color: var(--text-dim); }
+  .broll-flag-btn:disabled:not(.is-active):hover { color: var(--text-dim); border-color: var(--border); }
+  /* no caret and no box: a name to read, like the location beside it */
+  .broll-owner-select:disabled {
+    cursor: default; opacity: 1; color: var(--text);
+    appearance: none; -webkit-appearance: none; background: transparent; border-color: transparent; padding-left: 0;
+  }
+  .broll-page-owner:disabled { padding-left: 4px; }
+  .broll-page-owner:disabled:hover { border-color: transparent; background: transparent; }
+  .broll-notes-input[readonly] { resize: none; }
+  .broll-page-note[readonly]:hover { border-color: transparent; }
+  .broll-static { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
 
   /* A phone: the table becomes a stack of rows, each field on its own line
      with its name beside it; nothing wider than the screen. */
