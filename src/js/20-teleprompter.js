@@ -14,7 +14,14 @@ import { showToast } from "./12-dirty-toast.js";
 import { htmlToPlainText, queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
 import { ONBOARD_KEY } from "./20b-onboarding.js";
-import { canOpenPrompterInBrowser, openPrompterInBrowser } from "./20f-desktop.js";
+import {
+  canOpenPrompterInBrowser,
+  createDesktopRecognition,
+  desktopVoiceAvailable,
+  desktopVoiceKnown,
+  loadDesktopVoice,
+  openPrompterInBrowser
+} from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { onRootClick } from "./21-events.js";
 
@@ -447,35 +454,52 @@ function setVoiceStatus(msg, kind) {
   el.className = "pp-voice-status" + (kind ? " " + kind : "");
 }
 
-/* What the voice button says when it is not following. On desktop it does
-   not follow at all (see updateVoiceAvailability) — it opens the script in
-   the browser, and says so on the button rather than in small print. */
+/* What the voice button says when it is not following. On desktop it
+   follows through Windows' own recogniser where main has one (issue #8,
+   main.js section 9d); where it has none (not Windows, an older shell) it
+   opens the script in the browser instead, and says so on the button
+   rather than in small print. */
 var VOICE_IDLE_LABEL = "Follow My Voice";
 var VOICE_BROWSER_LABEL = "Open in browser to use Follow My Voice";
-var VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in the desktop app yet — it works in the browser version.";
+var VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in this desktop app — it works in the browser version.";
+
+/* On desktop: does this machine listen for itself? */
+function desktopListens() {
+  return !!S.DESKTOP && desktopVoiceAvailable();
+}
 
 function voiceIdleLabel() {
-  return S.DESKTOP && canOpenPrompterInBrowser() ? VOICE_BROWSER_LABEL : VOICE_IDLE_LABEL;
+  if (S.DESKTOP && !desktopListens() && canOpenPrompterInBrowser()) return VOICE_BROWSER_LABEL;
+  return VOICE_IDLE_LABEL;
 }
 
 export function updateVoiceAvailability() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
+  /* Whether main can listen is one question over the bridge, asked the
+     first time the teleprompter needs to know; until the answer is in,
+     the button waits rather than offering something it may not do. */
+  if (S.DESKTOP && !desktopVoiceKnown()) {
+    btn.disabled = true;
+    loadDesktopVoice().then(updateVoiceAvailability);
+    return;
+  }
   if (!S.voiceFollowActive) btn.textContent = voiceIdleLabel();
   /* The Web Speech API's constructor exists in Electron's Chromium, but
      recognition itself fails immediately with a 'network' error — Google's
      speech backend that powers it is not reachable from inside Electron
-     the way it is from an actual Chrome/Edge install. Desktop voice needs
-     its own recognition engine (not Google's, #8) — so rather than a
-     button that looks live and then fails on click with a misleading
-     "needs an internet connection" message, the desktop button does the
-     thing that works today: it opens this script in the default browser,
-     starting in the teleprompter (issue #86, openPrompterInBrowser in
-     20f-desktop.js). A bridge too old to offer that keeps the honest
-     disabled state. This arm changes again once the desktop engine lands:
-     the browser stays the fallback where it is not available. */
+     the way it is from an actual Chrome/Edge install. So desktop voice
+     never uses it: on Windows main runs Windows' own recogniser and this
+     page gets what it hears (createDesktopRecognition, 20f-desktop.js);
+     anywhere main cannot, the button does the thing that works there — it
+     opens this script in the default browser, starting in the
+     teleprompter (issue #86, openPrompterInBrowser in 20f-desktop.js). A
+     bridge too old for either keeps the honest disabled state. */
   if (S.DESKTOP) {
-    if (canOpenPrompterInBrowser()) {
+    if (desktopListens()) {
+      btn.disabled = false;
+      if (!S.voiceFollowActive && !S.voiceStarting) setVoiceStatus("", "");
+    } else if (canOpenPrompterInBrowser()) {
       btn.disabled = false;
       setVoiceStatus("Chrome or Edge can follow your voice — this opens the saved script there.", "");
     } else {
@@ -597,12 +621,23 @@ function releaseVoiceStream() {
   S.voiceStream = null;
 }
 
+/* What a desktop listener's warnings mean (desktop/voice/listen.ps1). They
+   do not stop anything — the recogniser keeps listening — they say why it
+   may not be following. */
+var DESKTOP_VOICE_WARNINGS = {
+  "no-signal": "Windows isn't hearing the microphone — check it's plugged in, and that Settings › Privacy & security › Microphone lets desktop apps use it.",
+  "too-quiet": "Speak up a little, or move closer to the microphone.",
+  "too-noisy": "It's noisy here — Follow My Voice may lose its place."
+};
+
 export async function startVoiceFollow() {
-  /* Belt and braces: updateVoiceAvailability() already disables the button
-     on desktop, but this guard is what actually keeps a desktop start from
-     ever reaching getUserMedia or the recognizer, even if something else
-     re-enables the button. Same paused-engine reasoning as above. */
-  if (S.DESKTOP) {
+  /* Belt and braces: updateVoiceAvailability() already sets the button up
+     for what this desktop can do, but this guard is what actually keeps a
+     desktop start from ever reaching getUserMedia or the Web Speech
+     recognizer, even if something else re-enables the button. */
+  var desktop = !!S.DESKTOP;
+  if (desktop && !desktopVoiceKnown()) await loadDesktopVoice();
+  if (desktop && !desktopListens()) {
     if (!canOpenPrompterInBrowser()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
     setVoiceStatus("Opening in your browser…", "");
     openPrompterInBrowser().then(function (result) {
@@ -610,7 +645,7 @@ export async function startVoiceFollow() {
     });
     return;
   }
-  if (!SpeechRecognitionCtor) return;
+  if (!desktop && !SpeechRecognitionCtor) return;
   /* recognition.start() is async and voiceFollowActive only flips in onstart,
      so without this a second click builds a second recognizer and orphans the
      first — an invisible live microphone session. */
@@ -635,7 +670,10 @@ export async function startVoiceFollow() {
      restart, which makes a long read unusable. Doing it here also lets us
      tell a refusal apart from a missing device, which the recognizer's own
      error reporting blurs together. */
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  /* Not on desktop: Windows' listener opens the microphone itself, in its
+     own process, and a second capture here would only light a second
+     recording indicator. */
+  if (!desktop && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setVoiceStatus("Asking for the microphone…", "");
     try {
       S.voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -654,7 +692,7 @@ export async function startVoiceFollow() {
   }
 
   try {
-    S.recognition = new SpeechRecognitionCtor();
+    S.recognition = desktop ? createDesktopRecognition() : new SpeechRecognitionCtor();
   } catch (e) {
     S.voiceStarting = false;
     releaseVoiceStream();
@@ -665,6 +703,13 @@ export async function startVoiceFollow() {
   S.recognition.interimResults = true;
   S.recognition.lang = "en-US";
 
+  if (desktop) {
+    setVoiceStatus("Starting Windows speech recognition…", "");
+    S.recognition.onwarning = function (e) {
+      var msg = DESKTOP_VOICE_WARNINGS[e && e.warning];
+      if (msg && S.voiceFollowActive) setVoiceStatus(msg, "error");
+    };
+  }
   S.recognition.onstart = function () {
     S.voiceStarting = false;
     S.voiceFollowActive = true;
@@ -687,7 +732,21 @@ export async function startVoiceFollow() {
     S.voiceStarting = false;
     if (e.error === "no-speech" || e.error === "aborted") return;
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-      setVoiceStatus("Microphone blocked — allow it for this site (the icon at the right of the address bar), then try again.", "error");
+      setVoiceStatus(desktop
+        ? "Microphone blocked — let desktop apps use it in Settings › Privacy & security › Microphone, then try again."
+        : "Microphone blocked — allow it for this site (the icon at the right of the address bar), then try again.", "error");
+      S.voiceFollowActive = false;
+    } else if (e.error === "no-recognizer") {
+      /* Windows' listener: no speech recogniser is installed at all. */
+      setVoiceStatus("Windows has no speech recogniser installed. Add one in Settings › Time & language › Speech, or use Present in Browser.", "error");
+      S.voiceFollowActive = false;
+    } else if (e.error === "taken") {
+      setVoiceStatus("Another tab is following your voice now.", "");
+      S.voiceFollowActive = false;
+    } else if (e.error === "helper-failed" || e.error === "unavailable") {
+      /* Windows' listener could not run at all. Starting it again would
+         only fail the same way, forty times. */
+      setVoiceStatus("Windows speech recognition couldn't start. Present in Browser still works.", "error");
       S.voiceFollowActive = false;
     } else if (e.error === "audio-capture") {
       setVoiceStatus("No microphone was found.", "error");

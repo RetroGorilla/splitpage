@@ -60,6 +60,7 @@ if (location.origin === "splitpage://app") {
   let reassignDocIdCallback = null;
   let draftFlushCallback = null;
   let updateStatusCallback = null;
+  let voiceEventCallback = null;
 
   receive("splitpage:open-file", (_event, entry) => {
     if (openFileCallback) openFileCallback(reviveFileEntry(entry));
@@ -79,6 +80,11 @@ if (location.origin === "splitpage://app") {
      read the status once. */
   receive("splitpage:update-status", (_event, status) => {
     if (updateStatusCallback) updateStatusCallback(status);
+  });
+  /* FOLLOW MY VOICE (main.js section 9d): what the Windows listener heard,
+     for this tab's session only — {type, session, text | code | lang}. */
+  receive("splitpage:voice-event", (_event, payload) => {
+    if (voiceEventCallback) voiceEventCallback(payload);
   });
   /* DOC-CLAIMS: main has decided this page's document is a copy of one open
      in another tab, and is handing it a replacement identity. The payload is
@@ -415,6 +421,27 @@ if (location.origin === "splitpage://app") {
        or {ok:false, code} — never the URL. */
     openPrompterInBrowser() {
       return invoke("splitpage:prompter-open-in-browser");
+    },
+
+    /* ---- Follow My Voice (main.js section 9d, issue #8) -----------------
+       Argument-free (invariant #45): whether this machine can listen
+       ({available}), start listening for this tab ({ok, session} or
+       {ok:false, code}) and stop. What is heard arrives through
+       onVoiceEvent. */
+    voiceStatus() {
+      return invoke("splitpage:voice-status");
+    },
+
+    voiceStart() {
+      return invoke("splitpage:voice-start");
+    },
+
+    voiceStop() {
+      return invoke("splitpage:voice-stop");
+    },
+
+    onVoiceEvent(cb) {
+      voiceEventCallback = cb;
     },
 
     /* ---- Google Drive (main.js section 9c, issue #10) -------------------

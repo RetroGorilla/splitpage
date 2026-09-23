@@ -3,9 +3,10 @@
  * WHY THIS EXISTS. Follow My Voice runs on the Web Speech API, and inside
  * Electron that API's constructor exists but recognition fails at once with
  * a 'network' error: Google's speech backend is reachable from a real Chrome
- * or Edge install and not from here (#8). Until the desktop app has a
- * recogniser of its own, the fallback is to read the script in the person's
- * own browser. This file is what puts the script there.
+ * or Edge install and not from here. On Windows the desktop app now has a
+ * recogniser of its own (#8, desktop/voice-helper.js); reading the script in
+ * the person's own browser is still offered everywhere, and is the only way
+ * elsewhere. This file is what puts the script there.
  *
  * WHY A LOOPBACK SERVER AND NOT A FILE. A browser cannot be handed a local
  * file path to read, and a page opened from file:// is not a secure context,

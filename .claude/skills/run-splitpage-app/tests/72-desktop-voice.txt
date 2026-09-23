@@ -1,0 +1,124 @@
+# Follow My Voice on desktop (issue #8): the page's half.
+#
+# On Windows the desktop main process runs Windows' own recogniser and sends
+# this page what it hears (desktop/main.js section 9d). The page wraps that
+# in a Web-Speech-shaped recognizer (createDesktopRecognition, 20f-desktop.js)
+# so the teleprompter's following code runs unchanged on top of it. Here that
+# wrapper runs under the in-memory fake desktop backend with its voice calls
+# (makeFakeBackend({voice:true})): the suite plays main's events in with
+# _voiceEmit and reads back what the page asked for in _voiceCalls.
+#
+# The main-process half (the process, its lines, take-over, tab close) is
+# desktop/test/voice-helper.test.mjs and smoke.mjs's "Follow My Voice on
+# desktop" group. The real recogniser hearing a real voice is
+# docs/WINDOWS-CHECKS.md §3, by hand.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.D = window.__desktopTest; window.fakeV = D.makeFakeBackend({ voice: true }); D.setBackend(window.fakeV); window.F = window.__splitpageFormats; return true; })()
+
+# --- a desktop that can listen offers to, and never takes a browser mic -----
+eval (function(){ window.__gumCalls = 0; window.__gumReal = navigator.mediaDevices.getUserMedia; navigator.mediaDevices.getUserMedia = function () { window.__gumCalls++; return window.__gumReal.apply(navigator.mediaDevices, arguments); }; return true; })()
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+expect fakeV._voiceCalls.status === 1
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 1
+expect document.getElementById('pp-voice-status').textContent.indexOf('Starting Windows speech recognition') !== -1
+expect window.__gumCalls === 0
+expect fakeV._prompterCalls === undefined
+# the script's own first words, whatever the demo document says: what the
+# fake "hears" below is read off the prompter itself
+eval (function(){ window.__w = Array.prototype.map.call(document.querySelectorAll('#prompter .w'), function (e) { return e.textContent; }).filter(function (t) { return /[a-z0-9]/i.test(t); }); window.__say = function (a, b) { return window.__w.slice(a, b).join(' '); }; return window.__w.length; })()
+expect window.__w.length >= 12
+
+# --- main's events drive it -------------------------------------------------
+eval (function(){ fakeV._voiceEmit({ type: 'start', lang: 'en-US' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect document.getElementById('pp-voice').textContent == Stop Following
+eval (function(){ fakeV._voiceEmit({ type: 'interim', text: __say(0, 2) }); return true; })()
+wait document.querySelectorAll('#prompter .w.current-word').length === 1
+eval (function(){ fakeV._voiceEmit({ type: 'final', text: __say(0, 5) }); return true; })()
+wait document.querySelectorAll('#prompter .w.spoken').length >= 4
+eval window.__spokenAt = document.querySelectorAll('#prompter .w.spoken').length
+# an event from another session (one that already ended) moves nothing
+eval (function(){ fakeV._voiceEmit({ session: 999, type: 'final', text: __say(5, 10) }); return true; })()
+sleep 200
+expect document.querySelectorAll('#prompter .w.spoken').length === window.__spokenAt
+expect document.getElementById('pp-voice-status').textContent.indexOf('following along') !== -1
+
+# a warning says why it may not follow, and changes nothing else
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); return true; })()
+expect document.getElementById('pp-voice-status').textContent.indexOf("Windows isn't hearing the microphone") !== -1
+expect document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- the listener exiting by itself is restarted, like a Web Speech end ----
+eval (function(){ fakeV._voiceEmit({ type: 'end', reason: 'exited' }); return true; })()
+wait fakeV._voiceCalls.start === 2
+eval (function(){ fakeV._voiceEmit({ type: 'start' }); return true; })()
+eval (function(){ fakeV._voiceEmit({ type: 'final', text: __say(5, 8) }); return true; })()
+wait document.querySelectorAll('#prompter .w.spoken').length > window.__spokenAt
+expect document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- Stop Following stops main's listener -----------------------------------
+jsclick #pp-voice
+wait fakeV._voiceCalls.stop === 1
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+eval (function(){ fakeV._voiceEmit({ type: 'final', text: __say(8, 12) }); return true; })()
+sleep 200
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- another tab taking the microphone stops this one, no restart ----------
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 3
+eval (function(){ fakeV._voiceEmit({ type: 'start' }); fakeV._voiceEmit({ type: 'end', reason: 'taken' }); return true; })()
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+expect document.getElementById('pp-voice-status').textContent.indexOf('Another tab is following your voice now') !== -1
+sleep 2500
+expect fakeV._voiceCalls.start === 3
+
+# --- no recogniser installed: said plainly, no restart loop -----------------
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 4
+eval (function(){ fakeV._voiceEmit({ type: 'error', code: 'no-recognizer' }); fakeV._voiceEmit({ type: 'end', reason: 'exited' }); return true; })()
+wait document.getElementById('pp-voice-status').textContent.indexOf('no speech recogniser installed') !== -1
+sleep 2500
+expect fakeV._voiceCalls.start === 4
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- main refusing to start: said plainly, no restart loop ------------------
+eval (function(){ fakeV._voiceStartAnswer = { ok: false, code: 'SPAWN_FAILED' }; return true; })()
+jsclick #pp-voice
+wait document.getElementById('pp-voice-status').textContent.indexOf("couldn't start") !== -1
+sleep 2500
+expect fakeV._voiceCalls.start === 5
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+eval (function(){ delete fakeV._voiceStartAnswer; return true; })()
+
+# --- closing the prompter stops listening -----------------------------------
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 6
+eval (function(){ fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+wait fakeV._voiceCalls.stop === 2
+
+# --- a desktop that cannot listen keeps Present in Browser ------------------
+eval (function(){ window.fakeN = D.makeFakeBackend({ voice: true }); window.fakeN._voiceAvailable = false; D.setBackend(window.fakeN); return true; })()
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-voice').textContent == Open in browser to use Follow My Voice
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+eval (function(){ navigator.mediaDevices.getUserMedia = window.__gumReal; D.restoreBackend(); return true; })()
+expect window.__gumCalls === 0
+expect !window.splitpageDesktop
+quit

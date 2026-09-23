@@ -131,7 +131,6 @@ for (const arch of ARCHS) {
     /* One check for the whole directory, and it fails if any single binary
        does: a summary line that said "ok" right under a mismatch would read
        as a pass to anyone skimming the build log. */
-    // TODO(U2b): SplitpageSpeech.exe IL-only allowlist once the voice engine is decided.
     let native = 0;
     const wrong = [];
     for (const file of walk(unpacked)) {
@@ -147,6 +146,13 @@ for (const arch of ARCHS) {
     check(wrong.length === 0,
       `${arch}: every other .exe/.dll/.node in ${UNPACKED[arch]} is ${arch} or allowlisted`,
       wrong.length ? wrong.join("; ") : `${native} checked`);
+
+    /* Follow My Voice (#8) runs this script with Windows' own powershell.exe,
+       so it ships no binary of its own to check above — only the script,
+       which has to sit outside the asar for powershell.exe to read it. */
+    const voiceScript = join(unpacked, "resources", "splitpage", "voice", "listen.ps1");
+    check(existsSync(voiceScript), `${arch}: the Follow My Voice listener ships outside the asar`,
+      existsSync(voiceScript) ? "" : "resources/splitpage/voice/listen.ps1 missing — stage.mjs");
   }
 
   const setup = join(DIST, `SplitpageDesktopSetup-${VERSION}-${arch}.exe`);
