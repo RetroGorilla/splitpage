@@ -12,6 +12,7 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import {
   healTagRegistry,
+  mintTagId,
   productionEntries,
   productionIndexStats,
   resetProductionIndexStats
@@ -35,8 +36,10 @@ test("reading the breakdown never writes the registry; healTagRegistry does, wit
   assert.deepEqual(S.state.productionTags, [], "a read wrote the registry");
 
   assert.equal(healTagRegistry(), 1);
-  assert.deepEqual(S.state.productionTags, [{ cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
+  assert.deepEqual(S.state.productionTags, [{ id: mintTagId("prop", "kettle"), cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
+  /* the same entries, now carrying the id the heal gave the item */
   assert.deepEqual(productionEntries(), before);
+  assert.equal(productionEntries()[0].id, mintTagId("prop", "kettle"));
   assert.equal(productionIndexStats().derived, 1, "healing re-derived the index");
   assert.equal(healTagRegistry(), 0);
 });

@@ -1,6 +1,6 @@
 # Structured document model — design (issue #85)
 
-Status: **decided; step 1 of §10 built** (`src/js/04c-doc-model.js`,
+Status: **decided; steps 1–2 of §10 built** (`src/js/04c-doc-model.js`,
 nothing in the app calls it yet). Adam made the decisions in §12 on
 2026-09-23; the sections below already reflect them. The build follows §10.
 #85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
@@ -133,20 +133,41 @@ ordinary text with a `tag` mark. The editor keeps the caret out of it and
 deletes it whole, which matches today's `contenteditable=false`. The model
 doesn't need a special node for it.
 
-### 3.1 The registry gets ids
+### 3.1 The registry gets ids (built, step 2)
 
-`productionTags` entries gain `id` (`t_` + random, the `safeId` shape). At
-load, every tag span is resolved by (category, normalised name) to its entry.
-An entry is created if missing, which `healTagRegistry()` already does. The
-span becomes `tag: id`.
+`productionTags` entries gain `id`: `t_` plus a 64-bit hash of the entry's
+key (category + normalised name) **at the moment it is created**, so two
+people tagging the same thing independently mint the same id. A rename keeps
+it. If the id a key would mint is already taken (a rename freed a name, and
+the name came back as a new item), a counter goes on the end (`-2`).
+`migrateRows` gives every entry one (`ensureTagIds`), so a file from before
+ids, or an entry an older copy of the app merged without one, gets one on
+load.
 
-- **Rename** changes `entry.name` only. The script text under the tag is
-  what the narrator says and stays as typed, which is today's behaviour too
-  (`renameTag` only rewrites `data-tag-name`).
-- **Remove** clears the mark from every run carrying that id. This is a walk
-  over runs, not a re-parse.
-- **Merge** of two registry entries (rename onto an existing name) repoints
-  runs from one id to the other.
+**Ids live in the registry only, not on the spans.** The stored HTML keeps
+naming a tag by `data-tag-cat` + `data-tag-name` (D2), and a span's name is
+always its entry's name (a rename rewrites the spans, as today). So (category,
+normalised name) stays a unique key within a document, and the model resolves
+a span to its entry's id through it: `registryTagHooks(registry)` gives
+`fromHtml` its `tagId(cat, name)` and `toHtml` its `tagOf(id)`. Putting
+`data-tag-id` on spans as well was dropped: every existing tagged cell's HTML
+would change on its first load, an older copy of the app would strip the
+attribute again (its sanitiser does not know it), and the server's reviewer
+anchor check compares attributes — all churn in the whole-cell merge that
+runs until step 6, for no gain the registry id does not already give.
+
+- **Rename** changes `entry.name` and keeps `entry.id`. Until step 4 the
+  spans are rewritten too; from step 4 cells hold ids and the HTML is
+  written with the registry's current name, so a rename touches one record.
+- **Remove** clears the mark from every run carrying that id.
+- **Merge.** `mergeProductionTags` merges by id: a rename on one side and an
+  assignment on the other are one item with both (a rename is taken from
+  whichever side made it; both did, differently: theirs). Two ids that now
+  name one item fold into the first, the way a rename onto an existing name
+  already folds. The on-disk merge review lists the breakdown by id too.
+- The one case ids do not fix: I rename an item while you edit a cell that
+  still has the old name's span. Merged, your cell keeps the old name, and
+  the heal gives it an entry of its own — as it does today.
 
 ### 3.2 Comments
 
@@ -415,8 +436,9 @@ until step 4.
    `<strong><em>`, and `toHtml` always writes one. The first save of an old
    cell through the model changes its string, not its content — which is
    why merge compares models, not strings, from step 6.)
-2. **Registry ids.** `productionTags[].id`, `data-tag-id` on spans, rename
-   and remove through ids. Existing behaviour, new keys.
+2. **Registry ids. Done.** `productionTags[].id`, minted from the key and
+   kept through renames; the registry merges by id; `registryTagHooks` for
+   the model. No ids on spans (§3.1 says why). `src/test/tag-ids.test.mjs`.
 3. **Readers first.** Exports, word count, the production index, b-roll,
    the teleprompter and find all read runs through the memo. This is where
    cross-formatting find starts working.
