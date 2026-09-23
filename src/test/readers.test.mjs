@@ -10,15 +10,21 @@
  * hand-written non-canonical cells, and seeded random cells built the
  * way editing builds them — each run wrapped on its own, its marks in a
  * random order — then sanitised, as every cell is on blur and on load.
+ *
+ * Two readers give something else on purpose, and are checked for exactly
+ * that: the plain Markdown export writes Markdown that renders the cell's
+ * formatting where the HTML walker's did not, and the production index
+ * counts a tag's stretches in the model rather than its spans.
  */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellOf, toDocxRuns, toPlainText } from "../js/04c-doc-model.js";
-import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { cellOf, toDocxRuns, toMarkdown, toPlainText } from "../js/04c-doc-model.js";
+import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { tagsInField } from "../js/07-production-tags.js";
 import { htmlToPlainText, htmlToRuns } from "../js/14-export.js";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
-import { STORED } from "./_stored-cells.mjs";
+import { STORED, tagSpan } from "./_stored-cells.mjs";
 
 test("plain text: the model reads every stored cell as htmlToPlainText does", () => {
   for (const html of STORED) assert.equal(toPlainText(cellOf(html)), htmlToPlainText(html), html);
@@ -177,4 +183,64 @@ test("teleprompter: where the model draws differently", () => {
   assert.equal(newPrompterScene("<strong></strong>"), null);
   /* a no-break space is kept, as the regex over "&nbsp;" kept it */
   assert.equal(newPrompterScene("&nbsp;x"), '&nbsp;<span class="w">x</span>');
+});
+
+/* ---- the plain Markdown export ----
+
+   toMarkdown is not htmlToMarkdown's output (doc-model.test.mjs pins where
+   and why they differ, each case checked against two CommonMark readers
+   when it was written). What must hold on every stored cell is that it
+   says the same words, and that its markup is only the notation the HTML
+   walker wrote plus the three elements it falls back to. */
+const MD_MARKUP = /<\/?(?:strong|em|s|u|mark)>|\]\((?:https?|mailto):[^)\s]*\)|\*|~~|\[/g;
+const words = (s) => s.replace(/\\([[\]()])/g, "\uE000$1").replace(MD_MARKUP, "").replace(/\uE000/g, "").replace(/[\s\u00a0]/g, "");
+
+test("markdown: every stored cell says the same words as the HTML reader wrote", () => {
+  let changed = 0;
+  for (const html of STORED) {
+    const before = htmlToMarkdown(html), after = toMarkdown(cellOf(html));
+    assert.equal(words(after), words(before), html);
+    assert.equal(words(after), toPlainText(cellOf(html)).replace(/[\s\u00a0]/g, ""), html);
+    if (after !== before) changed++;
+  }
+  assert.ok(changed > 0, "the random cells do exercise what the HTML walker wrote wrong");
+});
+
+test("markdown: a cell htmlToMarkdown wrote without a flaw is written the same", () => {
+  /* formatting on whole words, no two marks crossing, nothing side by
+     side: the Markdown anyone writes by hand */
+  for (const html of [
+    "plain words", "<strong>bold</strong> and <em>italic</em>", "a <strong><em>both</em></strong> b",
+    "<em>x <strong>y</strong></em> z", "line one<br>line two", '<a href="https://e.x/">a <strong>link</strong></a>',
+    "the " + tagSpan("prop", "Mug", "mug")
+  ]) {
+    const clean = sanitizeHtml(html);
+    assert.equal(toMarkdown(cellOf(clean)), htmlToMarkdown(clean), html);
+  }
+});
+
+/* ---- the production index ----
+
+   tagsInField reads the model (07-production-tags.js): one mention per
+   stretch of one tag. On every stored cell that is one per tag span, as
+   the HTML reader counted, with the same names; the shapes where the two
+   differ are tag-panel-model.test.mjs's. */
+function oldTagsInField(html) {
+  return [...inertBody(html).querySelectorAll(".tag-anchor")].map((el) => ({
+    catId: el.getAttribute("data-tag-cat"),
+    name: (el.getAttribute("data-tag-name") || "").trim(),
+    text: (el.textContent || "").trim()
+  })).filter((t) => t.catId && t.name);
+}
+
+test("production index: every stored cell has the mentions the span reader found", () => {
+  let tagged = 0;
+  for (const html of STORED) {
+    const before = oldTagsInField(html), after = tagsInField(html);
+    assert.deepEqual(after.map((t) => [t.catId, t.name]), before.map((t) => [t.catId, t.name]), html);
+    /* a line break inside a tag is "\n" in the model; textContent had none */
+    assert.deepEqual(after.map((t) => t.text.replace(/\s+/g, "")), before.map((t) => t.text.replace(/\s+/g, "")), html);
+    if (after.length) tagged++;
+  }
+  assert.ok(tagged > 100, "enough tagged cells: " + tagged);
 });

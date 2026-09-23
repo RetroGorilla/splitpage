@@ -195,24 +195,34 @@ export function contentMemo(compute) {
    The returned array is SHARED with every other caller for the same field
    content — read it, never mutate it. Mentions are built around it.
 
-   One mention per tag SPAN, so it reads the HTML rather than the cell's
-   model (cellOf, #85 step 3), which cannot count spans: two spans of one
-   tag side by side are one run there, a tag nested in a tag is only the
-   inner one, an empty tag span is nothing, and a b-roll key inside a tag
-   splits it in two. Cells older copies of the app stored have all of
-   those ("[mug][mug]" typed made the first), and the count is what the
-   panel shows as an item's mentions and what Remove label reports
-   (tag-panel-model.test.mjs pins each case). */
+   One mention per stretch of one tag in the cell's model (cellOf, #85
+   step 3): what the editor shows as one tagged phrase, and what the cell
+   keeps as one once anything writes it. Until #85 this counted tag SPANS in
+   the HTML, and on shapes older copies of the app stored the two differ:
+   two spans of one tag side by side ("[mug][mug]" typed; typed today it
+   makes one) are one mention here, a tag nested in a tag is the inner one
+   with the outer on either side of it, an empty tag span shows nothing and
+   is no mention, and a b-roll key inside a tag splits it in two. Each of
+   those cells is written in exactly that shape the first time the cell is
+   edited, so counting spans made an item's mention count change when
+   someone fixed a typo next to it; counting the model's stretches gives
+   the count the cell keeps. It is what the panel shows as an item's
+   mentions, what the breakdown exports print, and what Remove label
+   reports (tag-panel-model.test.mjs pins each case). */
 export var tagsInField = contentMemo(function (html) {
   var out = [];
-  var body = inertBody(html);
-  Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-    var catId = el.getAttribute("data-tag-cat");
-    var name = (el.getAttribute("data-tag-name") || "").trim();
-    if (!catId || !name) return;
-    out.push({ catId: catId, name: name, text: (el.textContent || "").trim() });
+  var last = null;
+  cellOf(html).forEach(function (r) {
+    var id = r.atom ? null : r.marks.tag;
+    if (id && last && last.id === id) { last.text += r.text; return; }
+    last = null;
+    var t = id ? tagNameOf(id) : null;
+    var name = t ? t.name.trim() : "";
+    if (!name) return;
+    last = { id: id, catId: t.cat, name: name, text: r.text };
+    out.push(last);
   });
-  return out;
+  return out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
 });
 
 export function collectTagsFromRows(rows) {
@@ -1372,9 +1382,8 @@ function countPhraseMatches(phrase) {
    every other tag in the cell to its entry's casing, and write a fold's
    survivor's casing where the old code wrote the name that was typed.
 
-   The count returned is the SPANS the tag had, read by tagsInField — the
-   same count the panel shows as the item's mentions. The model cannot
-   give it: two spans of one tag side by side are one run there. */
+   The count returned is the mentions the tag had, read by tagsInField —
+   the same count the panel shows for the item. */
 function eachTaggedField(cat, name, toName) {
   var target = normalizeTagName(name);
   var toId = toName === null ? null : namedTagId(cat, toName);
@@ -1382,11 +1391,11 @@ function eachTaggedField(cat, name, toName) {
   S.state.rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
       var html = row[field];
-      var spans = tagsInField(html).filter(function (t) {
+      var mentions = tagsInField(html).filter(function (t) {
         return t.catId === cat && normalizeTagName(t.name) === target;
       }).length;
-      if (!spans) return;
-      changed += spans;
+      if (!mentions) return;
+      changed += mentions;
       row[field] = holdsMedia(html) ? retagInHtml(html, cat, target, toName) : retagCell(html, cat, target, toId);
       stampRow(row);
     });

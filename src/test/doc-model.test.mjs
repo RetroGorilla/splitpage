@@ -4,9 +4,10 @@
  * What has to hold before any reader or writer is moved onto it:
  *   - fromHtml/toHtml round-trip: toHtml's output is a fixed point of the
  *     sanitiser, and reading it back gives the same cell;
- *   - the three readers give exactly what the HTML readers they will
- *     replace (htmlToPlainText, htmlToMarkdown, htmlToRuns) give for the
- *     same cell's HTML;
+ *   - toPlainText and toDocxRuns give exactly what the HTML readers they
+ *     replace (htmlToPlainText, htmlToRuns) give for the same cell's HTML;
+ *     toMarkdown writes htmlToMarkdown's notation laid out so a Markdown
+ *     reader shows the cell's formatting (its own tests below);
  *   - edits, steps and their inverses, and the three-way merge.
  * Every property is checked on hand-written cells covering every construct
  * the sanitiser keeps, on the demo document, and on seeded random cells.
@@ -159,14 +160,74 @@ test("a cell keeps the words the stored HTML shows", () => {
   }
 });
 
-test("the three readers agree with the HTML readers they replace", () => {
+test("the plain-text and Word readers agree with the HTML readers they replace", () => {
   const cells = FIXTURES.map((h) => fromHtml(h)).concat(RANDOM);
   for (const cell of cells) {
     const html = toHtml(cell);
     assert.equal(toPlainText(cell), htmlToPlainText(html), html);
-    assert.equal(toMarkdown(cell), htmlToMarkdown(html), html);
     assert.deepEqual(toDocxRuns(cell), htmlToRuns(html), html);
   }
+});
+
+/* ---- toMarkdown ----
+
+   Not htmlToMarkdown's output: that follows the nesting of the elements,
+   and Markdown's delimiters only open and close where CommonMark's
+   flanking rules let them. Each case below is one the HTML walker wrote
+   wrong (checked against markdown-it and commonmark.js when this was
+   written: the old output rendered other formatting than the cell's, the
+   new renders the cell's), or one it wrote right and toMarkdown keeps. */
+test("toMarkdown: what htmlToMarkdown wrote right, it writes the same", () => {
+  for (const html of [
+    "plain <strong>bold</strong> and <em>it</em> <s>gone</s> <u>under</u> <mark>lit</mark>",
+    '<a href="https://e.x/a(b)">li]nk</a>',
+    "<em>x <strong>y</strong></em> z",
+    "<strong><em>both</em></strong>",
+    "<strong>one<br>two</strong>",
+    '<strong>a <a href="https://e.x/">link</a> b</strong>',
+    '<a href="https://e.x/"><strong>a b</strong> c</a>',
+    "pick up the <strong>" + tagSpan("prop", "Red mug", "red mug") + "</strong> now",
+    '<em>a</em><span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span> drone'
+  ]) {
+    assert.equal(toMarkdown(fromHtml(html)), htmlToMarkdown(sanitizeHtml(html)), html);
+  }
+});
+
+test("toMarkdown: where the elements' nesting made broken Markdown, it writes working Markdown", () => {
+  const cases = [
+    /* two elements side by side, as a comment's edge inside a word is in
+       the model's own nesting */
+    ["<strong>a</strong><strong>b</strong>", "**a****b**", "**ab**"],
+    ['<strong>bo</strong><span class="cmt-anchor" data-cmt="c1"><strong>ld</strong></span>x', "**bo****ld**x", "**bold**x"],
+    /* the model's fixed nesting over italic "x " then bold-italic "y" */
+    ["<em>x </em><strong><em>y</em></strong> z", "*x ****y*** z", "*x **y*** z"],
+    /* a delimiter next to a space opens or closes nothing */
+    ["<strong>bold </strong>text", "**bold **text", "**bold** text"],
+    ["<u>a </u>b", "<u>a </u>b", "<u>a</u> b"],
+    /* two marks that cross: the second one's reopening would share a run
+       of asterisks with the first one's close */
+    ["<strong>abc<em>de</em></strong><em>fgh</em>", "**abc*de****fgh*", "**abc*de***<em>fgh</em>"],
+    /* inside a word, next to punctuation, ** cannot open */
+    ['a<strong>"q"</strong>b', 'a**"q"**b', 'a<strong>"q"</strong>b'],
+    /* a blank line ends a Markdown paragraph, and emphasis with it */
+    ["<strong>one<br><br>two</strong>", "**one\n\ntwo**", "**one**\n\n**two**"],
+    /* an element alone on a paragraph's first line starts an HTML block */
+    ["<mark><br>x</mark>", "<mark>\nx</mark>", "<mark>x</mark>"],
+    /* underline outside bold, so the ** sits between letters */
+    ["x<strong><u>y</u></strong>z", "x**<u>y</u>**z", "x<u>**y**</u>z"]
+  ];
+  for (const [html, before, after] of cases) {
+    assert.equal(htmlToMarkdown(sanitizeHtml(html)), before, html);
+    assert.equal(toMarkdown(fromHtml(html)), after, html);
+  }
+});
+
+test("toMarkdown: the same cell writes the same Markdown however its HTML nested", () => {
+  assert.equal(toMarkdown(fromHtml("<em><strong>a</strong> b</em>")), toMarkdown(fromHtml("<strong><em>a</em></strong><em> b</em>")));
+  assert.equal(toMarkdown(fromHtml("<em><strong>a</strong> b</em>")), "***a** b*");
+  /* tags and comments are words: their edges never split emphasis */
+  assert.equal(toMarkdown(fromHtml("<strong>" + tagSpan("prop", "Mug", "mug") + ' and <span class="cmt-anchor" data-cmt="c1">cup</span></strong>')),
+    "**mug and cup**");
 });
 
 /* ---- canonical form ---- */
