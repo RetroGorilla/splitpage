@@ -1,0 +1,77 @@
+# Undo and redo for the whole document (#85, src/js/12a-undo.js).
+#
+# One stack per tab, recorded by diffing the document after every edit, so
+# every action is covered without its own undo code: typing (a word at a
+# time), a deleted scene, a status click, a split. Ctrl+Z / Ctrl+Shift+Z /
+# Ctrl+Y answer from a script cell and from anywhere that is not a text box
+# of its own; the browser's own contenteditable history is never used
+# (historyUndo is cancelled). The pure core is src/test/undo.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.__rows0 = document.querySelectorAll('#rows .row').length
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.aud = function (i) { return F.state().rows[i].audioText; }; window.__a0 = aud(0); return U.sizes().undo; })()
+expect U.sizes().undo === 0
+
+# --- typing: one word at a time ---------------------------------------------
+eval (function(){ var c = document.querySelector('#rows .row .audio-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+press  alpha bravo
+sleep 300
+expect aud(0).indexOf('alpha bravo') !== -1
+key ctrl KeyZ
+sleep 200
+expect aud(0).indexOf('bravo') === -1
+expect aud(0).indexOf('alpha') !== -1
+key ctrl KeyZ
+sleep 200
+expect aud(0).indexOf('alpha') === -1
+# the space typed before the first word was an entry of its own
+key ctrl KeyZ
+sleep 200
+expect aud(0) === window.__a0
+# the caret is back in the cell it came from
+expect document.activeElement.getAttribute('data-field') == audioText
+key ctrl+shift KeyZ
+sleep 200
+key ctrl+shift KeyZ
+sleep 200
+expect aud(0).indexOf('alpha') !== -1
+key ctrl+shift KeyZ
+sleep 200
+expect aud(0).indexOf('alpha bravo') !== -1
+# the browser's own undo, as the Edit menu sends it, is the document's
+eval (function(){ var c = document.querySelector('#rows .row .audio-cell .cell-editable'); var ev = new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true }); c.dispatchEvent(ev); window.__hu = ev.defaultPrevented; return true; })()
+sleep 200
+expect window.__hu === true
+expect aud(0).indexOf('bravo') === -1
+
+# --- a deleted scene comes back, from outside any cell -----------------------
+eval (function(){ window.__secondId = F.state().rows[1].id; return true; })()
+eval (function(){ var b = document.querySelectorAll('#rows .row')[1].querySelector('[data-action="delete-row"]'); b.click(); b = document.querySelectorAll('#rows .row')[1].querySelector('[data-action="delete-row"]'); if (b) b.click(); return true; })()
+wait F.state().rows.length === window.__rows0 - 1
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows.length === window.__rows0
+expect F.state().rows[1].id === window.__secondId
+key ctrl+shift KeyZ
+wait F.state().rows.length === window.__rows0 - 1
+key ctrl KeyZ
+wait F.state().rows.length === window.__rows0
+
+# --- a status click -----------------------------------------------------------
+eval window.__st = F.state().rows[0].status
+jsclick #rows .row [data-action="cycle-status"]
+wait F.state().rows[0].status !== window.__st
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows[0].status === window.__st
+
+# --- a text box of its own keeps its own undo ---------------------------------
+eval window.__sizesBefore = JSON.stringify(U.sizes())
+eval (function(){ var t = document.getElementById('doc-title'); t.focus(); return true; })()
+key ctrl KeyZ
+sleep 200
+expect JSON.stringify(U.sizes()) === window.__sizesBefore
+quit

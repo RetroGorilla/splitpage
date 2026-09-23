@@ -949,6 +949,25 @@ builds two fields.
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
 
+**The two script cells merge a word at a time** (#85,
+`docs/DOCUMENT-MODEL.md` §8). `mergeRow` hands each to `mergeTextField()`
+(03-sync.js), which reads base, mine and theirs into the document model
+(`fromHtml`, 04c-doc-model.js), **each through its own side's registry**
+(`textMergeContext` → `registryTagHooks`), so a tag renamed on one side is
+the same tag id on all three and a rename alone is not a change. Two
+strings that read as the same cell are the same cell (a re-serialisation
+never counts as an edit; theirs' string is kept). Both sides changed it:
+`mergeCells` merges the words and then the marks, and only the same words
+changed differently on both sides is a conflict — handled exactly as the
+whole-cell conflict always was: theirs stays live, my **whole** cell goes on
+an "Unmerged edit" card (design D3). The result names every tag the way the
+**merged** registry does (the registry is merged before the rows for that),
+so a rename from the other side reaches a cell taken from this one. A cell
+holding a picture or video card (which the model leaves out, D7) is still
+compared as a string, whole. The on-disk merge review (18a-local-merge.js)
+decides each cell with the same `mergeTextField()`, and shows "both sets of
+changes are combined" for an outcome of `merged`.
+
 **Images are references, not bytes** (#82). The document state never holds
 image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,

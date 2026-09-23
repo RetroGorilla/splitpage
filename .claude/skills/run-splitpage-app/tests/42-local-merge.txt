@@ -162,6 +162,31 @@ expect !F.state().comments.some(function(c){ return c.id === __card.id; })
 expect document.querySelector('#rows .row .visual-media img').getAttribute('data-blob') === PC.sha256
 eval (function(){ var p = document.getElementById('comments-close') || document.querySelector('#comments-panel [data-action="close"]'); if (p) p.click(); document.getElementById('merge-banner').hidden = true; Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); return true; })()
 
+# --- one cell, a different word changed on each side (#85) ----------------
+# The merge reads a script cell as words, not as one string: a word changed
+# on disk and another changed here, in the SAME cell, is not a conflict any
+# more. The pane says so ("merged") before anything happens, and the merge
+# does what it said — both words, no card.
+eval (function(){ var s = F.clone(F.state()); s.rows[0].audioText = 'alpha beta gamma delta'; window.__pw = { name: 'words.md', _mtime: Date.now() - 50000, _body: F.buildMarkdown(s), createWritable: async function(){ return { write: async function(d){ window.__pw._body = typeof d === 'string' ? d : await new Blob([d]).text(); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__pw._body], 'words.md', { type: 'text/markdown', lastModified: window.__pw._mtime }); } }; return true; })()
+eval (function(){ return F.openFile(new File([__pw._body], 'words.md', { type: 'text/markdown', lastModified: __pw._mtime }), __pw).then(function(){ return true; }); })()
+wait F.docFile().name === 'words.md'
+expect F.state().rows[0].audioText === 'alpha beta gamma delta' && F.hasDiskBase() === true
+eval (function(){ window.__cards0 = F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length; return true; })()
+eval (function(){ var t = F.clone(F.state()); t.rows[0].audioText = 'alpha beta gamma DISKWORD'; __pw._body = F.buildMarkdown(t); __pw._mtime = Date.now() + 100000; F.state().rows[0].audioText = 'LOCALWORD beta gamma delta'; window.__renderTest.render(); return true; })()
+eval (function(){ F.save(); return true; })()
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+eval (function(){ window.__wordEntry = Array.prototype.filter.call(document.querySelectorAll('#merge-review-list .merge-entry'), function(x){ return x.textContent.indexOf('DISKWORD') !== -1; })[0] || null; return !!__wordEntry; })()
+expect __wordEntry && __wordEntry.getAttribute('data-outcome') === 'merged'
+expect __wordEntry.querySelector('.merge-entry-outcome').textContent.indexOf('combined') !== -1
+expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length === 0
+click #merge-review-confirm
+wait F.state().rows[0].audioText === 'LOCALWORD beta gamma DISKWORD'
+expect F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length === __cards0
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('LOCALWORD beta gamma DISKWORD') !== -1
+eval (function(){ document.getElementById('merge-banner').hidden = true; Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); return true; })()
+
 # --- the same flow through a desktop file handle --------------------------
 # The desktop app has no File System Access API: every local file reaches
 # this code as a makeDesktopHandle() handle over the bridge, so the merge

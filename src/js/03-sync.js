@@ -3,6 +3,7 @@ import { SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
+import { noteRemoteChange } from "./12a-undo.js";
 import { isSha256Hex, normalizeImageRef, refsIn } from "../../shared/blob-policy.js";
 import {
   adoptRestoredState,
@@ -23,11 +24,14 @@ import {
   readSidePanelWidth
 } from "./03b-side-panels.js";
 import { safeId, storedImageHtml } from "./04-richtext.js";
+import { fromHtml, mergeCells, sameCell, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import {
   TAG_STATUSES,
+  ensureTagIds,
   normalizeTagName,
   registryKey,
+  registryTagHooks,
   resetProductionPanelState,
   tagStatus,
   tagStatusRank
@@ -311,6 +315,137 @@ function commentContentEqual(a, b) {
   return true;
 }
 
+/* ---- one script cell, three ways (#85, docs/DOCUMENT-MODEL.md §8) ----
+
+   A cell used to be compared as its HTML string, whole: re-tag a word on
+   one side and fix a typo on the other and the cell was a conflict, with
+   my whole cell on an "Unmerged edit" card. Now each side is read into the
+   document model (04c-doc-model.js) and merged there, a word at a time
+   (mergeCells): only the same words changed differently on both sides are
+   a conflict, and that conflict is handled exactly as before (design D3).
+
+   Each side's HTML names a tag by (category, name), and each side is read
+   through ITS OWN registry, so a tag renamed on one side resolves to the
+   same registry id on all three and a rename alone is not a change to the
+   cell. What is written back names each tag the way the MERGED registry
+   does.
+
+   Strings are only parsed where they differ, and two strings that read as
+   the same cell (a different nesting of the same bold and italic, say) are
+   the same cell: a re-serialisation alone never counts as an edit. */
+
+/* A side's registry as the model's tag hooks. An entry without an id (a
+   base kept from before ids) gets the one ensureTagIds would mint for it,
+   which is the id the other sides minted for the same key. */
+function tagHooksFor(tags) {
+  var list = tags || [];
+  if (list.some(function (t) { return t && !t.id; })) {
+    /* copies: ensureTagIds works in place, and this is a side's document */
+    list = list.map(function (t) { return t && Object.assign({}, t); });
+    ensureTagIds(list);
+  }
+  return registryTagHooks(list);
+}
+
+/* Does the merged registry name any of this side's entries differently (a
+   rename from the other side)? Only then can this side's HTML hold a tag
+   span that needs its name brought up to date. */
+function registryRenamed(sideTags, mergedTags) {
+  var merged = {};
+  (mergedTags || []).forEach(function (t) { if (t && t.id) merged[t.id] = t; });
+  return (sideTags || []).some(function (t) {
+    var m = t && t.id && merged[t.id];
+    return !!m && (m.cat !== t.cat || m.name !== t.name);
+  });
+}
+
+/* Everything mergeTextField() needs about the three registries, built once
+   per merge: each side's hooks, the hooks the result is written with, and
+   which sides' spans may be named out of date. `mergedTags` is the merged
+   registry; left out, it is what mergeProductionTags() makes of the three.
+   A tag the merged registry no longer holds keeps the name a side gave it
+   (theirs first), so a span is never dropped from the text — the heal in
+   migrateRows re-registers it, as it always has. */
+export function textMergeContext(base, mine, theirs, mergedTags) {
+  var baseTags = base && base.productionTags;
+  if (mergedTags === undefined) mergedTags = mergeProductionTags(baseTags, mine.productionTags, theirs.productionTags);
+  var hb = tagHooksFor(baseTags), hm = tagHooksFor(mine.productionTags), ht = tagHooksFor(theirs.productionTags);
+  var hout = registryTagHooks(mergedTags);
+  return {
+    hasBase: !!base,
+    base: hb,
+    mine: hm,
+    theirs: ht,
+    out: {
+      tagId: hout.tagId,
+      tagOf: function (id) { return hout.tagOf(id) || ht.tagOf(id) || hm.tagOf(id) || hb.tagOf(id); }
+    },
+    refit: {
+      mine: registryRenamed(mine.productionTags, mergedTags),
+      theirs: registryRenamed(theirs.productionTags, mergedTags)
+    }
+  };
+}
+
+/* A cell as the model reads it, through one side's registry; `media` says
+   it held a picture or a video card, which the model leaves out (design
+   D7) and so must not be merged through it. */
+function readCell(html, hooks) {
+  var media = false;
+  var cell = fromHtml(html, { tagId: hooks.tagId, onMedia: function () { media = true; } });
+  return { cell: cell, media: media };
+}
+
+/* One side's HTML as it goes into the merged document: unchanged, unless
+   the merged registry renamed a tag it names — then rewritten through the
+   model so its spans carry the new name. */
+function refitCell(html, side, ctx) {
+  if (!ctx.refit[side] || html.indexOf("tag-anchor") === -1) return html;
+  var cell = fromHtml(html, { tagId: ctx[side].tagId });
+  if (sameCell(fromHtml(html, { tagId: ctx.out.tagId }), cell)) return html;
+  return toHtml(cell, { tagOf: ctx.out.tagOf });
+}
+
+/* base (undefined when the row has no ancestor), mine, theirs: a cell's
+   HTML on each side. Returns {html, outcome}: outcome is "same" (no
+   difference that matters), "mine" / "theirs" (only that side changed it),
+   "merged" (both did, and both sets of changes are in html) or "conflict"
+   (both changed the same words: html is theirs, and the caller keeps mine
+   on a card). mergeRow() below and the on-disk merge review
+   (18a-local-merge.js) both decide by this, so the review says exactly
+   what the merge will do. */
+export function mergeTextField(base, mine, theirs, ctx) {
+  var bv = base == null ? "" : String(base), mv = mine == null ? "" : String(mine), tv = theirs == null ? "" : String(theirs);
+  var hasBase = ctx.hasBase && base !== undefined;
+  if (mv === tv) return { html: refitCell(tv, "theirs", ctx), outcome: "same" };
+
+  var M = readCell(mv, ctx.mine), T = readCell(tv, ctx.theirs);
+  var B = !hasBase ? null : bv === mv ? M : bv === tv ? T : readCell(bv, ctx.base);
+  /* A picture or video card in a cell has no place in the model, so any of
+     the three holding one is compared as a string, whole, as before. */
+  if (M.media || T.media || (B && B.media)) {
+    if (hasBase && mv === bv) return { html: tv, outcome: "theirs" };
+    if (hasBase && tv === bv) return { html: mv, outcome: "mine" };
+    return { html: tv, outcome: "conflict" };
+  }
+  if (sameCell(M.cell, T.cell)) return { html: refitCell(tv, "theirs", ctx), outcome: "same" };
+  if (!hasBase) return { html: refitCell(tv, "theirs", ctx), outcome: "conflict" };
+
+  var mineChanged = mv !== bv && !sameCell(M.cell, B.cell);
+  var theirsChanged = tv !== bv && !sameCell(T.cell, B.cell);
+  if (!mineChanged) return { html: refitCell(tv, "theirs", ctx), outcome: "theirs" };
+  if (!theirsChanged) return { html: refitCell(mv, "mine", ctx), outcome: "mine" };
+
+  var r = mergeCells(B.cell, M.cell, T.cell);
+  if (r.conflict) return { html: refitCell(tv, "theirs", ctx), outcome: "conflict" };
+  /* Both changed it and the changes fit together. Where the result is
+     simply one side's cell (the other's change was already in it), that
+     side's own HTML goes in rather than a rewrite of it. */
+  if (sameCell(r.cell, T.cell)) return { html: refitCell(tv, "theirs", ctx), outcome: "theirs" };
+  if (sameCell(r.cell, M.cell)) return { html: refitCell(mv, "mine", ctx), outcome: "mine" };
+  return { html: toHtml(r.cell, { tagOf: ctx.out.tagOf }), outcome: "merged" };
+}
+
 /* Merge `mine` and `theirs`, both descended from `base`.
    Anything that cannot be reconciled is preserved, never dropped. */
 export function mergeStates(base, mine, theirs) {
@@ -321,21 +456,39 @@ export function mergeStates(base, mine, theirs) {
   var merged = [];
   var placed = {};
 
+  /* The registry is merged first, not in its turn below: the cells are
+     written naming their tags the way the merged registry does. */
+  var tagField = STATE_FIELDS.filter(function (f) { return f.key === "productionTags"; })[0];
+  var mergedTags = tagField.mergeList(base && base.productionTags, mine.productionTags, theirs.productionTags);
+  var textCtx = textMergeContext(base, mine, theirs, mergedTags);
+
   function mergeRow(b, m, t) {
-    /* present on both sides — reconcile field by field, each compared by
-       rowFieldKey (the picture by its sha) and taken whole from its side */
+    /* present on both sides — reconcile field by field. The picture is
+       compared by rowFieldKey (its sha) and taken whole from its side; a
+       script cell goes through mergeTextField(), a word at a time. */
     var out = JSON.parse(JSON.stringify(t));
-    var tookMine = false;
+    var tookMine = false, tookTheirs = false;
     ROW_FIELDS.forEach(function (f) {
+      if (f !== "imageRef") {
+        var r = mergeTextField(b ? (b[f] == null ? "" : b[f]) : undefined, m[f], t[f], textCtx);
+        if (r.html !== (t[f] == null ? "" : String(t[f]))) out[f] = r.html;
+        if (r.outcome === "mine" || r.outcome === "merged") tookMine = true;
+        if (r.outcome === "theirs" || r.outcome === "merged" || r.outcome === "conflict") tookTheirs = true;
+        /* both changed the same words: keep theirs live, keep my whole
+           cell intact on a card (design D3) */
+        if (r.outcome === "conflict") conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
+        return;
+      }
       var mv = rowFieldKey(m, f), tv = rowFieldKey(t, f), bv = b ? rowFieldKey(b, f) : null;
       if (mv === tv) return;
-      if (b && mv === bv) return;                                   /* only they changed it */
+      if (b && mv === bv) { tookTheirs = true; return; }            /* only they changed it */
       if (b && tv === bv) {                                         /* only I changed it */
         out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
         tookMine = true;
         return;
       }
       /* both changed the same field: keep theirs live, keep mine intact */
+      tookTheirs = true;
       conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
     });
     /* Status isn't text to reconcile, it's progress to accumulate: if
@@ -343,11 +496,15 @@ export function mergeStates(base, mine, theirs) {
        furthest-along value can never un-shoot something someone filmed. */
     var rank = { todo: 0, ready: 1, shot: 2 };
     out.status = (rank[m.status] || 0) >= (rank[t.status] || 0) ? m.status : t.status;
+    /* A row whose cells combine both sides' words counts as mine: my edit
+       is in it, which is what "rows you edited" reports. With no ancestor
+       nothing can be told apart, and any row they hold counts as theirs,
+       as it always has. */
     if (tookMine) {
       out.updatedAt = nowIso();
       out.updatedBy = getEditorName();
       stats.rowsFromMe++;
-    } else if (!rowContentEqual(b || {}, t)) {
+    } else if (b ? tookTheirs : !rowContentEqual({}, t)) {
       stats.rowsFromThem++;
     }
     return out;
@@ -520,7 +677,7 @@ export function mergeStates(base, mine, theirs) {
          delete from an entry the other side simply never had, so every
          merge resurrected whatever either of us had removed (#61). */
       case "list-union-with-base":
-        out[f.key] = f.mergeList(base && base[f.key], mine[f.key], theirs[f.key]); break;
+        out[f.key] = f === tagField ? mergedTags : f.mergeList(base && base[f.key], mine[f.key], theirs[f.key]); break;
       case "changed-side-wins":
         out[f.key] = mergeChangedSideWins(f, base, mine, theirs); break;
       case "max-plus-one":
@@ -1255,6 +1412,10 @@ export function applyMerge(opts) {
   }
 
   function adopt() {
+    /* Someone else's changes arriving are not an edit of this tab's: the
+       undo stack records what was typed here first, then forgets what the
+       merge changed (design D4), so Ctrl+Z never reverts their words. */
+    noteRemoteChange(next);
     S.state = next;
     /* Before the undo point is armed: noteMergedDocId may have just moved
        this document's history to the merged id, and undoMerge compares what

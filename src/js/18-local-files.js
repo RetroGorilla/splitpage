@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { absorbRemoteChange, flushEdits } from "./12a-undo.js";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import { toggleHideShotScenes } from "./01b-hide-shot.js";
@@ -600,8 +601,11 @@ async function loadFileIntoEditor(file, handle, opts) {
        the rows and the title come back — the breakdown, the cast, the
        b-roll and the comments are this document's own and were never in
        the .docx to begin with. */
+    /* the file changed under us: not an edit of this tab's either */
+    flushEdits();
     S.state.rows = newRows;
     S.state.title = openedTitle;
+    absorbRemoteChange();
   } else {
     S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
     setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
