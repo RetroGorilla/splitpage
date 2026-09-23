@@ -458,3 +458,43 @@ test(".md: a table cell in the model's Markdown reads as unchanged", async () =>
     assert.doesNotMatch(back.rows[0].audioText, /cmt-anchor/);
   });
 });
+
+/* ---- a b-roll shot's hand-added props (#149) ---- */
+
+function withBrollProps() {
+  const s = fixture();
+  s.productionTags.push({ cat: "prop", name: "Drone", owner: "", notes: "", status: "have" });
+  s.rows[1].visualText = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> gulls over the pier';
+  s.brollShots = [{ id: "bs1", name: "gulls over the pier", status: "shot", props: [{ name: "Drone" }, { name: "Bird seed" }] }];
+  return migrateRows(s);
+}
+
+test(".splitpage carries a shot's props, id and name, and they come back the same", () => {
+  const s = withBrollProps();
+  const drone = s.productionTags.find((t) => t.name === "Drone").id;
+  assert.deepEqual(s.brollShots[0].props, [{ id: drone, name: "Drone" }, { id: "", name: "Bird seed" }]);
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  assert.equal(norm(back), norm(s));
+  assert.deepEqual(back.brollShots[0].props, s.brollShots[0].props);
+});
+
+test(".md carries a shot's props in its data block, and they come back the same", () => {
+  const s = withBrollProps();
+  const md = withState(s, buildMarkdownProject);
+  const proj = parseMarkdownProject(md);
+  return withState(proj.state, async () => {
+    const back = await applyMarkdownProject(proj, { noAsk: true });
+    assert.equal(norm(back), norm(s));
+    assert.deepEqual(back.brollShots[0].props, s.brollShots[0].props);
+  });
+});
+
+test("writing a .md lists shots without adding any to the list", () => {
+  /* the breakdown under the table asks which shots need each prop; a line
+     with no record yet must not get one because a file was written */
+  const s = withBrollProps();
+  s.rows[0].visualText = "B-roll: a line nobody has opened the panel for";
+  const before = JSON.stringify(s.brollShots);
+  withState(s, buildMarkdownProject);
+  assert.equal(JSON.stringify(s.brollShots), before);
+});

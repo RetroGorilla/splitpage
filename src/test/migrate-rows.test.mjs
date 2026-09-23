@@ -476,3 +476,51 @@ test("a picture two copies both moved merges into one comment", () => {
   assert.equal(half.comments.filter((c) => c.rowId === "r1" && c.field === "visualText").length, 1);
   assert.equal(half.rows[0].visualText.indexOf("<img"), -1);
 });
+
+/* ---- a shot's hand-added props (#149) ---- */
+
+test("brollShots props: every shot has a list, and garbage is tolerated rather than thrown on", () => {
+  const junk = [null, 42, "Ladder", { name: "" }, { id: "not an id", name: "Rope" }, [], { name: { x: 1 } },
+    { id: "t_zzzz", name: "<b>Tarp</b>" }];
+  const s = doc({ brollShots: [{ id: "b1", name: "Rooftop" }, { id: "b2", name: "Alley", props: junk },
+    { id: "b3", name: "Pier", props: "Kettle" }] });
+  assert.deepEqual(s.brollShots[0].props, [], "a shot from before props gets an empty list");
+  assert.deepEqual(s.brollShots[1].props, [
+    { id: "", name: "Ladder" }, { id: "", name: "Rope" }, { id: "t_zzzz", name: "Tarp" }
+  ]);
+  assert.deepEqual(s.brollShots[2].props, [], "a list that is not a list is none");
+});
+
+test("brollShots props: a name the registry does not know is kept, by name", () => {
+  const s = doc({ productionTags: [{ cat: "prop", name: "Kettle" }],
+    brollShots: [{ id: "b1", name: "Rooftop", props: [{ name: "Drone spare batteries" }] }] });
+  assert.deepEqual(s.brollShots[0].props, [{ id: "", name: "Drone spare batteries" }]);
+});
+
+test("brollShots props: an id takes its entry's current name; a known name takes its entry's id", () => {
+  const s = doc({ productionTags: [{ cat: "prop", name: "Kettle" }, { cat: "gear", name: "Tripod" }] });
+  const kettle = s.productionTags[0].id, tripod = s.productionTags[1].id;
+  const t = doc({ productionTags: s.productionTags, brollShots: [{ id: "b1", name: "Rooftop", props: [
+    { id: kettle, name: "old kettle name" }, { name: "KETTLE" }, { name: "tripod" }
+  ] }] });
+  /* the second is the same prop as the first (by name), and "tripod" is not
+     a prop — a Gear entry of that name is not what a name-only prop means */
+  assert.deepEqual(t.brollShots[0].props, [{ id: kettle, name: "Kettle" }, { id: "", name: "tripod" }]);
+  assert.notEqual(tripod, "");
+});
+
+test("brollShots props: duplicates go, names are bounded, the list is capped", () => {
+  const many = Array.from({ length: 100 }, (_, i) => ({ name: "Prop " + (i % 60) }));
+  many.unshift({ name: "x".repeat(300) });
+  const s = doc({ brollShots: [{ id: "b1", name: "Rooftop", props: many }] });
+  const props = s.brollShots[0].props;
+  assert.equal(props[0].name.length, 80);
+  assert.equal(props.length, 40);
+  assert.equal(new Set(props.map((p) => p.name)).size, props.length);
+});
+
+test("brollShots props: migrating twice changes nothing the second time", () => {
+  const once = doc({ productionTags: [{ cat: "prop", name: "Kettle" }],
+    brollShots: [{ id: "b1", name: "Rooftop", props: [{ name: "kettle" }, { name: "Rope" }, null] }] });
+  assert.deepEqual(migrateRows(JSON.parse(JSON.stringify(once))), once);
+});

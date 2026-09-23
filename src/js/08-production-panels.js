@@ -30,6 +30,7 @@ import {
   tagsByCategory,
   updateProductionBadge
 } from "./07-production-tags.js";
+import { brollShotsByProp } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
@@ -962,6 +963,9 @@ export function saveTagRename(key) {
 
 export function breakdownRows() {
   var out = [];
+  /* the b-roll shots that need each prop (#149), tagged on their lines or
+     added to them by hand */
+  var shotsFor = brollShotsByProp();
   tagsByCategory().forEach(function (g) {
     g.items.forEach(function (item) {
       var scenes = [];
@@ -986,7 +990,8 @@ export function breakdownRows() {
         /* still worth exporting rather than silently dropping — a props
            master reading this later should see it was tracked, not just
            lose it — but flagged rather than left looking like a scene list */
-        scenes: item.orphaned ? ["not in script"] : scenes
+        scenes: item.orphaned ? ["not in script"] : scenes,
+        broll: shotsFor[item.key] || []
       });
     });
   });
@@ -997,7 +1002,9 @@ export function breakdownRows() {
    filters or pivots into a props list, a graphics list or one person's
    pull list in a couple of clicks, and stays a single thing to send. */
 export function buildBreakdownCsv() {
-  var lines = [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes"].join(",")];
+  /* B-roll shots last, so a sheet built on the old columns' positions
+     still lines up */
+  var lines = [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots"].join(",")];
   breakdownRows().forEach(function (r) {
     lines.push([
       csvEscape(r.categoryLabel),
@@ -1007,7 +1014,8 @@ export function buildBreakdownCsv() {
       csvEscape(r.mentions),
       csvEscape(r.scenes.join(" ")),
       csvEscape(r.inScript),
-      csvEscape(r.notes)
+      csvEscape(r.notes),
+      csvEscape(r.broll.join("; "))
     ].join(","));
   });
   if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));

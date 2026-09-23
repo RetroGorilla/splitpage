@@ -62,7 +62,7 @@ expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editab
 # three lines, three items, and none of them still flagged as unanchored
 jsclick #btn-broll
 sleep 500
-expect document.querySelectorAll('#broll-list .tag-entity').length == 3
+expect document.querySelectorAll('#broll-list .broll-row').length == 3
 expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 0
 
 # --- 3) the consequence: a status set on an imported line survives a -----
@@ -70,10 +70,10 @@ expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 0
 # Unanchored, this was the failure the issue measured: the reworded line
 # came back as a new NOT SHOT item and the old record was orphaned as
 # "not in script".
-eval (function(){var h=Array.prototype.filter.call(document.querySelectorAll('#broll-list .tag-entity'),function(e){return e.textContent.indexOf('gulls over the harbour')!==-1;})[0];window.__gullsId=h.getAttribute('data-id');h.querySelector('[data-action="broll-status-toggle"]').click();return window.__gullsId;})()
+eval (function(){var h=Array.prototype.filter.call(document.querySelectorAll('#broll-list .broll-row'),function(e){return e.textContent.indexOf('gulls over the harbour')!==-1;})[0];window.__gullsId=h.getAttribute('data-id');h.querySelector('[data-action="broll-status-toggle"]').click();return window.__gullsId;})()
 sleep 300
-eval (function(){var e=document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"]');return e.querySelector('[data-action="broll-status-toggle"]').textContent;})()
-expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').textContent == Shot
+eval (function(){var e=document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsId+'"]');return e.querySelector('[data-action="broll-status-toggle"]').getAttribute('aria-checked');})()
+expect document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').getAttribute('aria-checked') == true
 
 caret #rows .row:nth-child(3) .visual-cell .cell-editable
 eval (function(){var c=document.querySelector('#rows .row:nth-child(3) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return c.textContent;})()
@@ -82,10 +82,10 @@ click #doc-title
 sleep 900
 
 # same record, same id, still Shot — and nothing orphaned beside it
-expect document.querySelectorAll('#broll-list .tag-entity').length == 3
-expect document.querySelectorAll('#broll-list .tag-orphan-badge').length == 0
-expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"] .tag-entity-name').textContent.indexOf('at dawn') !== -1
-expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').textContent == Shot
+expect document.querySelectorAll('#broll-list .broll-row').length == 3
+expect document.querySelectorAll('#broll-list .broll-orphan-ico').length == 0
+expect document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsId+'"] .broll-row-name').textContent.indexOf('at dawn') !== -1
+expect document.querySelector('#broll-list .broll-row[data-id="'+window.__gullsId+'"] [data-action="broll-status-toggle"]').getAttribute('aria-checked') == true
 
 # --- 4) while a line is still unanchored, the panel says so --------------
 # brollEntryFrom() has always computed `markerless` for exactly this state
@@ -94,7 +94,7 @@ expect document.querySelector('#broll-list .tag-entity[data-id="'+window.__gulls
 # the line unanchored — jsclick deliberately, since it never moves focus.
 caret #rows .row:nth-child(2) .visual-cell .cell-editable
 eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);document.execCommand('delete');var dt=new DataTransfer();dt.setData('text/plain','B-roll: unanchored for now');c.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));return c.textContent;})()
-wait document.querySelectorAll('#broll-list .tag-entity').length === 4
+wait document.querySelectorAll('#broll-list .broll-row').length === 4
 expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length == 0
 expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 1
 

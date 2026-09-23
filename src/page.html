@@ -795,29 +795,63 @@
   <div class="comments-list" id="gear-list"></div>
 </div>
 
-<div class="comments-panel" id="broll-panel" hidden>
+<div class="comments-panel broll-panel" id="broll-panel" hidden>
   <div class="comments-panel-resize-handle" id="broll-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>B-roll</h2>
+    <button type="button" class="broll-head-btn" id="broll-open-page" data-action="broll-open-page"
+      title="Open as a full page" aria-label="Open as a full page"><svg class="broll-ico" width="16" height="16"
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button>
     <button type="button" class="modal-close" id="broll-close" aria-label="Close">×</button>
   </div>
-  <div class="comments-panel-toggle production-controls">
-    <div class="group-seg" id="broll-modes" role="radiogroup" aria-label="Group b-roll by">
-      <button type="button" data-group="flat" role="radio" aria-checked="true">List</button>
-      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
-      <button type="button" data-group="location" role="radio" aria-checked="false">Location</button>
-    </div>
-  </div>
+  <!-- The summary, the filter chips and the Group menu: drawn by
+       renderBroll() (08d-broll-panel.js), since every count in them moves. -->
+  <div class="broll-controls" id="broll-controls"></div>
+  <div class="comments-list broll-list" id="broll-list"></div>
+  <!-- Only there while shots are selected: pinned under the list. -->
+  <div class="broll-bulk" id="broll-bulk" hidden></div>
   <!-- A shot nobody has written a scene for yet is an ordinary thing to
        want on the list — see addBrollFromPanel(). -->
-  <div class="gear-quickadd broll-quickadd">
-    <label for="broll-add-input">Add a shot</label>
-    <div class="gear-quickadd-row">
-      <input type="text" id="broll-add-input" maxlength="200" placeholder="Establisher of the street, blue hour">
+  <div class="broll-add gear-quickadd" id="broll-add">
+    <div class="broll-add-row">
+      <input type="text" id="broll-add-input" maxlength="200" placeholder="Add a shot" aria-label="Add a shot">
       <button type="button" id="broll-add-save">Add</button>
     </div>
+    <div class="broll-add-hint">Or start a line with <code>B-roll:</code> in the Visual column.</div>
   </div>
-  <div class="comments-list" id="broll-list"></div>
+</div>
+
+<!-- The b-roll shot list as a full page over the script (#150,
+     08d-broll-panel.js): the table, the filter chips and the summary are
+     drawn by renderBrollPage(). -->
+<div class="broll-page" id="broll-page" role="dialog" aria-modal="true" aria-labelledby="broll-page-title" hidden>
+  <div class="broll-page-inner">
+    <div class="broll-page-top">
+      <button type="button" class="broll-back" id="broll-page-close" data-action="broll-page-close"><svg class="broll-ico"
+        width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 12H6M11 6l-6 6 6 6"/></svg>Script</button>
+    </div>
+    <div class="broll-page-head">
+      <div class="broll-page-titles">
+        <h1 id="broll-page-title">B-roll shot list</h1>
+        <div class="broll-page-summary" id="broll-page-summary"></div>
+      </div>
+      <div class="broll-page-actions">
+        <label class="broll-page-group-pick">Group
+          <select id="broll-page-group">
+            <option value="location">Location</option>
+            <option value="scene">Scene</option>
+            <option value="person">Person</option>
+          </select>
+        </label>
+        <button type="button" class="broll-page-btn" data-action="broll-page-csv" title="Download the shot list as a spreadsheet">CSV</button>
+        <button type="button" class="broll-page-btn is-dark" data-action="broll-page-print" title="A PDF of the list as shown, to print">Print shot list</button>
+      </div>
+    </div>
+    <div class="broll-page-filters" id="broll-page-filters"></div>
+    <div class="broll-page-card" id="broll-page-table"></div>
+  </div>
 </div>
 
 <div class="modal-backdrop" id="server-modal" hidden>
