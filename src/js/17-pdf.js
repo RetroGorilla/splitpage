@@ -542,34 +542,59 @@ export function buildPdf(jpegs, commentJpegs) {
          replies still ran straight past the margin with no further
          check, silently losing whatever text landed below it. This
          mirrors how the scene-row loop above already paginates. */
-      var threadLines = [];
-      headerLines.forEach(function (l) { threadLines.push({ line: l, x: M }); });
-      quoteLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
-      bodyItems.forEach(function (b) { threadLines.push(b); });
+      /* Each line carries its block — the header, the quote, the body, a
+         reply's header, a reply's body — so the layout can tell a wrapped
+         line from the start of the next part. */
+      var threadLines = [], block = 0;
+      function addBlock(items, x) {
+        block++;
+        items.forEach(function (it) {
+          threadLines.push(it.pic ? it : { line: it.line || it, x: it.line ? it.x : x, block: block });
+        });
+      }
+      addBlock(headerLines, M);
+      addBlock(quoteLines, M + 12);
+      addBlock(bodyItems);
       replyBlocks.forEach(function (rb) {
-        rb.headerLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
-        rb.bodyItems.forEach(function (b) { threadLines.push(b); });
+        addBlock(rb.headerLines, M + 24);
+        addBlock(rb.bodyItems);
       });
 
       /* `need`: how far below y the next thing reaches — a line's LEAD,
-         or a picture's gap and height (commentBodyItems). */
+         or a picture's gap and height (commentBodyItems). Returns whether
+         it started a new page. */
       function ensureCommentRoom(need) {
         if (y - (need || LEAD) < M) {
           newPage(); y -= 6;
           text("Comments (continued)", M, y - 12, "F2", 12);
           y -= 34;
+          return true;
         }
+        return false;
       }
 
+      /* After a line y is its baseline - LEAD (what drawLines returns).
+         The next line of the same block goes LEAD under it — baseline y —
+         as the lines of a scene's text do; the first line of a block, or
+         the first after a picture or a page break, goes SIZE lower still
+         (baseline y - SIZE), the gap between the parts of a thread that
+         predates the line-by-line room check. That check drew every line
+         as a block's first, so a wrapped comment was spaced SIZE + LEAD
+         (22.5pt) a line rather than LEAD (13pt). Either way the line's
+         LEAD - SIZE of descender room below its baseline must clear M. */
+      var prevBlock = 0;
       ensureCommentRoom();
       threadLines.forEach(function (b) {
         if (b.pic) {
           ensureCommentRoom(CIMG_ABOVE + b.pic.h);
           drawCommentPic(b.pic, b.x);
+          prevBlock = 0;
           return;
         }
-        ensureCommentRoom();
-        y = drawLines([b.line], b.x, y - SIZE);
+        var follows = b.block === prevBlock;
+        if (ensureCommentRoom(follows ? LEAD - SIZE : LEAD)) follows = false;
+        y = drawLines([b.line], b.x, follows ? y : y - SIZE);
+        prevBlock = b.block;
       });
       y -= 6;
       ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 4).toFixed(2) + " m " +
