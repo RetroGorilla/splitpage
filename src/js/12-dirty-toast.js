@@ -226,6 +226,28 @@ export function showToast(msg, kind, sticky) {
   return el;
 }
 
+/* A toast with one action button beside its words ("Undo"), up a little
+   longer than a plain one so there is time to reach it. The button runs
+   onAction once and takes the toast away. */
+export function showActionToast(msg, kind, label, onAction) {
+  var el = showToast(msg, kind, true);
+  el.classList.remove("is-sticky");
+  el.removeAttribute("title");
+  el.classList.add("has-action");
+  var btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "toast-action";
+  btn.textContent = label;
+  btn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    el.dismiss();
+    onAction();
+  });
+  el.appendChild(btn);
+  setTimeout(el.dismiss, 6000);
+  return el;
+}
+
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {}

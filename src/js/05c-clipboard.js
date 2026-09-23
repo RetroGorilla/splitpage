@@ -1,8 +1,9 @@
 import { S } from "./_state.js";
-import { makeId } from "./02-state.js";
+import { escapeHtml, makeId } from "./02-state.js";
 import { randomHexBytes } from "./02b-doc-id.js";
-import { findRowIndex } from "./03-sync.js";
-import { inertBody, storedHtmlFromDom } from "./04-richtext.js";
+import { internDataUrl, persist } from "./02c-blobs.js";
+import { findRowIndex, getEditorName } from "./03-sync.js";
+import { buildVideoCardEl, imageRefOf, inertBody, safeHref, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
   cellLength,
   cellOf,
@@ -19,6 +20,8 @@ import {
 } from "./04c-doc-model.js";
 import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { recordPastedBroll } from "./08c-broll.js";
+import { markDirty } from "./12-dirty-toast.js";
+import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 
 /* ================= copy, cut, paste and drop in a script cell (#85, design §5) =================
 
@@ -43,8 +46,11 @@ import { recordPastedBroll } from "./08c-broll.js";
      into a cell with fromHtml — the sanitiser first, so nothing foreign
      gets in — and replace the selection with it as one model edit
      (editCell): one undo entry, the caret after what was pasted. Pictures
-     and video cards are dropped (D7): a script cell holds words, and a
-     comment or the scene picture is where a picture goes.
+     and video cards never go in the cell (D7): a script cell holds words.
+     Since #124 they are not dropped either: each picture, video card,
+     video link or video file becomes a comment on that scene and column —
+     the shape moveMediaOutOfCell (02-state.js) gives an old cell's — in
+     the same undo entry as the words that came with it.
    - A pasted B-ROLL KEY gets an id of its own whenever the document
      already knows its id; only a cut moving it keeps it (freshBrollIds,
      below).
@@ -87,17 +93,116 @@ export function cutNonceIn(html) {
   return m ? m[1] : null;
 }
 
-/* The clipboard's HTML without its pictures and video cards, counted, and
-   whether it ends in a paragraph. Taken out BEFORE the sanitiser sees
-   them: it would intern an inline data: picture (hash it, queue its bytes
-   for storage) only for the model to drop it. */
-function prepareHtml(html) {
+/* ---- what a paste attaches to its scene (#124) ----
+
+   A picture, a video card, a link to a video or a video file pasted or
+   dropped into a script cell is not script (D7), and not thrown away
+   either: it is attached to the scene as a comment on that row and
+   column. An item is {kind: "image", ref} (a registry record, #82),
+   {kind: "video", href} or {kind: "videoFile", name, size}.
+
+   A link counts as a video when it is on a host video cards are made for
+   (VIDEO_HOSTS) or names a video file. A video card is one whatever its
+   link: someone made it one. */
+var VIDEO_HOSTS = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com|loom\.com|dailymotion\.com|dai\.ly|wistia\.com|wistia\.net|wi\.st|twitch\.tv|tiktok\.com|streamable\.com|frame\.io|f\.io|vidyard\.com)$/i;
+var VIDEO_FILE_PATH = /\.(mp4|m4v|mov|webm|mkv|avi|ogv)$/i;
+var URL_RE = /https?:\/\/[^\s<>"]+/gi;
+
+/* The link, made safe, when it is a video's; else null. */
+export function videoLink(href) {
+  var safe = safeHref(String(href == null ? "" : href));
+  if (!safe || !/^https?:\/\//i.test(safe)) return null;
+  try {
+    var u = new URL(safe);
+    return VIDEO_HOSTS.test(u.hostname) || VIDEO_FILE_PATH.test(u.pathname) ? safe : null;
+  } catch (e) { return null; }
+}
+
+/* A URL as it stands in text, without the punctuation that ends a sentence. */
+function urlInText(u) {
+  return videoLink(u.replace(/[.,;:!?)\]]+$/, ""));
+}
+
+/* An address without its scheme, "www." or a closing slash: how a link
+   whose words are its own address may spell it. */
+function bareUrl(u) {
+  return String(u).trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "").toLowerCase();
+}
+
+/* A key per distinct thing attached, so one paste attaches each once. */
+function attachKey(item) {
+  if (item.kind === "image") return "img:" + item.ref.sha256;
+  if (item.kind === "video") return "video:" + item.href;
+  return "file:" + item.name + ":" + item.size;
+}
+
+export function addAttachment(list, item) {
+  var key = attachKey(item);
+  if (!list.some(function (x) { return attachKey(x) === key; })) list.push(item);
+  return list;
+}
+
+/* Plain text's video links: {text, links}. Links standing on their own —
+   the whole paste is links and space, a URL copied from the address bar —
+   are the attachment and nothing else, so text comes back empty; links
+   inside other words stay in the words, and are attached as well. */
+export function videoLinksInText(text) {
+  var t = String(text == null ? "" : text);
+  var links = [];
+  (t.match(URL_RE) || []).forEach(function (u) {
+    var v = urlInText(u);
+    if (v && links.indexOf(v) === -1) links.push(v);
+  });
+  if (!links.length) return { text: t, links: links };
+  var rest = t.replace(URL_RE, function (u) { return urlInText(u) ? "" : u; });
+  return { text: /\S/.test(rest) ? t : "", links: links };
+}
+
+/* The clipboard's HTML without its pictures and videos — listed in
+   `attach`, counted in `media`, and `lost` counting the pictures that only
+   name one on the web, which cannot be kept — and whether it ends in a
+   paragraph. Taken out BEFORE fromHtml: the model has no place for them.
+   opts.skipImages: the paste carries its pictures as files too, and the
+   files are what is attached. */
+function prepareHtml(html, opts) {
+  opts = opts || {};
   var body = inertBody(html);
-  var media = 0;
-  Array.prototype.forEach.call(body.querySelectorAll("img, picture, video, a.video-embed-card"), function (el) {
+  var media = 0, lost = 0;
+  var attach = [];
+  Array.prototype.forEach.call(body.querySelectorAll("img"), function (el) {
+    media++;
+    if (!opts.skipImages) {
+      /* the sanitiser's own reading (#82): a known sha, or an inline
+         picture interned; an http src is neither */
+      var ref = imageRefOf(el);
+      if (ref) addAttachment(attach, { kind: "image", ref: ref });
+      else lost++;
+    }
+    if (el.parentNode) el.parentNode.removeChild(el);
+  });
+  Array.prototype.forEach.call(body.querySelectorAll("a[href]"), function (el) {
     if (!el.parentNode) return;
-    if (el.tagName === "IMG" || el.tagName === "A") media++;
+    var card = el.classList.contains("video-embed-card");
+    var href = card ? safeHref(el.getAttribute("href") || "") : videoLink(el.getAttribute("href"));
+    if (href && !/^https?:/i.test(href)) href = null;
+    if (!href && !card) return;
+    media++;
+    if (href) addAttachment(attach, { kind: "video", href: href });
+    /* A card, or a link whose words are only its own address, IS the
+       video; a link on other words keeps them, as a link. */
+    var words = (el.textContent || "").trim();
+    if (card || !href || !words || bareUrl(words) === bareUrl(href)) el.parentNode.removeChild(el);
+  });
+  Array.prototype.forEach.call(body.querySelectorAll("video"), function (el) {
+    if (!el.parentNode) return;
+    media++;
+    var source = el.querySelector("source[src]");
+    var href = safeHref(el.getAttribute("src") || (source ? source.getAttribute("src") : "") || "");
+    if (href && /^https?:/i.test(href)) addAttachment(attach, { kind: "video", href: href });
     el.parentNode.removeChild(el);
+  });
+  Array.prototype.forEach.call(body.querySelectorAll("picture"), function (el) {
+    if (el.parentNode) el.parentNode.removeChild(el);
   });
   /* What a word processor or a page puts on the clipboard beside the
      words — a style sheet, a script, a title — is not words anyone
@@ -116,34 +221,85 @@ function prepareHtml(html) {
     last = body.lastChild;
   }
   var endsInBlock = !!(last && last.nodeType === 1 && (last.tagName === "P" || last.tagName === "DIV"));
-  return { html: body.innerHTML, media: media, endsInBlock: endsInBlock };
+  return { html: body.innerHTML, media: media, lost: lost, attach: attach, endsInBlock: endsInBlock };
 }
 
 /* What a paste or a drop inserts, from the clipboard's HTML (or, when
    that gives nothing, its plain text):
-     {cell, text, media, fromCut, comments}
+     {cell, text, media, lost, attach, fromCut, comments}
    text is non-null when it came from the plain text, which is inserted as
    typing is (taking on the formatting where it lands); cell is what goes
-   in otherwise. media is how many pictures and video cards were dropped.
-   fromCut: the HTML is this tab's live cut (opts.nonce), and only then do
-   comment marks survive — the ones opts.hasComment(id) knows, listed in
-   comments. */
+   in otherwise. media is how many pictures and videos the HTML had, attach
+   what is to be attached to the scene (above), lost the pictures that
+   cannot be. fromCut: the HTML is this tab's live cut (opts.nonce), and
+   only then do comment marks survive — the ones opts.hasComment(id)
+   knows, listed in comments. opts.skipImages: see prepareHtml. */
 export function cellFromClipboard(html, text, opts) {
   opts = opts || {};
-  var media = 0;
+  var media = 0, lost = 0;
+  var attach = [];
   if (html) {
     var raw = String(html);
     var fromCut = !!(opts.nonce && cutNonceIn(raw) === opts.nonce);
-    var prep = prepareHtml(raw);
+    var prep = prepareHtml(raw, opts);
     media = prep.media;
+    lost = prep.lost;
+    attach = prep.attach;
     var cell = fromHtml(prep.html, { hasComment: fromCut ? (opts.hasComment || always) : never });
     if (prep.endsInBlock && projection(cell).slice(-1) === "\n") cell = sliceCell(cell, 0, cellLength(cell) - 1);
     if (cellLength(cell)) {
-      return { cell: cell, text: null, media: media, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
+      return { cell: cell, text: null, media: media, lost: lost, attach: attach, fromCut: fromCut, comments: fromCut ? commentIds(cell) : [] };
     }
   }
-  var t = text == null ? "" : String(text);
-  return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, fromCut: false, comments: [] };
+  /* A link to a video, as plain text, is attached; so is one the HTML
+     gave as a link, whose plain text is its address. */
+  var vt = videoLinksInText(text);
+  vt.links.forEach(function (href) { addAttachment(attach, { kind: "video", href: href }); });
+  var t = vt.text;
+  return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
+}
+
+/* The comment attaching one item to a scene's column: what
+   moveMediaOutOfCell (02-state.js) makes of a picture found in a cell,
+   but made by the person pasting, now, with an id of its own. Not
+   anchored to any words — none were chosen. */
+export function attachmentComment(rowId, field, item, author, at) {
+  var body;
+  if (item.kind === "image") {
+    body = storedImageHtml(item.ref) || '<img class="comment-img" data-blob="' + item.ref.sha256 + '">';
+  } else if (item.kind === "video") {
+    body = buildVideoCardEl(item.href).outerHTML;
+  } else {
+    /* A video file has no address a card could open, and its bytes are
+       not the document's to carry (a picture's are; a video's are far too
+       big): the comment names it, for whoever has the file. */
+    body = "Video file: <strong>" + escapeHtml(item.name || "video") + "</strong>" +
+      (item.size ? " (" + fileSizeLabel(item.size) + ")" : "") + " — the file itself is not kept in the document.";
+  }
+  var id = makeId("c");
+  return {
+    id: id,
+    rowId: rowId,
+    field: field,
+    anchorId: id,
+    quotedText: "",
+    author: author || "Anonymous",
+    body: body,
+    resolved: false,
+    resolvedBy: null,
+    resolvedAt: null,
+    assignee: "",
+    createdAt: at,
+    updatedAt: at,
+    kind: "anchor",
+    replies: []
+  };
+}
+
+function fileSizeLabel(n) {
+  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + " GB";
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+  return Math.max(1, Math.round(n / 1024)) + " KB";
 }
 
 /* ---- b-roll keys: one id, one line ----
@@ -275,17 +431,45 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
 }
 
 /* A paste or a drop into a script cell, replacing the selection (or at the
-   end of the cell when the selection is elsewhere). Returns
-     {done, cellEl, media, movedComments}
-   done false means nothing went in: the cell holds a picture or a video
-   card, which editCell does not edit (05b-cell-edit.js) and which no cell
-   does since design D7. */
-export function pasteIntoCell(cellEl, html, text) {
-  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs });
-  var result = { done: true, cellEl: cellEl, media: got.media, movedComments: false };
-  if (!cellLength(got.cell)) return result;
+   end of the cell when the selection is elsewhere). `extra` (optional):
+   {attach, skipImages} — what the clipboard's files gave (the DOM caller
+   reads them, readClipboardFiles below), and whether its pictures replace
+   the HTML's. Returns
+     {done, cellEl, media, lost, attached, rowIndex, field, movedComments}
+   attached: the comments made for the pictures and videos, on this
+   scene's column, in the same undo entry as the words (#124). done false
+   means nothing went in: the cell holds a picture or a video card, which
+   editCell does not edit (05b-cell-edit.js) and which no cell does since
+   design D7. */
+export function pasteIntoCell(cellEl, html, text, extra) {
+  extra = extra || {};
+  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs, skipImages: !!extra.skipImages });
+  var attach = (extra.attach || []).slice();
+  got.attach.forEach(function (item) { addAttachment(attach, item); });
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
+  var result = { done: true, cellEl: cellEl, media: got.media, lost: got.lost, attached: [],
+                 rowIndex: findRowIndex(rowId), field: field, movedComments: false };
+  function attachAll() {
+    var at = new Date().toISOString();
+    var author = getEditorName();
+    attach.forEach(function (item) {
+      var c = attachmentComment(rowId, field, item, author, at);
+      S.state.comments.push(c);
+      result.attached.push(c);
+    });
+  }
+  if (!cellLength(got.cell)) {
+    if (!attach.length || result.rowIndex === -1) return result;
+    /* Nothing but what is attached: one edit of its own, as editCell
+       would make it — whatever was typed a moment ago is its own entry. */
+    breakUndoCoalescing();
+    attachAll();
+    markDirty();
+    flushEdits();
+    breakUndoCoalescing();
+    return result;
+  }
   var fresh = editCell(cellEl, function (cell, sel) {
     var from = sel ? sel.from : cellLength(cell);
     var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
@@ -302,13 +486,17 @@ export function pasteIntoCell(cellEl, html, text) {
        cell as one undo entry (editCell's also, run once the pasted cell is
        in state, where syncCommentAnchors finds its marks). A cut of part
        of a comment's words leaves the rest marked where they were, and the
-       comment points at whichever comes first in the script. */
+       comment points at whichever comes first in the script. What the
+       paste attaches goes in the same entry. */
     var also = null;
-    if (got.fromCut) {
+    if (got.fromCut || attach.length) {
       also = function () {
-        cutNonce = null;
-        if (got.comments.length) syncCommentAnchors(S.state);
-        result.movedComments = got.comments.length > 0;
+        if (got.fromCut) {
+          cutNonce = null;
+          if (got.comments.length) syncCommentAnchors(S.state);
+          result.movedComments = got.comments.length > 0;
+        }
+        attachAll();
       };
     }
     return { cell: next, sel: { from: at, to: at }, also: also };
@@ -319,6 +507,47 @@ export function pasteIntoCell(cellEl, html, text) {
   }
   result.cellEl = fresh;
   return result;
+}
+
+/* What a paste's or a drop's files attach (#124), as a promise of
+   {attach, skipImages}: each picture made small and put in the image
+   registry the way the comment composer's Image button does it (#82), each
+   video file by its name. skipImages is true when a picture came as a
+   file — the HTML beside it (a picture copied from a page) names the same
+   one. Anything else is not this paste's to attach. */
+export function readClipboardFiles(files, compress) {
+  var list = Array.prototype.slice.call(files || []);
+  var attach = [];
+  var skipImages = false;
+  var jobs = list.map(function (file) {
+    var type = String(file && file.type || "");
+    if (type.indexOf("video/") === 0) {
+      attach.push({ kind: "videoFile", name: String(file.name || ""), size: file.size || 0 });
+      return Promise.resolve();
+    }
+    if (type.indexOf("image/") !== 0) return Promise.resolve();
+    skipImages = true;
+    var slot = attach.length;
+    attach.push(null);
+    return compress(file, 700, 0.72).then(function (dataUrl) {
+      var rec = internDataUrl(dataUrl);
+      if (!rec) return;
+      persist([rec.sha256]);
+      attach[slot] = { kind: "image", ref: rec };
+    }, function () {});
+  });
+  return Promise.all(jobs).then(function () {
+    var kept = attach.filter(Boolean);
+    /* lost: pictures that would not read as one */
+    return { attach: kept, skipImages: skipImages, lost: attach.length - kept.length };
+  });
+}
+
+/* Whether a paste or a drop carries files this attaches. */
+export function hasMediaFiles(files) {
+  return Array.prototype.some.call(files || [], function (f) {
+    return /^(image|video)\//.test(String(f && f.type || ""));
+  });
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
