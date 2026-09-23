@@ -23,6 +23,7 @@
  */
 
 import http from "node:http";
+import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -169,10 +170,31 @@ function findBrowser() {
   throw new Error("no Chromium/Edge found — pass --chrome <path> or set SPLITPAGE_CHROME");
 }
 
+/* True when something already accepts connections on 127.0.0.1:port. */
+function portInUse(port) {
+  return new Promise((resolve) => {
+    const s = net.connect({ port, host: "127.0.0.1" });
+    s.setTimeout(1000, () => { s.destroy(); resolve(false); });
+    s.once("connect", () => { s.destroy(); resolve(true); });
+    s.once("error", () => resolve(false));
+  });
+}
+
 let browserProc = null;
 let userDataDir = null;
-function startBrowser() {
+async function startBrowser() {
   if (browserProc) return;
+  // A browser still holding --cdp-port (a leftover from an earlier run, most
+  // often) would answer /json/list in place of ours: connectCdp attaches to
+  // it and every command then times out. Refuse up front instead.
+  if (await portInUse(opts.cdpPort)) {
+    const e = new Error(
+      `CDP port ${opts.cdpPort} is already in use, probably by a browser left over from an earlier run. ` +
+      `Pass a different --cdp-port, or close whatever holds it` +
+      (process.platform === "win32" ? " (see \"Orphaned browsers\" in SKILL.md)." : "."));
+    e.fatal = true;
+    throw e;
+  }
   const exe = findBrowser();
   userDataDir = path.join(os.tmpdir(), `splitpage-edge-${opts.runId}-${Math.random().toString(16).slice(2, 10)}`);
   const args = [
@@ -196,6 +218,40 @@ function startBrowser() {
   browserProc = spawn(exe, args, { stdio: ["ignore", "ignore", "ignore"], detached: false });
   browserProc.on("error", (e) => { throw new Error(`failed to launch ${exe}: ${e.message}`); });
   log(`browser pid=${browserProc.pid} exe=${exe} cdp=${opts.cdpPort} headless=${!opts.headed}`);
+}
+
+/* On Windows, killing the msedge.exe we spawned does not take down the real
+   browser tree: it lives on, keeps --remote-debugging-port, and the next run
+   on that port attaches to it. Stop every msedge.exe whose command line
+   carries THIS run's profile directory. Never match by name alone, which
+   would close the user's own Edge. Mirrors driver.ps1's sweep. */
+function sweepBrowsers(dir) {
+  if (process.platform !== "win32" || !dir) return;
+  // The directory goes in through the environment, not the command string, so
+  // nothing in it can be read as PowerShell. .Contains is a literal match
+  // (-like would treat [ ] in a --run-id as wildcards). A second pass catches
+  // any child that started while the first one was stopping its parent.
+  const ps = [
+    "$d = $env:SPLITPAGE_SWEEP_DIR",
+    "for ($i = 0; $i -lt 3; $i++) {",
+    "  $p = @(Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" -ErrorAction Stop |",
+    "    Where-Object { $_.CommandLine -and $_.CommandLine.Contains($d) })",
+    "  if ($p.Count -eq 0) { break }",
+    "  $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+    "  Start-Sleep -Milliseconds 300",
+    "}",
+  ].join("\n");
+  try {
+    // -EncodedCommand (UTF-16LE base64) sidesteps Windows argument quoting,
+    // which mangles the embedded quotes and newlines of a plain -Command.
+    const enc = Buffer.from(ps, "utf16le").toString("base64");
+    execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", enc], {
+      stdio: "ignore", timeout: 30000,
+      env: { ...process.env, SPLITPAGE_SWEEP_DIR: path.basename(dir) },
+    });
+  } catch (e) {
+    log(`browser sweep failed: ${e.message}`);
+  }
 }
 
 /* ------------------------------------------------------------------ cdp */
@@ -586,7 +642,7 @@ async function invokeLine(line) {
   const rest = i < 0 ? "" : line.slice(i + 1);
   switch (cmd.toLowerCase()) {
     case "open":
-      await startServer(); startBrowser(); await connectCdp();
+      await startServer(); await startBrowser(); await connectCdp();
       await go(rest || "/index.html");
       break;
     case "goto": await go(rest); break;
@@ -657,7 +713,11 @@ async function main() {
     }
     for (const line of lines) {
       try { if (!(await invokeLine(line))) break; }
-      catch (e) { out1(`ERROR: ${e.message}`); failures++; exit = 1; }
+      catch (e) {
+        out1(`ERROR: ${e.message}`); failures++; exit = 1;
+        // Nothing after this line could run; don't print a FAIL per command.
+        if (e.fatal) break;
+      }
     }
     // A run that asserted nothing is a run that proved nothing.
     if (checks === 0 && failures === 0) {
@@ -678,6 +738,7 @@ async function main() {
   } finally {
     try { ws?.close(); } catch {}
     if (browserProc) { try { browserProc.kill("SIGKILL"); } catch {} }
+    sweepBrowsers(userDataDir);
     if (server) { try { server.close(); } catch {} }
     if (userDataDir) {
       await sleep(300);

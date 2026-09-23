@@ -534,7 +534,22 @@ the app.
   by the `splitpage-edge-*` profile directory (never by process name — that
   would close the browser you are reading this in). If you see
   `The WebSocket is in an invalid state ('Aborted')` on the *first* command of
-  a suite, check for leftovers before suspecting the app:
+  a suite, check for leftovers before suspecting the app.
+
+  `driver.mjs` on Windows had the same leak: `browserProc.kill("SIGKILL")`
+  does not reach Edge's real process tree, which kept holding
+  `--remote-debugging-port`. The next run on that `--cdp-port` attached to the
+  OLD browser and every command timed out (`CDP Page.navigate timed out after
+  30000ms`, `FAIL (timeout) document.querySelectorAll('#rows .row').length > 0`).
+  It now does what `driver.ps1` does: after the kill, on win32 only, it stops
+  every `msedge.exe` whose command line contains its own
+  `splitpage-edge-<runId>-<rand>` profile directory, then deletes the
+  directory. On every platform it also checks `--cdp-port` before launching
+  the browser and stops with `ERROR: CDP port <n> is already in use` if
+  anything is listening there, rather than attaching to a stranger. That error
+  means a leftover browser (a driver killed before its cleanup ran, such as by
+  Ctrl+C or a closed pipe, can still leave one) or another run on the same
+  port: pick another `--cdp-port`, or count the leftovers:
 
   ```bash
   powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { \$_.CommandLine -like '*splitpage-edge-*' }).Count"
