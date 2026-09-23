@@ -1,0 +1,19 @@
+# Pasting from Google Docs does not bold the whole paste (#121).
+# Google Docs wraps its clipboard fragment in a <b style="font-weight:normal"
+# id="docs-internal-guid-...">, with real bold/italic runs as separate
+# <span style="font-weight:700"> / <span style="font-style:italic"> spans
+# inside it. The sanitiser (04-richtext.js) must let that inline style
+# cancel the tag's own boldness rather than reading <b> alone as bold.
+# Run:  driver.ps1 -Script .claude/skills/run-splitpage-app/tests/86-gdocs-paste-bold.txt
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+eval (function(){ window.cell = document.querySelector('#rows .row .audio-cell .cell-editable'); cell.focus(); var s = getSelection(); var r = document.createRange(); r.selectNodeContents(cell); r.collapse(false); s.removeAllRanges(); s.addRange(r); return true; })()
+eval (function(){ var dt = new DataTransfer(); dt.setData('text/html', '<b style="font-weight:normal;" id="docs-internal-guid-x"><span style="font-weight:700;">GBOLD</span><span style="font-weight:400;"> plain </span><span style="font-style:italic;font-weight:400;">GITAL</span></b>'); dt.setData('text/plain', 'GBOLD plain GITAL'); var ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }); cell.dispatchEvent(ev); return ev.defaultPrevented; })()
+wait cell.innerHTML.indexOf('<strong>GBOLD</strong>') !== -1
+expect cell.innerHTML.indexOf('GBOLD plain') === -1
+expect cell.innerHTML.indexOf('<em>GITAL</em>') !== -1
+expect cell.innerHTML.indexOf('docs-internal-guid') === -1
+
+logs

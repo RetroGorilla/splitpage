@@ -93,6 +93,15 @@ test("a paste is sanitised, keeps formatting and tags, and drops pictures and vi
   assert.equal(projection(onlyPic.cell), "");
 });
 
+test("a Google Docs fragment's font-weight:normal wrapper cancels its own <b>, not its bold spans (#121)", () => {
+  const html = '<b style="font-weight:normal;" id="docs-internal-guid-x">' +
+    '<span style="font-weight:700;">GBOLD</span>' +
+    '<span style="font-weight:400;"> plain </span>' +
+    '<span style="font-style:italic;font-weight:400;">GITAL</span></b>';
+  const got = cellFromClipboard(html, "ignored", {});
+  assert.equal(toHtml(got.cell), "<strong>GBOLD</strong> plain <em>GITAL</em>");
+});
+
 test("plain text goes in as typing, a line break as a line break", () => {
   const got = cellFromClipboard("", "one\r\ntwo", {});
   assert.equal(got.text, "one\r\ntwo");
