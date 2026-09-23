@@ -443,14 +443,17 @@ sides:
      `git merge-file`)
    - then merge marks per character of the words neither side changed: a mark added or removed on one side is
      applied to the result, and if both sides set the same mark to
-     different values, theirs wins and it is reported
+     different values (only a link or a tag has a value), theirs wins and
+     it is reported as a conflict (step 3)
 3. Only overlapping token ranges changed on both sides are a conflict. A
    rewrite so large on both sides that the word diff would need more than
    4 million table cells (a few thousand words each) is treated as one
    conflicting change instead. For
    those, theirs stays live, and the conflict card holds **my version of
    the whole cell**, as today (D3). "Use my version" restores it as one
-   undoable step.
+   undoable step. A link or tag both sides set differently on the same
+   characters is a conflict too, with the same card; there the merged cell
+   stays live, their link or tag on those characters.
 
 This fixes the named case: a tag re-wrap (marks only) on one side plus a
 word edit on the other merges cleanly. The on-disk merge review
@@ -493,9 +496,21 @@ changes are combined"). What building it settled:
   ("rows you edited"): my edit is in it. `rowsFromThem` now counts rows
   where their change was actually taken (by model), not every row whose
   string differs from base.
-- **Not done:** a mark both sides set differently goes to theirs, but
-  `mergeCells`' `markConflicts` count is not surfaced anywhere yet. Rows
-  only one side has (added, or kept over a delete) are still copied as
+- **A link or tag both sides set differently is a conflict.** On those
+  characters `mergeCells` keeps theirs and counts it in `markConflicts`;
+  `mergeTextField` turns a count above zero into outcome `conflict` (with
+  `marks: true`), so every caller of it reports it the way it reports a
+  word conflict: `mergeRow` puts my whole cell on an "Unmerged edit" card
+  (D3), which covers the hosted save's 409, the presence-heartbeat pull and
+  the crash-draft and stash merges, and the on-disk review lists it as a
+  conflict, worded as a link or tag. The difference from a word conflict
+  is what stays live: the merged cell (their link or tag, everything else
+  from both sides), not theirs whole, and if my other edits are in it the
+  row counts in `rowsFromMe`. Formatting (bold and the rest) is on or off
+  per character, so it can never conflict; a comment anchor neither. The
+  live HTML is what it was before this was reported, so what the merge
+  touches, and so what undo forgets (D4), is unchanged.
+- **Not done:** rows only one side has (added, or kept over a delete) are still copied as
   they are, so one added on my side still names a tag by the name my
   registry had, even if theirs renamed it; the heal registers that name
   again beside the renamed entry, as it always did.

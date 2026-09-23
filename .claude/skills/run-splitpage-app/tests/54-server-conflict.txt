@@ -204,4 +204,64 @@ expect document.getElementById('merge-undo').hidden
 expect document.getElementById('merge-summary').textContent.indexOf('Undo merge') === -1
 expect window.__puts.length === 8
 
+# --- a link both sides set differently is a conflict, not a silent loss ---
+# The cell merges a word at a time (#85), and a link on a word neither side
+# otherwise changed is merged per character: one side's link is kept. Both
+# sides linking the SAME word to DIFFERENT places used to keep theirs and
+# report nothing, so my link was gone without a trace. Now it takes the
+# conflict path: the merged cell is live (their link, every other change
+# combined), my whole cell is on an "Unmerged edit" card (design D3), and
+# "Use my version" puts it back. First a clean save, so both sides start
+# from the same plain words.
+eval (function(){ Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); document.getElementById('merge-banner').hidden = true; F.state().rows[0].visualText = 'see the docs today'; F.state().rows[1].visualText = 'read the notes'; window.__renderTest.render(); window.__answers = [ {status:200, body:{id:'doc-409', rev:13, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return true; })()
+eval (async function(){ await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 9
+expect window.__hostedTest.home().rev === 13
+expect window.__hostedTest.base().rows[0].visualText === 'see the docs today'
+
+# mine: the word linked here, and a word changed elsewhere in the cell;
+# theirs: the same word linked somewhere else
+eval (function(){ window.__cards0 = F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length; F.state().rows[0].visualText = 'see the <a href="https://mine.example/" target="_blank" rel="noopener">docs</a> tomorrow'; window.__renderTest.render(); var t = F.clone(window.__puts[8].state); t.rows[0].visualText = 'see the <a href="https://theirs.example/" target="_blank" rel="noopener">docs</a> today'; window.__answers = [ {status:409, body:{error:'conflict', rev:14, state: t}}, {status:200, body:{id:'doc-409', rev:15, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return true; })()
+eval (async function(){ await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 11
+# live: their link, my other word
+expect window.__puts[10].state.rows[0].visualText.indexOf('https://theirs.example/') !== -1
+expect window.__puts[10].state.rows[0].visualText.indexOf('https://mine.example/') === -1
+expect window.__puts[10].state.rows[0].visualText.indexOf('tomorrow') !== -1
+expect F.state().rows[0].visualText === window.__puts[10].state.rows[0].visualText
+# ...and my whole cell on a card, reported as a conflict
+eval (function(){ window.__linkCard = F.state().comments.filter(function(c){ return c.kind === 'conflict' && c.rowId === F.state().rows[0].id && c.field === 'visualText'; }).pop() || null; return !!window.__linkCard; })()
+expect F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length === window.__cards0 + 1
+expect window.__linkCard.body.indexOf('https://mine.example/') !== -1 && window.__linkCard.body.indexOf('tomorrow') !== -1
+expect window.__puts[10].state.comments.some(function(c){ return c.id === window.__linkCard.id; })
+expect !document.getElementById('merge-banner').hidden
+expect document.getElementById('merge-banner').classList.contains('notice-warn')
+expect !document.getElementById('merge-review').hidden
+expect document.getElementById('merge-summary').textContent.indexOf('changed on both sides') !== -1
+
+# "Use my version" restores my cell, my link in it
+jsclick #merge-review
+wait !!document.querySelector('.comment-card[data-id="' + window.__linkCard.id + '"] [data-action="restore-conflict"]')
+eval (function(){ document.querySelector('.comment-card[data-id="' + window.__linkCard.id + '"] [data-action="restore-conflict"]').click(); return true; })()
+wait F.state().rows[0].visualText.indexOf('https://mine.example/') !== -1
+expect !F.state().comments.some(function(c){ return c.id === window.__linkCard.id; })
+expect document.querySelector('#rows .row .visual-cell .cell-editable a').getAttribute('href') === 'https://mine.example/'
+
+# --- ...and the same from a pull: a tag both sides put on one word --------
+# A pull merges through the same mergeStates, so a different tag on the same
+# word is reported the same way: theirs live, mine on a card. Scene 2's
+# words, tagged as a different prop on each side, while unsaved here.
+eval (function(){ var p = document.getElementById('comments-close') || document.querySelector('#comments-panel [data-action="close"]'); if (p) p.click(); document.getElementById('merge-banner').hidden = true; Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); return true; })()
+eval (function(){ window.__answers = [ {status:200, body:{id:'doc-409', rev:16, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return F.save().then(function(){ return window.__hostedTest.home().rev; }); })()
+expect window.__hostedTest.home().rev === 16
+eval (function(){ window.__cards1 = F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length; var sp = function(n){ return 'read the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="' + n + '" contenteditable="false">notes</span>'; }; F.state().rows[1].visualText = sp('Mine Notes'); window.__renderTest.render(); window.__pulled2 = F.clone(window.__hostedTest.base()); window.__pulled2.rows[1].visualText = sp('Their Notes'); var prev = window.fetch; window.fetch = function(url, opts){ var u = String(url); if ((!opts || !opts.method || opts.method === 'GET') && u.indexOf('api/docs/doc-409') !== -1) return Promise.resolve(new Response(JSON.stringify({id:'doc-409', rev:17, state: window.__pulled2, updatedAt:new Date().toISOString(), updatedBy:'Priya Malhotra'}), {status:200, headers:{'content-type':'application/json'}})); return prev(url, opts); }; window.__hostedTest.noteRev({docId:'doc-409', rev:17}); return true; })()
+wait window.__hostedTest.home().rev === 17
+wait F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).length === window.__cards1 + 1
+expect F.state().rows[1].visualText.indexOf('Their Notes') !== -1
+expect F.state().rows[1].visualText.indexOf('Mine Notes') === -1
+expect F.state().comments.filter(function(c){ return c.kind === 'conflict'; }).pop().body.indexOf('Mine Notes') !== -1
+expect !document.getElementById('merge-banner').hidden
+expect document.getElementById('merge-summary').textContent.indexOf('changed on both sides') !== -1
+expect window.__puts.length === 12
+
 quit
