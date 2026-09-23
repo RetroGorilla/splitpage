@@ -1038,6 +1038,168 @@
   .import-scan-hint { grid-column: 2; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
   .modal-footer-actions { display: flex; gap: 8px; }
 
+  /* ---------- the command menu (issue #147) ----------
+     A search box centred over the script with a scrim behind it: 640px
+     wide, a 60px input row, the matches grouped under it with their
+     shortcut chips. Above the side panels, the writer and the modals'
+     layer (it never opens over a modal, so it never has to sit above one). */
+  .cmdk-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 170;
+    background: rgba(20, 18, 14, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 12vh 16px 16px;
+    opacity: 1;
+    transition: opacity var(--dur-enter) var(--ease-enter);
+  }
+  @starting-style {
+    .cmdk-backdrop:not([hidden]) { opacity: 0; }
+    .cmdk-backdrop:not([hidden]) .cmdk-panel { transform: translateY(-6px) scale(0.99); }
+  }
+  .cmdk-panel {
+    width: 640px;
+    max-width: 100%;
+    max-height: min(560px, 76vh);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(30, 25, 15, 0.08), 0 28px 60px -18px rgba(30, 25, 15, 0.45);
+    overflow: hidden;
+    font-family: var(--font-body);
+    transition: transform var(--dur-enter) var(--ease-enter);
+  }
+  .cmdk-input-row {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 60px;
+    padding: 0 16px 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cmdk-search-icon {
+    flex: none;
+    width: 19px;
+    height: 19px;
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #cmdk-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 17px;
+    color: var(--text);
+  }
+  #cmdk-input::placeholder { color: var(--text-faint); }
+  .cmdk-esc, .cmdk-foot kbd {
+    flex: none;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    line-height: 17px;
+    padding: 1px 6px;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+  .cmdk-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding: 6px;
+  }
+  .cmdk-group {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 10px 12px 4px;
+  }
+  .cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
+    padding: 6px 12px;
+    border-radius: 9px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .cmdk-item.is-active { background: color-mix(in srgb, var(--visual) 12%, var(--surface)); }
+  .cmdk-item[aria-disabled="true"] { cursor: default; }
+  .cmdk-item[aria-disabled="true"] .cmdk-label,
+  .cmdk-item[aria-disabled="true"] .cmdk-icon { color: var(--text-faint); }
+  .cmdk-item[aria-disabled="true"].is-active { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+  .cmdk-icon {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cmdk-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .cmdk-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmdk-label mark { background: none; color: inherit; font-weight: 700; }
+  .cmdk-why { font-size: 12px; color: var(--text-dim); line-height: 1.3; margin-top: 1px; }
+  .cmdk-state { font-size: 12px; color: var(--text-dim); }
+  .cmdk-keys { flex: none; display: inline-flex; gap: 3px; }
+  .cmdk-keys kbd {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 5px;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    line-height: 17px;
+    text-align: center;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+  .cmdk-empty { padding: 26px 16px; text-align: center; font-size: 14px; color: var(--text-dim); }
+  .cmdk-foot {
+    flex: none;
+    display: flex;
+    gap: 16px;
+    padding: 9px 16px;
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 55%, var(--surface));
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .cmdk-foot kbd { margin-right: 3px; padding: 0 5px; }
+  @media (max-width: 760px) {
+    .cmdk-backdrop { padding: 10px; }
+    .cmdk-panel { max-height: calc(100vh - 20px); }
+    #cmdk-input { font-size: 16px; }
+    .cmdk-item { min-height: 44px; }
+  }
+  @media (max-width: 760px) and (hover: none) {
+    .cmdk-keys, .cmdk-esc, .cmdk-foot { display: none; }
+  }
+
   /* ---------- the Export dialog (issue #146) ----------
      Formats on the left as radio cards in two groups, what the chosen one
      will make on the right: a small page, one line of what is in it, the

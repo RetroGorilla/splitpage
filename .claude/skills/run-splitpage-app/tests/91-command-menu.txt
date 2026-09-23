@@ -1,0 +1,198 @@
+# The command menu (issue #147): Ctrl/Cmd+K, or File ▸ Search commands… on a
+# keyboard with no Ctrl. A search box centred over the script with a scrim
+# (640px wide, 16px radius, a 60px input row); typing narrows every File-
+# menu command — each export format, the panels, Write, Present, Find,
+# history and the rest — by name or by a word for it, grouped, with shortcut
+# chips. ↑/↓ move, Enter runs (checked here by what it visibly does), Esc
+# closes and puts the focus — and a script cell's caret — back. With nothing
+# typed, what was run last on this device comes first. An unavailable
+# command is greyed with the menu's own reason. It never opens inside the
+# teleprompter, over a modal, or over the writer. 18d-command-menu.js.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.C = window.__commandTest; window.F = window.__splitpageFormats; window.__rowsBefore = JSON.stringify(F.state().rows); return !!(C && F); })()
+expect true
+expect localStorage.getItem('splitpage-recent-commands') === null
+
+# --- Ctrl+K opens it over the script, focused in the box --------------------
+caret #rows .row .audio-cell .cell-editable
+key ctrl KeyK
+sleep 300
+expect !document.getElementById('cmdk').hidden
+expect document.activeElement.id == cmdk-input
+expect getComputedStyle(document.getElementById('cmdk')).position == fixed
+expect Math.round(document.querySelector('#cmdk .cmdk-panel').getBoundingClientRect().width) == 640
+expect getComputedStyle(document.querySelector('#cmdk .cmdk-panel')).borderTopLeftRadius == 16px
+expect Math.round(document.querySelector('#cmdk .cmdk-input-row').getBoundingClientRect().height) == 60
+expect Math.abs((document.querySelector('#cmdk .cmdk-panel').getBoundingClientRect().left + 320) - innerWidth / 2) < 12
+expect document.getElementById('cmdk-input').getAttribute('role') == combobox
+# nothing typed and nothing run yet: every command, in the menu's groups
+expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-group'), function(g){return g.textContent;}).join('|') === 'File|Share|Export|View|This document|Help'
+expect document.querySelectorAll('#cmdk-list .cmdk-item').length > 30
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="export-pdf"]') !== null
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="export-narration-txt"]') !== null
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="panel-production"]') !== null
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="find"]') !== null
+# desktop-only items the menu hides are not offered here either
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="prompter-open-in-browser"]') === null
+# shortcut chips, and the first command active
+expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item[data-cmd="find"] .cmdk-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+F'
+expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') == save
+expect document.getElementById('cmdk-input').getAttribute('aria-activedescendant') === document.querySelector('#cmdk-list .cmdk-item.is-active').id
+shot 91-command-menu
+
+# --- typing narrows, by name and by the words people use -------------------
+type gear
+sleep 200
+expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item'), function(r){return r.getAttribute('data-cmd');}).join(',') === 'panel-gear,export-packing-gear'
+# nothing is tagged Gear yet: listed, greyed, with the same reason the
+# Export dialog gives
+expect document.querySelector('#cmdk-list [data-cmd="export-packing-gear"]').getAttribute('aria-disabled') == true
+expect document.querySelector('#cmdk-list [data-cmd="export-packing-gear"] .cmdk-why').textContent == Nothing tagged Gear yet — nothing to pack
+expect document.querySelector('#cmdk-list [data-cmd="export-packing-gear"] .cmdk-why').textContent === window.__exportTest.reason('export-packing-gear')
+expect C.results('teleprompter')[0].items[0].id == present
+expect C.results('voice over')[0].items[0].id == export-narration-docx
+expect C.results('excel')[0].items[0].id == export-csv
+expect C.results('publish').some(function(g){return g.items.some(function(i){return i.id === 'share-link' && !i.disabled && i.why === 'No server connected — set one up first';});})
+expect C.results('zzzzqq').length === 0
+eval (function(){var i=document.getElementById('cmdk-input');i.value='zzzzqq';i.dispatchEvent(new Event('input'));return true;})()
+sleep 100
+expect document.querySelector('#cmdk-list .cmdk-empty').textContent.indexOf('No command matches') === 0
+
+# --- ↑/↓ move, Enter runs: the Production panel opens -----------------------
+eval (function(){var i=document.getElementById('cmdk-input');i.value='';i.dispatchEvent(new Event('input'));return true;})()
+type panel
+sleep 200
+expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') == panel-production
+key ArrowDown
+expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') !== 'panel-production'
+key ArrowUp
+expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') == panel-production
+expect document.getElementById('production-panel').hidden
+key Enter
+sleep 500
+expect document.getElementById('cmdk').hidden
+expect !document.getElementById('production-panel').hidden
+expect JSON.parse(localStorage.getItem('splitpage-recent-commands'))[0] == panel-production
+jsclick #production-close
+sleep 400
+
+# --- the same handler the menu runs: Find & replace -------------------------
+key ctrl KeyK
+sleep 300
+type find
+sleep 200
+key Enter
+sleep 400
+expect !document.getElementById('findbar').hidden
+expect document.activeElement.id == find-input
+jsclick #find-close
+sleep 200
+
+# --- with nothing typed, what ran last comes first --------------------------
+key ctrl KeyK
+sleep 300
+expect document.querySelector('#cmdk-list .cmdk-group').textContent == Recent
+expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list [role="group"]:first-child .cmdk-item'), function(r){return r.getAttribute('data-cmd');}).join(',') === 'find,panel-production'
+expect document.querySelectorAll('#cmdk-list .cmdk-item[data-cmd="find"]').length === 1
+# Enter on an unavailable command does nothing
+type gear packing
+sleep 200
+expect document.querySelector('#cmdk-list .cmdk-item').getAttribute('aria-disabled') == true
+eval (function(){window.__files0=document.querySelectorAll('.toast').length;return true;})()
+key Enter
+sleep 200
+expect !document.getElementById('cmdk').hidden
+
+# --- Esc closes and puts the caret back where it was ------------------------
+key Escape
+sleep 200
+expect document.getElementById('cmdk').hidden
+caret #rows .row .audio-cell .cell-editable
+key ctrl KeyK
+sleep 300
+key Escape
+sleep 200
+expect document.activeElement.classList.contains('cell-editable')
+expect document.activeElement.closest('.audio-cell') !== null
+press  XYZ
+sleep 300
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.slice(-3) == XYZ
+# Ctrl+K from a cell never put anything into it
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent.toLowerCase().indexOf('xyzk') === -1
+eval document.activeElement.blur()
+
+# --- a click on the scrim closes it too -------------------------------------
+key ctrl KeyK
+sleep 300
+eval (function(){var m=document.getElementById('cmdk');m.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));return true;})()
+sleep 200
+expect document.getElementById('cmdk').hidden
+
+# --- from the File menu, for a keyboard with no Ctrl -----------------------
+click #btn-file
+sleep 200
+expect Array.prototype.map.call(document.querySelectorAll('#menu-command .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+K'
+jsclick #menu-command
+sleep 300
+expect document.getElementById('file-menu').hidden
+expect !document.getElementById('cmdk').hidden
+expect document.activeElement.id == cmdk-input
+# Esc goes back to the File button it came from
+key Escape
+sleep 200
+expect document.activeElement.id == btn-file
+
+# --- not inside the teleprompter ---------------------------------------------
+jsclick #btn-present
+sleep 500
+expect !document.getElementById('prompter').hidden
+key ctrl KeyK
+sleep 300
+expect document.getElementById('cmdk').hidden
+key Escape
+sleep 400
+expect document.getElementById('prompter').hidden
+
+# --- not while a modal is open -----------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+sleep 400
+expect !document.getElementById('import-modal').hidden
+key ctrl KeyK
+sleep 300
+expect document.getElementById('cmdk').hidden
+key Escape
+sleep 300
+expect document.getElementById('import-modal').hidden
+
+# --- nor over the writer -----------------------------------------------------
+jsclick #btn-write
+sleep 600
+expect !document.getElementById('writer').hidden
+key ctrl KeyK
+sleep 300
+expect document.getElementById('cmdk').hidden
+jsclick #wr-close
+sleep 600
+
+# --- a review session: the same reasons the menu gives -----------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 200
+key ctrl KeyK
+sleep 300
+type write
+sleep 200
+expect document.querySelector('#cmdk-list [data-cmd="write"]').getAttribute('aria-disabled') == true
+expect document.querySelector('#cmdk-list [data-cmd="write"] .cmdk-why').textContent == Viewing only — the writer changes the script
+expect C.results('paste').some(function(g){return g.items.some(function(i){return i.id === 'paste' && i.disabled && i.why.indexOf('Viewing only') === 0;});})
+key Enter
+sleep 300
+expect document.getElementById('writer').hidden
+key Escape
+eval window.__hostedTest.setSession({role:'edit',docId:null})
+
+quit
