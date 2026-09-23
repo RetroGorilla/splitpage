@@ -65,7 +65,7 @@ import {
   narrationRows
 } from "./15-docx.js";
 import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildPackingListPdf, buildPdf, pdfImagesFor } from "./17-pdf.js";
+import { buildPackingListPdf, buildPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { showAbout } from "./20a-update.js";
 import {
@@ -188,7 +188,7 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
   if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
-  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows)), filename: baseName + ".pdf" };
+  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: baseName + ".pdf" };
   if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };
