@@ -31,6 +31,7 @@ import {
   updateProductionBadge
 } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
+import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 
@@ -566,8 +567,13 @@ export function armRemoveTag(btn, key) {
     S.tagDeleteArmId = null;
     var item = findTagByKey(key);
     if (!item) return;
+    /* one undo entry of its own: removing touches cells only, so typing
+       in one of them just before or after could otherwise coalesce into
+       it */
+    breakUndoCoalescing();
     var n = removeTag(item.cat.id, item.name);
     markDirty();
+    breakUndoCoalescing();
     render();
     queueAutoSave();
     showToast("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
@@ -771,6 +777,7 @@ export function bulkDeleteSelected() {
   var items = selectedEntries();
   if (!items.length) return;
   var unlabelled = 0;
+  breakUndoCoalescing();
   items.forEach(function (item) {
     if (!item.orphaned) unlabelled += removeTag(item.cat.id, item.name);
     deleteProductionTagEntry(item.cat.id, item.name);
@@ -778,6 +785,7 @@ export function bulkDeleteSelected() {
   var n = items.length;
   clearProductionSelection();
   markDirty();
+  breakUndoCoalescing();
   render();
   queueAutoSave();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
@@ -936,10 +944,12 @@ export function saveTagRename(key) {
   var input = document.querySelector('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
   var item = findTagByKey(key);
   if (!input || !item) { S.tagRenaming = null; renderProduction(); return; }
+  breakUndoCoalescing();
   var changed = renameTag(item.cat.id, item.name, input.value);
   S.tagRenaming = null;
   if (changed) {
     markDirty();
+    breakUndoCoalescing();
     render();
     queueAutoSave();
     showToast("Renamed to " + plainText(input.value).trim(), "ok");

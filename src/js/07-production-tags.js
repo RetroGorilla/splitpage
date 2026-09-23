@@ -9,12 +9,24 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import { namedTagId, projection, replaceWithTag } from "./04c-doc-model.js";
+import {
+  cellOf,
+  namedTagId,
+  projection,
+  replaceWithTag,
+  retag,
+  setMark,
+  tagIds,
+  tagNameOf,
+  toHtml
+} from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
+import { domRangeFor } from "./09-find-replace.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
+import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
 
@@ -182,7 +194,16 @@ export function contentMemo(compute) {
    back-fill is the path that found it.
 
    The returned array is SHARED with every other caller for the same field
-   content — read it, never mutate it. Mentions are built around it. */
+   content — read it, never mutate it. Mentions are built around it.
+
+   One mention per tag SPAN, so it reads the HTML rather than the cell's
+   model (cellOf, #85 step 3), which cannot count spans: two spans of one
+   tag side by side are one run there, a tag nested in a tag is only the
+   inner one, an empty tag span is nothing, and a b-roll key inside a tag
+   splits it in two. Cells older copies of the app stored have all of
+   those ("[mug][mug]" typed made the first), and the count is what the
+   panel shows as an item's mentions and what Remove label reports
+   (tag-panel-model.test.mjs pins each case). */
 export var tagsInField = contentMemo(function (html) {
   var out = [];
   var body = inertBody(html);
@@ -706,7 +727,7 @@ var AUTO_TAG_MAX_LEN = 60;
 
 /* Typing shortcut: closing one of the TAG_SHORTCUTS pairs around a phrase
    you just typed turns it straight into a tag of that category — the same
-   .tag-anchor span tagFieldOccurrences() inserts by hand. Only live typing
+   tag the composer puts on (tagFieldOccurrences()). Only live typing
    of the closing character triggers it (never paste, import, or a merge) —
    see the inputType/data guard below — and only within the text node that
    holds the caret, so it can never reach across a <br> or out of the field.
@@ -1172,79 +1193,164 @@ export function acceptUntaggedMention() {
   return true;
 }
 
-/* Walk the text nodes of one field, wrapping every whole-word occurrence of
-   `phrase`. Text already inside a tag or a link is left alone. */
-/* onlyOccurrence, when given (0-based), wraps ONLY that one match — every
-   other occurrence of the phrase is left as plain text, untouched. This is
-   what applyTag()'s single-mention path needs: wrapping every match and
-   then guessing which one to keep afterward (the previous approach) can't
-   tell "the phrase repeats" apart from "an unrelated existing tag with the
-   same name sits elsewhere in this cell", and always kept DOM order —
-   i.e. always the first occurrence — regardless of which one the user had
-   actually selected. Matches are numbered in the same document-order walk
-   this function always used, so an index captured earlier (by counting
-   matches with countOnly, over the text before the selection — see the
-   "tag" command in 05-render.js) lines up exactly with the index used here. */
-export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccurrence) {
+/* ---- a tag put on words the app is told about ----
+
+   The tag composer (applyTag below) and a Markdown cell rebuilt on load
+   (20d-formats.js) both say "this phrase is <cat> <name>" and leave it to
+   this code to find where. That is an edit of each cell's model (#85,
+   docs/DOCUMENT-MODEL.md §4): the phrase is found in the cell's projection
+   (cellOf, never the HTML string), setMark() puts the tag on the words
+   where they stand, and the cell is written back with toHtml().
+
+   What counts as an occurrence is what the old walk over text nodes
+   counted:
+     - case does not matter, and the words keep the casing they were
+       written in — the tag goes ON them, so "Gaffer Tape" in the text stays
+       that way under a tag named "gaffer tape";
+     - whole words only: a letter or digit in any script (\p{L}\p{N}, not
+       [A-Za-z0-9] — with the ASCII class, "Ana" inside "Anaïs" passed and
+       got tagged mid-word) on either side disqualifies it;
+     - never words already in a tag or a link, never across a line break.
+   Reading the projection rather than one text node at a time settles
+   three things that walk decided by accident:
+     - a match may run across formatting ("red <strong>mug</strong>"), as
+       find does (09-find-replace.js); the tag goes round both, the bold
+       stays on "mug";
+     - never across a b-roll key (the atom is not words), and never into or
+       out of a comment: the model keeps a tag one unit a comment covers
+       all of or none of (normalizeCell), so a tag straddling a comment's
+       edge would silently stretch the comment over the rest of it. Inside
+       one comment is fine;
+     - the whole-word neighbours are the cell's, not the text node's, so
+       "Mug" in "<strong>Mug</strong>s" is no more a word than in "Mugs". */
+var TAG_WORD_CHAR_RE = /[\p{L}\p{N}]/u;
+
+/* Lower case, one character for one. toLowerCase() can lengthen a string
+   ("İ" becomes two), which would put every offset after it in the wrong
+   place; a character that would grow keeps its case instead. */
+function foldCaseKeepLength(s) {
+  var lower = s.toLowerCase();
+  if (lower.length === s.length) return lower;
+  var out = "";
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charAt(i).toLowerCase();
+    out += c.length === 1 ? c : s.charAt(i);
+  }
+  return out;
+}
+
+function sameCmt(a, b) {
+  return (a || []).join("\u0000") === (b || []).join("\u0000");
+}
+
+/* Every place `phrase` can become a tag in `cell` (a cell of the model), as
+   {from, to} offsets into its projection, in order. Matches never overlap:
+   the search goes on from the end of one, found or turned down for its
+   neighbours, as the old walk's did. One turned down for what it runs into
+   (a tag, a link, a key, a line break, a comment's edge) goes on from the
+   next character instead: the old walk never saw such a match at all, and
+   still found the occurrence starting just past a tag's end. */
+export function tagOccurrences(cell, phrase) {
+  var needle = foldCaseKeepLength(String(phrase == null ? "" : phrase));
+  var out = [];
+  if (!needle) return out;
+  var text = "", marks = [];
+  (cell || []).forEach(function (r) {
+    if (r.atom) { text += "￼"; marks.push(null); return; }
+    text += r.text;
+    for (var i = 0; i < r.text.length; i++) marks.push(r.marks);
+  });
+  var hay = foldCaseKeepLength(text);
+  var at = hay.indexOf(needle);
+  while (at !== -1) {
+    var end = at + needle.length;
+    var ok = true;
+    for (var i = at; i < end && ok; i++) {
+      var m = marks[i];
+      ok = !!m && !m.tag && !m.href && text.charAt(i) !== "\n" && sameCmt(m.cmt, marks[at].cmt);
+    }
+    if (!ok) { at = hay.indexOf(needle, at + 1); continue; }
+    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
+      out.push({ from: at, to: end });
+    }
+    at = hay.indexOf(needle, end);
+  }
+  return out;
+}
+
+/* A cell still holding a picture or a video card (pasted before design D7
+   kept them out of script text; the load-time move empties them) is not
+   written through the model, which has no place for either: writing it
+   back would delete them. Same exception, and the same check, as
+   editCell's and Replace All's. */
+function holdsMedia(html) {
+  return /<img[\s>]|video-embed-card/i.test(html || "");
+}
+
+/* For such a cell: the same matches, wrapped in the DOM — each offset
+   mapped onto an inert parse of the HTML (domRangeFor, which reads the DOM
+   the way fromHtml does) and its contents moved into a tag span. Last
+   first, so every earlier range is still where it was. Null if the DOM
+   does not read as the model does (never tag the wrong words). */
+function wrapTagInHtml(html, cell, found, cat, name) {
   var body = inertBody(html);
   var doc = body.ownerDocument;
-  var needle = phrase.toLowerCase();
-  var hits = 0;
-  var matchIndex = 0;
-
-  function walk(node) {
-    var kids = Array.prototype.slice.call(node.childNodes);
-    for (var i = 0; i < kids.length; i++) {
-      var child = kids[i];
-      if (child.nodeType === 1) {
-        if (!isInsideTagOrLink(child)) walk(child);
-        continue;
-      }
-      if (child.nodeType !== 3) continue;
-      if (isInsideTagOrLink(child.parentNode)) continue;
-
-      var text = child.nodeValue || "";
-      var hay = text.toLowerCase();
-      var frag = doc.createDocumentFragment();
-      var cursor = 0, at = hay.indexOf(needle), matched = false;
-
-      while (at !== -1) {
-        var before = at === 0 ? "" : text.charAt(at - 1);
-        var after = text.charAt(at + phrase.length);
-        /* \p{L}\p{N}, not [A-Za-z0-9] — the same ASCII-only class the
-           comment on buildUntaggedIndex's matcher (below) says was found
-           and fixed there. Left as ASCII here, "Ana" inside "Anaïs"
-           passed the boundary check (the accented "ï" isn't in
-           [A-Za-z0-9]) and got wrapped mid-word. */
-        if (!/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after)) {
-          var wrapThisOne = !countOnly && (onlyOccurrence === undefined || onlyOccurrence === matchIndex);
-          if (wrapThisOne) {
-            hits++;
-            matched = true;
-            if (at > cursor) frag.appendChild(doc.createTextNode(text.slice(cursor, at)));
-            var span = doc.createElement("span");
-            span.className = "tag-anchor";
-            span.setAttribute("data-tag-cat", cat);
-            span.setAttribute("data-tag-name", name);
-            span.appendChild(doc.createTextNode(text.substr(at, phrase.length)));
-            frag.appendChild(span);
-            cursor = at + phrase.length;
-          } else if (countOnly) {
-            hits++;
-          }
-          matchIndex++;
-        }
-        at = hay.indexOf(needle, at + phrase.length);
-      }
-
-      if (matched) {
-        if (cursor < text.length) frag.appendChild(doc.createTextNode(text.slice(cursor)));
-        child.parentNode.replaceChild(frag, child);
-      }
-    }
+  var expect = projection(cell);
+  for (var i = found.length - 1; i >= 0; i--) {
+    var range = domRangeFor(body, found[i].from, found[i].to, expect);
+    if (!range) return null;
+    var span = doc.createElement("span");
+    span.className = "tag-anchor";
+    span.setAttribute("data-tag-cat", cat);
+    span.setAttribute("data-tag-name", name);
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
   }
-  walk(body);
-  return { hits: hits, html: body.innerHTML };
+  /* a match that began or ended inside formatting leaves that element's
+     other half empty; the model writes no empty elements, so neither does
+     this */
+  Array.prototype.forEach.call(body.querySelectorAll("strong, em, u, s, mark"), function (el) {
+    if (el.parentNode && !el.textContent && !el.querySelector("img, br")) el.parentNode.removeChild(el);
+  });
+  return sanitizeHtml(body.innerHTML);
+}
+
+/* Tags every occurrence of `phrase` in one field's HTML as (cat, name),
+   returning {hits, html}: how many were tagged, and the field's new HTML
+   (the same string when none were). countOnly counts them and changes
+   nothing.
+
+   onlyOccurrence, when given (0-based), tags ONLY that one match — every
+   other occurrence of the phrase is left as plain text, untouched. This is
+   what applyTag()'s single-mention path needs: tagging every match and
+   then guessing which one to keep afterward (the approach before that)
+   can't tell "the phrase repeats" apart from "an unrelated existing tag
+   with the same name sits elsewhere in this cell", and always kept the
+   first occurrence regardless of which one the user had actually selected.
+   Matches are numbered in document order by tagOccurrences, so an index
+   captured earlier (by counting matches with countOnly over the text
+   before the selection — see the "tag" command in 05-render.js) lines up
+   exactly with the index used here.
+
+   The tag is named by (cat, name) the way editCell's typed tags are
+   (namedTagId): fromHtml without the registry's hooks names every tag
+   already in the cell by its own spelling too, so toHtml writes each one
+   back exactly as it was, and the new spans say exactly `name`. */
+export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccurrence) {
+  var cell = cellOf(html);
+  var found = tagOccurrences(cell, phrase);
+  if (countOnly) return { hits: found.length, html: html };
+  if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence]] : [];
+  if (!found.length) return { hits: 0, html: html };
+  /* the name the sanitiser would have left on the span */
+  var clean = plainText(name).trim().slice(0, 80);
+  if (holdsMedia(html)) {
+    var wrapped = wrapTagInHtml(html, cell, found, cat, clean);
+    return wrapped === null ? { hits: 0, html: html } : { hits: found.length, html: wrapped };
+  }
+  var id = namedTagId(cat, clean);
+  found.forEach(function (m) { cell = setMark(cell, m.from, m.to, "tag", id); });
+  return { hits: found.length, html: toHtml(cell) };
 }
 
 function tagAllOccurrences(phrase, cat, name) {
@@ -1256,7 +1362,7 @@ function tagAllOccurrences(phrase, cat, name) {
       var res = tagFieldOccurrences(row[field], needle, cat, name, false);
       if (res.hits) {
         total += res.hits;
-        row[field] = sanitizeHtml(res.html);
+        row[field] = res.html;
         stampRow(row);
       }
     });
@@ -1264,39 +1370,81 @@ function tagAllOccurrences(phrase, cat, name) {
   return total;
 }
 
+/* Read through cellOf, whose parse is cached by the field's HTML: the
+   composer asks this as it opens, and a field read once is not read
+   again. */
 function countPhraseMatches(phrase) {
   var needle = String(phrase || "").trim();
   if (!needle || !S.state) return 0;
   var total = 0;
   S.state.rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
-      total += tagFieldOccurrences(row[field], needle, "prop", "x", true).hits;
+      total += tagOccurrences(cellOf(row[field]), needle).length;
     });
   });
   return total;
 }
 
-function eachTagSpan(cat, name, fn) {
+/* ---- renaming and removing a tag everywhere ----
+
+   Both are edits of each cell's model that carries the tag: retag() moves
+   its runs to the new name, or to none. The stored HTML names a tag by
+   category and name (design D2, §3.1), so a rename still has to rewrite
+   the words in every cell that carries it; what changed is that it
+   rewrites the model and writes the cell with toHtml(), rather than
+   editing attributes in a parse of the HTML.
+
+   Cells are read WITHOUT the registry's hooks, so each distinct spelling
+   of a tag in a cell ("Mug", "mug ") is its own model id: the ones that
+   match (cat, name) the way the registry does — normalizeTagName — are
+   moved, and every other tag in the cell is written back with the exact
+   name it had. Reading through the registry instead would also respell
+   every other tag in the cell to its entry's casing, and write a fold's
+   survivor's casing where the old code wrote the name that was typed.
+
+   The count returned is the SPANS the tag had, read by tagsInField — the
+   same count the panel shows as the item's mentions. The model cannot
+   give it: two spans of one tag side by side are one run there. */
+function eachTaggedField(cat, name, toName) {
   var target = normalizeTagName(name);
+  var toId = toName === null ? null : namedTagId(cat, toName);
   var changed = 0;
   S.state.rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
-      var body = inertBody(row[field]);
-      var hit = false;
-      Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-        if (el.getAttribute("data-tag-cat") !== cat) return;
-        if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
-        fn(el);
-        hit = true;
-        changed++;
-      });
-      if (hit) {
-        row[field] = sanitizeHtml(body.innerHTML);
-        stampRow(row);
-      }
+      var html = row[field];
+      var spans = tagsInField(html).filter(function (t) {
+        return t.catId === cat && normalizeTagName(t.name) === target;
+      }).length;
+      if (!spans) return;
+      changed += spans;
+      row[field] = holdsMedia(html) ? retagInHtml(html, cat, target, toName) : retagCell(html, cat, target, toId);
+      stampRow(row);
     });
   });
   return changed;
+}
+
+function retagCell(html, cat, target, toId) {
+  var cell = cellOf(html);
+  tagIds(cell).forEach(function (id) {
+    var t = tagNameOf(id);
+    if (t && t.cat === cat && normalizeTagName(t.name) === target) cell = retag(cell, id, toId);
+  });
+  return toHtml(cell);
+}
+
+/* The same for a cell the model cannot write (holdsMedia): the spans
+   themselves, renamed or unwrapped in a parse of its HTML. */
+function retagInHtml(html, cat, target, toName) {
+  var body = inertBody(html);
+  Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
+    if (el.getAttribute("data-tag-cat") !== cat) return;
+    if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
+    if (toName !== null) { el.setAttribute("data-tag-name", toName); return; }
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.parentNode.removeChild(el);
+  });
+  return sanitizeHtml(body.innerHTML);
 }
 
 export function renameTag(cat, oldName, newName) {
@@ -1327,19 +1475,14 @@ export function renameTag(cat, oldName, newName) {
   /* an orphaned item has no live spans to rename, but its registry entry
      still needs the new name so it doesn't fall right back to the old
      one the next time productionEntries() reads it */
-  var spanCount = eachTagSpan(cat, oldName, function (el) {
-    el.setAttribute("data-tag-name", clean);
-  });
+  var spanCount = eachTaggedField(cat, oldName, clean);
   var entry = registryEntry(cat, oldName);
   if (entry) entry.name = clean;
   return spanCount > 0 || !!entry;
 }
 
 export function removeTag(cat, name) {
-  return eachTagSpan(cat, name, function (el) {
-    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
-    el.parentNode.removeChild(el);
-  });
+  return eachTaggedField(cat, name, null);
 }
 
 /* ---- the tag composer ---- */
@@ -1492,10 +1635,16 @@ export function applyTag() {
   var ctx = pendingTag;
   closeTagComposer();
 
+  /* Each path is one undo entry of its own, however many cells it tags:
+     whatever was typed a moment ago is recorded first, and the entry is
+     closed after, so neither the typing before nor after can coalesce into
+     it. */
   if (all) {
+    breakUndoCoalescing();
     var n = tagAllOccurrences(phrase, cat, name);
     registerProductionTag(cat, name);
     markDirty();
+    breakUndoCoalescing();
     render();
     queueAutoSave();
     showToast("Labelled " + n + " mention" + (n === 1 ? "" : "s") + " of " + name, "ok");
@@ -1513,14 +1662,20 @@ export function applyTag() {
      the same bug's other half: because only that one match is ever
      wrapped, an unrelated pre-existing tag elsewhere in the cell that
      happens to share this name is never touched or confused with it. */
-  var res = tagFieldOccurrences(cellEl.innerHTML, phrase, cat, name, false, ctx.occurrenceIndex || 0);
-  if (!res.hits) { showToast("Could not find that text any more.", "warn"); return; }
   var idx = findRowIndex(ctx.rowId);
   if (idx === -1) return;
-  S.state.rows[idx][ctx.field] = sanitizeHtml(res.html);
-  stampRow(S.state.rows[idx]);
+  /* The stored cell, not the one on screen: the model reads the stored
+     HTML, and anything typed and not yet stored goes in first. */
+  syncFieldFromDom(cellEl);
+  breakUndoCoalescing();
+  var row = S.state.rows[idx];
+  var res = tagFieldOccurrences(row[ctx.field], phrase, cat, name, false, ctx.occurrenceIndex || 0);
+  if (!res.hits) { showToast("Could not find that text any more.", "warn"); return; }
+  row[ctx.field] = res.html;
+  stampRow(row);
   registerProductionTag(cat, name);
   markDirty();
+  breakUndoCoalescing();
   render();
   queueAutoSave();
   showToast("Labelled as " + name, "ok");
