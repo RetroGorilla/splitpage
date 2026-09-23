@@ -859,7 +859,9 @@ Both carry the production breakdown and comments the same way.
 paragraph, character and table styles, a document theme font, scene numbers
 in their own column, page numbers in the footer, and a production-breakdown
 table whose columns size themselves to what's actually in them instead of a
-fixed guess.
+fixed guess. Its comments section shows each picture in a comment or reply
+where it was, as the PDF does; Markdown, CSV and plain text write
+`[image]` in its place.
 
 Neither is the same thing as **Save**. These are copies for reading and
 sharing: they carry the words, not the tagging, the comment anchors, the

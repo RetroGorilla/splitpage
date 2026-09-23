@@ -351,10 +351,11 @@ function commentLastActivity(c) {
    currently sorted — a file's own appendix should read the same way twice.
 
    `body` is plain text, and a picture in it is simply gone. A writer that
-   can draw pictures (the PDF) passes {pieces:true} and gets, beside the
-   same `body`, each comment's and reply's `pieces`: the body in order as
-   {text} and {image: <sha>} — see bodyPieces. The
-   other writers never ask, so what they read is unchanged. */
+   can draw pictures (the PDF, the .docx) passes {pieces:true} and gets,
+   beside the same `body`, each comment's and reply's `pieces`: the body in
+   order as {text} and {image: <sha>} — see bodyPieces. The text-only
+   writers (Markdown, CSV, .txt) ask too, for commentBodyText's "[image]"
+   placeholders; `body` itself is the same either way. */
 export function commentEntries(opts) {
   var pieces = !!(opts && opts.pieces);
   var list = (S.state.comments || []).slice();
@@ -433,6 +434,20 @@ function commentBodyPieces(c) {
     return ref ? [{ image: ref.sha256 }] : [];
   }
   return bodyPieces(c.body);
+}
+
+/* A comment's or reply's body (from commentEntries({pieces:true})) for a
+   writer that can only write text — Markdown, CSV, .txt: `body` exactly,
+   when it holds no picture, and otherwise its pieces in reading order with
+   each picture a COMMENT_IMAGE_TEXT line of its own, so a picture-only
+   comment or an image conflict card no longer reads "(empty)". The
+   pictures themselves are not carried; "" still means an empty body. */
+export var COMMENT_IMAGE_TEXT = "[image]";
+
+export function commentBodyText(entry) {
+  var pieces = (entry && entry.pieces) || [];
+  if (!pieces.some(function (p) { return p.image; })) return entry.body;
+  return pieces.map(function (p) { return p.image ? COMMENT_IMAGE_TEXT : p.text; }).join("\n");
 }
 
 /* anchorLiveText's fallback for a row the "hide shot scenes" toggle

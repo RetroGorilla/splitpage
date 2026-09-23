@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { escapeHtml, makeId } from "./02-state.js";
-import { internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
+import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
+import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import { safeHref } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
@@ -110,6 +111,20 @@ function docxRunsXml(html, rels) {
   return out + '</w:p>';
 }
 
+/* One inline picture as a run: `img` is what rels.addImage returned, `id`
+   the drawing's id (unique in the document), cx/cy its size in EMU. */
+function docxDrawingRun(img, id, cx, cy) {
+  return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+    '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+    '<wp:docPr id="' + id + '" name="' + img.name + '"/><wp:cNvGraphicFramePr/>' +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + id + '" name="' + img.name + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
+    '<pic:blipFill><a:blip r:embed="' + img.rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
+    '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+}
+
 function docxCellXml(inner, widthDxa) {
   return '<w:tc><w:tcPr><w:tcW w:w="' + widthDxa + '" w:type="dxa"/>' +
     '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
@@ -168,6 +183,11 @@ export function buildDocx() {
     }
   };
 
+  /* sha -> the picture's media part and pixel size, or null when its bytes
+     are not here: each ref'd row picture, and each comment picture once
+     written, so a comment showing one of those again reuses its part */
+  var pictureParts = {};
+
   var body = "";
   body += '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
     '<w:r><w:t xml:space="preserve">' + xmlEscape(S.state.title || "Untitled Script") + '</w:t></w:r></w:p>';
@@ -194,15 +214,8 @@ export function buildDocx() {
         var maxW = 2750000; /* ~2.9in in EMU, fits the cell */
         var cx = Math.round(Math.min(maxW, dim.w * 9525));
         var cy = Math.round(cx * dim.ratio);
-        visual += '<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
-          '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
-          '<wp:docPr id="' + media.length + '" name="' + img.name + '"/><wp:cNvGraphicFramePr/>' +
-          '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
-          '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + media.length + '" name="' + img.name + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
-          '<pic:blipFill><a:blip r:embed="' + img.rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
-          '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
-          '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
-          '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+        visual += '<w:p>' + docxDrawingRun(img, media.length, cx, cy) + '</w:p>';
+        if (rowImage(row).ref) pictureParts[rowImage(row).ref.sha256] = { rid: img.rid, name: img.name, w: dim.w, h: dim.h };
       } catch (e) { /* unreadable image — skip it rather than break the export */ }
     }
     visual += docxRunsXml(row.visualText, rels);
@@ -247,10 +260,60 @@ export function buildDocx() {
       bRows + '</w:tbl>';
   }
 
-  var comments = commentEntries();
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
       '<w:r><w:t>Comments</w:t></w:r></w:p>';
+
+    /* Pictures in comments and replies (#82 P6 keeps them in the body as
+       <img data-blob>; commentEntries' pieces name them by sha). Each is a
+       paragraph of its own at its body's indent, in the order the body has
+       it — sized as the PDF sizes them: at most CIMG_MAXW of what is left
+       of the text column beside the indent and CIMG_MAXH tall, aspect kept,
+       and never larger than its own pixels at 96 dpi, so a small picture
+       stays small. Each is embedded as the type it is, like a row's; the
+       same picture twice — or one a row already shows — is one media
+       part (pictureParts). One whose bytes are not here
+       (buildFileData has already fetched every one it could) is an italic
+       "[image unavailable]" in its place. */
+    var CIMG_MAXW = 0.6, CIMG_MAXH = 3302000; /* 260pt, in EMU */
+    var drawingId = media.length;
+
+    function commentPictureXml(sha, indentDxa) {
+      var img = pictureParts[sha];
+      if (img === undefined) {
+        img = null;
+        var bytes = bytesForSync(sha);
+        var mime = bytes && sniffImageMime(bytes);
+        var dims = mime && imageDims(bytes);
+        if (dims && dims.width > 0 && dims.height > 0) {
+          img = rels.addImage(bytes, mime);
+          img.w = dims.width;
+          img.h = dims.height;
+        }
+        pictureParts[sha] = img;
+      }
+      if (!img) return docxLineBreakParagraph("[image unavailable]", indentDxa, "<w:i/>");
+      /* twips to EMU is x635 */
+      var scale = Math.min(9525, (10080 - indentDxa) * 635 * CIMG_MAXW / img.w, CIMG_MAXH / img.h);
+      var cx = Math.max(1, Math.round(img.w * scale));
+      var cy = Math.max(1, Math.round(img.h * scale));
+      return '<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:left="' + indentDxa + '"/></w:pPr>' +
+        docxDrawingRun(img, ++drawingId, cx, cy) + '</w:p>';
+    }
+
+    /* A comment's or reply's body in order. One with no picture is the one
+       paragraph it always was, "(empty)" and all. */
+    function commentBodyXml(entry, indentDxa) {
+      var pieces = entry.pieces || [];
+      if (!pieces.some(function (p) { return p.image; })) {
+        return docxLineBreakParagraph(entry.body || '(empty)', indentDxa, '');
+      }
+      return pieces.map(function (p) {
+        return p.image ? commentPictureXml(p.image, indentDxa) : docxLineBreakParagraph(p.text, indentDxa, '');
+      }).join("");
+    }
+
     comments.forEach(function (c) {
       body += '<w:p><w:pPr><w:spacing w:before="200" w:after="20"/></w:pPr>' +
         '<w:r><w:rPr><w:b/><w:color w:val="8A6D3B"/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location +
@@ -261,12 +324,12 @@ export function buildDocx() {
       if (c.quoted) {
         body += docxLineBreakParagraph('“' + c.quoted + '”', 360, '<w:i/>');
       }
-      body += docxLineBreakParagraph(c.body || '(empty)', 360, '');
+      body += commentBodyXml(c, 360);
       c.replies.forEach(function (rp) {
         body += '<w:p><w:pPr><w:spacing w:before="60" w:after="0"/><w:ind w:left="720"/></w:pPr>' +
           '<w:r><w:rPr><w:b/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">↳ ' +
           xmlEscape(rp.author + (rp.when ? ', ' + rp.when : '')) + ': </w:t></w:r></w:p>';
-        body += docxLineBreakParagraph(rp.body || '(empty)', 720, '');
+        body += commentBodyXml(rp, 720);
       });
     });
   }

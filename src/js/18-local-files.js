@@ -28,7 +28,7 @@ import {
 } from "./07-production-tags.js";
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
 import { openFindBar } from "./09-find-replace.js";
-import { commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
+import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
@@ -262,7 +262,8 @@ function htmlToPlainScript() {
     lines.push("");
   }
 
-  var comments = commentEntries();
+  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     lines.push("COMMENTS");
     lines.push("========");
@@ -273,11 +274,11 @@ function htmlToPlainScript() {
       if (c.quoted) {
         c.quoted.split(/\r\n|\r|\n/).forEach(function (l) { lines.push('  "' + l + '"'); });
       }
-      (c.body || "(empty)").split(/\r\n|\r|\n/).forEach(function (l) { lines.push("  " + l); });
+      (commentBodyText(c) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l) { lines.push("  " + l); });
       c.replies.forEach(function (rp) {
         lines.push("");
         var prefix = "  > " + rp.author + (rp.when ? ", " + rp.when : "") + ": ";
-        (rp.body || "(empty)").split(/\r\n|\r|\n/).forEach(function (l, i) {
+        (commentBodyText(rp) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l, i) {
           lines.push((i === 0 ? prefix : "    ") + l);
         });
       });
