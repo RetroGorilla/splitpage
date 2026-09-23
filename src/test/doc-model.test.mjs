@@ -411,7 +411,7 @@ test("cellOf: fromHtml, cached by the HTML itself", () => {
   const c = cellOf(html);
   assert.deepEqual(c, fromHtml(html));
   assert.equal(cellOf(html), c, "the same array for the same HTML");
-  assert.deepEqual(tagNameOf(c[2].marks.tag), { cat: "prop", name: "Mug" });
+  assert.deepEqual(tagNameOf(c.find((r) => r.marks.tag).marks.tag), { cat: "prop", name: "Mug" });
   assert.equal(tagNameOf("t_abc"), null);
   assert.deepEqual(cellOf(null), []);
 });
