@@ -17,11 +17,42 @@
     --border: #DCD5C4;
     --text: #221F1A;
     --text-dim: #6E6858;
-    --text-faint: #9B9484;
+    /* Was #9B9484, 2.7:1 on --bg — too faint for the hints, counts and
+       timestamps it is used for, most of which are real information. This
+       is 4.7:1 (#143) and still sits clearly below --text-dim. */
+    --text-faint: #736D5D;
     --visual: #1B7A68;
     --visual-soft: #E3F1EC;
     --audio: #C1461C;
     --audio-soft: #FBE9DE;
+
+    /* ---------- production tag categories (#143) ----------
+
+       One colour and one tint per TAG_CATEGORIES entry. Teal and orange are
+       deliberately absent: they are the Visual and Audio columns, and a
+       Location tag in the old teal or a Prop in the old orange read as the
+       column rather than as the tag. The colour draws the tag's 2px rule in
+       the script and every dot, stripe and pill in the Production/Gear
+       panels (TAG_CATEGORIES points at these by name, so one change here
+       reaches both); the tint is the fill behind the tagged words. Nothing
+       about a colour is stored in a document — a tag carries only its
+       category id — so changing these needs no migration.
+
+       Each is at least 4.5:1 on white and on --bg, so any of them can be
+       used as text; the dark blocks below keep the same hues, lightened to
+       at least 4.5:1 on the dark --surface. */
+    --tag-prop: #2F5DA8;          /* blue */
+    --tag-prop-tint: #E8EEF8;
+    --tag-location: #7446A8;      /* violet */
+    --tag-location-tint: #F0E9F7;
+    --tag-cast: #A23B72;          /* plum */
+    --tag-cast-tint: #F8E8F0;
+    --tag-vfx: #8A6508;           /* ochre */
+    --tag-vfx-tint: #F6EFDB;
+    --tag-sound: #3E5C76;         /* slate */
+    --tag-sound-tint: #E6EDF3;
+    --tag-gear: #5B6B1E;          /* olive */
+    --tag-gear-tint: #EEF1DE;
     --accent: #C1461C;
     --accent-contrast: #FFF8F1;
     --danger: #B3261E;
@@ -96,11 +127,28 @@
       --border: #3B3427;
       --text: #F3EFE5;
       --text-dim: #B6AD99;
+      /* 4.9:1 on --bg and 4.5:1 on --surface — already clear of the bar
+         the light value was raised to in #143, so left as it was. */
       --text-faint: #8B8371;
       --visual: #56D6BC;
       --visual-soft: #1C3733;
       --audio: #FF8552;
       --audio-soft: #3C2617;
+      /* The tag hues lightened until each is about 6:1 on --surface, and
+         the tints are 20% of that over --surface (#143). Keep in step with
+         the block below. */
+      --tag-prop: #749AD8;
+      --tag-prop-tint: #30343C;
+      --tag-location: #AC8CCF;
+      --tag-location-tint: #3B323A;
+      --tag-cast: #D181AC;
+      --tag-cast-tint: #432F33;
+      --tag-vfx: #C6910B;
+      --tag-vfx-tint: #403313;
+      --tag-sound: #7C9DBA;
+      --tag-sound-tint: #323536;
+      --tag-gear: #8AA32E;
+      --tag-gear-tint: #34361A;
       --accent: #FF8552;
       --accent-contrast: #241004;
       --danger: #FF7A6E;
@@ -111,7 +159,12 @@
       color-scheme: dark;
     }
   }
-  :root[data-theme="dark"] {
+  /* .prompter-line takes the dark tokens whatever the app's theme: the
+     teleprompter is a single dark world (see .prompter below), and the
+     script's own marks inside it — tags, comment anchors — are drawn from
+     these tokens, so in a light-themed app they would otherwise be the
+     light palette on a near-black page: a pale tint box under white text. */
+  :root[data-theme="dark"], .prompter-line {
     --bg: #16130F;
     --surface: #1F1B15;
     --surface-2: #292319;
@@ -123,6 +176,18 @@
     --visual-soft: #1C3733;
     --audio: #FF8552;
     --audio-soft: #3C2617;
+    --tag-prop: #749AD8;
+    --tag-prop-tint: #30343C;
+    --tag-location: #AC8CCF;
+    --tag-location-tint: #3B323A;
+    --tag-cast: #D181AC;
+    --tag-cast-tint: #432F33;
+    --tag-vfx: #C6910B;
+    --tag-vfx-tint: #403313;
+    --tag-sound: #7C9DBA;
+    --tag-sound-tint: #323536;
+    --tag-gear: #8AA32E;
+    --tag-gear-tint: #34361A;
     --accent: #FF8552;
     --accent-contrast: #241004;
     --danger: #FF7A6E;
@@ -584,8 +649,17 @@
     font-style: italic;
   }
   .cell-editable strong { font-weight: 700; }
-  .cell-editable a { color: var(--visual); text-decoration: underline; text-underline-offset: 2px; }
-  .audio-cell .cell-editable a { color: var(--audio); }
+  /* A link is teal in both columns (#143). It used to turn Audio orange in
+     the audio column, where it then looked like a comment anchor (orange
+     underline) — the four marks a script can carry are told apart by their
+     look alone: a highlight is a yellow fill, a comment an orange DOTTED
+     underline, a link a solid teal underline, a tag a tint with a rule. */
+  .cell-editable a {
+    color: var(--visual);
+    text-decoration: underline solid var(--visual);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 2px;
+  }
   .cell-editable mark, .prompter-line mark {
     background: #FCE38A;
     color: #2B2100;
@@ -1039,22 +1113,28 @@
   .modal-footer-actions { display: flex; gap: 8px; }
 
   /* ---------- production tags ---------- */
+  /* A tag is a light tint of its category with a 2px rule under it — no
+     icon in the text (#143: tried in the mockups and rejected; an icon in a
+     line being read aloud is one more thing to read). The tint is an opaque
+     colour of its own rather than the category colour over transparent, so
+     it reads the same on the Visual column's green-grey and the Audio
+     column's peach. The colours are the --tag-* tokens at the top. */
   .tag-anchor {
     border-radius: 3px;
     padding: 0 2px;
     cursor: pointer;
     box-shadow: inset 0 -2px 0 var(--tag-color, var(--visual));
-    background: color-mix(in srgb, var(--tag-color, var(--visual)) 14%, transparent);
+    background: var(--tag-tint, color-mix(in srgb, var(--tag-color, var(--visual)) 14%, transparent));
   }
-  .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 30%, transparent); }
-  .tag-anchor[data-tag-cat="prop"]     { --tag-color: #C2703D; }
-  .tag-anchor[data-tag-cat="location"] { --tag-color: #2F7D6B; }
-  .tag-anchor[data-tag-cat="cast"]     { --tag-color: #7A5AA8; }
-  .tag-anchor[data-tag-cat="vfx"]      { --tag-color: #B03A5B; }
+  .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 22%, var(--tag-tint, transparent)); }
+  .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
+  .tag-anchor[data-tag-cat="location"] { --tag-color: var(--tag-location); --tag-tint: var(--tag-location-tint); }
+  .tag-anchor[data-tag-cat="cast"]     { --tag-color: var(--tag-cast);     --tag-tint: var(--tag-cast-tint); }
+  .tag-anchor[data-tag-cat="vfx"]      { --tag-color: var(--tag-vfx);      --tag-tint: var(--tag-vfx-tint); }
   /* added when Music/SFX was split out of VFX — without it a sound tag fell
      back to --visual and read as the wrong category in the script itself */
-  .tag-anchor[data-tag-cat="sound"]    { --tag-color: #3D6DA8; }
-  .tag-anchor[data-tag-cat="gear"]     { --tag-color: #A67C1F; }
+  .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
+  .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
   .tag-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
   .tag-badge { background: var(--visual); }
 
@@ -2009,18 +2089,24 @@
      .tag-badge without touching a plain .comments-badge's red. */
   .comments-badge.tag-badge { background: var(--visual); }
 
+  /* A comment's phrase is a dotted Audio-orange underline and nothing else
+     (#143). It used to be an orange-tinted fill as well, which on the
+     page's warm background read as one more yellow highlight — and a
+     highlight inside a comment (the demo's "word for word") was then fill
+     on fill, one of the two invisible. As an underline it is drawn over
+     whatever fill the words already have, so a <mark> or a tag inside it
+     keeps its own look and both marks stay visible. The offset puts it
+     clear of a link's solid underline, which sits at 2px. */
   .cmt-anchor {
-    background: color-mix(in srgb, var(--accent) 26%, transparent);
-    border-bottom: 2px solid var(--accent);
+    text-decoration: underline dotted var(--audio);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4.5px;
+    text-decoration-skip-ink: none;
     border-radius: 2px;
     cursor: pointer;
-    padding: 0 1px;
   }
-  .cmt-anchor:hover { background: color-mix(in srgb, var(--accent) 40%, transparent); }
-  .cmt-anchor.resolved {
-    background: color-mix(in srgb, var(--text-faint) 20%, transparent);
-    border-bottom-color: var(--text-faint);
-  }
+  .cmt-anchor:hover { background: color-mix(in srgb, var(--audio) 14%, transparent); }
+  .cmt-anchor.resolved { text-decoration-color: var(--text-faint); }
   .cmt-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
   @keyframes cmt-flash {
     0%, 100% { box-shadow: none; }
@@ -2333,6 +2419,14 @@
   .prompter-line strong { color: #FFB98F; }
   .prompter-line u { text-underline-offset: 3px; }
   .prompter-line a { color: #A9E6D9; text-decoration: underline; }
+  /* The editor's 2px/4.5px comment underline is sized for 16px text; at
+     prompter sizes it thins to a hairline and slides up under the yellow
+     of a highlight it wraps, where orange dots on yellow all but vanish.
+     Scaled with the text, it stays a visible line clear of the fill. */
+  .prompter-line .cmt-anchor {
+    text-decoration-thickness: 0.07em;
+    text-underline-offset: 0.28em;
+  }
   .prompter-line .w { transition: opacity var(--dur-enter) var(--ease-standard); }
   .prompter-line .w.spoken { opacity: 0.32; }
   .prompter-line .w.current-word {
