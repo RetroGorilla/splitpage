@@ -150,6 +150,7 @@
       "reshoot": false,
       "notes": "",
       "owner": "",
+      "props": [],
       "audioRef": "Q1. Tell me who you are and what this place is.\nListen for a clean name-and-role line we can open the film on.",
       "location": "",
       "origin": "script"
@@ -162,6 +163,7 @@
       "reshoot": false,
       "notes": "",
       "owner": "",
+      "props": [],
       "audioRef": "Q2. Why a bakery — and why here, of all places?\nLet her tell it. Don't fill the pauses; the best line usually comes after one.",
       "location": "front counter",
       "origin": "script"
@@ -174,6 +176,7 @@
       "reshoot": false,
       "notes": "",
       "owner": "",
+      "props": [],
       "audioRef": "Q4. Is there a customer who's been coming since day one?\nIf she names someone, ask whether we can film them this week.",
       "location": "",
       "origin": "script"

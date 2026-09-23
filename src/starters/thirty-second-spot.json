@@ -127,6 +127,7 @@
       "reshoot": false,
       "notes": "",
       "owner": "",
+      "props": [],
       "audioRef": "VO: Train, desk, trail — it fits every cup holder we could find.",
       "location": "train platform",
       "origin": "script"
@@ -139,6 +140,7 @@
       "reshoot": false,
       "notes": "",
       "owner": "",
+      "props": [],
       "audioRef": "VO: Keepwarm. Stays hot. Stays put.",
       "location": "",
       "origin": "script"
