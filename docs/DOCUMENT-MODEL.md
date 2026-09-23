@@ -212,6 +212,28 @@ The b-roll key is an atom with the shot id. The shot's name is still the
 text after it up to the next line break, as today (08c:78-90). Only the key
 is special. **It is the only atom.**
 
+- **One id, one line.** The b-roll list finds a shot's record by its key's
+  id, so no two keys in a document may share one. A copy of a key carries
+  its id, so a **paste or drop** gives each pasted key a new id
+  (`makeId("bs")`, as a typed key gets) whenever any key in the document
+  has it, or any record in the list does; a key from another document whose
+  id this one does not know keeps it. A **cut then paste** in the same tab
+  (D6's nonce) is a move: the cut took the key out, so its id is free and
+  it keeps it, and its shot — status, notes and all — is found by it again.
+  Only another key holding the id then (the cut undone first, say) makes it
+  a new one. A copy is a **new shot**: its record is made fresh in the
+  paste's own undo entry, seeded from the scene it landed in the way a
+  typed key's is, and nothing of the copied shot's status, notes, owner or
+  location comes with it. Split and join move a key rather than copy it,
+  and import brings only plain-text markers, which the anchoring pass keys.
+  **Built:** `freshBrollIds` / `brollIdsTaken` (05c-clipboard.js),
+  `recordPastedBroll` (08c-broll.js). A document that already has two keys
+  with one id (pasted by an older version) is healed by the anchoring
+  pass: the list reads the second as unanchored, a name match never takes
+  a record a key further down still holds, and the pass gives the second
+  key an id of its own. Tests: `clipboard.test.mjs`,
+  `broll-model.test.mjs`, browser suite 80.
+
 **Script cells hold no pictures or video cards (D7).**
 
 - **Pasting.** A paste into a cell drops them. Comments keep both, and the
@@ -564,7 +586,8 @@ until step 4.
      (`05b-cell-edit.js`): bold/italic/underline/strike/highlight (with a
      collapsed caret too), links, Enter, the three tag routes, the b-roll
      key, paste, drop, copy and cut (`05c-clipboard.js`). Copy never
-     carries a comment; cut then paste moves it (D6). Pictures and video
+     carries a comment; cut then paste moves it (D6). A pasted b-roll key
+     gets an id of its own unless a cut is moving it (§3.3). Pictures and video
      cards are dropped from pasted script text and moved out of existing
      cells into comments on load (D7).
    - splitting a scene (Enter in the writer, Alt+Enter) is `splitCell` at
