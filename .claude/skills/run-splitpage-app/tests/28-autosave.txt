@@ -67,7 +67,7 @@ wait window.__written === 1
 # --- off means off --------------------------------------------------------
 eval (function(){A.timing().idle = 30;A.timing().max = 60;window.__written = 0;A.toggle();return true;})()
 expect A.enabled() === false
-expect document.getElementById('menu-autosave').textContent === 'Autosave: off'
+expect document.getElementById('menu-autosave').getAttribute('aria-checked') === 'false'
 caret #rows .row .audio-cell .cell-editable
 type not autosaved
 eval document.activeElement.blur()
@@ -92,7 +92,7 @@ expect document.getElementById('save-status').textContent === 'Saved'
 
 eval (function(){A.toggle();return true;})()
 expect A.enabled() === true
-expect document.getElementById('menu-autosave').textContent === 'Autosave: on'
+expect document.getElementById('menu-autosave').getAttribute('aria-checked') === 'true'
 expect localStorage.getItem('splitpage-autosave') === '1'
 
 # --- a file that changed on disk stops autosave instead of throwing a modal

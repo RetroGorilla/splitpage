@@ -544,13 +544,12 @@ export function toggleAutoSave() {
     : "Autosave is off — your changes are only written when you press Save.", "ok");
 }
 
-/* The menu entry says what is on, not what pressing it does: a checkmark
-   in a menu of verbs is read as state, and "Autosave: on" cannot be
-   misread as a command to turn it on. */
+/* The menu entry is a switch (#145): its position says what is on, which a
+   verb in a menu of verbs could not — "Autosave" beside a switch that is
+   on cannot be misread as a command to turn it on. */
 export function updateAutoSaveMenu() {
   var item = document.getElementById("menu-autosave");
   if (!item) return;
-  item.textContent = "Autosave: " + (autoSaveEnabled ? "on" : "off");
   item.setAttribute("aria-checked", autoSaveEnabled ? "true" : "false");
   item.classList.toggle("is-on", autoSaveEnabled);
 }

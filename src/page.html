@@ -59,6 +59,48 @@
 </style>
 </head>
 <body>
+<!-- The icons the File menu, the Export dialog and the command menu draw
+     (issues #145-#147): one stroke set, 24-unit grid, drawn in currentColor
+     through <use href="#i-…">. Never emoji — they render in a different
+     colour and weight on every platform. -->
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6M9 14h6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 14V3"/><path d="M7.5 7.5L12 3l4.5 4.5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 19a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.9 9 5 5 0 0 1 17.5 19z"/></symbol>
+    <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 17.9 8.5a5 5 0 0 1 .6 9.9"/><path d="M12 12v8M9 15l3-3 3 3"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="7" rx="1.5"/><rect x="3.5" y="13" width="17" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-2a4 4 0 0 1 4-4h12"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 12.5v2a4 4 0 0 1-4 4H4"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="i-find" viewBox="0 0 24 24"><path d="M4 6h10M4 11h6M4 16h5"/><circle cx="15.5" cy="14.5" r="3.5"/><path d="M20.5 19.5l-2.5-2.5"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.7 9.7 0 0 1 12 5c5 0 9 5 10 7a14 14 0 0 1-2.5 3.3M6.6 6.6C4.4 8 2.9 10.2 2 12c1 2 5 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+    <symbol id="i-present" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M10.5 8.3v5.4l4.3-2.7z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3.5h11l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5z"/><path d="M7.5 3.5v4.5h7.5V3.5"/><path d="M7.5 20.5v-6h9v6"/></symbol>
+    <symbol id="i-autosave" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 0 1-13.4 4.6"/><path d="M4.5 12a7.5 7.5 0 0 1 13.4-4.6"/><path d="M18.5 3.5v4h-4M5.5 20.5v-4h4"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 0 1 4.9.6c0 1.7-2.4 2.3-2.4 3.9"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6.5h9M17 6.5h3M4 12h3M11 12h9M4 17.5h11M19 17.5h1"/><circle cx="15" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17.5" r="2"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5z"/><circle cx="8" cy="8" r="1.5"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M14.5 4.5v15"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1 1 17.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 1 1-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 1 1 6.5 15H9z"/></symbol>
+  </defs>
+</svg>
 <div id="root">
   <header class="topbar">
     <div>
@@ -104,152 +146,154 @@
     </div>
     <div class="toolbar">
       <div class="menu-wrap">
-        <button class="btn" id="btn-file" type="button" aria-haspopup="true" aria-expanded="false">☰ File</button>
+        <button class="btn" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">☰ File</button>
+        <!-- Only drawn at phone width, where the menu is a sheet from the
+             bottom of the screen; a dropdown needs no scrim. -->
         <div class="menu-backdrop" id="file-menu-backdrop" hidden></div>
-        <!-- A left drawer, not a dropdown: the list is far too long to hang
-             off the button without running past the bottom of the window.
-             Same element, same id, same data-file-action buttons, so every
-             capture-phase listener other fragments hang off #file-menu
-             (20b, 20c, 20e, 20f) keeps working untouched. -->
-        <div class="menu" id="file-menu" hidden role="menu" aria-label="File">
+        <!-- A dropdown hung off the File button (issue #145), not the left
+             drawer #51 made it: a file card on top, then plain headed groups,
+             none of them collapsed, and a footer. Same element and id, and
+             every data-file-action button is still in here exactly once, so
+             the capture-phase listeners other fragments hang off #file-menu
+             (20b, 20c, 20e) and the desktop native menu, which clicks these
+             buttons (runDesktopMenuCommand, 20f-desktop.js), keep working
+             untouched. 18b-file-menu.js opens it, keeps the card and the
+             reasons current, draws the shortcut chips and does the keyboard.
+
+             Every item is .mi: an icon, a label, an optional second line
+             (.mi-why) saying why it cannot work right now, and the shortcut
+             chips 18b draws from data-keys — only for a shortcut that works
+             in this build (data-keys-only="desktop" for one only the desktop
+             app's native menu has). -->
+        <div class="menu" id="file-menu" hidden role="menu" aria-label="File" tabindex="-1">
           <div class="menu-head">
             <span class="menu-title">File</span>
             <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close">✕</button>
           </div>
           <div class="menu-body" role="none">
-          <!-- Most-used, no heading, never collapses (issue #51): the three
-               things every save touches, in the order you reach for them. -->
-          <button type="button" role="menuitem" data-file-action="save-as">Save As…</button>
-          <button type="button" role="menuitem" data-file-action="save-back" id="menu-save-back" disabled>Save to file</button>
-          <!-- Says what is on, not what pressing it does — updateAutoSaveMenu()
-               (14-export.js) rewrites the label on every change. -->
-          <button type="button" role="menuitemcheckbox" aria-checked="true" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing">Autosave: on</button>
-
-          <div class="menu-sep"></div>
-
-          <!-- Headed, collapsible sections from here down (issue #51):
-               .menu-section-toggle is a real <button> so Enter/Space toggles
-               it and it sits in the normal Tab order; .menu-section-body
-               carries the plain `hidden` attribute when collapsed, which
-               both hides it and — for free, via the browser's own tab-order
-               rules — takes every button inside it out of Tab traversal.
-               initFileMenuSections() (18-local-files.js) sets aria-expanded
-               and `hidden` to match the remembered per-device state on boot;
-               toggleFileMenuSection() flips both on click. -->
-          <div class="menu-section">
-            <button type="button" class="menu-section-toggle" data-menu-section="open" aria-expanded="true" aria-controls="menu-section-open"><span class="menu-label">Open</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
-            <div class="menu-section-body" id="menu-section-open" role="none">
-              <button type="button" role="menuitem" data-file-action="open">Open a document…</button>
-              <button type="button" role="menuitem" data-file-action="paste">Paste a script…</button>
-              <button type="button" role="menuitem" data-file-action="gdoc-import">Import from Google Doc link…</button>
-              <button type="button" role="menuitem" data-file-action="drive-open" id="menu-drive-open">Google Drive files…</button>
+            <!-- The file card: where this document is kept and whether it is
+                 all there yet (refreshFileCard(), 18b-file-menu.js), and the
+                 two things every save touches. Save to file is only here
+                 while a foreign file is open (#menu-save-back: disabled, and
+                 so hidden, the rest of the time). -->
+            <div class="fm-card" role="group" aria-labelledby="fm-card-name">
+              <div class="fm-card-file">
+                <svg class="fm-card-icon" aria-hidden="true"><use href="#i-file"/></svg>
+                <div class="fm-card-text">
+                  <div class="fm-card-name" id="fm-card-name">Not saved yet</div>
+                  <div class="fm-card-meta" id="fm-card-meta"></div>
+                </div>
+              </div>
+              <!-- A switch, not "Autosave: on" text. updateAutoSaveMenu()
+                   (14-export.js) keeps aria-checked; the click keeps the
+                   menu open so the switch is seen to move. -->
+              <button type="button" role="menuitemcheckbox" aria-checked="true" class="mi mi-switch" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing"><svg class="mi-icon" aria-hidden="true"><use href="#i-autosave"/></svg><span class="mi-text"><span class="mi-label">Autosave</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="save-back" id="menu-save-back" disabled><svg class="mi-icon" aria-hidden="true"><use href="#i-save"/></svg><span class="mi-text"><span class="mi-label">Save to file</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="save-as" data-keys="mod+shift+s" title="Writes this script to a new file of your choosing — the one on screen keeps its own"><svg class="mi-icon" aria-hidden="true"><use href="#i-copy"/></svg><span class="mi-text"><span class="mi-label">Save a copy…</span><span class="mi-why" hidden></span></span></button>
             </div>
-          </div>
+            <!-- The command menu (issue #147) — here for a keyboard with no
+                 Ctrl, and so the shortcut is written down somewhere. -->
+            <button type="button" role="menuitem" class="mi mi-command" data-file-action="command-menu" id="menu-command" data-keys="mod+k"><svg class="mi-icon" aria-hidden="true"><use href="#i-search"/></svg><span class="mi-text"><span class="mi-label">Search commands…</span><span class="mi-why" hidden></span></span></button>
 
-          <div class="menu-sep"></div>
-
-          <!-- #menu-section-server-wrap is hidden by updateServerMenu()
-               (13-hosted.js) when every item inside it is hidden — today
-               that never quite happens, since Servers… and Publish & copy a
-               link stay offered even with nothing connected, but the section
-               follows the same "nothing to show" rule as its items rather
-               than assuming that. -->
-          <div class="menu-section" id="menu-section-server-wrap">
-            <button type="button" class="menu-section-toggle" data-menu-section="server" aria-expanded="true" aria-controls="menu-section-server" id="menu-server-section-toggle"><span class="menu-label">Server</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
-            <div class="menu-section-body" id="menu-section-server" role="none">
+            <div class="menu-group" role="group" aria-labelledby="fm-g-new" data-menu-group="new">
+              <div class="menu-group-head" id="fm-g-new">New &amp; open</div>
+              <button type="button" role="menuitem" class="mi" data-file-action="new" title="An empty script in this tab — the one on screen goes into Version history first"><svg class="mi-icon" aria-hidden="true"><use href="#i-file-plus"/></svg><span class="mi-text"><span class="mi-label">New script</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="open" data-keys="mod+o"><svg class="mi-icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="mi-text"><span class="mi-label">Open…</span><span class="mi-why" hidden></span></span></button>
               <!-- shown only when the page was served by a Splitpage document
-                   server; hidden on file:// and on plain static hosting -->
-              <button type="button" role="menuitem" data-file-action="server-open" id="menu-server-open" hidden>Open from the server…</button>
-              <button type="button" role="menuitem" data-file-action="server-publish" id="menu-server-new" hidden>Put this script on the server</button>
-              <div class="menu-sep" id="menu-server-sep" hidden></div>
-              <!-- The live counterpart of the export formats below, and
-                   deliberately next to the rest of the server tools (issue
-                   #19/#51): every export hands someone a DEAD COPY whose
-                   edits never come back, and this is the one that doesn't.
-                   It publishes to the connected server and copies the
-                   address of that one shared document. Always shown — with
-                   no server it says so and opens Servers… rather than doing
-                   nothing. 13-hosted.js. -->
-              <button type="button" role="menuitem" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document.">Publish &amp; copy a link</button>
-              <button type="button" role="menuitem" data-file-action="servers" id="menu-servers">Servers…</button>
+                   server; hidden on file:// and on plain static hosting
+                   (updateServerMenu, 13-hosted.js) -->
+              <button type="button" role="menuitem" class="mi" data-file-action="server-open" id="menu-server-open" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-server"/></svg><span class="mi-text"><span class="mi-label">Open from the server…</span><span class="mi-why" hidden></span></span></button>
+              <!-- Desktop only: main keeps the list (DESKTOP-RECENTS), and it
+                   is asked for each time the submenu opens. -->
+              <button type="button" role="menuitem" class="mi mi-parent" data-submenu="recent" id="menu-recent" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-recent" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-clock"/></svg><span class="mi-text"><span class="mi-label">Open recent</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+              <div class="menu-sub" id="menu-sub-recent" role="menu" aria-label="Open recent" hidden></div>
+              <button type="button" role="menuitem" class="mi mi-parent" data-submenu="import" id="menu-import" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-import"><svg class="mi-icon" aria-hidden="true"><use href="#i-import"/></svg><span class="mi-text"><span class="mi-label">Import</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
+              <div class="menu-sub" id="menu-sub-import" role="menu" aria-label="Import" hidden>
+                <button type="button" role="menuitem" class="mi" data-file-action="paste" title="Brings a revised draft into this document — its breakdown, cast, b-roll and comments all stay"><svg class="mi-icon" aria-hidden="true"><use href="#i-clipboard"/></svg><span class="mi-text"><span class="mi-label">Paste a script…</span><span class="mi-why" hidden></span></span></button>
+                <button type="button" role="menuitem" class="mi" data-file-action="gdoc-import"><svg class="mi-icon" aria-hidden="true"><use href="#i-link"/></svg><span class="mi-text"><span class="mi-label">Google Doc link…</span><span class="mi-why" hidden></span></span></button>
+                <button type="button" role="menuitem" class="mi" data-file-action="drive-open" id="menu-drive-open"><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud"/></svg><span class="mi-text"><span class="mi-label">Google Drive…</span><span class="mi-why" hidden></span></span></button>
+              </div>
             </div>
-          </div>
 
-          <div class="menu-sep"></div>
-
-          <div class="menu-section">
-            <button type="button" class="menu-section-toggle" data-menu-section="export" aria-expanded="false" aria-controls="menu-section-export"><span class="menu-label">Export</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
-            <div class="menu-section-body" id="menu-section-export" role="none" hidden>
-              <button type="button" role="menuitem" data-file-action="export-docx">Word (.docx)</button>
-              <button type="button" role="menuitem" data-file-action="export-md">Markdown (.md)</button>
-              <button type="button" role="menuitem" data-file-action="export-md-table" title="Same script, laid out as a Visual/Audio table instead of a stacked scene list">Markdown, two columns (.md)</button>
-              <button type="button" role="menuitem" data-file-action="export-csv">Spreadsheet (.csv)</button>
-              <button type="button" role="menuitem" data-file-action="export-breakdown">Breakdown only (.csv)</button>
-              <button type="button" role="menuitem" data-file-action="export-pdf">PDF (.pdf)</button>
-              <!-- the old save format, now an export: one self-contained page
-                   for sending a script to someone with nothing installed -->
-              <button type="button" role="menuitem" data-file-action="export-html" title="One self-contained page — the script with a copy of Splitpage around it. For sending to someone who has nothing installed.">Standalone HTML (.html)</button>
-              <div class="menu-sep"></div>
-              <div class="menu-label">Narration</div>
-              <button type="button" role="menuitem" data-file-action="export-narration-docx">Narration only (.docx)</button>
-              <button type="button" role="menuitem" data-file-action="export-narration-txt">Narration only (.txt)</button>
-              <div class="menu-sep"></div>
-              <div class="menu-label">Packing lists</div>
-              <button type="button" role="menuitem" data-file-action="export-packing-gear">Gear (.pdf)</button>
-              <button type="button" role="menuitem" data-file-action="export-packing-prop">Props (.pdf)</button>
+            <!-- The live counterpart of every export (issue #19): an export
+                 hands someone a DEAD COPY whose edits never come back, and
+                 Publish & copy a link doesn't. It is always offered — with no
+                 server it says so on its second line and opens Servers… to
+                 set one up rather than failing. 13-hosted.js. -->
+            <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
+              <div class="menu-group-head" id="fm-g-share">Share</div>
+              <button type="button" role="menuitem" class="mi" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document."><svg class="mi-icon" aria-hidden="true"><use href="#i-share"/></svg><span class="mi-text"><span class="mi-label">Publish &amp; copy a link</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="server-publish" id="menu-server-new" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud-up"/></svg><span class="mi-text"><span class="mi-label">Put this script on the server</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
-          </div>
 
-          <div class="menu-sep"></div>
+            <!-- One Export… (issue #146) where there were thirteen items: the
+                 dialog picks the format (18c-export-dialog.js). "Export again
+                 as …" appears once something has been exported on this
+                 device and repeats it in one click. -->
+            <div class="menu-group" role="group" aria-labelledby="fm-g-export" data-menu-group="export">
+              <div class="menu-group-head" id="fm-g-export">Export</div>
+              <button type="button" role="menuitem" class="mi" data-file-action="export" id="menu-export" data-keys="mod+e" title="PDF, Word, Markdown, a spreadsheet, a standalone page, or part of the script"><svg class="mi-icon" aria-hidden="true"><use href="#i-export"/></svg><span class="mi-text"><span class="mi-label">Export…</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="export-again" id="menu-export-again" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-repeat"/></svg><span class="mi-text"><span class="mi-label">Export again</span><span class="mi-why" hidden></span></span></button>
+              <!-- Every format's own action, as it always was: what the
+                   dialog's Export button, "Export again", the command menu
+                   and the desktop native menu's Export submenu all click.
+                   Never shown — the dialog is how a person picks one. -->
+              <div class="menu-hidden-actions" hidden>
+                <button type="button" data-file-action="export-pdf">PDF (.pdf)</button>
+                <button type="button" data-file-action="export-docx">Word (.docx)</button>
+                <button type="button" data-file-action="export-md">Markdown (.md)</button>
+                <button type="button" data-file-action="export-md-table">Markdown, two columns (.md)</button>
+                <button type="button" data-file-action="export-csv">Spreadsheet (.csv)</button>
+                <button type="button" data-file-action="export-html">Standalone page (.html)</button>
+                <button type="button" data-file-action="export-narration-docx">Narration only (.docx)</button>
+                <button type="button" data-file-action="export-narration-txt">Narration only (.txt)</button>
+                <button type="button" data-file-action="export-breakdown">Breakdown (.csv)</button>
+                <button type="button" data-file-action="export-packing-gear">Gear packing list (.pdf)</button>
+                <button type="button" data-file-action="export-packing-prop">Props packing list (.pdf)</button>
+              </div>
+            </div>
 
-          <div class="menu-section">
-            <button type="button" class="menu-section-toggle" data-menu-section="document" aria-expanded="true" aria-controls="menu-section-document"><span class="menu-label">This document</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
-            <div class="menu-section-body" id="menu-section-document" role="none">
-              <button type="button" role="menuitem" data-file-action="history">Version history…</button>
+            <div class="menu-group" role="group" aria-labelledby="fm-g-doc" data-menu-group="document">
+              <div class="menu-group-head" id="fm-g-doc">This document</div>
+              <button type="button" role="menuitem" class="mi" data-file-action="history"><svg class="mi-icon" aria-hidden="true"><use href="#i-history"/></svg><span class="mi-text"><span class="mi-label">Version history…</span><span class="mi-why" hidden></span></span></button>
               <!-- Ctrl+F everywhere else; this entry exists because phone
                    keyboards have no Ctrl -->
-              <button type="button" role="menuitem" data-file-action="find">Find &amp; replace</button>
+              <button type="button" role="menuitem" class="mi" data-file-action="find" data-keys="mod+f"><svg class="mi-icon" aria-hidden="true"><use href="#i-find"/></svg><span class="mi-text"><span class="mi-label">Find &amp; replace</span><span class="mi-why" hidden></span></span></button>
               <!-- Collapses every scene marked Shot into a thin strip — issue
-                   #25. Says what is on, not what pressing it does (see
-                   menu-autosave); updateHideShotMenu() (01b-hide-shot.js)
-                   keeps aria-checked and the checkmark in sync. Ctrl/Cmd+
-                   Alt+H, mirrored in the desktop View menu (desktop/main.js). -->
-              <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+                   #25. A switch; updateHideShotMenu() (01b-hide-shot.js) keeps
+                   aria-checked. Ctrl/Cmd+Alt+H, mirrored in the desktop View
+                   menu (desktop/main.js). -->
+              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse scenes marked Shot into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide shot scenes</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <!-- Desktop app only (issue #86): the in-page twin of View ▸
                    Present in Browser, which a Windows user cannot reach —
                    the window's title bar is the tab strip, so there is no
-                   menu bar to open. toggleFileMenu() (18-local-files.js)
+                   menu bar to open. toggleFileMenu() (18b-file-menu.js)
                    unhides it whenever the bridge can hand the script to the
                    browser; the native item clicks this same button
                    (runDesktopMenuCommand, 20f-desktop.js). -->
-              <button type="button" role="menuitem" data-file-action="prompter-open-in-browser" id="menu-present-browser" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app (Ctrl+Shift+P)">Present in browser (Follow My Voice)</button>
+              <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-browser" id="menu-present-browser" data-keys="mod+shift+p" data-keys-only="desktop" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser (Follow My Voice)</span><span class="mi-why" hidden></span></span></button>
               <!-- Desktop app only (issue #123): the in-page twin of View ▸ Use
                    Chromium Speech Recognition — the same script in an
                    installed Chromium browser whatever the default is, where
                    Follow My Voice uses that browser's own recognition.
-                   Unhidden like the item above (18-local-files.js). -->
-              <button type="button" role="menuitem" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition">Use Chromium Speech Recognition</button>
+                   Unhidden like the item above. -->
+              <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Use Chromium Speech Recognition</span><span class="mi-why" hidden></span></span></button>
             </div>
           </div>
-
-          <div class="menu-sep"></div>
-
-          <div class="menu-section">
-            <button type="button" class="menu-section-toggle" data-menu-section="help" aria-expanded="false" aria-controls="menu-section-help"><span class="menu-label">Help &amp; settings</span><span class="menu-section-chevron" aria-hidden="true">▾</span></button>
-            <div class="menu-section-body" id="menu-section-help" role="none" hidden>
-              <button type="button" role="menuitem" data-file-action="setup">Set up Splitpage…</button>
-              <button type="button" role="menuitem" data-file-action="tagging-help">Tagging reference</button>
-              <button type="button" role="menuitem" data-file-action="help">User guide…</button>
-              <button type="button" role="menuitem" data-file-action="tour">Take the tour</button>
-              <button type="button" role="menuitem" data-file-action="about">About Splitpage</button>
-              <div class="menu-sep"></div>
-              <!-- Browser build only: takes history, bookmarks and prefs to
-                   the desktop app. 20f-desktop.js's initDesktop hides the
-                   export entry and unhides the import one there. -->
-              <button type="button" role="menuitem" data-file-action="export-app-data" id="menu-export-app-data">Export app data…</button>
-              <button type="button" role="menuitem" data-file-action="import-app-data" id="menu-import-app-data" hidden>Import app data…</button>
-            </div>
-          </div>
+          <!-- Help and the app's own settings: small, always at the bottom,
+               outside the scrolling list so they are never scrolled away. -->
+          <div class="menu-foot" role="group" aria-label="Help and settings">
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="help" data-keys="F1" data-keys-only="desktop"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-label">Help</span></button>
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tour"><svg class="mi-icon" aria-hidden="true"><use href="#i-compass"/></svg><span class="mi-label">Tour</span></button>
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="setup" title="Set up Splitpage…"><svg class="mi-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="mi-label">Set up</span></button>
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="about" title="About Splitpage"><svg class="mi-icon" aria-hidden="true"><use href="#i-info"/></svg><span class="mi-label">About</span></button>
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tagging-help"><svg class="mi-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="mi-label">Tagging reference</span></button>
+            <!-- Browser build: takes history, bookmarks and prefs to the
+                 desktop app. 20f-desktop.js's initDesktop unhides the import
+                 entry there. -->
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="export-app-data" id="menu-export-app-data"><svg class="mi-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="mi-label">Export app data…</span></button>
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="import-app-data" id="menu-import-app-data" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="mi-label">Import app data…</span></button>
           </div>
         </div>
       </div>
@@ -435,6 +479,61 @@
   </div>
 </div>
 
+<!-- The command menu (issue #147): Ctrl/Cmd+K, or File ▸ Search commands…
+     on a keyboard with no Ctrl. A search box over the script that finds
+     every File-menu command, each export format, the panels, Write and
+     Present by name or by a word for them, and runs the same handler the
+     menu or the button does. 18d-command-menu.js builds the list. -->
+<div class="cmdk-backdrop" id="cmdk" hidden>
+  <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Search commands">
+    <div class="cmdk-input-row">
+      <svg class="cmdk-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <input type="text" id="cmdk-input" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search commands…" aria-label="Search commands">
+      <kbd class="cmdk-esc" aria-hidden="true">Esc</kbd>
+    </div>
+    <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Commands"></div>
+    <div class="cmdk-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to run</span><span><kbd>Esc</kbd> to close</span></div>
+  </div>
+</div>
+
+<!-- File ▸ Export… (issue #146): one dialog in place of thirteen menu items.
+     The format cards and the options are built by 18c-export-dialog.js from
+     its EXPORT_FORMATS table; what the Export button runs is the matching
+     hidden <button data-file-action="export-…"> in #file-menu, so the
+     dialog, the desktop native menu and the command menu all reach one code
+     path. -->
+<div class="modal-backdrop" id="export-modal" hidden>
+  <div class="modal-panel export-panel" role="dialog" aria-modal="true" aria-labelledby="export-title">
+    <div class="export-head">
+      <h2 id="export-title">Export</h2>
+      <button type="button" class="modal-close" id="export-close" aria-label="Close">×</button>
+    </div>
+    <div class="export-body">
+      <div class="export-formats" id="export-formats" role="radiogroup" aria-labelledby="export-title"></div>
+      <div class="export-side">
+        <div class="export-preview-tray">
+          <div class="export-preview" id="export-preview" aria-hidden="true"></div>
+        </div>
+        <p class="export-summary" id="export-summary"></p>
+        <div class="export-options" id="export-options"></div>
+        <div class="export-field">
+          <span class="export-field-label">File name</span>
+          <code class="export-filename" id="export-filename"></code>
+        </div>
+        <p class="export-why" id="export-why" role="status" hidden></p>
+      </div>
+    </div>
+    <div class="export-foot">
+      <p class="export-note">Exports are copies. To share one live document, use
+        <button type="button" class="export-note-link" id="export-share-link">Publish &amp; copy a link</button>.</p>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="export-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="export-go">Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="gdoc-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="gdoc-title">
     <div class="modal-header">
@@ -443,7 +542,7 @@
     </div>
     <p class="modal-hint">Paste the link to a Google Doc (or just its ID). Splitpage can't read it directly — it
       opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
-      it lands, bring it in the same way as any other Word file: File ▸ Open a document…. If the doc isn't
+      it lands, bring it in the same way as any other Word file: File ▸ Open…. If the doc isn't
       shared "Anyone with the link", make sure you're signed in to the right Google account in that tab first.</p>
     <input type="text" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
     <div class="modal-footer">
