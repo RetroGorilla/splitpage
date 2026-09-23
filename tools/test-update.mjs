@@ -20,14 +20,17 @@
  * Exits non-zero on the first failure.
  */
 
-import { mkdtempSync, copyFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, copyFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 
 const REAL_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
-const MIRROR_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+/* The public mirror. The source repo is private, so a portable copy checking
+   it gets a 404 and never hears of a release. */
+const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
+/* Somewhere a manifest might try to redirect the check to. */
+const OTHER_API = "https://api.github.com/repos/someone-else/splitpage/releases/latest";
 
 let passed = 0;
 const failures = [];
@@ -53,6 +56,9 @@ const { updateApiUrl, compareVersions } = mod;
 /* Test 1: default when nothing is set */
 delete process.env.SPLITPAGE_UPDATE_API;
 eq("default URL (no override, no manifest)", updateApiUrl(), DEFAULT_API);
+check("...and it is the same mirror the desktop app checks",
+  readFileSync(join(REAL_ROOT, "desktop", "main.js"), "utf8").includes(JSON.stringify(DEFAULT_API)),
+  "desktop/main.js's DEFAULT_UPDATE_API differs");
 
 /* Test 2: env override takes precedence */
 process.env.SPLITPAGE_UPDATE_API = "https://custom.api/releases/latest";
@@ -81,19 +87,18 @@ writeFileSync(join(testAppRoot, "VERSION"), "1.0.0\n");
 writeFileSync(join(testAppRoot, ".splitpage-release.json"), JSON.stringify({
   name: "Splitpage",
   version: "1.0.0",
-  updateApi: MIRROR_API,
+  updateApi: OTHER_API,
   files: {}
 }));
 
 const testMod = await import(pathToFileURL(join(testAppRoot, "update.mjs")).href);
 const testUpdateApiUrl = testMod.updateApiUrl;
 delete process.env.SPLITPAGE_UPDATE_API;
-check("a manifest naming another update API is ignored", testUpdateApiUrl() !== MIRROR_API,
+check("a manifest naming another update API is ignored", testUpdateApiUrl() !== OTHER_API,
   "got " + testUpdateApiUrl());
-check("...and the built-in default is used instead",
-  testUpdateApiUrl().startsWith("https://api.github.com/repos/"), "got " + testUpdateApiUrl());
-process.env.SPLITPAGE_UPDATE_API = MIRROR_API;
-eq("...while the env var still overrides it", testUpdateApiUrl(), MIRROR_API);
+eq("...and the built-in default is used instead", testUpdateApiUrl(), DEFAULT_API);
+process.env.SPLITPAGE_UPDATE_API = OTHER_API;
+eq("...while the env var still overrides it", testUpdateApiUrl(), OTHER_API);
 delete process.env.SPLITPAGE_UPDATE_API;
 
 rmSync(testAppRoot, { recursive: true, force: true });

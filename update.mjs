@@ -30,8 +30,10 @@ import { fileURLToPath } from "node:url";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
 /* Overridable so this can be pointed at a test server — and so anyone running
-   their own fork is not stuck checking someone else's releases. */
-const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage/releases/latest";
+   their own fork is not stuck checking someone else's releases. The public
+   mirror, not the source repo: that one is private, so an anonymous check
+   against it is a 404. Same URL as DEFAULT_UPDATE_API in desktop/main.js. */
+const DEFAULT_API = "https://api.github.com/repos/RetroGorilla/splitpage-releases/releases/latest";
 
 const argv = process.argv.slice(2);
 /* --json makes stdout a single machine-readable line, for anything that has
