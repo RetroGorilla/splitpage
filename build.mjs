@@ -399,6 +399,10 @@ const PARTS = [
    img-src              'self' data: blob: — every image in a document is a
                         data: URI (safeImageSrc allows nothing else) and
                         exports build blob: URLs.
+   media-src            'self' blob: — a video file dropped or pasted into a
+                        scene is read through a blob: URL the page made from
+                        it, for its first frame (#135). Nothing remote: a
+                        video on the web is a link, never played here.
    connect-src          this origin, and any http(s) server the user points
                         File > Servers... at, which is a documented feature
                         and includes a LAN address over plain http. Narrower
@@ -426,6 +430,7 @@ const CSP_DIRECTIVES = (scriptHash) => [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
   "connect-src 'self' https: http:",
   "object-src 'none'",
   "frame-src 'self'",

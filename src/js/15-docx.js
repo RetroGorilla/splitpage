@@ -1,8 +1,9 @@
 import { S } from "./_state.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
+import { morePictureRefs, pictureBytes, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
-import { safeHref } from "./04-richtext.js";
+import { inertBody, safeHref } from "./04-richtext.js";
 import { cellOf, toDocxRuns, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
@@ -130,6 +131,50 @@ function docxDrawingRun(img, id, cx, cy) {
     '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
 }
 
+/* A scene's video links (#135) as one small paragraph under its pictures:
+   "▶ " and each link — a web address as a hyperlink showing it, a video
+   file by its name. docxVideoLinksOf (below) is how docxToRows knows it
+   again. */
+var VIDEO_LINKS_MARK = "▶ ";
+
+function docxVideoLinksXml(links, rels) {
+  if (!links.length) return "";
+  var rPr = '<w:rPr><w:sz w:val="18"/></w:rPr>';
+  var out = '<w:p><w:r>' + rPr + '<w:t xml:space="preserve">' + VIDEO_LINKS_MARK + '</w:t></w:r>';
+  links.forEach(function (l, i) {
+    if (i) out += '<w:r>' + rPr + '<w:t xml:space="preserve">  ·  </w:t></w:r>';
+    if (l.href) {
+      out += '<w:hyperlink r:id="' + rels.addLink(l.href) + '"><w:r><w:rPr><w:color w:val="1155CC"/><w:u w:val="single"/><w:sz w:val="18"/></w:rPr>' +
+        '<w:t xml:space="preserve">' + xmlEscape(l.href) + '</w:t></w:r></w:hyperlink>';
+    } else {
+      out += '<w:r>' + rPr + '<w:t xml:space="preserve">' + xmlEscape(l.name + " (video file)") + '</w:t></w:r>';
+    }
+  });
+  return out + '</w:p>';
+}
+
+/* A table cell's paragraph written by docxVideoLinksXml, read back as the
+   links it names — null for any other paragraph. Only "▶ " followed by
+   nothing but links and file names separated by " · " counts; a line of
+   the user's own that happens to start with the mark keeps its words. */
+function docxVideoLinksOf(pEl, linkMap) {
+  var html = docxParaToHtml(pEl, linkMap);
+  var text = htmlToPlainText(html);
+  if (text.indexOf(VIDEO_LINKS_MARK) !== 0) return null;
+  var hrefs = [];
+  inertBody(html).querySelectorAll("a[href]").forEach(function (a) { hrefs.push(a.getAttribute("href")); });
+  var parts = text.slice(VIDEO_LINKS_MARK.length).split("  ·  ");
+  var links = [];
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].trim();
+    var file = /^(.+) \(video file\)$/.exec(p);
+    if (file) { links.push({ name: file[1] }); continue; }
+    if (hrefs.indexOf(p) === -1) return null;
+    links.push({ href: p });
+  }
+  return links.length ? links : null;
+}
+
 function docxCellXml(inner, widthDxa) {
   return '<w:tc><w:tcPr><w:tcW w:w="' + widthDxa + '" w:type="dxa"/>' +
     '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
@@ -223,6 +268,21 @@ export function buildDocx() {
         if (rowImage(row).ref) pictureParts[rowImage(row).ref.sha256] = { rid: img.rid, name: img.name, w: dim.w, h: dim.h };
       } catch (e) { /* unreadable image — skip it rather than break the export */ }
     }
+    /* the rest of the scene's gallery (#135), each picture under the one
+       before it, and its video links as one paragraph of "▶ " links —
+       what docxToRows reads back into the gallery */
+    morePictureRefs(row).forEach(function (ref) {
+      var more = pictureBytes(ref);
+      if (!more) return;
+      try {
+        var mdim = safeAspect({ w: more.width, h: more.height });
+        var mimg = rels.addImage(more.bytes, more.mime);
+        var mcx = Math.round(Math.min(2750000, mdim.w * 9525));
+        visual += '<w:p>' + docxDrawingRun(mimg, media.length, mcx, Math.round(mcx * mdim.ratio)) + '</w:p>';
+        pictureParts[ref.sha256] = { rid: mimg.rid, name: mimg.name, w: mdim.w, h: mdim.h };
+      } catch (e) { /* as above */ }
+    });
+    visual += docxVideoLinksXml(rowVideoLinks(row), rels);
     visual += docxRunsXml(row.visualText, rels);
     rowsXml += '<w:tr>' + docxNumberCellXml(pad2(idx + 1), COL_NO, false) +
       docxCellXml(visual, COL) + docxCellXml(docxRunsXml(row.audioText, rels), COL) + '</w:tr>';
@@ -645,6 +705,13 @@ function isAllBoldPara(pEl) {
   return sawText;
 }
 
+/* Every picture a cell holds, by relationship id, in order. */
+function allEmbedIds(el) {
+  return Array.prototype.map.call(el.getElementsByTagNameNS(A_NS, "blip"), function (b) {
+    return b.getAttributeNS(R_NS, "embed");
+  }).filter(Boolean);
+}
+
 function firstEmbedId(el) {
   var blip = el.getElementsByTagNameNS(A_NS, "blip")[0];
   return blip ? blip.getAttributeNS(R_NS, "embed") : null;
@@ -788,7 +855,9 @@ export async function docxToRows(file) {
       visualText: fields.visualText || "",
       imageRef: null,
       audioText: fields.audioText || "",
-      _pendingImage: fields._pendingImage || null
+      _pendingImage: fields._pendingImage || null,
+      _pendingMore: fields._pendingMore || null,
+      _links: fields._links || null
     };
   }
 
@@ -796,13 +865,19 @@ export async function docxToRows(file) {
     if (node.localName === "tbl") {
       flush();
       var trs = directChildren(node, "tr");
-      var cellHtml = [], cellEls = [];
+      var cellHtml = [], cellEls = [], cellLinks = [];
       for (var t = 0; t < trs.length; t++) {
         var tcs = directChildren(trs[t], "tc");
+        var rowLinks = [];
         cellEls.push(tcs);
+        cellLinks.push(rowLinks);
         cellHtml.push(tcs.map(function (tc) {
           var parts = [];
           directChildren(tc, "p").forEach(function (pEl) {
+            /* buildDocx's line of a scene's video links (#135) goes
+               back into its gallery, not its words */
+            var vl = docxVideoLinksOf(pEl, linkMap);
+            if (vl) { vl.forEach(function (l) { rowLinks.push(l); }); return; }
             var h = docxParaToHtml(pEl, linkMap);
             if (h) parts.push(h);
           });
@@ -817,13 +892,20 @@ export async function docxToRows(file) {
       for (var i = mapping.skipHeader ? 1 : 0; i < cellHtml.length; i++) {
         var v = cellHtml[i][mapping.vi] || "";
         var a = cellHtml[i][mapping.ai] || "";
-        /* a picture can sit in either cell — take whichever has one */
-        var embed = null;
-        for (var c = 0; c < cellEls[i].length && !embed; c++) embed = firstEmbedId(cellEls[i][c]);
-        if (!htmlToPlainText(v) && !htmlToPlainText(a) && !embed) continue;
+        /* a picture can sit in either cell — the first is the scene's
+           picture, any after it the rest of its gallery (#135) */
+        var targets = [];
+        for (var c = 0; c < cellEls[i].length; c++) {
+          allEmbedIds(cellEls[i][c]).forEach(function (id) {
+            if (imageMap[id] && targets.indexOf(imageMap[id]) === -1) targets.push(imageMap[id]);
+          });
+        }
+        if (!htmlToPlainText(v) && !htmlToPlainText(a) && !targets.length && !cellLinks[i].length) continue;
         rows.push(newRow({
           visualText: v, audioText: a,
-          _pendingImage: embed && imageMap[embed] ? imageMap[embed] : null
+          _pendingImage: targets[0] || null,
+          _pendingMore: targets.length > 1 ? targets.slice(1) : null,
+          _links: cellLinks[i].length ? cellLinks[i] : null
         }));
       }
       return;
@@ -886,21 +968,34 @@ export async function docxToRows(file) {
   flush();
 
   /* pull each referenced picture out of the package and inline it */
+  async function pictureAt(target) {
+    try {
+      var path = target.indexOf("/") === 0 ? target.slice(1) : "word/" + target;
+      var imgBytes = await zip.get(path);
+      if (!imgBytes) return null;
+      var raw = bytesToDataUrl(imgBytes, mimeForPath(path));
+      /* JPEG, at most 1000px — what a picture attached by hand becomes
+         too — then into the image registry (#82), named by its record */
+      var rec = internDataUrl(await toJpegDataUrl(raw));
+      if (rec) queuePersist([rec.sha256]);
+      return rec;
+    } catch (e) { return null; }   /* unreadable picture — keep the row, drop the image */
+  }
   for (var ri = 0; ri < rows.length; ri++) {
     var pendingTarget = rows[ri]._pendingImage;
+    var pendingMore = rows[ri]._pendingMore || [];
+    var pendingLinks = rows[ri]._links;
     delete rows[ri]._pendingImage;
-    if (!pendingTarget) continue;
-    try {
-      var path = pendingTarget.indexOf("/") === 0 ? pendingTarget.slice(1) : "word/" + pendingTarget;
-      var imgBytes = await zip.get(path);
-      if (imgBytes) {
-        var raw = bytesToDataUrl(imgBytes, mimeForPath(path));
-        /* JPEG, at most 1000px — what a picture attached by hand becomes
-           too — then into the image registry (#82), named by its record */
-        var rec = internDataUrl(await toJpegDataUrl(raw));
-        if (rec) { queuePersist([rec.sha256]); rows[ri].imageRef = rec; }
-      }
-    } catch (e) { /* unreadable picture — keep the row, drop the image */ }
+    delete rows[ri]._pendingMore;
+    delete rows[ri]._links;
+    if (pendingTarget) rows[ri].imageRef = await pictureAt(pendingTarget);
+    var more = [];
+    for (var mi = 0; mi < pendingMore.length; mi++) {
+      var mrec = await pictureAt(pendingMore[mi]);
+      if (mrec) more.push({ imageRef: mrec });
+    }
+    if (more.length) rows[ri].moreImages = more;
+    if (pendingLinks) rows[ri].imageLinks = pendingLinks;
   }
 
   return { title: title, rows: rows, looseText: "" };

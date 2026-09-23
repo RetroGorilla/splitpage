@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
+import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { cellOf, toDocxRuns } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import {
@@ -156,9 +157,22 @@ function pdfJpegOf(pic) {
    imageRef have to be in memory first — buildFileData awaits
    ensureBytes() before it calls this. */
 export function pdfImagesFor(rows) {
-  return Promise.all((rows || []).map(function (row) {
+  rows = rows || [];
+  var first = Promise.all(rows.map(function (row) {
     return pdfJpegOf(rowImageBytes(row)).then(null, function () { return null; });
   }));
+  /* and the rest of each scene's gallery (#135), as `.more[index]`: a
+     list per row of the same {bytes, size}, the ones that would not
+     decode left out */
+  var more = Promise.all(rows.map(function (row) {
+    return Promise.all(morePictureRefs(row).map(function (ref) {
+      return pdfJpegOf(pictureBytes(ref)).then(null, function () { return null; });
+    })).then(function (list) { return list.filter(Boolean); });
+  }));
+  return Promise.all([first, more]).then(function (both) {
+    both[0].more = both[1];
+    return both[0];
+  });
 }
 
 /* A picture inside a comment or reply, by sha (commentEntries' pieces):
@@ -303,7 +317,16 @@ export function buildPdf(jpegs, commentJpegs) {
        the stored markup kept in separate elements come out as one run, so
        a word split across two <strong>s is one word to wrap, never broken
        between its halves at the end of a line. */
-    var vLines = pdfWrapRuns(toDocxRuns(cellOf(row.visualText)), COLW, SIZE);
+    /* the scene's video links (#135) head its visual column, under its
+       pictures, as the addresses themselves: a printed page has no link
+       to click */
+    var vRuns = toDocxRuns(cellOf(row.visualText));
+    var videoRuns = [];
+    rowVideoLinks(row).forEach(function (l) {
+      videoRuns.push({ text: "Video: " + videoLinkText(l), i: true }, { text: "\n" });
+    });
+    if (videoRuns.length && !vRuns.length) videoRuns.pop();
+    var vLines = pdfWrapRuns(videoRuns.concat(vRuns), COLW, SIZE);
     var aLines = pdfWrapRuns(toDocxRuns(cellOf(row.audioText)), COLW, SIZE);
 
     var imgH = 0, imgRef = null;
@@ -349,12 +372,41 @@ export function buildPdf(jpegs, commentJpegs) {
       } catch (e) { /* skip an unreadable image */ }
     }
 
+    /* The rest of the gallery (#135): small pictures under the first, three
+       to a line, each as wide as a third of the column and at most half as
+       tall again, aspect kept. A line that does not fit where the row is
+       drawn is left out, as the first picture is. */
+    var moreJpegs = jpegs && jpegs.more ? (jpegs.more[idx] || []) : [];
+    if (!jpegs) {
+      morePictureRefs(row).forEach(function (ref) {
+        var mp = pictureBytes(ref);
+        if (mp && mp.mime === "image/jpeg") moreJpegs.push({ bytes: mp.bytes, size: jpegSize(mp.bytes) });
+      });
+    }
+    var STRIP_GAP = 6, STRIP_N = 3;
+    var thumbW = (COLW - STRIP_GAP * (STRIP_N - 1)) / STRIP_N;
+    var stripLines = [];
+    moreJpegs.forEach(function (mj, k) {
+      try {
+        var mdim = safeAspect(mj.size);
+        var mname = "Im" + (images.length + 1);
+        images.push({ bytes: mj.bytes, w: mdim.w, h: mdim.h, name: mname });
+        var th = Math.min(thumbW * mdim.ratio, thumbW * 1.5);
+        var tw = th / mdim.ratio;
+        if (k % STRIP_N === 0) stripLines.push({ h: 0, items: [] });
+        var line = stripLines[stripLines.length - 1];
+        line.items.push({ name: mname, w: tw, h: th, x: (k % STRIP_N) * (thumbW + STRIP_GAP) });
+        line.h = Math.max(line.h, th);
+      } catch (e) { /* skip an unreadable image */ }
+    });
+    stripLines.forEach(function (line) { imgH += line.h + STRIP_GAP; });
+
     /* ROW_TAIL, not the 14 of the row gap below the rule: with 14 a row
        that passed this check by less than 1.5pt had its rule drawn up to
        1.5pt under the bottom margin. A row with nothing in it keeps the
        14 — it never enters the text loop, so its rule is drawn at its top
        (y), which the 14 already keeps inside the margin. */
-    var empty = !vLines.length && !aLines.length && !imgRef;
+    var empty = !vLines.length && !aLines.length && !imgRef && !stripLines.length;
     var need = Math.max(columnHeight(vLines) + imgH, columnHeight(aLines)) + (empty ? 14 : ROW_TAIL);
     if (y - need < M && y < PH - M - 40) { newPage(); y -= 6; drawColumnHeaders(); }
 
@@ -367,6 +419,15 @@ export function buildPdf(jpegs, commentJpegs) {
         (M + GUT).toFixed(2) + " " + (vy - imgRef.h).toFixed(2) + " cm /" + imgRef.name + " Do Q");
       vy -= imgRef.h + 8;
     }
+    stripLines.forEach(function (line) {
+      if (vy - line.h < M) return;
+      line.items.forEach(function (it) {
+        pageImages.push(it.name);
+        ops.push("q " + it.w.toFixed(2) + " 0 0 " + it.h.toFixed(2) + " " +
+          (M + GUT + it.x).toFixed(2) + " " + (vy - it.h).toFixed(2) + " cm /" + it.name + " Do Q");
+      });
+      vy -= line.h + STRIP_GAP;
+    });
 
     /* The loop below is the only thing that moves y past the picture, and
        a row with no text in either column never enters it — so y dropped

@@ -11,10 +11,12 @@ import {
 import { loadInitialState } from "./02-state.js";
 import { initDocIdentityChannel, syncDocIdentity } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
+import { gallerySize, rowSlots, videoLinkKey } from "./02d-gallery.js";
 import {
   SNAPSHOT_KEY,
   cloneState,
   closeHistoryPanel,
+  findRowIndex,
   getEditorName,
   promptForName,
   promptForWpm,
@@ -27,17 +29,20 @@ import {
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
-import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
+import { cssAttr, safeHref, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
   cancelLink,
   cancelVideo,
   confirmLink,
   confirmVideo,
   forgetStalePendingMarks,
+  galleryIndexOf,
   handleToolbarCmd,
   insertLineBreak,
   isScriptCell,
   render,
+  renderRow,
+  setGalleryIndex,
   syncFieldFromDom,
   toggleCellFormat,
   typePendingMarks,
@@ -61,15 +66,19 @@ import {
   armDelete,
   clearDropMarkers,
   compressImageFile,
+  grantVideoFile,
   focusRowField,
   handleImageFile,
   moveRow,
   moveRowTo,
+  openVideoFile,
   removeImage,
+  removeImageLink,
   setDropMarkerForRow,
   splitCellField,
   swapAdjacentRows,
-  updateDragScroll
+  updateDragScroll,
+  videoFirstFrame
 } from "./06-rows.js";
 import {
   acceptTagGhost,
@@ -151,8 +160,7 @@ import {
   setCommentSortMode,
   syncAnchorResolvedClasses,
   toggleReplyComposer,
-  toggleResolve,
-  updateCommentsCount
+  toggleResolve
 } from "./10-comments.js";
 import {
   clearPendingFileRows,
@@ -516,15 +524,74 @@ export function onRootClick(e) {
   var del = e.target.closest('[data-action="delete-row"]');
   if (del) { armDelete(del, del.getAttribute("data-id")); return; }
 
-  var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-replace"]');
+  var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-add-more"], [data-action="image-replace"]');
   if (imgAdd) {
     S.pendingImageRowId = imgAdd.getAttribute("data-id");
+    /* Replace names the slot on screen; the paperclip and Add add (#135) */
+    pendingImageSlot = imgAdd.getAttribute("data-action") === "image-replace"
+      ? Number(imgAdd.getAttribute("data-slot")) || 0 : undefined;
     document.getElementById("file-input").click();
     return;
   }
 
   var imgRemove = e.target.closest('[data-action="image-remove"]');
-  if (imgRemove) { removeImage(imgRemove.getAttribute("data-id")); return; }
+  if (imgRemove) { removeImage(imgRemove.getAttribute("data-id"), Number(imgRemove.getAttribute("data-slot")) || 0); return; }
+
+  /* the scene's gallery (#135): step through it, open a caption's video,
+     take a link off */
+  var step = e.target.closest('[data-action="gallery-prev"], [data-action="gallery-next"]');
+  if (step) { stepGallery(step.getAttribute("data-id"), step.getAttribute("data-action") === "gallery-next" ? 1 : -1); return; }
+
+  var linkOff = e.target.closest('[data-action="gallery-link-remove"]');
+  if (linkOff) {
+    removeImageLink(linkOff.getAttribute("data-id"), Number(linkOff.getAttribute("data-slot")) || 0, linkOff.getAttribute("data-key"));
+    return;
+  }
+
+  var videoLinkEl = e.target.closest('[data-action="gallery-link"]');
+  if (videoLinkEl) {
+    e.preventDefault();
+    openGalleryLink(videoLinkEl.getAttribute("data-id"), Number(videoLinkEl.getAttribute("data-slot")) || 0, videoLinkEl.getAttribute("data-key"));
+    return;
+  }
+}
+
+/* The slot the file picker's picture goes to: a number for Replace,
+   undefined to add one (#135). */
+var pendingImageSlot;
+
+/* One step through a scene's gallery, wrapping at either end; the step
+   button keeps focus across the repaint (paintRow, 05-render.js). */
+function stepGallery(rowId, by) {
+  var idx = findRowIndex(rowId);
+  if (idx === -1) return;
+  var row = S.state.rows[idx];
+  var n = gallerySize(row);
+  if (n < 2) return;
+  setGalleryIndex(rowId, (galleryIndexOf(row) + by + n) % n);
+  renderRow(rowId);
+}
+
+/* A caption's video, opened: a web address in the browser — the desktop
+   app hands it to the system's (the bridge's openExternal, which takes
+   http(s) only) — and a video file from this session's drop or paste
+   through the desktop bridge, which opens it with its own app only if
+   main granted it (openVideoFile). Everything goes through safeHref. */
+function openGalleryLink(rowId, slot, key) {
+  var idx = findRowIndex(rowId);
+  if (idx === -1) return;
+  var s = rowSlots(S.state.rows[idx])[slot];
+  var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
+  if (!link) return;
+  if (link.href) {
+    var href = safeHref(link.href);
+    if (!href || !/^https?:\/\//i.test(href)) return;
+    if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(href); return; }
+    var win = window.open(href, "_blank", "noopener");
+    if (win) win.opener = null;
+    return;
+  }
+  openVideoFile(link);
 }
 
 function onRootMouseDown(e) {
@@ -887,14 +954,15 @@ function onRootFocusOut(e) {
    from another scene stays a live tag, anything foreign is sanitised away
    — and put in place of the selection as one undoable edit. A picture, a
    video card, a video link or a video file never goes in the cell (design
-   D7): it is attached to the scene as a comment, in that same edit (#124).
-   Files are read first — a picture is made small and hashed — so a paste
-   carrying one goes in a moment later. */
+   D7): it goes into the scene's gallery, its Image section, in that same
+   edit (#135; #124 made a comment of it). Files are read first — a
+   picture is made small and hashed, a video file's first frame taken —
+   so a paste carrying one goes in a moment later. */
 function insertIntoScriptCell(cellEl, html, text, files) {
   if (hasMediaFiles(files)) {
     var rowId = cellEl.getAttribute("data-id");
     var field = cellEl.getAttribute("data-field");
-    readClipboardFiles(files, compressImageFile).then(function (extra) {
+    readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: grantVideoFile }).then(function (extra) {
       /* the same cell, unless a repaint replaced it meanwhile */
       var live = cellEl.isConnected ? cellEl
         : document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
@@ -910,8 +978,12 @@ function insertIntoScriptCellNow(cellEl, html, text, extra) {
   var res = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
   var lost = res.lost + (extra ? extra.lost : 0);
-  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be attached — only a link to it was copied. Save it, then paste or drop the file.", "warn");
-  if (res.attached.length) announceAttached(res, before);
+  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
+  if (res.attached) {
+    /* the Image section shows what just went in */
+    renderRow(cellEl.getAttribute("data-id"));
+    announceAttached(res, before);
+  }
   if (res.movedComments) {
     /* a cut comment's card follows its words to the new scene */
     syncAnchorResolvedClasses();
@@ -925,23 +997,16 @@ function insertIntoScriptCellNow(cellEl, html, text, extra) {
    (05c-clipboard.js): a copy never carries a comment; a cut does, to the
    paste in this tab that moves it (design D6). A selection that is not
    inside one script cell is left to the browser. */
-/* "Picture attached to scene 4", with Undo: the paste's own undo entry —
-   the words and what was attached — taken back, so long as it is still the
-   last thing done; after anything else, Ctrl+Z is the way back. */
+/* "Picture added to scene 4", with Undo: the paste's own undo entry —
+   the words and what went into the gallery — taken back, so long as it is
+   still the last thing done; after anything else, Ctrl+Z is the way back. */
 function announceAttached(res, before) {
-  var pics = 0, vids = 0;
-  res.attached.forEach(function (c) { if (/<img/.test(c.body)) pics++; else vids++; });
+  var pics = res.attached.pictures, vids = res.attached.videos;
   function n(count, one) { return count === 1 ? one : count + " " + one + "s"; }
   var what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
     : pics ? n(pics, "picture") : n(vids, "video");
-  var msg = what.charAt(0).toUpperCase() + what.slice(1) + " attached to scene " + (res.rowIndex + 1);
-  updateCommentsCount();
-  if (!document.getElementById("comments-panel").hidden) {
-    captureReplyDrafts();
-    renderComments();
-  }
+  var msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (res.rowIndex + 1);
   var entry = lastUndoEntry();
-  /* a server document's comments are sent, not undone (design D5) */
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
   showActionToast(msg, "ok", "Undo", function () {
     if (lastUndoEntry() === entry) undo();
@@ -995,6 +1060,18 @@ function onRootKeydown(e) {
   if (e.target.matches && e.target.matches(".video-popover input")) {
     if (e.key === "Enter") { e.preventDefault(); confirmVideo(e.target.closest(".field-wrap")); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelVideo(e.target.closest(".field-wrap")); }
+    return;
+  }
+  /* ← / → on any control of a scene's gallery steps through it (#135);
+     the focus stays on the step buttons' side (renderRow keeps it) */
+  var galleryEl = (e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.altKey && !e.ctrlKey && !e.metaKey &&
+    e.target.closest && e.target.closest(".scene-gallery");
+  if (galleryEl) {
+    e.preventDefault();
+    var gid = galleryEl.getAttribute("data-id");
+    stepGallery(gid, e.key === "ArrowRight" ? 1 : -1);
+    var again = document.querySelector('#rows .scene-gallery[data-id="' + cssAttr(gid) + '"] [data-action="gallery-' + (e.key === "ArrowRight" ? "next" : "prev") + '"]');
+    if (again && (!document.activeElement || document.activeElement === document.body)) again.focus({ preventScroll: true });
     return;
   }
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
@@ -1190,18 +1267,26 @@ function onRootDragLeave(e) {
 
 function onRootDrop(e) {
   var drop = imageDropTarget(e);
-  /* A video file is no scene picture: dropped on the visual column it is
-     attached to the scene from that column's cell, like one dropped on
-     the words (#124). */
+  /* Pictures and video files dropped anywhere on the visual column go into
+     the scene's gallery (#135) the way a paste's do — added beside the
+     pictures there, a video as its link — through the column's cell, so
+     it is one undo entry with a toast. Dropped on the words, the words
+     that came with them go in too; anywhere else in the column only the
+     files count. */
   var dropFiles = e.dataTransfer && e.dataTransfer.files;
-  var videoOnly = drop && hasMediaFiles(dropFiles) &&
-    !Array.prototype.some.call(dropFiles, function (f) { return /^image\//.test(f.type || ""); });
-  if (drop && !videoOnly) {
+  var mediaDrop = drop && hasMediaFiles(dropFiles);
+  if (drop) drop.closest(".visual-cell").classList.remove("drag-over");
+  if (drop && !mediaDrop) {
+    /* some other file: not a picture, and not for the browser to open */
     e.preventDefault();
-    var cell = drop.closest(".visual-cell");
-    if (cell) cell.classList.remove("drag-over");
-    var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) handleImageFile(drop.getAttribute("data-id"), file);
+    if (dropFiles && dropFiles.length) showToast("Only pictures and video files go in a scene's Image section.", "warn");
+    return;
+  }
+  if (mediaDrop && !(e.target.closest && e.target.closest(".cell-editable"))) {
+    e.preventDefault();
+    if (reviewMode()) return;
+    var visualCell = drop.closest(".visual-cell").querySelector(".cell-editable");
+    if (visualCell) insertIntoScriptCell(visualCell, "", "", dropFiles);
     return;
   }
   if (S.dragRowId) {
@@ -1223,8 +1308,7 @@ function onRootDrop(e) {
      the way a paste does (insertIntoScriptCell), at the drop point. A drag
      carries no cut nonce, so a comment on dragged words stays where it was
      (design D6). */
-  var cellEl = (e.target.closest && e.target.closest(".cell-editable")) ||
-    (videoOnly ? drop.closest(".visual-cell").querySelector(".cell-editable") : null);
+  var cellEl = e.target.closest && e.target.closest(".cell-editable");
   if (cellEl) {
     e.preventDefault();
     var dt = e.dataTransfer;
@@ -1860,9 +1944,10 @@ function init() {
 
   document.getElementById("file-input").addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0];
-    if (file && S.pendingImageRowId) handleImageFile(S.pendingImageRowId, file);
+    if (file && S.pendingImageRowId) handleImageFile(S.pendingImageRowId, file, pendingImageSlot);
     e.target.value = "";
     S.pendingImageRowId = null;
+    pendingImageSlot = undefined;
   });
 
   document.getElementById("doc-title").addEventListener("input", function (e) {
