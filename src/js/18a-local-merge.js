@@ -251,12 +251,14 @@ function mergeDiffModel(base, mine, theirs) {
     groups.push({ label: "Scene " + pad2(sceneNo[id]), note: mergeRowFate(bb, m, t), entries: entries });
   });
 
+  /* by id, the way mergeProductionTags() merges them (#85): a rename shows
+     as one item whose name differs, not as one deleted and one added */
   var tagEntries = mergeListEntries("Breakdown", mine.productionTags, theirs.productionTags,
-    function (t) { return registryKey(t.cat, t.name); },
+    function (t) { return t.id || registryKey(t.cat, t.name); },
     function (t) { var c = tagCategory(t.cat); return (c ? c.label + " " : "") + t.name; },
     function (t) {
       var st = tagStatus(t.status);
-      return mergeItemSummary([st ? st.label : "Needed", t.owner, t.notes]);
+      return mergeItemSummary([t.name, st ? st.label : "Needed", t.owner, t.notes]);
     });
   if (tagEntries.length) groups.push({ label: "Production breakdown", entries: tagEntries });
 
