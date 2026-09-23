@@ -9,7 +9,7 @@ import {
 import { escapeHtml, makeId } from "./02-state.js";
 import { pad2 } from "./05-render.js";
 import { commentBodyText, commentEntries } from "./10-comments.js";
-import { htmlToPlainText } from "./14-export.js";
+import { cellOf, toPlainText } from "./04c-doc-model.js";
 
 /* ================= csv ================= */
 
@@ -26,8 +26,8 @@ export function buildCsv() {
       csvEscape(pad2(i + 1)),
       csvEscape(st.label),
       csvEscape(formatDuration(rowSeconds(row))),
-      csvEscape(htmlToPlainText(row.visualText)),
-      csvEscape(htmlToPlainText(row.audioText))
+      csvEscape(toPlainText(cellOf(row.visualText))),
+      csvEscape(toPlainText(cellOf(row.audioText)))
     ].join(","));
   });
   lines.push(["", "", csvEscape(formatDuration(totalSeconds())), "", ""].join(","));
