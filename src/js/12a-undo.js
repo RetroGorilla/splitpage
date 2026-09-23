@@ -485,23 +485,45 @@ export function breakUndoCoalescing() {
 
 export function undoSizes() { return history.sizes(); }
 
-/* Where a text step leaves the caret: the end of what differs, in the
+/* Where a text step leaves the caret: the start of what differs, in the
    target cell's text as the DOM counts it (no line breaks; a b-roll key by
-   its letters) — 19-writer.js placeCaretAtTextOffset's coordinates. */
-export function caretAfterStep(step, dir) {
-  var fromHtmlStr = dir === "undo" ? step.after : step.before;
-  var toHtmlStr = dir === "undo" ? step.before : step.after;
+   its letters) — 19-writer.js placeCaretAtTextOffset's coordinates.
+
+   `step` is already the step for this direction (12a-undo.js `step()`
+   inverts it for undo before handing it here, so `before` is always what
+   the cell held before this operation and `after` what it holds once
+   applied) — no `dir` swap needed.
+
+   Found by the common SUFFIX alone, matched outward from the end of both
+   strings with no bound from a prefix search: a prefix search run first
+   (the previous approach) can run past the true edit point when the
+   inserted or deleted text happens to share characters with what follows
+   it (typing " mid" into "Alpha beta" makes "Alpha mid beta" — the space
+   right after "Alpha" equals the space the prefix search meets next,
+   so it swallows one extra character and lands the caret a letter too
+   late). The suffix search has no such ambiguity here because these are
+   single, contiguous edits: matching from the end finds the exact point
+   past which the two strings agree, which is where the caret belongs
+   whichever direction produced it — the end of newly (re)typed text on
+   redo, and the start of what typing undid on undo. */
+export function caretAfterStep(step) {
   function domText(h) {
     var out = "";
     normalizeCell(fromHtml(h == null ? "" : h)).forEach(function (r) { out += r.text.replace(/\n/g, ""); });
     return out;
   }
-  var a = domText(fromHtmlStr), b = domText(toHtmlStr);
-  var p = 0;
-  while (p < a.length && p < b.length && a[p] === b[p]) p++;
-  var sa = a.length, sb = b.length;
-  while (sa > p && sb > p && a[sa - 1] === b[sb - 1]) { sa--; sb--; }
-  return sb;
+  var a = domText(step.before), b = domText(step.after);
+  var s = 0;
+  while (s < a.length && s < b.length && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  var offset = b.length - s;
+  /* Never land between the two halves of a surrogate pair (an emoji): if
+     the match stopped one code unit short of a whole pair, count that
+     pair as matched too rather than split it. */
+  if (offset > 0 && offset < b.length) {
+    var hi = b.charCodeAt(offset - 1), lo = b.charCodeAt(offset);
+    if (hi >= 0xD800 && hi <= 0xDBFF && lo >= 0xDC00 && lo <= 0xDFFF) offset--;
+  }
+  return offset;
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
