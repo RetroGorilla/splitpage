@@ -4486,6 +4486,80 @@ async function caseDraftCrashWithImage(target) {
   }
 }
 
+/* caseGalleryVideoFile (#135). A video file dropped or pasted into a scene
+   is named in the scene's gallery caption, and on desktop that name opens
+   the file with its own app — but only through main, and only for a file
+   a drop or a paste handed the page this run. What is real here: a File
+   with a real path (put on an <input type=file> over CDP, the only way a
+   page ever gets one), the preload reading that path (webUtils), main's
+   checks and its token, and a drop of the same File onto a scene. TEST_MODE
+   records the open instead of starting a player (videoFileOpens). */
+async function caseGalleryVideoFile(target) {
+  const tag = target.name + " gallery: a dropped video file opens through main only (#135)";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-video-"));
+  const clip = path.join(dir, "take one.mp4");
+  const notes = path.join(dir, "notes.txt");
+  fs.writeFileSync(clip, Buffer.alloc(4096, 1));
+  fs.writeFileSync(notes, "not a video");
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "gallery-video-file" });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+    const bridgeHas = await evalPage(cdp, "typeof window.splitpageDesktop.grantVideoFile === 'function' && typeof window.splitpageDesktop.openVideoFile === 'function'");
+    record(tag + ": the bridge exposes grantVideoFile and openVideoFile", bridgeHas === true, String(bridgeHas));
+
+    /* a real File, with a real path, the way a drop or a paste gives one */
+    async function fileInput(id, filePath) {
+      const made = await cdp.send("Runtime.evaluate", {
+        expression: "(function(){ var i = document.createElement('input'); i.type = 'file'; i.id = " + JSON.stringify(id) + "; i.hidden = true; document.body.appendChild(i); return i; })()",
+        returnByValue: false
+      });
+      await cdp.send("DOM.setFileInputFiles", { files: [filePath], objectId: made.result.objectId });
+    }
+    await fileInput("__vf", clip);
+    await fileInput("__tf", notes);
+
+    const token = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(document.getElementById('__vf').files[0])");
+    record(tag + ": a video file with a path is granted an opaque token", typeof token === "string" && /^[0-9a-f]{32}$/.test(token), String(token));
+    const again = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(document.getElementById('__vf').files[0])");
+    record(tag + ": the same file is the same token", again === token, String(again));
+    const made = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(new File([new Uint8Array(8)], 'forged.mp4', { type: 'video/mp4' }))");
+    record(tag + ": a File the page made itself (no path) is refused", made === null, JSON.stringify(made));
+    const text = await evalPage(cdp, "window.splitpageDesktop.grantVideoFile(document.getElementById('__tf').files[0])");
+    record(tag + ": a file that is not a video is refused", text === null, JSON.stringify(text));
+
+    const bogus = await evalPage(cdp, "window.splitpageDesktop.openVideoFile('" + "0".repeat(32) + "')");
+    record(tag + ": a token main never gave opens nothing", !!bogus && bogus.ok === false && bogus.code === "UNKNOWN", JSON.stringify(bogus));
+    const opened = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify(token) + ")");
+    record(tag + ": its token opens it", !!opened && opened.ok === true, JSON.stringify(opened));
+    let opens = await shell(cdp, "videoFileOpens", {});
+    record(tag + ": main opened exactly that path", JSON.stringify(opens) === JSON.stringify([clip]), JSON.stringify(opens));
+
+    /* the whole way: dropped on a scene, named in its caption, opened from there */
+    await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById('__vf').files[0]); " +
+      "var media = document.querySelectorAll('#rows .visual-media'); media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
+    const link = await poll(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); return l.length ? l[l.length - 1].textContent : null; })()", 10000).catch(() => null);
+    record(tag + ": the drop names the file in the scene's caption", link === "▶ take one.mp4", String(link));
+    const statePath = await evalPage(cdp, "JSON.stringify(window.__splitpageFormats.state()).indexOf(" + JSON.stringify(dir.replace(/\\/g, "\\\\")) + ") !== -1 || JSON.stringify(window.__splitpageFormats.state()).indexOf(" + JSON.stringify(dir) + ") !== -1");
+    record(tag + ": the document names the file, never where it is", statePath === false, String(statePath));
+    await evalPage(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); l[l.length - 1].click(); return true; })()");
+    opens = await pollNode(async () => {
+      const list = await shell(cdp, "videoFileOpens", {});
+      return list && list.length >= 2 ? list : null;
+    }, 10000).catch(() => null);
+    record(tag + ": its caption link opens it through main", !!opens && opens[1] === clip, JSON.stringify(opens));
+
+    /* gone from disk: nothing to open, and it says so */
+    fs.rmSync(clip);
+    const gone = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify(token) + ")");
+    record(tag + ": a file since deleted answers GONE", !!gone && gone.ok === false && gone.code === "GONE", JSON.stringify(gone));
+  } finally {
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    rmrf(dir);
+  }
+}
+
 /* caseDraftCrashDirtyFile (F1F2-01). A RENDERER crash (not a whole-process
    one) of a dirty file tab: the reloaded tab still holds the unsaved edit,
    and splitpage:test-draft-status reports hasDraft:true. */
@@ -6527,6 +6601,7 @@ async function runTargetSuite(target, groupFilter) {
     // --- step N: crash-safe drafts (single and multi tab) ---
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
     ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
+    ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],
     ["draft: file deleted while down (unsaved copy)", () => caseDraftFileDeleted(target, fixturesDir)],

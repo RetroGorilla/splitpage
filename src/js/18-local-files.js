@@ -11,6 +11,7 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { ensureBytes, missingInlineImages } from "./02c-blobs.js";
+import { rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
@@ -234,6 +235,8 @@ function htmlToPlainScript() {
   var lines = [S.state.title || "Untitled Script", ""];
   S.state.rows.forEach(function (row, i) {
     lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(cellOf(row.visualText)));
+    /* the video links in the scene's gallery captions (#135) */
+    rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
     lines.push("      AUDIO: " + toPlainText(cellOf(row.audioText)));
     lines.push("");
   });

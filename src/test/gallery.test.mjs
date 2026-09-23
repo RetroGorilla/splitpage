@@ -1,0 +1,159 @@
+/* A scene's gallery (#135, 02d-gallery.js): the pictures of its Image
+ * section after the first (`moreImages`) and the video links under each
+ * (`imageLinks` for the first, `links` on the others), through everything
+ * that reads a row's picture: migrateRows, refsIn, the merge, the
+ * .splitpage file (pictures inline), the Word export and its reopening,
+ * the Markdown and PDF exports. The carousel, paste and drop are browser
+ * suites 91-scene-gallery.txt and 92-paste-into-gallery.txt.
+ */
+import "./_dom.mjs";
+import test from "node:test";
+import assert from "node:assert/strict";
+import { S } from "../js/_state.js";
+import { __init as initStatus } from "../js/01-scene-status.js";
+import { migrateRows } from "../js/02-state.js";
+import { intern } from "../js/02c-blobs.js";
+import {
+  addGalleryPicture, addGalleryVideo, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
+} from "../js/02d-gallery.js";
+import { mergeStates, rowContentEqual } from "../js/03-sync.js";
+import { __init as initTags } from "../js/07-production-tags.js";
+import { toMarkdownDoc } from "../js/14-export.js";
+import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
+import { buildPdf } from "../js/17-pdf.js";
+import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
+import { refsIn } from "../../shared/blob-policy.js";
+
+initTags();
+initStatus();
+initDocx();
+
+/* Just enough of a JPEG for the registry to sniff and measure. */
+const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
+const P1 = intern(jpegBytes(300, 200, 1));
+const P2 = intern(jpegBytes(200, 300, 2));
+const P3 = intern(jpegBytes(100, 100, 3));
+
+function doc(rows) {
+  return migrateRows({ schema: 2, title: "Gallery", comments: [], rows: rows.map((r, i) => Object.assign({ id: "r" + i, visualText: "", audioText: "", status: "todo" }, r)) });
+}
+
+test("migrateRows keeps a gallery, and makes it safe", () => {
+  const s = doc([
+    { imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }, { href: "javascript:alert(1)" }, { href: "https://youtu.be/abc" }, { name: "<b>take</b>.mp4", size: 12, extra: 1 }, "junk"],
+      moreImages: [{ imageRef: P2, links: [{ href: "https://vimeo.com/1" }] }, { imageRef: P1 }, { imageRef: { sha256: "x" } }, null, { imageRef: P3, bogus: true }] },
+    /* a first slot with nothing in it takes the next picture */
+    { imageRef: null, moreImages: [{ imageRef: P3, links: [{ href: "https://loom.com/share/x" }] }] },
+    /* no gallery: no keys added */
+    { imageRef: P1 }
+  ]);
+  const r0 = s.rows[0];
+  assert.deepEqual(r0.imageLinks, [{ href: "https://youtu.be/abc", poster: true }, { name: "take.mp4", size: 12 }]);
+  assert.deepEqual(r0.moreImages, [
+    { imageRef: P2, links: [{ href: "https://vimeo.com/1" }] },
+    { imageRef: P3 }
+  ], "a repeat of the first picture, a bad record and a non-object are dropped; nothing else rides along");
+  assert.equal(s.rows[1].imageRef.sha256, P3.sha256);
+  assert.deepEqual(s.rows[1].imageLinks, [{ href: "https://loom.com/share/x" }]);
+  assert.equal(s.rows[1].moreImages, undefined);
+  assert.ok(!("imageLinks" in s.rows[2]) && !("moreImages" in s.rows[2]));
+  /* idempotent */
+  assert.deepEqual(migrateRows(JSON.parse(JSON.stringify(s))).rows, s.rows);
+  /* every picture is a ref the blob walker names */
+  assert.deepEqual(refsIn(s).sort(), [P1.sha256, P2.sha256, P3.sha256].sort());
+});
+
+test("the slot operations: add beside, replace in place, remove, a link off", () => {
+  const row = doc([{}]).rows[0];
+  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v1" }, 0, null), 0);
+  assert.deepEqual(rowSlots(row).map((s) => [s.ref, s.links.length]), [[null, 1]], "a placeholder with its link");
+  assert.equal(addGalleryPicture(row, P1), 0, "a picture fills the empty first slot");
+  assert.equal(addGalleryPicture(row, P2), 1, "and the next goes beside it");
+  assert.equal(addGalleryPicture(row, P1), 0, "never twice");
+  assert.equal(addGalleryVideo(row, { href: "https://youtu.be/v2" }, 1, P3), 1, "a video on a scene with pictures: a caption link, no thumbnail");
+  assert.equal(rowSlots(row).length, 2);
+  assert.deepEqual(row.moreImages[0].links, [{ href: "https://youtu.be/v2" }]);
+  replaceGalleryPicture(row, 1, P3);
+  assert.equal(row.moreImages[0].imageRef.sha256, P3.sha256);
+  assert.deepEqual(row.moreImages[0].links, [{ href: "https://youtu.be/v2" }], "Replace keeps the caption");
+  removeGallerySlot(row, 0);
+  assert.equal(row.imageRef.sha256, P3.sha256, "the next picture moves up");
+  assert.equal(row.moreImages, undefined);
+  assert.ok(removeGalleryLink(row, 0, videoLinkKey({ href: "https://youtu.be/v2" })));
+  assert.ok(!("imageLinks" in row));
+  removeGallerySlot(row, 0);
+  assert.equal(row.imageRef, null);
+  assert.deepEqual(rowSlots(row), []);
+});
+
+test("the merge keeps both sides' pictures and links, and either side's removals", () => {
+  const base = doc([{ visualText: "v", imageRef: P1, moreImages: [{ imageRef: P2 }] }]);
+  const mine = JSON.parse(JSON.stringify(base));
+  const theirs = JSON.parse(JSON.stringify(base));
+  /* I add a picture and a link on the first; they add a link on the second
+     and remove nothing; */
+  mine.rows[0].moreImages.push({ imageRef: P3 });
+  mine.rows[0].imageLinks = [{ href: "https://youtu.be/mine" }];
+  theirs.rows[0].moreImages[0].links = [{ href: "https://vimeo.com/theirs" }];
+  let out = mergeStates(base, mine, theirs).merged;
+  assert.deepEqual(out.rows[0].moreImages, [
+    { imageRef: P2, links: [{ href: "https://vimeo.com/theirs" }] },
+    { imageRef: P3 }
+  ]);
+  assert.deepEqual(out.rows[0].imageLinks, [{ href: "https://youtu.be/mine" }]);
+  assert.equal(out.comments.length, 0, "never a conflict card");
+  /* they removed the second picture, I left it: it goes; I added one: it stays */
+  const theirs2 = JSON.parse(JSON.stringify(base));
+  delete theirs2.rows[0].moreImages;
+  out = mergeStates(base, mine, theirs2).merged;
+  assert.deepEqual(out.rows[0].moreImages, [{ imageRef: P3 }]);
+  /* a row whose gallery changed is not "untouched since base" */
+  assert.equal(rowContentEqual(base.rows[0], mine.rows[0]), false);
+  assert.equal(rowContentEqual(base.rows[0], JSON.parse(JSON.stringify(base.rows[0]))), true);
+});
+
+test("a .splitpage file carries every picture inline and reads back the same gallery", () => {
+  const s = doc([{ imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }], moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]);
+  const text = buildSplitpageFile(s);
+  const raw = JSON.parse(text);
+  assert.ok(raw.rows[0].visualImage.indexOf("data:image/jpeg;base64,") === 0);
+  assert.ok(raw.rows[0].moreImages[0].visualImage.indexOf("data:image/jpeg;base64,") === 0, "a further picture inline too");
+  assert.ok(!("imageRef" in raw.rows[0].moreImages[0]));
+  const back = migrateRows(parseSplitpageFile(text));
+  assert.deepEqual(back.rows[0].moreImages, s.rows[0].moreImages);
+  assert.deepEqual(back.rows[0].imageLinks, s.rows[0].imageLinks);
+  assert.equal(back.rows[0].imageRef.sha256, P1.sha256);
+});
+
+test("Word: every picture in the Visual cell, the links under them, and back again", async () => {
+  S.state = doc([
+    { visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }],
+      moreImages: [{ imageRef: P2, links: [{ name: "take one.mp4", size: 3 }] }, { imageRef: P3 }] },
+    { visualText: "▶ not a caption, just words", audioText: "Two." }
+  ]);
+  const parsed = await docxToRows(new File([buildDocx()], "g.docx"));
+  const r0 = parsed.rows[0];
+  assert.equal(r0.imageRef.sha256, P1.sha256);
+  assert.deepEqual((r0.moreImages || []).map((m) => m.imageRef.sha256), [P2.sha256, P3.sha256]);
+  assert.deepEqual(r0.imageLinks, [{ href: "https://youtu.be/abc" }, { name: "take one.mp4" }]);
+  assert.equal(r0.visualText.indexOf("youtu.be"), -1, "the links are not the scene's words");
+  assert.ok(parsed.rows[1].visualText.indexOf("not a caption, just words") !== -1);
+});
+
+test("Markdown and PDF name every picture and every link", () => {
+  S.state = doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
+    moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]);
+  const md = toMarkdownDoc();
+  assert.ok(md.indexOf("](images/scene-01.jpg)") !== -1);
+  assert.ok(md.indexOf("](images/scene-01-2.jpg)") !== -1);
+  assert.ok(md.indexOf("▶ [youtu.be/abc](https://youtu.be/abc)") !== -1);
+  assert.ok(md.indexOf("▶ b.mov _(video file)_") !== -1);
+  const jpeg = (w, h) => ({ bytes: jpegBytes(w, h, 9), size: { w, h } });
+  const jpegs = [jpeg(300, 200)];
+  jpegs.more = [[jpeg(200, 300)]];
+  const t = new TextDecoder("latin1").decode(buildPdf(jpegs));
+  /* a word to a text op */
+  assert.ok(t.indexOf("(Video:) Tj") !== -1 && t.indexOf("(https://youtu.be/abc) Tj") !== -1);
+  assert.ok(t.indexOf("(b.mov) Tj") !== -1);
+  assert.ok(/ cm \/Im1 Do Q/.test(t) && / cm \/Im2 Do Q/.test(t), "both pictures drawn");
+});

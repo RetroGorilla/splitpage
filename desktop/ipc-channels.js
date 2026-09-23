@@ -134,6 +134,16 @@ const CHANNELS = [
 
   { name: "splitpage:open-external", direction: "send", argsSchema: ["string"], allowedOrigins: APP },
 
+  /* A video file dropped or pasted into a scene's gallery (#135). The
+     preload reads the path off the File itself (webUtils.getPathForFile —
+     a page cannot make a File that has one) and hands it to video-file-
+     grant, which checks it is an existing video file and answers an opaque
+     token; video-file-open takes only such a token, and opens the file it
+     names with the system's own app. Tokens live for this run of the app
+     and are never written anywhere. */
+  { name: "splitpage:video-file-grant", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:video-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+
   /* ---- updates (section 9) -------------------------------------------
      Argument-free, all four, and now that is enforced rather than merely
      written down: the page asks for the update to be downloaded and run, it

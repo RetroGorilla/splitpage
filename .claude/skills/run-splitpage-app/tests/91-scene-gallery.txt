@@ -1,0 +1,155 @@
+# A scene's Image section is a small gallery (#135; 02d-gallery.js, the
+# carousel in 05-render.js rowGalleryHtml, its controls in 21-events.js):
+#   * a scene with three pictures shows one at a time with "1 / 3" and
+#     ‹ ›, which wrap; ← / → on its controls step it too;
+#   * each picture's caption holds its video links — an address as a link,
+#     a video file by its name (escaped) — never the scene's words; a link
+#     opens through the desktop bridge's openExternal on desktop, in a new
+#     tab in the browser; a thumbnail marked as its video's opens it too;
+#   * Add puts a picture beside the others and shows it, Replace swaps the
+#     one on screen keeping its caption, Remove takes that one away, × takes
+#     a link off — each one undo step;
+#   * a .splitpage save carries every picture inline and reopens as the
+#     same gallery.
+# The model, merge, and exports are src/test/gallery.test.mjs; pastes and
+# drops are 92-paste-into-gallery.txt. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- helpers, and a document whose first scene has three pictures ---------
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.B = window.__blobsTest; window.D = window.__desktopTest; window.png = function(w, h, color){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL('image/png'); }; window.bytesOf = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }; window.subtleHex = async function(bytes){ var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); return Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }; window.row = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.gal = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .scene-gallery'); }; window.count = function(id){ var c = document.querySelector('#rows .row[data-id="' + id + '"] .scene-gallery-count'); return c ? c.textContent : null; }; window.shown = function(id){ var i = document.querySelector('#rows .row[data-id="' + id + '"] .scene-gallery img[data-blob]'); return i ? i.getAttribute('data-blob') : null; }; window.caption = function(id){ return Array.prototype.map.call(document.querySelectorAll('#rows .row[data-id="' + id + '"] .scene-gallery-caption .scene-gallery-link'), function(a){ return a.textContent; }); }; window.act = function(id, action){ return document.querySelector('#rows .row[data-id="' + id + '"] [data-action="' + action + '"]'); }; return true; })()
+eval (function(){ window.U1 = png(40, 30, '#c33'); window.U2 = png(30, 40, '#36c'); window.U3 = png(20, 20, '#3a3'); window.U4 = png(24, 24, '#fa0'); var doc = { schema: 2, title: 'Gallery', comments: [], rows: [ { id: 'r1', visualText: 'Wide', audioText: 'Alpha', status: 'todo', visualImage: U1, imageLinks: [ { href: 'https://youtu.be/abc123' } ], moreImages: [ { visualImage: U2, links: [ { name: '<b>take</b> 1.mp4', size: 2048 }, { href: 'https://vimeo.com/76979871' } ] }, { visualImage: U3 } ] }, { id: 'r2', visualText: 'Close', audioText: 'Bravo', status: 'todo' } ] }; F.openFile(new File([JSON.stringify(doc)], 'gallery.splitpage')); return true; })()
+wait F.state().title === 'Gallery' && gal('r1')
+eval (async function(){ window.S1 = await subtleHex(bytesOf(U1)); window.S2 = await subtleHex(bytesOf(U2)); window.S3 = await subtleHex(bytesOf(U3)); window.S4 = await subtleHex(bytesOf(U4)); return [S1, S2, S3].join(','); })()
+expect row('r1').imageRef.sha256 === S1 && row('r1').moreImages.map(function(m){ return m.imageRef.sha256; }).join() === [S2, S3].join()
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
+
+# ---- 1. one picture at a time, 1 / 3, and a caption of links -----------------
+expect count('r1') === '1 / 3'
+expect shown('r1') === S1
+expect gal('r1').getAttribute('aria-roledescription') === 'carousel'
+expect caption('r1').join('|') === '▶ youtu.be/abc123'
+expect document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption a.scene-gallery-link').getAttribute('href') === 'https://youtu.be/abc123'
+# the links are not the scene's words
+expect row('r1').visualText === 'Wide'
+# a scene with no pictures has the paperclip and no gallery
+expect !gal('r2') && !!act('r2', 'image-add')
+wait (function(){ var i = document.querySelector('#rows .row[data-id="r1"] .scene-gallery img'); return i && (i.getAttribute('src') || '').indexOf('blob:') === 0 && i.complete && i.naturalWidth === 40; })()
+
+# ---- 2. › and ‹ step through, and wrap ---------------------------------------
+eval act('r1', 'gallery-next').click()
+wait count('r1') === '2 / 3'
+expect shown('r1') === S2
+# a file by its name, as text: the name's markup is not markup
+expect caption('r1').join('|') === '▶ take 1.mp4|▶ vimeo.com/76979871'
+expect document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption b') === null
+expect document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption button.scene-gallery-link.is-file') !== null
+eval act('r1', 'gallery-next').click()
+wait count('r1') === '3 / 3'
+expect shown('r1') === S3 && caption('r1').length === 0
+eval act('r1', 'gallery-next').click()
+wait count('r1') === '1 / 3'
+eval act('r1', 'gallery-prev').click()
+wait count('r1') === '3 / 3'
+# stepping is a view, not an edit
+eval U.flush()
+expect U.sizes().undo === 0
+
+# ---- 3. the keyboard: ← / → on the gallery's controls ------------------------
+eval act('r1', 'gallery-next').focus()
+key ArrowRight
+wait count('r1') === '1 / 3'
+expect document.activeElement && document.activeElement.closest('.scene-gallery') === gal('r1')
+key ArrowRight
+wait count('r1') === '2 / 3'
+key ArrowLeft
+wait count('r1') === '1 / 3'
+eval document.activeElement && document.activeElement.blur()
+
+# ---- 4. a caption link opens the video ----------------------------------------
+# in the browser: a new tab, through window.open (recorded here)
+eval (function(){ window.__opened = []; window.__realOpen = window.open; window.open = function(u){ window.__opened.push(u); return null; }; return true; })()
+eval document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption a.scene-gallery-link').click()
+expect __opened.join() === 'https://youtu.be/abc123'
+# on desktop: the bridge's openExternal, never window.open
+eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); return true; })()
+eval document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption a.scene-gallery-link').click()
+expect (fake._externalOpens || []).join() === 'https://youtu.be/abc123' && __opened.length === 1
+# a video file with no grant this session: it says how to open it, and opens nothing
+eval act('r1', 'gallery-next').click()
+wait count('r1') === '2 / 3'
+eval document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption button.is-file').click()
+wait Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf('drop “take 1.mp4” onto this scene again') !== -1; })
+expect !fake._videoOpens
+eval (function(){ D.setBackend(null); window.open = window.__realOpen; return true; })()
+
+# ---- 5. Add puts a picture beside the others and shows it; one undo step -----
+eval U.flush()
+eval (function(){ window.__u = U.sizes().undo; return true; })()
+eval act('r1', 'image-add-more').click()
+eval (function(){ var inp = document.getElementById('file-input'); var dt = new DataTransfer(); dt.items.add(new File([bytesOf(U4)], 'four.png', { type: 'image/png' })); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait row('r1').moreImages && row('r1').moreImages.length === 3
+wait count('r1') === '4 / 4'
+expect row('r1').imageRef.sha256 === S1
+eval (function(){ window.S4b = row('r1').moreImages[2].imageRef.sha256; return S4b; })()
+expect shown('r1') === S4b
+eval U.flush()
+expect U.sizes().undo === __u + 1
+key ctrl KeyZ
+wait row('r1').moreImages.length === 2
+wait count('r1') === '3 / 3' || count('r1') === '1 / 3' || count('r1') === '2 / 3'
+key ctrl+shift KeyZ
+wait row('r1').moreImages.length === 3
+
+# ---- 6. Replace swaps the picture on screen, keeping its caption -------------
+eval act('r1', 'gallery-next').click()
+wait count('r1') === '1 / 4'
+eval act('r1', 'gallery-next').click()
+wait count('r1') === '2 / 4' && shown('r1') === S2
+eval act('r1', 'image-replace').click()
+eval (function(){ var inp = document.getElementById('file-input'); var dt = new DataTransfer(); dt.items.add(new File([bytesOf(png(33, 22, '#909'))], 'swap.png', { type: 'image/png' })); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait row('r1').moreImages[0].imageRef.sha256 !== S2
+expect row('r1').moreImages[0].links.length === 2 && row('r1').moreImages.length === 3
+expect count('r1') === '2 / 4' && caption('r1').length === 2
+
+# ---- 7. × takes one link off; Remove takes the picture away ------------------
+eval U.flush()
+eval (function(){ window.__u = U.sizes().undo; return true; })()
+eval document.querySelector('#rows .row[data-id="r1"] .scene-gallery-caption [data-action="gallery-link-remove"]').click()
+wait row('r1').moreImages[0].links.length === 1
+expect caption('r1').join('|') === '▶ vimeo.com/76979871'
+eval act('r1', 'image-remove').click()
+wait row('r1').moreImages.length === 2
+wait count('r1') === '1 / 3'
+eval U.flush()
+expect U.sizes().undo === __u + 2
+key ctrl KeyZ
+wait row('r1').moreImages.length === 3
+key ctrl KeyZ
+wait row('r1').moreImages[0].links.length === 2
+# Remove on the first picture: the next one moves up
+eval (function(){ var b = act('r1', 'gallery-prev'); while (count('r1') !== '1 / 4') { b.click(); b = act('r1', 'gallery-prev'); } return count('r1'); })()
+eval act('r1', 'image-remove').click()
+wait row('r1').moreImages.length === 2 && row('r1').imageRef.sha256 !== S1
+# the picture that moved up brings its own caption
+expect row('r1').imageLinks.length === 2 && row('r1').imageLinks[1].href === 'https://vimeo.com/76979871'
+key ctrl KeyZ
+wait row('r1').imageRef.sha256 === S1 && row('r1').imageLinks.length === 1
+
+# ---- 8. a .splitpage save carries every picture inline, and reopens the same --
+eval (function(){ window.__saved = []; window.__h = { name: 'gallery.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ return { write: async function(d){ window.__saved.push(typeof d === 'string' ? d : await new Blob([d]).text()); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__saved[window.__saved.length - 1] || F.buildSplitpage()], 'gallery.splitpage', { lastModified: window.__h._mtime }); } }; window.__before = JSON.stringify({ a: row('r1').imageRef, b: row('r1').imageLinks, c: row('r1').moreImages }); return F.openFile(new File([F.buildSplitpage()], 'gallery.splitpage', { lastModified: window.__h._mtime }), window.__h).then(function(){ return true; }); })()
+wait F.docFile().kind === 'splitpage'
+eval (function(){ row('r2').audioText = 'saved'; F.save(); return true; })()
+wait window.__saved.length === 1
+eval (function(){ var j = JSON.parse(__saved[0]); var r = j.rows[0]; window.__inline = r.visualImage.indexOf('data:image/') === 0 && r.moreImages.every(function(m){ return m.visualImage.indexOf('data:image/') === 0 && !m.imageRef; }); return __inline; })()
+expect __inline === true
+eval (function(){ return F.openFile(new File([__saved[0]], 'again.splitpage')).then(function(){ return true; }); })()
+wait F.docFile().name === null || F.state().rows[1].audioText === 'saved'
+wait JSON.stringify({ a: row('r1').imageRef, b: row('r1').imageLinks, c: row('r1').moreImages }) === __before
+wait count('r1') === '1 / 4'
+
+# ---- 9. nothing in state carries a picture's bytes or a blob: URL -------------
+expect (function(){ var j = JSON.stringify(F.state()); return j.indexOf('data:image') === -1 && j.indexOf('blob:') === -1; })()
+
+logs
