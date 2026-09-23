@@ -376,6 +376,12 @@ export function trackDocument() {
    markDirty (noteEdit), and first thing before an undo, a redo or a remote
    change, so nothing typed a moment ago is left out of the stack. */
 export function flushEdits() {
+  /* Was an edit reported (markDirty -> noteEdit) since the last flush? If
+     not, whatever differs is something the app did by itself — the b-roll
+     list's idle refresh making a record for a line it found, the registry
+     heal — and it is taken in without an entry, so it can neither be
+     undone as if someone had done it nor empty the redo stack. */
+  var reported = flushQueued;
   flushQueued = false;
   if (applying) return;
   if (!S.state) { tracked = null; base = null; history.clear(); return; }
@@ -391,7 +397,7 @@ export function flushEdits() {
      (the sanitiser's nesting, then the model's) is not something anyone
      did: `base` follows it, and no entry is made for it. */
   var content = steps.filter(function (s) { return !cosmetic(s); });
-  if (!sent && content.length) history.record(content, Date.now());
+  if (reported && !sent && content.length) history.record(content, Date.now());
   /* `base` moves on by the same steps rather than by a fresh copy of the
      whole document: this runs after every keystroke, and applySteps shares
      every row the steps did not touch. */
@@ -454,6 +460,17 @@ function run(dir) {
     if (hooks.onRefused) hooks.onRefused(r.reason, dir);
   }
   return r;
+}
+
+/* What putting an undo or a redo on screen changed by itself — a reader
+   healing what it finds (the b-roll list making a record for a "B-roll:"
+   line the undo brought back, the registry heal) — is not an edit anyone
+   made: the stack's copy takes it in without an entry, so it neither lands
+   on the undo stack nor empties the redo stack. Called once the repaint is
+   done (21-events.js afterUndoApplied). */
+export function settleAfterApply() {
+  if (!S.state || S.state !== tracked) return;
+  base = clone(S.state);
 }
 
 export function undo() { return run("undo"); }

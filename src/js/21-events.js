@@ -153,7 +153,7 @@ import {
   updateImportPreview
 } from "./11-import.js";
 import { markDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { caretAfterStep, configureUndo, redo, undo } from "./12a-undo.js";
+import { caretAfterStep, configureUndo, redo, settleAfterApply, undo } from "./12a-undo.js";
 import {
   armDriveDelete,
   armServerDelete,
@@ -700,6 +700,7 @@ function afterUndoApplied(steps, dir) {
   } finally {
     S.undoApplying = false;
   }
+  settleAfterApply();
   if (cellStep) {
     var sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
     var cell = document.querySelector((writerOpen ? "#writer-doc " : "#rows ") + sel) || document.querySelector(sel);

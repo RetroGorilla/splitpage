@@ -103,11 +103,13 @@ key ctrl KeyZ
 sleep 300
 expect cell(0, 'visual').querySelectorAll('.broll-key').length == 0
 expect st(0, 'visual') == B-roll:
-# No redo check here: the undo's own repaint reads the b-roll list, and that
-# read (brollEntries) makes a record for the plain "B-roll:" line it now
-# finds — a document change of its own, which empties the redo stack. That
-# is the list's reader writing, not this path; the tag checks above cover
-# redo.
+# and redo puts the key back: what the undo's own repaint healed (the b-roll
+# list's record for the plain "B-roll:" line) is not an edit, so it neither
+# lands on the stack nor empties redo (12a-undo.js settleAfterApply)
+expect U.sizes().redo >= 1
+key ctrl+shift KeyZ
+sleep 300
+expect cell(0, 'visual').querySelectorAll('.broll-key').length == 1
 
 # typing after a key goes after it, not into it
 caret #rows .row:nth-child(2) .visual-cell .cell-editable
