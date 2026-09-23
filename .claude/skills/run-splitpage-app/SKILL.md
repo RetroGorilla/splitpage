@@ -466,6 +466,19 @@ the app.
   settles. This also quietly helps a `click` right after a panel's own CSS
   open-transition (e.g. `.comments-panel`'s 0.18s transform), which could
   briefly measure zero size the same way.
+- **A CSS fade-out reads its starting value until a frame after it starts, and
+  that frame can be late.** A transition keeps its before-change value until
+  the document timeline passes the frame it began in. An opacity or transform
+  transition runs on the compositor, so Chromium keeps it `pending`
+  (`currentTime` 0) until the compositor reports it started. That is often
+  one frame after the class flips, and more under load. So `sleep N` then
+  `expect opacity < 1` is a race against frame production, not a test of
+  the fade: `tests/61-transitions.txt` lost about 1 run in 6-8 that way. Take
+  the reading on the page's frames instead. Watch for the class flip, then
+  sample in `requestAnimationFrame` until the value moves or the movement is
+  over (`__snapMid` in that suite). A fade that never runs then still fails
+  the suite. A value that is already displaced at t=0, such as a FLIP
+  transform or a fade-in from 0, has no such gap.
 - **Assert on `textContent`, not `innerText`.** Splitpage uppercases a lot of UI
   through CSS `text-transform`, and `innerText` returns the *rendered* casing —
   `"HAVE IT"`, `"▶ PLAY"`. `textContent` returns the source. This produced two

@@ -14,6 +14,11 @@
 # sleep can walk past the 180ms the movement lasts on a slow machine — the
 # assertions would then be timing the harness rather than the app.
 #
+# The two mid-movement snapshots are also taken on the page's own frames
+# rather than after a `sleep`: in the first animation frame after the one the
+# class flipped in where the brand line has visibly started to fade. See
+# __snapMid below for why a wall-clock sleep cannot promise that.
+#
 # Two things about how the reduced-motion half is driven, because neither is
 # obvious:
 #
@@ -60,6 +65,42 @@ expect true
 eval (function(){window.__snap=function(name){var t=window.__tb();window[name]={condensed:t.classList.contains('is-condensed'),condensing:t.classList.contains('is-condensing'),h:window.__h(),anims:window.__anims('.topbar .toolbar'),bar:window.__cs('.topbar .toolbar','transform'),rows:window.__cs('#rows','transform'),title:window.__cs('#doc-title','transform'),brandPos:window.__cs('.brand-row','position'),brandDisplay:window.__cs('.brand-row','display'),brandOpacity:parseFloat(window.__cs('.brand-row','opacity'))};return name+' = '+JSON.stringify(window[name]);};return true;})()
 expect true
 
+# __snapMid(name, y) scrolls to y and takes the snapshot mid-movement. That
+# moment is defined by the page's frames, not by a `sleep`, because in the
+# frame the class flips in the condensing brand line still reads opacity 1,
+# and it can go on reading 1 for a frame or more after that:
+#
+# - The fade out is a CSS transition (.is-condensing in app.css). A transition
+#   has its before-change value until the document timeline moves past the
+#   frame it began in, and the timeline only moves when a frame is produced.
+# - Opacity runs on the compositor, so Chromium holds the transition `pending`
+#   (startTime null, currentTime 0) until the compositor reports it started.
+#   Traced here: pending in the flip frame every time, and in one trace in
+#   six still pending in the frame after it. With the page's frames slowed to
+#   ~45ms (a rAF busy-loop), it was still pending one frame after the flip
+#   every time. The start time is then backdated
+#   to the frame it really started in, so the fade runs its full --dur-exit.
+#   It has not been skipped, only started late.
+#
+# Every other mid-movement reading already holds in the flip frame: the FLIP
+# transforms start at their most displaced value, and the fade IN on the way
+# back up starts at 0. Only the fade OUT's starting value is the value it
+# leaves. `sleep 60` then `__snap` was about 60ms after the scroll, not
+# after the flip: the scroll's frame, the rAF-coalesced listener and the
+# compositor's start can all come late under a loaded headless browser, and
+# when all of that took 60ms or more the snapshot saw `brandOpacity: 1` next
+# to `condensing: true`. That is the 61-transitions flake (1 run in 6-8 in the
+# cloud container, more often beside other suites). With ~45ms frames it
+# failed on exactly that line in 10 runs out of 10.
+#
+# So: watch the class flip (a MutationObserver on .topbar), then on each later
+# frame snapshot as soon as the brand line has left 1. If the movement ends
+# first (.is-condensing dropped on the way down, no animation left on the
+# toolbar on the way up), the snapshot is taken then, and the assertions below
+# fail on it. A fade that never runs still fails this suite, as it should.
+eval (function(){window.__snapMid=function(name,y){return new Promise(function(resolve){var t=window.__tb(),want=!t.classList.contains('is-condensed'),flipTl=null,frames=0;var mo=new MutationObserver(function(){if(flipTl===null&&t.classList.contains('is-condensed')===want)flipTl=document.timeline.currentTime;});mo.observe(t,{attributes:true,attributeFilter:['class']});function tick(ts){if(flipTl!==null&&ts>flipTl){frames++;var fading=parseFloat(window.__cs('.brand-row','opacity'))<1;var moving=want?t.classList.contains('is-condensing'):window.__anims('.topbar .toolbar')>0;if(fading||!moving||frames>=60){mo.disconnect();resolve(window.__snap(name)+' ('+frames+' frame(s) after the flip)');return;}}requestAnimationFrame(tick);}requestAnimationFrame(tick);window.__scroll(y);});};return true;})()
+expect true
+
 # =============================================================================
 # #52 — nothing that MOVES is eased in place any more. The header used to
 # carry a padding-bottom transition that ran while everything else in it
@@ -74,9 +115,7 @@ expect window.__expandedH > 64
 
 # --- condensing: the layout is final in the frame the class flips, and the
 # --- pixels are put back with a transform that is still running
-eval window.__scroll(300)
-sleep 60
-eval window.__snap('__mc')
+eval window.__snapMid('__mc', 300)
 shot 54-mid-condense
 expect window.__mc.condensed
 expect window.__mc.condensing
@@ -101,9 +140,7 @@ eval (function(){window.__condensedH=window.__sc.h;return 'condensed header = '+
 
 # --- expanding: the brand line comes back in flow and is faded in, and the
 # --- document below travels with the header instead of jumping
-eval window.__scroll(0)
-sleep 60
-eval window.__snap('__me')
+eval window.__snapMid('__me', 0)
 shot 54-mid-expand
 expect window.__me.condensed == false
 expect window.__me.h > window.__condensedH + 20
