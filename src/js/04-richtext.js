@@ -185,7 +185,21 @@ function walkSanitize(srcParent, destParent) {
     }
     if (tag === "BR") { destParent.appendChild(document.createElement("br")); return; }
 
-    if (tag === "STRONG" || tag === "B") { var st = document.createElement("strong"); walkSanitize(node, st); destParent.appendChild(st); return; }
+    if (tag === "STRONG" || tag === "B") {
+      /* Google Docs wraps its whole clipboard fragment in a <b
+         style="font-weight:normal" id="docs-internal-guid-…">, relying on
+         that inline style to cancel the tag's own boldness — real bold
+         runs inside it are separate <span style="font-weight:700"> spans
+         (below). Reading the tag alone as bold ignored that override and
+         made the entire paste bold. The inline style, when present, wins. */
+      var bStyle = node.style || {};
+      var bWeight = bStyle.fontWeight;
+      var bWeightNum = parseInt(bWeight, 10);
+      var boldCancelled = bWeight === "normal" || bWeight === "400" ||
+        (!isNaN(bWeightNum) && bWeightNum < 600);
+      if (boldCancelled) { walkSanitize(node, destParent); return; }
+      var st = document.createElement("strong"); walkSanitize(node, st); destParent.appendChild(st); return;
+    }
     if (tag === "EM" || tag === "I") { var em = document.createElement("em"); walkSanitize(node, em); destParent.appendChild(em); return; }
     if (tag === "U") { var u = document.createElement("u"); walkSanitize(node, u); destParent.appendChild(u); return; }
     if (tag === "S" || tag === "STRIKE" || tag === "DEL") { var s = document.createElement("s"); walkSanitize(node, s); destParent.appendChild(s); return; }
