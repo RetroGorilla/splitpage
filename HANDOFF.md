@@ -567,7 +567,8 @@ of the document.
 ### 3.12 Gear is a category, and its panel is not a second copy of anything
 
 Adding Gear was one `TAG_CATEGORIES` entry, one `TAG_SHORTCUTS` entry, and
-one matching `.tag-anchor[data-tag-cat="gear"]` CSS rule (invariant 14) —
+one matching `.tag-anchor[data-tag-cat="gear"]` CSS rule (invariant 14;
+since #143 also its `--tag-gear` tokens) —
 everything else already iterates `TAG_CATEGORIES` generically. `#gear-panel`
 reuses `tagEntityHtml()` cards filtered by `gearEntries()`.
 **`wireTagEntityContainer(id)`** is `#production-panel`'s event wiring
@@ -1158,9 +1159,15 @@ bytes, #82 — nothing deletes them yet, D4).
     it** — checked at the very top of the click delegation.
 13. **Two different drags share the root handlers.** The image branch is
     gated on `isFileDrag(e) && !dragRowId`, or scene reordering breaks.
-14. **A new `TAG_CATEGORIES` entry needs a matching
-    `.tag-anchor[data-tag-cat="…"]` CSS rule** — panel colour comes from JS,
-    script colour comes from CSS.
+14. **A new `TAG_CATEGORIES` entry needs its colour tokens and a matching
+    `.tag-anchor[data-tag-cat="…"]` CSS rule** — `--tag-<id>` and
+    `--tag-<id>-tint` in `:root` and in both dark blocks of `app.css`, its
+    `color` set to `"var(--tag-<id>)"`, and the rule pointing `--tag-color`/
+    `--tag-tint` at them. Panels read the colour through `TAG_CATEGORIES`,
+    the script through the rule; both land on the same token, so the dark
+    theme and the prompter (which always takes the dark tokens) follow on
+    their own (#143). Keep the hues off the Visual teal and Audio orange.
+    `src/test/palette.test.mjs` checks all of it, contrast included.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
