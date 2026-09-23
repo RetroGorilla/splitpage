@@ -145,7 +145,29 @@ test("forget (design D4): a merge that changed a cell drops the entries for it, 
 });
 
 test("caretAfterStep: the end of what differs, in the DOM's text", () => {
-  const s = { op: "rowField", rowId: "r1", key: "audioText", before: "one<br>two", after: "one<br>two three" };
-  assert.equal(caretAfterStep(s, "undo"), "onetwo".length);
-  assert.equal(caretAfterStep(s, "redo"), "onetwo three".length);
+  // 12a-undo.js's step() inverts the entry's steps before handing them to
+  // caretAfterStep for an undo (before/after swapped), so `before` is
+  // always the cell as it read before this operation and `after` is what
+  // it reads once applied — never the original, un-inverted typing step.
+  const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "one<br>two", after: "one<br>two three" };
+  assert.equal(caretAfterStep(typed), "onetwo three".length, "redo: end of the retyped text");
+  assert.equal(caretAfterStep(invertSteps([typed])[0]), "onetwo".length, "undo: where the typing began");
+});
+
+test("caretAfterStep: a common character right at the edit doesn't grow the match past it (#119)", () => {
+  // Typing " mid" right after "Alpha" in "Alpha beta" makes "Alpha mid beta" —
+  // the space that starts the insertion is the same character as the space
+  // the untouched " beta" already begins with, so a prefix search greedy
+  // from the left can walk one character past the true edit point.
+  const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "Alpha beta", after: "Alpha mid beta" };
+  assert.equal(caretAfterStep(invertSteps([typed])[0]), "Alpha".length, "undo: right after \"Alpha\", not after its space too");
+  assert.equal(caretAfterStep(typed), "Alpha mid".length, "redo: end of the retyped word");
+});
+
+test("caretAfterStep: never lands between the two halves of an emoji's surrogate pair", () => {
+  // "a😀b" -> undoing an insertion right after the emoji must not offer an
+  // offset that sits inside it.
+  const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "a😀b", after: "a😀Xb" };
+  const offset = caretAfterStep(invertSteps([typed])[0]);
+  assert.equal(offset, "a😀".length);
 });
