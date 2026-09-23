@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
-import { normalizeImageRef } from "../../shared/blob-policy.js";
+import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   findRowIndex,
   getEditorName,
@@ -348,12 +348,19 @@ function commentLastActivity(c) {
    can reproduce inline comment bubbles, so this keeps every export honest
    about what a comment thread actually said rather than silently
    dropping it. Always script order, regardless of how the panel itself is
-   currently sorted — a file's own appendix should read the same way twice. */
-export function commentEntries() {
+   currently sorted — a file's own appendix should read the same way twice.
+
+   `body` is plain text, and a picture in it is simply gone. A writer that
+   can draw pictures (the PDF) passes {pieces:true} and gets, beside the
+   same `body`, each comment's and reply's `pieces`: the body in order as
+   {text} and {image: <sha>} — see bodyPieces. The
+   other writers never ask, so what they read is unchanged. */
+export function commentEntries(opts) {
+  var pieces = !!(opts && opts.pieces);
   var list = (S.state.comments || []).slice();
   list.sort(commentPositionCompare);
   return list.map(function (c) {
-    return {
+    var entry = {
       location: findAnchorLocationLabel(c.rowId, c.field),
       author: c.author || "Anonymous",
       body: htmlToPlainText(c.body),
@@ -363,14 +370,69 @@ export function commentEntries() {
       assignee: c.assignee || "",
       when: formatTimestampAbsolute(c.createdAt),
       replies: (c.replies || []).map(function (rp) {
-        return {
+        var reply = {
           author: rp.author || "Anonymous",
           body: htmlToPlainText(rp.body),
           when: formatTimestampAbsolute(rp.createdAt)
         };
+        if (pieces) reply.pieces = bodyPieces(rp.body);
+        return reply;
       })
     };
+    if (pieces) entry.pieces = commentBodyPieces(c);
+    return entry;
   });
+}
+
+/* A comment or reply body as the ordered pieces a picture-drawing writer
+   lays out: {text} runs between the pictures and {image: <sha>} for each
+   stored `<img data-blob>` (#82 P6), in document order — the sha alone,
+   since an image whose bytes this page has never seen is stored without
+   its size and type, and the writer reads both off the bytes anyway. Text is read the way
+   htmlToPlainText reads it — <br> a newline, every text node in order, a
+   no-break space a space — and trimmed per piece, since a picture is a
+   block of its own and the line breaks around it say nothing more. A body
+   with no picture is one {text} piece equal to `body` exactly, or none. */
+export function bodyPieces(html) {
+  var out = [];
+  if (!html) return out;
+  var root = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
+  if (!root.querySelector("img[data-blob]")) {
+    var only = htmlToPlainText(html);
+    if (only) out.push({ text: only });
+    return out;
+  }
+  var buf = "";
+  function flush() {
+    var t = buf.replace(/\u00A0/g, " ").trim();
+    if (t) out.push({ text: t });
+    buf = "";
+  }
+  (function walk(node) {
+    Array.prototype.forEach.call(node.childNodes, function (child) {
+      if (child.nodeType === 3) { buf += child.nodeValue || ""; return; }
+      if (child.nodeType !== 1) return;
+      if (child.tagName === "IMG") {
+        var sha = child.getAttribute("data-blob");
+        if (isSha256Hex(sha)) { flush(); out.push({ image: sha }); }
+        return;
+      }
+      walk(child);
+    });
+  })(root);
+  flush();
+  return out;
+}
+
+/* An image conflict card's picture is its `imageValue` (the record "Use
+   my version" puts back, and what the card draws — conflictBodyHtml), so
+   that is what prints, not the body that mirrors it. */
+function commentBodyPieces(c) {
+  if (c.kind === "conflict" && c.field === "visualImage") {
+    var ref = normalizeImageRef(c.imageValue);
+    return ref ? [{ image: ref.sha256 }] : [];
+  }
+  return bodyPieces(c.body);
 }
 
 /* anchorLiveText's fallback for a row the "hide shot scenes" toggle

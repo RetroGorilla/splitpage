@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { rowImageBytes } from "./02c-blobs.js";
+import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
 import { pad2 } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -12,6 +12,7 @@ import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, htmlToRuns, latin1Bytes } from "./14-export.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
+import { sniffImageMime } from "../../shared/blob-policy.js";
 
 /* ================= pdf ================= */
 
@@ -159,9 +160,51 @@ export function pdfImagesFor(rows) {
   }));
 }
 
-/* `jpegs` is pdfImagesFor(S.state.rows)'s answer. Without it only
-   pictures that are already JPEG are drawn. */
-export function buildPdf(jpegs) {
+/* A picture inside a comment or reply, by sha (commentEntries' pieces):
+   its bytes and type from the registry — the type sniffed, as a row's
+   is, since that is what the bytes are. null when the bytes are not here. */
+function commentPic(sha) {
+  var bytes = bytesForSync(sha);
+  if (!bytes) return null;
+  var rec = recordFor(sha);
+  var mime = sniffImageMime(bytes) || (rec && rec.mime);
+  return mime ? { bytes: bytes, mime: mime } : null;
+}
+
+function commentImageShas(entries) {
+  var out = [], seen = {};
+  function add(pieces) {
+    (pieces || []).forEach(function (p) {
+      if (p.image && !seen[p.image]) { seen[p.image] = true; out.push(p.image); }
+    });
+  }
+  entries.forEach(function (c) {
+    add(c.pieces);
+    c.replies.forEach(function (rp) { add(rp.pieces); });
+  });
+  return out;
+}
+
+/* Every picture in the comments and replies, as JPEG: {sha: {bytes,
+   size} | null}, null for one whose bytes are not here or will not
+   decode. Like pdfImagesFor, the bytes must be in memory first —
+   buildFileData's ensureBytes(refsIn(state)) covers comment and reply
+   bodies and an image conflict card's imageValue. */
+export function pdfCommentImagesFor() {
+  var shas = commentImageShas(commentEntries({ pieces: true }));
+  return Promise.all(shas.map(function (sha) {
+    return pdfJpegOf(commentPic(sha)).then(null, function () { return null; });
+  })).then(function (list) {
+    var out = {};
+    shas.forEach(function (sha, i) { out[sha] = list[i]; });
+    return out;
+  });
+}
+
+/* `jpegs` is pdfImagesFor(S.state.rows)'s answer and `commentJpegs`
+   pdfCommentImagesFor()'s. Without them only pictures that are already
+   JPEG are drawn. */
+export function buildPdf(jpegs, commentJpegs) {
   var PW = 612, PH = 792, M = 54;
   var GUT = 30, GAP = 16;
   var COLW = (PW - M * 2 - GUT - GAP) / 2;
@@ -393,7 +436,7 @@ export function buildPdf(jpegs) {
   }
 
   /* ---- comments ---- */
-  var comments = commentEntries();
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     newPage();
     text("Comments", M, y - 18, "F2", 16);
@@ -410,19 +453,85 @@ export function buildPdf(jpegs) {
       }, []);
     }
 
+    /* Pictures in comments (#82 P6 stores them in the body as <img
+       data-blob>). Each is a block of its own in the thread, in the order
+       the body has it, at the body's indent: at most CIMG_MAXW of the
+       column's width and CIMG_MAXH tall — well under a fresh page's room,
+       so one always fits somewhere — its aspect kept, and never larger
+       than its own pixels at 96 dpi (0.75pt a pixel), so a small picture
+       stays small. A picture drawn twice is embedded once. One with no
+       bytes, or that would not convert, prints as "[image unavailable]". */
+    var CIMG_MAXW = 0.6, CIMG_MAXH = 260, CIMG_ABOVE = 3, CIMG_BELOW = 7;
+    var commentImageNames = {};
+
+    function commentJpeg(sha) {
+      if (commentJpegs) return commentJpegs[sha] || null;
+      var pic = commentPic(sha);
+      return pic && pic.mime === "image/jpeg" ? { bytes: pic.bytes, size: jpegSize(pic.bytes) } : null;
+    }
+
+    function commentPicItem(sha, x) {
+      var colW = PW - M - x;
+      var jpeg = commentJpeg(sha);
+      if (jpeg) {
+        try {
+          var dim = safeAspect(jpeg.size);
+          var name = commentImageNames[sha];
+          if (!name) {
+            name = "Im" + (images.length + 1);
+            images.push({ bytes: jpeg.bytes, w: dim.w, h: dim.h, name: name });
+            commentImageNames[sha] = name;
+          }
+          var scale = Math.min(0.75, colW * CIMG_MAXW / dim.w, CIMG_MAXH / dim.h);
+          return { pic: { name: name, w: dim.w * scale, h: dim.h * scale }, x: x };
+        } catch (e) { /* unreadable — fall through to the note */ }
+      }
+      return { line: pdfWrapRuns([{ text: "[image unavailable]", i: true }], colW, SIZE)[0], x: x };
+    }
+
+    /* A comment's or reply's body as thread items — {line, x} and {pic,
+       x} — in order. A body with no picture wraps exactly as it always
+       did, "(empty)" and all. */
+    function commentBodyItems(entry, x) {
+      var colW = PW - M - x;
+      var pieces = entry.pieces || [];
+      var hasPic = pieces.some(function (p) { return p.image; });
+      if (!hasPic) {
+        return pdfWrapRuns(linesToRuns(entry.body || "(empty)"), colW, SIZE)
+          .map(function (l) { return { line: l, x: x }; });
+      }
+      var items = [];
+      pieces.forEach(function (p) {
+        if (p.image) { items.push(commentPicItem(p.image, x)); return; }
+        pdfWrapRuns(linesToRuns(p.text), colW, SIZE).forEach(function (l) { items.push({ line: l, x: x }); });
+      });
+      return items;
+    }
+
+    /* Top CIMG_ABOVE below y (which a text line leaves LEAD under its
+       baseline, clear of descenders); the next line's glyphs start
+       CIMG_BELOW under the picture. */
+    function drawCommentPic(pic, x) {
+      var top = y - CIMG_ABOVE;
+      if (pageImages.indexOf(pic.name) === -1) pageImages.push(pic.name);
+      ops.push("q " + pic.w.toFixed(2) + " 0 0 " + pic.h.toFixed(2) + " " +
+        x.toFixed(2) + " " + (top - pic.h).toFixed(2) + " cm /" + pic.name + " Do Q");
+      y = top - pic.h - CIMG_BELOW;
+    }
+
     comments.forEach(function (c) {
       var headerLines = pdfWrapRuns([{ text: c.location +
         (c.resolved ? " (resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")" : "") +
         (c.assignee ? " [assigned to " + c.assignee + "]" : "") +
         "  —  " + c.author + (c.when ? ", " + c.when : ""), b: true }], FULLW, SIZE);
       var quoteLines = c.quoted ? pdfWrapRuns(linesToRuns("“" + c.quoted + "”"), FULLW - 12, SIZE) : [];
-      var bodyLines = pdfWrapRuns(linesToRuns(c.body || "(empty)"), FULLW - 12, SIZE);
+      var bodyItems = commentBodyItems(c, M + 12);
       var replyBlocks = c.replies.map(function (rp) {
         return {
           /* "↳" isn't in this PDF's WinAnsi glyph set (only the chars in
              WINANSI_MAP + 0x20-0xFF render) — plain ">" instead of "?" */
           headerLines: pdfWrapRuns([{ text: "> " + rp.author + (rp.when ? ", " + rp.when : "") + ":", b: true }], FULLW - 24, SIZE),
-          bodyLines: pdfWrapRuns(linesToRuns(rp.body || "(empty)"), FULLW - 24, SIZE)
+          bodyItems: commentBodyItems(rp, M + 24)
         };
       });
 
@@ -436,14 +545,16 @@ export function buildPdf(jpegs) {
       var threadLines = [];
       headerLines.forEach(function (l) { threadLines.push({ line: l, x: M }); });
       quoteLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
-      bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+      bodyItems.forEach(function (b) { threadLines.push(b); });
       replyBlocks.forEach(function (rb) {
         rb.headerLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
-        rb.bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+        rb.bodyItems.forEach(function (b) { threadLines.push(b); });
       });
 
-      function ensureCommentRoom() {
-        if (y - LEAD < M) {
+      /* `need`: how far below y the next thing reaches — a line's LEAD,
+         or a picture's gap and height (commentBodyItems). */
+      function ensureCommentRoom(need) {
+        if (y - (need || LEAD) < M) {
           newPage(); y -= 6;
           text("Comments (continued)", M, y - 12, "F2", 12);
           y -= 34;
@@ -452,6 +563,11 @@ export function buildPdf(jpegs) {
 
       ensureCommentRoom();
       threadLines.forEach(function (b) {
+        if (b.pic) {
+          ensureCommentRoom(CIMG_ABOVE + b.pic.h);
+          drawCommentPic(b.pic, b.x);
+          return;
+        }
         ensureCommentRoom();
         y = drawLines([b.line], b.x, y - SIZE);
       });
