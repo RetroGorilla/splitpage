@@ -22,6 +22,10 @@ so others on your network open and edit the same scripts live, or
 offered it: download it from the releases page. When 3.0.0 itself ships, a
 beta copy is offered it like any other update.
 
+- **A start screen for every new tab.** A blank script or one of three
+  starter scripts (to-camera video, interview, 30-second spot), your recent
+  documents in the desktop app, and a drop zone for a file — see
+  [Tabs](#tabs).
 - **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
   formatting, tags, pasting, splitting, joining, moving and deleting scenes,
   a comment until it is sent, a scene's status and picture, the production
@@ -237,26 +241,48 @@ browser:
 
 Every tab you have open comes back the next time you launch Splitpage.
 
-**A new tab starts on a choice, not on a document.** It asks for one of two
-things — **New script**, which is a genuinely empty script (one blank scene,
-no tags, no comments, nothing carried over), or **Open a file**, which is the
-same picker as File ▸ Open a document…. The same page shows in the browser
-app on a fresh copy nothing has been opened or saved into. It never appears
-over a document: not one you opened, not a shared session's, and not one
-coming back from a crash. If you would rather look at the example script that
-ships with Splitpage, the link at the bottom of the page dismisses it (so does
+**A new tab starts on a start screen, not on a document.** Under **Start a
+script** it offers:
+
+- **Blank script** — a genuinely empty script: one blank scene, no tags, no
+  comments, nothing carried over.
+- Three **starter scripts**, each a real example to write over:
+  **To-camera video** (a hook, an intro, three sections and a call to
+  action), **Interview** (the questions in the audio column, cutaways and
+  b-roll in the visual one) and **30-second spot** (six timed beats ending
+  on a packshot). Each shows off what Splitpage does with a script — tagged
+  props, locations, VFX, cast, gear and music, `B-roll:` lines on the b-roll
+  list, a scene or two already marked Ready or Shot — and opens as a new,
+  unsaved document of its own, exactly like Blank script: Save asks where
+  to put it.
+- A **drop zone**: drop a `.md`, `.splitpage`, `.docx`, `.txt` or `.csv`
+  file anywhere on the page to open it, as **Open a file** would. Its two
+  links **paste a script** (the Paste a script… dialog, which here makes a
+  new document from what you paste) and **import a Google Doc link**.
+- **Open a file** (the same picker as File ▸ Open a document…) and **Join a
+  shared session** (the Servers dialog) in the bar across the top.
+- **Take the one-minute tour** and the **Tagging cheat sheet** at the bottom,
+  both shown over the example script — and in the browser app, a link to the
+  desktop app.
+
+The same page shows in the browser app on a fresh copy nothing has been
+opened or saved into. It never appears over a document: not one you opened,
+not a shared session's, and not one coming back from a crash. If you would
+rather look at the example script that ships with Splitpage, **Look at the
+example script instead** at the bottom of the page dismisses it (so does
 Esc).
 
-**Recent** is the third column, in the desktop app. It lists the last 20
-documents you had open, most recent first, by title and file name; clicking
-one reopens it in that tab with no picker in the way. If a file has been
-moved or deleted since, clicking it says so instead of failing quietly, and
-the **×** beside any entry takes it off the list — **Clear recent** takes
-them all off. The list is kept with the rest of the desktop app's session
-state on your own machine: it is not in a saved script, not in an export
-(including **Export app data**), and nobody in a shared session can see it.
-The browser app does not have this column — a browser can only reopen a file
-it still holds permission for, so it remembers the last one and no more.
+**Recent** sits beside the new-script cards in the desktop app. It lists the
+last 20 documents you had open, most recent first, by title and file name;
+clicking one reopens it in that tab with no picker in the way. If a file has
+been moved or deleted since, clicking it says so instead of failing quietly,
+and the **×** beside any entry takes it off the list — **Clear recent**
+takes them all off. The list is kept with the rest of the desktop app's
+session state on your own machine: it is not in a saved script, not in an
+export (including **Export app data**), and nobody in a shared session can
+see it. The browser app does not have this column — a browser can only
+reopen a file it still holds permission for, so it remembers the last one
+and no more.
 
 **Crash recovery.** If the app or your computer goes down with unsaved work
 open, nothing is lost: every tab's unsaved changes are kept on disk as you

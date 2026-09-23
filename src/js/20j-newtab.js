@@ -1,44 +1,57 @@
 import { S } from "./_state.js";
-import { home } from "./_home.js";
-import { loadLastFileHandle } from "./00-prelude.js";
+import { home, setHome } from "./_home.js";
+import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
-import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
+import { showTaggingHelp } from "./10-comments.js";
+import { openGdocModal, openImportModal } from "./11-import.js";
+import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
+import { desktopAppUrl } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
+import { startTour } from "./20c-help.js";
+import { openServersDialog } from "./20e-connect.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { draftRestorePending } from "./20g-drafts.js";
+import { STARTERS, starterById } from "./_starters.js";
 
 /* ================= the New Tab page =================
 
    A new desktop tab (and a fresh copy of the app in the browser) used to
    land on the seeded demo document, so the first thing anyone did was
    clear out somebody else's example script or go hunting through the File
-   drawer for Open. This page puts the only two things a new tab is
-   actually for one click away: an empty script, or the file picker.
+   drawer for Open. This page is where a new tab starts instead — since
+   issue #144 a start screen: a blank script or one of three starter
+   scripts, the recent documents on desktop, a drop zone, and the file
+   picker and the shared-session dialog one click away in its own top bar.
 
    WHAT IT IS NOT: a modal. It is an opaque full-page layer at z-index
    130 — above the topbar (120), below the side panels (140), the modals
    (150) and the tour (160) — so the first-run wizard still shows over it
    on a genuinely first run, and so nothing here can swallow a dialog.
+   The Servers dialog and the paste modal this page opens sit over it the
+   same way, and Esc belongs to them while they are up.
 
    WHAT IT DOES NOT TOUCH: the document. Showing the page changes no
    state at all; the demo is still underneath, which is why "Look at the
-   example script instead" (and Esc) can simply dismiss it. Only the
-   "New script" button replaces the document, and it replaces it with a
-   genuinely empty one — one blank scene, no tags, no comments, no
-   b-roll, a fresh identity — not a filtered copy of the seed.
+   example script instead" (and Esc) can simply dismiss it — and why the
+   tour and the tagging cheat sheet dismiss it too, since both are about
+   that example. Only a card replaces the document, and with a NEW one: a
+   blank is one empty scene with no tags, no comments, no b-roll; a starter
+   is a copy of one of the documents in src/starters/ (_starters.js). Both
+   get a fresh identity, no home and nothing to save — exactly what the
+   blank has always been — never a filtered copy of the seed.
 
-   THE THIRD COLUMN (issue #15) is recently-opened documents, and it is
+   THE RECENT COLUMN (issue #15) is recently-opened documents, and it is
    DESKTOP ONLY. The list is kept by the main process in
    desktop-state.json (contract DESKTOP-RECENTS) because that is the only
    side that can hold a durable reference to a file: the browser build
    remembers exactly one handle, and can only reopen one it still has
    permission for. So in the browser this column stays hidden and the
-   page keeps its two cards.
+   page is narrower.
 
    Nothing about the list reaches this page but what it needs to draw it
    and click it: an opaque fileId, the file's basename, the title the
@@ -68,12 +81,16 @@ function openNewTabPage() {
   if (!el || newTabPageShown) return;
   newTabPageShown = true;
   el.hidden = false;
+  /* The page scrolls itself; the demo underneath must not show a second
+     scroll bar beside it, or scroll under a wheel that missed the page. */
+  document.documentElement.classList.add("is-newtab-open");
+  updateDesktopPitch();
   document.addEventListener("keydown", onNewTabKeydown, true);
   var first = el.querySelector('[data-newtab-action="new"]');
   if (first) first.focus();
   /* Asked for every time the page is shown rather than cached: another
      tab (or another window) may have opened something since, and main is
-     the only authority on the list. Not awaited — the two cards must not
+     the only authority on the list. Not awaited — the cards must not
      wait on IPC to become clickable. */
   refreshRecents();
 }
@@ -83,27 +100,30 @@ export function closeNewTabPage() {
   if (!newTabPageShown) return;
   newTabPageShown = false;
   if (el) el.hidden = true;
+  document.documentElement.classList.remove("is-newtab-open");
+  setDropHover(false);
   document.removeEventListener("keydown", onNewTabKeydown, true);
 }
 
+/* Esc is the page's own "not now" — unless something opened over it has
+   the keyboard: the paste modal, the Servers dialog, the first-run wizard,
+   Help. Those are all .modal-backdrop, and each closes on its own Esc
+   listener further out; swallowing the key here (capture, on document)
+   would leave the dialog up and take the page down from under it. */
 function onNewTabKeydown(e) {
   if (e.key !== "Escape") return;
+  if (document.querySelector(".modal-backdrop:not([hidden]), #tour-overlay:not([hidden])")) return;
   e.stopPropagation();
   e.preventDefault();
   closeNewTabPage();
 }
 
-/* ---- "New script": a genuinely empty document ----
+/* ---- a new document: Blank script, a starter, a paste ----
 
    migrateRows fills in every list the document carries (comments,
    productionTags, people, brollShots, wordsPerMinute) and mints a fresh
    docId, so building the blank from its two required fields is enough —
-   and is the only way to be sure nothing of the seed survives.
-
-   Not dirty, and editSeq untouched: an empty document nobody has typed
-   into yet is exactly what isPristineSeedDocument() (03a-history-store.js)
-   means by pristine, which is what lets the desktop shell keep routing an
-   open into this tab and keep closing it without a prompt. */
+   and is the only way to be sure nothing of the seed survives. */
 function blankDocumentState() {
   return migrateRows({
     title: "Untitled Script",
@@ -111,16 +131,37 @@ function blankDocumentState() {
   });
 }
 
-function startBlankScript() {
-  /* Clicked before loadInitialState() resolved: assigning `state` now
-     would just be overwritten when the boot load lands (the same race
-     20f-desktop.js's open handlers wait out). */
-  if (!S.state && S.initialStateReady) return S.initialStateReady.then(startBlankScript);
-  S.state = blankDocumentState();
-  setBaseState(cloneState(S.state), "startBlankScript: a new blank document");
-  /* A blank document's id has never left this page, so a first Save can
-     take it with it rather than forking a new one (02b-doc-id.js). */
+/* A starter is stored already migrated (_starters.js), so this is a copy
+   of it plus the one thing migration adds: an identity of its own. The
+   copy is deep because migrateRows works in place, and the bundled
+   original is what the next click on the same card copies again. */
+function starterDocumentState(id) {
+  var starter = starterById(id);
+  return starter ? migrateRows(JSON.parse(JSON.stringify(starter.state))) : null;
+}
+
+/* The one way a card replaces the document.
+
+   Not dirty, and editSeq untouched: a new document nobody has typed into
+   yet is exactly what isPristineSeedDocument() (03a-history-store.js)
+   means by pristine, which is what lets the desktop shell keep routing an
+   open into this tab and keep closing it without a prompt — a starter no
+   one has touched is as easy to get back as a blank is.
+
+   And no home, nothing unsaved. The page only ever shows itself over a
+   clean document with no home (the gate below), but a new document has
+   no file to save back into whatever was on screen before it, and nothing
+   of its own to save yet — so a file or import home, and a dirty flag and
+   the autosave it would arm, are let go of here rather than trusted to be
+   absent. */
+function adoptNewDocument(next, reason) {
+  S.state = next;
+  setBaseState(cloneState(S.state), reason);
+  /* This id has never left this page, so a first Save can take it with it
+     rather than forking a new one (02b-doc-id.js). */
   S.docIdWrittenOut = false;
+  if (home.kind === "file" || home.kind === "import") setHome("none");
+  clearDirty();
   resetProductionPanelState();
   render();
   updateFileChip();
@@ -129,7 +170,45 @@ function startBlankScript() {
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   closeNewTabPage();
+}
+
+function startNewDocument(makeState, reason) {
+  /* Clicked before loadInitialState() resolved: assigning `state` now
+     would just be overwritten when the boot load lands (the same race
+     20f-desktop.js's open handlers wait out). */
+  if (!S.state && S.initialStateReady) {
+    return S.initialStateReady.then(function () { return startNewDocument(makeState, reason); });
+  }
+  var next = makeState();
+  if (!next) return Promise.resolve(false);
+  adoptNewDocument(next, reason);
   return Promise.resolve(true);
+}
+
+function startBlankScript() {
+  return startNewDocument(blankDocumentState, "startBlankScript: a new blank document");
+}
+
+function startStarterScript(id) {
+  return startNewDocument(function () { return starterDocumentState(id); },
+    "startStarterScript: a new document from the " + id + " starter");
+}
+
+/* "paste one": the ordinary import modal, in the mode where what it
+   imports becomes a new document (11-import.js) rather than rows added to
+   the demo underneath. Cancelled, it leaves this page exactly as it was.
+   `rows` arrive as the import builds them — HTML already, which is why the
+   schema is stamped current, as loadFileIntoEditor (18-local-files.js)
+   does for the same rows. The import then runs its scans over them,
+   marks the document dirty (a pasted script is on no disk yet) and says
+   how many rows came in. */
+function openPasteAsNewDocument() {
+  openImportModal({
+    intoNewDocument: function (rows) {
+      adoptNewDocument(migrateRows({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows }),
+        "newtab paste: a new document from pasted text");
+    }
+  });
 }
 
 /* ---- "Open a file" ----
@@ -140,6 +219,95 @@ function startBlankScript() {
 async function newTabOpenFile() {
   await openLocalFile();
   if (home.kind === "import" || home.kind === "file") closeNewTabPage();
+}
+
+/* ---- the drop zone ----
+
+   A dropped file opens the way the file input behind "Open a file" opens
+   one (21-events.js's #open-file-input listener): openProjectFile with no
+   handle, which reads a project file as a project and anything else as a
+   new document, and closes this page when it lands. No handle means Save
+   asks where to put it — a dropped File carries no permission to write
+   back, and on desktop the renderer never learns its path (invariant
+   #34). The whole page takes the drop, not just the zone, so a file let go
+   of a little off target is not the browser navigating away to show it. */
+function isFileDrag(e) {
+  var types = e.dataTransfer && e.dataTransfer.types;
+  if (!types) return false;
+  for (var i = 0; i < types.length; i++) if (types[i] === "Files") return true;
+  return false;
+}
+
+function setDropHover(on) {
+  var zone = document.getElementById("newtab-drop");
+  if (zone) zone.classList.toggle("is-over", !!on);
+}
+
+function newTabOpenDropped(file) {
+  if (!file) return Promise.resolve(false);
+  if (!fileKindFromName(file.name)) {
+    showToast("Splitpage opens .md, .splitpage, .docx, .txt and .csv files — " +
+      file.name + " isn't one of them.", "warn");
+    return Promise.resolve(false);
+  }
+  return openProjectFile(file, null);
+}
+
+/* ---- the starter cards ----
+
+   Built from STARTERS once, at boot, after the Blank script card that is
+   written into page.html. The preview is drawn from the starter's own
+   rows — a teal stub per line of the visual column, an orange one per
+   line of the audio, sized by how much each actually says — so it is a
+   picture of the layout that stays true if a starter is rewritten. */
+var PREVIEW_ROWS = 4;
+var PREVIEW_LINE_CHARS = 140;
+
+function previewColumn(html, cls) {
+  var len = String(html || "").replace(/<br\s*\/?>/gi, " ").replace(/<[^>]*>/g, "").length;
+  var lines = len > PREVIEW_LINE_CHARS ? 2 : 1;
+  var last = Math.round(Math.max(30, Math.min(100, ((len % PREVIEW_LINE_CHARS) || PREVIEW_LINE_CHARS) / PREVIEW_LINE_CHARS * 100)));
+  var out = "";
+  for (var i = 0; i < lines; i++) {
+    out += '<i class="' + cls + '" style="width:' + (i < lines - 1 ? 100 : last) + '%"></i>';
+  }
+  return '<span class="newtab-preview-col">' + out + '</span>';
+}
+
+function starterPreviewHtml(state) {
+  return '<span class="newtab-preview" aria-hidden="true">' +
+    state.rows.slice(0, PREVIEW_ROWS).map(function (row) {
+      return '<span class="newtab-preview-row">' +
+        previewColumn(row.visualText, "is-visual") + previewColumn(row.audioText, "is-audio") +
+      '</span>';
+    }).join("") +
+  '</span>';
+}
+
+function renderStarterCards() {
+  var cards = document.getElementById("newtab-cards");
+  if (!cards || cards.querySelector('[data-newtab-action="starter"]')) return;
+  cards.insertAdjacentHTML("beforeend", STARTERS.map(function (s) {
+    return '<button type="button" class="newtab-card" data-newtab-action="starter" data-starter="' + escapeHtml(s.id) + '">' +
+      starterPreviewHtml(s.state) +
+      '<strong class="newtab-card-name">' + escapeHtml(s.name) + '</strong>' +
+      '<span class="newtab-card-desc">' + escapeHtml(s.desc) + '</span>' +
+    '</button>';
+  }).join(""));
+}
+
+/* ---- the footer's desktop-app line: browser build only ----
+   Asked on every show (and with the recents, which ask the bridge anyway)
+   rather than once at boot: the desktop bridge is there before any script
+   runs in the real app, but a suite installs __desktopTest's fake one
+   later, and the link target can arrive with an update status after
+   boot. */
+function updateDesktopPitch() {
+  var pitch = document.getElementById("newtab-desktop");
+  if (!pitch) return;
+  pitch.hidden = !!S.DESKTOP;
+  var link = document.getElementById("newtab-desktop-link");
+  if (link && !S.DESKTOP) link.href = desktopAppUrl();
 }
 
 /* ---- the recent-documents column (DESKTOP-RECENTS) ---- */
@@ -157,17 +325,20 @@ function formatRecentWhen(at) {
   return new Date(at).toLocaleDateString();
 }
 
+var FORGET_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+
 function renderRecents(entries) {
   var col = document.getElementById("newtab-recents");
   var list = document.getElementById("newtab-recents-list");
-  var cards = document.querySelector("#newtab-page .newtab-cards");
+  var main = document.querySelector("#newtab-page .newtab-main");
   var inner = document.querySelector("#newtab-page .newtab-inner");
   if (!col || !list) return;
   /* The column itself stays once it is up, empty list and all: "Recent
      (nothing yet)" is a truthful answer, and a column that appears and
      disappears under the pointer as the last entry is forgotten is not. */
   col.hidden = false;
-  if (cards) cards.classList.add("has-recents");
+  if (main) main.classList.add("has-recents");
   if (inner) inner.classList.add("has-recents");
   var clear = document.getElementById("newtab-recents-clear");
   if (clear) clear.hidden = !entries.length;
@@ -182,16 +353,20 @@ function renderRecents(entries) {
       '<button type="button" class="newtab-recent-open" data-newtab-action="open-recent" ' +
         'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
         '<span class="newtab-recent-title">' + escapeHtml(title) + '</span>' +
-        '<span class="newtab-recent-name">' + escapeHtml(r.name) + (when ? " · " + escapeHtml(when) : "") + '</span>' +
+        '<span class="newtab-recent-meta">' +
+          '<span class="newtab-recent-name">' + escapeHtml(r.name) + '</span>' +
+          (when ? '<span class="newtab-recent-when">' + escapeHtml(when) + '</span>' : '') +
+        '</span>' +
       '</button>' +
       '<button type="button" class="newtab-recent-forget" data-newtab-action="forget-recent" ' +
         'data-file-id="' + escapeHtml(r.fileId) + '" title="Forget this one" ' +
-        'aria-label="Forget ' + escapeHtml(title) + '">\u00d7</button>' +
+        'aria-label="Forget ' + escapeHtml(title) + '">' + FORGET_ICON + '</button>' +
     '</div>';
   }).join("");
 }
 
 async function refreshRecents() {
+  updateDesktopPitch();
   if (!recentsSupported()) return;
   var entries;
   try { entries = await S.DESKTOP.listRecents(); } catch (e) { return; }
@@ -288,24 +463,50 @@ export function __init() {
   (function wireNewTabPage() {
     var el = newTabPageEl();
     if (!el) return;
+    renderStarterCards();
     el.addEventListener("click", function (e) {
       var target = e.target.closest("[data-newtab-action]");
       if (!target) return;
-      e.preventDefault();
       var action = target.getAttribute("data-newtab-action");
+      e.preventDefault();
       if (action === "new") startBlankScript();
+      else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
       else if (action === "open") newTabOpenFile();
+      else if (action === "join") openServersDialog();                 /* 20e-connect.js */
+      else if (action === "paste") openPasteAsNewDocument();
+      else if (action === "gdoc") openGdocModal();                     /* 11-import.js */
       else if (action === "dismiss") closeNewTabPage();
+      /* The tour and the cheat sheet are both about the example script,
+         so they take the page down to show it. */
+      else if (action === "tour") { closeNewTabPage(); startTour(); }  /* 20c-help.js */
+      else if (action === "tagging-help") { closeNewTabPage(); showTaggingHelp(); } /* 10-comments.js */
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();
+    });
+
+    el.addEventListener("dragover", function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
+      setDropHover(true);
+    });
+    el.addEventListener("dragleave", function (e) {
+      /* Fired for every child crossed; only leaving the page itself counts. */
+      if (!e.relatedTarget || !el.contains(e.relatedTarget)) setDropHover(false);
+    });
+    el.addEventListener("drop", function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      setDropHover(false);
+      newTabOpenDropped(e.dataTransfer.files && e.dataTransfer.files[0]);
     });
   })();
 
   maybeAutoShowNewTabPage();
 
   /* ---- test hook ----
-     Same trick as window.__onboarding: the gate and the blank document are
+     Same trick as window.__onboarding: the gate and the new documents are
      what a headless suite has to drive, and neither has a UI affordance
      that can be clicked into existence on demand. Nothing in the app reads
      this. */
@@ -314,6 +515,10 @@ export function __init() {
     isOpen: function () { return newTabPageShown; },
     eligible: newTabEligibleForAutoShow,
     blankState: blankDocumentState,
+    /* The starters (issue #144): their ids in card order, and a fresh
+       document built from one exactly as its card builds it. */
+    starterIds: function () { return STARTERS.map(function (s) { return s.id; }); },
+    starterState: starterDocumentState,
     /* The recents column (issue #15). Desktop-only and driven by IPC, so a
        browser suite reaches it through __desktopTest's fake backend. */
     refreshRecents: refreshRecents

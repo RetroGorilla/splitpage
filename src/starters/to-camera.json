@@ -1,0 +1,184 @@
+{
+  "schema": 2,
+  "title": "Three Lights for Under $200",
+  "rows": [
+    {
+      "id": "r1",
+      "status": "shot",
+      "visualText": "Cold open. Host at the desk in the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"home office\" contenteditable=\"false\">home office</span>, lit flat by the ceiling light — then all three lights snap on in one cut.<br><span class=\"broll-key\" data-broll-id=\"bs_tc_switch\" contenteditable=\"false\">B-roll:</span> hand hits the wall switch, the lights pop on one by one",
+      "audioText": "This is what my desk looked like on camera a year ago. And this is it now. Same room, same camera — three lights that cost less than one decent lens. Let me show you exactly how.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r2",
+      "status": "shot",
+      "visualText": "Medium shot, host to camera, <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"lav mic\" contenteditable=\"false\">lav mic</span> clipped out of sight. <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Title card\" contenteditable=\"false\">Title card</span> animates in over the first line, with the <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"intro sting\" contenteditable=\"false\">intro sting</span> under it.",
+      "audioText": "Hi, I'm Sam, and on this channel I make videos about making videos. If you film yourself at home and it always looks a bit flat, this one's for you. We'll build it in three steps: <strong>key</strong>, <strong>fill</strong> and <strong>background</strong>.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r3",
+      "status": "ready",
+      "visualText": "Wide: the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"softbox\" contenteditable=\"false\">softbox</span> on a <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"light stand\" contenteditable=\"false\">light stand</span>, 45° off to camera left, just above eye line.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Key light — $65”<br><span class=\"broll-key\" data-broll-id=\"bs_tc_softbox\" contenteditable=\"false\">B-roll:</span> close-up of the key light going up, diffusion sock pulled on",
+      "audioText": "Step one is your key light — the brightest one, and the one that shapes your face. A cheap one is fine. Put it off to one side and a little above your eyes, and angle it so it skims across you instead of hitting you head-on.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r4",
+      "status": "todo",
+      "visualText": "Same framing, key light only — then a sheet of <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"white foam board\" contenteditable=\"false\">white foam board</span> slides in on camera right and the shadow side lifts.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Fill — $8”",
+      "audioText": "Step two: fill. You don't need a second light for this. Foam board on the other side bounces the key back into the shadows. Move it closer for a softer look, further away for more contrast.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r5",
+      "status": "todo",
+      "visualText": "Over-the-shoulder toward the back wall: the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"RGB tube light\" contenteditable=\"false\">RGB tube light</span> on the shelf, washing the wall in amber.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Background — $120”<br><span class=\"broll-key\" data-broll-id=\"bs_tc_tube\" contenteditable=\"false\">B-roll:</span> slow push-in on the tube light fading from blue to amber",
+      "audioText": "Step three is what makes it look expensive: separation. A little colour on the wall behind you pulls you off the background. One RGB tube, set warm, pointed at the wall — never at you.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r6",
+      "status": "todo",
+      "visualText": "Back to the medium shot. <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"End screen\" contenteditable=\"false\">End screen</span> for the last 20 seconds: next video on the left, subscribe on the right.",
+      "audioText": "That's the whole setup — key, fill and background, for under two hundred dollars. Everything I used is linked in the description. And if you want to hear how I set up the audio side of this desk, that video's up next.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    }
+  ],
+  "comments": [],
+  "people": [],
+  "productionTags": [
+    {
+      "cat": "location",
+      "name": "home office",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_1fu1djvzygrwm"
+    },
+    {
+      "cat": "gear",
+      "name": "lav mic",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_nzo4b69nw035"
+    },
+    {
+      "cat": "vfx",
+      "name": "Title card",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_1qo6uv9fbawg8"
+    },
+    {
+      "cat": "sound",
+      "name": "intro sting",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_469hj710bzits"
+    },
+    {
+      "cat": "prop",
+      "name": "softbox",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_19kxk7t1hqzhja"
+    },
+    {
+      "cat": "gear",
+      "name": "light stand",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_173q64e1quze6n"
+    },
+    {
+      "cat": "vfx",
+      "name": "Lower third",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_1mi4te71e9svzw"
+    },
+    {
+      "cat": "prop",
+      "name": "white foam board",
+      "status": "sourcing",
+      "owner": "",
+      "notes": "",
+      "id": "t_qgk9qy1n0tn60"
+    },
+    {
+      "cat": "prop",
+      "name": "RGB tube light",
+      "status": "needed",
+      "owner": "",
+      "notes": "Any RGB tube with a warm preset. Around $120.",
+      "id": "t_14tahkzks1jcs"
+    },
+    {
+      "cat": "vfx",
+      "name": "End screen",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_11fjge21hkwctz"
+    }
+  ],
+  "brollShots": [
+    {
+      "id": "bs_tc_switch",
+      "name": "hand hits the wall switch, the lights pop on one by one",
+      "desc": "",
+      "status": "shot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "This is what my desk looked like on camera a year ago. And this is it now. Same room, same camera — three lights that cost less than one decent lens. Let me show you exactly how.",
+      "location": "home office",
+      "origin": "script"
+    },
+    {
+      "id": "bs_tc_softbox",
+      "name": "close-up of the key light going up, diffusion sock pulled on",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Step one is your key light — the brightest one, and the one that shapes your face. A cheap one is fine. Put it off to one side and a little above your eyes, and angle it so it skims across you instead of hitting you head-on.",
+      "location": "",
+      "origin": "script"
+    },
+    {
+      "id": "bs_tc_tube",
+      "name": "slow push-in on the tube light fading from blue to amber",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Step three is what makes it look expensive: separation. A little colour on the wall behind you pulls you off the background. One RGB tube, set warm, pointed at the wall — never at you.",
+      "location": "",
+      "origin": "script"
+    }
+  ],
+  "wordsPerMinute": 150,
+  "rev": 0
+}

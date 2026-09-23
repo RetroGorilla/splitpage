@@ -19,13 +19,13 @@ wait document.getElementById('newtab-page').hidden == false
 # DESKTOP is null here (no shell, no fake installed yet), which is exactly
 # what a browser copy looks like.
 expect document.getElementById('newtab-recents').hidden == true
-expect document.querySelector('#newtab-page .newtab-cards').classList.contains('has-recents') == false
+expect document.querySelector('#newtab-page .newtab-main').classList.contains('has-recents') == false
 
 # --- with a desktop bridge, the column shows what main hands over --------
 eval (function(){ window.D = window.__desktopTest; window.fake = D.makeFakeBackend(); D.setBackend(window.fake); window.__idA = window.fake._addFile('script-a.md', '# Script A' + String.fromCharCode(10,10) + 'Narration for A.'); window.__idB = window.fake._addFile('script-b.md', '# Script B' + String.fromCharCode(10,10) + 'Narration for B.'); window.fake._addRecent(window.__idB, 'script-b.md', 'Script B', Date.now()); window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now()); return true; })()
 eval (async function(){ await window.__newTab.refreshRecents(); return true; })()
 wait document.getElementById('newtab-recents').hidden == false
-expect document.querySelector('#newtab-page .newtab-cards').classList.contains('has-recents') == true
+expect document.querySelector('#newtab-page .newtab-main').classList.contains('has-recents') == true
 expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
 # most recent first, and each card names the document and the file
 expect document.querySelectorAll('#newtab-recents-list .newtab-recent-title')[0].textContent == Script A
@@ -34,6 +34,15 @@ expect document.querySelectorAll('#newtab-recents-list .newtab-recent-name')[0].
 # the entry carries the opaque id and nothing else — no path to be had
 expect document.querySelectorAll('#newtab-recents-list [data-newtab-action="open-recent"]')[0].getAttribute('data-file-id') === window.__idA
 expect document.getElementById('newtab-recents-list').textContent.indexOf('/') === -1
+# the start screen's layout (issue #144): at a desktop window's width the
+# column sits beside the New grid, ~380px wide, and the file name is the one
+# thing on the page in the mono face
+expect innerWidth < 1100 || document.getElementById('newtab-recents').getBoundingClientRect().left > document.getElementById('newtab-cards').getBoundingClientRect().right
+expect innerWidth < 1100 || Math.abs(document.getElementById('newtab-recents').getBoundingClientRect().width - 380) < 2
+expect getComputedStyle(document.querySelector('.newtab-recent-name')).fontFamily.indexOf('Plex Mono') !== -1
+expect getComputedStyle(document.querySelector('.newtab-recent-title')).fontFamily.indexOf('Work Sans') !== -1
+# ...and no desktop-app pitch inside the desktop app
+expect document.getElementById('newtab-desktop').hidden == true
 
 # --- clicking one opens it in this tab and closes the page ---------------
 click #newtab-recents-list [data-newtab-action="open-recent"]
@@ -71,6 +80,33 @@ expect document.getElementById('newtab-recents').hidden == false
 expect document.getElementById('newtab-recents-clear').hidden == true
 eval (async function(){ window.__cleared = await window.fake.listRecents(); return window.__cleared.length; })()
 expect window.__cleared.length == 0
+
+# --- a starter on desktop: a new document that never touches a file -----
+# Script A is open from its file under the page. Every file call the bridge
+# has is counted from here: opening a starter must make none of them, and
+# must tell main it is a document with no file, nothing unsaved, and an id
+# of its own.
+eval (function(){ window.__fileCalls = []; ['openFileDialog', 'saveFileDialog', 'writeFile', 'readFile', 'statFile', 'routeOpen'].forEach(function (n) { var f = window.fake[n]; window.fake[n] = function () { window.__fileCalls.push(n); return f.apply(this, arguments); }; }); window.__idWas = window.__splitpageFormats.state().docId; window.__newTab.open(); return true; })()
+wait document.getElementById('newtab-page').hidden == false
+expect window.__hostedTest.home().kind !== 'none'
+click [data-starter="to-camera"]
+wait document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length == 6
+expect document.getElementById('doc-title').value == Three Lights for Under $200
+sleep 800
+expect window.__fileCalls.length == 0
+expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.state().docId !== window.__idWas
+expect window.fake._lastDocState.fileId === null
+expect window.fake._lastDocState.dirty == false
+expect window.fake._lastDocState.docId === window.__splitpageFormats.state().docId
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+# Esc over it, from a page reopened on top: still the same document
+eval (function(){ window.__newTab.open(); window.__rowsBefore = document.getElementById('rows').innerHTML; return true; })()
+key Escape
+expect document.getElementById('newtab-page').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+expect window.__fileCalls.length == 0
 
 # --- it is not in the app-data export (§5 #48) ---------------------------
 # The bundle is built from an allowlist of localStorage keys and the history
