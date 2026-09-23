@@ -21,7 +21,9 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
-import { acceptStash, cloneState, mergeStates, readStash, rowContentEqual, stashLocalWork } from "../js/03-sync.js";
+import {
+  acceptStash, cloneState, mergeStates, mergeTextField, readStash, rowContentEqual, stashLocalWork, textMergeContext
+} from "../js/03-sync.js";
 import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../js/02c-blobs.js";
 import { S } from "../js/_state.js";
 
@@ -406,5 +408,149 @@ test("one release: an older stash's \"__IMAGE__\" sentinels take theirs' picture
   assert.equal(res.merged.rows[0].audioText, "mine", "and my text still merges");
   assert.equal(res.conflicts.length, 0, "no empty card for a picture nobody can know about");
   void a;
+});
+
+/* ---- a script cell, a word at a time (#85, docs/DOCUMENT-MODEL.md §8) ----
+   Each side's cell is read into the document model through its own
+   registry and merged there: only the same words changed differently on
+   both sides are a conflict, and that conflict is exactly the old one —
+   theirs live, my whole cell on a card (design D3). */
+
+const span = (cat, name, text) =>
+  `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${text || name}</span>`;
+function cellDoc(audioText, productionTags) {
+  return migrateRows({
+    title: "R", schema: 2,
+    rows: [{ id: "r1", audioText: audioText }],
+    productionTags: productionTags || []
+  });
+}
+
+test("a word changed on each side of one cell: both words are kept, no conflict", () => {
+  const base = cellDoc("the cat sat on the mat");
+  const mine = cellDoc("the dog sat on the mat");
+  const theirs = cellDoc("the cat sat on the rug");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, "the dog sat on the rug");
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.merged.comments.length, 0, "no Unmerged edit card");
+  /* my edit is in the row: it counts as mine, and the row is stamped */
+  assert.equal(res.stats.rowsFromMe, 1);
+  assert.equal(res.stats.rowsFromThem, 0);
+});
+
+test("#85: a tag wrapped round words on one side, a word fixed elsewhere on the other — both", () => {
+  const base = cellDoc("Put the red mug on the tabel");
+  const mine = cellDoc("Put the " + span("prop", "red mug") + " on the tabel");
+  const theirs = cellDoc("Put the red mug on the table");
+  assert.equal(mine.productionTags.length, 1, "tagging registered the item on my side");
+  for (const [m, t] of [[mine, theirs], [theirs, mine]]) {
+    const res = mergeStates(base, cloneState(m), cloneState(t));
+    assert.equal(res.merged.rows[0].audioText, "Put the " + span("prop", "red mug") + " on the table");
+    assert.equal(res.conflicts.length, 0);
+    assert.deepEqual(res.merged.productionTags.map((x) => x.name), ["red mug"]);
+  }
+});
+
+test("the same words changed differently on both sides: the conflict card, exactly as before", () => {
+  const base = cellDoc("the cat sat on the mat");
+  const mine = cellDoc("the dog sat on the mat, <strong>twice</strong>");
+  const theirs = cellDoc("the cow sat on the mat");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, "the cow sat on the mat", "theirs stays live");
+  assert.equal(res.conflicts.length, 1);
+  assert.equal(res.conflicts[0].field, "audioText");
+  const card = res.merged.comments.find((c) => c.kind === "conflict");
+  assert.equal(card.rowId, "r1");
+  assert.equal(card.conflictField, "Audio");
+  assert.equal(card.body, "the dog sat on the mat, <strong>twice</strong>", "the card holds my whole cell");
+  assert.equal(res.stats.rowsFromMe, 0);
+  assert.equal(res.stats.rowsFromThem, 1);
+});
+
+test("a tag renamed on one side and the cell edited on the other: both, under the new name", () => {
+  /* A rename changes the registry entry's name and rewrites its spans'
+     data-tag-name (renameTag); the id stays. Read through each side's own
+     registry, the renamed cell is the same cell as base. */
+  const base = cellDoc("Pour the " + span("prop", "Mug", "mug") + " out now");
+  const id = base.productionTags[0].id;
+  const renamed = cellDoc("Pour the " + span("prop", "Cup", "mug") + " out now",
+    [{ id: id, cat: "prop", name: "Cup", owner: "", notes: "", status: "needed" }]);
+  const edited = cellDoc("Pour the " + span("prop", "Mug", "mug") + " out slowly");
+  const want = "Pour the " + span("prop", "Cup", "mug") + " out slowly";
+  for (const [m, t] of [[renamed, edited], [edited, renamed]]) {
+    const res = mergeStates(base, cloneState(m), cloneState(t));
+    assert.equal(res.merged.rows[0].audioText, want);
+    assert.equal(res.conflicts.length, 0);
+    assert.deepEqual(res.merged.productionTags.map((x) => [x.id, x.name]), [[id, "Cup"]],
+      "one entry, renamed — the old name is not healed back in beside it");
+  }
+});
+
+test("a formatting change on one side and a text change on the other: both", () => {
+  const base = cellDoc("a quick brown fox");
+  const mine = cellDoc("a <strong>quick</strong> brown fox");
+  const theirs = cellDoc("a quick brown dog");
+  const res = mergeStates(base, mine, theirs);
+  assert.equal(res.merged.rows[0].audioText, "a <strong>quick</strong> brown dog");
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.stats.rowsFromMe, 1);
+});
+
+test("a re-serialisation is not a change: the same content, nested differently", () => {
+  /* toHtml writes one nesting; the sanitiser keeps whatever it is given.
+     The first save of an old cell through the model changes its string,
+     not its content, and must never read as an edit. */
+  const old = "<em><strong>x</strong></em> y";
+  const canon = "<strong><em>x</em></strong> y";
+  assert.notEqual(cellDoc(old).rows[0].audioText, cellDoc(canon).rows[0].audioText, "the fixture really differs as a string");
+
+  /* only re-serialised on my side, edited on theirs: theirs, not a conflict */
+  let res = mergeStates(cellDoc(old), cellDoc(canon), cellDoc("<em><strong>x</strong></em> z"));
+  assert.equal(res.merged.rows[0].audioText, "<em><strong>x</strong></em> z");
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.stats.rowsFromMe, 0);
+
+  /* only re-serialised on my side, untouched on theirs: nothing of mine
+     to keep, and their string stays as it was */
+  res = mergeStates(cellDoc(old), cellDoc(canon), cellDoc(old));
+  assert.equal(res.merged.rows[0].audioText, old);
+  assert.equal(res.stats.rowsFromMe, 0);
+  assert.equal(res.stats.rowsFromThem, 0);
+
+  /* re-serialised on theirs, edited on mine: mine */
+  res = mergeStates(cellDoc(old), cellDoc("<em><strong>x</strong></em> w"), cellDoc(canon));
+  assert.equal(res.merged.rows[0].audioText, "<em><strong>x</strong></em> w");
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.stats.rowsFromMe, 1);
+
+  /* with no ancestor at all, equal content is still no conflict */
+  res = mergeStates(null, cellDoc(canon), cellDoc(old));
+  assert.equal(res.conflicts.length, 0);
+  assert.equal(res.merged.rows[0].audioText, old, "theirs' string is preferred");
+});
+
+test("mergeTextField names each outcome the way mergeRow acts on it", () => {
+  const b = cellDoc("one two three"), ctx = textMergeContext(b, b, b);
+  const f = (base, mine, theirs) => mergeTextField(base, mine, theirs, ctx);
+  assert.deepEqual(f("one two three", "one two three", "one two three"), { html: "one two three", outcome: "same" });
+  assert.deepEqual(f("one two three", "one 2 three", "one two three"), { html: "one 2 three", outcome: "mine" });
+  assert.deepEqual(f("one two three", "one two three", "one two 3"), { html: "one two 3", outcome: "theirs" });
+  assert.deepEqual(f("one two three", "1 two three", "one two 3"), { html: "1 two 3", outcome: "merged" });
+  assert.deepEqual(f("one two three", "one 2 three", "one II three"), { html: "one II three", outcome: "conflict" });
+  /* both made the same edit: the same */
+  assert.deepEqual(f("one two three", "one 2 three", "one 2 three"), { html: "one 2 three", outcome: "same" });
+  /* no ancestor: any real difference is a conflict */
+  assert.equal(f(undefined, "one 2 three", "one two three").outcome, "conflict");
+});
+
+test("a cell holding a picture is compared whole, as a string — the model has no place for one", () => {
+  /* fromHtml leaves pictures out (design D7), so a merge through the model
+     would drop one; until they move to comments, such a cell merges the
+     old way. */
+  const img = '<img class="comment-img" data-blob="' + "a".repeat(64) + '" data-w="1" data-h="1" data-mime="image/png">';
+  const b = cellDoc("one two"), ctx = textMergeContext(b, b, b);
+  assert.deepEqual(mergeTextField("one two", "one two " + img, "one two", ctx), { html: "one two " + img, outcome: "mine" });
+  assert.equal(mergeTextField("one two", "1 two " + img, "one 2", ctx).outcome, "conflict");
 });
 
