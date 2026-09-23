@@ -167,4 +167,36 @@ jsclick #file-menu [data-file-action="export-md"]
 sleep 1200
 expect window.__blobs[window.__blobs.length-1].type == text/markdown
 
+# =============================================================================
+# PDF — a picture's row is at least as tall as the picture. A row with a
+# picture and no text in either column never entered buildPdf()'s text
+# loop, the only place y moved past the picture, so the next row was drawn
+# over it with a 14pt strip showing (Im2 at y=331.17, Im3 at 317.17). The
+# content streams are uncompressed: every image's draw rectangle is read
+# back and checked against the other pictures and against everything drawn
+# after its row's rule. Rows: picture only, picture only, picture + short
+# text, picture + text far longer than the picture, a filler that leaves
+# less room than a picture at the bottom of a page, a picture that must
+# therefore start the next page, and a last text row. The pictures are
+# canvas PNGs, so they go through the real PNG -> JPEG conversion.
+# =============================================================================
+
+eval (function(){ window.__pdfLayout = function(t){ var pages = [], re = /obj\n<< \/Length (\d+) >>\nstream\n/g, m; while ((m = re.exec(t))) { var s = t.substr(re.lastIndex, +m[1]); pages.push(s.split('\n').map(function(op){ var x; if ((x = /^q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([-\d.]+) cm \/(Im\d+) Do Q$/.exec(op))) return { k: 'img', n: x[5], w: +x[1], h: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2] }; if ((x = /^BT \/F\d ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((.*)\) Tj ET$/.exec(op))) return { k: 'text', s: x[4], y: +x[3], top: +x[3] + +x[1] }; if ((x = /^q 0\.90 0\.89 0\.86 RG 0\.5 w [\d.]+ ([-\d.]+) m /.exec(op))) return { k: 'rule', y: +x[1], top: +x[1] }; if ((x = / ([-\d.]+) [\d.]+ [\d.]+ re f Q$/.exec(op))) return { k: 'fill', y: +x[1], top: +x[1] }; return { k: 'other' }; })); } var imgs = [], bad = []; pages.forEach(function(ops, p){ ops.forEach(function(op, i){ if (op.k !== 'img') return; op.page = p; op.prevRule = null; for (var q = i - 1; q >= 0; q--) if (ops[q].k === 'rule') { op.prevRule = ops[q].y; break; } imgs.push(op); if (op.y < 53.99 || op.top > 738.01) bad.push(op.n + ' off the page'); var r = -1; for (var k = i + 1; k < ops.length; k++) if (ops[k].k === 'rule') { r = k; break; } if (r < 0) { bad.push(op.n + ' has no row rule'); return; } if (!(ops[r].y < op.y)) bad.push(op.n + ' rule not below it'); for (var k2 = r + 1; k2 < ops.length; k2++) { var o = ops[k2]; if (o.top !== undefined && o.top > op.y + 0.01) bad.push(o.k + ' ' + (o.s || o.n || '') + ' at ' + o.top.toFixed(2) + ' over ' + op.n + ' (bottom ' + op.y.toFixed(2) + ')'); } }); }); for (var a = 0; a < imgs.length; a++) for (var b = a + 1; b < imgs.length; b++) { var A = imgs[a], B = imgs[b]; if (A.page === B.page && A.x < B.x + B.w && B.x < A.x + A.w && A.y < B.top && B.y < A.top) bad.push(A.n + ' and ' + B.n + ' overlap'); } return { pages: pages, imgs: imgs, bad: bad, lastRule: pages.map(function(ops){ var y = null; ops.forEach(function(o){ if (o.k === 'rule') y = o.y; }); return y; }) }; }; return true; })()
+eval (function(){ var c = document.createElement('canvas'); c.width = 60; c.height = 40; var g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 60, 40); var P = c.toDataURL('image/png'); var L = function(n){ var a = []; for (var i = 1; i <= n; i++) a.push('Line ' + i); return a.join('<br>'); }; var spec = [[P, ''], [P, ''], [P, 'Short.'], [P, L(40)], [null, L(40)], [P, ''], [null, 'After.']]; F.state().rows = spec.map(function(s, i){ return { id: 'pdf-row-' + i, visualText: '', visualImage: s[0], audioText: s[1], status: 'todo' }; }); return F.state().rows.length; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+wait (function(){ var b = window.__blobs[window.__blobs.length - 1]; return !!b && b.type === 'application/pdf'; })()
+eval (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length - 1].arrayBuffer())); window.__lay = __pdfLayout(t); return JSON.stringify({ imgs: __lay.imgs.map(function(i){ return i.n + '@p' + (i.page + 1) + ' ' + i.w.toFixed(2) + 'x' + i.h.toFixed(2) + ' y=' + i.y.toFixed(2); }), bad: __lay.bad }); })()
+# all five pictures drawn, full column width, 3:2
+expect __lay.imgs.length === 5 && __lay.imgs.every(function(i){ return i.w === 229 && i.h.toFixed(2) === '152.67'; })
+# no picture overlaps another, runs off a page, or has anything after its row drawn over it
+expect __lay.bad.length === 0
+# the report's pair: two picture-only rows one after the other, the second
+# a whole picture plus the row gap lower, not 14pt
+expect __lay.imgs[0].page === __lay.imgs[1].page && Math.abs(__lay.imgs[0].y - __lay.imgs[1].top - 37.5) < 0.02
+# the picture after the filler did not fit in what the filler left and so
+# starts the next page, under its column headers
+expect __lay.imgs[4].page > __lay.imgs[3].page && __lay.imgs[4].prevRule === null && __lay.imgs[4].top.toFixed(2) === '708.00'
+expect __lay.lastRule[__lay.imgs[4].page - 1] > 54 && __lay.lastRule[__lay.imgs[4].page - 1] - 14 - 54 < __lay.imgs[4].h
+
 quit
