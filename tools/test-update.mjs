@@ -110,7 +110,13 @@ eq("a newer patch is newer", compareVersions("2.1.1", "2.1.0"), 1);
 eq("an older minor is older", compareVersions("2.0.9", "2.1.0"), -1);
 eq("the same version is neither", compareVersions("2.1.0", "2.1.0"), 0);
 eq("a longer version beats its own prefix", compareVersions("2.1.0.1", "2.1.0"), 1);
-eq("a pre-release tag never reads as newer than the release", compareVersions("1.2.0-beta", "1.2.0"), 0);
+eq("a pre-release is older than its release", compareVersions("1.2.0-beta", "1.2.0"), -1);
+eq("a numbered pre-release is older than its release too", compareVersions("3.0.0-beta.1", "3.0.0"), -1);
+eq("a release is newer than its pre-release", compareVersions("3.0.0", "3.0.0-beta.2"), 1);
+eq("beta.10 is newer than beta.9", compareVersions("3.0.0-beta.10", "3.0.0-beta.9"), 1);
+eq("a pre-release of 3.0 is newer than 2.1", compareVersions("3.0.0-beta.1", "2.1.0"), 1);
+eq("rc is newer than beta", compareVersions("3.0.0-rc.1", "3.0.0-beta.3"), 1);
+eq("beta.1 is newer than plain beta", compareVersions("3.0.0-beta.1", "3.0.0-beta"), 1);
 eq("10 sorts above 9, not below it", compareVersions("1.10.0", "1.9.0"), 1);
 
 /* ---------- the self-update path is gone (#75) ----------
