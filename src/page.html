@@ -211,6 +211,14 @@
                    keeps aria-checked and the checkmark in sync. Ctrl/Cmd+
                    Alt+H, mirrored in the desktop View menu (desktop/main.js). -->
               <button type="button" role="menuitemcheckbox" aria-checked="false" data-file-action="toggle-hide-shot" id="menu-hide-shot" title="Collapse scenes marked Shot into a thin strip (Ctrl+Alt+H)">Hide shot scenes: off</button>
+              <!-- Desktop app only (issue #86): the in-page twin of View ▸
+                   Present in Browser, which a Windows user cannot reach —
+                   the window's title bar is the tab strip, so there is no
+                   menu bar to open. toggleFileMenu() (18-local-files.js)
+                   unhides it whenever the bridge can hand the script to the
+                   browser; the native item clicks this same button
+                   (runDesktopMenuCommand, 20f-desktop.js). -->
+              <button type="button" role="menuitem" data-file-action="prompter-open-in-browser" id="menu-present-browser" hidden title="Opens this script's teleprompter in Chrome or Edge, where Follow My Voice works (Ctrl+Shift+P)">Present in browser (Follow My Voice)</button>
             </div>
           </div>
 

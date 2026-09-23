@@ -182,10 +182,11 @@ var DESKTOP_HEADER_BUTTONS = {
 };
 
 function runDesktopMenuCommand(cmd) {
-  /* View ▸ Present in Browser — not a button anywhere in #file-menu, and it
-     does not need one: the teleprompter's own Follow My Voice button runs
-     the same function on desktop (20-teleprompter.js). */
-  if (cmd === "prompter-open-in-browser") { openPrompterInBrowser(); return; }
+  /* View ▸ Present in Browser ("prompter-open-in-browser") needs nothing of
+     its own here: it is File ▸ This document ▸ Present in browser's button
+     (#menu-present-browser), clicked like any other item below. It had no
+     in-page twin at first, which left it unreachable on Windows — the
+     title bar is the tab strip, so there is no menu bar to open (#86). */
   var btnId = DESKTOP_HEADER_BUTTONS[cmd];
   if (btnId) {
     var btn = document.getElementById(btnId);
@@ -205,8 +206,9 @@ function runDesktopMenuCommand(cmd) {
 /* ---- the teleprompter in the browser (issue #86) ----
 
    Follow My Voice fails inside Electron (#8) and works in Chrome and Edge,
-   so on desktop the teleprompter's voice button and View ▸ Present in
-   Browser hand the script to the default browser instead. The bridge call
+   so on desktop the teleprompter's voice button, File ▸ Present in browser
+   and View ▸ Present in Browser (which clicks that File item) hand the
+   script to the default browser instead. The bridge call
    takes NO argument (invariant #28, desktop/main.js section 9b): this page
    never says which file, which server or which URL — main reads all of
    that off this tab's own record and opens the browser itself. What this
