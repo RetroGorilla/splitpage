@@ -11,7 +11,9 @@ import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml, rowImage } from "./02c-blobs.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, storedHtmlFromDom } from "./04-richtext.js";
+import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
+import { fromHtml, toHtml } from "./04c-doc-model.js";
+import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
 import {
   healTagRegistry,
@@ -558,6 +560,9 @@ var rowsPainted = 0;
 var cellsPainted = 0;
 
 export function render() {
+  /* A document the undo stack has not seen (just opened, restored or
+     replaced) is copied before it can be edited (12a-undo.js). */
+  trackDocument();
   if (!S.state) return;
   renderCalls++;
   resetTransientUiState();
@@ -621,6 +626,12 @@ export function render() {
 /* ================= field sync ================= */
 
 export function syncFieldFromDom(cellEl) {
+  /* A cell a repaint has already replaced holds what the document USED to
+     say — reading it back would put that over whatever replaced it. This is
+     how an undo's repaint (12a-undo.js) was being reverted by the focusout
+     of the very cell it repainted. And nothing is read back while an undo
+     or a redo is being put on screen. */
+  if (!cellEl.isConnected || S.undoApplying) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
@@ -632,6 +643,16 @@ export function syncFieldFromDom(cellEl) {
     /* ...and so is the src the hydrator (02c-blobs.js) gave every
        <img data-blob> on screen: state names a picture by its sha only (#82). */
     html = storedHtmlFromDom(html);
+    /* Into state in the document model's one form (#85): read through the
+       model and written back out, so what a keystroke stores is already
+       sanitised and canonical — not the raw DOM the sanitiser used to catch
+       up with only on blur — and a re-serialisation is never a change the
+       undo stack or a merge can see. The live DOM is left exactly as it is;
+       noteFieldPainted below records that it shows this content. A cell
+       still holding a picture or a video card (pasted in before design D7
+       kept them out of script text) keeps the sanitiser's form, since the
+       model has no place for either. */
+    html = /<img|video-embed-card/.test(html) ? sanitizeHtml(html) : toHtml(fromHtml(html));
     if (S.state.rows[idx][field] !== html) {
       S.state.rows[idx][field] = html;
       stampRow(S.state.rows[idx]);

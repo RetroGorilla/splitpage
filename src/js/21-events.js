@@ -21,6 +21,7 @@ import {
   reportMerge,
   restoreSnapshotFromCard,
   setBaseState,
+  stampRow,
   undoMerge,
   updateIdentityChip
 } from "./03-sync.js";
@@ -52,8 +53,6 @@ import {
   setDropMarkerForRow,
   splitCellField,
   swapAdjacentRows,
-  undoMoveRow,
-  undoSplitCellField,
   updateDragScroll
 } from "./06-rows.js";
 import {
@@ -147,6 +146,7 @@ import {
   updateImportPreview
 } from "./11-import.js";
 import { markDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { caretAfterStep, configureUndo, redo, undo } from "./12a-undo.js";
 import {
   armDriveDelete,
   armServerDelete,
@@ -167,6 +167,7 @@ import {
   driveSignOut,
   driveStartRename,
   driveUploadFiles,
+  onServerDoc,
   openServerDoc,
   reviewBlocked,
   reviewMode,
@@ -204,6 +205,7 @@ import {
   onWriterFormat,
   onWriterKeydown,
   openWriter,
+  placeCaretAtTextOffset,
   renderWriter,
   scheduleWriterStats,
   updateWriterFormatState,
@@ -603,6 +605,85 @@ function keepCaretInView(cellEl) {
   nearestScrollAncestor(cellEl).scrollBy({ top: delta, behavior: "smooth" });
 }
 
+/* ---- undo and redo (12a-undo.js) ---- */
+
+function isUndoKey(e) {
+  return (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "z" || e.key === "Z");
+}
+function isRedoKey(e) {
+  return (e.ctrlKey || e.metaKey) && !e.altKey &&
+    (((e.key === "z" || e.key === "Z") && e.shiftKey) || ((e.key === "y" || e.key === "Y") && !e.shiftKey));
+}
+
+/* Where the document's undo does NOT answer Ctrl+Z: a text box of its own
+   (the title, a search, a dialog's field, a comment being written) keeps
+   the browser's, which is what undoes typing in it. */
+function ownsItsUndo(el) {
+  if (!el || el === document.body) return false;
+  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
+  if (el.isContentEditable) {
+    var cell = el.closest && el.closest(".cell-editable");
+    return !(cell && isScriptCell(cell));
+  }
+  return false;
+}
+
+function onUndoKey(e) {
+  if (e.defaultPrevented) return false;
+  var redoing = isRedoKey(e);
+  if (!redoing && !(isUndoKey(e) && !e.shiftKey)) return false;
+  if (ownsItsUndo(document.activeElement)) return false;
+  if (reviewMode()) return false;
+  e.preventDefault();
+  if (redoing) redo(); else undo();
+  return true;
+}
+
+function onUndoBeforeInput(e) {
+  if (e.inputType !== "historyUndo" && e.inputType !== "historyRedo") return;
+  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (!cellEl || !isScriptCell(cellEl)) return;
+  e.preventDefault();
+  if (e.inputType === "historyRedo") redo(); else undo();
+}
+
+/* What an undo or a redo leaves on screen: the document repainted, the
+   rows it touched stamped as edited now (they are, and a collaborator's
+   merge needs to know), and — when it was one cell's text — the caret back
+   in that cell where the change was. */
+function afterUndoApplied(steps, dir) {
+  var cellStep = null;
+  steps.forEach(function (st) {
+    if (st.op !== "rowField") return;
+    var row = S.state.rows.find(function (r) { return r.id === st.rowId; });
+    if (!row) return;
+    stampRow(row);
+    /* the caret goes to the first cell whose text this changed and that is
+       still in the script — for a split undone, the scene it was split from */
+    if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
+  });
+  markDirty();
+  S.undoApplying = true;
+  try {
+    if (writerOpen) renderWriter(); else render();
+    renderProduction();
+  } finally {
+    S.undoApplying = false;
+  }
+  if (cellStep) {
+    var sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
+    var cell = document.querySelector((writerOpen ? "#writer-doc " : "#rows ") + sel) || document.querySelector(sel);
+    if (cell) {
+      cell.focus();
+      placeCaretAtTextOffset(cell, caretAfterStep(cellStep, dir === "undo" ? "undo" : "redo"));
+    }
+  }
+}
+
+function onUndoRefused(reason, dir) {
+  showToast("Couldn't " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
+}
+
 function onRootInput(e) {
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
@@ -697,33 +778,11 @@ function onRootKeydown(e) {
      fire on them. A comment's own composer and a reply's are untouched:
      they are not script cells. */
   if (reviewMode() && isScriptCell(cellEl)) return;
-  /* Ctrl/Cmd+Z right after Alt+Enter: render() rebuilt the contenteditable
-     the split happened in, so the browser's own undo history has nothing
-     left to act on. undoSplitCellField() is the app-level replacement —
-     see its comment in 06-rows.js for why it is safe to try unconditionally
-     here (it only actually reverts when nothing has touched either half
-     since the split, and is a no-op otherwise). Only Ctrl+Z, not
-     Ctrl+Shift+Z — that is a redo request, which this never was. */
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) {
-    if (undoSplitCellField()) { e.preventDefault(); return; }
-    /* Same idea for Alt+Up/Alt+Down (undoMoveRow, 06-rows.js): swaps the
-       two rows back and hands back the record it undid so the caret can
-       return to the exact field/offset the move started from. Split view
-       and the writer finish it differently for the same reason the move
-       itself does — see the Alt+Up/Alt+Down handler below. */
-    var moveUndo = undoMoveRow();
-    if (moveUndo) {
-      e.preventDefault();
-      if (writerOpen) {
-        renderWriter();
-      } else {
-        render();
-        if (moveUndo.field) focusRowField(moveUndo.movedId, moveUndo.field, moveUndo.offset);
-      }
-      renderProduction();
-      return;
-    }
-  }
+  /* Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y are the document's undo
+     and redo (12a-undo.js), never the browser's own contenteditable
+     history: every repaint destroyed that, and it only ever knew about the
+     one cell. onUndoKey handles it, the same way it does outside a cell. */
+  if (onUndoKey(e)) return;
   /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
      The untagged-mention prompt only ever gets the key when nothing more
      explicit is in flight. */
@@ -1083,6 +1142,18 @@ function init() {
   rowsEl.addEventListener("focusout", onRootFocusOut);
   rowsEl.addEventListener("paste", onRootPaste);
   rowsEl.addEventListener("keydown", onRootKeydown);
+  configureUndo({ commentsAreSent: onServerDoc, afterApply: afterUndoApplied, onRefused: onUndoRefused });
+  /* Ctrl+Z with nothing focused, or a button — after deleting a scene from
+     its menu, say — is the document's undo too. A focused script cell
+     handles it in onRootKeydown first; a text box of its own keeps its own. */
+  window.addEventListener("keydown", function (e) {
+    if (e.target && e.target.closest && e.target.closest("#rows, #writer-doc")) return;
+    onUndoKey(e);
+  });
+  /* The browser's own undo arrives as beforeinput too (Edit ▸ Undo, a
+     right-click menu, the desktop app's Edit menu): the document's undo
+     answers it instead, so there is only ever one history. */
+  rowsEl.addEventListener("beforeinput", onUndoBeforeInput);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
   rowsEl.addEventListener("dragover", onRootDragOver);
@@ -1731,6 +1802,7 @@ function init() {
   writerDocEl.addEventListener("focusout", onRootFocusOut);
   writerDocEl.addEventListener("paste", onRootPaste);
   writerDocEl.addEventListener("keydown", onRootKeydown);
+  writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
   /* capture, so Enter becomes a new scene before onRootKeydown can make
      it a line break */
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);

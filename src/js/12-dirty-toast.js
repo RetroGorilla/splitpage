@@ -13,6 +13,7 @@ import {
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
+import { noteEdit } from "./12a-undo.js";
 
 /* ================= dirty / toast ================= */
 
@@ -70,6 +71,10 @@ export function setSaveButtons(text, disabled) {
 export function markDirty() {
   S.dirty = true;
   S.editSeq++;
+  /* Every edit ends here, so this is where the undo stack hears about it:
+     12a-undo.js diffs the document against its last copy once this task
+     is done, and records the difference as one undo entry. */
+  noteEdit();
   /* Unconditional, and NOT left to setSaveButtons() below: the line after
      this skips that funnel while a save is in flight, so an edit typed
      during a save would otherwise not reach the crash-draft writer until
