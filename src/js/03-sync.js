@@ -841,7 +841,7 @@ export function mergeProductionTags(baseTags, mineTags, theirTags) {
    side must not fuse them. Otherwise the rules are the production
    registry's: an empty field never overwrites a filled one, and a status
    can only move forward, so a merge can never un-shoot something somebody
-   has already been out and shot. "Needs attention" is the one flag that
+   has already been out and shot. The reshoot flag ("Flagged") is the one that
    survives from either side — if one of them thinks it needs another look,
    it needs another look.
 
