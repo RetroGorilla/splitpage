@@ -277,15 +277,18 @@ import {
    action added to any of them has to be considered here before a reviewer
    can reach it, which is the right way round for something the server is
    going to refuse anyway. Everything on it either navigates (jumping to a
-   tag, a scene, a comment) or is part of writing a comment or a reply,
-   including the reply composer's own link popover. The b-roll panel and
+   tag, a scene, a comment), is part of writing a comment or a reply,
+   including the reply composer's own link popover, or builds a file from
+   the document without writing to it (the Production panel's CSV, the
+   Gear panel's packing list). The b-roll panel and
    its full page have their own delegation since #148, and their own list
    (08d-broll-panel.js BROLL_REVIEW_SAFE_ACTIONS). */
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
   "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
   "jump-tag": 1, "jump-row": 1, "writer-jump": 1,
-  "tag-expand": 1, "bulk-clear": 1
+  "tag-expand": 1, "bulk-clear": 1,
+  "export-breakdown": 1, "export-packing-gear": 1
 };
 
 export function onRootClick(e) {
