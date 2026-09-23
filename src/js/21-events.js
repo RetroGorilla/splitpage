@@ -33,10 +33,14 @@ import {
   cancelVideo,
   confirmLink,
   confirmVideo,
+  forgetStalePendingMarks,
   handleToolbarCmd,
   insertLineBreak,
+  isScriptCell,
   render,
   syncFieldFromDom,
+  toggleCellFormat,
+  typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
 import {
@@ -547,16 +551,14 @@ function onRootMouseDown(e) {
 /* The comment composer and every reply box reuse .cell-editable, and their
    input events bubble to the same handler as the script's own cells. Only
    the script itself can carry tags, so everything tag-related below is
-   gated on the cell actually being a row field — otherwise typing
+   gated on the cell actually being a row field (isScriptCell, 05-render.js,
+   where the formatting commands need it too) — otherwise typing
    "[boom pole]" into a comment silently made a tag inside that comment and
-   registered a production item that could never appear in the script. */
-/* The writer's paragraphs are row fields too — same data-id/data-field,
+   registered a production item that could never appear in the script.
+   The writer's paragraphs are row fields too — same data-id/data-field,
    same row behind them — so they get the same treatment as the cells in
    the split view. That is the whole reason the writer needed no editing
    code of its own beyond splitting and joining scenes. */
-function isScriptCell(cellEl) {
-  return !!(cellEl && cellEl.closest("#rows, #writer-doc") && cellEl.getAttribute("data-field"));
-}
 
 /* The nearest ancestor that actually scrolls — document for a cell in
    #rows, the .writer-scroll pane for a paragraph in #writer-doc. Walked
@@ -647,6 +649,31 @@ function onUndoBeforeInput(e) {
   if (e.inputType === "historyRedo") redo(); else undo();
 }
 
+/* A character typed where B/I/U was pressed with nothing selected goes in
+   through the model carrying those marks (typePendingMarks, 05-render.js)
+   rather than being typed by the browser — and then gets everything a
+   typed character gets (the tag shortcuts, b-roll capture, the counters),
+   since the input event the browser would have fired never comes. IME
+   composition is left alone: it is the browser's (design §5). */
+function onFormatBeforeInput(e) {
+  if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
+  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (!cellEl || !isScriptCell(cellEl)) return;
+  var fresh = typePendingMarks(cellEl, e.data);
+  if (!fresh) return;
+  e.preventDefault();
+  onRootInput({ target: fresh, inputType: "insertText", data: e.data });
+}
+
+/* The bar that shows this cell's formatting: the writer's own, or the
+   field's mini toolbar. */
+function refreshFormatState(cellEl) {
+  if (cellEl.classList.contains("wr-para")) updateWriterFormatState();
+  else updateToolbarState(cellEl);
+}
+
+var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
+
 /* What an undo or a redo leaves on screen: the document repainted, the
    rows it touched stamped as edited now (they are, and a collaborator's
    merge needs to know), and — when it was one cell's text — the caret back
@@ -722,6 +749,11 @@ function onRootFocusOut(e) {
   S.untaggedMutedFor = null;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
+  /* A cell losing focus because a repaint from state is replacing it (an
+     undo, an edit through the model) holds nothing state does not already
+     have — and anything done to it here, a b-roll line anchored say, would
+     land in a cell about to leave the page. */
+  if (S.undoApplying) return;
   var wrap = cellEl.closest(".field-wrap");
   var related = e.relatedTarget;
   if (wrap && related && wrap.contains(related)) return; /* focus moved within the same field (e.g. the link popover) — defer sanitizing */
@@ -867,10 +899,25 @@ function onRootKeydown(e) {
     addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
     return;
   }
-  if (e.key === "Enter") { e.preventDefault(); insertLineBreak(cellEl); syncFieldFromDom(cellEl); return; }
-  if (mod && (e.key === "b" || e.key === "B")) { e.preventDefault(); document.execCommand("bold"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
-  else if (mod && (e.key === "i" || e.key === "I")) { e.preventDefault(); document.execCommand("italic"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
-  else if (mod && (e.key === "u" || e.key === "U")) { e.preventDefault(); document.execCommand("underline"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
+  /* Enter and Shift+Enter, and Ctrl+B/I/U: in a script cell, edits of its
+     model (05-render.js); in a comment or reply box, or a cell with a
+     picture in it, the browser's own commands, as before. */
+  if (e.key === "Enter") {
+    e.preventDefault();
+    syncFieldFromDom(insertLineBreak(cellEl));
+    return;
+  }
+  var fmtCmd = mod ? FORMAT_KEYS[String(e.key || "").toLowerCase()] : null;
+  if (fmtCmd) {
+    e.preventDefault();
+    var fmtCell = toggleCellFormat(cellEl, fmtCmd);
+    if (!fmtCell) {
+      document.execCommand(fmtCmd);
+      syncFieldFromDom(cellEl);
+      fmtCell = cellEl;
+    }
+    refreshFormatState(fmtCell);
+  }
 }
 
 function onRootDragStart(e) {
@@ -1000,7 +1047,10 @@ function onRootDrop(e) {
 }
 
 function init() {
-  try { document.execCommand("styleWithCSS", false, true); } catch (e) {}
+  /* No page-wide styleWithCSS any more: a script cell's formatting is the
+     model's (05-render.js), and the one command still wanting CSS mode —
+     hiliteColor in a cell the model does not edit — switches it on for
+     itself (applyHighlight). */
 
   /* Fire and forget: the menu items reveal themselves if a server answers,
      and everything below works identically either way. Deliberately not
@@ -1154,6 +1204,7 @@ function init() {
      right-click menu, the desktop app's Edit menu): the document's undo
      answers it instead, so there is only ever one history. */
   rowsEl.addEventListener("beforeinput", onUndoBeforeInput);
+  rowsEl.addEventListener("beforeinput", onFormatBeforeInput);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
   rowsEl.addEventListener("dragover", onRootDragOver);
@@ -1584,6 +1635,9 @@ function init() {
   });
 
   document.addEventListener("selectionchange", function () {
+    /* a B/I/U pressed with nothing selected is for that caret position
+       only — first, so the toolbars below no longer show it */
+    forgetStalePendingMarks();
     var active = document.activeElement;
     if (active && active.classList && active.classList.contains("cell-editable")) {
       if (active.classList.contains("wr-para")) updateWriterFormatState();
@@ -1803,6 +1857,7 @@ function init() {
   writerDocEl.addEventListener("paste", onRootPaste);
   writerDocEl.addEventListener("keydown", onRootKeydown);
   writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
+  writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
   /* capture, so Enter becomes a new scene before onRootKeydown can make
      it a line break */
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);

@@ -16,9 +16,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  addComment, applySteps, cellLength, cellOf, tagNameOf, commentIds, commentRange, deleteRange, fromHtml, insertBrollKey,
-  insertText, invertSteps, joinCells, marksAt, mergeCells, normalizeCell, projection, removeComment,
-  replaceText, retag, sameCell, setMark, sliceCell, splitCell, tagIds, toDocxRuns, toHtml, toMarkdown,
+  addComment, applySteps, breakLine, cellLength, cellOf, tagNameOf, commentIds, commentRange, deleteRange, fromHtml, insertBrollKey,
+  insertText, invertSteps, joinCells, markThroughout, marksAt, mergeCells, normalizeCell, projection, removeComment,
+  replaceText, retag, sameCell, setMark, sliceCell, splitCell, tagIds, toDocxRuns, toHtml, toMarkdown, toggleMark, typingMarks,
   toPlainText, touchedCells
 } from "../js/04c-doc-model.js";
 import { htmlToMarkdown, sanitizeHtml } from "../js/04-richtext.js";
@@ -224,6 +224,66 @@ test("deleteRange, replaceText, setMark", () => {
   assert.deepEqual(setMark(cell, 4, 7, "b", true), [T("one "), T("two", { b: true }), T(" three")]);
   assert.deepEqual(setMark(setMark(cell, 4, 7, "b", true), 0, 13, "b", false), cell);
   assert.deepEqual(setMark([T("a"), B("bs1")], 0, 2, "tag", "t:prop:X"), [T("a", { tag: "t:prop:X" }), B("bs1")]);
+});
+
+/* ---- the editor's formatting edits (05-render.js toggleCellFormat and
+   insertLineBreak call these through editCell) ---- */
+
+test("markThroughout: every visible character, line breaks and b-roll keys aside", () => {
+  const cell = [T("one "), T("two", { b: true }), T(" three")];
+  assert.equal(markThroughout(cell, 4, 7, "b"), true);
+  assert.equal(markThroughout(cell, 3, 7, "b"), false);
+  assert.equal(markThroughout(cell, 4, 8, "b"), false);
+  assert.equal(markThroughout(cell, 7, 4, "b"), true, "a backwards range is the same range");
+  /* two lines bolded one at a time read as bold across the break */
+  const lines = [T("ab", { b: true }), T("\n"), T("cd", { b: true })];
+  assert.equal(markThroughout(lines, 0, 5, "b"), true);
+  assert.equal(markThroughout([T("a", { hl: true }), B("bs1"), T("b", { hl: true })], 0, 3, "hl"), true);
+  /* nothing that could be bold is not bold */
+  assert.equal(markThroughout(cell, 4, 4, "b"), false);
+  assert.equal(markThroughout([T("\n")], 0, 1, "b"), false);
+});
+
+test("toggleMark: over an existing run's edge it goes on for all, then off for all", () => {
+  const cell = [T("one "), T("two", { b: true }), T(" three")];
+  const on = toggleMark(cell, 4, 13, "b");
+  assert.deepEqual(on, [T("one "), T("two three", { b: true })]);
+  assert.deepEqual(toggleMark(on, 4, 13, "b"), [T("one two three")]);
+  assert.deepEqual(toggleMark(cell, 4, 7, "b"), [T("one two three")]);
+  assert.deepEqual(toggleMark([T("lit")], 0, 3, "hl"), [T("lit", { hl: true })]);
+  assert.equal(toHtml(toggleMark([T("a b")], 0, 3, "i")), "<em>a b</em>");
+});
+
+test("breakLine: one break inside a line, a sentinel pair at the end", () => {
+  assert.deepEqual(breakLine([T("abcd")], 2, 2), { cell: [T("ab\ncd")], pos: 3 });
+  /* at the end there is nothing to give the new line a box: two breaks, pos between */
+  assert.deepEqual(breakLine([T("abcd")], 4, 4), { cell: [T("abcd\n\n")], pos: 5 });
+  assert.equal(toHtml(breakLine([T("abcd")], 4, 4).cell), "abcd<br><br>");
+  assert.deepEqual(breakLine([], 0, 0), { cell: [T("\n\n")], pos: 1 });
+  /* a trailing break already gives the new line its box: just one more */
+  assert.deepEqual(breakLine([T("ab\n")], 2, 2), { cell: [T("ab\n\n")], pos: 3 });
+  /* over a selection, the selection goes; at the end, the pair again */
+  assert.deepEqual(breakLine([T("one two")], 3, 7), { cell: [T("one\n\n")], pos: 4 });
+  assert.deepEqual(breakLine([T("one two")], 7, 0), { cell: [T("\n\n")], pos: 1 });
+  assert.deepEqual(breakLine([T("one two")], 0, 3), { cell: [T("\n two")], pos: 1 });
+  /* formatting carries on through the break, as typing does */
+  assert.deepEqual(breakLine([T("bold", { b: true })], 4, 4), { cell: [T("bold\n\n", { b: true })], pos: 5 });
+  /* a comment or a link only where the text on both sides is in it */
+  const inside = [T("say "), T("two words", { cmt: ["c1"], href: "https://e.x/" })];
+  assert.deepEqual(breakLine(inside, 7, 7).cell, [T("say "), T("two\n words", { href: "https://e.x/", cmt: ["c1"] })]);
+  assert.deepEqual(breakLine(inside, 4, 4).cell, [T("say \n"), T("two words", { href: "https://e.x/", cmt: ["c1"] })]);
+  assert.deepEqual(breakLine(inside, 13, 13).cell, [T("say "), T("two words", { href: "https://e.x/", cmt: ["c1"] }), T("\n\n")]);
+  /* never a tag */
+  const tagged = [T("x", { tag: "t:prop:X" }), T("y", { tag: "t:prop:Y" })];
+  assert.deepEqual(breakLine(tagged, 1, 1).cell, [T("x", { tag: "t:prop:X" }), T("\n"), T("y", { tag: "t:prop:Y" })]);
+});
+
+test("typingMarks: what a character typed there carries", () => {
+  const cell = [T("bold", { b: true, cmt: ["c1"], href: "https://e.x/" }), T(" tag", { tag: "t:prop:X" })];
+  assert.deepEqual(typingMarks(cell, 4), { b: true });
+  assert.deepEqual(typingMarks(cell, 0), { b: true });
+  assert.deepEqual(typingMarks(cell, 8), {});
+  assert.deepEqual(typingMarks([], 0), {});
 });
 
 test("comments: add, find, remove", () => {

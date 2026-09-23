@@ -277,6 +277,31 @@ What changes is who owns the truth once the browser has changed the DOM.
   `historyUndo`/`historyRedo` is cancelled and routed to ours, and Ctrl+Z /
   Ctrl+Y / Ctrl+Shift+Z are handled in `onRootKeydown`.
 
+**Built so far: formatting and line breaks.** In a script cell (#rows or
+the writer) B/I/U/S, highlight, a link and Enter / Shift+Enter are model
+edits through `editCell` (05b-cell-edit.js), one undo entry each, with the
+selection kept:
+
+- `toggleMark` (04c): every visible character of the selection already
+  has the mark (line breaks and b-roll keys aside, `markThroughout`) → off,
+  else on over all of it. The toolbars' lit state is the same question
+  (`cellFormatState`, 05-render.js), so a lit button always means
+  "pressing this removes it".
+- A link is `setMark(…, "href", url)`; the caret goes just past it.
+- `breakLine` (04c) replaces the selection with `"\n"`, or `"\n\n"` with
+  the caret between them when nothing follows (the sentinel a trailing
+  `<br>` needs to give the new line a box). Formatting carries through the
+  break; a comment or link only where both sides are in it.
+- With nothing selected, B/I/U is a *pending mark* for that caret position:
+  the next `insertText` there is cancelled in `beforeinput` and inserted
+  through the model with it, then run through the usual input handling
+  (tag shortcuts, b-roll capture). Moving the caret forgets it.
+- Still `execCommand`: the comment composer and reply boxes (not document
+  cells), and a script cell still holding a picture or video card
+  (`editCell` declines it until D7's load-time move exists). The page-wide
+  `styleWithCSS` is gone; `applyHighlight`'s fallback turns it on for
+  itself.
+
 **Rejected alternatives**
 
 - **Fully controlled** (every `beforeinput` cancelled and applied to the
