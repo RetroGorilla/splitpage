@@ -17,8 +17,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   addComment, applySteps, breakLine, cellLength, cellOf, tagNameOf, commentIds, commentRange, deleteRange, fromHtml, insertBrollKey,
-  insertText, invertSteps, joinCells, markThroughout, marksAt, mergeCells, normalizeCell, projection, removeComment,
-  replaceText, retag, sameCell, setMark, sliceCell, splitCell, tagIds, toDocxRuns, toHtml, toMarkdown, toggleMark, typingMarks,
+  insertText, invertSteps, joinCells, markThroughout, marksAt, mergeCells, namedTagId, normalizeCell, projection, removeComment,
+  replaceText, replaceWithBrollKey, replaceWithTag, retag, sameCell, setMark, sliceCell, splitCell, tagIds, toDocxRuns, toHtml,
+  toMarkdown, toggleMark, typingMarks,
   toPlainText, touchedCells
 } from "../js/04c-doc-model.js";
 import { htmlToMarkdown, sanitizeHtml } from "../js/04-richtext.js";
@@ -313,6 +314,37 @@ test("insertBrollKey puts the key in as one atom", () => {
   const cell = insertBrollKey([T("intro\n drone")], 6, "bs_7", "B-roll:");
   assert.deepEqual(cell, [T("intro\n"), B("bs_7"), T(" drone")]);
   assert.equal(toHtml(cell), 'intro<br><span class="broll-key" data-broll-id="bs_7" contenteditable="false">B-roll:</span> drone');
+});
+
+test("replaceWithTag: typed words become one tag, keeping their formatting", () => {
+  /* "[red mug]" closed: the brackets go, the phrase is the tag */
+  const typed = [T("pick up the "), T("[red mug]", { b: true }), T(" now")];
+  const id = namedTagId("prop", "red mug");
+  assert.equal(id, "t:prop:red mug");
+  assert.deepEqual(tagNameOf(id), { cat: "prop", name: "red mug" });
+  const r = replaceWithTag(typed, 12, 21, "red mug", id);
+  assert.deepEqual(r.cell, [T("pick up the "), T("red mug", { b: true, tag: id }), T(" now")]);
+  assert.equal(r.end, 19);
+  assert.equal(toHtml(r.cell), "pick up the " + tagSpan("prop", "red mug", "<strong>red mug</strong>") + " now");
+  /* at the very end of a cell, reversed bounds, and a comment over it all */
+  const end = replaceWithTag([T("a [lamp", { cmt: ["c1"] })], 7, 2, "Lamp", namedTagId("prop", "Lamp"));
+  assert.deepEqual(end.cell, [T("a ", { cmt: ["c1"] }), T("Lamp", { tag: "t:prop:Lamp", cmt: ["c1"] })]);
+  assert.equal(end.end, cellLength(end.cell));
+  /* what is typed next is not part of the tag */
+  assert.deepEqual(insertText(end.cell, end.end, " on"), [T("a ", { cmt: ["c1"] }), T("Lamp", { tag: "t:prop:Lamp", cmt: ["c1"] }), T(" on")]);
+});
+
+test("replaceWithBrollKey: the typed marker becomes the key, the caret just after it", () => {
+  const r = replaceWithBrollKey([T("intro\n  B-roll:")], 6, 15, "bs_9", "B-roll:");
+  assert.deepEqual(r.cell, [T("intro\n"), B("bs_9")]);
+  assert.equal(r.end, 7);
+  assert.equal(r.end, cellLength(r.cell));
+  /* typed in bold, the key is still a plain one at the top of its line —
+     the only place the b-roll list reads a key — and the rest stays bold */
+  const bold = replaceWithBrollKey([T("b-roll -", { b: true }), T(" gulls", { b: true })], 0, 8, "bs_1", "b-roll -");
+  assert.deepEqual(bold.cell, [B("bs_1", "b-roll -"), T(" gulls", { b: true })]);
+  assert.equal(bold.end, 1);
+  assert.equal(toHtml(bold.cell), '<span class="broll-key" data-broll-id="bs_1" contenteditable="false">b-roll -</span><strong> gulls</strong>');
 });
 
 test("random edits keep lengths and never leave a cell out of canonical form", () => {

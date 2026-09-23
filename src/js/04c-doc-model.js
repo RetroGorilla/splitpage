@@ -254,6 +254,13 @@ export function tagNameOf(id) {
   return defaultTagOf(id);
 }
 
+/* The other way: the tag mark a cell read without registry hooks (cellOf,
+   editCell) gives the tag (cat, name) — and that toHtml writes back as a
+   span with that category and name. */
+export function namedTagId(cat, name) {
+  return defaultTagId(cat, name);
+}
+
 /* ---- the one nesting, shared by every writer ----
 
    Elements open outermost first in this order: each comment (by id), the
@@ -521,6 +528,31 @@ export function replaceText(cell, from, to, text) {
   var first = chars[from];
   var marks = first.atom ? typingMarks(cell, from) : first.marks;
   return insertText(deleteRange(cell, from, to), from, text, marks);
+}
+
+/* The words from..to become `text` carrying tag `id` — what every typed
+   route to a tag does (a closing shortcut, Tab completion, an untagged
+   mention taken). The words keep the formatting they had (replaceText), so
+   a phrase typed in bold is a bold tag. Returns {cell, end}: end is the
+   position just past the tag, where the caret goes. */
+export function replaceWithTag(cell, from, to, text, id) {
+  var a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
+  var next = replaceText(cell, a, b, text);
+  var end = a + cleanText(text).length;
+  return { cell: setMark(next, a, end, "tag", id), end: end };
+}
+
+/* The words from..to become a b-roll key (the atom) — what typing
+   "B-roll:" does (08c-broll.js maybeCaptureBroll). The key carries no
+   marks, even when the words were bold: a key inside <strong> or a comment
+   is not one the b-roll list can read (brollLineMarker knows a key only
+   where it starts its line at the top of the cell — the shape the
+   anchoring pass gives one too), so its line would fall back to matching
+   its record by name. Returns {cell, end}: end is the position just past
+   the key, where the caret goes. */
+export function replaceWithBrollKey(cell, from, to, id, keyText) {
+  var a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
+  return { cell: insertBrollKey(deleteRange(cell, a, b), a, id, keyText, {}), end: a + 1 };
 }
 
 /* name is b, i, u, s, hl (value true/false), href (a URL or null) or tag

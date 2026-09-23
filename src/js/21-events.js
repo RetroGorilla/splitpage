@@ -766,8 +766,11 @@ function onRootFocusOut(e) {
   /* Leaving a field is the safe moment to anchor a B-roll marker that got
      into it without being typed — a paste, or the closing character
      arriving as part of one. Only this field, and in place: see
-     anchorBrollInLeftCell(). */
-  anchorBrollInLeftCell(cellEl);
+     anchorBrollInLeftCell(). Not while an undo or a redo is being put on
+     screen: its repaint replaces the focused cell, Chrome fires focusout
+     on it on the way out, and anchoring then would turn the "B-roll:" an
+     undo of a typed key just gave back straight into a key again. */
+  if (!S.undoApplying) anchorBrollInLeftCell(cellEl);
 }
 
 function onRootPaste(e) {
