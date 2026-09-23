@@ -12,6 +12,7 @@ import {
   normalizeCell,
   projection,
   sliceCell,
+  syncCommentAnchors,
   toHtml
 } from "./04c-doc-model.js";
 import { cellSelection, editCell } from "./05b-cell-edit.js";
@@ -32,8 +33,9 @@ import { cellSelection, editCell } from "./05b-cell-edit.js";
      comment marks only from HTML carrying the live nonce, and only for
      comments this document still has; everything else pasted — another
      tab's cut, another app, a second paste of the same cut — lands with
-     no comment. The moved comment's rowId/field follow it to where it was
-     pasted, so its card and its "jump to" point at the new place.
+     no comment. The moved comment's rowId/field follow its marks
+     (syncCommentAnchors, 04c-doc-model.js), so its card and its "jump to"
+     point at the new place.
    - PASTE and DROP read the HTML flavour (else the plain text), turn it
      into a cell with fromHtml — the sanitiser first, so nothing foreign
      gets in — and replace the selection with it as one model edit
@@ -191,17 +193,6 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
   return true;
 }
 
-/* Comments whose words were just pasted into (rowId, field) now belong
-   there. */
-function followComments(ids, rowId, field) {
-  if (!ids.length) return;
-  S.state.comments.forEach(function (c) {
-    if (c.kind === "conflict" || ids.indexOf(c.anchorId || c.id) === -1) return;
-    c.rowId = rowId;
-    c.field = field;
-  });
-}
-
 /* A paste or a drop into a script cell, replacing the selection (or at the
    end of the cell when the selection is elsewhere). Returns
      {done, cellEl, media, movedComments, fallback}
@@ -213,8 +204,6 @@ export function pasteIntoCell(cellEl, html, text) {
   var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs });
   var result = { done: true, cellEl: cellEl, media: got.media, movedComments: false, fallback: null };
   if (!cellLength(got.cell)) return result;
-  var rowId = cellEl.getAttribute("data-id");
-  var field = cellEl.getAttribute("data-field");
   var fresh = editCell(cellEl, function (cell, sel) {
     var from = sel ? sel.from : cellLength(cell);
     var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
@@ -223,12 +212,15 @@ export function pasteIntoCell(cellEl, html, text) {
       : joinCells(joinCells(sliceCell(rest, 0, from), got.cell), sliceCell(rest, from));
     var at = from + cellLength(next) - cellLength(rest);
     /* The comment moving is part of the same paste, so it goes in with the
-       cell as one undo entry (editCell's also). */
+       cell as one undo entry (editCell's also, run once the pasted cell is
+       in state, where syncCommentAnchors finds its marks). A cut of part
+       of a comment's words leaves the rest marked where they were, and the
+       comment points at whichever comes first in the script. */
     var also = null;
     if (got.fromCut) {
       also = function () {
         cutNonce = null;
-        followComments(got.comments, rowId, field);
+        if (got.comments.length) syncCommentAnchors(S.state);
         result.movedComments = got.comments.length > 0;
       };
     }
