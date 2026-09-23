@@ -55,7 +55,7 @@ export function safeImageSrc(src) {
        claims — and becomes the stored form, its bytes queued to be stored.
      - anything else — an http src, an SVG, a data: URI that is not a
        picture, an upper-case or short sha — is dropped, as before. */
-function imageRefOf(node) {
+export function imageRefOf(node) {
   var sha = node.getAttribute("data-blob");
   if (isSha256Hex(sha)) {
     return recordFor(sha) || normalizeImageRef({
