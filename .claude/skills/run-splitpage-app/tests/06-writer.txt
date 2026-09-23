@@ -98,9 +98,11 @@ expect document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]').classList.
 # selection they are about to format
 jsclick .writer-bar .wr-fmt[data-cmd="italic"]
 sleep 400
-# NOT asserted here: execCommand emits <span style="font-weight:bold"> in
-# Chromium, and it is the shared sanitiser on the way out that turns that into
-# <strong>/<em>. Asserting on the live DOM would be testing the browser.
+# A paragraph formats through the document model (#85), so the canonical
+# markup is in state at once — no blur, no sanitiser catching up (it was
+# execCommand's <span style="font-weight:bold"> until then, and not asserted).
+expect window.__splitpageFormats.state().rows.find(function(r){return r.id===document.querySelector('#writer-doc .wr-para').getAttribute('data-id');}).audioText.indexOf('<strong><em>now.</em></strong>') !== -1
+expect document.querySelector('.writer-bar .wr-fmt[data-cmd="italic"]').classList.contains('is-active')
 
 shot 06-writer
 

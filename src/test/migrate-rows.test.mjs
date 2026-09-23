@@ -20,7 +20,9 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { legacyMdToHtml, migrateRows } from "../js/02-state.js";
+import { legacyMdToHtml, mediaCommentId, migrateRows } from "../js/02-state.js";
+import { mergeStates } from "../js/03-sync.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import { dataUrlForSync } from "../js/02c-blobs.js";
 import { DEFAULT_WPM } from "../js/01-scene-status.js";
 import { __init as initTags, collectTagsFromRows, mintTagId } from "../js/07-production-tags.js";
@@ -375,4 +377,91 @@ test("migrating twice changes nothing the second time", () => {
   });
   const twice = migrateRows(JSON.parse(JSON.stringify(once)));
   assert.deepEqual(twice, once);
+});
+
+/* ---- pictures and video cards out of script cells (#85, design D7) ----
+
+   A script cell holds words. A picture or a video card a paste put into
+   one before D7 moves, as the document is read, into a comment on the same
+   scene and column — with an id derived from the row, the column and the
+   picture's sha or the link, so reading it twice or merging two copies
+   that both moved it gives one comment. */
+
+const SHA_X = "ab".repeat(32);
+const cellPic = (sha) => '<img class="comment-img" data-blob="' + sha + '" data-w="4" data-h="3" data-mime="image/png">';
+const VIDEO = "https://www.youtube.com/watch?v=abc";
+const videoCard = '<a class="video-embed-card" href="' + VIDEO + '" target="_blank" rel="noopener"><span class="vec-play">▶</span>' +
+  '<span>Watch video</span><span class="vec-host">· youtube.com</span></a>';
+
+function withPictureInCell() {
+  return {
+    schema: 2, title: "T",
+    rows: [
+      { id: "r1", visualText: "wide " + cellPic(SHA_X) + " shot", audioText: "hello", updatedAt: "2026-05-01T10:00:00.000Z" },
+      { id: "r2", visualText: "close", audioText: "watch " + videoCard + " this", updatedAt: "" }
+    ],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", body: "a note", author: "Sam" }]
+  };
+}
+
+test("a picture in a script cell becomes one comment on that scene holding it", () => {
+  const s = migrateRows(withPictureInCell());
+  assert.equal(s.rows[0].visualText, "wide  shot", "the words stay, the picture goes");
+  const moved = s.comments.filter((c) => c.rowId === "r1" && c.field === "visualText");
+  assert.equal(moved.length, 1);
+  const c = moved[0];
+  assert.equal(c.id, mediaCommentId("r1", "visualText", "img:" + SHA_X));
+  assert.ok(c.body.endsWith("<br>" + cellPic(SHA_X)), c.body);
+  assert.equal(c.author, "Splitpage");
+  assert.equal(c.quotedText, "");
+  assert.equal(c.kind, "anchor");
+  assert.equal(c.resolved, false);
+  assert.equal(c.createdAt, "2026-05-01T10:00:00.000Z", "when the row last changed, not now");
+  /* not anchored to any words: no cell carries a span naming it */
+  assert.ok(!s.rows.some((r) => (r.visualText + r.audioText).indexOf('data-cmt="' + c.anchorId + '"') !== -1));
+  /* the picture is still referenced, so its bytes are kept */
+  assert.deepEqual(refsIn(s), [SHA_X]);
+  /* the comment that was there is untouched */
+  assert.equal(s.comments[0].id, "c1");
+  assert.equal(s.comments[0].body, "a note");
+});
+
+test("a video card in a script cell becomes a comment holding the card", () => {
+  const s = migrateRows(withPictureInCell());
+  assert.equal(s.rows[1].audioText, "watch  this");
+  const moved = s.comments.filter((c) => c.rowId === "r2" && c.field === "audioText");
+  assert.equal(moved.length, 1);
+  assert.equal(moved[0].id, mediaCommentId("r2", "audioText", "video:" + VIDEO));
+  assert.ok(moved[0].body.endsWith("<br>" + videoCard), moved[0].body);
+});
+
+test("moving pictures out of cells is idempotent", () => {
+  const once = migrateRows(withPictureInCell());
+  assert.equal(once.comments.length, 3);
+  const twice = migrateRows(JSON.parse(JSON.stringify(once)));
+  assert.deepEqual(twice, once);
+  /* the same picture twice in one cell is one comment */
+  const dup = migrateRows({ schema: 2, title: "T", rows: [{ id: "r1", visualText: cellPic(SHA_X) + " and " + cellPic(SHA_X), audioText: "" }] });
+  assert.equal(dup.comments.length, 1);
+  /* reading the unmigrated original again gives the same ids */
+  assert.deepEqual(migrateRows(withPictureInCell()).comments.map((c) => c.id), once.comments.map((c) => c.id));
+});
+
+test("a picture two copies both moved merges into one comment", () => {
+  const base = migrateRows(withPictureInCell());
+  const mine = migrateRows(withPictureInCell());
+  const theirs = migrateRows(withPictureInCell());
+  mine.rows[0].audioText = "hello there";
+  theirs.rows[1].visualText = "close up";
+  const merged = migrateRows(mergeStates(base, mine, theirs).merged);
+  assert.equal(merged.comments.filter((c) => c.rowId === "r1" && c.field === "visualText").length, 1);
+  assert.equal(merged.comments.filter((c) => c.rowId === "r2" && c.field === "audioText").length, 1);
+  assert.equal(merged.comments.length, 3);
+  assert.equal(merged.rows[0].audioText, "hello there");
+  assert.equal(merged.rows[1].visualText, "close up");
+  /* one side from an older copy of the app, which never moved it: still one */
+  const old = withPictureInCell();
+  const half = migrateRows(mergeStates(old, mine, old).merged);
+  assert.equal(half.comments.filter((c) => c.rowId === "r1" && c.field === "visualText").length, 1);
+  assert.equal(half.rows[0].visualText.indexOf("<img"), -1);
 });

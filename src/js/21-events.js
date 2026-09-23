@@ -33,12 +33,17 @@ import {
   cancelVideo,
   confirmLink,
   confirmVideo,
+  forgetStalePendingMarks,
   handleToolbarCmd,
   insertLineBreak,
+  isScriptCell,
   render,
   syncFieldFromDom,
+  toggleCellFormat,
+  typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
+import { copyFromCell, pasteIntoCell } from "./05c-clipboard.js";
 import {
   addRow,
   addRowAndFocus,
@@ -127,11 +132,13 @@ import {
   openCommentsPanel,
   postComment,
   postReply,
+  renderComments,
   restoreConflictValue,
   setCommentAssignee,
   setCommentAssigneeFilter,
   setCommentFilterMode,
   setCommentSortMode,
+  syncAnchorResolvedClasses,
   toggleReplyComposer,
   toggleResolve
 } from "./10-comments.js";
@@ -146,7 +153,7 @@ import {
   updateImportPreview
 } from "./11-import.js";
 import { markDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { caretAfterStep, configureUndo, redo, undo } from "./12a-undo.js";
+import { caretAfterStep, configureUndo, redo, settleAfterApply, undo } from "./12a-undo.js";
 import {
   armDriveDelete,
   armServerDelete,
@@ -547,16 +554,14 @@ function onRootMouseDown(e) {
 /* The comment composer and every reply box reuse .cell-editable, and their
    input events bubble to the same handler as the script's own cells. Only
    the script itself can carry tags, so everything tag-related below is
-   gated on the cell actually being a row field — otherwise typing
+   gated on the cell actually being a row field (isScriptCell, 05-render.js,
+   where the formatting commands need it too) — otherwise typing
    "[boom pole]" into a comment silently made a tag inside that comment and
-   registered a production item that could never appear in the script. */
-/* The writer's paragraphs are row fields too — same data-id/data-field,
+   registered a production item that could never appear in the script.
+   The writer's paragraphs are row fields too — same data-id/data-field,
    same row behind them — so they get the same treatment as the cells in
    the split view. That is the whole reason the writer needed no editing
    code of its own beyond splitting and joining scenes. */
-function isScriptCell(cellEl) {
-  return !!(cellEl && cellEl.closest("#rows, #writer-doc") && cellEl.getAttribute("data-field"));
-}
 
 /* The nearest ancestor that actually scrolls — document for a cell in
    #rows, the .writer-scroll pane for a paragraph in #writer-doc. Walked
@@ -647,6 +652,31 @@ function onUndoBeforeInput(e) {
   if (e.inputType === "historyRedo") redo(); else undo();
 }
 
+/* A character typed where B/I/U was pressed with nothing selected goes in
+   through the model carrying those marks (typePendingMarks, 05-render.js)
+   rather than being typed by the browser — and then gets everything a
+   typed character gets (the tag shortcuts, b-roll capture, the counters),
+   since the input event the browser would have fired never comes. IME
+   composition is left alone: it is the browser's (design §5). */
+function onFormatBeforeInput(e) {
+  if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
+  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (!cellEl || !isScriptCell(cellEl)) return;
+  var fresh = typePendingMarks(cellEl, e.data);
+  if (!fresh) return;
+  e.preventDefault();
+  onRootInput({ target: fresh, inputType: "insertText", data: e.data });
+}
+
+/* The bar that shows this cell's formatting: the writer's own, or the
+   field's mini toolbar. */
+function refreshFormatState(cellEl) {
+  if (cellEl.classList.contains("wr-para")) updateWriterFormatState();
+  else updateToolbarState(cellEl);
+}
+
+var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
+
 /* What an undo or a redo leaves on screen: the document repainted, the
    rows it touched stamped as edited now (they are, and a collaborator's
    merge needs to know), and — when it was one cell's text — the caret back
@@ -670,6 +700,7 @@ function afterUndoApplied(steps, dir) {
   } finally {
     S.undoApplying = false;
   }
+  settleAfterApply();
   if (cellStep) {
     var sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
     var cell = document.querySelector((writerOpen ? "#writer-doc " : "#rows ") + sel) || document.querySelector(sel);
@@ -691,6 +722,13 @@ function onRootInput(e) {
   maybeAutoTagShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
   syncFieldFromDom(cellEl);
+  afterScriptCellChange(cellEl);
+}
+
+/* Everything a change to a script cell's text sets going, whoever made
+   it: typing (onRootInput) or a paste, a drop or a cut through the model
+   (05c-clipboard.js), which change the cell without an input event. */
+function afterScriptCellChange(cellEl) {
   keepCaretInView(cellEl);
   /* Keeps the production count/panel in sync with edits that change which
      tags exist in the script WITHOUT going through the tag composer or the
@@ -717,11 +755,22 @@ function onRootInput(e) {
 }
 
 function onRootFocusOut(e) {
+  /* editCell (05b-cell-edit.js) replacing the focused cell with its
+     repaint: the browser reports that as the old element losing focus, but
+     nobody left the field — the caret goes straight back into the new one.
+     Treating it as a leave anchored a pasted b-roll line under the caret
+     and read the old element's words back over the edit. */
+  if (S.cellRepainting) return;
   hideTagGhost();
   hideUntaggedPrompt();
   S.untaggedMutedFor = null;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
+  /* A cell losing focus because a repaint from state is replacing it (an
+     undo, an edit through the model) holds nothing state does not already
+     have — and anything done to it here, a b-roll line anchored say, would
+     land in a cell about to leave the page. */
+  if (S.undoApplying) return;
   var wrap = cellEl.closest(".field-wrap");
   var related = e.relatedTarget;
   if (wrap && related && wrap.contains(related)) return; /* focus moved within the same field (e.g. the link popover) — defer sanitizing */
@@ -734,8 +783,54 @@ function onRootFocusOut(e) {
   /* Leaving a field is the safe moment to anchor a B-roll marker that got
      into it without being typed — a paste, or the closing character
      arriving as part of one. Only this field, and in place: see
-     anchorBrollInLeftCell(). */
-  anchorBrollInLeftCell(cellEl);
+     anchorBrollInLeftCell(). Not while an undo or a redo is being put on
+     screen: its repaint replaces the focused cell, Chrome fires focusout
+     on it on the way out, and anchoring then would turn the "B-roll:" an
+     undo of a typed key just gave back straight into a key again. */
+  if (!S.undoApplying) anchorBrollInLeftCell(cellEl);
+}
+
+/* A paste or a drop into a script cell, through the model (05c-clipboard.js):
+   the clipboard's HTML (else its text) read with fromHtml — a tag copied
+   from another scene stays a live tag, anything foreign is sanitised away,
+   a picture or a video card is dropped (design D7) — and put in place of
+   the selection as one undoable edit. A cell still holding a picture is
+   not edited through the model, and gets what it always got instead. */
+function insertIntoScriptCell(cellEl, html, text) {
+  var res = pasteIntoCell(cellEl, html, text);
+  if (!res.done) {
+    if (res.fallback.html) document.execCommand("insertHTML", false, res.fallback.html);
+    else if (res.fallback.text) document.execCommand("insertText", false, res.fallback.text);
+    return;
+  }
+  if (res.media) showToast("Pictures and videos don't go in the script — add them to a comment, or as the scene's picture.");
+  if (res.movedComments) {
+    /* a cut comment's card follows its words to the new scene */
+    syncAnchorResolvedClasses();
+    captureReplyDrafts();
+    renderComments();
+  }
+  afterScriptCellChange(res.cellEl);
+}
+
+/* Copy and cut inside one script cell go through the model too
+   (05c-clipboard.js): a copy never carries a comment; a cut does, to the
+   paste in this tab that moves it (design D6). A selection that is not
+   inside one script cell is left to the browser. */
+function onRootCopy(e) {
+  onRootCopyOrCut(e, false);
+}
+function onRootCut(e) {
+  onRootCopyOrCut(e, true);
+}
+function onRootCopyOrCut(e, cut) {
+  var cellEl = e.target.closest && e.target.closest(".cell-editable");
+  if (!cellEl || !isScriptCell(cellEl)) return;
+  var readOnly = reviewMode();
+  if (copyFromCell(e, cellEl, cut, readOnly) && cut && !readOnly) {
+    var fresh = document.activeElement && document.activeElement.closest && document.activeElement.closest(".cell-editable");
+    afterScriptCellChange(fresh || cellEl);
+  }
 }
 
 function onRootPaste(e) {
@@ -743,13 +838,18 @@ function onRootPaste(e) {
   if (!cellEl) return;
   e.preventDefault();
   var cd = e.clipboardData || window.clipboardData;
-  /* Prefer the HTML flavor, but only once it has been through
-     sanitizeHtml/walkSanitize — the same gate every other route into a
-     cell's markup goes through. That keeps a tag copied from one scene
-     (a .tag-anchor span with its data-tag-cat/data-tag-name) intact when
-     pasted into another, without reopening the door to raw HTML pasted in
-     from outside Splitpage (a foreign <script>, inline style, etc.) that
-     plain-text-only paste used to close off entirely. */
+  if (isScriptCell(cellEl)) {
+    /* a review session's script is read-only: nothing to paste into */
+    if (reviewMode()) return;
+    insertIntoScriptCell(cellEl, cd.getData("text/html"), cd.getData("text/plain"));
+    return;
+  }
+  /* A comment's composer or a reply box: not script text, and pictures
+     and video cards are welcome there. Prefer the HTML flavor, but only
+     once it has been through sanitizeHtml/walkSanitize — the same gate
+     every other route into a body's markup goes through — so raw HTML
+     pasted in from outside Splitpage (a foreign <script>, inline style,
+     etc.) never gets in. */
   var html = cd.getData("text/html");
   if (html) {
     var clean = sanitizeHtml(html);
@@ -867,10 +967,25 @@ function onRootKeydown(e) {
     addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
     return;
   }
-  if (e.key === "Enter") { e.preventDefault(); insertLineBreak(cellEl); syncFieldFromDom(cellEl); return; }
-  if (mod && (e.key === "b" || e.key === "B")) { e.preventDefault(); document.execCommand("bold"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
-  else if (mod && (e.key === "i" || e.key === "I")) { e.preventDefault(); document.execCommand("italic"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
-  else if (mod && (e.key === "u" || e.key === "U")) { e.preventDefault(); document.execCommand("underline"); syncFieldFromDom(cellEl); updateToolbarState(cellEl); }
+  /* Enter and Shift+Enter, and Ctrl+B/I/U: in a script cell, edits of its
+     model (05-render.js); in a comment or reply box, or a cell with a
+     picture in it, the browser's own commands, as before. */
+  if (e.key === "Enter") {
+    e.preventDefault();
+    syncFieldFromDom(insertLineBreak(cellEl));
+    return;
+  }
+  var fmtCmd = mod ? FORMAT_KEYS[String(e.key || "").toLowerCase()] : null;
+  if (fmtCmd) {
+    e.preventDefault();
+    var fmtCell = toggleCellFormat(cellEl, fmtCmd);
+    if (!fmtCell) {
+      document.execCommand(fmtCmd);
+      syncFieldFromDom(cellEl);
+      fmtCell = cellEl;
+    }
+    refreshFormatState(fmtCell);
+  }
 }
 
 function onRootDragStart(e) {
@@ -931,8 +1046,9 @@ function onRootDragOver(e) {
   }
   /* Foreign content being dragged in from outside the page (another tab,
      another app) onto a script cell. preventDefault here so 'drop' is
-     guaranteed to fire and land in onRootDrop's plain-text-only path below
-     instead of some engine's own native "accept the drop" default —
+     guaranteed to fire and land in onRootDrop's model path below (the
+     sanitiser, then fromHtml) instead of some engine's own native "accept
+     the drop" default —
      Chromium's own default for a contenteditable region is to accept it
      and insert raw HTML regardless of what this handler does, which is
      exactly the paste bypass onRootPaste already exists to block. */
@@ -972,35 +1088,42 @@ function onRootDrop(e) {
     return;
   }
   /* Any other drop onto a script cell is foreign content — a page or app
-     outside Splitpage dragging in its own text/HTML. onRootPaste already
-     forces plain text for exactly this reason (Ctrl+V bypassing
-     sanitizeHtml would be as bad as this); mirror it here rather than
-     letting the browser perform its own native HTML insertion, which
-     never passes through sanitizeHtml/walkSanitize at all. */
+     outside Splitpage dragging in its own text/HTML, or words dragged from
+     another scene. It never gets the browser's own native HTML insertion,
+     which passes through neither the sanitiser nor the model: it goes in
+     the way a paste does (insertIntoScriptCell), at the drop point. A drag
+     carries no cut nonce, so a comment on dragged words stays where it was
+     (design D6). */
   var cellEl = e.target.closest && e.target.closest(".cell-editable");
   if (cellEl) {
     e.preventDefault();
-    var text = e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
-    if (text) {
-      /* Unlike paste, nothing has focused this cell or put a caret in it —
-         the user was dragging, never clicked in. insertText writes at the
-         current selection, so without one first it has nowhere to land. */
-      cellEl.focus();
-      try {
-        var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
-        if (range && cellEl.contains(range.startContainer)) {
-          var sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      } catch (err) {}
-      document.execCommand("insertText", false, text);
-    }
+    var dt = e.dataTransfer;
+    var html = dt ? dt.getData("text/html") : "";
+    var text = dt ? dt.getData("text/plain") : "";
+    if (!html && !text) return;
+    if (isScriptCell(cellEl) && reviewMode()) return;
+    /* Unlike paste, nothing has focused this cell or put a caret in it —
+       the user was dragging, never clicked in. The insertion goes at the
+       current selection, so without one first it has nowhere to land. */
+    cellEl.focus();
+    try {
+      var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (range && cellEl.contains(range.startContainer)) {
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } catch (err) {}
+    if (isScriptCell(cellEl)) insertIntoScriptCell(cellEl, html, text);
+    else if (text) document.execCommand("insertText", false, text);
   }
 }
 
 function init() {
-  try { document.execCommand("styleWithCSS", false, true); } catch (e) {}
+  /* No page-wide styleWithCSS any more: a script cell's formatting is the
+     model's (05-render.js), and the one command still wanting CSS mode —
+     hiliteColor in a cell the model does not edit — switches it on for
+     itself (applyHighlight). */
 
   /* Fire and forget: the menu items reveal themselves if a server answers,
      and everything below works identically either way. Deliberately not
@@ -1141,6 +1264,8 @@ function init() {
   rowsEl.addEventListener("input", onRootInput);
   rowsEl.addEventListener("focusout", onRootFocusOut);
   rowsEl.addEventListener("paste", onRootPaste);
+  rowsEl.addEventListener("copy", onRootCopy);
+  rowsEl.addEventListener("cut", onRootCut);
   rowsEl.addEventListener("keydown", onRootKeydown);
   configureUndo({ commentsAreSent: onServerDoc, afterApply: afterUndoApplied, onRefused: onUndoRefused });
   /* Ctrl+Z with nothing focused, or a button — after deleting a scene from
@@ -1154,6 +1279,7 @@ function init() {
      right-click menu, the desktop app's Edit menu): the document's undo
      answers it instead, so there is only ever one history. */
   rowsEl.addEventListener("beforeinput", onUndoBeforeInput);
+  rowsEl.addEventListener("beforeinput", onFormatBeforeInput);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
   rowsEl.addEventListener("dragover", onRootDragOver);
@@ -1584,6 +1710,9 @@ function init() {
   });
 
   document.addEventListener("selectionchange", function () {
+    /* a B/I/U pressed with nothing selected is for that caret position
+       only — first, so the toolbars below no longer show it */
+    forgetStalePendingMarks();
     var active = document.activeElement;
     if (active && active.classList && active.classList.contains("cell-editable")) {
       if (active.classList.contains("wr-para")) updateWriterFormatState();
@@ -1801,8 +1930,11 @@ function init() {
   writerDocEl.addEventListener("input", onRootInput);
   writerDocEl.addEventListener("focusout", onRootFocusOut);
   writerDocEl.addEventListener("paste", onRootPaste);
+  writerDocEl.addEventListener("copy", onRootCopy);
+  writerDocEl.addEventListener("cut", onRootCut);
   writerDocEl.addEventListener("keydown", onRootKeydown);
   writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
+  writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
   /* capture, so Enter becomes a new scene before onRootKeydown can make
      it a line break */
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);

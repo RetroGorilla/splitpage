@@ -1,11 +1,12 @@
 import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
-import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
+import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
-import { normalizeImageRef } from "../../shared/blob-policy.js";
+import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
+  buildVideoCardEl,
   plainName,
   plainText,
   safeHref,
@@ -23,6 +24,7 @@ import {
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
+import { fromHtml, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 
@@ -147,6 +149,84 @@ export function legacyMdToHtml(text) {
   return out;
 }
 
+/* ---- pictures and video cards out of script cells (#85, design D7, §3.3) ----
+
+   A script cell holds words. The document model has no place for a
+   picture or a video card in one, and a paste now drops them — but before
+   that a paste could put either into a cell, and documents holding one
+   exist. Rather than keep those cells outside the model for good (every
+   editing path would need a second way to handle them), the picture or
+   the link moves into a comment on the same scene and column as the
+   document is read. Like healTagRegistry(), that marks nothing as edited
+   by itself: it is written out with the next real save, and version
+   history still has the cell as it was.
+
+   The comment's id is derived from the row, the column and the picture's
+   sha (or the video's link), never minted at random: reading the same
+   document twice, or two copies of it that both moved the picture and are
+   then merged (comments merge by id), gives one comment, not two. The
+   picture stays referenced — shared/blob-policy.js refsIn() reads comment
+   bodies too — so its bytes are kept. The comment is not anchored to any
+   words: there were none. */
+var MEDIA_COMMENT_NOTE = {
+  visualText: "This was in the scene's visual column. Pictures and videos go in comments now:",
+  audioText: "This was in the scene's audio column. Pictures and videos go in comments now:"
+};
+
+export function mediaCommentId(rowId, field, key) {
+  return "cm" + sha256Hex("splitpage-cell-media\n" + rowId + "\n" + field + "\n" + key).slice(0, 24);
+}
+
+/* Takes every picture and video card out of row[field], in place, and
+   returns a comment for each distinct picture or link. */
+function moveMediaOutOfCell(row, field) {
+  var found = [];
+  var cell = fromHtml(row[field], { onMedia: function (m) { found.push(m); } });
+  row[field] = toHtml(cell);
+  var out = [];
+  var seen = Object.create(null);
+  found.forEach(function (m) {
+    var key, media;
+    if (m.kind === "image") {
+      var sha = m.ref && m.ref.sha256;
+      if (!isSha256Hex(sha)) return;
+      key = "img:" + sha;
+      var rec = recordFor(sha) || normalizeImageRef(m.ref);
+      media = rec ? storedImageHtml(rec) : '<img class="comment-img" data-blob="' + sha + '">';
+    } else {
+      var href = safeHref(m.href || "");
+      if (!href) return;
+      key = "video:" + href;
+      media = buildVideoCardEl(href).outerHTML;
+    }
+    var id = mediaCommentId(row.id, field, key);
+    if (seen[id]) return;
+    seen[id] = true;
+    out.push({
+      id: id,
+      rowId: row.id,
+      field: field,
+      anchorId: null,
+      quotedText: "",
+      /* no person put it here, and the comment says what did */
+      author: "Splitpage",
+      body: MEDIA_COMMENT_NOTE[field] + "<br>" + media,
+      resolved: false,
+      resolvedBy: null,
+      resolvedAt: null,
+      assignee: "",
+      /* when the row last changed is the nearest honest answer to when the
+         picture got there — never "now", which two copies read at different
+         times would disagree on */
+      createdAt: row.updatedAt || "",
+      updatedAt: row.updatedAt || "",
+      kind: "anchor",
+      replies: []
+    });
+  });
+  return out;
+}
+
 /* Everything that arrives from outside this page — a file on disk, a version
    someone else published, a restored snapshot — is untrusted. Normalise and
    sanitize it here, once, on the way in. `schema` marks content that has
@@ -184,6 +264,7 @@ export function migrateRows(s) {
      stray null/primitive doesn't throw and take the whole load down with
      it, the same protection `people` already gets a few lines down. */
   s.rows = s.rows.filter(function (r) { return r && typeof r === "object"; });
+  var movedMedia = [];
   s.rows.forEach(function (r) {
     r.id = safeId(r.id, "r");
     r.status = rowStatus(r.status) ? r.status : "todo";
@@ -208,10 +289,27 @@ export function migrateRows(s) {
        "Jan 1, 12:00 AM" for any row that was never actually stamped. */
     if (!r.updatedAt) r.updatedAt = "";
     r.updatedBy = r.updatedBy ? plainName(r.updatedBy) : null;
+    ["visualText", "audioText"].forEach(function (field) {
+      if (/<img|video-embed-card/.test(r[field])) movedMedia = movedMedia.concat(moveMediaOutOfCell(r, field));
+    });
   });
 
   if (!Array.isArray(s.comments)) s.comments = [];
   s.comments = s.comments.filter(function (c) { return c && typeof c === "object"; });
+  /* Added before the comments are normalised below, so a moved picture's
+     comment gets exactly what every other comment gets and comes out of a
+     second migration unchanged. One already there (this document was read
+     before, or both copies of a merge moved the same picture) is not added
+     again: its id is the same by construction. */
+  if (movedMedia.length) {
+    var haveComment = Object.create(null);
+    s.comments.forEach(function (c) { haveComment[safeId(c.id, "c")] = true; });
+    movedMedia.forEach(function (c) {
+      if (haveComment[c.id]) return;
+      haveComment[c.id] = true;
+      s.comments.push(c);
+    });
+  }
   s.comments.forEach(function (c) {
     c.id = safeId(c.id, "c");
     if (c.field === "title") {

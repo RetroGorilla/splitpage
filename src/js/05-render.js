@@ -12,7 +12,18 @@ import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml, rowImage } from "./02c-blobs.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { fromHtml, toHtml } from "./04c-doc-model.js";
+import {
+  breakLine,
+  cellLength,
+  fromHtml,
+  insertText,
+  markThroughout,
+  setMark,
+  toHtml,
+  toggleMark,
+  typingMarks
+} from "./04c-doc-model.js";
+import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
 import {
@@ -630,8 +641,10 @@ export function syncFieldFromDom(cellEl) {
      say — reading it back would put that over whatever replaced it. This is
      how an undo's repaint (12a-undo.js) was being reverted by the focusout
      of the very cell it repainted. And nothing is read back while an undo
-     or a redo is being put on screen. */
-  if (!cellEl.isConnected || S.undoApplying) return;
+     or a redo is being put on screen, or while editCell repaints the cell
+     it has just written (the one being replaced is still connected when
+     the browser tells it it lost focus). */
+  if (!cellEl.isConnected || S.undoApplying || S.cellRepainting) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
@@ -662,7 +675,148 @@ export function syncFieldFromDom(cellEl) {
   }
 }
 
-/* ================= rich text commands ================= */
+/* ================= rich text commands =================
+
+   In a script cell — a row field in #rows, a writer paragraph — every one
+   of these is an edit of the cell's model (#85, design §5), made through
+   editCell (05b-cell-edit.js): the toggle is decided by what the model
+   says the selection holds, the result is written as canonical HTML, and
+   it is one undo entry of its own. No execCommand: its output differed by
+   browser (<b>, <span style="font-weight: bold">), only became the stored
+   form once the sanitiser caught up on blur, and its toggle decision read
+   the live DOM rather than the document.
+
+   Two kinds of cell keep the browser's own commands: a comment composer or
+   a reply box, which is not a document cell and has no model behind it,
+   and a script cell still holding a picture or a video card, which the
+   model has no place for (editCell declines it — design D7). */
+
+/* A row field, in the split view or the writer — the writer's paragraphs
+   carry the same data-id/data-field and the same row behind them. The
+   comment composer and every reply box reuse .cell-editable too, and the
+   shared input handlers (21-events.js) gate everything that only makes
+   sense in the script on this. */
+export function isScriptCell(cellEl) {
+  return !!(cellEl && cellEl.closest("#rows, #writer-doc") && cellEl.getAttribute("data-field"));
+}
+
+/* The toolbar's and the keyboard's command names, as model marks. */
+var FORMAT_MARKS = { bold: "b", italic: "i", underline: "u", strikeThrough: "s", highlight: "hl" };
+
+/* editCell(cellEl, fn) through the model, or null when this cell is not
+   one it edits (not a script cell; a picture or video card in it) and the
+   caller has to take its old way. Otherwise the cell element to carry on
+   with — a repaint in #rows replaces it — whether or not fn changed
+   anything. */
+function throughModel(cellEl, fn) {
+  if (!isScriptCell(cellEl)) return null;
+  var ran = false;
+  var fresh = editCell(cellEl, function (cell, sel) {
+    ran = true;
+    return fn(cell, sel);
+  });
+  return ran ? (fresh || cellEl) : null;
+}
+
+/* ---- pending marks: B/I/U with nothing selected ----
+
+   With a caret and no selection, Ctrl+B means "what I type next is bold".
+   execCommand kept that as a hidden typing style; here it is this note of
+   which marks to turn on or off, good for one cell and one caret position.
+   The next character typed there (typePendingMarks, from beforeinput) goes
+   in through the model with them, and the browser's own typing carries on
+   inside the formatting that character now sits in. Moving the caret
+   anywhere else forgets it (forgetStalePendingMarks, on selectionchange),
+   as the browser's typing style did. */
+var pendingMarks = null;          /* {cell, pos, marks: {b: true|false, ...}} */
+
+function pendingAt(cellEl, pos) {
+  return pendingMarks && pendingMarks.cell === cellEl && pendingMarks.pos === pos ? pendingMarks.marks : null;
+}
+
+/* What a character typed at pos would carry: the model's typing marks with
+   any pending toggles over them. */
+function marksForTyping(cellEl, cell, pos) {
+  var m = typingMarks(cell, pos);
+  var p = pendingAt(cellEl, pos);
+  if (p) Object.keys(p).forEach(function (k) { if (p[k]) m[k] = true; else delete m[k]; });
+  return m;
+}
+
+function togglePendingMark(cellEl, cell, pos, mark) {
+  var p = pendingAt(cellEl, pos) || {};
+  var on = !marksForTyping(cellEl, cell, pos)[mark];
+  /* toggled back to what typing there gives anyway: nothing pending */
+  if (on === !!typingMarks(cell, pos)[mark]) delete p[mark]; else p[mark] = on;
+  pendingMarks = Object.keys(p).length ? { cell: cellEl, pos: pos, marks: p } : null;
+}
+
+export function forgetStalePendingMarks() {
+  if (!pendingMarks) return;
+  var c = pendingMarks.cell;
+  var sel = c.isConnected && document.activeElement === c ? cellSelection(c) : null;
+  if (!sel || sel.from !== sel.to || sel.from !== pendingMarks.pos) pendingMarks = null;
+}
+
+/* beforeinput's insertText, when marks are pending at the caret: the text
+   goes in through the model carrying them, instead of the browser typing
+   it. Returns the cell element to carry on with, or null to let the
+   browser type as usual. */
+export function typePendingMarks(cellEl, text) {
+  if (!pendingMarks || pendingMarks.cell !== cellEl || !text) return null;
+  var typed = false;
+  var fresh = throughModel(cellEl, function (cell, sel) {
+    if (!sel || sel.from !== sel.to || !pendingAt(cellEl, sel.from)) return null;
+    var next = insertText(cell, sel.from, text, marksForTyping(cellEl, cell, sel.from));
+    var at = sel.from + cellLength(next) - cellLength(cell);
+    typed = true;
+    return { cell: next, sel: { from: at, to: at } };
+  });
+  pendingMarks = null;
+  return typed ? fresh : null;
+}
+
+/* ---- B, I, U, S and highlight ---- */
+
+/* Toggle one format over the selection in a script cell: every character
+   of it already has it -> off, else on (toggleMark). With nothing
+   selected, a pending mark for what is typed next. Returns the cell to
+   carry on with, or null for the caller's old way (see throughModel). */
+export function toggleCellFormat(cellEl, cmd) {
+  var mark = FORMAT_MARKS[cmd];
+  if (!mark) return null;
+  return throughModel(cellEl, function (cell, sel) {
+    if (!sel) return null;
+    if (sel.from === sel.to) {
+      togglePendingMark(cellEl, cell, sel.from, mark);
+      return null;
+    }
+    pendingMarks = null;
+    return { cell: toggleMark(cell, sel.from, sel.to, mark), sel: sel };
+  });
+}
+
+/* Which formats the selection in a script cell has, keyed by command name
+   (bold, italic, underline, strikeThrough, highlight) — what the toolbars
+   light up. Read from the model, so it is the toggle's own answer: "on"
+   exactly when pressing the button would take it off. Read off the cell
+   on screen rather than state, which a keystroke may not have reached yet.
+   Null for a cell the model does not edit (the caller asks the browser). */
+export function cellFormatState(cellEl) {
+  if (!isScriptCell(cellEl)) return null;
+  var html = storedHtmlFromDom(cellEl.innerHTML);
+  if (/<img|video-embed-card/.test(html)) return null;
+  var out = {};
+  var sel = cellSelection(cellEl);
+  if (!sel) return out;
+  var cell = fromHtml(html);
+  var typing = sel.from === sel.to ? marksForTyping(cellEl, cell, sel.from) : null;
+  Object.keys(FORMAT_MARKS).forEach(function (cmd) {
+    var k = FORMAT_MARKS[cmd];
+    out[cmd] = typing ? !!typing[k] : markThroughout(cell, sel.from, sel.to, k);
+  });
+  return out;
+}
 
 /* Is there anything after `node` that gives the last line a box to sit in?
    A zero-width caret spot does not count — it is ensureTrailingCaretSpot()'s
@@ -683,16 +837,28 @@ function hasRenderedContentAfter(cellEl, node) {
    character landed BEFORE the <br> on the same line, and once a trailing
    <br> was there every later Enter in that cell was a complete no-op.
    insertLineBreak adds the second, sentinel <br> that gives the new last
-   line a box, and consumes it again as soon as you type. */
+   line a box, and consumes it again as soon as you type.
+
+   A script cell does the same through the model (breakLine, 04c-doc-model.js,
+   sentinel and all), with the caret just after the break. Only a comment or
+   reply box, or a cell with a picture in it, still asks the browser.
+   Returns the cell element to carry on with — a repaint in #rows replaces
+   it. */
 export function insertLineBreak(cellEl) {
+  var fresh = throughModel(cellEl, function (cell, sel) {
+    if (!sel) return null;
+    var b = breakLine(cell, sel.from, sel.to);
+    return { cell: b.cell, sel: { from: b.pos, to: b.pos } };
+  });
+  if (fresh) return fresh;
   try {
-    if (document.execCommand("insertLineBreak")) return;
+    if (document.execCommand("insertLineBreak")) return cellEl;
   } catch (err) {}
   /* Manual fallback for anything that does not implement the command. */
   var sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return;
+  if (!sel || !sel.rangeCount) return cellEl;
   var range = sel.getRangeAt(0);
-  if (!cellEl.contains(range.startContainer)) return;
+  if (!cellEl.contains(range.startContainer)) return cellEl;
   range.deleteContents();
   var br = document.createElement("br");
   range.insertNode(br);
@@ -703,6 +869,7 @@ export function insertLineBreak(cellEl) {
   range.collapse(true);
   sel.removeAllRanges();
   sel.addRange(range);
+  return cellEl;
 }
 
 export function isSelectionInsideTag(root, tagName) {
@@ -717,7 +884,10 @@ export function isSelectionInsideTag(root, tagName) {
   return false;
 }
 
-/* execCommand("hiliteColor"/"backColor") produces a styled <span
+/* The highlight of a cell the model does not edit (a picture in it — see
+   the top of this section), where it is still the browser's.
+
+   execCommand("hiliteColor"/"backColor") produces a styled <span
    style="background-color:...">, never a <mark>, in every modern
    browser — removeHighlight() below already knows to look for both, but
    the toggle DECISION point (handleToolbarCmd) and the toolbar's active-
@@ -745,9 +915,15 @@ function unwrapElement(el) {
 }
 
 export function applyHighlight() {
+  /* Firefox applies hiliteColor only in CSS mode. It used to be switched
+     on for the whole page at start-up; this is the one command left that
+     needs it, so it is on for this command only, and every other
+     execCommand (a reply box's bold) writes plain elements. */
+  try { document.execCommand("styleWithCSS", false, true); } catch (e) {}
   var ok = false;
   try { ok = document.execCommand("hiliteColor", false, HIGHLIGHT_COLOR); } catch (e) {}
   if (!ok) { try { document.execCommand("backColor", false, HIGHLIGHT_COLOR); } catch (e) {} }
+  try { document.execCommand("styleWithCSS", false, false); } catch (e) {}
 }
 
 export function removeHighlight(cellEl) {
@@ -769,15 +945,19 @@ export function updateToolbarState(cellEl) {
   if (!wrap) return;
   var toolbar = wrap.querySelector(".mini-toolbar");
   if (!toolbar) return;
+  /* from the model in a script cell; a reply box, or a cell with a
+     picture in it, still asks the browser */
+  var model = toolbar.querySelector('[data-cmd="bold"]') ? cellFormatState(cellEl) : null;
   ["bold", "italic", "underline", "strikeThrough"].forEach(function (cmd) {
     var btn = toolbar.querySelector('[data-cmd="' + cmd + '"]');
     if (!btn) return;
     var on = false;
-    try { on = document.queryCommandState(cmd); } catch (e) {}
+    if (model) on = !!model[cmd];
+    else { try { on = document.queryCommandState(cmd); } catch (e) {} }
     btn.classList.toggle("is-active", on);
   });
   var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
-  if (hiBtn) hiBtn.classList.toggle("is-active", isSelectionHighlighted(cellEl));
+  if (hiBtn) hiBtn.classList.toggle("is-active", model ? !!model.highlight : isSelectionHighlighted(cellEl));
 }
 
 export function handleToolbarCmd(btn) {
@@ -785,9 +965,15 @@ export function handleToolbarCmd(btn) {
   var cellEl = wrap.querySelector(".cell-editable");
   var cmd = btn.getAttribute("data-cmd");
   cellEl.focus();
-  if (cmd === "highlight") {
-    if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
-    else applyHighlight();
+  if (FORMAT_MARKS[cmd]) {
+    var formatted = toggleCellFormat(cellEl, cmd);
+    if (formatted) { updateToolbarState(formatted); return; }
+    if (cmd === "highlight") {
+      if (isSelectionHighlighted(cellEl)) removeHighlight(cellEl);
+      else applyHighlight();
+    } else {
+      document.execCommand(cmd);
+    }
     syncFieldFromDom(cellEl);
     updateToolbarState(cellEl);
     return;
@@ -921,17 +1107,30 @@ export function confirmLink(wrap) {
   }
   if (!/^https?:\/\//i.test(url) && url.indexOf("mailto:") !== 0) url = "https://" + url;
   var cellEl = S.savedRangeCell;
+  var saved = S.savedRange;
+  popover.hidden = true;
+  S.savedRange = null; S.savedRangeCell = null;
   cellEl.focus();
   var sel = window.getSelection();
   sel.removeAllRanges();
+  /* A script cell: the link is an href mark over the saved selection
+     (safeHref, through the model, is the last word on what may be one), and
+     the caret goes just past the linked words, as it did. */
+  sel.addRange(saved);
+  var linked = throughModel(cellEl, function (cell, s) {
+    if (!s || s.from === s.to) return null;
+    return { cell: setMark(cell, s.from, s.to, "href", url), sel: { from: s.to, to: s.to } };
+  });
+  if (linked) { caretOutOfLinkEnd(linked); return; }
+  sel.removeAllRanges();
   try {
-    var a = wrapRangeInLink(S.savedRange, url);
+    var a = wrapRangeInLink(saved, url);
     var afterRange = document.createRange();
     afterRange.setStartAfter(a);
     afterRange.collapse(true);
     sel.addRange(afterRange);
   } catch (e) {
-    sel.addRange(S.savedRange);
+    sel.addRange(saved);
     document.execCommand("createLink", false, url);
     var links = cellEl.querySelectorAll("a:not([target])");
     for (var i = 0; i < links.length; i++) {
@@ -939,9 +1138,29 @@ export function confirmLink(wrap) {
       links[i].setAttribute("rel", "noopener");
     }
   }
-  popover.hidden = true;
-  S.savedRange = null; S.savedRangeCell = null;
   syncFieldFromDom(cellEl);
+}
+
+/* The model puts a caret at the end of the linked words inside the <a>
+   (posToDom lands in the text it ends), where the next thing typed would
+   join the link. Just past the <a> is where the old wrap-and-insert left
+   it, and where typing is ordinary text again. */
+function caretOutOfLinkEnd(cellEl) {
+  var sel = window.getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return;
+  var r = sel.getRangeAt(0);
+  var node = r.startContainer.nodeType === 3 ? r.startContainer.parentNode : r.startContainer;
+  var a = node && node.closest ? node.closest("a") : null;
+  if (!a || !cellEl.contains(a)) return;
+  var rest = document.createRange();
+  rest.selectNodeContents(a);
+  rest.setStart(r.startContainer, r.startOffset);
+  if (rest.toString().replace(/\u200B/g, "")) return;
+  var after = document.createRange();
+  after.setStartAfter(a);
+  after.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(after);
 }
 
 export function cancelLink(wrap) {
