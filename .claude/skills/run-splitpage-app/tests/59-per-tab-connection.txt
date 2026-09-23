@@ -1,0 +1,142 @@
+# Per-tab server connections (#11): the half of it a single page can show.
+#
+# Each tab is its own page with its own `conn` (_home.js) — which server, the
+# token it carries there, the role the server gave it, the SSH tunnel it
+# rides. Two tabs holding two DIFFERENT connections at once needs two real
+# pages and two real servers, which this harness has neither of: that is the
+# desktop smoke suite's "per-tab connections" groups (desktop/test/smoke.mjs),
+# run on real Electron tabs against two real server.js processes. What IS
+# here is everything one page decides on its own: where it boots, what
+# survives its reload, which token goes to which server, and that another
+# tab's choice — which reaches this page only as a localStorage write — does
+# not move it.
+#
+# 127.0.0.1:9 and :8 are the discard ports: nothing answers, the probe fails
+# at once, and the page says it could not reach them. That is fine — no
+# assertion here needs a server to answer.
+#
+# A goto is a real reload; nothing on `window` survives it.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# --- a fresh page starts on its own origin's server ------------------------
+expect window.__hostedTest.conn().serverUrl === ''
+expect window.__hostedTest.conn().hasToken === false
+expect window.__hostedTest.conn().tunnel === null
+expect JSON.parse(sessionStorage.getItem('splitpage-tab-server')).serverUrl === ''
+
+# --- pointing THIS tab somewhere -------------------------------------------
+# Not the default for new pages unless asked (the Servers dialog asks; main
+# opening a document in this tab does not).
+eval window.__hostedTest.pointTabAt('http://127.0.0.1:9/')
+expect window.__hostedTest.conn().serverUrl == http://127.0.0.1:9/
+expect JSON.parse(sessionStorage.getItem('splitpage-tab-server')).serverUrl == http://127.0.0.1:9/
+expect localStorage.getItem('splitpage-server-base') === null
+
+# --- a token is for the server it was given for ----------------------------
+eval window.__hostedTest.setToken('aaaa1111', true)
+expect window.__hostedTest.conn().hasToken === true
+expect JSON.parse(sessionStorage.getItem('splitpage-server-token')).serverUrl == http://127.0.0.1:9/
+expect JSON.parse(sessionStorage.getItem('splitpage-server-token')).token == aaaa1111
+# remembered on this device for THAT server, and only that one
+expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))['http://127.0.0.1:9/'] == aaaa1111
+expect Object.keys(JSON.parse(localStorage.getItem('splitpage-server-tokens'))).length == 1
+# the pre-#11 single remembered token key is never written any more
+expect localStorage.getItem('splitpage-server-token') === null
+
+# pointing at another server does NOT carry the token with it...
+eval window.__hostedTest.pointTabAt('http://127.0.0.1:8/', {makeDefault: true})
+expect window.__hostedTest.conn().serverUrl == http://127.0.0.1:8/
+expect window.__hostedTest.conn().hasToken === false
+expect sessionStorage.getItem('splitpage-server-token') === null
+expect localStorage.getItem('splitpage-server-base') == http://127.0.0.1:8/
+# ...and coming back finds the one remembered for it
+eval window.__hostedTest.pointTabAt('http://127.0.0.1:9/')
+expect window.__hostedTest.conn().hasToken === true
+expect JSON.parse(sessionStorage.getItem('splitpage-server-token')).token == aaaa1111
+
+# --- another tab's choice does not move this one ---------------------------
+# A second tab picking a server writes the shared default; that is all it
+# can reach. This tab reloads onto ITS server, with its token.
+eval (function(){localStorage.setItem('splitpage-server-base','http://127.0.0.1:8/');return 1;})()
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+expect window.__hostedTest.conn().serverUrl == http://127.0.0.1:9/
+expect window.__hostedTest.conn().hasToken === true
+# the File menu entry names this tab's server, not the default
+expect document.getElementById('menu-servers').textContent.indexOf('127.0.0.1:9') !== -1
+
+# --- a stale token is forgotten for this server only -----------------------
+eval (function(){var m=JSON.parse(localStorage.getItem('splitpage-server-tokens'));m['http://127.0.0.1:8/']='bbbb2222';localStorage.setItem('splitpage-server-tokens',JSON.stringify(m));return 1;})()
+eval window.__hostedTest.clearToken()
+expect window.__hostedTest.conn().hasToken === false
+expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))['http://127.0.0.1:9/'] === undefined
+expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))['http://127.0.0.1:8/'] == bbbb2222
+
+# --- a fresh page (a new tab) starts on the default ------------------------
+# Emptying this tab's sessionStorage is what a brand-new tab looks like.
+eval (function(){sessionStorage.removeItem('splitpage-tab-server');sessionStorage.removeItem('splitpage-server-token');return 1;})()
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+expect window.__hostedTest.conn().serverUrl == http://127.0.0.1:8/
+# ...with the token remembered for the DEFAULT server, not the one this
+# page was on before
+expect window.__hostedTest.conn().hasToken === true
+
+# --- the legacy single remembered token moves under its own server ---------
+eval (function(){localStorage.removeItem('splitpage-server-tokens');localStorage.setItem('splitpage-server-token','cccc3333');localStorage.setItem('splitpage-server-base','http://127.0.0.1:9/');sessionStorage.removeItem('splitpage-tab-server');sessionStorage.removeItem('splitpage-server-token');return 1;})()
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+expect localStorage.getItem('splitpage-server-token') === null
+expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))['http://127.0.0.1:9/'] == cccc3333
+expect Object.keys(JSON.parse(localStorage.getItem('splitpage-server-tokens'))).length == 1
+expect window.__hostedTest.conn().serverUrl == http://127.0.0.1:9/
+expect window.__hostedTest.conn().hasToken === true
+
+# --- the review role belongs to the document's connection ------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 200
+expect window.__hostedTest.conn().homeHoldsIt === true
+expect window.__hostedTest.reviewMode() === true
+expect document.body.classList.contains('is-review')
+# leaving the server home (the Servers dialog does this before pointing the
+# tab anywhere) takes the review mode with it...
+eval window.__hostedTest.pointTabAt('http://127.0.0.1:8/')
+sleep 200
+expect window.__hostedTest.home().kind == none
+expect window.__hostedTest.reviewMode() === false
+# ...and the new connection starts with no role at all: the next server
+# decides for itself
+expect window.__hostedTest.conn().role === ''
+
+# --- desktop: main hands this tab a document on another server -------------
+# The payload names the server (#11). This tab is pointed there before the
+# id is asked for, and it does NOT become the default for new pages.
+eval (function(){window.__fake = window.__desktopTest.makeFakeBackend(); window.__desktopTest.setBackend(window.__fake); window.__desktopTest.initDesktop(); return 1;})()
+eval (function(){localStorage.setItem('splitpage-server-base','http://127.0.0.1:8/');return 1;})()
+eval (function(){window.__fake._fireOpenServerDoc({serverDocId:'far-doc', serverUrl:'http://127.0.0.1:7/'});return 1;})()
+wait window.__hostedTest.conn().serverUrl === 'http://127.0.0.1:7/'
+expect localStorage.getItem('splitpage-server-base') == http://127.0.0.1:8/
+# a payload for the server this tab is already on changes nothing
+eval (function(){window.__fake._fireOpenServerDoc({serverDocId:'near-doc', serverUrl:'http://127.0.0.1:7/'});return 1;})()
+sleep 200
+expect window.__hostedTest.conn().serverUrl == http://127.0.0.1:7/
+
+# the report main keeps its source from names the server, never the token
+eval window.__hostedTest.setToken('dddd4444', false)
+eval window.__hostedTest.setSession({role:'edit',docId:'far-doc'})
+# setSession paints; a report goes out on the next dirty/clean change
+eval window.__desktopTest.markDirtyForTest()
+sleep 300
+expect window.__fake._lastDocState.serverKey == far-doc
+expect window.__fake._lastDocState.serverUrl == http://127.0.0.1:7/
+expect window.__fake._lastDocState.role == edit
+expect JSON.stringify(window.__fake._lastDocState).indexOf('dddd4444') === -1
+# not remembered on this device, because it was not asked to be
+expect (JSON.parse(localStorage.getItem('splitpage-server-tokens') || '{}'))['http://127.0.0.1:7/'] === undefined
+eval window.__desktopTest.restoreBackend()
+
+# --- nothing credential-shaped leaks into the document ---------------------
+expect JSON.stringify(window.__splitpageFormats.state()).indexOf('dddd4444') === -1
+expect JSON.stringify(window.__splitpageFormats.state()).indexOf('127.0.0.1:7') === -1

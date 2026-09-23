@@ -11,11 +11,42 @@ directories:
 # strip's own three files are NOT here — they are served from
 # resources/splitpage/tabstrip (stage.mjs stages them, extraResources below
 # ships them), because protocol.handle reads them off disk.
+#
+# shared/ (issue #76) is required at startup too but is NOT here either, for a
+# different reason: it lives at the REPO root, one level above this app
+# directory, and main.js finds it through APP_ROOT — the repo root in dev,
+# resources/splitpage when packaged. stage.mjs copies it there with the rest,
+# so one path expression works in both, and requiring a plain file outside the
+# asar is ordinary. Deleting it from stage.mjs breaks launch, not just a
+# feature.
 files:
   - main.js
   - preload.js
   - tabstrip-preload.js
   - drafts.js
+  # The IPC channel table. main.js requires it at startup and both preloads
+  # read it over splitpage:ipc-table-sync, so a packaged build without it is
+  # an app with no bridge at all — same reason drafts.js is listed.
+  - ipc-channels.js
+  # The teleprompter's loopback listener (issue #86). main.js requires it at
+  # startup, so it has to ship for the same reason drafts.js does.
+  - prompter-share.js
+  # Google Drive through a loopback OAuth redirect (issue #10). main.js
+  # requires it at startup, so it has to ship for the same reason drafts.js
+  # does. desktop/test/google-drive.test.mjs checks that every ./module
+  # main.js requires is listed here.
+  - google-drive.js
+  # The content-addressed blob folder images live in (issue #82). main.js
+  # requires it at startup, so it has to ship for the same reason drafts.js
+  # does.
+  - blob-store.js
+  # Version history on disk (issue #83): the fs backend the shared store runs
+  # over in main, and the one-time v1 migration it runs first. Listed before
+  # main.js requires them (step 3a) so that switch-over cannot ship without
+  # them; history-fs-backend.js itself requires ./blob-store.js. The migrator
+  # goes in the release after (owner decision #83-3) — delete the line then.
+  - history-fs-backend.js
+  - history-v1-migrate.js
   - package.json
 
 extraResources:

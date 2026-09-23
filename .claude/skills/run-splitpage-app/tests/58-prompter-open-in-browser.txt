@@ -1,0 +1,194 @@
+# The teleprompter's "Open in browser" (issue #86), both ends of it that a
+# browser can reach.
+#
+# THE BROWSER END. The desktop shell opens one of two addresses in the
+# default browser (desktop/main.js section 9b):
+#   ?teleprompter=1#script=<64 hex>   served by the desktop's own loopback
+#                                     listener (desktop/prompter-share.js)
+#   ?doc=<id>&teleprompter=1          served by its document server
+# This harness's static server cannot answer prompter-script/<token> the way
+# that listener does, so the success path is driven through
+# window.__prompterTest.launchFromScript — the same function a real load
+# runs — with fetch stubbed. The address parsing is driven for real, by
+# loading those addresses: they fail to find a script (the harness has none
+# to give), which is the expired-link path, and that is asserted too.
+#
+# THE DESKTOP END. The renderer's half of the button — save first when that
+# needs no dialog, refuse and explain when it would, never name a URL — runs
+# under the in-memory fake desktop backend (20f-desktop.js), like
+# 21-desktop-shim.txt. The main-process half (what URL, what bytes, the
+# listener itself) is desktop/test/smoke.mjs's "teleprompter: open in
+# browser" groups and desktop/test/prompter-share.test.mjs.
+#
+# Follow My Voice itself cannot be driven here or anywhere headless — it
+# needs a real microphone.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+# --- a real load of the loopback address, token and all ---------------------
+# First, before any DOM churn: it needs its own page load, and a goto late in
+# a suite can abort the CDP socket (SKILL.md gotchas). ?wizard=1 stops the
+# harness pre-marking onboarding done, so this proves the launch marks it
+# itself: the first-run wizard is for someone arriving at the app, and this
+# tab arrived at a script.
+open /index.html?wizard=1&teleprompter=1#script=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+wait document.querySelectorAll('#rows .row').length > 0
+wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('teleprompter link has expired') !== -1) return true; return false; })()
+expect location.search.indexOf('teleprompter') === -1
+expect location.hash === ''
+expect location.href.indexOf('script=') === -1
+expect sessionStorage.getItem('splitpage-prompter-launch') === null
+expect document.getElementById('prompter').hidden == true
+expect JSON.parse(localStorage.getItem('splitpage-onboarding')).at == prompter-launch
+expect document.getElementById('onboarding-modal').hidden == true
+
+# --- ?teleprompter=1 with no ?doc= and no server: waits, opens nothing ------
+goto /index.html?teleprompter=1
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 1200
+expect location.search.indexOf('teleprompter') === -1
+expect document.getElementById('prompter').hidden == true
+
+# --- the script arrives: opened as a copy, straight into the prompter ------
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.P = window.__prompterTest; window.__realFetch = window.fetch; window.__scriptText = JSON.stringify({ title: 'Browser Read', rows: [{ visualText: 'Wide', audioText: 'Alpha bravo charlie delta.' }, { visualText: 'Close', audioText: 'Echo foxtrot golf.' }] }); window.__asked = []; window.fetch = function (u, o) { if (String(u).indexOf('prompter-script/') === 0) { window.__asked.push({ url: String(u), cache: o && o.cache }); return Promise.resolve(new Response(JSON.stringify({ name: 'Read Me.splitpage', text: window.__scriptText }), { status: 200, headers: { 'content-type': 'application/json' } })); } return window.__realFetch.apply(this, arguments); }; return !!(F && P && P.launchFromScript); })()
+expect true
+eval (async function(){ await window.__historyTest.idle(); window.__bodiesBefore = await window.__historyTest.bodyCount(null); return window.__bodiesBefore; })()
+eval P.launchFromScript('ab'.repeat(32)).then(function (r) { window.__launched = r; return r; })
+expect window.__launched === true
+expect window.__asked.length === 1
+expect window.__asked[0].url === 'prompter-script/' + 'ab'.repeat(32)
+expect window.__asked[0].cache == no-store
+expect F.state().title == Browser Read
+expect F.state().rows.length === 2
+expect !document.getElementById('prompter').hidden
+expect document.getElementById('prompter-content').textContent.indexOf('Alpha bravo charlie delta.') !== -1
+expect document.getElementById('prompter-content').textContent.indexOf('Echo foxtrot golf.') !== -1
+# a copy to read: a project file with NO handle — nothing here can write
+# back over the desktop's file — and not dirty
+expect F.docFile().kind == splitpage
+expect F.docFile().name === null
+expect document.getElementById('btn-save').textContent.indexOf('•') === -1
+# the browser build's own voice button, untouched by the desktop arm
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('changes made here are not saved back') !== -1) return true; return false; })()
+
+# no version-history snapshot at all — not of the page it replaced ("Before
+# opening …"), not of the script: reading a script must leave no copy of it
+# in this origin's storage
+eval (async function(){ await window.__historyTest.idle(); window.__bodiesAfter = await window.__historyTest.bodyCount(null); return window.__bodiesAfter; })()
+expect window.__bodiesAfter === window.__bodiesBefore
+expect window.__historyTest.pending(null).length === 0
+
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+# --- an expired link says so, and forgets the token -----------------------
+eval (function(){ sessionStorage.setItem('splitpage-prompter-launch', 'cd'.repeat(32)); window.fetch = function (u) { if (String(u).indexOf('prompter-script/') === 0) return Promise.resolve(new Response(JSON.stringify({ error: 'expired' }), { status: 404, headers: { 'content-type': 'application/json' } })); return window.__realFetch.apply(this, arguments); }; return true; })()
+eval P.launchFromScript('cd'.repeat(32)).then(function (r) { window.__expired = r; return r; })
+expect window.__expired === false
+expect sessionStorage.getItem('splitpage-prompter-launch') === null
+expect document.getElementById('prompter').hidden == true
+expect F.state().title == Browser Read
+eval (function(){ window.fetch = window.__realFetch; return true; })()
+
+# --- the browser build's File menu has no Present in browser ---------------
+# (it is the desktop app's in-page route to View ▸ Present in Browser, whose
+# menu bar Windows never draws — the title bar is the tab strip)
+jsclick #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.getElementById('menu-present-browser').hidden === true
+jsclick #file-menu-close
+wait document.getElementById('file-menu').hidden
+
+# --- the desktop end: a document with nowhere to live is not saved ---------
+eval (function(){ window.D = window.__desktopTest; window.fakeP = D.makeFakeBackend(); D.setBackend(window.fakeP); return !!D; })()
+expect true
+eval (function(){ window.__noHomeId = window.fakeP._addFile('placeholder.md', ''); return true; })()
+eval D.runMenuCommand('prompter-open-in-browser')
+wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('Save this script first') !== -1) return true; return false; })()
+expect !window.fakeP._prompterCalls
+expect window.fakeP._text(window.__noHomeId) === ''
+
+# --- a desktop file, clean: the bridge is asked, with no argument ----------
+eval (function(){ window.__pid = window.fakeP._addFile('prompt.md', F.buildMarkdown()); return true; })()
+eval (async function(){ var h = D.makeHandle({ id: window.__pid, name: 'prompt.md' }); var f = await h.getFile(); await F.openFile(f, h); return true; })()
+wait F.docFile().name === 'prompt.md'
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-voice').textContent == Open in browser to use Follow My Voice
+expect document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-voice-status').textContent.indexOf('Chrome or Edge') !== -1
+jsclick #pp-voice
+wait window.fakeP._prompterCalls === 1
+wait document.getElementById('pp-voice-status').textContent.indexOf('Opened in your browser') !== -1
+expect window.fakeP.openPrompterInBrowser.length === 0
+
+# --- dirty: saved first (no dialog — it has a file), then asked ------------
+eval (function(){ F.state().title = 'Saved before the browser'; D.markDirtyForTest(); return true; })()
+wait document.getElementById('btn-save').textContent.indexOf('•') !== -1
+jsclick #pp-voice
+wait window.fakeP._prompterCalls === 2
+expect window.fakeP._text(window.__pid).indexOf('Saved before the browser') !== -1
+# what main would have read off the tab's record at that moment: clean
+expect window.fakeP._prompterDocState.dirty === false
+expect window.fakeP._prompterDocState.fileId === window.__pid
+
+# --- main refusing is said out loud, not swallowed ---------------------------
+eval (function(){ window.fakeP._prompterAnswer = { ok: false, code: 'READ_FAILED' }; return true; })()
+jsclick #pp-voice
+wait window.fakeP._prompterCalls === 3
+wait document.getElementById('pp-voice-status').textContent.indexOf("Couldn't read the saved file") !== -1
+
+# --- File ▸ This document ▸ Present in browser: the in-page route ----------
+# Offered on desktop, inside the always-visible drawer (not the collapsed
+# Export/Help sections), and it hands off through the same bridge call.
+eval (function(){ window.fakeP._prompterAnswer = null; return true; })()
+jsclick #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.getElementById('menu-present-browser').hidden === false
+expect document.getElementById('menu-present-browser').closest('.menu-section-body').id == menu-section-document
+expect document.getElementById('menu-present-browser').closest('.menu-section-body').hidden === false
+expect document.getElementById('menu-present-browser').getAttribute('data-file-action') == prompter-open-in-browser
+jsclick #menu-present-browser
+wait window.fakeP._prompterCalls === 4
+expect document.getElementById('file-menu').hidden === true
+wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('Opened in your browser') !== -1) return true; return false; })()
+# the native View menu item clicks that same button, so the two cannot drift
+eval (function(){ window.__clicked = 0; document.getElementById('menu-present-browser').addEventListener('click', function(){ window.__clicked++; }); return true; })()
+eval D.runMenuCommand('prompter-open-in-browser')
+wait window.fakeP._prompterCalls === 5
+expect window.__clicked === 1
+
+# --- an older bridge without the call keeps the honest disabled state -------
+eval (function(){ window.fakeOld = D.makeFakeBackend(); delete window.fakeOld.openPrompterInBrowser; D.setBackend(window.fakeOld); return true; })()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-voice').disabled === true
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in the desktop app yet") !== -1
+jsclick #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.getElementById('menu-present-browser').hidden === true
+jsclick #file-menu-close
+wait document.getElementById('file-menu').hidden
+
+# --- back to the browser build ---------------------------------------------
+eval (function(){ D.restoreBackend(); return true; })()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+jsclick #pp-close
+expect !window.splitpageDesktop
+jsclick #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.getElementById('menu-present-browser').hidden === true
+jsclick #file-menu-close
+
+quit

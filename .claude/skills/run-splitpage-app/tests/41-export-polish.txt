@@ -14,14 +14,29 @@ eval (function(){window.F = window.__splitpageFormats; return !!(F && F.state);}
 expect true
 
 # the seed ships with a sample comment thread — clear it so the round trip
-# below tests the scene table alone; the docx importer turning a Comments
-# section's own paragraphs back into fabricated rows is pre-existing
-# behaviour this issue doesn't touch, not something new here
+# below tests the scene table alone (reopening an export WITH comments is
+# the last section of this suite)
 eval (function(){F.state().comments = []; return true;})()
 
 # a store-only zip walker, identical in shape to 03-exports.txt's — kept on
 # window so later eval statements in this suite can reuse it
 eval (function(){window.__unzip = function(bytes){var dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);var off=0,files={};while(off+4<=bytes.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(bytes.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=bytes.subarray(d,d+cs);off=d+cs;}return files;};return 'unzip-ready';})()
+# two readings of a cell for comparing rows across a reopen, both parsed
+# ONCE, the way the editor renders the cell:
+#   __text  what the reader sees. Escaped markup reads as its own visible
+#           "<strong>", so a reopen that escapes the importer's HTML fails
+#           here. (This used to decode up to five times until nothing was
+#           left to decode, which read escaped markup back as clean text and
+#           hid exactly that bug: File ▸ Open of a .docx stored every
+#           <strong>/<em>/<a> as literal text, once more per reopen.)
+#   __marks the formatting: runs of text with the set of bold/italic/
+#           underline/strike/highlight/link (with its href) around them,
+#           adjacent runs of the same set merged, so how Word happened to
+#           split its runs doesn't matter and anything else — a comment
+#           anchor, a tag chip — is transparent
+eval (function(){ window.__text = function(html){ var t = document.createElement('template'); t.innerHTML = html || ''; return t.content.textContent.replace(/ /g, ' ').replace(/\s+/g, ' ').trim(); }; window.__marks = function(html){ var t = document.createElement('template'); t.innerHTML = html || ''; var out = []; var walk = function(n, fmt){ if (n.nodeType === 3){ if (!n.data) return; var last = out[out.length - 1]; if (last && last[1] === fmt) last[0] += n.data; else out.push([n.data, fmt]); return; } if (n.nodeType !== 1 && n.nodeType !== 11) return; var tag = n.nodeType === 1 ? n.localName : ''; var f = fmt; if (tag === 'strong' || tag === 'b') f += '+b'; else if (tag === 'em' || tag === 'i') f += '+i'; else if (tag === 'u') f += '+u'; else if (tag === 's') f += '+s'; else if (tag === 'mark') f += '+mark'; else if (tag === 'a') f += '+a(' + n.getAttribute('href') + ')'; else if (tag === 'br'){ out.push(['\n', '']); return; } if (f !== fmt) f = f.split('+').filter(Boolean).sort().join('+'); for (var c = n.firstChild; c; c = c.nextSibling) walk(c, f); }; walk(t.content, ''); return out.map(function(r){ return [r[0].replace(/ /g, ' ').replace(/\s+/g, ' '), r[1]]; }).filter(function(r){ return r[0] !== ' ' || r[1]; }); }; return JSON.stringify([__text('a &lt;b&gt;x&lt;/b&gt; <i>y</i>'), __marks('a <strong>b<em>c</em></strong><em>d</em>')]); })()
+expect __text('a &lt;b&gt;x&lt;/b&gt; <i>y</i>') === 'a <b>x</b> y'
+expect JSON.stringify(__marks('a <strong>b<em>c</em></strong><em>d</em><span class="x"><em>e</em></span>')) === JSON.stringify([['a ', ''], ['b', 'b'], ['c', 'b+i'], ['de', 'i']])
 
 # =============================================================================
 # .docx — a plain script, no tags yet: styles, theme, footer and scene
@@ -76,6 +91,12 @@ expect F.state().rows[0].audioText.indexOf('welcome back') !== -1
 expect F.state().rows[0].visualText.indexOf('Host on camera') !== -1
 # the scene-number column never leaks into either cell's text
 expect F.state().rows[0].visualText.indexOf('No.') === -1
+# and they come back as the same text AND the same formatting — the seed's
+# second scene carries <em>, <strong>, a highlight, <u> and a link, which a
+# reopen used to store escaped, as visible "<strong>" in the cell
+expect JSON.stringify(F.state().rows.map(function(r){ return [__text(r.visualText), __text(r.audioText)]; })) === JSON.stringify(__before.map(function(r){ return [__text(r.v), __text(r.a)]; }))
+expect JSON.stringify(F.state().rows.map(function(r){ return [__marks(r.visualText), __marks(r.audioText)]; })) === JSON.stringify(__before.map(function(r){ return [__marks(r.v), __marks(r.a)]; }))
+expect F.state().rows[1].audioText.indexOf('<strong>exactly</strong>') !== -1 && F.state().rows[1].visualText.indexOf('<em>columns</em>') !== -1 && F.state().rows[1].audioText.indexOf('<a href="https://example.com"') !== -1
 
 # =============================================================================
 # .docx breakdown table — columns that fit their content
@@ -97,6 +118,8 @@ jsclick #file-menu [data-file-action="export-docx"]
 sleep 2000
 eval (async function(){var bytes=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dec=new TextDecoder();var xml=dec.decode(window.__unzip(bytes)['word/document.xml']);var grids=[],re=/<w:tblGrid>([\s\S]*?)<\/w:tblGrid>/g,m;while((m=re.exec(xml))!==null){var cols=[],re2=/<w:gridCol w:w="(\d+)"\/>/g,m2;while((m2=re2.exec(m[1]))!==null)cols.push(parseInt(m2[1],10));grids.push(cols);}window.__grids=grids;return true;})()
 expect window.__grids.length === 2
+# kept for the reopen section at the end: an export with a breakdown section
+eval (function(){ window.__bdDocx = window.__blobs[window.__blobs.length-1]; window.__bdRows = F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText) }; }); return JSON.stringify(window.__bdRows); })()
 expect window.__grids[0].length === 3
 expect window.__grids[1].length === 7
 # Notes (index 6) beats Mentions (index 4) and Status (index 2) given a real
@@ -166,5 +189,243 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md"]
 sleep 1200
 expect window.__blobs[window.__blobs.length-1].type == text/markdown
+
+# =============================================================================
+# PDF — a picture's row is at least as tall as the picture. A row with a
+# picture and no text in either column never entered buildPdf()'s text
+# loop, the only place y moved past the picture, so the next row was drawn
+# over it with a 14pt strip showing (Im2 at y=331.17, Im3 at 317.17). The
+# content streams are uncompressed: every image's draw rectangle is read
+# back and checked against the other pictures and against everything drawn
+# after its row's rule. Rows: picture only, picture only, picture + short
+# text, picture + text far longer than the picture, a filler that leaves
+# less room than a picture at the bottom of a page, a picture that must
+# therefore start the next page, and a last text row. The pictures are
+# canvas PNGs, so they go through the real PNG -> JPEG conversion.
+# =============================================================================
+
+eval (function(){ window.__pdfLayout = function(t){ var pages = [], re = /obj\n<< \/Length (\d+) >>\nstream\n/g, m; while ((m = re.exec(t))) { var s = t.substr(re.lastIndex, +m[1]); pages.push(s.split('\n').map(function(op){ var x; if ((x = /^q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([-\d.]+) cm \/(Im\d+) Do Q$/.exec(op))) return { k: 'img', n: x[5], w: +x[1], h: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2] }; if ((x = /^BT \/F\d ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((.*)\) Tj ET$/.exec(op))) return { k: 'text', s: x[4], y: +x[3], top: +x[3] + +x[1] }; if ((x = /^q 0\.90 0\.89 0\.86 RG 0\.5 w [\d.]+ ([-\d.]+) m /.exec(op))) return { k: 'rule', y: +x[1], top: +x[1] }; if ((x = / ([-\d.]+) [\d.]+ [\d.]+ re f Q$/.exec(op))) return { k: 'fill', y: +x[1], top: +x[1] }; return { k: 'other' }; })); } var imgs = [], bad = []; pages.forEach(function(ops, p){ ops.forEach(function(op, i){ if (op.k !== 'img') return; op.page = p; op.prevRule = null; for (var q = i - 1; q >= 0; q--) if (ops[q].k === 'rule') { op.prevRule = ops[q].y; break; } imgs.push(op); if (op.y < 53.99 || op.top > 738.01) bad.push(op.n + ' off the page'); var r = -1; for (var k = i + 1; k < ops.length; k++) if (ops[k].k === 'rule') { r = k; break; } if (r < 0) { bad.push(op.n + ' has no row rule'); return; } if (!(ops[r].y < op.y)) bad.push(op.n + ' rule not below it'); for (var k2 = r + 1; k2 < ops.length; k2++) { var o = ops[k2]; if (o.top !== undefined && o.top > op.y + 0.01) bad.push(o.k + ' ' + (o.s || o.n || '') + ' at ' + o.top.toFixed(2) + ' over ' + op.n + ' (bottom ' + op.y.toFixed(2) + ')'); } }); }); for (var a = 0; a < imgs.length; a++) for (var b = a + 1; b < imgs.length; b++) { var A = imgs[a], B = imgs[b]; if (A.page === B.page && A.x < B.x + B.w && B.x < A.x + A.w && A.y < B.top && B.y < A.top) bad.push(A.n + ' and ' + B.n + ' overlap'); } return { pages: pages, imgs: imgs, bad: bad, lastRule: pages.map(function(ops){ var y = null; ops.forEach(function(o){ if (o.k === 'rule') y = o.y; }); return y; }) }; }; return true; })()
+eval (function(){ var c = document.createElement('canvas'); c.width = 60; c.height = 40; var g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 60, 40); var P = c.toDataURL('image/png'); var L = function(n){ var a = []; for (var i = 1; i <= n; i++) a.push('Line ' + i); return a.join('<br>'); }; var spec = [[P, ''], [P, ''], [P, 'Short.'], [P, L(40)], [null, L(40)], [P, ''], [null, 'After.']]; F.state().rows = spec.map(function(s, i){ return { id: 'pdf-row-' + i, visualText: '', visualImage: s[0], audioText: s[1], status: 'todo' }; }); return F.state().rows.length; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+wait (function(){ var b = window.__blobs[window.__blobs.length - 1]; return !!b && b.type === 'application/pdf'; })()
+eval (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length - 1].arrayBuffer())); window.__lay = __pdfLayout(t); return JSON.stringify({ imgs: __lay.imgs.map(function(i){ return i.n + '@p' + (i.page + 1) + ' ' + i.w.toFixed(2) + 'x' + i.h.toFixed(2) + ' y=' + i.y.toFixed(2); }), bad: __lay.bad }); })()
+# all five pictures drawn, full column width, 3:2
+expect __lay.imgs.length === 5 && __lay.imgs.every(function(i){ return i.w === 229 && i.h.toFixed(2) === '152.67'; })
+# no picture overlaps another, runs off a page, or has anything after its row drawn over it
+expect __lay.bad.length === 0
+# the report's pair: two picture-only rows one after the other, the second
+# a whole picture plus the row gap lower, not 14pt
+expect __lay.imgs[0].page === __lay.imgs[1].page && Math.abs(__lay.imgs[0].y - __lay.imgs[1].top - 37.5) < 0.02
+# the picture after the filler did not fit in what the filler left and so
+# starts the next page, under its column headers
+expect __lay.imgs[4].page > __lay.imgs[3].page && __lay.imgs[4].prevRule === null && __lay.imgs[4].top.toFixed(2) === '708.00'
+expect __lay.lastRule[__lay.imgs[4].page - 1] > 54 && __lay.lastRule[__lay.imgs[4].page - 1] - 14 - 54 < __lay.imgs[4].h
+
+# =============================================================================
+# PDF — pictures in comments and replies. A comment or reply body keeps its
+# picture as <img class="comment-img" data-blob> (#82 P6); the comments
+# section used to read bodies as plain text, so the picture was dropped and
+# a picture-only body printed "(empty)". A .splitpage whose bodies carry
+# inline PNG/JPEG pictures, as a saved file does, is opened through the
+# real open path (the sanitiser interns them) and exported through the File
+# menu. Thread 1 pushes its picture down the first comments page line by
+# line until it no longer fits, so it must start the next page; thread 2
+# has a PNG and a JPEG in the body and a JPEG in a reply, text around each;
+# thread 3 names a picture nobody has.
+# =============================================================================
+
+eval (function(){ window.__cmtLayout = function(t){ var pages = [], re = /obj\n<< \/Length (\d+) >>\nstream\n/g, m; while ((m = re.exec(t))) pages.push(t.substr(re.lastIndex, +m[1]).split('\n')); var xo = [], pr = /\/Type \/Page \/Parent[^\n]*/g, pm; while ((pm = pr.exec(t))) { var xm = /\/XObject << ([^>]*) >>/.exec(pm[0]); xo.push(xm ? (xm[1].match(/Im\d+/g) || []) : []); } var ops = [], on = false; pages.forEach(function(lines, p){ lines.forEach(function(op){ var x; if ((x = /^BT \/F\d ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((.*)\) Tj ET$/.exec(op))) { if (x[4] === 'Comments' && +x[1] === 16) { on = true; return; } if (!on || /^Comments/.test(x[4])) return; ops.push({ k: 'text', s: x[4], page: p, x: +x[2], y: +x[3], top: +x[3] + +x[1], bottom: +x[3] - 2.5 }); return; } if (!on) return; if ((x = /^q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([-\d.]+) cm \/(Im\d+) Do Q$/.exec(op))) ops.push({ k: 'img', n: x[5], page: p, w: +x[1], h: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2], bottom: +x[4] }); }); }); var bad = []; ops.forEach(function(o, i){ if (o.bottom < 51 || o.top > 738.01) bad.push((o.n || o.s) + ' off the page'); if (o.k === 'img' && o.x + o.w > 558.01) bad.push(o.n + ' past the right margin'); if (o.k === 'img' && xo[o.page].indexOf(o.n) < 0) bad.push(o.n + ' not in page ' + (o.page + 1) + ' resources'); var q = ops[i - 1]; if (!q || q.page !== o.page || (q.k === 'text' && o.k === 'text' && q.y === o.y)) return; if (o.top > q.bottom + 0.01) bad.push((o.n || o.s) + ' (top ' + o.top.toFixed(2) + ') overlaps ' + (q.n || q.s) + ' (bottom ' + q.bottom.toFixed(2) + ')'); }); return { ops: ops, imgs: ops.filter(function(o){ return o.k === 'img'; }), bad: bad, at: function(s){ for (var i = 0; i < ops.length; i++) if (ops[i].s === s || ops[i].n === s) return i; return -1; } }; }; return true; })()
+eval (function(){ var pic = function(w, h, color, type){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(w / 4, h / 4, w / 2, h / 2); return c.toDataURL(type, 0.9); }; var im = function(u){ return '<img src="' + u + '" class="comment-img">'; }; var push = []; for (var i = 1; i <= 36; i++) push.push('Push ' + i); window.__cpics = { push: pic(400, 300, '#2a6', 'image/png'), png: pic(120, 80, '#c33', 'image/png'), jpg: pic(200, 300, '#36c', 'image/jpeg'), reply: pic(640, 480, '#c90', 'image/jpeg') }; var doc = { schema: 2, title: 'Comment pictures', rows: [0, 1, 2].map(function(i){ return { id: 'cp-row-' + i, visualText: 'Scene ' + i, audioText: 'Audio ' + i, status: 'todo' }; }), comments: [ { id: 'cp-c1', rowId: 'cp-row-0', field: 'audioText', author: 'Ann', createdAt: '2026-09-01T10:00:00Z', body: push.join('<br>') + im(__cpics.push) + 'PUSHAFTER', replies: [] }, { id: 'cp-c2', rowId: 'cp-row-1', field: 'audioText', author: 'Ann', createdAt: '2026-09-02T10:00:00Z', body: 'BEFOREPIC ' + im(__cpics.png) + ' BETWEENPICS<br>' + im(__cpics.jpg) + 'AFTERPICS', replies: [ { id: 'cp-r1', author: 'Bob', createdAt: '2026-09-03T10:00:00Z', body: 'REPLYBEFORE ' + im(__cpics.reply) + ' REPLYAFTER' } ] }, { id: 'cp-c3', rowId: 'cp-row-2', field: 'audioText', author: 'Ann', createdAt: '2026-09-04T10:00:00Z', body: 'GONEBEFORE <img class="comment-img" data-blob="' + 'e'.repeat(64) + '"> GONEAFTER', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'comment-pictures.splitpage')); return true; })()
+wait F.state().title === 'Comment pictures' && F.state().comments.length === 3
+# the open path stored every picture by reference, bytes in the registry
+expect F.state().comments[1].body.indexOf('data:image') === -1 && (F.state().comments[1].body.match(/data-blob="[0-9a-f]{64}"/g) || []).length === 2 && /data-blob="[0-9a-f]{64}"/.test(F.state().comments[1].replies[0].body)
+eval (function(){ window.__lastPdfBlob = window.__blobs[window.__blobs.length - 1]; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+wait (function(){ var b = window.__blobs[window.__blobs.length - 1]; return !!b && b.type === 'application/pdf' && b !== window.__lastPdfBlob; })()
+eval (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length - 1].arrayBuffer())); window.__cl = __cmtLayout(t); return JSON.stringify({ imgs: __cl.imgs.map(function(i){ return i.n + '@p' + (i.page + 1) + ' x=' + i.x + ' ' + i.w.toFixed(2) + 'x' + i.h.toFixed(2) + ' y=' + i.y.toFixed(2); }), bad: __cl.bad }); })()
+# all four comment pictures drawn, each its own image
+expect __cl.imgs.length === 4 && __cl.imgs.map(function(i){ return i.n; }).filter(function(n, i, a){ return a.indexOf(n) === i; }).length === 4
+# nothing overlaps the thing before it, runs off a page or past the margin,
+# and every picture is in its own page's resources
+expect __cl.bad.length === 0
+# in the order the bodies have them: text, PNG, text, JPEG, text; then the
+# reply's text, JPEG, text
+expect [__cl.at('BEFOREPIC'), __cl.at(__cl.imgs[1].n), __cl.at('BETWEENPICS'), __cl.at(__cl.imgs[2].n), __cl.at('AFTERPICS'), __cl.at('REPLYBEFORE'), __cl.at(__cl.imgs[3].n), __cl.at('REPLYAFTER')].every(function(v, i, a){ return v >= 0 && (i === 0 || v > a[i - 1]); })
+# sized in the column: the small PNG at its own size (120 x 80 px at 96 dpi),
+# never enlarged; the portrait JPEG kept portrait; the reply's large JPEG
+# at 60% of the reply column, 4:3; each at its body's indent
+expect __cl.imgs[1].w === 90 && __cl.imgs[1].h === 60 && __cl.imgs[1].x === 66
+expect __cl.imgs[2].w === 150 && __cl.imgs[2].h === 225
+expect __cl.imgs[3].w === 288 && __cl.imgs[3].h === 216 && __cl.imgs[3].x === 78
+# thread 1's picture did not fit under its 36 lines, so it starts the
+# next page, whole, under the continued heading — and the text after it follows it
+expect (function(){ var i = __cl.at(__cl.imgs[0].n), p = __cl.ops[i - 1], im = __cl.imgs[0]; return p.s === '36' && p.page < im.page && p.y - 13 - 3 - im.h < 54 && im.top > 738 - 60 && __cl.ops[i + 1].s === 'PUSHAFTER' && __cl.ops[i + 1].page === im.page; })()
+# those 36 lines are one paragraph: each exactly one line height (13pt)
+# under the one before, not the 22.5pt of every line being spaced as the
+# start of a new part of the thread
+expect (function(){ var ys = __cl.ops.filter(function(o){ return o.s === 'Push'; }).map(function(o){ return o.y; }); return ys.length === 36 && ys.every(function(y, i){ return i === 0 || Math.abs(ys[i - 1] - y - 13) < 0.005; }); })()
+# the picture nobody has is a short note, where it was
+expect (function(){ var i = __cl.at('[image'); return i > __cl.at('GONEBEFORE') && __cl.ops[i + 1].s === 'unavailable]' && __cl.at('GONEAFTER') > i; })()
+
+# =============================================================================
+# Word, Markdown, CSV and .txt — pictures in comments and replies. The .docx
+# embeds each in its place in the thread, as the type it is; the text
+# formats write "[image]" there. Thread 1 has a PNG and a JPEG in its body,
+# a reply with a JPEG between text and a picture-only reply showing the
+# body's PNG again (one media part); thread 2 is an image conflict card,
+# picture only (it used to read "(empty)"); thread 3 names a picture nobody
+# has. Opened through the real open path, exported through the File menu.
+# =============================================================================
+
+eval (function(){ var pic = function(w, h, color, type){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(w / 4, h / 4, w / 2, h / 2); return c.toDataURL(type, 0.9); }; var im = function(u){ return '<img src="' + u + '" class="comment-img">'; }; var p = { png: pic(120, 80, '#a3c', 'image/png'), jpg: pic(200, 300, '#3ac', 'image/jpeg'), reply: pic(640, 480, '#ca3', 'image/jpeg'), conflict: pic(320, 240, '#3c6', 'image/png') }; var doc = { schema: 2, title: 'Comment pictures docx', rows: [0, 1, 2].map(function(i){ return { id: 'dx-row-' + i, visualText: 'Scene ' + i, audioText: 'Audio ' + i, status: 'todo' }; }), comments: [ { id: 'dx-c1', rowId: 'dx-row-0', field: 'audioText', author: 'Ann', createdAt: '2026-09-01T10:00:00Z', body: 'DXBEFORE ' + im(p.png) + ' DXBETWEEN<br>' + im(p.jpg) + 'DXAFTER', replies: [ { id: 'dx-r1', author: 'Bob', createdAt: '2026-09-02T10:00:00Z', body: 'DXREPLY ' + im(p.reply) + ' DXREPLYAFTER' }, { id: 'dx-r2', author: 'Cy', createdAt: '2026-09-03T10:00:00Z', body: im(p.png) } ] }, { id: 'dx-c2', kind: 'conflict', rowId: 'dx-row-1', field: 'visualImage', conflictField: 'Visual image', author: 'Dee', createdAt: '2026-09-04T10:00:00Z', body: im(p.conflict), replies: [] }, { id: 'dx-c3', rowId: 'dx-row-2', field: 'audioText', author: 'Ann', createdAt: '2026-09-05T10:00:00Z', body: 'DXGONE <img class="comment-img" data-blob="' + 'd'.repeat(64) + '"> DXGONEAFTER', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'comment-pictures-docx.splitpage')); return true; })()
+wait F.state().title === 'Comment pictures docx' && F.state().comments.length === 3
+expect F.state().comments[1].imageValue && /^[0-9a-f]{64}$/.test(F.state().comments[1].imageValue.sha256) && (F.state().comments[0].body.match(/data-blob="[0-9a-f]{64}"/g) || []).length === 2
+
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ var files = window.__unzip(new Uint8Array(await window.__blobs[window.__blobs.length - 1].arrayBuffer())), dec = new TextDecoder(), W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'; var parse = function(n){ return new DOMParser().parseFromString(dec.decode(files[n]), 'application/xml'); }; var doc = parse('word/document.xml'), rels = {}; [].forEach.call(parse('word/_rels/document.xml.rels').getElementsByTagName('Relationship'), function(r){ rels[r.getAttribute('Id')] = r.getAttribute('Target'); }); var ps = [].filter.call(doc.getElementsByTagNameNS(W, 'body')[0].childNodes, function(n){ return n.localName === 'p'; }); var start = -1; ps.forEach(function(p, i){ if (start < 0 && p.textContent === 'Comments') start = i; }); var seq = ps.slice(start + 1).map(function(p){ var b = p.getElementsByTagName('a:blip')[0], ind = p.getElementsByTagNameNS(W, 'ind')[0], e = p.getElementsByTagName('wp:extent')[0]; return b ? { img: rels[b.getAttributeNS(R, 'embed')], cx: +e.getAttribute('cx'), cy: +e.getAttribute('cy'), ind: ind ? +ind.getAttributeNS(W, 'left') : 0 } : { s: p.textContent, i: p.getElementsByTagNameNS(W, 'i').length > 0 }; }); var ids = [].map.call(doc.getElementsByTagName('wp:docPr'), function(d){ return d.getAttribute('id'); }); window.__dx = { names: Object.keys(files), media: Object.keys(rels).filter(function(k){ return /^media\//.test(rels[k]); }).map(function(k){ return rels[k]; }), types: dec.decode(files['[Content_Types].xml']), parses: !doc.querySelector('parsererror') && start >= 0, seq: seq, key: seq.map(function(x){ return x.img ? 'IMG:' + x.img : x.s; }), ids: ids }; return JSON.stringify({ media: __dx.media, key: __dx.key }); })()
+expect __dx.parses
+# four media parts — the body's PNG and JPEG, the reply's JPEG, the conflict
+# card's PNG — each named and declared as its type; the PNG the second reply
+# shows again is the same part
+expect JSON.stringify(__dx.media) === JSON.stringify(['media/image1.png', 'media/image2.jpeg', 'media/image3.jpeg', 'media/image4.png'])
+expect ['word/media/image1.png', 'word/media/image2.jpeg', 'word/media/image3.jpeg', 'word/media/image4.png'].every(function(n){ return __dx.names.indexOf(n) !== -1; })
+expect __dx.types.indexOf('<Default Extension="png" ContentType="image/png"/>') !== -1 && __dx.types.indexOf('<Default Extension="jpeg" ContentType="image/jpeg"/>') !== -1
+expect __dx.ids.length === 5 && __dx.ids.filter(function(v, i, a){ return a.indexOf(v) === i; }).length === 5
+# in the order the bodies have them, at the comment's and the reply's indent
+expect (function(){ var k = __dx.key, at = function(s, f){ return k.indexOf(s, f || 0); }, r = at('DXREPLY'); var o = [at('DXBEFORE'), at('IMG:media/image1.png'), at('DXBETWEEN'), at('IMG:media/image2.jpeg'), at('DXAFTER'), r, at('IMG:media/image3.jpeg'), at('DXREPLYAFTER'), at('IMG:media/image1.png', r)]; return o.every(function(v, i){ return v >= 0 && (i === 0 || v > o[i - 1]); }) && __dx.seq[o[1]].ind === 360 && __dx.seq[o[6]].ind === 720 && __dx.seq[o[8]].ind === 720; })()
+# sized like the PDF: the small PNG at its own pixels at 96 dpi, the portrait
+# JPEG kept portrait, the reply's large JPEG at 60% of the reply column, 4:3
+expect (function(){ var s = __dx.seq.filter(function(x){ return x.img; }); return s[0].cx === 120 * 9525 && s[0].cy === 80 * 9525 && s[1].cx === 200 * 9525 && s[1].cy === 300 * 9525 && s[2].cx === Math.round(9360 * 635 * 0.6) && Math.abs(s[2].cx / s[2].cy - 4 / 3) < 0.001; })()
+# the conflict card prints its picture, not "(empty)"
+expect __dx.key.indexOf('(empty)') === -1 && __dx.key.indexOf('IMG:media/image4.png') > __dx.key.indexOf('DXREPLYAFTER')
+# the picture nobody has: an italic note where it was
+expect (function(){ var i = __dx.key.indexOf('DXGONE'); return i > 0 && __dx.key[i + 1] === '[image unavailable]' && __dx.seq[i + 1].i && __dx.key[i + 2] === 'DXGONEAFTER'; })()
+
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__dxMd = await window.__blobs[window.__blobs.length - 1].text(); return window.__dxMd.slice(window.__dxMd.indexOf('## Comments')); })()
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md-table"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__dxMdTable = await window.__blobs[window.__blobs.length - 1].text(); return true; })()
+# Markdown, both shapes: "[image]" where each picture was, nothing "(empty)"
+expect [__dxMd, __dxMdTable].every(function(md){ var t = md.slice(md.indexOf('## Comments')); return t.indexOf('DXBEFORE  \n[image]  \nDXBETWEEN  \n[image]  \nDXAFTER') !== -1 && t.indexOf('DXREPLY  \n> [image]  \n> DXREPLYAFTER') !== -1 && /\*\*Cy\*\*[^\n]*:  \[image\]\n/.test(t) && /Dee[^\n]*\n\n\[image\]\n/.test(t) && t.indexOf('DXGONE  \n[image]  \nDXGONEAFTER') !== -1 && t.indexOf('(empty)') === -1; })
+
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-csv"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__dxCsv = await window.__blobs[window.__blobs.length - 1].text(); return window.__dxCsv.slice(window.__dxCsv.indexOf('Comments')); })()
+# CSV: the Comment column, in reading order; the picture-only reply and the
+# conflict card read "[image]"
+expect __dxCsv.indexOf('"DXBEFORE\n[image]\nDXBETWEEN\n[image]\nDXAFTER"') !== -1 && __dxCsv.indexOf('"DXREPLY\n[image]\nDXREPLYAFTER"') !== -1 && __dxCsv.indexOf('"DXGONE\n[image]\nDXGONEAFTER"') !== -1
+expect __dxCsv.split('\r\n').filter(function(l){ return /,\[image\]$/.test(l); }).length === 2 && /↳ Cy,[^\r\n]*,\[image\]\r\n/.test(__dxCsv) && /,Dee,[^\r\n]*,\[image\]\r\n/.test(__dxCsv)
+
+# .txt — written only back to a foreign .txt (its import home): open one,
+# carry this document's comments into it, Save to file, read what was written
+eval (function(){ window.__dxComments = JSON.parse(JSON.stringify(F.state().comments)); window.__txtBody = null; window.__txtH = { name: 'dx.txt', createWritable: async function(){ return { write: async function(b){ window.__txtBody = b; }, close: async function(){} }; }, getFile: async function(){ return new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }); } }; return F.openFile(new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }), window.__txtH); })()
+wait window.__hostedTest.home().kind === 'import' && window.__hostedTest.home().name === 'dx.txt'
+eval (function(){ var rid = F.state().rows[0].id; F.state().comments = __dxComments.map(function(c){ c.rowId = rid; return c; }); return F.state().comments.length; })()
+jsclick #btn-file
+jsclick #menu-save-back
+wait window.__txtBody !== null
+eval (async function(){ var b = window.__txtBody; window.__dxTxt = typeof b === 'string' ? b : await new Blob([b]).text(); return window.__dxTxt.slice(window.__dxTxt.indexOf('COMMENTS')); })()
+expect __dxTxt.indexOf('  DXBEFORE\n  [image]\n  DXBETWEEN\n  [image]\n  DXAFTER') !== -1 && /> Bob, [^\n]*: DXREPLY\n    \[image\]\n    DXREPLYAFTER/.test(__dxTxt) && /> Cy, [^\n]*: \[image\]\n/.test(__dxTxt) && /Dee[^\n]*\n  \[image\]\n/.test(__dxTxt) && __dxTxt.indexOf('  DXGONE\n  [image]\n  DXGONEAFTER') !== -1 && __dxTxt.indexOf('(empty)') === -1
+
+# =============================================================================
+# Reopening a .docx Splitpage wrote: the script's rows and nothing else. Its
+# "Production breakdown" and "Comments" sections used to come back as rows —
+# each heading a bold row, each comment line a narration row, and a comment's
+# picture a row picture. They are recognised as the Heading1 after a table in
+# the export's own "SplitpageTable" style; a Word document of the user's own
+# with a "Comments" heading still imports it as before.
+# =============================================================================
+
+# the breakdown export from the top of this suite: two scenes, no heading row
+eval (async function(){ await F.openFile(new File([window.__bdDocx], 'breakdown.docx')); return JSON.stringify(F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText) }; })); })()
+expect F.state().rows.length === 2 && JSON.stringify(F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText) }; })) === JSON.stringify(window.__bdRows)
+expect F.state().rows.every(function(r){ return (r.visualText + r.audioText).indexOf('Production breakdown') === -1 && (r.visualText + r.audioText).indexOf('rental house') === -1; })
+
+# scenes with pictures (a PNG, a JPEG, one without), comments with pictures,
+# a quote, replies with and without a picture, a resolved one and a picture
+# nobody has — exported to Word through the File menu and reopened
+eval (function(){ var pic = function(w, h, color, type){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL(type, 0.9); }; var im = function(u){ return '<img src="' + u + '" class="comment-img">'; }; var p = { row0: pic(160, 90, '#2a6', 'image/png'), row1: pic(90, 160, '#c33', 'image/jpeg'), c: pic(120, 80, '#36c', 'image/png'), r: pic(200, 150, '#c90', 'image/jpeg') }; var doc = { schema: 2, title: 'Reopen round trip', rows: [ { id: 'rt-0', visualText: 'RT wide shot', visualImage: p.row0, audioText: 'RT <strong>opening</strong> line', status: 'todo' }, { id: 'rt-1', visualText: '', visualImage: p.row1, audioText: 'RT second line', status: 'todo' }, { id: 'rt-2', visualText: 'RT close up', audioText: '', status: 'todo' } ], comments: [ { id: 'rt-c1', rowId: 'rt-0', field: 'audioText', author: 'Ann', quotedText: 'opening', assignee: 'Bob', createdAt: '2026-09-01T10:00:00Z', body: 'RTCOMMENT ' + im(p.c) + ' RTAFTERPIC', replies: [ { id: 'rt-r1', author: 'Bob', createdAt: '2026-09-02T10:00:00Z', body: 'RTREPLY ' + im(p.r) }, { id: 'rt-r2', author: 'Cy', createdAt: '2026-09-03T10:00:00Z', body: 'RTREPLYTEXT' } ] }, { id: 'rt-c2', rowId: 'rt-2', field: 'visualText', author: 'Dee', resolved: true, resolvedBy: 'Ann', createdAt: '2026-09-04T10:00:00Z', body: im(p.c), replies: [] }, { id: 'rt-c3', rowId: 'rt-1', field: 'audioText', author: 'Ann', createdAt: '2026-09-05T10:00:00Z', body: 'RTGONE <img class="comment-img" data-blob="' + 'c'.repeat(64) + '">', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'reopen.splitpage')); return true; })()
+wait F.state().title === 'Reopen round trip' && F.state().comments.length === 3
+eval (function(){ window.__rtBefore = F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText), pic: r.imageRef ? r.imageRef.width + 'x' + r.imageRef.height : null }; }); window.__nBlobs = window.__blobs.length; return JSON.stringify(window.__rtBefore); })()
+expect __rtBefore.length === 3 && __rtBefore[0].pic === '160x90' && __rtBefore[1].pic === '90x160' && __rtBefore[2].pic === null
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__rtDocx = window.__blobs[window.__blobs.length - 1]; var xml = new TextDecoder().decode(window.__unzip(new Uint8Array(await window.__rtDocx.arrayBuffer()))['word/document.xml']); window.__rtHasComments = xml.indexOf('RTCOMMENT') !== -1 && xml.indexOf('RTREPLY') !== -1 && (xml.match(/<a:blip /g) || []).length === 5; return window.__rtHasComments; })()
+# the export really carries the comments section and its three pictures
+expect __rtHasComments
+eval (async function(){ await F.openFile(new File([window.__rtDocx], 'reopen.docx')); return JSON.stringify(F.state().rows.map(function(r){ return r.visualText + ' | ' + r.audioText + ' | ' + (r.imageRef ? r.imageRef.width + 'x' + r.imageRef.height : '-'); })); })()
+wait F.state().title === 'Reopen round trip' && F.state().comments.length === 0
+# exactly the script's three rows, their text and their pictures
+expect JSON.stringify(F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText), pic: r.imageRef ? r.imageRef.width + 'x' + r.imageRef.height : null }; })) === JSON.stringify(__rtBefore)
+# no comment line, heading, author or picture became a row
+expect F.state().rows.every(function(r){ var t = r.visualText + ' ' + r.audioText; return !/RTCOMMENT|RTAFTERPIC|RTREPLY|RTGONE|image unavailable|Comments|Ann|Dee/.test(t); })
+expect F.state().rows.filter(function(r){ return r.imageRef; }).length === 2
+# the one bold word is still bold, not the text "<strong>opening</strong>"
+expect F.state().rows[0].audioText.indexOf('<strong>opening</strong>') !== -1 && F.state().rows[0].audioText.indexOf('&lt;') === -1
+
+# a Word document of the user's own — a table in Word's style, then a
+# "Comments" heading of its own — still imports every line of it, written
+# here with a store-only zip (the importer reads no CRC)
+eval (function(){ var enc = new TextEncoder(); var u16 = function(n){ return [n & 255, n >> 8 & 255]; }, u32 = function(n){ return [n & 255, n >> 8 & 255, n >> 16 & 255, n >>> 24 & 255]; }; window.__zipStore = function(entries){ var local = [], central = [], off = 0; entries.forEach(function(e){ var name = enc.encode(e.name), data = enc.encode(e.text); var lh = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(0), u32(data.length), u32(data.length), u16(name.length), u16(0)); local.push(new Uint8Array(lh), name, data); central.push(new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(0), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off))), name); off += lh.length + name.length + data.length; }); var cdLen = central.reduce(function(a, b){ return a + b.length; }, 0); return new Blob(local.concat(central, [new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length), u32(cdLen), u32(off), u16(0)))])); }; var p = function(t, st){ return '<w:p>' + (st ? '<w:pPr><w:pStyle w:val="' + st + '"/></w:pPr>' : '') + '<w:r><w:t>' + t + '</w:t></w:r></w:p>'; }, tc = function(t){ return '<w:tc>' + p(t) + '</w:tc>'; }; var body = p('Foreign script', 'Title') + '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr><w:tr>' + tc('Visual') + tc('Audio') + '</w:tr><w:tr>' + tc('FOREIGN shot') + tc('FOREIGN line') + '</w:tr></w:tbl>' + p('Comments', 'Heading1') + p('FOREIGN note under comments'); window.__foreignDocx = window.__zipStore([{ name: 'word/document.xml', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + body + '</w:body></w:document>' }]); return window.__foreignDocx.size; })()
+eval (async function(){ await F.openFile(new File([window.__foreignDocx], 'foreign.docx')); return JSON.stringify(F.state().rows.map(function(r){ return r.visualText + ' | ' + r.audioText; })); })()
+wait F.state().title === 'Foreign script'
+expect JSON.stringify(F.state().rows.map(function(r){ return [__text(r.visualText), __text(r.audioText)]; })) === JSON.stringify([['FOREIGN shot', 'FOREIGN line'], ['Comments', ''], ['', 'FOREIGN note under comments']])
+
+# =============================================================================
+# Formatting survives File ▸ Open of a .docx — and a second trip changes
+# nothing. docxToRows hands back HTML; loadFileIntoEditor built the new
+# document through migrateRows() with no schema, which read those rows as
+# pre-rich-text Markdown and ran legacyMdToHtml over them: every <strong>,
+# <em> and link became visible text ("&lt;strong&gt;"), every "&" became
+# "&amp;", and each further export and reopen escaped it once more.
+# =============================================================================
+
+eval (function(){ var doc = { schema: 2, title: 'Format round trip', rows: [ { id: 'fm-0', visualText: 'FM <strong>bold shot</strong> of Tom &amp; Jerry &lt;cut&gt;', audioText: 'Say it <em>slowly</em>, then <a href="https://example.com/p?a=1&amp;b=2" target="_blank" rel="noopener">read the link</a> and <strong><em>both at once</em></strong>.', status: 'todo' }, { id: 'fm-1', visualText: '<em>FM italic direction</em>', audioText: 'Plain line, <strong>one bold word</strong>.', status: 'todo' } ], comments: [] }; return F.openFile(new File([JSON.stringify(doc)], 'format.splitpage')).then(function(){ return true; }); })()
+wait F.state().title === 'Format round trip' && F.docFile().kind === 'splitpage'
+eval (function(){ window.__fmBefore = F.state().rows.map(function(r){ return { v: __marks(r.visualText), a: __marks(r.audioText) }; }); window.__nBlobs = window.__blobs.length; return JSON.stringify(window.__fmBefore); })()
+expect __fmBefore.length === 2 && JSON.stringify(__fmBefore[0].a).indexOf('a(https://example.com/p?a=1&b=2)') !== -1
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ await F.openFile(new File([window.__blobs[window.__blobs.length - 1]], 'format.docx')); return JSON.stringify(F.state().rows.map(function(r){ return r.visualText + ' | ' + r.audioText; })); })()
+wait F.state().title === 'Format round trip' && F.docFile().kind === null
+expect F.state().rows.length === 2
+# the same text with the same bold, italic and link (href and all) around it
+expect JSON.stringify(F.state().rows.map(function(r){ return { v: __marks(r.visualText), a: __marks(r.audioText) }; })) === JSON.stringify(__fmBefore)
+# real markup in the row, not the escaped text of it
+expect F.state().rows[0].visualText.indexOf('<strong>bold shot</strong>') !== -1
+expect F.state().rows[0].audioText.indexOf('<em>slowly</em>') !== -1
+expect F.state().rows[0].audioText.indexOf('<a href="https://example.com/p?a=1&amp;b=2"') !== -1
+expect F.state().rows[1].visualText.indexOf('<em>FM italic direction</em>') !== -1
+expect F.state().rows.every(function(r){ var h = r.visualText + r.audioText; return h.indexOf('&lt;strong') === -1 && h.indexOf('&lt;em') === -1 && h.indexOf('&lt;a ') === -1 && h.indexOf('&amp;amp;') === -1 && h.indexOf('&amp;lt;') === -1; })
+# what the reader sees: the "&" and "<cut>" as typed, no tag names
+expect __text(F.state().rows[0].visualText) === 'FM bold shot of Tom & Jerry <cut>'
+expect __text(F.state().rows[0].audioText) === 'Say it slowly, then read the link and both at once.'
+# the rendered cell agrees with the row
+expect document.querySelector('#rows .row .visual-cell .cell-editable strong') !== null && document.querySelector('#rows .row .visual-cell .cell-editable').textContent.indexOf('<strong>') === -1
+
+# a second export + reopen of that reopened document is byte-for-byte stable
+eval (function(){ window.__fm1 = JSON.stringify(F.state().rows.map(function(r){ return [r.visualText, r.audioText]; })); window.__nBlobs = window.__blobs.length; return window.__fm1; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ await F.openFile(new File([window.__blobs[window.__blobs.length - 1]], 'format-2.docx')); return JSON.stringify(F.state().rows.map(function(r){ return r.visualText + ' | ' + r.audioText; })); })()
+wait F.state().title === 'Format round trip'
+expect JSON.stringify(F.state().rows.map(function(r){ return [r.visualText, r.audioText]; })) === __fm1
+expect JSON.stringify(F.state().rows.map(function(r){ return { v: __marks(r.visualText), a: __marks(r.audioText) }; })) === JSON.stringify(__fmBefore)
 
 quit

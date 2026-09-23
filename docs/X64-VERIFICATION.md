@@ -140,8 +140,13 @@ git clone https://github.com/RetroGorilla/splitpage.git splitpage_local_developm
 cd splitpage_local_development
 git checkout Splitpage-electron
 git checkout <COMMIT>
-git config core.hooksPath .githooks
 ```
+
+(A `git config core.hooksPath .githooks` step used to be here. `.githooks/`
+is gone since #80: `index.html` is no longer tracked, so there is no longer a
+committed build output for a hook to keep in step or a committed demo
+document for it to protect. Run `npm install && node build.mjs` after the
+checkout instead — a fresh clone has no `index.html` at all.)
 
 Every `.mjs` script in this repo needs Node to run at all — including the
 scripts that fetch a runtime for *packaging* the app — so if this machine

@@ -1,0 +1,207 @@
+# The compare-and-set save and its 409 merge (saveToServer, 13-hosted.js).
+#
+# This is the merge the README's collaboration story rests on and the only
+# one of the three that had no suite at all: the harness serves static files
+# and cannot start server.js, so there was no 409 to be had. There is one
+# here because `fetch` is replaced for PUTs to api/docs/ only — a queue of
+# answers in, a record of exactly what was sent out — which is enough to
+# drive the whole loop and to read back the two numbers that decide whether
+# anybody's work is lost. Everything else (GET, presence, update-status)
+# still goes to the real static server.
+#
+# The rest of the session comes from window.__hostedTest.setSession(), the
+# same hook 43-review-mode.txt uses.
+#
+# What it pins down (#72):
+#   * baseRev is the DOCUMENT's rev, taken from the server's own answers and
+#     nowhere else — 3 from the session, then 4 out of the 409 body, then 5
+#     out of the 200 body;
+#   * `state.rev` is NOT pre-incremented by the client. It is the merge
+#     counter inside the document (max-plus-one, 02-state.js) and moves only
+#     when a merge moves it. The client used to bump it on the way out and
+#     put it back on every failure, which was a second, private counter that
+#     drifted from the server's on every conflict;
+#   * both sides' edits survive the merge, and the banner only appears once
+#     the merged version is actually stored (reportMerge's alreadySaved).
+#
+# And what "Undo merge" means after one (#97). It used to mean nothing: the
+# undo point was filed and never armed (applyMerge's armUndo:false), so the
+# button answered "No merge snapshot to undo." Now:
+#   * the button is armed at the version the user was SAVING — the
+#     pre-merge document, never the merged one, and never a half-merged
+#     one from a second 409 inside the same save;
+#   * the banner says what it does: the merge is already on the server, so
+#     undoing is local, and the next save replaces the merged copy;
+#   * and it does: that save carries baseRev = the rev the merged save came
+#     back with, so the server's compare-and-set accepts it, and if
+#     somebody saved in between, the 409 merge measures against the merged
+#     base and keeps the undone changes undone.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats;return typeof F.save === 'function';})()
+expect true
+
+# A hosted document autosaves from the first keystroke, and every one of
+# those writes would take an answer out of the queue below.
+eval (function(){ if (F.autosave.enabled()) F.autosave.toggle(); return F.autosave.enabled() === false; })()
+expect true
+
+# The fake server: PUTs to api/docs/ are recorded and answered from
+# __answers; everything else goes through to the real one.
+eval (function(){ window.__puts = []; window.__answers = []; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); if (opts && opts.method === 'PUT' && u.indexOf('api/docs/') !== -1) { window.__puts.push(JSON.parse(opts.body)); var a = window.__answers.shift(); return Promise.resolve(new Response(JSON.stringify(a.body), {status: a.status, headers: {'content-type':'application/json'}})); } return real(url, opts); }; return true; })()
+expect true
+
+# connected, editing, and this view loaded the document at the server's rev 3
+eval (function(){ window.__hostedTest.setSession({docId:'doc-409', rev: 3}); return window.__hostedTest.role(); })()
+expect 'edit'
+
+# Their version: scene 2 reworded, and a merge counter of its own that has
+# nothing to do with ours — proving the counter the retry carries is the
+# merge's max-plus-one and not something the client invented.
+eval (function(){ window.__theirs = F.clone(F.state()); window.__theirs.rows[1].audioText = 'THEIRSCENETWO'; window.__theirs.rev = 2; return window.__theirs.rows.length; })()
+
+# ours: scene 1
+caret #rows .row .audio-cell .cell-editable
+type MINESCENEONE
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('MINESCENEONE') !== -1
+
+# somebody published between our load and our write, then we win the retry
+eval (function(){ window.__revBefore = F.state().rev; window.__answers = [ {status:409, body:{error:'conflict', rev:4, state: window.__theirs}}, {status:200, body:{id:'doc-409', rev:5, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return window.__revBefore; })()
+eval (async function(){ await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 2
+
+# the compare-and-set numbers, each one the server's own
+expect window.__puts[0].baseRev === 3
+expect window.__puts[1].baseRev === 4
+
+# the document's merge counter: untouched on the way out, moved only by the
+# merge that actually happened
+expect window.__puts[0].state.rev === window.__revBefore
+expect window.__puts[1].state.rev === Math.max(window.__revBefore, 2) + 1
+expect F.state().rev === window.__puts[1].state.rev
+
+# nobody's work was lost, and what went up is what is on screen
+expect document.querySelector('#rows').textContent.indexOf('MINESCENEONE') !== -1
+expect document.querySelector('#rows').textContent.indexOf('THEIRSCENETWO') !== -1
+expect window.__puts[1].state.rows[0].audioText.indexOf('MINESCENEONE') !== -1
+expect window.__puts[1].state.rows[1].audioText.indexOf('THEIRSCENETWO') !== -1
+
+# reported only once it was stored — the banner can never describe a merge
+# that failed to save
+expect !document.getElementById('merge-banner').hidden
+
+# --- "Undo merge" is offered, and says what it does (#97) ----------------
+# The merge is already on the server, so Undo can only put the user's
+# version back here; the banner says the next save is what replaces the
+# merged copy.
+expect !document.getElementById('merge-undo').hidden
+expect document.getElementById('merge-summary').textContent.indexOf('Undo merge puts your version back here; the next save replaces the merged copy on the server.') !== -1
+
+# One undo point for one merge, labelled for this path.
+eval (async function(){ await window.__historyTest.idle(); var h = await window.__historyTest.listRaw(F.docId()); window.__conflictSnaps = function(list){ return list.filter(function(e){ return e.label === "Before merging in someone else's changes"; }).length; }; window.__snapsA = window.__conflictSnaps(h); return window.__snapsA; })()
+expect window.__snapsA === 1
+
+# Clicked: the confirm names what it drops — THEIR changes, not "my
+# edits", because the undo point here is the user's own version.
+eval (function(){ window.__warnBefore = document.querySelectorAll('.toast.warn').length; return true; })()
+click #merge-undo
+expect document.getElementById('merge-undo').classList.contains('armed')
+expect document.getElementById('merge-undo').textContent === 'Drop their changes?'
+click #merge-undo
+
+# The restore is the PRE-MERGE document: ours kept, theirs gone. The undo
+# point is what this save was publishing, not the merged result.
+wait F.state().rows[1].audioText.indexOf('THEIRSCENETWO') === -1
+expect F.state().rows[0].audioText.indexOf('MINESCENEONE') !== -1
+expect document.querySelector('#rows').textContent.indexOf('THEIRSCENETWO') === -1
+expect Array.prototype.some.call(document.querySelectorAll('.toast'), function(t){ return t.textContent.indexOf('Your version is back, unsaved. The next save replaces the merged copy on the server.') !== -1; })
+expect !Array.prototype.some.call(document.querySelectorAll('.toast.warn'), function(t){ return t.textContent.indexOf('No merge snapshot to undo') !== -1; })
+expect document.querySelectorAll('.toast.warn').length === window.__warnBefore
+# local and unsaved: nothing went out, and the document is dirty
+expect window.__puts.length === 2
+expect document.getElementById('btn-save').classList.contains('is-dirty')
+# the merge base is still what the server confirmed — the merged version
+expect window.__hostedTest.base().rows[1].audioText.indexOf('THEIRSCENETWO') !== -1
+expect window.__hostedTest.home().rev === 5
+
+# --- the next save, after somebody else saved again ----------------------
+# baseRev is 5, the rev the merged save came back with — a real server that
+# still holds rev 5 accepts it outright and the pre-merge version replaces
+# the merged one. Here somebody saved first (rev 6: the merged document plus
+# a new visual on scene 1), so it conflicts. The merge measures against the
+# merged base, sees the undone scene 2 as THIS side's edit, and keeps it
+# undone; only their NEW change comes in. Undo is not quietly re-merged.
+eval (function(){ window.__theirs2 = F.clone(window.__puts[1].state); window.__theirs2.rows[0].visualText = 'THEIRVISUALONE'; window.__answers = [ {status:409, body:{error:'conflict', rev:6, state: window.__theirs2}}, {status:200, body:{id:'doc-409', rev:7, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return true; })()
+eval (async function(){ await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 4
+expect window.__puts[2].baseRev === 5
+expect window.__puts[2].state.rows[1].audioText.indexOf('THEIRSCENETWO') === -1
+expect window.__puts[2].state.rows[0].audioText.indexOf('MINESCENEONE') !== -1
+expect window.__puts[3].baseRev === 6
+expect window.__puts[3].state.rows[1].audioText.indexOf('THEIRSCENETWO') === -1
+expect window.__puts[3].state.rows[0].audioText.indexOf('MINESCENEONE') !== -1
+expect window.__puts[3].state.rows[0].visualText.indexOf('THEIRVISUALONE') !== -1
+expect window.__hostedTest.home().rev === 7
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+
+# --- two 409s in one save: the undo point is still the user's version ----
+# The second round finds the first round's merge on screen — a document the
+# user never had. Only the first round files an undo point, so Undo lands
+# on what they were saving, not on half a merge.
+caret #rows .row .audio-cell .cell-editable
+type MINEB
+eval document.activeElement.blur()
+wait F.state().rows[0].audioText.indexOf('MINEB') !== -1
+eval (async function(){ await window.__historyTest.idle(); window.__snapsB0 = window.__conflictSnaps(await window.__historyTest.listRaw(F.docId())); return window.__snapsB0; })()
+eval (function(){ var b1 = F.clone(window.__puts[3].state); b1.rows[1].visualText = 'B1THEIRS'; var b2 = F.clone(b1); b2.rows[0].visualText = 'B2THEIRS'; window.__answers = [ {status:409, body:{error:'conflict', rev:8, state: b1}}, {status:409, body:{error:'conflict', rev:9, state: b2}}, {status:200, body:{id:'doc-409', rev:10, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; return true; })()
+eval (async function(){ await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 7
+expect window.__puts[4].baseRev === 7
+expect window.__puts[5].baseRev === 8
+expect window.__puts[6].baseRev === 9
+expect window.__puts[6].state.rows[0].audioText.indexOf('MINEB') !== -1
+expect window.__puts[6].state.rows[1].visualText.indexOf('B1THEIRS') !== -1
+expect window.__puts[6].state.rows[0].visualText.indexOf('B2THEIRS') !== -1
+expect !document.getElementById('merge-undo').hidden
+eval (async function(){ await window.__historyTest.idle(); window.__snapsB1 = window.__conflictSnaps(await window.__historyTest.listRaw(F.docId())); return window.__snapsB1; })()
+expect window.__snapsB1 === window.__snapsB0 + 1
+
+click #merge-undo
+expect document.getElementById('merge-undo').textContent === 'Drop their changes?'
+click #merge-undo
+wait F.state().rows[1].visualText.indexOf('B1THEIRS') === -1
+expect F.state().rows[0].visualText.indexOf('B2THEIRS') === -1
+expect F.state().rows[0].audioText.indexOf('MINEB') !== -1
+expect F.state().rows[0].visualText.indexOf('THEIRVISUALONE') !== -1
+
+# ...and with nobody saving in between, the next save goes out at the rev
+# the merged save came back with, which is the rev the server holds, so a
+# real server accepts it: the user's version replaces the merged copy.
+eval (async function(){ window.__answers = [ {status:200, body:{id:'doc-409', rev:11, updatedAt:new Date().toISOString(), updatedBy:'Someone'}} ]; await F.save(); return window.__puts.length; })()
+expect window.__puts.length === 8
+expect window.__puts[7].baseRev === 10
+expect window.__puts[7].state.rows[0].audioText.indexOf('MINEB') !== -1
+expect window.__puts[7].state.rows[1].visualText.indexOf('B1THEIRS') === -1
+expect window.__puts[7].state.rows[0].visualText.indexOf('B2THEIRS') === -1
+expect window.__hostedTest.home().rev === 11
+expect !document.getElementById('btn-save').classList.contains('is-dirty')
+
+# --- a pull takes the button away, even with a 409's undo point armed -----
+# The pull channel (#69, tests/55-pull-merge.txt) files no undo point on
+# purpose, and undoing one would throw away a collaborator's saved work. So
+# its banner offers no "Undo merge" at all — not even the one the 409 above
+# left armed, which now points at a version from before their save arrived.
+# 55 cannot show this half: nothing arms an undo point there first. A GET of
+# this document is answered here the way 55 answers one.
+expect !document.getElementById('merge-undo').hidden
+eval (function(){ window.__pulled = F.clone(F.state()); window.__pulled.rows[1].audioText = 'PULLEDTWO'; var prev = window.fetch; window.fetch = function(url, opts){ var u = String(url); if ((!opts || !opts.method || opts.method === 'GET') && u.indexOf('api/docs/doc-409') !== -1) return Promise.resolve(new Response(JSON.stringify({id:'doc-409', rev:12, state: window.__pulled, updatedAt:new Date().toISOString(), updatedBy:'Priya Malhotra'}), {status:200, headers:{'content-type':'application/json'}})); return prev(url, opts); }; window.__hostedTest.noteRev({docId:'doc-409', rev:12}); return true; })()
+wait document.querySelector('#rows').textContent.indexOf('PULLEDTWO') !== -1
+expect window.__hostedTest.home().rev === 12
+expect !document.getElementById('merge-banner').hidden
+expect document.getElementById('merge-undo').hidden
+expect document.getElementById('merge-summary').textContent.indexOf('Undo merge') === -1
+expect window.__puts.length === 8
+
+quit

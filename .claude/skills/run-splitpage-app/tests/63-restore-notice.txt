@@ -1,0 +1,53 @@
+# The desktop restore notice (initDesktop's onRestoreNotice, 20f-desktop.js):
+# a launch that could not bring back one or more remembered tabs (a missing
+# file, an unreadable one, a server document whose server never answered)
+# tells the user once, as one sticky warning toast naming each of them,
+# rather than failing silently.
+#
+# Main sends it as splitpage:restore-notice {skipped:[{name, reason}]}. There
+# is no Electron shell here, so window.__desktopTest swaps in its fake
+# backend, re-runs initDesktop() against it (the boot run saw no bridge and
+# registered nothing), and the fake's _fireRestoreNotice() hands the page the
+# exact payload main would. Every `eval` is one physical line.
+
+open
+
+eval (function(){ window.D = window.__desktopTest; window.F = window.__splitpageFormats; window.fakeR = D.makeFakeBackend(); D.setBackend(window.fakeR); window.__rn = function(){ return Array.prototype.filter.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf('Could not restore') === 0 && !t.classList.contains('is-leaving'); }); }; return typeof window.fakeR._fireRestoreNotice; })()
+expect typeof window.fakeR._fireRestoreNotice === 'function'
+
+# ---- nothing is listening until initDesktop() registers the callback ----
+eval (function(){ window.fakeR._fireRestoreNotice({skipped: [{name: 'Early.splitpage', reason: 'missing'}]}); return window.__rn().length; })()
+expect window.__rn().length === 0
+
+eval (function(){ D.initDesktop(); window.__revBefore = F.state().rev; window.__idBefore = F.docId(); return true; })()
+
+# ---- a launch that skipped nothing says nothing -------------------------
+eval (function(){ window.fakeR._fireRestoreNotice({skipped: []}); window.fakeR._fireRestoreNotice({}); window.fakeR._fireRestoreNotice(null); return window.__rn().length; })()
+expect window.__rn().length === 0
+
+# ---- skipped tabs: one sticky warning naming each, with its reason ------
+# The reason words are the user's, not main's codes ("server-unreachable"
+# reads "server unreachable"); an unknown code is shown as-is and a nameless
+# entry reads "a document". A name is text, never markup.
+eval (function(){ window.fakeR._fireRestoreNotice({skipped: [{name: 'Pilot.splitpage', reason: 'missing'}, {name: 'Notes.md', reason: 'unreadable'}, {name: 'Shared draft', reason: 'server-unreachable'}, {reason: 'weird'}, {name: '<b>x</b>.md', reason: 'missing'}]}); return window.__rn().map(function(t){ return t.textContent; }); })()
+expect window.__rn().length === 1
+expect window.__rn()[0].textContent === 'Could not restore: Pilot.splitpage (missing), Notes.md (unreadable), Shared draft (server unreachable), a document (weird), <b>x</b>.md (missing).'
+expect window.__rn()[0].classList.contains('warn')
+expect window.__rn()[0].classList.contains('is-sticky')
+expect window.__rn()[0].querySelector('b') === null
+
+# ---- sticky: still up after an ordinary toast would have gone (2.6s) ----
+sleep 3200
+expect window.__rn().length === 1
+
+# ---- and it touched nothing about the document on screen ----------------
+expect F.state().rev === window.__revBefore
+expect F.docId() === window.__idBefore
+
+# ---- a click dismisses it -----------------------------------------------
+click #toast-host .toast.is-sticky.warn
+wait window.__rn().length === 0
+sleep 400
+expect Array.prototype.filter.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf('Could not restore') === 0; }).length === 0
+
+eval (function(){ D.restoreBackend(); return true; })()

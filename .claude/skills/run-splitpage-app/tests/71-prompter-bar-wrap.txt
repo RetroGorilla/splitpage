@@ -1,0 +1,150 @@
+# The teleprompter's control bar stays clickable wherever it wraps.
+#
+# #prompter-scroll is absolutely positioned (inset 0) inside .prompter-
+# viewport, the slice of the prompter above the bar. Its vertical padding
+# used to be 46vh — a share of the WINDOW — so once the bar wrapped onto a
+# second row the padding alone (92vh) outgrew that slice, the scroller grew
+# downward to fit it, and being positioned it painted over the bar's first
+# row: on Windows at 1400x864 (bar 108px, two rows) a click at the centre of
+# Follow My Voice, Play, Scene mode or the Speed slider landed on
+# #prompter-content and did nothing. The same happened on a narrow window,
+# whose 38vh padding overflowed a slice left even shorter by a three-to-six-
+# row bar. The padding is now 46cqh of the viewport box, which also clips.
+#
+# At each size below, every visible button and input in the bar must be the
+# element at its own centre (elementFromPoint), the scroller must end where
+# the bar begins, and the reading line must sit where 20-teleprompter.js's
+# maths put it: .prompter-guide at the middle of the viewport box AND at
+# scroller.clientHeight / 2 (cueScene()'s promptSceneGuideOffset, which
+# scene mode's boundary checks compare against — suite 49), a cued scene's
+# first word landing on it, the first line able to start on it and the last
+# able to scroll up to it. Mirror + Flip are checked once as well.
+#
+# Several viewports in one suite: resizing an open page with nothing but
+# evaluations in between holds up here (15-tutorial does the same); the
+# "set device metrics once" gotcha in SKILL.md bites after heavy DOM churn.
+# The rows() > 1 guards make sure each size really wraps the bar, even with
+# the container's narrower fallback fonts, so no check passes vacuously.
+#
+# window.__pb (defined once below; a resize keeps it):
+#   rows()        distinct control rows in the bar
+#   misses()      "ok", or each control whose centre hits something else
+#   fits()        "ok" when the scroller is exactly the viewport box, above the bar
+#   guide()       "ok" when the guide is at the box's middle and at clientHeight/2
+#   wordOnGuide() "ok" when some word's top is on the guide (after a cue)
+#   reach()       "ok" when the first line starts on the guide at scrollTop 0
+#                 and the last one ends within a line of it at the bottom
+
+open
+viewport 1400 864
+goto /index.html
+sleep 800
+eval window.__pb = (function () { function $(s) { return document.querySelector(s); } function r(el) { return el.getBoundingClientRect(); } function controls() { return Array.prototype.filter.call($('.prompter-bar').querySelectorAll('button, input'), function (el) { return !el.hidden && el.getClientRects().length > 0; }); } function guideY() { var g = r($('.prompter-guide')); return g.top + g.height / 2; } return { rows: function () { var tops = {}; controls().forEach(function (el) { var b = r(el); tops[Math.round((b.top + b.height / 2) / 12)] = 1; }); return Object.keys(tops).length; }, misses: function () { var bad = controls().filter(function (el) { var b = r(el), hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return !(hit && (hit === el || el.contains(hit))); }).map(function (el) { var b = r(el), hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return el.id + '->' + (hit ? (hit.id || hit.className || hit.tagName) : 'null'); }); return controls().length < 8 ? 'only ' + controls().length + ' controls' : (bad.length ? bad.join(' ') : 'ok'); }, fits: function () { var s = r($('#prompter-scroll')), v = r($('.prompter-viewport')), b = r($('.prompter-bar')); var ok = s.bottom <= b.top + 0.5 && Math.abs(s.top - v.top) < 0.5 && Math.abs(s.bottom - v.bottom) < 0.5; return ok ? 'ok' : 'scroll ' + s.top + '-' + s.bottom + ' viewport ' + v.top + '-' + v.bottom + ' bar top ' + b.top; }, guide: function () { var s = $('#prompter-scroll'), v = r($('.prompter-viewport')), y = guideY(); var jsLine = r(s).top + s.clientHeight / 2; var ok = Math.abs(y - (v.top + v.height / 2)) < 1 && Math.abs(y - jsLine) < 1; return ok ? 'ok' : 'guide ' + y + ' viewport middle ' + (v.top + v.height / 2) + ' clientHeight/2 line ' + jsLine; }, wordOnGuide: function () { var s = $('#prompter-scroll'), y = guideY(); if (s.scrollTop <= 0) return 'not scrolled'; var best = Infinity; document.querySelectorAll('#prompter-content .w').forEach(function (w) { best = Math.min(best, Math.abs(r(w).top - y)); }); return best < 1.5 ? 'ok' : 'nearest word top is ' + best + 'px off the guide'; }, reach: function () { var s = $('#prompter-scroll'), lines = document.querySelectorAll('#prompter-content .prompter-line'), y = guideY(); if (lines.length < 2) return 'only ' + lines.length + ' lines'; var lh = parseFloat(getComputedStyle(lines[0]).lineHeight); s.scrollTop = 0; var f = r(lines[0]); s.scrollTop = s.scrollHeight; var l = r(lines[lines.length - 1]); s.scrollTop = 0; var ok = f.top <= y && y <= f.top + lh && Math.abs(l.bottom - y) <= lh; return ok ? 'ok' : 'guide ' + y + ' first line top ' + f.top + ' last line bottom ' + l.bottom + ' line-height ' + lh; } }; })(), true
+expect typeof window.__pb.misses === 'function'
+click #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 300
+
+# --- 1400x864, the window it was reported at ---------------------------------
+# Under Windows' fonts the bar already wraps here; under the container's
+# narrower fallback it takes scene mode's Prev / readout / Next to wrap it.
+jsclick #pp-scene-mode
+sleep 300
+expect !document.getElementById('pp-scene-next').hidden
+expect __pb.rows() > 1
+expect __pb.misses() == ok
+expect __pb.fits() == ok
+expect __pb.guide() == ok
+jsclick #pp-scene-next
+sleep 300
+expect document.getElementById('pp-scene-readout').textContent == Scene 2 of 2
+expect __pb.wordOnGuide() == ok
+jsclick #pp-scene-mode
+sleep 300
+expect document.getElementById('pp-scene-next').hidden
+expect __pb.misses() == ok
+expect __pb.reach() == ok
+
+# --- 1000x864: the same height, wrapping with scene mode off ----------------
+viewport 1000 864
+sleep 500
+expect __pb.rows() > 1
+expect __pb.misses() == ok
+expect __pb.fits() == ok
+expect __pb.guide() == ok
+expect __pb.reach() == ok
+jsclick #pp-scene-mode
+sleep 300
+expect __pb.misses() == ok
+jsclick #pp-scene-next
+sleep 300
+expect __pb.wordOnGuide() == ok
+# Mirror + Flip together: the scroller turns in place inside its box, so the
+# box, the bar and the guide are where they were
+jsclick #pp-mirror
+jsclick #pp-flip
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('mirror') && document.getElementById('prompter-scroll').classList.contains('flip')
+expect __pb.misses() == ok
+expect __pb.fits() == ok
+expect __pb.guide() == ok
+jsclick #pp-mirror
+jsclick #pp-flip
+jsclick #pp-scene-mode
+sleep 300
+
+# --- 1100x700: shorter, so the old overflow reached the whole first row ------
+viewport 1100 700
+sleep 500
+expect __pb.rows() > 1
+expect __pb.misses() == ok
+expect __pb.fits() == ok
+expect __pb.guide() == ok
+expect __pb.reach() == ok
+
+# --- 740x420: the narrow-screen layout (max-width 760px), short --------------
+viewport 740 420
+sleep 500
+expect getComputedStyle(document.querySelector('.prompter-bar .div-sep')).display == none
+expect __pb.rows() > 2
+expect __pb.misses() == ok
+expect __pb.fits() == ok
+expect __pb.guide() == ok
+expect __pb.reach() == ok
+jsclick #pp-scene-mode
+sleep 300
+expect __pb.misses() == ok
+jsclick #pp-scene-next
+sleep 300
+expect __pb.wordOnGuide() == ok
+jsclick #pp-scene-mode
+sleep 300
+
+# --- 375x600: phone width, the bar at its tallest ----------------------------
+viewport 375 600
+sleep 500
+expect __pb.rows() > 3
+expect __pb.misses() == ok
+expect __pb.fits() == ok
+expect __pb.guide() == ok
+expect __pb.reach() == ok
+
+jsclick #pp-close
+sleep 300
+expect document.getElementById('prompter').hidden
+
+# --- an empty prompter's message sits on the reading line --------------------
+# With no audio text the prompter shows one message instead of lines. It
+# used to carry its own 40vh top padding on top of the scroller's, which put
+# it in the bottom fade (86-92% of the way down).
+viewport 1000 864
+eval (function(){ var st = window.__splitpageFormats.state(); st.rows.forEach(function(r){ r.audioText = ''; }); return true; })()
+click #btn-present
+wait !document.getElementById('prompter').hidden && !!document.querySelector('#prompter-content .prompter-empty')
+sleep 300
+eval (function(){ var e = document.querySelector('#prompter-content .prompter-empty').getBoundingClientRect(); var v = document.querySelector('.prompter-viewport').getBoundingClientRect(); var g = document.querySelector('.prompter-guide').getBoundingClientRect(); window.__emptyFrac = (e.top + e.height / 2 - v.top) / v.height; window.__emptyOnGuide = e.top <= g.top + g.height / 2 + 1 && g.top + g.height / 2 - 1 <= e.bottom; return window.__emptyFrac.toFixed(3) + ' ' + window.__emptyOnGuide; })()
+expect window.__emptyFrac > 0.4 && window.__emptyFrac < 0.6
+expect window.__emptyOnGuide === true
+jsclick #pp-close
+sleep 300
+quit

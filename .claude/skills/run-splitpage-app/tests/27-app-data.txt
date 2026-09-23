@@ -216,4 +216,103 @@ eval (async function(){ await A.importText('not json at all'); window.__c13Summa
 expect window.__c13Summary.ok === false
 expect window.__c13Summary.code === 'not-json'
 
+# =============================================================================
+# 14-19. images (#82 P7). Nothing in the app creates an imageRef yet, so the
+# snapshots below are built by hand and seeded through __historyTest's
+# importBundle; the images are real canvas PNGs interned and persisted
+# through __blobsTest (02c-blobs.js, IndexedDB 'splitpage-blobs').
+# clearBlobs() deletes that database, points the registry back at its own
+# backend choice (forgetting what it knew to be durable) and drops the bytes
+# it holds in memory — a fresh machine, as far as images go.
+# =============================================================================
+eval (function(){ window.B = window.__blobsTest; window.SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i; window.pngUrl = function(w, h, color, noise){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); if (noise) { var d = g.getImageData(0, 0, w, h); for (var i = 0; i < d.data.length; i++) d.data[i] = (i % 4 === 3) ? 255 : (Math.random() * 256) | 0; g.putImageData(d, 0, 0); } return c.toDataURL('image/png'); }; window.bodyOf = function(u){ return u.slice(u.indexOf(',') + 1); }; window.subtleHex = async function(bytes){ var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); return Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }; window.clearBlobs = async function(){ await new Promise(function(r){ var q = indexedDB.deleteDatabase('splitpage-blobs'); q.onsuccess = q.onerror = r; q.onblocked = function(){ setTimeout(r, 1000); }; }); A.useBlobBackend(null); B.forgetMemory(); return true; }; window.snap = function(id, atMs, state){ return { meta: { id: id, label: 'Blob ' + id, at: new Date(atMs).toISOString(), atMs: atMs, by: 'T', rows: (state.rows || []).length, title: state.title || '', kind: 'snapshot' }, stateJson: JSON.stringify(state) }; }; window.imgRow = function(rec){ return { id: 'r' + rec.sha256.slice(0, 6), visualText: '', audioText: 'x', imageRef: rec }; }; return !!(B && B.internDataUrl && B.idbRecord && A.useBlobBackend && A.exportFile && A.exportSummary && H.setExportCap); })()
+expect true
+
+# ---- 14. export: exactly the images the snapshots name, a missing one listed
+# r1 is a row's imageRef, r2 an <img data-blob> in a comment body, r3 is in
+# the store but named by nothing, M is named but its bytes exist nowhere.
+eval (async function(){ await H.resetForTest(); await clearBlobs(); window.u1 = pngUrl(31, 17, '#c33'); window.u2 = pngUrl(19, 29, '#3a6'); window.u3 = pngUrl(11, 13, '#36c'); window.r1 = B.internDataUrl(u1); window.r2 = B.internDataUrl(u2); window.r3 = B.internDataUrl(u3); window.M = 'ab'.repeat(32); window.c14Persist = await B.persist([r1.sha256, r2.sha256, r3.sha256]); window.bd = did('b1'); window.bd2 = did('b2'); var docA = { docId: bd, title: 'Blob Doc', snapshots: [ snap('sblob1', 1000, { title: 'Blob Doc', docId: bd, rows: [imgRow(r1)], comments: [{ id: 'c1', body: '<p>see <img class="comment-img" data-blob="' + r2.sha256 + '" data-w="19" data-h="29" data-mime="image/png"></p>', replies: [] }] }), snap('sblob2', 2000, { title: 'Blob Doc', docId: bd, rows: [{ id: 'rm', audioText: 'm', imageRef: { sha256: M, width: 4, height: 4, mime: 'image/png' } }] }) ] }; var docB = { docId: bd2, title: 'Plain Doc', snapshots: [ snap('splain1', 1500, { title: 'Plain', docId: bd2, rows: [{ id: 'r1', audioText: 'plain' }] }) ] }; window.c14Seed = await H.importBundle({ docs: [docA, docB], older: [] }); B.forgetMemory(); window.c14 = await A.build(); return [c14Persist, c14Seed, Object.keys(c14.blobs), c14.missingBlobs]; })()
+expect c14Persist.length === 0 && c14Seed.added === 3
+expect Object.keys(c14.blobs).sort().join(',') === [r1.sha256, r2.sha256].sort().join(',')
+expect c14.blobs[r1.sha256].mime === 'image/png' && c14.blobs[r1.sha256].b64 === bodyOf(u1)
+expect c14.blobs[r2.sha256].mime === 'image/png' && c14.blobs[r2.sha256].b64 === bodyOf(u2)
+expect JSON.stringify(c14.missingBlobs) === JSON.stringify([M])
+expect c14.history.blobs === undefined && c14.history.missingBlobs === undefined && c14.history.truncated === false
+expect c14.history.docs.filter(function(d){ return d.docId === bd; })[0].snapshots.length === 2
+# the bytes came back from IndexedDB (memory was forgotten before the build)
+expect B.has(r1.sha256) && B.has(r2.sha256) && !B.has(r3.sha256)
+
+# ---- invariant #48 over a bundle that carries images: hex keys and base64
+# values never trip the secrets walk (hex has no t/o/k/s/p/l, and values are
+# never read), on export and on import alike.
+eval (function(){ window.__c14Keys = []; (function walk(v){ if (!v || typeof v !== 'object') return; if (Array.isArray(v)) { v.forEach(walk); return; } Object.keys(v).forEach(function(k){ window.__c14Keys.push(k); walk(v[k]); }); })(c14); window.__c14Bad = __c14Keys.filter(function(k){ return SECRET_RE.test(k); }); return [__c14Keys.length, __c14Bad]; })()
+expect __c14Bad.length === 0 && __c14Keys.indexOf('b64') !== -1 && __c14Keys.indexOf(r1.sha256) !== -1
+expect !SECRET_RE.test('0123456789abcdef'.repeat(4)) && !SECRET_RE.test('fedcba9876543210'.repeat(4))
+expect (function(){ try { A.assertNoSecrets(c14); A.parse(JSON.stringify(c14)); return true; } catch (e) { return false; } })()
+
+# ---- 15. File > Export app data end to end says an image was left out
+eval (async function(){ window.__c15Warn = document.querySelectorAll('.toast.warn').length; await A.exportFile(); window.c15 = A.exportSummary(); return c15; })()
+expect c15.ok === true && c15.images === 2 && c15.truncated === false
+expect c15.missingBlobs.length === 1 && c15.missingBlobs[0] === M
+expect c15.warning.indexOf('1 image was missing') !== -1
+expect Array.prototype.some.call(document.querySelectorAll('.toast.warn'), function(t){ return t.textContent.indexOf('could not be included') !== -1; })
+
+# ---- 16. import: every image stored durably BEFORE any snapshot. History
+# puts are held at the 'delay-put' gate; the images must reach IndexedDB
+# while the history store is still empty — had a snapshot been written
+# first, the gate would hold the import before any image and this wait
+# would time out.
+eval (async function(){ window.c16Text = JSON.stringify(c14); await H.resetForTest(); await clearBlobs(); window.c16Before = [B.has(r1.sha256), B.has(r2.sha256), await B.idbRecord(r1.sha256)]; H.injectFault('delay-put'); window.c16P = A.importText(c16Text); return c16Before; })()
+expect c16Before[0] === false && c16Before[1] === false && c16Before[2] === null
+# (`wait` cannot await a promise, so a poller in the page sets a flag)
+eval (function(){ window.c16Stored = false; (function poll(){ Promise.all([B.idbRecord(r1.sha256), B.idbRecord(r2.sha256)]).then(function(r){ if (r[0] && r[1] && r[0].isBlob && r[1].isBlob) window.c16Stored = true; else setTimeout(poll, 100); }, function(){ setTimeout(poll, 100); }); })(); return true; })()
+wait window.c16Stored === true
+expect (async function(){ return (await H.listRaw(bd)).length === 0 && (await H.listRaw(bd2)).length === 0; })()
+eval (async function(){ H.releaseDelayedPut(); window.c16 = await c16P; return c16; })()
+expect c16.ok === true && c16.history.added === 3 && c16.history.failed === 0
+expect c16.blobs.stored === 2 && c16.blobs.refused.length === 0 && c16.blobs.failed.length === 0 && c16.blobs.ignored === 0
+expect c16.warning === null
+# the bytes round-trip: forget memory, read them back from the store
+eval (async function(){ B.forgetMemory(); window.c16Missing = await B.ensureBytes([r1.sha256, r2.sha256, M]); return c16Missing; })()
+expect JSON.stringify(c16Missing) === JSON.stringify([M])
+expect B.dataUrlForSync(r1.sha256) === u1 && B.dataUrlForSync(r2.sha256) === u2
+expect (async function(){ var r = await B.idbRecord(r1.sha256); return r.mime === 'image/png' && r.size === atob(bodyOf(u1)).length; })()
+# importing the same file again stores nothing new and skips every snapshot
+eval (async function(){ window.c16Again = await A.importText(c16Text); return c16Again; })()
+expect c16Again.history.added === 0 && c16Again.blobs.stored === 2 && c16Again.blobs.refused.length === 0
+
+# ---- 17. a tampered image is refused, its snapshot still imports: r1's key
+# holding r2's bytes (hash mismatch), an SVG under its true sha (not an
+# image), broken base64, and r3 which no snapshot names (ignored, not stored)
+eval (async function(){ await H.resetForTest(); await clearBlobs(); var svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"></svg>'); window.S1 = await subtleHex(svg); window.K1 = 'cd'.repeat(32); var bd3 = did('b3'); var blobs = {}; blobs[r1.sha256] = { mime: 'image/png', b64: bodyOf(u2) }; blobs[S1] = { mime: 'image/png', b64: btoa(String.fromCharCode.apply(null, svg)) }; blobs[K1] = { mime: 'image/png', b64: 'not base64!!' }; blobs[r3.sha256] = { mime: 'image/png', b64: bodyOf(u3) }; window.c17Bundle = { format: 'splitpage-app-data', version: 1, exportedAt: new Date().toISOString(), appVersion: '', history: { docs: [{ docId: bd3, title: 'Tampered', snapshots: [ snap('stamp1', 1000, { title: 'Tampered', docId: bd3, rows: [imgRow(r1), { id: 'rs', audioText: 's', imageRef: { sha256: S1, width: 4, height: 4, mime: 'image/png' } }, { id: 'rk', audioText: 'k', imageRef: { sha256: K1, width: 4, height: 4, mime: 'image/png' } }] }) ] }], older: [] }, blobs: blobs, missingBlobs: [], bookmarks: [], prefs: {} }; window.c17 = await A.importText(JSON.stringify(c17Bundle)); return c17; })()
+expect c17.ok === true && c17.history.added === 1 && c17.history.failed === 0
+expect c17.blobs.refused.slice().sort().join(',') === [r1.sha256, S1, K1].sort().join(',')
+expect c17.blobs.stored === 0 && c17.blobs.ignored === 1
+# the tampered bytes (u2's) never entered the registry, and nothing reached the store
+expect !B.has(r1.sha256) && !B.has(r2.sha256) && !B.has(r3.sha256)
+expect (async function(){ return (await B.idbRecord(r1.sha256)) === null && (await B.idbRecord(r3.sha256)) === null && (await B.idbRecord(S1)) === null; })()
+expect c17.warning.indexOf('3 images in that file could not be imported') !== -1
+# an image over the 16 MiB cap is refused on its length alone
+eval (async function(){ var sha = 'ef'.repeat(32), bd4 = did('b4'), blobs = {}; blobs[sha] = { mime: 'image/png', b64: 'A'.repeat(Math.ceil(16 * 1024 * 1024 / 3) * 4 + 4) }; window.c17b = await H.importBundle({ docs: [{ docId: bd4, title: 'Big', snapshots: [ snap('sbig1', 1000, { title: 'Big', docId: bd4, rows: [{ id: 'r', audioText: 'x', imageRef: { sha256: sha, width: 4, height: 4, mime: 'image/png' } }] }) ] }], older: [], blobs: blobs }); return c17b; })()
+expect c17b.blobs.refused.length === 1 && c17b.blobs.refused[0] === 'ef'.repeat(32) && c17b.added === 1
+
+# ---- 18. an old bundle (no `blobs` key) imports exactly as before, even
+# when its snapshots name images
+eval (async function(){ await H.resetForTest(); await clearBlobs(); window.c18Bundle = JSON.parse(c16Text); delete c18Bundle.blobs; delete c18Bundle.missingBlobs; window.c18Parsed = A.parse(JSON.stringify(c18Bundle)); window.c18 = await A.importText(JSON.stringify(c18Bundle)); return c18; })()
+expect c18Parsed.blobs === null
+expect c18.ok === true && c18.history.added === 3 && c18.history.failed === 0 && c18.warning === null
+expect c18.blobs.stored === 0 && c18.blobs.refused.length === 0 && c18.blobs.failed.length === 0
+
+# ---- 19. images count toward the export cap: two ~200 KB images, each named
+# by one snapshot. Bodies alone fit the cap easily; with the images only
+# the newest snapshot and its image do, so the older one is left out
+# (truncated) along with its image.
+eval (async function(){ await H.resetForTest(); window.n1u = pngUrl(200, 200, '#000', true); window.n2u = pngUrl(200, 200, '#000', true); window.n1 = B.internDataUrl(n1u); window.n2 = B.internDataUrl(n2u); await B.persist([n1.sha256, n2.sha256]); window.bd5 = did('b5'); await H.importBundle({ docs: [{ docId: bd5, title: 'Cap', snapshots: [ snap('scapold', 1000, { title: 'Cap', docId: bd5, rows: [imgRow(n1)] }), snap('scapnew', 2000, { title: 'Cap', docId: bd5, rows: [imgRow(n2)] }) ] }], older: [] }); window.c19Cap = bodyOf(n2u).length + 20000; H.setExportCap(c19Cap); window.c19 = await A.build(); H.setExportCap(null); window.c19Full = await A.build(); return [bodyOf(n1u).length, bodyOf(n2u).length, c19Cap]; })()
+expect bodyOf(n1u).length > 100000 && bodyOf(n2u).length > 100000
+expect c19.history.docs.filter(function(d){ return d.docId === bd5; })[0].snapshots.map(function(s){ return s.meta.id; }).join(',') === 'scapnew'
+expect c19.history.truncated === true
+expect Object.keys(c19.blobs).join(',') === n2.sha256 && c19.missingBlobs.length === 0
+expect c19Full.history.docs.filter(function(d){ return d.docId === bd5; })[0].snapshots.length === 2 && Object.keys(c19Full.blobs).length === 2 && c19Full.history.truncated === false
+eval (function(){ H.setExportCap(null); A.useBlobBackend(null); return true; })()
+
 quit

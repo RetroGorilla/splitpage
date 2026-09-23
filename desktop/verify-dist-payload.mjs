@@ -79,7 +79,7 @@ async function resolvePackagingPath7za() {
   try {
     mod = await import(pathToFileURL(require.resolve("app-builder-lib/out/toolsets/7zip.js")));
   } catch (e) {
-    throw new Error(`could not load app-builder-lib's 7zip toolset module: ${e.message}`);
+    throw new Error(`could not load app-builder-lib's 7zip toolset module: ${e.message}`, { cause: e });
   }
   return mod.getPath7za();
 }

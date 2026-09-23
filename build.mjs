@@ -3,24 +3,50 @@
  *
  * Source lives in src/ as separate files so it can be edited like normal code:
  * page.html (shell), app.css, seed-state.json (the demo document) and the
- * numbered fragments in src/js/.
+ * numbered ES modules in src/js/. docs/help.md (the user guide) and VERSION
+ * are inputs too — the first is rendered into the in-app Help page, the
+ * second is stamped into both outputs.
  * The SHIPPED app is a single index.html, and that is not a packaging
  * preference — it is load-bearing. A save writes
  *   "<!doctype html>" + document.documentElement.outerHTML
  * with the new document spliced into #state-data (see buildPublishHtml in
- * src/app.js). If the page linked out to app.css / app.js, every saved
- * .splitpage.html would be a shell that only works next to those files. So we
- * inline everything back into one self-contained page here.
+ * src/js/02-state.js). If the page linked out to app.css / app.js, every
+ * saved .splitpage.html would be a shell that only works next to those files.
+ * So we inline everything back into one self-contained page here.
  *
- * No dependencies, no plugins: substitution of three marker lines. Run it with
- *   node build.mjs           write index.html
- *   node build.mjs --check   verify index.html matches src/ (exit 1 if not)
+ * Substitution of a handful of marker lines, plus one bundler. Two outputs:
+ * index.html, and sw.js, which cannot be inlined into it (a service worker
+ * has to have its own URL) and so is stamped in place — see "sw.js (#79)".
+ *   node build.mjs           write index.html and stamp sw.js
+ *   node build.mjs --check   verify both are current (exit 1 if not)
+ *
+ * index.html is NOT in the repository (#80): it is generated, it is in
+ * .gitignore, and a fresh clone has none until this runs. So --check's
+ * index.html half reports "not built yet" rather than crashing, and CI
+ * builds rather than checks — see .github/workflows/ci.yml. sw.js stays
+ * tracked, because it is the file you edit as well as the file that ships.
+ *
+ * esbuild is the only dependency, and it is a build-time one: nothing it
+ * produces needs a runtime, and the shipped page still has no <script src>.
+ * `npm install` (or `npm ci`) before either command.
  */
 
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+
+/* Imported this way, rather than at the top, so a checkout that has not run
+   `npm install` yet gets told what is wrong instead of a module-resolution
+   stack trace. CI and desktop/stage.mjs both shell out to this file. */
+let esbuild;
+try {
+  esbuild = await import("esbuild");
+} catch {
+  console.error("esbuild is not installed — run `npm install` first.");
+  console.error("(src/js has been bundled rather than concatenated since #66.)");
+  process.exit(1);
+}
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
@@ -30,26 +56,66 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
    newline becomes the inserted block's last one. */
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-/* src/js/*.js are FRAGMENTS of one IIFE, not modules: they share a single
-   closure and are concatenated in filename order, which is why every name is
-   numbered. A fragment is not valid JS on its own — 00-prelude.js opens the
-   function and 21-events.js closes it. That is deliberate: it keeps the
-   scoping identical to the single file this was split out of, with no bundler
-   and no dependency. Renaming one renumbers its position, so don't. */
+/* src/js/*.js are ES modules (#66). They used to be fragments of one IIFE,
+   concatenated in filename order — which is why they are still numbered: the
+   numbers are the order src/js/_entry.js calls their __init()s in, and that
+   is the app's boot order. Nothing else depends on the filenames now, so a
+   rename costs an edit to _entry.js and the imports that name the file.
+
+   One esbuild call, no plugins and no config file, producing one IIFE with
+   everything in it — the same shape the concatenated fragments had, which is
+   what lets it be inlined into the page exactly as before.
+
+   - bundle: follow the imports from _entry.js; nothing is left external.
+   - format iife: a classic script, not a module. <script type="module"> is
+     deferred, and 00-prelude has to capture PAGE_SHELL while the parser is
+     still paused on this tag (that is the whole reason the page is one file).
+   - minify: names, whitespace and dead code. The window.__* test backdoors
+     survive it because they are property assignments, not bindings.
+   - charset utf8: leave the app's text alone rather than re-escaping every
+     non-ASCII character. The page is <meta charset="utf-8"> and the CSP hash
+     below is taken over the same characters the parser will see.
+   - legalComments none: keep the output a single pure line of JS, so the
+     hash and the byte count only move when the source does. */
 function appJs() {
-  const dir = join(ROOT, "src", "js");
-  const names = readdirSync(dir).filter((n) => n.endsWith(".js")).sort();
-  if (!names.length) throw new Error("no fragments in src/js");
-  return names.map((n) => chomp(readFileSync(join(dir, n), "utf8"))).join("\n");
+  const result = esbuild.buildSync({
+    entryPoints: [join(ROOT, "src", "js", "_entry.js")],
+    bundle: true,
+    format: "iife",
+    minify: true,
+    charset: "utf8",
+    legalComments: "none",
+    absWorkingDir: ROOT,
+    logLevel: "warning",
+    write: false
+  });
+  if (result.outputFiles.length !== 1) {
+    throw new Error("esbuild produced " + result.outputFiles.length + " files, expected 1");
+  }
+  const code = result.outputFiles[0].text;
+  /* The bundle is inlined into <script id="app-logic">, so an unescaped
+     "</script" anywhere in it would end the tag early and leave the rest of
+     the app as text on the page. esbuild escapes the sequence inside string
+     literals; this is the guard for everything else. */
+  if (/<\/script/i.test(code)) throw new Error("the bundle contains a literal </script");
+  return code;
 }
 
-/* ---- README.md -> in-app Help ----
+/* ---- docs/help.md -> in-app Help ----
  *
  * A dependency-free Markdown-to-HTML converter, just capable enough for
- * README.md's own vocabulary (headings, lists, blockquotes, pipe tables,
+ * docs/help.md's own vocabulary (headings, lists, blockquotes, pipe tables,
  * fenced code, horizontal rules, and inline code/bold/italic/links, plus a
- * few literal <kbd> tags README already writes by hand). Not a general
- * Markdown engine — anything README doesn't use isn't handled.
+ * few literal <kbd> tags the guide writes by hand). Not a general Markdown
+ * engine — anything the guide doesn't use isn't handled.
+ *
+ * The guide used to be README.md, with <!-- help:skip --> markers around the
+ * sections that are for people working on the repo rather than people using
+ * the app (#80). Splitting the two files apart retired the markers: every
+ * heading in docs/help.md is meant for the reader of the Help page, and the
+ * README can now change without rebuilding the app. An HTML comment left in
+ * this file would render as visible text, since nothing strips comments any
+ * more — keep them inside fenced code, as the export-format section does.
  *
  * Order matters (HANDOFF.md's escaping rule, applied to a build-time
  * converter rather than live text): escape HTML first, so nothing in the
@@ -109,7 +175,7 @@ function seedCheckValue() {
 
 /* Inline formatting: code spans first (so `**not bold**` inside backticks is
    protected), then links, then bold, then italic. <kbd>/</kbd> are the only
-   literal HTML README writes outside of code — everything else stays
+   literal HTML the guide writes outside of code — everything else stays
    escaped text. */
 function mdInline(text) {
   const codeSpans = [];
@@ -126,36 +192,19 @@ function mdInline(text) {
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
   text = text.replace(/&lt;kbd&gt;/g, "<kbd>").replace(/&lt;\/kbd&gt;/g, "</kbd>");
+  /* eslint-disable-next-line no-control-regex -- the NUL is the sentinel the
+     code-span pass at the top of this function wrote; it is chosen precisely
+     because the guide's prose can never contain one. */
   text = text.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => "<code>" + codeSpans[i] + "</code>");
   return text;
 }
 
-/* Strips everything between <!-- help:skip-start --> and <!-- help:skip-end -->
-   (developer-only sections that don't belong in the in-app Help), operating
-   on the ALREADY-ESCAPED text, so the markers themselves must be matched in
-   their escaped form. */
-function stripHelpSkipBlocks(escaped) {
-  const start = "&lt;!-- help:skip-start --&gt;";
-  const end = "&lt;!-- help:skip-end --&gt;";
-  let out = "";
-  let i = 0;
-  while (i < escaped.length) {
-    const s = escaped.indexOf(start, i);
-    if (s === -1) { out += escaped.slice(i); break; }
-    out += escaped.slice(i, s);
-    const e = escaped.indexOf(end, s);
-    if (e === -1) throw new Error("README.md: help:skip-start with no matching help:skip-end");
-    i = e + end.length;
-  }
-  return out;
-}
-
 /* Parses a run of consecutive list lines into <ul>/<ol> HTML. Lines indented
    2+ spaces and starting with "-" nest one level deep inside the preceding
-   top-level item — README only ever goes one level, so that's all this
+   top-level item — the guide only ever goes one level, so that's all this
    supports. Any other line (a wrapped physical line of the same paragraph)
    is a "lazy continuation" of whichever item/sub-item came before it, joined
-   with a space — README wraps list-item prose onto following lines without
+   with a space — the guide wraps list-item prose onto following lines without
    re-indenting it to any marker. */
 function mdList(lines) {
   const ordered = /^\d+\.\s/.test(lines[0]);
@@ -201,16 +250,16 @@ function mdTable(lines) {
 
 /* Returns { html, toc } — toc is a nested <ul> of <h2>/<h3> links, in
    document order, for #help-toc. Heading ids are "help-" + a slug of the
-   heading text, so a README anchor link and a Help deep link land on the
-   same element. */
+   heading text, so a docs/help.md anchor link and a Help deep link land on
+   the same element. */
 function mdToHtml(markdown) {
-  const escaped = stripHelpSkipBlocks(escapeHtml(markdown));
+  const escaped = escapeHtml(markdown);
   const lines = escaped.split("\n");
   const out = [];
   const toc = []; /* { li: "<li>...", subs: ["<li>...", ...] } — one per h2 */
   let i = 0;
   while (i < lines.length) {
-    let line = lines[i];
+    const line = lines[i];
 
     if (!line.trim()) { i++; continue; }
 
@@ -257,7 +306,7 @@ function mdToHtml(markdown) {
     }
 
     if (/^-\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      /* A blank line normally ends a list, but README also uses blank lines
+      /* A blank line normally ends a list, but the guide also uses blank lines
          to separate ordered items that carry a trailing paragraph or nested
          bullets. So a blank line doesn't end the list by itself — only when
          nothing after it (skipping further blank lines) continues the list:
@@ -300,23 +349,29 @@ function mdToHtml(markdown) {
 }
 
 /* Computed once and reused for both markers below, rather than re-parsing
-   README.md twice. */
-let readmeHelp = null;
-function readmeHtml() {
-  if (!readmeHelp) readmeHelp = mdToHtml(readFileSync(join(ROOT, "README.md"), "utf8"));
-  return readmeHelp;
+   docs/help.md twice. */
+let helpRendered = null;
+function helpHtml() {
+  if (!helpRendered) helpRendered = mdToHtml(readFileSync(join(ROOT, "docs", "help.md"), "utf8"));
+  return helpRendered;
 }
+
+/* VERSION is one line. Two different outputs splice it in — index.html's
+   <meta> and sw.js's cache name — and only one of them goes through chomp(),
+   so trim it here rather than leaving the second one to inherit whatever
+   line ending an editor left behind. */
+const version = () => readFileSync(join(ROOT, "VERSION"), "utf8").trim();
 
 const PARTS = [
   /* Inline, not a line of its own: stamps the release into a <meta> so the
      About box can name a version even on a file:// open, where there is no
      launcher to ask. */
-  ["{{VERSION}}", () => readFileSync(join(ROOT, "VERSION"), "utf8")],
+  ["{{VERSION}}", version],
   ["{{SEED_CHECK}}", seedCheckValue],
   ["/*{{APP_CSS}}*/", () => src("app.css")],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
-  ["{{HELP_TOC}}", () => readmeHtml().toc],
-  ["{{README_HTML}}", () => readmeHtml().html],
+  ["{{HELP_TOC}}", () => helpHtml().toc],
+  ["{{HELP_HTML}}", () => helpHtml().html],
   ["//{{APP_JS}}", appJs]
 ];
 
@@ -392,6 +447,8 @@ const APP_SCRIPT_OPEN = '<script id="app-logic">';
    (08c-broll.js used one as a key separator), and it is escaped there now —
    this normalisation is the guard that stops the next one being a puzzle. */
 function asParsed(text) {
+  /* eslint-disable-next-line no-control-regex -- matching a NUL is the entire
+     point: this is the rewrite the HTML parser makes, reproduced. */
   return text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "\uFFFD");
 }
 
@@ -409,6 +466,40 @@ export function buildCsp(html) {
   return CSP_DIRECTIVES(hash).join("; ");
 }
 
+/* ---------- sw.js (#79) ----------
+ *
+ * The service worker is the one shipped file that is NOT inlined into
+ * index.html, and it cannot be: a worker has to have its own URL or the
+ * browser will not register it. So package.mjs, the Dockerfile and
+ * desktop/stage.mjs all copy the repo-root sw.js out verbatim, and there is
+ * no template for it to be spliced into on the way past.
+ *
+ * It is therefore stamped IN PLACE. sw.js in the tree is both the file you
+ * edit and the artifact that ships, and exactly one line of it belongs to
+ * this build: the cache name, which has to carry VERSION so that a deploy
+ * renames the cache and the worker's activate handler drops the previous
+ * release's entries (the whole of issue #79 — see sw.js's own header).
+ *
+ * --check is meaningful for it in the way that matters: what it catches is
+ * VERSION and sw.js having drifted apart, which is the only way this file
+ * can be wrong, and it is exactly the failure a version bump committed on
+ * its own would otherwise ship. It cannot catch a hand-edit elsewhere in
+ * sw.js, because there is no other source for the rest of the file to
+ * disagree with.
+ */
+const SW_CACHE_LINE = /^var CACHE = "(splitpage-[^"]*)";$/m;
+const swCacheName = (text) => SW_CACHE_LINE.exec(text)[1];
+
+function buildSw() {
+  const current = readFileSync(join(ROOT, "sw.js"), "utf8");
+  if (!SW_CACHE_LINE.test(current)) {
+    throw new Error('sw.js: no `var CACHE = "splitpage-<version>";` line for the build to stamp');
+  }
+  /* A function replacement, not "$1...$2": VERSION is data, and replace()
+     would expand a "$&" in it — the same reason build() splits and joins. */
+  return current.replace(SW_CACHE_LINE, () => 'var CACHE = "splitpage-' + version() + '";');
+}
+
 function build() {
   let html = src("page.html");
   for (const [marker, load] of PARTS) {
@@ -423,18 +514,42 @@ function build() {
 
 const out = join(ROOT, "index.html");
 const built = build();
+const swOut = join(ROOT, "sw.js");
+const swBuilt = buildSw();
 
 if (process.argv.includes("--check")) {
-  const current = readFileSync(out, "utf8");
-  if (current === built) {
+  let stale = false;
+  /* index.html is untracked and generated (#80), so "no file at all" is the
+     normal state of a fresh clone rather than a corrupt one. Said plainly
+     here, because "ENOENT: no such file or directory" is a confusing way to
+     learn that the answer is simply `node build.mjs`. */
+  const current = existsSync(out) ? readFileSync(out, "utf8") : null;
+  if (current === null) {
+    console.error("index.html has not been built yet — run `node build.mjs`");
+    stale = true;
+  } else if (current === built) {
     console.log("index.html is up to date with src/ (" + Buffer.byteLength(built) + " bytes)");
-    process.exit(0);
+  } else {
+    console.error("index.html does NOT match src/ — run `node build.mjs`");
+    console.error("  built:   " + Buffer.byteLength(built) + " bytes");
+    console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
+    stale = true;
   }
-  console.error("index.html does NOT match src/ — run `node build.mjs`");
-  console.error("  built:   " + Buffer.byteLength(built) + " bytes");
-  console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
-  process.exit(1);
+  /* Reported separately, and both are reported, so a run that is wrong twice
+     does not have to be fixed twice to find that out. */
+  const swCurrent = readFileSync(swOut, "utf8");
+  if (swCurrent === swBuilt) {
+    console.log("sw.js is stamped with VERSION (cache " + swCacheName(swBuilt) + ")");
+  } else {
+    console.error("sw.js's cache name does NOT match VERSION — run `node build.mjs`");
+    console.error("  built:   " + swCacheName(swBuilt));
+    console.error("  on disk: " + swCacheName(swCurrent));
+    stale = true;
+  }
+  process.exit(stale ? 1 : 0);
 }
 
 writeFileSync(out, built);
 console.log("wrote index.html (" + Buffer.byteLength(built) + " bytes)");
+writeFileSync(swOut, swBuilt);
+console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");

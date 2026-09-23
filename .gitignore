@@ -9,7 +9,7 @@ _*.html
 data/
 
 # Session hand-off notes — per-session scratch, not project documentation.
-# The durable equivalents are README.md, DEPLOY.md and HANDOFF.md.
+# The durable equivalents are README.md, docs/help.md, DEPLOY.md, HANDOFF.md.
 .claude/handoff/
 
 # OS / editor noise
@@ -19,6 +19,25 @@ desktop.ini
 *.swp
 .vscode/
 .idea/
+
+# The app itself, and a build output: `node build.mjs` writes it from src/,
+# docs/help.md and VERSION. It was tracked until #80, where 1.4MB of generated
+# HTML in every pull request diff — and a pre-commit hook nothing installed to
+# keep it honest — stopped being worth it. CI builds it and uploads it as the
+# `splitpage-app` artifact; `node package.mjs` builds it before packaging; a
+# server deploy takes it from the artifact (DEPLOY.md §2).
+#
+# Not being tracked is also what retired the hook's second job: a copy of the
+# app with YOUR script saved into it is now an untracked local file, so there
+# is nothing to accidentally commit and nothing to push.
+#
+# sw.js is deliberately NOT here. It cannot be inlined into the page (a worker
+# needs its own URL), so it is the file you edit as well as the one that
+# ships; the build only stamps its cache name from VERSION.
+#
+# Anchored with a leading slash on purpose: desktop/tabstrip/index.html is a
+# hand-written source file and must stay tracked.
+/index.html
 
 # Built releases. `node package.mjs` regenerates the lot.
 dist/
@@ -31,3 +50,7 @@ update-status.json
 
 # Build-time downloads (the bundled Node runtime). Fetched on demand.
 .cache/
+
+# npm installs. build.mjs gained one devDependency (esbuild) in #66; the
+# desktop shell has its own. Neither belongs in the repo.
+node_modules/

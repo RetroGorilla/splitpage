@@ -23,7 +23,7 @@
 
 const {
   app, BrowserWindow, WebContentsView, Menu, protocol, net, ipcMain, dialog, shell,
-  utilityProcess, session, nativeTheme, screen
+  utilityProcess, session, nativeTheme, screen, safeStorage
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -37,6 +37,40 @@ const { spawn } = require("node:child_process");
    It is listed in electron-builder.yml's `files` so a packaged build ships it
    — requiring it without that would crash the packaged app on startup. */
 const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+/* desktop/prompter-share.js: the loopback listener behind the teleprompter's
+   "Open in browser" (issue #86, section 9b). Plain Node, no Electron, in
+   electron-builder.yml's `files` for the same reason drafts.js is. */
+const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
+/* desktop/google-drive.js: Google Drive through a loopback OAuth redirect
+   (issue #10, section 9c) — the listener, PKCE, the tokens and every Drive
+   request. Plain Node, no Electron, in electron-builder.yml's `files` for
+   the same reason drafts.js is. */
+const { createGoogleDrive } = require("./google-drive");
+/* desktop/blob-store.js: the content-addressed blob folder images live in
+   since issue #82 (section 8c) — <userData>/blobs, named by SHA-256. Plain
+   Node, no Electron, in electron-builder.yml's `files` for the same reason
+   drafts.js is. The image-only rule (imageBlobRefusal) is the IPC door's,
+   and lives beside the store so the unit test holds the same copy. */
+const {
+  createBlobStore, imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY
+} = require("./blob-store");
+/* desktop/history-fs-backend.js and desktop/history-v1-migrate.js: version
+   history on disk (issue #83, section 8b) — the backend shared/history-
+   store.js runs over here, and the one-time move of the v1 folder layout
+   into it (temporary: removed in the release after the one that ships it).
+   Plain Node, no Electron, in electron-builder.yml's `files` for the same
+   reason drafts.js is. */
+const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
+const { migrateHistoryV1 } = require("./history-v1-migrate");
+/* desktop/ipc-channels.js is the one list of channels that cross this
+   process boundary, and the one validator every inbound message goes
+   through (section 14). Plain CommonJS data and pure functions, no Electron
+   dependency, so it loads here and — through splitpage:ipc-table-sync —
+   in both sandboxed preloads. Listed in electron-builder.yml's `files`, for
+   the same reason drafts.js is. */
+const {
+  APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs
+} = require("./ipc-channels");
 
 /* ---------------------------------------------------------------------
  * 0. The privileged scheme. Must be registered before `app` is ready —
@@ -107,6 +141,7 @@ const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
    window close once passed for "the debug port goes dead on the first
    close" while popping error dialogs on Adam's desktop every test run. */
 const TEST_MODE = process.env.SPLITPAGE_TEST === "1";
+const testExternalOpens = [];
 if (TEST_MODE) {
   /* uncaughtException/unhandledRejection are registered further down (see
      the "winning instance" block below), not here — the crash handler needs
@@ -128,6 +163,13 @@ if (TEST_MODE) {
   dialog.showSaveDialogSync = () => undefined;
   dialog.showSaveDialog = async () => ({ canceled: true, filePath: "" });
   dialog.showErrorBox = (title, content) => console.error("[splitpage-test] error box: " + title + " — " + content);
+
+  /* A browser window is as much "on the screen of the person whose machine
+     it is" as a dialog, and the teleprompter's Open in browser (section 9b)
+     exists to open one. Recorded instead, in order, for the test-shell
+     driver's 'externalOpens' op: the URL main WOULD have handed the OS is
+     the assertion, since no test can watch a real default browser start. */
+  shell.openExternal = async (url) => { testExternalOpens.push(String(url)); };
 }
 
 /* ---------------------------------------------------------------------
@@ -143,6 +185,32 @@ const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "splitpage")
   : path.resolve(__dirname, "..");
 
+/* shared/ (issue #76): the policy this process and the browser bundle must
+   not disagree about — what version history keeps and throws away, and who
+   gives a document id up when two tabs hold the same one. Plain CommonJS
+   with no Electron and no DOM in it, so the same files are required here,
+   bundled into the page by esbuild, and imported by node --test.
+
+   It rides on APP_ROOT rather than __dirname because APP_ROOT is already
+   exactly the two places these files are: the repo root in dev (they are
+   <repo>/shared/), and resources/splitpage when packaged, where stage.mjs
+   copies them next to index.html and server/. main.js is inside the asar
+   in a packaged build and shared/ is not, which is fine — this is an
+   ordinary require of an ordinary file on disk. shared/package.json travels
+   with them and is not optional: these are CommonJS, the repo root's
+   package.json says "type": "module", and node resolves the nearest one
+   (the same reason server/package.json is staged). */
+const SHARED_ROOT = path.join(APP_ROOT, "shared");
+const historyPolicy = require(path.join(SHARED_ROOT, "history-policy.js"));
+const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } = historyPolicy;
+/* shared/history-store.js (#83): the one version-history store, over the
+   backend section 8b makes. Requires history-policy.js and doc-id-policy.js
+   beside it, so stage.mjs copies it into resources/splitpage/shared too. */
+const { createHistoryStore } = require(path.join(SHARED_ROOT, "history-store.js"));
+const {
+  DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput
+} = require(path.join(SHARED_ROOT, "doc-id-policy.js"));
+
 /* Only these get served from "/" other than index.html. Anything else is a
    404, and traversal is impossible by construction: the request path is
    matched against this fixed table, never used to build a filesystem path. */
@@ -151,7 +219,7 @@ const STATIC_ALLOWLIST = {
   "/manifest.webmanifest": { file: "manifest.webmanifest", type: "application/manifest+json; charset=utf-8" },
   "/icon.svg": { file: "icon.svg", type: "image/svg+xml" },
   "/sw.js": { file: "sw.js", type: "text/javascript; charset=utf-8" },
-  "/README.md": { file: "README.md", type: "text/markdown; charset=utf-8" },
+  "/help.md": { file: "help.md", type: "text/markdown; charset=utf-8" },
   "/VERSION": { file: "VERSION", type: "text/plain; charset=utf-8" }
 };
 
@@ -341,12 +409,14 @@ const MIN_WINDOW_H = 400;
 
 /* DOC-ID-FORMAT. A document's own id — minted in the renderer, carried inside
    the document, and the same 33 characters everywhere (history's and drafts'
-   looser patterns were dropped for it). Declared once here because more than
-   one section needs it: section 8b builds a version-history folder name out
-   of it, and the duplicate-claim authority keys a Map on it. Every docId
-   reaching this process came out of a file someone else may have written, so
-   nothing may use one before it matches this (invariant #38). */
-const DOC_ID_RE = /^d[0-9a-f]{32}$/;
+   looser patterns were dropped for it). More than one section here needs it:
+   section 8b keys version history on it, and the duplicate-claim
+   authority keys a Map on it. Every docId reaching this
+   process came out of a file someone else may have written, so nothing may
+   use one before it matches DOC_ID_RE (invariant #38) — which is
+   shared/doc-id-policy.js's, required at the top of this file, so that the
+   renderer minting an id and this process accepting one are the same test
+   (#76). */
 
 /* The crash-loop guard (DRAFT-IPC-AND-SHAPES): main reloads a tab whose
    renderer died at most twice per minute. A third crash inside the window
@@ -382,7 +452,9 @@ const windowsById = new Map();
    sender into the tab it belongs to without the page ever naming itself.
    pathToTabId and serverDocIdToTabId answer "is this already open?", which
    is decided by absolute path or server document id and never by docId
-   (invariant #36). */
+   (invariant #36). A server document is keyed by its server AND its id
+   (serverRouteKey, #11): tabs can be on different servers, and the same id
+   on two of them is two documents. */
 const webContentsIdToTabId = new Map();
 const pathToTabId = new Map();
 const serverDocIdToTabId = new Map();
@@ -478,79 +550,48 @@ const docClaimCleanupRegistered = new WeakSet();
    spellings of one path there are one file. Paths are resolved HERE from the
    opaque fileId: the renderer never sends one (invariant #34). */
 function homeKeyForClaim(tab) {
-  if (tab.serverKey) return "server:" + String(tab.serverKey).slice(0, 200);
+  if (tab.serverKey) {
+    /* The same id on two servers is two homes (#11). This app's own server
+       keeps the key it always had. */
+    const url = tab.source.kind === "server" && tab.source.serverUrl ? "@" + tab.source.serverUrl : "";
+    return "server:" + String(tab.serverKey).slice(0, 200) + url;
+  }
   const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
 }
 
-/* OFF, and measured rather than assumed. The idea was that on win32
-   birthtime is a real creation time, so of two identical files the one that
-   came into existence later is the copy — with a 2 s window so a copy made by
-   the same operation as the original was not judged on noise.
+/* chooseDuplicateLoser — which of two claims on one id has to give it up,
+   pure and symmetric so both tabs reach the same verdict — is
+   shared/doc-id-policy.js's, required at the top of this file, next to the
+   renderer's own BroadcastChannel rule (#76).
 
-   It does not survive contact with this filesystem. atomicWrite() saves by
-   writing `.<name>.tmp-xxxx` next to the document and renaming it over the
-   original, and NTFS here does NOT carry the destination's creation time
-   across that rename (the "file tunnelling" behaviour the rule was counting
-   on): measured on Windows 11, every save-in-place moved birthtimeMs forward
-   by exactly the elapsed time (two saves 2.5 s apart moved it 2517 ms and
-   2512 ms; a plain in-place fs.writeFileSync moved it not at all). So every
-   save Splitpage makes re-dates the file.
+   The win32 birthtime branch it used to carry is GONE, not merely off. The
+   idea was that birthtime is a real creation time there, so of two identical
+   files the one that came into existence later is the copy. It does not
+   survive contact with the filesystem: atomicWrite() saves by writing
+   `.<name>.tmp-xxxx` next to the document and renaming it over the original,
+   and NTFS here does NOT carry the destination's creation time across that
+   rename (the "file tunnelling" behaviour the rule was counting on) —
+   measured on Windows 11, every save-in-place moved birthtimeMs forward by
+   exactly the elapsed time. That is not merely useless, it inverts the
+   answer: save the ORIGINAL after someone copied it and the original looks
+   younger than the copy, so the rule would re-id the document the user has
+   been working in. Nothing reads a claim's birthtime now, so nothing stats
+   for one either. */
 
-   That is not merely useless, it inverts the answer: save the ORIGINAL after
-   someone copied it and the original now looks younger than the copy, so the
-   rule would name the original as the loser and re-id the document the user
-   has been working in, leaving the untouched copy holding the id. The seq
-   tie-break below — which tab adopted the identity first — is the honest
-   answer, and it is symmetric for free.
-
-   Left as one clearly commented branch rather than deleted (overrides §2):
-   if a future measurement shows a filesystem that really does preserve it,
-   this is a one-word change. desktop/test/smoke.mjs's
-   caseAtomicSaveKeepsBirthtime re-measures on every run and fails if the two
-   ever disagree. */
-const DUP_TRUST_BIRTHTIME = false;
-const DUP_BIRTHTIME_NOISE_MS = 2000;
-
-/* Pure, and symmetric: run on either claim of a pair it must name the same
-   loser, or both tabs would re-id (or neither). Returns the claim that has to
-   give the id up, or null when the pair is not a duplicate at all. */
-function chooseDuplicateLoser(a, b) {
-  if (!a || !b || !a.docId || a.docId !== b.docId) return null;
-  /* One home, one document. Nothing to split. */
-  if (a.homeKey === b.homeKey) return null;
-  const aServer = a.homeKey.startsWith("server:");
-  const bServer = b.homeKey.startsWith("server:");
-  /* Two server documents sharing an id are the SAME document opened twice
-     (or two connections to it) — that is what a server id means. */
-  if (aServer && bServer) return null;
-  /* A server document against a local file: the server copy is the one other
-     people are also editing, so the local file is the copy that gets re-id'd.
-     (In practice this is a file saved down from a server document.) */
-  if (aServer !== bServer) return aServer ? b : a;
-  /* Two files. Birthtime is NOT consulted — see DUP_TRUST_BIRTHTIME. */
-  if (DUP_TRUST_BIRTHTIME &&
-      a.birthtimeMs > 0 && b.birthtimeMs > 0 &&
-      Math.abs(a.birthtimeMs - b.birthtimeMs) > DUP_BIRTHTIME_NOISE_MS) {
-    return a.birthtimeMs > b.birthtimeMs ? a : b;
-  }
-  /* Nothing to tell them apart on disk: the tab that adopted the identity
-     later is the newcomer. */
-  return a.seq > b.seq ? a : b;
-}
-
-/* The replacement identity, derived so it is stable across relaunches. This
-   MUST stay byte-identical to the renderer's
-   deriveDocId('splitpage-dup', fromId + '\n' + homeKey) — both are sha256
-   over UTF-8 of 'splitpage-dup\n<fromId>\n<homeKey>', first 32 hex after a
-   'd'. Invariant #37: changing either side re-identifies every copy that has
-   not been saved since, and splits its history. */
+/* The replacement identity, derived so it is stable across relaunches. It
+   MUST come out byte-identical to the renderer's, and since #76 that is
+   structural rather than a promise in a comment: the string being hashed and
+   the truncation both come from shared/doc-id-policy.js, and only the sha256
+   differs — node's here, the renderer's own frozen implementation there
+   (invariant #37: changing either side re-identifies every copy that has not
+   been saved since, and splits its history). */
 function replacementDocId(fromId, homeKey) {
   const digest = crypto.createHash("sha256")
-    .update("splitpage-dup\n" + fromId + "\n" + homeKey, "utf8")
+    .update(duplicateReplacementInput(fromId, homeKey), "utf8")
     .digest("hex");
-  return "d" + digest.slice(0, 32);
+  return docIdFromSha256Hex(digest);
 }
 
 /* The live page behind a claim, or null. Deliberately resolved through the
@@ -571,22 +612,13 @@ function tabWebContentsForClaim(webContentsId) {
 function checkDuplicateDocId(senderId) {
   const mine = docClaims.get(senderId);
   if (!mine) return;
-  /* NEVER JUDGE ON EVIDENCE THAT HAS NOT ARRIVED. A claim whose stat is
-     still in flight reads as birthtimeMs 0 — so a rule that consults it
-     could name DIFFERENT losers for the same pair before and after that stat
-     lands, and both tabs would be told to re-id: both give up the shared id,
-     both show the "this file is a copy" toast, and the history under the
-     original id is copied to two derived ids and owned by neither. With
-     DUP_TRUST_BIRTHTIME off the verdict no longer depends on the stat at
-     all, so this is now insurance rather than the load-bearing guard — it
-     stays because it is what makes turning that flag back on safe, and it
-     costs one deferred check. A skipped pair is not forgotten: when the
-     other claim's stat settles it runs this check for itself, with both
-     sides evidenced, and pendingToId still keeps each loser told exactly
-     once. */
-  if (mine.statPending) return;
+  /* A verdict depends on nothing but the two claims themselves — their
+     docId, their home and the order they were adopted in — so there is no
+     evidence to wait for and no deferred re-check (#76 deleted the stat the
+     old birthtime rule needed). Both tabs compute the same answer from the
+     same pair whenever either of them reports. */
   for (const [otherId, theirs] of docClaims) {
-    if (otherId === senderId || theirs.statPending) continue;
+    if (otherId === senderId) continue;
     const loser = chooseDuplicateLoser(mine, theirs);
     if (!loser) continue;
     const winner = loser === mine ? theirs : mine;
@@ -620,7 +652,9 @@ function recordDocClaim(sender, tab) {
   const previous = docClaims.get(webContentsId);
   /* The overwhelmingly common report: same document, same place, the title
      or the dirty flag moved. Re-claiming would burn a seq on every keystroke
-     and lose the birthtime we already paid a stat for. */
+     — and the seq IS the verdict's tie-break, so a tab that kept minting
+     fresh ones would eventually make itself the newcomer against a tab that
+     had gone quiet. */
   if (previous && previous.docId === docId && previous.homeKey === homeKey) {
     previous.title = tab.title;
     return;
@@ -629,48 +663,17 @@ function recordDocClaim(sender, tab) {
     docClaimCleanupRegistered.add(sender);
     sender.once("destroyed", () => { docClaims.delete(webContentsId); });
   }
-  const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
-  const claim = {
+  docClaims.set(webContentsId, {
     docId,
     homeKey,
     seq: ++docClaimSeq,
-    birthtimeMs: 0,
     title: tab.title,
-    pendingToId: null,
-    /* True from the moment a file home is claimed until its stat answers.
-       checkDuplicateDocId refuses to judge a pair while either side is
-       pending, so a verdict is only ever computed from two fully-evidenced
-       claims (see its own comment). */
-    statPending: !!absPath
-  };
-  docClaims.set(webContentsId, claim);
-
-  if (!absPath) {
-    checkDuplicateDocId(webContentsId);
-    return;
-  }
-  /* A file home is still stat'ed for its creation time before the verdict,
-     even though DUP_TRUST_BIRTHTIME is off and nothing reads the answer
-     today: it is what a re-enabled rule would need, and recording it here is
-     what lets that be a one-word change. The await is why every use of
-     `claim` afterwards re-checks that it is still the current claim: the page
-     can have reported three more times, or closed, while the disk answered. A
-     stat that fails simply leaves birthtimeMs at 0. */
-  fsp.stat(absPath).then(
-    (stat) => {
-      claim.statPending = false;
-      if (docClaims.get(webContentsId) !== claim) return;
-      claim.birthtimeMs = Number(stat.birthtimeMs) || 0;
-      checkDuplicateDocId(webContentsId);
-    },
-    () => {
-      /* The stat failed, so birthtimeMs stays 0 and the seq tie-break
-         decides — but the evidence is IN, which is what pending means. */
-      claim.statPending = false;
-      if (docClaims.get(webContentsId) !== claim) return;
-      checkDuplicateDocId(webContentsId);
-    }
-  );
+    pendingToId: null
+  });
+  /* Synchronously, because the verdict reads nothing but the claims
+     themselves: until #76 a file home was stat'ed first and the check waited
+     on the answer, for a birthtime rule that was off and that nothing read. */
+  checkDuplicateDocId(webContentsId);
 }
 
 /* The draft store (DRAFT-STORE). Every question about a tab's crash draft
@@ -792,9 +795,10 @@ function tabIsUnsaved(tab) {
    adding it to what it sends. */
 
 const DRAFT_ORIGIN_KINDS = new Set(["untitled", "file", "server", "import"]);
-/* The three kinds docFileHandle.kind can hold (18-local-files.js:218/233/245,
-   14-export.js:85). Anything else — including null for an untitled or
-   imported document — is recorded as null. */
+/* The three formats a renderer "file" home can hold (`home.format`,
+   src/js/_home.js — set by adoptProjectState in 18-local-files.js and by
+   saveDoc's retarget in 14-export.js). Anything else — including null for
+   an untitled or imported document — is recorded as null. */
 const DRAFT_FILE_KINDS = new Set(["md", "html", "splitpage"]);
 /* A name the user can see, long enough for a real title and no longer
    (DRAFT-IPC-AND-SHAPES: title <= 300). Deliberately its own constant rather
@@ -812,6 +816,8 @@ function draftScalarString(v, max) {
   /* C0 controls and DEL: everything below U+0020 (newline included) plus
      U+007F. Written as \x escapes deliberately — a literal control character
      in this source would be invisible to anyone reading it. */
+  /* eslint-disable-next-line no-control-regex -- stripping control characters
+     is the function's job; the class is written out above. */
   const clean = v.replace(/[\x00-\x1f\x7f]/g, "").slice(0, max);
   return clean || null;
 }
@@ -914,7 +920,9 @@ function requestDraftFlush(tab, budgetMs) {
  *    Shape (contract DESKTOP-STATE-V2):
  *      {version:2, windows:[{windowId, bounds:{x,y,width,height}|null,
  *        maximized, activeTabId, tabs:[{tabId, source, lastKnownTitle}]}]}
- *      source = {kind:'file', absPath} | {kind:'server', serverDocId} | {kind:'blank'}
+ *      source = {kind:'file', absPath}
+ *             | {kind:'server', serverDocId, serverUrl, tunnel}
+ *             | {kind:'blank'}
  *    Array order is window order and strip order. There is deliberately no
  *    docId and no draftId: a document's id lives in the document, and a
  *    tab's draft folder is named by its tabId.
@@ -979,16 +987,118 @@ function normalizeBounds(b) {
   return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
 }
 
+/* ---- PER-TAB CONNECTIONS (#11) ----------------------------------------
+
+   A server tab's source names the server its document is on, not just the
+   document's id: tabs can be on different servers, and a tab restored after
+   a relaunch has to come back on ITS server rather than on whichever one
+   some other tab picked last. The connection is the renderer's `conn`
+   (src/js/_home.js):
+
+     serverUrl  "" for this app's own document server (splitpage://app/api,
+                --library/--host), else the http(s) base the page talks to.
+     tunnel     null, or {userHost, remotePort, localPort} — the SSH forward
+                the reader runs themselves to reach that base. Host and
+                ports only, the same fields a Servers-dialog bookmark keeps.
+                Nothing here ever starts ssh for a tab: the only ssh this
+                process spawns is --tunnel's, from its own argv.
+     token      IN MEMORY ONLY, AND ONLY IN TRANSIT. When a page asks to open
+                a server document (splitpage:route-open) and main answers
+                with a NEW tab, the asking page's token is kept on that new
+                tab's record just long enough to hand it to the new page at
+                boot (TAB-BOOT-SYNC) — then it is dropped from the record.
+                The new tab does not ask for a PIN the reader already typed,
+                and main does not go on holding a credential it has no more
+                use for: from then on the page keeps its own (sessionStorage,
+                which a crash reload keeps too). A this-tab route never
+                stores one at all — that page already has it. Never written
+                to desktop-state.json, a draft header or anything else on
+                disk (invariant #29): a restored tab asks again unless the
+                reader chose "Remember on this device" for that server,
+                which is the renderer's own storage.
+     role       IN MEMORY ONLY, as the page last reported it — informational
+                (the test shell reads it). Never handed to a page: a page
+                learns its role from the server, every time.
+
+   Every field from a page is validated here; a page is not trusted to name
+   a URL main would ever open, and nothing here opens one (the teleprompter
+   refuses a remote server tab — section 9b). */
+const SERVER_URL_MAX = 2048;
+const TUNNEL_USERHOST_RE = /^[A-Za-z0-9._@:[\]-]{1,255}$/;
+const CONN_TOKEN_RE = /^[A-Za-z0-9_-]{1,256}$/;
+
+/* "" (this app's own server), the page's own normalized base unchanged, or
+   null for anything that is not one: not http(s), a user:password, a query,
+   a fragment, whitespace, or no trailing slash. Unchanged rather than
+   rebuilt so a page comparing it to its own `conn.serverUrl` gets the same
+   string back. */
+function normalizeServerUrl(v) {
+  if (v === "" || v === null || v === undefined) return "";
+  if (typeof v !== "string" || v.length > SERVER_URL_MAX || /\s/.test(v) || !v.endsWith("/")) return null;
+  let u;
+  try { u = new URL(v); } catch { return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  if (u.username || u.password || u.search || u.hash || v.indexOf("?") !== -1 || v.indexOf("#") !== -1) return null;
+  if (!/^https?:\/\//i.test(v)) return null;
+  return v;
+}
+
+function normalizeTunnel(t) {
+  if (!t || typeof t !== "object") return null;
+  const port = (n) => Number.isInteger(n) && n >= 1 && n <= 65535;
+  if (typeof t.userHost !== "string" || !TUNNEL_USERHOST_RE.test(t.userHost) || t.userHost[0] === "-") return null;
+  if (!port(t.remotePort) || !port(t.localPort)) return null;
+  return { userHost: t.userHost, remotePort: t.remotePort, localPort: t.localPort };
+}
+
+function normalizeConnToken(t) { return typeof t === "string" && CONN_TOKEN_RE.test(t) ? t : ""; }
+function normalizeConnRole(r) { return r === "edit" || r === "review" ? r : ""; }
+
+/* The in-memory server source: what a TabRecord holds. */
+function serverSource(serverDocId, c) {
+  const o = c || {};
+  return {
+    kind: "server",
+    serverDocId,
+    serverUrl: normalizeServerUrl(o.serverUrl) || "",
+    tunnel: normalizeTunnel(o.tunnel),
+    token: normalizeConnToken(o.token),
+    role: normalizeConnRole(o.role)
+  };
+}
+
+/* The routing key for a server document: which server, and which id on it. */
+function serverRouteKey(src) {
+  return (src.serverUrl || "") + "\n" + src.serverDocId;
+}
+
+/* The PERSISTED shape — also what every v2 read produces. token and role are
+   not in it, so they cannot reach desktop-state.json however a TabRecord is
+   handed in: this is the whitelist shellStateAsV2 writes through. A server
+   source whose address does not validate comes back blank rather than
+   silently re-homed on this app's own server, where the same id would be
+   somebody else's document. A pre-#11 server source has no serverUrl at
+   all, which meant this app's own server; it still does. */
 function normalizeTabSource(src) {
   if (src && typeof src === "object") {
     if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
       return { kind: "file", absPath: src.absPath };
     }
     if (src.kind === "server" && typeof src.serverDocId === "string" && src.serverDocId) {
-      return { kind: "server", serverDocId: src.serverDocId };
+      const serverUrl = normalizeServerUrl(src.serverUrl);
+      if (serverUrl === null) return { kind: "blank" };
+      return { kind: "server", serverDocId: src.serverDocId, serverUrl, tunnel: normalizeTunnel(src.tunnel) };
     }
   }
   return { kind: "blank" };
+}
+
+/* The in-memory form of a source handed to createTab: the persisted shape,
+   plus the token and role a server source may carry in memory. */
+function liveTabSource(src) {
+  const base = normalizeTabSource(src);
+  if (base.kind !== "server") return base;
+  return serverSource(base.serverDocId, { ...base, token: src.token, role: src.role });
 }
 
 function blankDesktopWindow(extra) {
@@ -1103,7 +1213,7 @@ function normalizeDesktopStateV2(raw) {
 let desktopStateSynthesized = null; // {text, state}
 
 function readDesktopStateV2() {
-  let text = null;
+  let text;
   try { text = fs.readFileSync(stateFilePath(), "utf8"); } catch { text = null; }
   if (desktopStateSynthesized && desktopStateSynthesized.text === text) {
     return structuredClone(desktopStateSynthesized.state);
@@ -1320,7 +1430,9 @@ function shellStateAsV2() {
          (DESKTOP-STATE-V2): relaunching into a row of empty documents the
          user never asked for would be worse than losing nothing. */
       if (tab.source.kind === "blank" && !draftsHasDraft(tabId)) continue;
-      rows.push({ tabId, source: tab.source, lastKnownTitle: tab.title || "" });
+      /* normalizeTabSource is the whitelist: a server tab's in-memory token
+         and role stop here (invariant #29, #11). */
+      rows.push({ tabId, source: normalizeTabSource(tab.source), lastKnownTitle: tab.title || "" });
     }
     /* …except that a window whose tabs are ALL skipped would vanish from the
        file entirely (normalizeDesktopStateV2 drops a window with no tabs),
@@ -1416,86 +1528,38 @@ async function atomicWrite(absPath, buffer) {
  * 8b. Version history storage — the desktop half of HISTORY-STORAGE, and
  *     every handler behind HISTORY-IPC.
  *
- *     In a browser, per-document version history lives in IndexedDB
- *     (src/js/03a-history-store.js). On the desktop it lives in a plain
- *     folder tree under userData instead, and THIS process owns all of it:
- *     validation, the on-disk format, eviction. The renderer names a
- *     document only by docId and a snapshot only by its snapshot id
- *     (invariant #38) — it can never name a folder, and a docId that does
- *     not match DOC_ID_RE never reaches a path at all. A docId comes out of
- *     a file someone else may have written, so that check is the same kind
- *     of boundary as "the renderer never sends a path" (invariant #34).
+ *     One store (shared/history-store.js, the same code the browser runs)
+ *     over one backend (desktop/history-fs-backend.js), both made once from
+ *     whenReady (#83). The store decides WHAT is kept — put-if-absent, the
+ *     stamp, the trim to 50, the cap, the quota retry, the Older bucket,
+ *     holds, which bodies are unreferenced; the backend keeps it on disk:
  *
  *       <userData>/history/
- *         FORMAT                      "1". A HIGHER number means a newer
- *                                     build wrote this folder; history then
- *                                     goes READ-ONLY rather than let this
- *                                     build rewrite an index whose shape it
- *                                     does not understand.
- *         docs/d-<docId>/index.json   {formatVersion, docId, title,
- *                                     lastOpenedAt, bytes, snapshots[]},
- *                                     snapshots oldest first
- *         docs/d-<docId>/s-<id>.snap  three lines: the magic line, the meta
- *                                     JSON (with no document id in it — the
- *                                     folder IS the document), then the
- *                                     state JSON verbatim
- *         older/index.json            the one-time migration's bucket:
- *                                     {formatVersion, migratedAt, expiresAt,
- *                                     bytes, snapshots[]}
- *         older/s-<id>.snap
+ *         FORMAT          "2". A HIGHER number is a newer build's folder:
+ *                         history then goes READ-ONLY (reads work, every
+ *                         write answers 'read-only').
+ *         index.json      every bucket's snapshots in one file, written as
+ *         index.prev.json two durable generations (a torn index.json falls
+ *                         back to the previous one)
+ *         bodies/         the snapshot bodies, content-addressed (a
+ *                         createBlobStore folder of its own, not <userData>/
+ *                         blobs: images are never deleted, history evicts)
+ *         v1-backup/      the v1 layout (docs/, older/) after the one-time
+ *                         migration (desktop/history-v1-migrate.js);
+ *                         deleted by the NEXT release
  *
- *     ORDER OF WRITES. A body is written before the index that names it, and
- *     a delete removes the index entry before it unlinks the body. Whichever
- *     half a crash interrupts, what survives is repairable rather than
- *     wrong: a body with no index entry is an orphan the next launch adopts,
- *     and an index entry with no body is dropped. Nothing here is fsynced
- *     (atomicWrite, section 6, deliberately does not) — losing the very
- *     newest snapshot to a power cut is tolerable, which is exactly what
- *     separates history from the session file and the crash drafts, both of
- *     which use writeFileDurableSync instead.
- *
- *     ONE QUEUE. Every read and every mutation runs through
- *     historyExclusive, so the in-memory index can never be observed
- *     half-updated and two puts can never interleave their index writes. The
- *     first job through it is always ensureHistoryTable (the fsck).
+ *     The renderer names a document only by docId and a snapshot only by
+ *     its snapshot id (invariant #38): it can never name a file, and a docId
+ *     that does not match DOC_ID_RE is refused at the IPC door below. Every
+ *     read and write runs on the backend's one queue; the migration is the
+ *     first job on it, and while it runs a list answers {migrating: true}
+ *     at once instead of "No snapshots".
  * --------------------------------------------------------------------- */
-
-const HISTORY_PER_DOC = 50;
-const HISTORY_OLDER_KEY = "_older";
-const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
-/* Orchestrator override §2, confirmed 2026-09-14: the Older bucket expires as
-   a WHOLE, 90 days after the migration that created it, because counting from
-   each legacy snapshot's own date would empty it on day one. One named
-   constant here and one in 03a-history-store.js: changing the policy is two
-   edits, both obvious. */
-const HISTORY_OLDER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
-const HISTORY_FORMAT_VERSION = 1;
-const HISTORY_SNAP_MAGIC = "splitpage-snapshot 1";
-/* 256 MiB (HISTORY-IPC). A body past this is refused outright rather than
-   written: one snapshot that size would swallow the whole budget by itself. */
-const HISTORY_MAX_BODY_BYTES = 256 * 1024 * 1024;
-const HISTORY_DESKTOP_CAP_BYTES = 500 * 1024 * 1024;
-/* Identifying an orphan body needs only its first two lines — the magic and
-   the meta JSON — so the fsck reads a bounded prefix instead of pulling a
-   multi-megabyte document into memory for every file in the folder. */
-const HISTORY_HEADER_READ_BYTES = 64 * 1024;
-/* atomicWrite names its temp file `.<basename>.tmp-<12 hex>`. One older than
-   this was left behind by a process that died between writing it and the
-   rename; nothing else ever creates that shape here. */
-const HISTORY_TMP_MAX_AGE_MS = 10 * 60 * 1000;
-const HISTORY_TMP_RE = /^\..+\.tmp-[0-9a-f]{12}$/;
-const HISTORY_SNAP_FILE_RE = /^s-([a-z0-9][a-z0-9_-]{2,63})\.snap$/;
-
-/* TEST_MODE only (HISTORY-IPC). 'exit-after-body' kills this process between
-   the body write and the index write, which is how a smoke case reproduces a
-   power cut mid-snapshot and proves the next launch adopts the orphan;
-   'enospc-once'/'enospc-always' make body writes fail the way a full disk
-   does, without filling one. Read once — a normal launch has no faults. */
-const HISTORY_TEST_FAULT = TEST_MODE ? String(process.env.SPLITPAGE_TEST_HISTORY_FAULT || "") : "";
-let historyFaultArmed = HISTORY_TEST_FAULT;
 
 /* The cap is 500 MB, overridable in TEST_MODE so an eviction case does not
    have to write half a gigabyte to reach it. */
+const HISTORY_DESKTOP_CAP_BYTES = 500 * 1024 * 1024;
+
 function historyCapBytes() {
   if (TEST_MODE) {
     const n = Number(process.env.SPLITPAGE_TEST_HISTORY_CAP_BYTES);
@@ -1504,556 +1568,76 @@ function historyCapBytes() {
   return HISTORY_DESKTOP_CAP_BYTES;
 }
 
-/* Resolved at call time, never cached: SPLITPAGE_USER_DATA moves userData for
-   a test run, and app.getPath is the one authority on where it landed. */
-function historyRoot() { return path.join(app.getPath("userData"), "history"); }
+/* TEST_MODE only (HISTORY-IPC). Read once — a normal launch has no faults.
+     exit-after-body      SIGKILL between a snapshot's body and the index
+                          that names it (a power cut mid-snapshot)
+     exit-mid-migration   SIGKILL after the v1 migration's 2nd body
+     exit-after-migration-index
+                          SIGKILL once the migration's index.json is durable,
+                          before FORMAT and the move into v1-backup/
+     enospc-once / enospc-always
+                          body writes fail the way a full disk does */
+const HISTORY_TEST_FAULT = TEST_MODE ? String(process.env.SPLITPAGE_TEST_HISTORY_FAULT || "") : "";
 
-/* Containment (invariant #38). path.relative answers "" for the root itself,
-   something starting with ".." for anything outside it, and an absolute path
-   when the two are on different drives — all three are refusals. */
-function historyContained(root, p) {
-  const rel = path.relative(root, p);
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+/* Dies the way a power cut does: no will-quit, nothing tidied. The children
+   go first or they are orphaned. */
+function historyTestKill() {
+  killDocumentServer();
+  killTunnel();
+  process.kill(process.pid, "SIGKILL");
 }
 
-/* A bucket is a document (its docId) or the migration's Older bucket. The
-   Older bucket is reachable ONLY through {older:true} in the IPC query, never
-   by naming it — a hostile file claiming docId "_older" fails DOC_ID_RE. */
-function historyIsBucket(bucket) {
-  return bucket === HISTORY_OLDER_KEY || (typeof bucket === "string" && DOC_ID_RE.test(bucket));
+function historyTestBackendHooks() {
+  if (HISTORY_TEST_FAULT !== "exit-after-body") return undefined;
+  return { afterBodyPut: historyTestKill };
 }
 
-function historyBucketDir(bucket) {
-  if (!historyIsBucket(bucket)) return null;
-  const root = historyRoot();
-  const dir = bucket === HISTORY_OLDER_KEY
-    ? path.join(root, "older")
-    : path.join(root, "docs", "d-" + bucket);
-  return historyContained(root, dir) ? dir : null;
+function historyTestMigrateHooks() {
+  if (HISTORY_TEST_FAULT === "exit-mid-migration") {
+    return { afterBody: (k) => { if (k >= 2) historyTestKill(); } };
+  }
+  if (HISTORY_TEST_FAULT === "exit-after-migration-index") return { afterIndex: historyTestKill };
+  return undefined;
 }
 
-function historyIndexFile(bucket) {
-  const dir = historyBucketDir(bucket);
-  if (!dir) return null;
-  const p = path.join(dir, "index.json");
-  return historyContained(dir, p) ? p : null;
-}
-
-function historySnapFile(bucket, snapId) {
-  const dir = historyBucketDir(bucket);
-  if (!dir || typeof snapId !== "string" || !HISTORY_SNAP_ID_RE.test(snapId)) return null;
-  const p = path.join(dir, "s-" + snapId + ".snap");
-  return historyContained(dir, p) ? p : null;
-}
-
-/* bucket -> {docId?, title?, lastOpenedAt?, migratedAt?, expiresAt?, bytes,
-   snapshots: SnapshotMeta[] oldest first}. Loaded once by the fsck and kept
-   current by every write below — this process holds the single-instance lock,
-   so nothing else can be changing the folder underneath it. */
-const historyIndexes = new Map();
-let historyChain = Promise.resolve();
-let historyEnsured = null;
-let historyReadOnly = false;
-/* The ENOSPC twin of the renderer's historyQuotaStuck (03a-history-store.js).
-   WHY: an eviction is committed before the retry runs and cannot be undone.
-   When the retry is refused too — the disk is genuinely full, not merely over
-   OUR cap — evicting again on the next capture would delete roughly one more
-   snapshot per capture while still storing nothing. So after one failed
-   evict-and-retry, later refusals go straight to 'enospc' until some write
-   succeeds again. Every put still makes its first attempt, so space freed
-   elsewhere is picked up at once. */
-let historyQuotaStuck = false;
-
-/* One promise chain for every history job in this process. A job that throws
-   is not allowed to wedge the chain, so the chain itself always continues. */
-function historyExclusive(job) {
-  const run = historyChain.then(async () => {
-    if (!historyEnsured) {
-      historyEnsured = ensureHistoryTable().then(() => true, (err) => {
-        /* An unreadable history folder must not take a snapshot write down
-           with it: carry on with an empty table, and let the write itself
-           report 'io' if the disk really is the problem. */
-        if (TEST_MODE) process.stderr.write(`[splitpage] history fsck failed: ${err && err.stack || err}\n`);
-        return true;
-      });
-    }
-    await historyEnsured;
-    return job();
-  });
-  historyChain = run.then(() => {}, () => {});
-  return run;
-}
-
-function historyClip(v, n) { return String(v == null ? "" : v).slice(0, n); }
-
-function historyIsNoSpace(err) {
-  const code = err && err.code;
-  return code === "ENOSPC" || code === "EDQUOT";
-}
-
-function historyErrorCode(err) { return historyIsNoSpace(err) ? "enospc" : "io"; }
-
-/* SnapshotMeta (HISTORY-STORAGE), rebuilt from plain values with every length
-   clamped — the same clamps 03a-history-store.js applies, so a meta means the
-   same thing on both sides of the bridge. Deliberately carries no document
-   id: on disk the folder is the document. Returns null when the id is
-   unusable, which is what makes an invalid meta a rejected invoke. */
-function sanitizeHistoryMeta(m) {
-  if (!m || typeof m !== "object") return null;
-  const id = typeof m.id === "string" ? m.id : "";
-  if (!HISTORY_SNAP_ID_RE.test(id)) return null;
-  let atMs = Number(m.atMs);
-  if (!Number.isFinite(atMs)) atMs = Date.parse(m.at) || 0;
-  if (!Number.isFinite(atMs)) atMs = 0;
-  const out = {
-    id,
-    label: historyClip(m.label, 300),
-    at: typeof m.at === "string" && m.at ? historyClip(m.at, 40) : new Date(atMs).toISOString(),
-    atMs,
-    by: historyClip(m.by, 100),
-    rows: Math.max(0, Math.floor(Number(m.rows) || 0)),
-    title: historyClip(m.title, 300),
-    sizeBytes: Math.max(0, Math.floor(Number(m.sizeBytes) || 0)),
-    kind: m.kind === "legacy" ? "legacy" : "snapshot",
-    formatVersion: 1
+/* enospc-once / enospc-always: the backend with its tx.put refusing like a
+   full disk. Everything else passes straight through. */
+function historyWithEnospcFault(backend) {
+  let armed = HISTORY_TEST_FAULT;
+  const enospc = () => {
+    if (armed === "enospc-once") armed = "";
+    else if (armed !== "enospc-always") return;
+    const err = new Error("Injected ENOSPC");
+    err.code = "enospc";
+    throw err;
   };
-  if (m.legacyId != null) out.legacyId = historyClip(m.legacyId, 100);
-  return out;
-}
-
-/* WHY A PUT RE-STAMPS atMs (orchestrator override §2b, and the same reasoning
-   as 03a's historyStampAfter). Trims and the eviction planner call the
-   largest atMs a document's NEWEST snapshot. After the system clock is
-   corrected backwards, every new capture would otherwise sort below snapshots
-   stamped in the "future": each save's trim would delete the previous real
-   snapshot and keep the stale ones. So a put stamps strictly after the newest
-   snapshot already stored in its bucket; `at` keeps the wall-clock text the
-   user actually saw. copy and import-older keep their source atMs — they are
-   not new work. */
-function historyStampAfter(m, newestAtMs) {
-  const n = Number(newestAtMs);
-  if (newestAtMs != null && Number.isFinite(n) && !(m.atMs > n)) m.atMs = n + 1;
-  return m;
-}
-
-/* A NON-POSITIVE expiresAt is "not stamped", never "expired since 1970".
-   historyNewRecord starts an Older record at 0, and a bucket the fsck rebuilt
-   from its bodies keeps that 0 when its index.json was missing or unparseable
-   — which is exactly what a crash between the migration's body writes and its
-   single index write leaves behind. Reading 0 as expired hid the whole
-   migrated history from every list, while planHistoryEviction guards its
-   expiry sweep with `expiresAt > 0` and so refused to delete it: invisible,
-   undeletable, still counted against the cap, and (because the migration
-   could never see its own entries come back) re-imported fruitlessly on every
-   launch. The two predicates have to agree; fsckHistoryBucket re-stamps a
-   rebuilt bucket so it can still expire on schedule. */
-function historyOlderExpired(rec) {
-  if (!rec || rec.expiresAt == null) return false;
-  const expiresAt = Number(rec.expiresAt);
-  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return false;
-  return Date.now() >= expiresAt;
-}
-
-function historyNewRecord(bucket) {
-  return bucket === HISTORY_OLDER_KEY
-    ? { migratedAt: 0, expiresAt: 0, bytes: 0, snapshots: [] }
-    : { docId: bucket, title: "", lastOpenedAt: 0, bytes: 0, snapshots: [] };
-}
-
-function historyRecordFor(bucket) {
-  let rec = historyIndexes.get(bucket);
-  if (!rec) {
-    rec = historyNewRecord(bucket);
-    historyIndexes.set(bucket, rec);
-  }
-  return rec;
-}
-
-function historyIndexShape(bucket, rec) {
-  if (bucket === HISTORY_OLDER_KEY) {
-    return {
-      formatVersion: HISTORY_FORMAT_VERSION,
-      migratedAt: rec.migratedAt || 0,
-      expiresAt: rec.expiresAt || 0,
-      bytes: rec.bytes,
-      snapshots: rec.snapshots
-    };
-  }
   return {
-    formatVersion: HISTORY_FORMAT_VERSION,
-    docId: bucket,
-    title: rec.title || "",
-    lastOpenedAt: rec.lastOpenedAt || 0,
-    bytes: rec.bytes,
-    snapshots: rec.snapshots
+    get name() { return backend.name; },
+    get persistent() { return backend.persistent; },
+    get readOnly() { return backend.readOnly; },
+    exclusive: (fn, o) => backend.exclusive((tx) => fn(Object.assign({}, tx, {
+      put: async (sha, text) => { enospc(); return tx.put(sha, text); }
+    })), o)
   };
 }
 
-function historyRecountBytes(rec) {
-  rec.bytes = rec.snapshots.reduce((n, m) => n + (Number(m.sizeBytes) || 0), 0);
-  return rec.bytes;
-}
-
-async function writeHistoryIndex(bucket) {
-  const file = historyIndexFile(bucket);
-  const rec = historyIndexes.get(bucket);
-  if (!file || !rec) return;
-  historyRecountBytes(rec);
-  await fsp.mkdir(path.dirname(file), { recursive: true });
-  await atomicWrite(file, Buffer.from(JSON.stringify(historyIndexShape(bucket, rec)), "utf8"));
-}
-
-/* A bucket with nothing left in it goes as a whole, folder included — an
-   expired Older bucket in particular, so a later migration starts a fresh 90
-   days instead of inheriting an already-dead expiry. */
-async function historyDropBucket(bucket) {
-  historyIndexes.delete(bucket);
-  const dir = historyBucketDir(bucket);
-  if (!dir) return;
-  await fsp.rm(dir, { recursive: true, force: true }).catch(() => { /* locked; next launch */ });
-}
-
-function historySnapText(meta, stateJson) {
-  return HISTORY_SNAP_MAGIC + "\n" + JSON.stringify(meta) + "\n" + stateJson;
-}
-
-/* The first two lines of a .snap, from a bounded read. Returns null for
-   anything that is not one of ours, which is what marks a file corrupt. */
-async function readHistorySnapHeader(file) {
-  let fh = null;
-  try {
-    fh = await fsp.open(file, "r");
-    const buf = Buffer.alloc(HISTORY_HEADER_READ_BYTES);
-    const { bytesRead } = await fh.read(buf, 0, HISTORY_HEADER_READ_BYTES, 0);
-    const head = buf.subarray(0, bytesRead).toString("utf8");
-    const nl1 = head.indexOf("\n");
-    if (nl1 === -1 || head.slice(0, nl1).trim() !== HISTORY_SNAP_MAGIC) return null;
-    const nl2 = head.indexOf("\n", nl1 + 1);
-    if (nl2 === -1) return null;
-    let parsed = null;
-    try { parsed = JSON.parse(head.slice(nl1 + 1, nl2)); } catch { return null; }
-    const meta = sanitizeHistoryMeta(parsed);
-    if (!meta) return null;
-    return { meta, headerBytes: Buffer.byteLength(head.slice(0, nl2 + 1), "utf8") };
-  } catch {
-    return null;
-  } finally {
-    if (fh) await fh.close().catch(() => {});
-  }
-}
-
-/* The whole snapshot. The state JSON is handed back as TEXT and is never
-   parsed here: main has no business knowing what a document looks like, and
-   parsing it would only add a way for a corrupt body to take this process
-   down. Everything after the SECOND newline is the body, newlines and all. */
-async function readHistorySnapshotFile(bucket, snapId) {
-  const file = historySnapFile(bucket, snapId);
-  if (!file) return null;
-  let text;
-  try { text = await fsp.readFile(file, "utf8"); } catch { return null; }
-  const nl1 = text.indexOf("\n");
-  if (nl1 === -1 || text.slice(0, nl1).trim() !== HISTORY_SNAP_MAGIC) return null;
-  const nl2 = text.indexOf("\n", nl1 + 1);
-  if (nl2 === -1) return null;
-  let parsed = null;
-  try { parsed = JSON.parse(text.slice(nl1 + 1, nl2)); } catch { return null; }
-  const meta = sanitizeHistoryMeta(parsed);
-  if (!meta) return null;
-  return { meta, stateJson: text.slice(nl2 + 1) };
-}
-
-/* ---- the fsck (runs once, as the first job on the queue) ---- */
-
-async function ensureHistoryTable() {
-  const root = historyRoot();
-  historyIndexes.clear();
-  historyReadOnly = false;
-
-  let formatText = null;
-  try { formatText = await fsp.readFile(path.join(root, "FORMAT"), "utf8"); } catch { /* first run */ }
-  if (formatText == null) {
-    await fsp.mkdir(path.join(root, "docs"), { recursive: true });
-    await atomicWrite(path.join(root, "FORMAT"), Buffer.from(HISTORY_FORMAT_VERSION + "\n", "utf8"));
-  } else {
-    const n = parseInt(String(formatText).trim(), 10);
-    /* A number we cannot read at all is treated as ours rather than as a
-       reason to stop storing history; a HIGHER one is a newer build's folder
-       and must not be rewritten by this one. */
-    if (Number.isFinite(n) && n > HISTORY_FORMAT_VERSION) historyReadOnly = true;
-  }
-
-  const buckets = [];
-  let names = [];
-  try { names = await fsp.readdir(path.join(root, "docs")); } catch { /* nothing stored yet */ }
-  for (const name of names) {
-    if (!name.startsWith("d-")) continue;
-    const docId = name.slice(2);
-    if (DOC_ID_RE.test(docId)) buckets.push(docId);
-  }
-  try {
-    if ((await fsp.stat(path.join(root, "older"))).isDirectory()) buckets.push(HISTORY_OLDER_KEY);
-  } catch { /* no migration has run here */ }
-
-  for (const bucket of buckets) {
-    try { await fsckHistoryBucket(bucket); }
-    catch (err) {
-      if (TEST_MODE) process.stderr.write(`[splitpage] history bucket unreadable: ${err && err.stack || err}\n`);
-    }
-  }
-}
-
-/* Reconciles one bucket's index.json with the bodies actually on disk:
-     - sweeps temp files older than 10 minutes (a write that died before its
-       rename; nothing else in this folder has that name shape)
-     - rebuilds a corrupt or missing index.json from the bodies' own headers
-     - adopts orphan bodies (written, then the index write never happened)
-     - drops index entries whose body is gone
-     - renames a body that is not a readable snapshot to *.corrupt, so it is
-       neither adopted every launch nor silently deleted
-   Read-only mode does all the reading and none of the repairs. */
-async function fsckHistoryBucket(bucket) {
-  const dir = historyBucketDir(bucket);
-  if (!dir) return;
-  let names;
-  try { names = await fsp.readdir(dir); } catch { return; }
-
-  const now = Date.now();
-  const bodies = new Map();          /* snapId -> {file, diskBytes} */
-  for (const name of names) {
-    if (HISTORY_TMP_RE.test(name)) {
-      if (historyReadOnly) continue;
-      const tmp = path.join(dir, name);
-      try {
-        const st = await fsp.stat(tmp);
-        if (now - st.mtimeMs > HISTORY_TMP_MAX_AGE_MS) await fsp.unlink(tmp);
-      } catch { /* gone, or locked — next launch */ }
-      continue;
-    }
-    const m = HISTORY_SNAP_FILE_RE.exec(name);
-    if (!m) continue;
-    const file = path.join(dir, name);
-    let diskBytes = 0;
-    try { diskBytes = (await fsp.stat(file)).size; } catch { continue; }
-    bodies.set(m[1], { file, diskBytes });
-  }
-
-  let raw = null;
-  let indexBroken = false;
-  try { raw = JSON.parse(await fsp.readFile(path.join(dir, "index.json"), "utf8")); }
-  catch (err) { indexBroken = err && err.code !== "ENOENT"; }
-
-  const rec = historyNewRecord(bucket);
-  if (raw && typeof raw === "object") {
-    if (bucket === HISTORY_OLDER_KEY) {
-      rec.migratedAt = Number(raw.migratedAt) || 0;
-      rec.expiresAt = Number(raw.expiresAt) || 0;
-    } else {
-      rec.title = historyClip(raw.title, 300);
-      rec.lastOpenedAt = Number(raw.lastOpenedAt) || 0;
-    }
-  }
-
-  const listed = raw && Array.isArray(raw.snapshots) ? raw.snapshots : [];
-  const seen = new Set();
-  for (const entry of listed) {
-    const meta = sanitizeHistoryMeta(entry);
-    if (!meta || seen.has(meta.id) || !bodies.has(meta.id)) continue;   /* body gone: drop the entry */
-    seen.add(meta.id);
-    rec.snapshots.push(meta);
-  }
-
-  let changed = indexBroken || rec.snapshots.length !== listed.length;
-  for (const [snapId, body] of bodies) {
-    if (seen.has(snapId)) continue;
-    const header = await readHistorySnapHeader(body.file);
-    if (!header) {
-      if (!historyReadOnly) {
-        await fsp.rename(body.file, body.file + ".corrupt").catch(() => {});
-        changed = true;
-      }
-      continue;
-    }
-    /* An orphan body IS the snapshot — the crash simply happened between it
-       and its index entry, so adopting it is exactly the repair. */
-    if (!header.meta.sizeBytes) header.meta.sizeBytes = Math.max(0, body.diskBytes - header.headerBytes);
-    header.meta.diskBytes = body.diskBytes;
-    rec.snapshots.push(header.meta);
-    seen.add(snapId);
-    changed = true;
-  }
-
-  rec.snapshots.sort((a, b) => (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  historyRecountBytes(rec);
-
-  /* A rebuilt Older bucket lost its migration record along with its index, so
-     nothing on disk says when its 90 days started — and an unstamped bucket
-     would live forever (planHistoryEviction only sweeps `expiresAt > 0`).
-     Restarting the clock from now is the only date there is, and it keeps
-     overrides §2's rule intact: the whole bucket expires at once, counted
-     from the migration. */
-  if (bucket === HISTORY_OLDER_KEY && rec.snapshots.length && !(Number(rec.expiresAt) > 0)) {
-    rec.migratedAt = Number(rec.migratedAt) > 0 ? Number(rec.migratedAt) : Date.now();
-    rec.expiresAt = rec.migratedAt + HISTORY_OLDER_TTL_MS;
-    changed = true;
-  }
-
-  if (!rec.snapshots.length) {
-    if (!historyReadOnly) await historyDropBucket(bucket);
-    return;
-  }
-  historyIndexes.set(bucket, rec);
-  if (changed && !historyReadOnly) {
-    if (indexBroken) {
-      await fsp.rename(path.join(dir, "index.json"), path.join(dir, "index.json.corrupt")).catch(() => {});
-    }
-    await writeHistoryIndex(bucket).catch(() => { /* reported by the next write */ });
-  }
-}
-
-/* ---- eviction planner ----
-
-   A LINE-FOR-LINE COPY of planHistoryEviction in src/js/03a-history-store.js,
-   de-indented to this file's top level and otherwise untouched (it is written
-   in the renderer's plain-ES5 house style for exactly that reason: `var`,
-   function declarations, nothing from either closure). The browser and the
-   desktop app must expire, trim and evict version history identically, and
-   the ONLY way to keep two copies honest is to compare them — which is what
-   caseHistoryPlannerTwin (step M) does, running the same fixtures through
-   window.__historyTest.planEviction and through splitpage:test-history-plan
-   and demanding the same answer. If you change one, change the other in the
-   same commit. */
-function planHistoryEviction(docs, capBytes, nowMs, opts) {
-  opts = opts || {};
-  var perDoc = Number(opts.perDoc) > 0 ? Math.floor(Number(opts.perDoc)) : 50;
-  var olderKey = typeof opts.olderKey === "string" ? opts.olderKey : "_older";
-  var cap = (typeof capBytes === "number" && capBytes >= 0) ? capBytes : Infinity;
-  var now = (typeof nowMs === "number" && isFinite(nowMs)) ? nowMs : 0;
-  var protect = Object.create(null);
-  (Array.isArray(opts.protect) ? opts.protect : []).forEach(function (p) {
-    if (p && typeof p.docId === "string" && typeof p.id === "string") protect[p.docId + "\n" + p.id] = true;
-  });
-  function toMs(v) {
-    if (typeof v === "number") return isFinite(v) ? v : 0;
-    if (typeof v === "string" && v) { var p = Date.parse(v); return isFinite(p) ? p : 0; }
-    return 0;
-  }
-  var list = [], older = null, total = 0, deletes = [];
-  (Array.isArray(docs) ? docs : []).forEach(function (d) {
-    if (!d || typeof d.docId !== "string") return;
-    var snaps = [];
-    (Array.isArray(d.snapshots) ? d.snapshots : []).forEach(function (s) {
-      if (!s || typeof s.id !== "string") return;
-      var size = Number(s.sizeBytes);
-      snaps.push({ id: s.id, atMs: toMs(s.atMs), size: isFinite(size) && size > 0 ? size : 0 });
-    });
-    snaps.sort(function (a, b) { return (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
-    snaps.forEach(function (s) { total += s.size; });
-    var entry = { docId: d.docId, lastOpenedAt: toMs(d.lastOpenedAt), expiresAt: toMs(d.expiresAt), snaps: snaps };
-    if (d.docId === olderKey) older = entry; else list.push(entry);
-  });
-  var totalBefore = total;
-  /* Deletes entry's oldest snapshot that is not protected — never its
-     newest one when keepNewest. false when nothing there may go. */
-  function dropOldest(entry, keepNewest) {
-    var end = keepNewest ? entry.snaps.length - 1 : entry.snaps.length;
-    for (var j = 0; j < end; j++) {
-      var s = entry.snaps[j];
-      if (protect[entry.docId + "\n" + s.id]) continue;
-      entry.snaps.splice(j, 1);
-      total -= s.size;
-      deletes.push({ docId: entry.docId, id: s.id });
-      return true;
-    }
-    return false;
-  }
-  if (older && older.expiresAt > 0 && now >= older.expiresAt) {
-    while (dropOldest(older, false)) { /* the whole bucket */ }
-  }
-  list.forEach(function (e) {
-    while (e.snaps.length > perDoc && dropOldest(e, true)) { /* newest perDoc stay */ }
-  });
-  if (older) {
-    while (total > cap && dropOldest(older, false)) { /* Older before any document */ }
-  }
-  list.sort(function (a, b) {
-    return (a.lastOpenedAt - b.lastOpenedAt) || (a.docId < b.docId ? -1 : a.docId > b.docId ? 1 : 0);
-  });
-  for (var i = 0; i < list.length && total > cap; i++) {
-    while (total > cap && dropOldest(list[i], true)) { /* its newest stays */ }
-  }
-  return { deletes: deletes, totalBefore: totalBefore, totalAfter: total, overCap: total > cap };
-}
-
-/* Runs the plan and applies it: index first, then unlink, one bucket at a
-   time. `protect` is the renderer's held snapshots (protectHistorySnapshot,
-   03a) — a restore is READING one of these while its "Before restoring"
-   backup is being written, and the Older bucket is the first thing eviction
-   takes, so without this list a restore from Older under a full disk could
-   delete the very snapshot it is restoring. Caller holds the queue. */
-async function historyEvictLocked(capBytes, protect) {
-  const docs = [...historyIndexes.entries()].map(([bucket, rec]) => ({
-    docId: bucket,
-    lastOpenedAt: rec.lastOpenedAt || 0,
-    expiresAt: rec.expiresAt || 0,
-    snapshots: rec.snapshots.map((m) => ({ id: m.id, atMs: m.atMs, sizeBytes: m.sizeBytes }))
-  }));
-  const plan = planHistoryEviction(docs, capBytes, Date.now(), {
-    perDoc: HISTORY_PER_DOC,
-    olderKey: HISTORY_OLDER_KEY,
-    protect: historyAllHolds(protect)
-  });
-  if (historyReadOnly) {
-    return { evicted: 0, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalBefore };
-  }
-
-  const byBucket = new Map();
-  for (const d of plan.deletes) {
-    if (!byBucket.has(d.docId)) byBucket.set(d.docId, new Set());
-    byBucket.get(d.docId).add(d.id);
-  }
-  let evicted = 0;
-  for (const [bucket, ids] of byBucket) {
-    const rec = historyIndexes.get(bucket);
-    if (!rec) continue;
-    rec.snapshots = rec.snapshots.filter((m) => !ids.has(m.id));
-    try {
-      if (rec.snapshots.length) await writeHistoryIndex(bucket);
-      else await historyDropBucket(bucket);
-    } catch (err) {
-      if (TEST_MODE) process.stderr.write(`[splitpage] history index write failed: ${err && err.stack || err}\n`);
-    }
-    for (const id of ids) {
-      const file = historySnapFile(bucket, id);
-      if (!file) continue;
-      await fsp.unlink(file).catch(() => { /* already gone, or locked */ });
-      evicted++;
-    }
-  }
-  return { evicted, overCap: plan.overCap, totalBefore: plan.totalBefore, totalAfter: plan.totalAfter };
-}
+let historyBackend = null;
+let historyStore = null;
 
 /* EVERY TAB'S held snapshots, not just the caller's. Eviction is process-wide
    — a put from any tab can delete any document's oldest snapshot, the Older
-   bucket goes first, and historyCopyLocked and the expired-Older sweep evict
-   with no caller at all — while a protect list only ever travelled with the
-   one call that carried it. So tab B's save could delete the snapshot tab A
-   was in the middle of restoring, which is the very thing override §2b's
-   protect list exists to stop. Keyed by webContents id and dropped with the
-   tab (forgetTab), so a closed or crashed tab cannot pin snapshots for the
-   rest of the run. */
+   bucket goes first, and a copy and the expired-Older sweep evict with no
+   caller at all — while a protect list only ever travelled with the one call
+   that carried it. So tab B's save could delete the snapshot tab A was in the
+   middle of restoring, which is the very thing override §2b's protect list
+   exists to stop. Keyed by webContents id and dropped with the tab
+   (forgetTab), so a closed or crashed tab cannot pin snapshots for the rest
+   of the run. The store unions these into every eviction (its holds()). */
 const historyHolds = new Map();   /* webContentsId -> [{docId, id}] */
 
-function historyAllHolds(protect) {
-  const out = historyProtectList(protect);
-  const seen = new Set(out.map((p) => p.docId + "\n" + p.id));
-  for (const held of historyHolds.values()) {
-    for (const p of held) {
-      const key = p.docId + "\n" + p.id;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(p);
-    }
-  }
+function historyAllHolds() {
+  const out = [];
+  for (const held of historyHolds.values()) out.push(...held);
   return out;
 }
 
@@ -2067,291 +1651,82 @@ function historyProtectList(protect) {
     if (!p || typeof p !== "object") continue;
     const docId = typeof p.docId === "string" ? p.docId : "";
     const id = typeof p.id === "string" ? p.id : "";
-    if (!historyIsBucket(docId) || !HISTORY_SNAP_ID_RE.test(id)) continue;
+    if (!(docId === HISTORY_OLDER_KEY || DOC_ID_RE.test(docId)) || !HISTORY_SNAP_ID_RE.test(id)) continue;
     out.push({ docId, id });
   }
   return out;
 }
 
-function historyTotalBytes() {
-  let total = 0;
-  for (const rec of historyIndexes.values()) total += rec.bytes || 0;
-  return total;
+/* Called once from whenReady, before registerIpc: open() starts at once, so
+   the v1 migration (when there is one) is the first job on the queue and
+   every IPC call waits behind it. Not awaited — a first launch after the
+   upgrade may take a while to migrate, and the window must not wait for it. */
+function initHistoryStore() {
+  const backend = createHistoryFsBackend({
+    dir: path.join(app.getPath("userData"), "history"),
+    fs, fsp, path, crypto,
+    migrate: (api) => migrateHistoryV1(api, {
+      policy: historyPolicy, DOC_ID_RE, testHooks: historyTestMigrateHooks()
+    }),
+    testHooks: historyTestBackendHooks()
+  });
+  historyBackend = backend;
+  historyStore = createHistoryStore({
+    backend: /^enospc-/.test(HISTORY_TEST_FAULT) ? historyWithEnospcFault(backend) : backend,
+    now: Date.now,
+    /* The body folder checks every body against its sha, so this must be
+       SHA-256 of the UTF-8 bytes, nothing else. */
+    hashText: (s) => crypto.createHash("sha256").update(s, "utf8").digest("hex"),
+    capBytes: historyCapBytes,
+    maxBodyBytes: HISTORY_MAX_BODY_BYTES,
+    holds: historyAllHolds
+  });
+  backend.open().catch((err) => {
+    /* Every job now rejects with this error: reads report "could not read"
+       (never an empty list), writes answer its code and stay pending in the
+       renderer, and the next launch tries again with v1 untouched. */
+    if (TEST_MODE) process.stderr.write(`[splitpage] history open failed: ${err && err.stack || err}\n`);
+  });
 }
 
-/* ---- TEST_MODE faults ---- */
-
-function historyFaultBeforeBodyWrite() {
-  if (historyFaultArmed === "enospc-once") {
-    historyFaultArmed = "";
-    const err = new Error("Injected ENOSPC");
-    err.code = "ENOSPC";
-    throw err;
-  }
-  if (historyFaultArmed === "enospc-always") {
-    const err = new Error("Injected ENOSPC");
-    err.code = "ENOSPC";
-    throw err;
-  }
-}
-
-function historyFaultAfterBodyWrite() {
-  if (historyFaultArmed !== "exit-after-body") return;
-  /* A body on disk with no index entry, and the process gone without running
-     will-quit — the exact state a power cut mid-snapshot leaves. SIGKILL, so
-     nothing gets a chance to tidy up; the children have to go first or they
-     are orphaned. */
-  killDocumentServer();
-  killTunnel();
-  process.kill(process.pid, "SIGKILL");
-}
-
-/* ---- the operations (each one holds the queue) ---- */
-
-async function historyPutLocked(docId, meta, stateJson, protect) {
-  if (historyReadOnly) return { ok: false, code: "read-only" };
-  const size = Buffer.byteLength(stateJson, "utf8");
-  if (size > HISTORY_MAX_BODY_BYTES) return { ok: false, code: "too-large" };
-
-  const rec = historyRecordFor(docId);
-  const existing = rec.snapshots.find((m) => m.id === meta.id);
-  /* Idempotent: the same snapshot id twice is the retry of a write whose
-     answer was lost, never a second snapshot. */
-  if (existing) {
-    return { ok: true, sizeBytes: existing.sizeBytes, duplicate: true, evicted: 0, overCap: false };
-  }
-
-  const newest = rec.snapshots.length ? rec.snapshots[rec.snapshots.length - 1].atMs : null;
-  const m = historyStampAfter(sanitizeHistoryMeta(meta), newest);
-  m.sizeBytes = size;
-
-  const file = historySnapFile(docId, m.id);
-  if (!file) return { ok: false, code: "io" };
-  const body = Buffer.from(historySnapText(m, stateJson), "utf8");
-  m.diskBytes = body.length;
-
-  const writeBody = async () => {
-    await fsp.mkdir(path.dirname(file), { recursive: true });
-    historyFaultBeforeBodyWrite();
-    await atomicWrite(file, body);
-    historyFaultAfterBodyWrite();
-  };
-
-  let evicted = 0;
-  try {
-    await writeBody();
-    historyQuotaStuck = false;
-  } catch (err) {
-    if (!historyIsNoSpace(err)) {
-      if (TEST_MODE) process.stderr.write(`[splitpage] history put failed: ${err && err.stack || err}\n`);
-      return { ok: false, code: "io" };
-    }
-    if (historyQuotaStuck) return { ok: false, code: "enospc" };
-    /* The retry's budget is the normal cap lowered by this snapshot's size:
-       evicting under the normal cap alone frees nothing when the real disk,
-       not our cap, is what refused the write. */
-    const ev = await historyEvictLocked(Math.min(historyCapBytes(), Math.max(0, historyTotalBytes() - size)), protect)
-      .catch(() => ({ evicted: 0 }));
-    evicted = ev.evicted || 0;
-    if (!evicted) {
-      /* Nothing could be freed, so the retry cannot gain anything — say so
-         now rather than delete more on the next capture (override §2b). */
-      historyQuotaStuck = true;
-      return { ok: false, code: "enospc" };
-    }
-    try {
-      await writeBody();
-      historyQuotaStuck = false;
-    } catch (err2) {
-      if (historyIsNoSpace(err2)) historyQuotaStuck = true;
-      return { ok: false, code: historyErrorCode(err2), evicted };
-    }
-  }
-
-  rec.snapshots.push(m);
-  rec.snapshots.sort((a, b) => (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  if (m.title) rec.title = m.title;
-  rec.lastOpenedAt = Date.now();
-  try {
-    await writeHistoryIndex(docId);
-  } catch (err) {
-    /* The body is on disk; the index is not. The next launch's fsck adopts
-       it, so the snapshot is not lost — but this write did not complete, and
-       saying so is what makes the renderer keep its own copy pending. */
-    rec.snapshots = rec.snapshots.filter((s) => s.id !== m.id);
-    await fsp.unlink(file).catch(() => {});
-    return { ok: false, code: historyErrorCode(err), evicted };
-  }
-
-  /* Trim to 50 and, if we are over the cap, evict — the planner does both in
-     one pass, and does the per-document trim whether or not the cap is hit. */
-  const ev = await historyEvictLocked(historyCapBytes(), protect)
-    .catch(() => ({ evicted: 0, overCap: false }));
-  return {
-    ok: true,
-    sizeBytes: size,
-    duplicate: false,
-    evicted: evicted + (ev.evicted || 0),
-    overCap: !!ev.overCap
-  };
-}
-
-function historyListLocked(docId) {
-  const out = { entries: [], older: [], olderExpiresAt: null };
-  if (docId) {
-    const rec = historyIndexes.get(docId);
-    if (rec) out.entries = rec.snapshots.slice().reverse();
-  }
-  const older = historyIndexes.get(HISTORY_OLDER_KEY);
-  if (older) {
-    if (historyOlderExpired(older)) {
-      /* A read must not write inside its own turn, and the panel has already
-         stopped showing these: report empty now and queue the delete behind
-         this job. The planner takes an expired bucket as a whole. */
-      historyExclusive(() => historyEvictLocked(historyCapBytes(), [])).catch(() => {});
-    } else {
-      out.older = older.snapshots.slice().reverse();
-      out.olderExpiresAt = older.expiresAt || null;
-    }
-  }
+/* A meta on the wire carries no document id: the renderer stamps its own
+   (03a's desktopHistoryBackend), as it did when the folder was the
+   document. */
+function historyWireMeta(m) {
+  if (!m || typeof m !== "object") return m;
+  const out = Object.assign({}, m);
+  delete out.docId;
   return out;
 }
 
-async function historyCopyLocked(fromDocId, toDocId) {
-  if (historyReadOnly) return { ok: false, copied: 0, code: "read-only" };
-  const src = historyIndexes.get(fromDocId);
-  const dstExisting = historyIndexes.get(toDocId);
-  /* Nothing to copy and nothing already there: a copy of an empty history
-     must not conjure a record for a document that has none. */
-  if (!src && !dstExisting) return { ok: true, copied: 0 };
+/* ---------------------------------------------------------------------
+ * 8c. Content-addressed blobs (issue #82).
+ *
+ *     <userData>/blobs/FORMAT and sha256/<aa>/<sha>: raw bytes named by
+ *     their own SHA-256 (desktop/blob-store.js has the layout and the
+ *     integrity rules). Made once from whenReady, before any window, which
+ *     is also when a put that died mid-write has its temp file swept.
+ *
+ *     The page reaches it through three app-origin invokes, and names a
+ *     blob by its sha and nothing else — no path, no folder, no URL
+ *     (invariant #28): blob-put(sha, bytes), blob-get(sha) and
+ *     blob-missing(shas). A store that could not be created leaves the app
+ *     running without it: puts answer UNAVAILABLE, gets null, and every sha
+ *     is missing — the document still holds every image inline in its file
+ *     (#82 D1), so nothing is lost, only not cached here.
+ * --------------------------------------------------------------------- */
 
-  const dst = historyRecordFor(toDocId);
-  const have = new Set(dst.snapshots.map((m) => m.id));
-  const toDir = historyBucketDir(toDocId);
-  if (!toDir) return { ok: false, copied: 0, code: "io" };
-  let copied = 0;
+let blobStore = null;
+
+function initBlobStore() {
   try {
-    await fsp.mkdir(toDir, { recursive: true });
-    for (const m of (src ? src.snapshots : [])) {
-      if (have.has(m.id)) continue;
-      const fromFile = historySnapFile(fromDocId, m.id);
-      const toFile = historySnapFile(toDocId, m.id);
-      if (!fromFile || !toFile) continue;
-      /* Same shape as atomicWrite's temp name, so the fsck's sweep catches
-         one left behind by a crash between the copy and the rename. */
-      const tmp = path.join(toDir, `.${path.basename(toFile)}.tmp-${crypto.randomBytes(6).toString("hex")}`);
-      try {
-        await fsp.copyFile(fromFile, tmp);
-        await fsp.rename(tmp, toFile);
-      } catch (err) {
-        await fsp.unlink(tmp).catch(() => {});
-        throw err;
-      }
-      dst.snapshots.push(sanitizeHistoryMeta(m));   /* ids are kept: a second copy is a no-op */
-      have.add(m.id);
-      copied++;
-    }
+    blobStore = createBlobStore({ dir: path.join(app.getPath("userData"), "blobs"), fs, fsp, path, crypto });
+    return blobStore.init();
   } catch (err) {
-    if (TEST_MODE) process.stderr.write(`[splitpage] history copy failed: ${err && err.stack || err}\n`);
-    if (!dst.snapshots.length) historyIndexes.delete(toDocId);
-    return { ok: false, copied, code: historyErrorCode(err) };
+    blobStore = null;
+    if (TEST_MODE) process.stderr.write(`[splitpage] blob store unavailable: ${err && err.stack || err}\n`);
+    return null;
   }
-
-  dst.snapshots.sort((a, b) => (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  if (!dst.title && src && src.title) dst.title = src.title;
-  dst.lastOpenedAt = Date.now();
-  if (!dst.snapshots.length) { historyIndexes.delete(toDocId); return { ok: true, copied: 0 }; }
-  try { await writeHistoryIndex(toDocId); }
-  catch (err) { return { ok: false, copied, code: historyErrorCode(err) }; }
-  /* The index is written first, so a trim that fails still leaves a correct
-     (if over-long) history rather than bodies nothing points at. */
-  await historyEvictLocked(historyCapBytes(), []).catch(() => {});
-  return { ok: true, copied };
-}
-
-/* Never creates a record: opening a document that has no history yet must not
-   leave an empty folder behind for every file ever opened. */
-async function historyTouchLocked(docId, title) {
-  if (historyReadOnly) return;
-  const rec = historyIndexes.get(docId);
-  if (!rec) return;
-  rec.lastOpenedAt = Date.now();
-  const t = historyClip(title, 300);
-  if (t) rec.title = t;
-  await writeHistoryIndex(docId).catch(() => { /* a touch is a courtesy */ });
-}
-
-/* Put-if-absent into the Older bucket. migratedAt/expiresAt are set only when
-   the bucket is created, so re-running an interrupted migration never extends
-   the 90 days. */
-async function historyImportOlderLocked(entries) {
-  if (historyReadOnly) return { ok: false, count: 0, added: 0, code: "read-only" };
-  const existing = historyIndexes.get(HISTORY_OLDER_KEY);
-  if (!existing && !entries.length) return { ok: true, count: 0, added: 0 };
-  const rec = historyRecordFor(HISTORY_OLDER_KEY);
-  if (!existing) {
-    const now = Date.now();
-    rec.migratedAt = now;
-    rec.expiresAt = now + HISTORY_OLDER_TTL_MS;
-  }
-  const have = new Set(rec.snapshots.map((m) => m.id));
-  const dir = historyBucketDir(HISTORY_OLDER_KEY);
-  let added = 0;
-  try {
-    await fsp.mkdir(dir, { recursive: true });
-    for (const e of entries) {
-      const meta = sanitizeHistoryMeta(e && e.meta);
-      if (!meta || have.has(meta.id) || typeof (e && e.stateJson) !== "string") continue;
-      const file = historySnapFile(HISTORY_OLDER_KEY, meta.id);
-      if (!file) continue;
-      meta.sizeBytes = Buffer.byteLength(e.stateJson, "utf8");
-      const body = Buffer.from(historySnapText(meta, e.stateJson), "utf8");
-      meta.diskBytes = body.length;
-      await atomicWrite(file, body);
-      rec.snapshots.push(meta);
-      have.add(meta.id);
-      added++;
-    }
-  } catch (err) {
-    if (TEST_MODE) process.stderr.write(`[splitpage] history import failed: ${err && err.stack || err}\n`);
-    if (!rec.snapshots.length) historyIndexes.delete(HISTORY_OLDER_KEY);
-    else await writeHistoryIndex(HISTORY_OLDER_KEY).catch(() => {});
-    return { ok: false, count: rec.snapshots.length, added, code: historyErrorCode(err) };
-  }
-  if (!rec.snapshots.length) { historyIndexes.delete(HISTORY_OLDER_KEY); return { ok: true, count: 0, added: 0 }; }
-  rec.snapshots.sort((a, b) => (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  try { await writeHistoryIndex(HISTORY_OLDER_KEY); }
-  catch (err) { return { ok: false, count: rec.snapshots.length, added, code: historyErrorCode(err) }; }
-  return { ok: true, count: rec.snapshots.length, added };
-}
-
-function historyUsageLocked() {
-  const cap = historyCapBytes();
-  let total = 0;
-  let docCount = 0;
-  for (const [bucket, rec] of historyIndexes) {
-    total += rec.bytes || 0;
-    if (bucket !== HISTORY_OLDER_KEY) docCount++;
-  }
-  return { totalBytes: total, capBytes: cap, overCap: total > cap, docCount, readOnly: historyReadOnly };
-}
-
-/* Every document this store can enumerate, Older excluded — argument-free
-   (#34: nothing here is a path or a name the renderer chose) and read-only,
-   so it never touches historyReadOnly. Backs the renderer's
-   desktopHistoryBackend.rawDocIds()/rawDoc() (03a-history-store.js), which
-   exportHistoryAll() (20h-appdata.js's File > Export app data..., desktop
-   half) needs to walk every document's history the way the browser's IndexedDB
-   backend already can. historyIndexes only holds a bucket once it has been
-   fscked or written to at least once, exactly the documents this backend
-   actually has snapshots for. */
-function historyListDocsLocked() {
-  const out = [];
-  for (const [bucket, rec] of historyIndexes) {
-    if (bucket === HISTORY_OLDER_KEY) continue;
-    out.push({ docId: bucket, title: rec.title || "", lastOpenedAt: rec.lastOpenedAt || 0 });
-  }
-  return out;
 }
 
 /* ---------------------------------------------------------------------
@@ -2597,7 +1972,7 @@ function updateApiUrl() {
 function isAllowedDownloadHost(urlString) {
   let parsed;
   try { parsed = new URL(urlString); } catch { return false; }
-  let api = null;
+  let api;
   try { api = new URL(updateApiUrl()); } catch { api = null; }
   if (api && parsed.origin === api.origin) return true;
   if (parsed.protocol !== "https:") return false;
@@ -2922,6 +2297,196 @@ function runUpdateInstaller() {
 }
 
 /* ---------------------------------------------------------------------
+ * 9b. The teleprompter, in the browser (issue #86).
+ *
+ *     Follow My Voice needs the Web Speech API, which fails inside Electron
+ *     (#8) and works in Chrome and Edge. So the teleprompter can hand the
+ *     script to the default browser, starting straight in the prompter.
+ *     The desktop tab stays open and stays the place the script is edited;
+ *     the browser is a copy to read from.
+ *
+ *     THE SAME CONTRACT AS THE UPDATE BRIDGE (invariant #28). The page asks,
+ *     with no argument at all (splitpage:prompter-open-in-browser, argsSchema
+ *     NONE): "open what I am showing in the browser". It never names the URL
+ *     to open, the file to read or the server to point at. Main answers from
+ *     what it already holds about the CALLING tab — its TabRecord, the
+ *     authority every close and routing decision reads (invariant #42):
+ *
+ *       a file tab    source.absPath, which main registered itself when the
+ *                     file was opened or saved (invariant #34). Its bytes
+ *                     are read HERE, off disk, and served from memory by
+ *                     desktop/prompter-share.js on a loopback port; the URL
+ *                     is that listener's own, with a fresh 256-bit token.
+ *       a server tab  source.serverDocId on the document server THIS process
+ *                     runs (documentServerPort): http://127.0.0.1:<port>/
+ *                     ?doc=<id>&teleprompter=1. The id is checked against
+ *                     the server's own id shape before it goes anywhere near
+ *                     a URL.
+ *
+ *     The worst a compromised page can do with this channel is make main
+ *     open, in the user's browser, a loopback page of this app showing a
+ *     document the user already has open — nothing it names, nothing
+ *     off-box, no file of its choosing.
+ *
+ *     UNSAVED WORK IS REFUSED, not guessed at. The browser reads what is on
+ *     disk (or on the server), so a tab main knows to be dirty answers
+ *     UNSAVED_CHANGES and a tab with nowhere to live answers NOT_SAVED. The
+ *     page saves first when that needs no dialog and says why when it would
+ *     (openPrompterInBrowser, 20f-desktop.js).
+ * --------------------------------------------------------------------- */
+
+/* The server's own document-id shape (server/server.js ID_RE), repeated
+   rather than required because server.js is the utility process's code, not
+   this one's. A serverKey the page reported that does not fit it never
+   becomes part of a URL. */
+const SERVER_DOC_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+let prompterShare = null;
+function prompterShareInstance() {
+  if (!prompterShare) {
+    prompterShare = createPrompterShare({
+      staticAllowlist: STATIC_ALLOWLIST,
+      /* The same containment check the protocol handler makes: entry.file is
+         a literal from STATIC_ALLOWLIST, never request text. */
+      readStatic: (entry) => {
+        const absPath = path.join(APP_ROOT, entry.file);
+        if (!absPath.startsWith(APP_ROOT)) return Promise.reject(new Error("outside APP_ROOT"));
+        return fsp.readFile(absPath);
+      },
+      cspHeader: readAppCsp
+    });
+  }
+  return prompterShare;
+}
+
+async function openPrompterInBrowser(tab) {
+  if (!tab) return { ok: false, code: "NO_TAB" };
+  if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
+  const source = tab.source || { kind: "blank" };
+  let url;
+  if (source.kind === "server") {
+    /* A document on somebody else's server (#11) has no loopback URL here,
+       and this channel never opens one the page named. The page copies its
+       own share link instead (20f-desktop.js) and never reaches this. */
+    if (source.serverUrl) return { ok: false, code: "REMOTE_SERVER" };
+    const id = typeof source.serverDocId === "string" ? source.serverDocId : "";
+    if (!SERVER_DOC_ID_RE.test(id)) return { ok: false, code: "NOT_SAVED" };
+    if (!documentServerPort) return { ok: false, code: "NO_SERVER" };
+    url = `http://127.0.0.1:${documentServerPort}/?doc=${encodeURIComponent(id)}&teleprompter=1`;
+  } else if (source.kind === "file") {
+    const absPath = source.absPath;
+    if (!isShareableName(absPath)) return { ok: false, code: "NOT_A_PROJECT" };
+    let text;
+    try {
+      const st = await fsp.stat(absPath);
+      if (!st.isFile()) return { ok: false, code: "READ_FAILED" };
+      if (st.size > MAX_SCRIPT_BYTES) return { ok: false, code: "TOO_LARGE" };
+      text = await fsp.readFile(absPath, "utf8");
+    } catch {
+      return { ok: false, code: "READ_FAILED" };
+    }
+    /* Re-read after the awaits: the tab may have closed, or gone dirty, while
+       the file was being read. A share for a closed tab would never be
+       revoked by forgetTab. */
+    if (!tabs.has(tab.id)) return { ok: false, code: "NO_TAB" };
+    if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
+    try {
+      url = await prompterShareInstance().publish(tab.id, path.basename(absPath), text);
+    } catch (err) {
+      if (TEST_MODE) process.stderr.write(`[splitpage] prompter share failed: ${err && err.stack || err}\n`);
+      return { ok: false, code: "SERVE_FAILED" };
+    }
+  } else {
+    return { ok: false, code: "NOT_SAVED" };
+  }
+  try {
+    await shell.openExternal(url);
+  } catch {
+    return { ok: false, code: "OPEN_FAILED" };
+  }
+  return { ok: true, kind: source.kind };
+}
+
+/* ---------------------------------------------------------------------
+ * 9c. Google Drive, through a loopback OAuth redirect (issue #10).
+ *
+ *     The web build signs in with Google Identity Services, which needs an
+ *     http(s) origin registered with Google; splitpage://app can never be
+ *     one. Google's answer for installed apps is a loopback redirect, and
+ *     whoever holds the loopback listener holds the sign-in — so all of it
+ *     lives here, in desktop/google-drive.js: the one-shot listener on
+ *     127.0.0.1, PKCE S256 and `state`, the code-for-token exchange, the
+ *     refresh token (a safeStorage blob in userData, or memory only), the
+ *     access token (memory only), and every request to Google's fixed hosts.
+ *
+ *     THE SAME CONTRACT AS THE UPDATE BRIDGE (invariant #28). Sign in, sign
+ *     out and status take no argument: the page cannot name the URL the
+ *     browser is sent to, the redirect address, or the client. List,
+ *     download and upload take a Drive id (or an upload's name and bytes),
+ *     validated in google-drive.js — never a URL. No answer carries a token,
+ *     so a compromised page can at worst read and write the signed-in
+ *     person's Drive through main, for as long as it runs, which is what
+ *     the Drive modal itself does; it can never take the credential away.
+ *
+ *     CONFIG. SPLITPAGE_GOOGLE_CLIENT_ID / SPLITPAGE_GOOGLE_CLIENT_SECRET,
+ *     or <userData>/google-oauth-client.json. Read on every call, so a file
+ *     dropped in while the app runs is picked up without a restart.
+ *
+ *     TEST MODE. SPLITPAGE_TEST_GOOGLE_BASE points every Google endpoint at
+ *     a local fake (desktop/test/fake-google.mjs) — honoured only under
+ *     SPLITPAGE_TEST=1, and google-drive.js itself refuses the override
+ *     without testMode. shell.openExternal is already a recorder there
+ *     (section 1), which is how smoke.mjs reads the consent URL.
+ * --------------------------------------------------------------------- */
+
+/* safeStorage, with Linux's "basic_text" backend counted as unavailable:
+   it encrypts with a key compiled into Chromium, which is plain text by
+   another name. There the refresh token is kept for the session only and
+   the modal says so. SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1 (test mode only)
+   lets the smoke suite exercise the stored-token path on a Linux runner
+   that has no keyring: it switches safeStorage to its plain-text key
+   (setUsePlainTextEncryption) and accepts basic_text — the file on disk is
+   still not the token's bytes, which is what that suite checks. */
+const DRIVE_TEST_BASIC_TEXT = TEST_MODE && process.env.SPLITPAGE_TEST_DRIVE_BASIC_TEXT === "1";
+let driveBasicTextArmed = false;
+function driveSafeStorage() {
+  return {
+    isEncryptionAvailable() {
+      if (DRIVE_TEST_BASIC_TEXT && process.platform === "linux" && !driveBasicTextArmed &&
+          typeof safeStorage.setUsePlainTextEncryption === "function") {
+        driveBasicTextArmed = true;
+        safeStorage.setUsePlainTextEncryption(true);
+      }
+      if (!safeStorage.isEncryptionAvailable()) return false;
+      if (process.platform === "linux" && !DRIVE_TEST_BASIC_TEXT) {
+        let backend = "unknown";
+        try { backend = safeStorage.getSelectedStorageBackend(); } catch { /* treat as unknown */ }
+        if (backend === "basic_text" || backend === "unknown") return false;
+      }
+      return true;
+    },
+    encryptString: (s) => safeStorage.encryptString(s),
+    decryptString: (b) => safeStorage.decryptString(b)
+  };
+}
+
+let googleDrive = null;
+function googleDriveInstance() {
+  if (!googleDrive) {
+    googleDrive = createGoogleDrive({
+      userDataDir: app.getPath("userData"),
+      env: process.env,
+      safeStorage: driveSafeStorage(),
+      openExternal: (url) => shell.openExternal(url),
+      testMode: TEST_MODE,
+      testEndpointsBase: TEST_MODE && process.env.SPLITPAGE_TEST_GOOGLE_BASE ? process.env.SPLITPAGE_TEST_GOOGLE_BASE : undefined,
+      log: (line) => { if (TEST_MODE) process.stderr.write("[splitpage] " + line + "\n"); }
+    });
+  }
+  return googleDrive;
+}
+
+/* ---------------------------------------------------------------------
  * 10. protocol.handle — the whole of what the window is allowed to load.
  * --------------------------------------------------------------------- */
 
@@ -2975,19 +2540,6 @@ const TABSTRIP_CSP = [
   "form-action 'none'",
   "frame-ancestors 'none'"
 ].join("; ");
-
-function contentTypeFor(ext) {
-  const table = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".webmanifest": "application/manifest+json; charset=utf-8",
-    ".svg": "image/svg+xml",
-    ".md": "text/markdown; charset=utf-8",
-    ".txt": "text/plain; charset=utf-8"
-  };
-  return table[ext] || "application/octet-stream";
-}
 
 function registerProtocol() {
   protocol.handle("splitpage", async (request) => {
@@ -3407,7 +2959,7 @@ function claimRoutingKey(map, key, tabId) {
 
 function indexTabSource(tab) {
   if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
-  if (tab.source.kind === "server") claimRoutingKey(serverDocIdToTabId, tab.source.serverDocId, tab.id);
+  if (tab.source.kind === "server") claimRoutingKey(serverDocIdToTabId, serverRouteKey(tab.source), tab.id);
 }
 
 function unindexTabSource(tab) {
@@ -3456,6 +3008,8 @@ function forgetTab(tabId) {
   unindexTabSource(tab);
   webContentsIdToTabId.delete(tab.webContentsId);
   tabs.delete(tabId);
+  /* A tab's browser copy of its script (section 9b) goes with the tab. */
+  if (prompterShare) prompterShare.revoke(tabId);
   const w = windowsById.get(tab.windowId);
   if (w) {
     const i = w.tabIds.indexOf(tabId);
@@ -3500,7 +3054,7 @@ function createTab(windowId, opts) {
     windowId,
     view,
     webContentsId: view.webContents.id,
-    source: normalizeTabSource(o.source),
+    source: liveTabSource(o.source),
     fileId: null,
     title: "",
     dirty: false,
@@ -3845,11 +3399,14 @@ function routeOpenPath(absPath, opts) {
   return created ? { where: "new-tab", tabId: created.id } : null;
 }
 
-function routeOpenServerDoc(serverDocId, opts) {
+/* `c` is the calling tab's connection, {serverUrl, token, tunnel}, already
+   validated by the route-open handler: the document is on THAT server. */
+function routeOpenServerDoc(serverDocId, c, opts) {
   const o = opts || {};
   if (typeof serverDocId !== "string" || !serverDocId) return null;
+  const source = serverSource(serverDocId, c);
 
-  const existingId = serverDocIdToTabId.get(serverDocId);
+  const existingId = serverDocIdToTabId.get(serverRouteKey(source));
   const existing = existingId ? tabs.get(existingId) : null;
   if (existing) {
     activateTab(existing.id);
@@ -3861,10 +3418,12 @@ function routeOpenServerDoc(serverDocId, opts) {
   if (!w) return null;
   const target = tabs.get(o.fromTabId) || tabs.get(w.activeTabId);
   if (target && target.pristine && target.ready) {
-    target.source = { kind: "server", serverDocId };
+    /* This page already holds its own token; main keeps none for it. */
+    source.token = "";
+    target.source = source;
     indexTabSource(target);
     if (!target.view.webContents.isDestroyed()) {
-      target.view.webContents.send("splitpage:open-server-doc", { serverDocId });
+      target.view.webContents.send("splitpage:open-server-doc", payloadForSource(source));
     }
     activateTab(target.id);
     persistShellState();
@@ -3872,9 +3431,9 @@ function routeOpenServerDoc(serverDocId, opts) {
   }
 
   const created = createTab(w.id, {
-    source: { kind: "server", serverDocId },
+    source,
     launchIntent: { type: "open-server" },
-    pendingPayload: { kind: "open-server", serverDocId }
+    pendingPayload: payloadForSource(source)
   });
   return created ? { where: "new-tab", tabId: created.id } : null;
 }
@@ -4142,7 +3701,11 @@ function focusWindow(windowId) {
 function payloadForSource(source) {
   if (!source) return null;
   if (source.kind === "file") return { kind: "open-file", absPath: source.absPath };
-  if (source.kind === "server") return { kind: "open-server", serverDocId: source.serverDocId };
+  /* The server travels with the id (#11) so the page can check it is on
+     the right one; the token does not — a page gets that once, at boot. */
+  if (source.kind === "server") {
+    return { kind: "open-server", serverDocId: source.serverDocId, serverUrl: source.serverUrl || "" };
+  }
   return null;
 }
 
@@ -4195,7 +3758,11 @@ function draftSourceFromListing(listing) {
   const origin = (listing.header && listing.header.origin) || null;
   if (listing.filePath) return { kind: "file", absPath: listing.filePath };
   if (origin && origin.server && typeof origin.server.docId === "string" && origin.server.docId) {
-    return { kind: "server", serverDocId: origin.server.docId };
+    /* The draft header records the server as draftServerOrigin rebuilt it:
+       an http(s) origin+pathname, or null for this app's own server. */
+    const base = typeof origin.server.base === "string" && origin.server.base
+      ? origin.server.base.replace(/\/*$/, "/") : "";
+    return normalizeTabSource({ kind: "server", serverDocId: origin.server.docId, serverUrl: base });
   }
   return { kind: "blank" };
 }
@@ -4293,13 +3860,17 @@ function restoreSessionAtLaunch(draftInit) {
 
         if (pt.source.kind === "server") {
           /* A server that is not reachable at relaunch is not probed here
-             (the main process has no session and no PIN): the tab opens and
-             its own renderer reports the failure through a toast. */
+             (the main process has no session and no PIN): the tab opens on
+             ITS server (TAB-BOOT-SYNC's connection, #11) and its own
+             renderer reports the failure through a toast. It carries no
+             token — desktop-state.json never holds one — so a server that
+             asks for a PIN asks again, unless the reader chose "Remember on
+             this device" for that server. */
           const tab = createTab(rec.id, {
             tabId: pt.tabId,
             source: pt.source,
             launchIntent: { type: "open-server" },
-            pendingPayload: { kind: "open-server", serverDocId: pt.source.serverDocId }
+            pendingPayload: payloadForSource(pt.source)
           });
           if (tab) placed.add(tab.id);
           continue;
@@ -4556,6 +4127,22 @@ function buildMenu() {
       { label: "Comments", accelerator: "CmdOrCtrl+Alt+C", click: () => sendMenuCommand("toggle-comments") },
       { label: "Write", click: () => sendMenuCommand("write") },
       { label: "Present", click: () => sendMenuCommand("present") },
+      /* Issue #86: Follow My Voice runs in Chrome/Edge and not in here (#8),
+         so this reads the same script from the default browser. The page
+         decides whether it needs saving first (20f-desktop.js); main decides
+         what URL that is (section 9b). This menu bar is never drawn on
+         Windows (titleBarStyle "hidden": the tab strip is the title bar), so
+         the page carries the same command as File ▸ This document ▸ Present
+         in browser, and this item is what the accelerator hangs off.
+         Ctrl/Cmd+Shift+P: no page keydown handler uses Shift+P (21-events.js
+         takes Ctrl+F and Ctrl/Cmd+Alt+H only), no other item here uses it,
+         and a Shift chord cannot be an AltGr character the way a Ctrl+Alt
+         letter can on Czech, Hungarian or Polish layouts. */
+      {
+        label: "Present in Browser (Follow My Voice)",
+        accelerator: "CmdOrCtrl+Shift+P",
+        click: () => sendMenuCommand("prompter-open-in-browser")
+      },
       { type: "separator" },
       /* Issue #25: collapses scenes marked Shot into a thin strip. The
          renderer owns the on/off state (per-device localStorage, not this
@@ -4627,33 +4214,122 @@ function buildMenu() {
 }
 
 /* ---------------------------------------------------------------------
- * 14. IPC — the bridge's other half. Every handler validates the calling
- *     frame is our own app origin (or, in tunnel mode, none of these are
- *     exposed at all — see preload.js), never trusting contextIsolation
- *     alone to have kept a compromised/tunnelled renderer out.
+ * 14. IPC — the bridge's other half. Every channel this process listens on
+ *     is one row of desktop/ipc-channels.js, and every inbound message goes
+ *     through ONE gate before any handler body runs: the sender's origin
+ *     against the row's allowedOrigins, then the arguments against its
+ *     argsSchema. Nothing is registered that the table does not list, so a
+ *     channel cannot exist here and be missing from the copy of the table
+ *     the preloads read at load. None of this trusts contextIsolation alone
+ *     to have kept a compromised or tunnelled renderer out — in tunnel mode
+ *     the window gets no bridge at all (see preload.js), and a page that is
+ *     neither of our two origins is refused here as well.
  * --------------------------------------------------------------------- */
 
-function isTrustedSender(event) {
+/* Which of our origins the sender is, or null for a page that is neither.
+   The trailing slash is load-bearing: "splitpage://apple/" must not read as
+   the app. */
+function senderOriginOf(event) {
   const url = event.senderFrame && event.senderFrame.url;
-  return typeof url === "string" && url.startsWith("splitpage://app/");
+  if (typeof url !== "string") return null;
+  if (url.startsWith(APP_ORIGIN + "/")) return APP_ORIGIN;
+  if (url.startsWith(TABSTRIP_ORIGIN + "/")) return TABSTRIP_ORIGIN;
+  return null;
 }
 
-function requireTrusted(event) {
-  if (!isTrustedSender(event)) throw new Error("untrusted sender");
+function isTrustedSender(event) {
+  return senderOriginOf(event) === APP_ORIGIN;
 }
 
 /* The tab strip is a SECOND privileged origin (invariant #43), and its own
    trust check is deliberately separate from isTrustedSender above: neither
-   origin can reach the other's handlers. The URL prefix alone is not enough
-   — it also has to be a window's OWN primary webContents, so a strip page
-   somehow loaded into a view or an iframe would still pass no shell command. */
+   origin can reach the other's handlers, because no row of the table lists
+   both for anything but the table read itself. The origin alone is not
+   enough — it also has to be a window's OWN primary webContents, so a strip
+   page somehow loaded into a view or an iframe would still pass no shell
+   command. */
 function isTrustedTabStripSender(event) {
-  const url = event.senderFrame && event.senderFrame.url;
-  if (typeof url !== "string" || !url.startsWith("splitpage://tabstrip/")) return false;
+  if (senderOriginOf(event) !== TABSTRIP_ORIGIN) return false;
   for (const w of windowsById.values()) {
     if (!w.win.isDestroyed() && w.win.webContents === event.sender) return true;
   }
   return false;
+}
+
+/* THE ONE VALIDATOR. Answers null when a message may go through, or the
+   reason it may not — which is what an invoke's caller is told, and what a
+   test run prints. Fail closed, in this order: a channel nobody declared, a
+   sender from an origin the row does not list, an origin whose own trust
+   check says no, then arguments that do not match the schema.
+
+   Both trust checks survive verbatim; what changed is that they are made
+   here, once, instead of at the top of sixty handlers where the next one
+   written is the one that forgets. */
+function ipcRefusalReason(channel, event, args) {
+  if (!channel) return "unknown channel";
+  const origin = senderOriginOf(event);
+  if (!origin || !channel.allowedOrigins.includes(origin)) return "untrusted sender";
+  const trusted = origin === APP_ORIGIN ? isTrustedSender(event) : isTrustedTabStripSender(event);
+  if (!trusted) return "untrusted sender";
+  const bad = checkArgs(channel.argsSchema, args);
+  return bad ? channel.name + ": " + bad : null;
+}
+
+/* Said out loud under SPLITPAGE_TEST and nowhere else, like every other
+   thing this process reports: a refused message has always been a no-op a
+   normal launch says nothing about, and the one place it matters that it was
+   refused is a test run watching for it. */
+function logIpcRefusal(name, reason) {
+  if (TEST_MODE) console.error("[splitpage-test] ipc refused " + name + ": " + reason);
+}
+
+/* Registration goes through the table too. ipcHandle/ipcOn/ipcOnSync look
+   the row up by (name, direction) and throw at startup if there is not one,
+   so a channel registered here but never declared there cannot reach a
+   running app. ipcMain.handle and ipcMain.on are called in these three
+   functions and nowhere else in this file; desktop/test/ipc-table.test.mjs
+   holds it to that. */
+function ipcChannelRow(name, direction) {
+  const channel = channelFor(name, direction);
+  if (!channel) throw new Error(`ipc: ${name} (${direction}) is not in desktop/ipc-channels.js`);
+  return channel;
+}
+
+function ipcHandle(name, fn) {
+  const channel = ipcChannelRow(name, "invoke");
+  ipcMain.handle(name, (event, ...args) => {
+    const reason = ipcRefusalReason(channel, event, args);
+    if (reason) { logIpcRefusal(name, reason); throw new Error(reason); }
+    return fn(event, ...args);
+  });
+}
+
+function ipcOn(name, fn) {
+  const channel = ipcChannelRow(name, "send");
+  ipcMain.on(name, (event, ...args) => {
+    const reason = ipcRefusalReason(channel, event, args);
+    if (reason) { logIpcRefusal(name, reason); return; }
+    fn(event, ...args);
+  });
+}
+
+/* A sendSync caller is BLOCKED until returnValue is set, so every path out
+   of here sets one. A refusal — and a handler that threw, which would
+   otherwise leave the renderer waiting on a reply that is never coming —
+   answers with the row's declared refusal value: the same "I know nothing"
+   answer that channel's preload already falls back to. */
+function ipcOnSync(name, fn) {
+  const channel = ipcChannelRow(name, "sendSync");
+  ipcMain.on(name, (event, ...args) => {
+    const reason = ipcRefusalReason(channel, event, args);
+    if (reason) { logIpcRefusal(name, reason); event.returnValue = channel.refusal; return; }
+    try {
+      event.returnValue = fn(event, ...args);
+    } catch (err) {
+      logIpcRefusal(name, (err && err.message) || "handler failed");
+      event.returnValue = channel.refusal;
+    }
+  });
 }
 
 /* The strip's sender, as a WindowRecord. */
@@ -4696,8 +4372,16 @@ function launchIntentFor(tab) {
 }
 
 function registerIpc() {
-  ipcMain.handle("splitpage:open-file-dialog", async (event) => {
-    requireTrusted(event);
+  /* THE TABLE ITSELF, and it has to come first: a sandboxed preload cannot
+     require desktop/ipc-channels.js off disk (its `require` resolves
+     'electron', 'events', 'timers' and 'url' and nothing else), so it asks
+     here instead — synchronously, before it builds a single bridge method —
+     and exposes nothing at all if no answer comes. Only the list of channel
+     descriptions crosses, and an origin is only ever handed the rows it is
+     already allowed to use. */
+  ipcOnSync("splitpage:ipc-table-sync", (event) => channelsForOrigin(senderOriginOf(event)));
+
+  ipcHandle("splitpage:open-file-dialog", async (event) => {
     const answer = consumeTestDialogAnswer();
     let chosen;
     if (answer !== undefined) {
@@ -4717,8 +4401,7 @@ function registerIpc() {
     return await readFileEntry(id, chosen);
   });
 
-  ipcMain.handle("splitpage:save-file-dialog", async (event, options) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:save-file-dialog", async (event, options) => {
     const opts = options || {};
     const answer = consumeTestDialogAnswer();
     let chosen;
@@ -4765,15 +4448,13 @@ function registerIpc() {
     return { id, name: path.basename(chosen) };
   });
 
-  ipcMain.handle("splitpage:read-file", async (event, id) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:read-file", async (event, id) => {
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     return await readFileEntry(id, absPath);
   });
 
-  ipcMain.handle("splitpage:write-file", async (event, id, data) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:write-file", async (event, id, data) => {
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     const buffer = toBuffer(data);
@@ -4782,8 +4463,7 @@ function registerIpc() {
     return { lastModified: Math.floor(stat.mtimeMs), size: stat.size };
   });
 
-  ipcMain.handle("splitpage:stat-file", async (event, id) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:stat-file", async (event, id) => {
     const absPath = fileRegistry.get(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     try {
@@ -4801,19 +4481,16 @@ function registerIpc() {
      returns a path (invariant #34) — an entry is named by the same opaque
      fileId it was listed with, and reopening one goes through the ordinary
      route-open above, so main still decides where it lands. */
-  ipcMain.handle("splitpage:recents-list", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:recents-list", async () => {
     return recentsForRenderer();
   });
 
-  ipcMain.handle("splitpage:recents-remove", async (event, fileId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:recents-remove", async (event, fileId) => {
     if (removeRecentDocumentByFileId(fileId)) await persistRecents();
     return recentsForRenderer();
   });
 
-  ipcMain.handle("splitpage:recents-clear", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:recents-clear", async () => {
     if (recentDocuments.length) {
       recentDocuments = [];
       await persistRecents();
@@ -4827,8 +4504,7 @@ function registerIpc() {
      splitpage:set-document-state instead of a dedicated "remember this"
      call — one report, not two paths that can drift apart. */
 
-  ipcMain.handle("splitpage:get-session-info", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:get-session-info", async () => {
     return {
       library: LIBRARY,
       hosting: HOSTING,
@@ -4851,9 +4527,7 @@ function registerIpc() {
   /* Synchronous: preload reads this once, at load time, to build the plain
      `appVersion` string property on window.splitpageDesktop (not a
      promise — see the bridge contract). */
-  ipcMain.on("splitpage:get-app-version-sync", (event) => {
-    event.returnValue = isTrustedSender(event) ? app.getVersion() : null;
-  });
+  ipcOnSync("splitpage:get-app-version-sync", () => app.getVersion());
 
   /* TAB-BOOT-SYNC. Synchronous for the same reason appVersion is: preload
      reads it ONCE, at load time, and the renderer's boot sequence needs the
@@ -4865,10 +4539,9 @@ function registerIpc() {
      It carries no path and no server document id: the renderer is told what
      KIND of boot this is and nothing more, so a compromised page learns
      nothing about the file system from it (invariant #34). */
-  ipcMain.on("splitpage:tab-boot-sync", (event) => {
-    if (!isTrustedSender(event)) { event.returnValue = null; return; }
+  ipcOnSync("splitpage:tab-boot-sync", (event) => {
     const tab = tabOf(event);
-    if (!tab) { event.returnValue = null; return; }
+    if (!tab) return null;
     const intent = launchIntentFor(tab);
     tab.launchIntent = intent;
     const hasDraftToRestore = intent.type === "restore-draft";
@@ -4890,50 +4563,113 @@ function registerIpc() {
         try { draftStore.release(tab.id); } catch { /* store not usable */ }
       }
     }
-    event.returnValue = {
+    /* The token rides this one answer and is then dropped from the record
+       (#11): the page keeps its own from here on. */
+    const connection = tab.source.kind === "server"
+      ? { serverUrl: tab.source.serverUrl || "", token: tab.source.token || "", tunnel: tab.source.tunnel || null }
+      : null;
+    if (tab.source.kind === "server") tab.source.token = "";
+    return {
       tabId: tab.id,
       windowId: tab.windowId,
       launchIntent: intent,
+      /* #11: the server a server tab's document is on, so the page's very
+         first /api/health goes to the right one, and the token route-open
+         handed over for a new tab, if any. null
+         for any other tab, which starts where a fresh page starts. Never a
+         path, never a server document id (invariant #34): the id still
+         arrives with the pending payload. */
+      connection,
       hadPriorSession,
       firstTabOfLaunch: tab.firstTabOfLaunch === true,
       hasDraftToRestore
     };
   });
 
-  ipcMain.on("splitpage:open-external", (event, url) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:open-external", (event, url) => {
     if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
   });
 
   /* ---- updates -------------------------------------------------------
-     Three calls, none of which takes an argument. That is the contract:
-     the page can ask what the situation is, ask for the download to start,
-     and ask for what was downloaded to be run — it cannot say WHAT to
-     download or WHAT to run. See section 9. */
+     Four calls, none of which takes an argument. That is the contract: the
+     page can ask what the situation is, ask for the download to start, and
+     ask for what was downloaded to be run — it cannot say WHAT to download
+     or WHAT to run. It used to be a contract written in a comment; the
+     table states it (argsSchema: none, all four), so a call that carries an
+     argument is refused before it arrives. See section 9. */
 
-  ipcMain.handle("splitpage:update-status", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-status", async () => {
     return updateStatus;
   });
 
   /* Re-run the check on demand, for the case the launch check found nothing
      because the machine was offline at the time. */
-  ipcMain.handle("splitpage:update-check", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-check", async () => {
     if (SKIP_UPDATE_CHECK) return updateStatus;
     setUpdateStatus({ checking: true });
     await checkForUpdate();
     return updateStatus;
   });
 
-  ipcMain.handle("splitpage:update-download", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-download", async () => {
     return downloadUpdate();
   });
 
-  ipcMain.handle("splitpage:update-install", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:update-install", async () => {
     return runUpdateInstaller();
+  });
+
+  /* ---- the teleprompter in the browser (section 9b, issue #86) --------
+     No argument, like the four above and for the same reason: the page asks
+     for what it is showing to be opened in the browser, and main decides
+     from the calling tab's own record what that is and where it lives. */
+  ipcHandle("splitpage:prompter-open-in-browser", async (event) => {
+    return openPrompterInBrowser(tabOf(event));
+  });
+
+  /* ---- Google Drive (section 9c, issue #10) ---------------------------
+     The account calls take no argument; the Drive calls take a Drive id or
+     an upload request, which google-drive.js validates field by field.
+     Only a tab page may call them (the table's APP origin), and a sender
+     with no TabRecord is refused like every other tab-page handler. */
+  ipcHandle("splitpage:drive-status", async (event) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return Object.assign({ ok: true }, googleDriveInstance().status());
+  });
+
+  ipcHandle("splitpage:drive-sign-in", async (event) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    const result = await googleDriveInstance().signIn();
+    /* The person just finished in their browser; bring them back. Never in
+       a test run, where no window is ever shown (invariant #33). */
+    if (result && result.ok && !TEST_MODE) {
+      const win = dialogParentFor(event);
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        win.focus();
+      }
+    }
+    return result;
+  });
+
+  ipcHandle("splitpage:drive-sign-out", async (event) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().signOut();
+  });
+
+  ipcHandle("splitpage:drive-list", async (event, folderId) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().listFolder(folderId);
+  });
+
+  ipcHandle("splitpage:drive-download", async (event, fileId) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().download(fileId);
+  });
+
+  ipcHandle("splitpage:drive-upload", async (event, request) => {
+    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
+    return googleDriveInstance().upload(request);
   });
 
   /* The TabRecord is main's copy of what the page is showing, and it is the
@@ -4941,8 +4677,7 @@ function registerIpc() {
      It must be current the instant the page reports, which is why this is a
      send and not an invoke, and why nothing here returns early before the
      record is updated. */
-  ipcMain.on("splitpage:set-document-state", (event, docState) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:set-document-state", (event, docState) => {
     const tab = tabOf(event);
     if (!tab) return;
     const s = docState || {};
@@ -4973,8 +4708,25 @@ function registerIpc() {
     if (hasServerKey) tab.serverKey = typeof s.serverKey === "string" && s.serverKey ? s.serverKey : null;
     if (hasFileId) tab.fileId = absPath ? s.fileId : null;
     if (hasFileId || hasServerKey) {
+      const prev = tab.source.kind === "server" ? tab.source : null;
       unindexTabSource(tab);
-      if (tab.serverKey) tab.source = { kind: "server", serverDocId: tab.serverKey };
+      if (tab.serverKey) {
+        /* Which server the document is on (#11). An older page reports no
+           serverUrl; an unusable one is not believed. Either way the
+           server this tab's source already named stays, if it is the same
+           document, and this app's own otherwise. The in-memory token
+           stays only while the server does. */
+        const reported = "serverUrl" in s ? normalizeServerUrl(s.serverUrl) : null;
+        const kept = prev && prev.serverDocId === tab.serverKey ? prev.serverUrl : "";
+        const serverUrl = reported === null ? kept : reported;
+        const sameServer = !!prev && prev.serverUrl === serverUrl;
+        tab.source = serverSource(tab.serverKey, {
+          serverUrl,
+          tunnel: "tunnel" in s ? s.tunnel : (sameServer ? prev.tunnel : null),
+          token: sameServer ? prev.token : "",
+          role: "role" in s ? s.role : (sameServer ? prev.role : "")
+        });
+      }
       else if (absPath) tab.source = { kind: "file", absPath };
       /* Both reported and both empty is the one honest "this tab holds no
          document any more" (New document, or a server document closed). */
@@ -5006,8 +4758,7 @@ function registerIpc() {
     catch (err) { if (TEST_MODE) console.error("[splitpage-test] doc claim failed", err); }
   });
 
-  ipcMain.on("splitpage:renderer-ready", (event) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:renderer-ready", (event) => {
     const tab = tabOf(event);
     if (!tab) return;
     tab.ready = true;
@@ -5020,8 +4771,7 @@ function registerIpc() {
   /* DOCUMENT-STATE-AND-ROUTING-IPC. The renderer asks "open this", main
      decides WHERE — this tab, a tab that already has it, or a new one — and
      answers with which of the three happened so the page can tell the user. */
-  ipcMain.handle("splitpage:route-open", async (event, payload) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:route-open", async (event, payload) => {
     const tab = tabOf(event);
     if (!tab) throw new Error("unknown tab");
     const p = payload || {};
@@ -5033,7 +4783,14 @@ function registerIpc() {
       return { where: result.where };
     }
     if (p.kind === "server") {
-      const result = routeOpenServerDoc(String(p.serverDocId || ""), { fromWindowId: tab.windowId, fromTabId: tab.id });
+      /* The connection the page is on (#11). An address that does not
+         validate is refused outright rather than routed to this app's own
+         server under the same id, which would be somebody else's document.
+         A token that does not look like one is simply not carried. */
+      const serverUrl = normalizeServerUrl(p.serverUrl);
+      if (serverUrl === null) throw new Error("route-open: not a server address");
+      const c = { serverUrl, token: p.token, tunnel: p.tunnel };
+      const result = routeOpenServerDoc(String(p.serverDocId || ""), c, { fromWindowId: tab.windowId, fromTabId: tab.id });
       if (!result) throw new Error("could not route that server document");
       return { where: result.where };
     }
@@ -5057,8 +4814,7 @@ function registerIpc() {
      from — rather than inventing a code no contract lists. */
   const DRAFT_STORE_DOWN = { ok: false, code: "EIO" };
 
-  ipcMain.handle("splitpage:draft-write", async (event, payload) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:draft-write", async (event, payload) => {
     const tab = tabOf(event);
     if (!tab) return { ok: false, code: "NO_TAB" };
     if (!draftStore) return DRAFT_STORE_DOWN;
@@ -5079,8 +4835,7 @@ function registerIpc() {
   /* "This tab is clean at seq N": the crash draft has nothing left to protect.
      The store refuses while the tab is held, which is right — a held tab's
      "clean" may only mean its draft has not been loaded yet (invariant #40). */
-  ipcMain.handle("splitpage:draft-discard", async (event, payload) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:draft-discard", async (event, payload) => {
     const tab = tabOf(event);
     if (!tab) return { ok: false, code: "NO_TAB" };
     if (!draftStore) return DRAFT_STORE_DOWN;
@@ -5093,8 +4848,7 @@ function registerIpc() {
      until the page reports what it did with it (draft-restore-done) or the
      user throws it away, so a restore that dies halfway can start again at
      the next launch (invariant #40). */
-  ipcMain.handle("splitpage:draft-take", async (event) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:draft-take", async (event) => {
     const tab = tabOf(event);
     if (!tab || !draftStore) return null;
     const taken = await draftStore.take(tab.id);
@@ -5145,8 +4899,7 @@ function registerIpc() {
      releases the hold and lets writes rotate the draft again; 'failed' keeps
      it, so every later write of this tab is refused as HELD and the
      unrestored work survives to the next launch (DRAFT-STORE). */
-  ipcMain.on("splitpage:draft-restore-done", (event, payload) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:draft-restore-done", (event, payload) => {
     const tab = tabOf(event);
     if (!tab || !draftStore) return;
     const outcome = payload && typeof payload.outcome === "string" ? payload.outcome : "";
@@ -5169,8 +4922,7 @@ function registerIpc() {
 
   /* The reply to splitpage:draft-flush. Matched by reqId: a reply whose
      request has already been given up on resolves nothing at all. */
-  ipcMain.on("splitpage:draft-flushed", (event, reqId, result) => {
-    if (!isTrustedSender(event)) return;
+  ipcOn("splitpage:draft-flushed", (event, reqId, result) => {
     const resolve = pendingDraftFlushes.get(reqId);
     if (!resolve) return;
     pendingDraftFlushes.delete(reqId);
@@ -5179,8 +4931,10 @@ function registerIpc() {
 
   /* ---- version history (HISTORY-IPC) ---------------------------------
 
-     Every channel is requireTrusted, so only splitpage://app — a document
-     page — reaches them; the tab strip, on its own origin, gets nothing.
+     Every channel lists splitpage://app and nothing else, so only a
+     document page reaches them; the tab strip, on its own origin, gets
+     nothing — and gets it from the table, not from a check each handler
+     has to remember to make.
 
      An invalid docId, snapshot id or body REJECTS the invoke rather than
      answering {ok:false}: those are not conditions the renderer can recover
@@ -5189,16 +4943,31 @@ function registerIpc() {
      'invalid' so the entry is dropped instead of being kept pending in RAM
      for the life of the page. Everything that a retry COULD fix — a full
      disk, an I/O error, a read-only folder, a body over the limit — comes
-     back as a value. */
+     back as a value. A READ the store cannot do (the history folder failed
+     to open) rejects as well: "could not read" must never look like an
+     empty history. */
 
   const historyDocIdArg = (v) => {
     if (typeof v !== "string" || !DOC_ID_RE.test(v)) throw new Error("history: invalid document id");
     return v;
   };
 
-  ipcMain.handle("splitpage:history-put", async (event, docId, meta, stateJson, protect) => {
-    requireTrusted(event);
-    historyDocIdArg(docId);
+  /* (docId | null, meta, stateJson, {protect?, older?}) — the store's own
+     put(), options bag and all. {older:true} (literally true) writes into
+     the Older bucket, and then the docId MUST be null: the flag names the
+     bucket, never a string, so "_older" or a real docId beside it rejects.
+     Without the flag the docId must be a real one, so null alone rejects
+     too. That one flag is all that is left of splitpage:history-import-
+     older (#83 step 4): an import into Older is a put per entry, each
+     put-if-absent, and the renderer counts what landed. */
+  ipcHandle("splitpage:history-put", async (event, docId, meta, stateJson, opts) => {
+    const o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
+    const older = o.older === true;
+    if (older) {
+      if (docId !== null) throw new Error("history: an Older put names no document");
+    } else {
+      historyDocIdArg(docId);
+    }
     const clean = sanitizeHistoryMeta(meta);
     if (!clean) throw new Error("history: invalid snapshot meta");
     if (typeof stateJson !== "string") throw new Error("history: invalid snapshot body");
@@ -5213,21 +4982,51 @@ function registerIpc() {
        than by A's own put. Each report replaces the last, which is what
        protectHistorySnapshot's release() is: the page sends its current holds
        with every put. */
-    const held = historyProtectList(protect);
+    const held = historyProtectList(o.protect);
     historyHolds.set(event.sender.id, held);
-    return historyExclusive(() => historyPutLocked(docId, clean, stateJson, held));
+    /* The answer keeps HISTORY-IPC's shape ({ok, sizeBytes, duplicate,
+       evicted, overCap} | {ok:false, code, evicted?}), which is what 03a's
+       desktopHistoryBackend reads — an Older put answers it too. */
+    const r = older
+      ? await historyStore.put(null, clean, stateJson, { protect: held, older: true })
+      : await historyStore.put(docId, clean, stateJson, { protect: held });
+    if (r.stored) {
+      return {
+        ok: true,
+        sizeBytes: historyUtf8Length(stateJson),
+        duplicate: !!r.duplicate,
+        evicted: Number(r.evicted) || 0,
+        overCap: !!r.overCap
+      };
+    }
+    const out = { ok: false, code: typeof r.code === "string" ? r.code : "io" };
+    if (r.evicted) out.evicted = r.evicted;
+    return out;
   });
 
-  ipcMain.handle("splitpage:history-list", async (event, docId) => {
-    requireTrusted(event);
+  /* → {entries, older, olderExpiresAt, usage} — usage being the store's
+     {totalBytes, capBytes, overCap, docCount, readOnly}, or null when it
+     could not be read. The panel only ever asked for usage together with
+     a list, so it rides on the list's answer rather than a channel of its
+     own (#83 step 4). A list the store cannot read still rejects. */
+  ipcHandle("splitpage:history-list", async (event, docId) => {
     /* null is "just the Older bucket, please" — the panel asks for it on a
        document that has no id yet. Anything else must be a real docId. */
     const id = docId == null ? null : historyDocIdArg(docId);
-    return historyExclusive(() => historyListLocked(id));
+    /* The v1 migration holds the queue: say so now rather than wait behind
+       it (the panel shows a line instead of "No snapshots"). */
+    if (historyBackend.migrating) return { entries: [], older: [], olderExpiresAt: null, usage: null, migrating: true };
+    const r = await historyStore.list(id);
+    const usage = await historyStore.usage().catch(() => null);
+    return {
+      entries: r.entries.map(historyWireMeta),
+      older: r.older.map(historyWireMeta),
+      olderExpiresAt: r.olderExpiresAt,
+      usage
+    };
   });
 
-  ipcMain.handle("splitpage:history-get", async (event, query, snapshotId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-get", async (event, query, snapshotId) => {
     const q = query || {};
     /* The Older bucket is reachable ONLY through older:true. A file claiming
        docId "_older" fails DOC_ID_RE and never gets near it (invariant #38). */
@@ -5243,32 +5042,22 @@ function registerIpc() {
        dropped with the tab, so a page that stops reporting over-protects one
        snapshot at worst. */
     if (Array.isArray(q.protect)) historyHolds.set(event.sender.id, historyProtectList(q.protect));
-    return historyExclusive(() => readHistorySnapshotFile(bucket, snapshotId));
+    /* The state JSON goes back as TEXT and is never parsed here: main has
+       no business knowing what a document looks like. */
+    const r = await historyStore.get(bucket, snapshotId);
+    return r ? { meta: historyWireMeta(r.meta), stateJson: r.stateJson } : null;
   });
 
-  ipcMain.handle("splitpage:history-copy", async (event, fromDocId, toDocId) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-copy", async (event, fromDocId, toDocId) => {
     historyDocIdArg(fromDocId);
     historyDocIdArg(toDocId);
     if (fromDocId === toDocId) return { ok: true, copied: 0 };
-    return historyExclusive(() => historyCopyLocked(fromDocId, toDocId));
+    return historyStore.copy(fromDocId, toDocId);
   });
 
-  ipcMain.handle("splitpage:history-touch", async (event, docId, title) => {
-    requireTrusted(event);
+  ipcHandle("splitpage:history-touch", async (event, docId, title) => {
     historyDocIdArg(docId);
-    await historyExclusive(() => historyTouchLocked(docId, title));
-  });
-
-  ipcMain.handle("splitpage:history-import-older", async (event, entries) => {
-    requireTrusted(event);
-    if (!Array.isArray(entries)) throw new Error("history: invalid import");
-    return historyExclusive(() => historyImportOlderLocked(entries));
-  });
-
-  ipcMain.handle("splitpage:history-usage", async (event) => {
-    requireTrusted(event);
-    return historyExclusive(() => historyUsageLocked());
+    await historyStore.touch(docId, title);
   });
 
   /* Enumeration for File > Export app data.. on desktop (20h-appdata.js /
@@ -5276,62 +5065,101 @@ function registerIpc() {
      name out — just the docIds this store already knows about, each with the
      same title/lastOpenedAt splitpage:history-list already exposes per
      document. */
-  ipcMain.handle("splitpage:history-list-docs", async (event) => {
-    requireTrusted(event);
-    return historyExclusive(() => historyListDocsLocked());
+  ipcHandle("splitpage:history-list-docs", async () => {
+    return historyStore.listDocs();
+  });
+
+  /* ---- content-addressed blobs (section 8c, issue #82) ----------------
+
+     The sha is typed in the table (64 lowercase hex), so by the time a
+     handler runs it cannot be a path. What stays here is what a schema
+     cannot say: blob-put's bytes must be real bytes (not a string), a PNG,
+     JPEG, GIF or WebP of at most 16 MiB, and hash to the sha — the store
+     checks that last one itself. Every content refusal is an answer,
+     {ok:false, code}, in the Drive calls' style; only a malformed call
+     (which the table mostly catches first) rejects. */
+
+  ipcHandle("splitpage:blob-put", async (event, sha, bytes) => {
+    if (typeof bytes === "string") return { ok: false, code: "BAD_BYTES" };
+    let buf;
+    try { buf = toBuffer(bytes); } catch { return { ok: false, code: "BAD_BYTES" }; }
+    const refusal = imageBlobRefusal(buf);
+    if (refusal) return { ok: false, code: refusal };
+    if (!blobStore) return { ok: false, code: "UNAVAILABLE" };
+    return blobStore.put(sha, buf);
+  });
+
+  /* {bytes, mime} or null. The mime is sniffed from the bytes, never
+     remembered from a put: this door hands back images only, so anything
+     else in the folder (a later issue's snapshot bodies) answers null here. */
+  ipcHandle("splitpage:blob-get", async (event, sha) => {
+    if (!blobStore) return null;
+    const buf = await blobStore.get(sha);
+    if (!buf) return null;
+    const mime = sniffImageMime(buf);
+    return mime ? { bytes: buf, mime } : null;
+  });
+
+  /* The subset of `shas` this store does not hold. At most
+     MAX_MISSING_QUERY per call, every one a sha — a list with anything else
+     in it rejects rather than being half-answered. */
+  ipcHandle("splitpage:blob-missing", async (event, shas) => {
+    if (shas.length > MAX_MISSING_QUERY) throw new Error("blob-missing: at most " + MAX_MISSING_QUERY + " shas per call");
+    if (!shas.every(isSha256)) throw new Error("blob-missing: every entry must be a sha256");
+    if (!blobStore) return [...new Set(shas)];
+    return blobStore.missing(shas);
   });
 
   /* ---- the tab strip's channels (TABSTRIP-BRIDGE) --------------------
      A separate origin with its own trust check, and deliberately nothing
-     else: no file, draft or history handler accepts a strip sender, and
-     isTrustedSender (splitpage://app/ only) is what keeps it that way. */
+     else: no file, draft or history handler accepts a strip sender. What
+     keeps it that way is one column of desktop/ipc-channels.js — these nine
+     rows are the only ones that list splitpage://tabstrip, and the strip's
+     preload is handed exactly those nine. */
 
-  ipcMain.on("splitpage:tabstrip-window-id-sync", (event) => {
-    const w = isTrustedTabStripSender(event) ? tabStripWindowOf(event) : null;
-    event.returnValue = w ? w.id : null;
+  ipcOnSync("splitpage:tabstrip-window-id-sync", (event) => {
+    const w = tabStripWindowOf(event);
+    return w ? w.id : null;
   });
 
-  ipcMain.handle("splitpage:tabstrip-get-state", async (event) => {
-    if (!isTrustedTabStripSender(event)) throw new Error("untrusted sender");
+  ipcHandle("splitpage:tabstrip-get-state", async (event) => {
     const w = tabStripWindowOf(event);
     return w ? shellStateForWindow(w.id) : null;
   });
 
-  /* Every strip command validates its tabId as 32 hex AND as a tab that
-     actually exists — a strip page can otherwise name any string it likes. */
-  const stripTab = (event, tabId) => {
-    if (!isTrustedTabStripSender(event)) return null;
-    if (typeof tabId !== "string" || !TAB_OR_WINDOW_ID_RE.test(tabId)) return null;
-    return tabs.get(tabId) || null;
-  };
+  /* Every strip command's tabId is typed as 32 hex by the table, and the
+     gate has already refused anything else — a strip page can otherwise name
+     any string it likes. What is left for here is the half a schema cannot
+     know: whether the id names a tab that still exists. */
+  const stripTab = (_event, tabId) => tabs.get(tabId) || null;
 
-  ipcMain.on("splitpage:tabstrip-new-tab", (event) => {
-    const w = isTrustedTabStripSender(event) ? tabStripWindowOf(event) : null;
+  ipcOn("splitpage:tabstrip-new-tab", (event) => {
+    const w = tabStripWindowOf(event);
     if (w) createTab(w.id, { source: { kind: "blank" }, launchIntent: { type: "blank" } });
   });
 
-  ipcMain.on("splitpage:tabstrip-activate", (event, tabId) => {
+  ipcOn("splitpage:tabstrip-activate", (event, tabId) => {
     const tab = stripTab(event, tabId);
     if (tab) activateTab(tab.id);
   });
 
-  ipcMain.on("splitpage:tabstrip-close", (event, tabId) => {
+  ipcOn("splitpage:tabstrip-close", (event, tabId) => {
     const tab = stripTab(event, tabId);
     if (tab) requestCloseTab(tab.id);
   });
 
-  ipcMain.on("splitpage:tabstrip-reorder", (event, tabId, index) => {
+  ipcOn("splitpage:tabstrip-reorder", (event, tabId, index) => {
     const tab = stripTab(event, tabId);
     if (tab && Number.isInteger(index)) reorderTab(tab.id, index);
   });
 
-  ipcMain.on("splitpage:tabstrip-move-here", (event, tabId, dropIndex) => {
+  ipcOn("splitpage:tabstrip-move-here", (event, tabId, dropIndex) => {
     const tab = stripTab(event, tabId);
     const w = tab ? tabStripWindowOf(event) : null;
     if (tab && w) moveTabToWindow(tab.id, w.id, Number.isInteger(dropIndex) ? dropIndex : undefined);
   });
 
-  ipcMain.on("splitpage:tabstrip-tear-off", (event, tabId, screenX, screenY) => {
+  ipcOn("splitpage:tabstrip-tear-off", (event, tabId, screenX, screenY) => {
     const tab = stripTab(event, tabId);
     if (tab) tearOffToNewWindow(tab.id, Number(screenX), Number(screenY));
   });
@@ -5343,9 +5171,7 @@ function registerIpc() {
      answers the same TEST_MODE boolean that already governs every dialog
      in this process (see section 1), nothing a normal launch couldn't
      already infer by watching dialogs never appear. */
-  ipcMain.on("splitpage:is-test-mode-sync", (event) => {
-    event.returnValue = isTrustedSender(event) ? TEST_MODE : false;
-  });
+  ipcOnSync("splitpage:is-test-mode-sync", () => TEST_MODE);
 
   if (TEST_MODE) {
     /* TEST_MODE-only bridge for desktop/test/smoke.mjs. A page-initiated
@@ -5366,8 +5192,7 @@ function registerIpc() {
        user can actually do. Gated on TEST_MODE at registration, not just
        inside the handler, so the channel has no listener — and therefore
        no effect — at all in a normal launch. */
-    ipcMain.on("splitpage:test-request-close", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-request-close", (event) => {
       const tab = tabOf(event);
       const w = tab ? windowsById.get(tab.windowId) : null;
       const win = w ? w.win : BrowserWindow.fromWebContents(event.sender);
@@ -5376,8 +5201,7 @@ function registerIpc() {
 
     /* The Ctrl+W path for the calling tab, so a test can close ONE tab of a
        window without going near the window itself. */
-    ipcMain.on("splitpage:test-request-close-tab", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-request-close-tab", (event) => {
       const tab = tabOf(event);
       if (tab) requestCloseTab(tab.id);
     });
@@ -5386,8 +5210,7 @@ function registerIpc() {
        Quitting with a dirty window still has to prompt — app.quit() asks
        every open BrowserWindow to close first, which fires the same
        win.on('close') this whole fix is about. */
-    ipcMain.on("splitpage:test-request-quit", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-request-quit", () => {
       app.quit();
     });
 
@@ -5398,8 +5221,7 @@ function registerIpc() {
        ask about ANOTHER tab of the same run — the driving page cannot be the
        crashed one it wants to look at — and can name only a tab that exists.
        TEST_MODE only, like every hook in this block. */
-    ipcMain.handle("splitpage:test-draft-status", async (event, tabId) => {
-      requireTrusted(event);
+    ipcHandle("splitpage:test-draft-status", async (event, tabId) => {
       const named = typeof tabId === "string" && TAB_OR_WINDOW_ID_RE.test(tabId) ? tabs.get(tabId) : null;
       const tab = named || tabOf(event);
       const id = tab ? tab.id : null;
@@ -5417,37 +5239,22 @@ function registerIpc() {
        the hold, the reload, the crash-loop guard — instead of describing it.
        The page dies without unloading, which is exactly the point: whatever
        it had not written is gone, and only its draft can bring it back. */
-    ipcMain.on("splitpage:test-crash-renderer", (event) => {
-      if (!isTrustedSender(event)) return;
+    ipcOn("splitpage:test-crash-renderer", (event) => {
       event.sender.forcefullyCrashRenderer();
     });
 
-    /* The eviction planner, straight through, on a fixture the test supplies
-       — no disk, no folder, no state of this process at all. It exists so
-       caseHistoryPlannerTwin can prove main's line-for-line copy of
-       planHistoryEviction still answers exactly what the renderer's original
-       does: two copies of a policy stay honest only if something compares
-       them. TEST_MODE only, like every hook in this block. */
-    ipcMain.handle("splitpage:test-history-plan", async (event, fixture) => {
-      requireTrusted(event);
-      const f = fixture || {};
-      return planHistoryEviction(f.docs, f.capBytes, f.nowMs, f.opts);
-    });
-
-    /* chooseDuplicateLoser over two claims the test invents, answering 'a',
-       'b' or null. Same shape of hook as the planner above, for the same
-       reason: caseAtomicSaveKeepsBirthtime measures what this filesystem
-       does to a saved file's birthtime, and then has to ask the real
-       function whether it would have been fooled by it. Asking the function
-       is the assertion — reading DUP_TRUST_BIRTHTIME out of the source would
-       only prove a constant's spelling. */
-    ipcMain.handle("splitpage:test-dup-loser", async (event, a, b) => {
-      requireTrusted(event);
+    /* The real chooseDuplicateLoser (DOC-CLAIMS) over two claims the test
+       invents, answering 'a', 'b' or null. Asking the function is the
+       assertion: caseAtomicSaveKeepsBirthtime measures what this filesystem
+       does to a saved file's birthtime and then holds the verdict against
+       it, which no amount of reading the source would prove. A birthtime a
+       caller still sends is simply not copied — the rule has no branch for
+       one any more (#76). */
+    ipcHandle("splitpage:test-dup-loser", async (event, a, b) => {
       const claim = (c) => ({
         docId: String((c && c.docId) || ""),
         homeKey: String((c && c.homeKey) || ""),
-        seq: Number((c && c.seq) || 0),
-        birthtimeMs: Number((c && c.birthtimeMs) || 0)
+        seq: Number((c && c.seq) || 0)
       });
       const ca = claim(a), cb = claim(b);
       const loser = chooseDuplicateLoser(ca, cb);
@@ -5460,8 +5267,7 @@ function registerIpc() {
        exercises the real paths rather than a test-only imitation of them —
        and it does it without a single real click, which is what keeps a run
        on this machine invisible (invariant #33). */
-    ipcMain.handle("splitpage:test-shell", async (event, op, args) => {
-      requireTrusted(event);
+    ipcHandle("splitpage:test-shell", async (event, op, args) => {
       const caller = tabOf(event);
       const a = args || {};
       const listTargets = () => ({
@@ -5476,7 +5282,14 @@ function registerIpc() {
               dirty: !!t.dirty,
               pristine: !!t.pristine,
               isServerDoc: t.source.kind === "server",
-              path: t.source.kind === "file" ? t.source.absPath : null
+              path: t.source.kind === "file" ? t.source.absPath : null,
+              /* #11: which server, and whether main is holding a token for
+                 it — never the token itself, even here. */
+              serverDocId: t.source.kind === "server" ? t.source.serverDocId : null,
+              serverUrl: t.source.kind === "server" ? t.source.serverUrl : null,
+              tunnel: t.source.kind === "server" ? t.source.tunnel : null,
+              hasToken: t.source.kind === "server" ? !!t.source.token : false,
+              role: t.source.kind === "server" ? t.source.role : null
             } : null;
           }).filter(Boolean)
         }))
@@ -5514,6 +5327,27 @@ function registerIpc() {
         }
         case "listTargets":
           return listTargets();
+        /* Every URL main would have handed the OS's default browser this
+           run (TEST_MODE stubs shell.openExternal, section 1), oldest first. */
+        case "externalOpens":
+          return testExternalOpens.slice();
+        /* What the teleprompter's loopback listener is holding (section 9b):
+           listening or not, its port, and which tabs have a live share —
+           never a token or a script. */
+        case "prompterShareStatus":
+          return prompterShare ? prompterShare.status() : { listening: false, port: null, shares: [] };
+        /* Google Drive (section 9c): which safeStorage backend this run got
+           and which token endpoint the client is pointed at — never a token. */
+        case "driveInfo": {
+          let backend = null;
+          /* Linux only; other platforms may not have it at all. */
+          try { if (process.platform === "linux") backend = safeStorage.getSelectedStorageBackend(); } catch { backend = null; }
+          return {
+            backend,
+            encryptionAvailable: safeStorage.isEncryptionAvailable(),
+            tokenEndpoint: googleDriveInstance().endpoints.token
+          };
+        }
         default:
           throw new Error("test-shell: unknown op " + op);
       }
@@ -5556,6 +5390,14 @@ app.whenReady().then(async () => {
      soon as its page loads, and init() is also what reads last session's
      state and finishes any discard whose delete did not complete. */
   const draftInit = initDraftStore();
+  /* The blob folder (section 8c) likewise, before the first page can ask
+     for an image — and its temp sweep has to run before any put of this
+     process could have a temp file of its own in flight. */
+  initBlobStore();
+  /* Version history (section 8b): its folder opens now, so the v1
+     migration, when there is one, is the first job on its queue and every
+     history IPC call waits behind it. */
+  initHistoryStore();
   registerProtocol();
   registerIpc();
   buildMenu();
@@ -5705,6 +5547,15 @@ app.on("will-quit", () => {
   }
   killDocumentServer();
   killTunnel();
+  /* Every script shared with the browser (section 9b) lives only in this
+     process's memory; closing the listener here is tidiness, not cleanup —
+     there is nothing on disk to remove, on this path or on a crash. */
+  if (prompterShare) prompterShare.closeAll();
+  /* A Google sign-in still waiting for its browser callback (section 9c):
+     close its loopback listener with the app. The tokens need nothing —
+     the access token was only ever in memory, the refresh token is already
+     wherever it is going to be. */
+  if (googleDrive) googleDrive.shutdown();
   /* The app is really going, in one piece. Recording that is what lets the
      next launch tell "you quit" from "you were killed": a session.json still
      saying 'running' at startup means the previous run died, and its drafts

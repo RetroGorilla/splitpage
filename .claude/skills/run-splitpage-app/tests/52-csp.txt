@@ -41,8 +41,10 @@ expect window.__csp.indexOf("'unsafe-eval'") === -1
 # teleprompter's transform).
 expect window.__csp.split("'unsafe-inline'").length == 2
 expect /style-src [^;]*'unsafe-inline'/.test(window.__csp)
-# Images are data: URIs and nothing else (safeImageSrc), so http(s) images
-# stay refused even if one gets past the sanitiser.
+# Images are the document's own and nothing else: blob: URLs the image
+# registry mints for a picture's bytes (#82 — rows, comments, replies and
+# cells all name pictures by sha), and data: URIs where a picture is still
+# inline. http(s) images stay refused even if one gets past the sanitiser.
 expect /img-src 'self' data: blob:;/.test(window.__csp)
 
 # ---- and it is enforcing ---------------------------------------------------
@@ -67,8 +69,12 @@ expect window.__imgRan === false
 expect document.getElementById('font-css') !== null
 expect document.getElementById('font-css').getAttribute('onload') === null
 # The two places the app really does build a URL at runtime still work: a
-# data: image in a document, and a blob: URL for an export.
+# picture's blob: URL, and a blob: URL for an export.
 eval (function(){var u=URL.createObjectURL(new Blob(['x'],{type:'text/plain'}));URL.revokeObjectURL(u);return u.slice(0,5);})()
 expect URL.createObjectURL(new Blob(['x'])).slice(0,5) === 'blob:'
+# a comment picture in its stored form (<img data-blob>, no src): the
+# hydrator gives it a blob: src and it loads under the enforcing policy
+eval (function(){var c=document.createElement('canvas');c.width=12;c.height=9;c.getContext('2d').fillRect(0,0,12,9);var rec=window.__blobsTest.internDataUrl(c.toDataURL('image/png'));var d=document.createElement('div');d.innerHTML='<img class="comment-img" data-blob="'+rec.sha256+'">';document.body.appendChild(d);window.__cspImg=d.firstChild;return rec.sha256;})()
+wait (window.__cspImg.getAttribute('src')||'').indexOf('blob:')===0 && window.__cspImg.complete && window.__cspImg.naturalWidth===12
 
 quit

@@ -92,20 +92,25 @@ caret #rows .row:nth-child(1) .visual-cell .cell-editable
 press  Camera on the [tripod]
 sleep 400
 expect document.querySelectorAll('#rows .row:nth-child(1) .visual-cell .tag-anchor').length == 1
-# Force a re-render (adding a row rebuilds every cell) so this also exercises
-# the render-time fix, not just the fresh-insertion caret placement.
+# Force a render so this also exercises the render-time fix, not just the
+# fresh-insertion caret placement.
 jsclick #rows .row:nth-child(2) [data-action="insert-below"]
 sleep 300
 caret #rows .row:nth-child(1) .visual-cell .cell-editable
 press  and dolly
 sleep 300
-# another render rebuilds the cell straight from saved state — proves both
-# that the typed text landed after the tag, not lost or inside it, AND that
-# the caret-landing spot never leaked into what got saved
+# Another render, then what was SAVED — proves both that the typed text
+# landed after the tag, not lost or inside it, AND that the caret-landing
+# spot never leaked into the document. Read off the document itself: since
+# #84 a render leaves a field whose text it already shows alone (this one
+# still holds the caret, and its caret spot), rather than rebuilding it
+# from state.
 jsclick #rows .row:nth-child(3) [data-action="insert-below"]
 sleep 300
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.trim().endsWith('tripod and dolly')
-expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').innerHTML.indexOf('​') == -1
+eval window.__v0 = JSON.parse(window.__splitpageFormats.buildSplitpage()).rows[0].visualText
+expect (function(){var d=document.createElement('div');d.innerHTML=window.__v0;return d.textContent.trim().endsWith('tripod and dolly');})()
+expect window.__v0.indexOf('​') == -1
+expect document.querySelector('#rows .row:nth-child(1) .visual-cell .cell-editable').textContent.replace(/\u200B/g,'').trim().endsWith('tripod and dolly')
 
 shot 02-production
 quit

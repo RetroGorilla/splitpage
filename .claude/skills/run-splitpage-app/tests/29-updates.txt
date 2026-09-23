@@ -6,9 +6,11 @@
 # same shape, so both are driven here through window.__updateTest.applyStatus
 # — no launcher to start, no release to publish, no network.
 #
-# What it does NOT cover: the launcher's staging route (tools/test-server.mjs)
-# and the desktop download/install itself (desktop/test/smoke.mjs). This is
-# the renderer's half only.
+# What it does NOT cover: the desktop download/install itself
+# (desktop/test/smoke.mjs). This is the renderer's half only. Nor does it
+# press the portable copy's button — that one opens a real releases page in a
+# real new tab, and what is being asserted is which button is offered, not
+# what a browser does with a link.
 # ---------------------------------------------------------------------------
 
 open /index.html
@@ -25,22 +27,26 @@ expect window.__updateTest.bar().hidden == true
 eval window.__updateTest.applyStatus({ version: "2.0.0", latest: null, updateAvailable: false, checking: true })
 expect window.__updateTest.bar().hidden == true
 
-# ---- the launcher copy -------------------------------------------------
+# ---- the portable copy -------------------------------------------------
 
-# An update is available. Without a launcher there is nothing this page can
-# do about it, so it says so and offers no button.
+# An update is available. This copy cannot install it — #75 deleted the
+# staging route the Download button used to POST to — so the bar names both
+# versions, says what to do about it, and offers the release page.
 eval window.__updateTest.applyStatus({ version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false })
 expect window.__updateTest.bar().hidden == false
 expect window.__updateTest.bar().text.indexOf('2.1.0') >= 0
 expect window.__updateTest.bar().text.indexOf('2.0.0') >= 0
-expect window.__updateTest.bar().buttonHidden == true
+expect window.__updateTest.bar().text.indexOf('Unzip') >= 0
+expect window.__updateTest.bar().buttonHidden == false
+expect window.__updateTest.bar().buttonLabel == Open release page
 
-# Already staged beats merely available: one restart away, and no button —
-# there is nothing left to press.
+# `pending` is what the staged-and-waiting bar used to be driven by. The
+# launcher writes it as null now and always (start.mjs, writeStatus), and a
+# stale one left in an old update-status.json must not bring back a "restart
+# to finish installing it" line about an install that can no longer happen.
 eval window.__updateTest.applyStatus({ version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, pending: { to: "2.1.0" } })
-expect window.__updateTest.bar().hidden == false
-expect window.__updateTest.bar().text.indexOf('restart') >= 0
-expect window.__updateTest.bar().buttonHidden == true
+expect window.__updateTest.bar().text.indexOf('restart') < 0
+expect window.__updateTest.bar().buttonLabel == Open release page
 
 # ---- dismiss means dismiss --------------------------------------------
 
@@ -97,7 +103,9 @@ expect window.__updateTest.bar().text.indexOf('connection reset') >= 0
 expect window.__updateTest.bar().buttonLabel == Try again
 
 # No installer for this platform/arch in that release: the release page is the
-# only honest thing left to offer, and it is the ONLY case that opens a link.
+# only honest thing left to offer — the same answer the portable copy gets
+# above, and the one case where the click can be driven, because the desktop
+# path hands the URL to main instead of opening a tab.
 eval window.__updateTest.applyStatus({ desktop: true, version: "2.0.0", latest: "2.1.0", updateAvailable: true, checking: false, canInstall: false, releaseUrl: "https://example.test/r", download: { state: "idle", received: 0, total: 0 } })
 expect window.__updateTest.bar().buttonLabel == Open release page
 eval window.__fakeCalls = []

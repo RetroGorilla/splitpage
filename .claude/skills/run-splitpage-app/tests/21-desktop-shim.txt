@@ -209,10 +209,15 @@ expect window.__toDump[window.__toId] === undefined
 eval (function(){ H.setDesktopTimeout(null); D.restoreBackend(); return true; })()
 expect !window.splitpageDesktop
 
-# ---- Follow My Voice is disabled in the desktop app (Q25) -----------------
+# ---- Follow My Voice never starts in the desktop app (Q25) ----------------
 # updateVoiceAvailability() only re-runs from openPrompter(), so re-evaluating
 # it under a swapped-in backend means closing and reopening the prompter, same
 # as any other desktop-dependent UI in this suite would have to.
+# Since #86 a desktop bridge that offers openPrompterInBrowser turns the
+# button into "Open in browser to use Follow My Voice" instead
+# (58-prompter-open-in-browser.txt). This section is the bridge WITHOUT that
+# call — an older preload — which keeps the button disabled, and in either
+# case a start must never reach the microphone inside Electron.
 caret #rows .row .audio-cell .cell-editable
 press A line to read out loud for the voice follow test.
 sleep 300
@@ -224,7 +229,7 @@ expect !document.getElementById('prompter').hidden
 # build's button is enabled here — this is the byte-for-byte-unchanged path.
 expect document.getElementById('pp-voice').disabled === false
 
-eval (function(){window.fakeV = D.makeFakeBackend(); D.setBackend(window.fakeV); return true;})()
+eval (function(){window.fakeV = D.makeFakeBackend(); delete window.fakeV.openPrompterInBrowser; D.setBackend(window.fakeV); return true;})()
 jsclick #pp-close
 wait document.getElementById('prompter').hidden
 jsclick #btn-present
