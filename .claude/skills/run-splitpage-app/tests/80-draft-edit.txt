@@ -1,0 +1,253 @@
+# Editing a comment or reply draft through the document model, with an
+# undo history of the box's own (#85 design §10 step 7;
+# src/js/05d-draft-edit.js, wired in 05-render.js and 21-events.js).
+#
+# The composer and the reply boxes used to be edited with execCommand,
+# which kept the browser's own undo working in them. Now B/I/U/S,
+# highlight, a link, Enter, a paste, a picture and a video card are edits
+# through the model, and Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (and a menu's
+# historyUndo) answer from the box's own history, so undo must still cover
+# typing, formatting and pasting there — and every picture in the draft
+# must survive every edit. The pure half (placeholders, the history stack)
+# is src/test/draft-edit.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.body = function(){ return document.getElementById('comment-body-editable'); }; window.plain = function(el){ return el.textContent.replace(/\u200B/g, ''); }; window.tb = function(cmd){ return document.querySelector('#comment-modal .mini-toolbar [data-cmd="' + cmd + '"]'); }; window.selText = function(el, a, b){ var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null); var n, seen = 0, sn = null, so = 0, en = null, eo = 0; while ((n = w.nextNode())) { if (n.parentNode.closest('.video-embed-card')) continue; var len = n.nodeValue.replace(/\u200B/g, '').length; if (!sn && a <= seen + len) { sn = n; so = a - seen; } if (!en && b <= seen + len) { en = n; eo = b - seen; } seen += len; } el.focus(); var r = document.createRange(); r.setStart(sn, so); r.setEnd(en, eo); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return r.toString(); }; window.selAll = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; window.clip = function(el, data){ var dt = new DataTransfer(); Object.keys(data).forEach(function(k){ dt.setData(k, data[k]); }); var ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; }; window.histEv = function(el, type){ var ev = new InputEvent('beforeinput', { inputType: type, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; }; window.pngUrl = function(w, h){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = '#3a7'; g.fillRect(0, 0, w, h); g.fillStyle = '#e52'; g.fillRect(3, 3, 9, 7); return c.toDataURL('image/png'); }; window.bytesOf = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }; window.attach = function(){ var inp = document.getElementById('comment-image-input'); var dt = new DataTransfer(); dt.items.add(new File([bytesOf(pngUrl(40, 30))], 'p.png', { type: 'image/png' })); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; }; window.imgs = function(el){ return el.querySelectorAll('img[data-blob]').length; }; window.shown = function(img){ return !!img && (img.getAttribute('src') || '').indexOf('blob:') === 0; }; return true; })()
+
+# ---- the composer, on some words of the first scene ------------------------
+eval (function(){ var c = document.querySelector('#rows .row .audio-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); document.execCommand('insertText', false, 'the words to discuss'); return c.textContent; })()
+sleep 200
+eval selText(document.querySelector('#rows .row .audio-cell .cell-editable'), 4, 9)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="comment"]
+wait !document.getElementById('comment-modal').hidden
+wait document.activeElement === body()
+
+# ---- 1. typing is undoable, and redoable ------------------------------------
+type first words
+expect plain(body()) === 'first words'
+key ctrl KeyZ
+expect plain(body()) === ''
+key ctrl+shift KeyZ
+expect plain(body()) === 'first words'
+
+# ---- 2. bold, then Ctrl+Z ---------------------------------------------------
+eval selText(body(), 0, 5)
+key ctrl KeyB
+sleep 100
+expect body().innerHTML.indexOf('<strong>first</strong> words') === 0
+expect getSelection().toString() === 'first'
+expect tb('bold').classList.contains('is-active')
+key ctrl KeyZ
+sleep 100
+expect body().innerHTML.indexOf('<strong>') === -1
+expect plain(body()) === 'first words'
+# the selection comes back with it
+expect getSelection().toString() === 'first'
+key ctrl KeyY
+sleep 100
+expect body().innerHTML.indexOf('<strong>first</strong> words') === 0
+# the browser's own undo (a menu's Undo) is the box's too
+expect histEv(body(), 'historyUndo') === true
+expect body().innerHTML.indexOf('<strong>') === -1
+expect histEv(body(), 'historyRedo') === true
+expect body().innerHTML.indexOf('<strong>first</strong>') === 0
+# the toolbar's buttons: italic, strike, highlight
+eval selText(body(), 6, 11)
+jsclick #comment-modal .mini-toolbar [data-cmd="italic"]
+sleep 100
+expect body().innerHTML.indexOf('<strong>first</strong> <em>words</em>') === 0
+jsclick #comment-modal .mini-toolbar [data-cmd="highlight"]
+sleep 100
+expect body().innerHTML.indexOf('<mark><em>words</em></mark>') !== -1
+expect tb('highlight').classList.contains('is-active')
+key ctrl KeyZ
+key ctrl KeyZ
+key ctrl KeyZ
+sleep 100
+expect body().innerHTML.indexOf('<') === -1
+expect plain(body()) === 'first words'
+
+# ---- 3. typing after an edit comes off on its own ---------------------------
+eval selText(body(), 11, 11)
+type  more
+expect plain(body()) === 'first words more'
+key ctrl KeyZ
+expect plain(body()) === 'first words'
+
+# ---- 4. B with nothing selected: what is typed next is bold -----------------
+eval selText(body(), 11, 11)
+key ctrl KeyB
+sleep 100
+expect tb('bold').classList.contains('is-active')
+press XY
+sleep 100
+expect body().innerHTML.indexOf('words<strong>XY</strong>') !== -1
+key ctrl KeyZ
+key ctrl KeyZ
+sleep 100
+expect plain(body()) === 'first words'
+
+# ---- 5. paste, then Ctrl+Z --------------------------------------------------
+eval selText(body(), 11, 11)
+expect clip(body(), {'text/html': ' <b>pasted</b><script>window.__bad = 1</script>', 'text/plain': ' pasted'}) === true
+sleep 100
+expect body().innerHTML.indexOf('first words <strong>pasted</strong>') === 0
+expect body().innerHTML.indexOf('script') === -1 && !window.__bad
+key ctrl KeyZ
+sleep 100
+expect plain(body()) === 'first words'
+key ctrl+shift KeyZ
+sleep 100
+expect body().innerHTML.indexOf('<strong>pasted</strong>') !== -1
+key ctrl KeyZ
+# plain text only
+eval selText(body(), 0, 0)
+expect clip(body(), {'text/plain': 'so: '}) === true
+expect plain(body()) === 'so: first words'
+key ctrl KeyZ
+expect plain(body()) === 'first words'
+
+# ---- 6. a link, then Ctrl+Z -------------------------------------------------
+eval selText(body(), 6, 11)
+jsclick #comment-modal .mini-toolbar [data-cmd="link"]
+sleep 100
+expect !document.querySelector('#comment-modal .link-popover').hidden
+eval (function(){ document.querySelector('#comment-modal .link-popover input').value = 'example.com/x'; return true; })()
+jsclick #comment-modal [data-action="link-confirm"]
+sleep 100
+expect body().innerHTML.indexOf('first <a href="https://example.com/x" target="_blank" rel="noopener">words</a>') === 0
+expect document.activeElement === body()
+key ctrl KeyZ
+sleep 100
+expect !body().querySelector('a') && plain(body()) === 'first words'
+
+# ---- 7. Enter, then Ctrl+Z --------------------------------------------------
+eval selText(body(), 5, 5)
+key Enter
+sleep 100
+expect body().innerHTML.indexOf('first<br> words') === 0
+key ctrl KeyZ
+sleep 100
+expect body().innerHTML.indexOf('<br>') === -1
+
+# ---- 8. a picture survives formatting, and its insertion is undoable -------
+eval attach()
+wait shown(body().querySelector('img[data-blob]'))
+expect imgs(body()) === 1
+expect body().innerHTML.indexOf('first words<br><img') === 0
+eval window.SHA = body().querySelector('img[data-blob]').getAttribute('data-blob')
+eval selAll(body())
+key ctrl KeyB
+sleep 100
+expect imgs(body()) === 1 && !!body().querySelector('strong') && !body().querySelector('strong img')
+expect tb('bold').classList.contains('is-active')
+eval selAll(body())
+key ctrl KeyI
+sleep 100
+jsclick #comment-modal .mini-toolbar [data-cmd="highlight"]
+sleep 100
+expect imgs(body()) === 1 && !!body().querySelector('mark') && !body().querySelector('mark img, em img')
+wait shown(body().querySelector('img[data-blob]'))
+expect body().querySelector('img[data-blob]').getAttribute('data-blob') === window.SHA
+# the picture inside a selection being linked is never inside the link
+eval selAll(body())
+jsclick #comment-modal .mini-toolbar [data-cmd="link"]
+eval (function(){ document.querySelector('#comment-modal .link-popover input').value = 'https://example.com/y'; return true; })()
+jsclick #comment-modal [data-action="link-confirm"]
+sleep 100
+expect imgs(body()) === 1 && !!body().querySelector('a[href="https://example.com/y"]') && !body().querySelector('a img')
+# a paste next to it, of HTML carrying the same picture: two now
+eval selText(body(), 0, 0)
+expect clip(body(), {'text/html': 'see <img class="comment-img" data-blob="' + window.SHA + '"> ', 'text/plain': 'see'}) === true
+sleep 100
+expect imgs(body()) === 2
+# undo it all, one step at a time; the picture is there until its own step
+key ctrl KeyZ
+expect imgs(body()) === 1
+key ctrl KeyZ
+key ctrl KeyZ
+key ctrl KeyZ
+key ctrl KeyZ
+sleep 100
+expect imgs(body()) === 1 && !body().querySelector('strong, em, mark, a')
+key ctrl KeyZ
+sleep 100
+expect imgs(body()) === 0 && plain(body()) === 'first words'
+key ctrl+shift KeyZ
+sleep 100
+expect imgs(body()) === 1
+wait shown(body().querySelector('img[data-blob]'))
+
+# ---- 9. a video card: in, formatted around, and undone ---------------------
+jsclick #comment-modal .mini-toolbar [data-cmd="video"]
+eval (function(){ document.querySelector('#comment-modal .video-popover input').value = 'youtube.com/watch?v=abc'; return true; })()
+jsclick #comment-modal [data-action="video-confirm"]
+sleep 100
+expect body().querySelectorAll('.video-embed-card').length === 1
+eval selAll(body())
+key ctrl KeyB
+sleep 100
+expect body().querySelectorAll('.video-embed-card').length === 1 && imgs(body()) === 1 && !body().querySelector('strong .video-embed-card')
+key ctrl KeyZ
+key ctrl KeyZ
+sleep 100
+expect body().querySelectorAll('.video-embed-card').length === 0 && imgs(body()) === 1
+
+# ---- 10. posted with its picture; a new draft has no history ---------------
+eval selText(body(), 0, 5)
+key ctrl KeyB
+sleep 100
+eval window.__nc = F.state().comments.length
+jsclick #comment-post
+sleep 300
+expect F.state().comments.length === window.__nc + 1
+expect (function(){ var b = F.state().comments[F.state().comments.length - 1].body; return b.indexOf('<strong>first</strong> words<br><img') === 0 && b.indexOf('data-blob="' + window.SHA + '"') !== -1 && b.indexOf('src=') === -1; })()
+eval selText(document.querySelector('#rows .row .audio-cell .cell-editable'), 13, 20)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="comment"]
+wait !document.getElementById('comment-modal').hidden
+wait document.activeElement === body()
+key ctrl KeyZ
+sleep 100
+expect body().innerHTML === ''
+key Escape
+wait document.getElementById('comment-modal').hidden
+
+# ---- 11. a reply box has its own history too --------------------------------
+eval (function(){ if (document.getElementById('comments-panel').hidden) document.getElementById('btn-comments').click(); return true; })()
+wait !!document.querySelector('#comments-list .comment-card [data-action="toggle-reply"]')
+eval (function(){ document.querySelector('#comments-list .comment-card [data-action="toggle-reply"]').click(); return true; })()
+wait !!document.querySelector('#comments-list .reply-composer .cell-editable')
+caret #comments-list .reply-composer .cell-editable
+type reply text
+eval window.RB = document.querySelector('#comments-list .reply-composer .cell-editable')
+eval selText(RB, 0, 5)
+key ctrl KeyB
+sleep 100
+expect RB.innerHTML.indexOf('<strong>reply</strong> text') === 0
+expect document.querySelector('#comments-list .reply-composer .mini-toolbar [data-cmd="bold"]').classList.contains('is-active')
+eval selText(RB, 5, 5)
+expect clip(RB, {'text/html': '<em>!</em>', 'text/plain': '!'}) === true
+expect RB.innerHTML.indexOf('<strong>reply</strong><em>!</em> text') === 0
+key ctrl KeyZ
+expect RB.innerHTML.indexOf('<strong>reply</strong> text') === 0
+key ctrl KeyZ
+expect plain(RB) === 'reply text' && RB.innerHTML.indexOf('<') === -1
+key ctrl KeyZ
+expect plain(RB) === ''
+# none of this touched the document's own undo
+expect F.state().rows[0].audioText.indexOf('reply') === -1
+
+# ---- 12. an IME composition: its keys are the IME's, and what it composed
+# is one entry once it ends (a real IME cannot be driven here: the events
+# are dispatched by hand around the browser's own insertion) --------------
+eval (function(){ RB.focus(); RB.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' })); document.execCommand('insertText', false, '\u304B\u306A'); var ev = new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, isComposing: true, bubbles: true, cancelable: true }); RB.dispatchEvent(ev); window.__imePrevented = ev.defaultPrevented; RB.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '\u304B\u306A' })); return plain(RB); })()
+expect window.__imePrevented === false
+expect plain(RB) === '\u304B\u306A'
+key ctrl KeyZ
+expect plain(RB) === ''
+key ctrl+shift KeyZ
+expect plain(RB) === '\u304B\u306A'
+quit
