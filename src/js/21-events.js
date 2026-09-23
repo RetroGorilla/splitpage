@@ -846,7 +846,7 @@ function onRootKeydown(e) {
     var mvId = cellEl.getAttribute("data-id");
     var mvField = cellEl.getAttribute("data-field");
     var mvOffset = caretTextOffset(cellEl);
-    if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1, mvField, mvOffset)) {
+    if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
       if (writerOpen) {
         renderWriter();
       } else {

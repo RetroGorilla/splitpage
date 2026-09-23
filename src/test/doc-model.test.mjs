@@ -415,3 +415,11 @@ test("cellOf: fromHtml, cached by the HTML itself", () => {
   assert.equal(tagNameOf("t_abc"), null);
   assert.deepEqual(cellOf(null), []);
 });
+
+test("toHtml: opts.textHtml writes each stretch of text, the b-roll key's word too", () => {
+  const cell = [T("a <b>", { b: true }), T("\nc"), B("bs_1")];
+  const seen = [];
+  const html = toHtml(cell, { textHtml: (t, esc) => { seen.push(t); return "[" + esc(t) + "]"; } });
+  assert.deepEqual(seen, ["a <b>", "c", "B-roll:"]);
+  assert.equal(html, '<strong>[a &lt;b&gt;]</strong><br>[c]<span class="broll-key" data-broll-id="bs_1" contenteditable="false">[B-roll:]</span>');
+});

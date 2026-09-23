@@ -3,12 +3,12 @@ import { escapeHtml, makeId } from "./02-state.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import { safeHref } from "./04-richtext.js";
+import { cellOf, toDocxRuns, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
 import {
   htmlToPlainText,
-  htmlToRuns,
   strBytes,
   xmlEscape,
   zipRead,
@@ -84,8 +84,13 @@ function fitColumnWidths(totalWidth, minChars, headers, rowsCells) {
   return widths;
 }
 
+/* A cell's runs come from the document model (#85), not a walk of its
+   HTML: the same text in the same formats, except that neighbours in one
+   format the stored markup happened to keep in separate elements
+   (<strong>a</strong><strong>b</strong>) are one <w:r>, which Word draws
+   exactly as it drew two. */
 function docxRunsXml(html, rels) {
-  var runs = htmlToRuns(html);
+  var runs = toDocxRuns(cellOf(html));
   if (!runs.length) return '<w:p/>';
   var out = '<w:p>';
   var openLink = null;
@@ -498,7 +503,7 @@ function packDocx(body, links, media) {
    other export already is that. */
 
 export function narrationRows() {
-  return S.state.rows.filter(function (row) { return htmlToPlainText(row.audioText); });
+  return S.state.rows.filter(function (row) { return toPlainText(cellOf(row.audioText)); });
 }
 
 export function buildNarrationText() {
@@ -509,7 +514,7 @@ export function buildNarrationText() {
        round trip this format exists for, quietly broken by a scene whose
        narration happened to contain two line breaks in a row. Runs of
        blank lines collapse to a single break; the scene stays one scene. */
-    out.push(htmlToPlainText(row.audioText).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
+    out.push(toPlainText(cellOf(row.audioText)).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
   });
   return out.join("\n");

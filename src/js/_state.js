@@ -82,9 +82,8 @@ export const S = {
   /* 03-sync declares it; 03-sync, 13-hosted, 14-export assign it. */
   lastMergeUndo: undefined,
 
-  /* 06-rows declares it; 06-rows, 19-writer assign it. */
-  lastMoveUndo: undefined,
-  /* true while an undo or a redo is being put on screen (21-events.js
+  /* 12a-undo declares it; 21-events assigns it. True while an undo or a
+     redo is being put on screen (21-events.js
      afterUndoApplied): syncFieldFromDom reads nothing back meanwhile */
   undoApplying: false,
 

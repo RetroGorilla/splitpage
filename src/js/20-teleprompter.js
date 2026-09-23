@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
-import { inertBody, sanitizeHtml } from "./04-richtext.js";
+import { cellOf, projection, sliceCell, toHtml, toPlainText } from "./04c-doc-model.js";
 import {
   addPersonForTag,
   renderProduction,
@@ -11,7 +11,7 @@ import {
   setTagOwner
 } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
 import { ONBOARD_KEY } from "./20b-onboarding.js";
 import {
@@ -38,34 +38,42 @@ function normalizeWord(w) {
   return String(w || "").toLowerCase().replace(/[^a-z0-9']/g, "");
 }
 
-/* split text nodes into <span class="w"> per word, preserving surrounding
-   tags (strong/em/u/mark/a) so formatting survives word-wrapping */
-function wrapWordsForPrompter(node) {
-  var kids = Array.prototype.slice.call(node.childNodes);
-  kids.forEach(function (child) {
-    if (child.nodeType === 3) {
-      var parts = child.nodeValue.split(/(\s+)/);
-      var frag = document.createDocumentFragment();
-      parts.forEach(function (part) {
-        if (part === "") return;
-        if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
-        var span = document.createElement("span");
-        span.className = "w";
-        span.textContent = part;
-        frag.appendChild(span);
-      });
-      node.replaceChild(frag, child);
-    } else if (child.nodeType === 1) {
-      if (child.tagName === "BR") return;
-      wrapWordsForPrompter(child);
+/* One scene's words as the prompter shows them, read from the document
+   model (#85) rather than by walking the cell's HTML: the cell's own
+   markup, so tags, comments, links and formatting look as they do in the
+   editor, with every word in a <span class="w"> — the unit voice follow
+   and the reading line step through. Words are cut at whitespace within
+   each stretch of text whose formatting, link, tag and comments are all
+   the same, as they always were cut per text node: "bo<strong>ld</strong>"
+   is two spans. (Two neighbouring elements of the SAME format, which the
+   stored markup can hold, are one stretch now, so a word split between
+   them is one span instead of two.) Nesting is the model's one order, not
+   whatever the stored markup had; it looks the same. Returns the markup
+   and how many words it holds. */
+export function prompterSceneHtml(cell) {
+  var words = 0;
+  var html = toHtml(cell, {
+    textHtml: function (text, esc) {
+      return text.split(/(\s+)/).map(function (part) {
+        if (!part) return "";
+        if (/^\s+$/.test(part)) return esc(part);
+        words++;
+        return '<span class="w">' + esc(part) + "</span>";
+      }).join("");
     }
   });
+  return { html: html, words: words };
 }
 
-function tokenizeForPrompter(html) {
-  var container = inertBody(sanitizeHtml(html));
-  wrapWordsForPrompter(container);
-  return container.innerHTML;
+/* A scene's cell without the spaces and line breaks at either end, which
+   would otherwise open or close its paragraph with an empty line. A
+   no-break space stays, as it did when this was a regex over the stored
+   HTML (which spells it "&nbsp;"): it is there because someone typed it. */
+export function trimPrompterCell(cell) {
+  var p = projection(cell);
+  var lead = p.length - p.replace(/^[^\S\u00a0]+/, "").length;
+  var tail = p.length - p.replace(/[^\S\u00a0]+$/, "").length;
+  return lead + tail >= p.length ? [] : sliceCell(cell, lead, p.length - tail);
 }
 
 /* A trailing ., !, or ? (optionally tucked inside a closing quote/paren)
@@ -74,18 +82,6 @@ function tokenizeForPrompter(html) {
    or no punctuation at all — a sentence split across rows for editing
    convenience) flows straight into the next row instead, with no gap. */
 var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
-
-/* How many `.w` spans tokenizeForPrompter(html) would produce for one
-   row's own text, counted in an offscreen container rather than the real
-   one — the word count a row contributes, independent of whichever
-   paragraph it ends up glued into below. Used only to build scene
-   boundaries (issue #26); promptWords itself still comes from the real,
-   merged rendering, so the two can never disagree about what a "word" is. */
-function countPrompterWords(html) {
-  var tmp = document.createElement("div");
-  tmp.innerHTML = tokenizeForPrompter(html);
-  return tmp.querySelectorAll(".w").length;
-}
 
 export function buildPrompterContent() {
   /* On day two you only want what's left. Filtering here rather than
@@ -98,21 +94,26 @@ export function buildPrompterContent() {
   var source = skippingShot
     ? S.state.rows.filter(function (row) { return row.status !== "shot"; })
     : S.state.rows;
-  /* Trimmed the same way lineHtml is below, but keeping every row (even a
-     blank one) and its id — scene mode's boundaries are addressed by
-     scene POSITION in this filtered list, the same list "Scene 4 of 12"
-     counts against, so a scene with nothing to read still holds its place
-     in the count even though stepScene() below will never stop on it. */
+  /* Every row (even a blank one) and its id — scene mode's boundaries are
+     addressed by scene POSITION in this filtered list, the same list
+     "Scene 4 of 12" counts against, so a scene with nothing to read still
+     holds its place in the count even though stepScene() below will never
+     stop on it. Each scene is rendered once, here: the words a scene
+     counts for its boundaries are the very spans its paragraph shows, so
+     the two can never disagree about what a "word" is. */
   var sceneEntries = source.map(function (row) {
-    return { id: row.id, html: (row.audioText || "").replace(/^(\s|<br\s*\/?>)+|(\s|<br\s*\/?>)+$/g, "") };
+    var cell = trimPrompterCell(cellOf(row.audioText));
+    return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
   });
-  var lineHtml = sceneEntries.map(function (e) { return e.html; }).filter(function (html) { return html.trim(); });
+  var lines = sceneEntries.filter(function (e) { return e.view; });
 
+  /* Scenes are glued into one paragraph with a space between, so no word
+     ever runs on from one scene into the next. */
   var paragraphs = [];
-  lineHtml.forEach(function (html, i) {
-    var prevEndsSentence = i === 0 || SENTENCE_END_RE.test(htmlToPlainText(lineHtml[i - 1]).trim());
-    if (prevEndsSentence) paragraphs.push(html);
-    else paragraphs[paragraphs.length - 1] += " " + html;
+  lines.forEach(function (e, i) {
+    var prevEndsSentence = i === 0 || SENTENCE_END_RE.test(toPlainText(lines[i - 1].cell));
+    if (prevEndsSentence) paragraphs.push(e.view.html);
+    else paragraphs[paragraphs.length - 1] += " " + e.view.html;
   });
 
   var content = document.getElementById("prompter-content");
@@ -123,7 +124,7 @@ export function buildPrompterContent() {
     S.promptWords = [];
   } else {
     content.innerHTML = paragraphs.map(function (html) {
-      return '<div class="prompter-line">' + tokenizeForPrompter(html) + '</div>';
+      return '<div class="prompter-line">' + html + '</div>';
     }).join("");
     S.promptWords = Array.prototype.map.call(content.querySelectorAll(".w"), function (el) {
       return { el: el, norm: normalizeWord(el.textContent) };
@@ -152,7 +153,7 @@ export function buildPrompterContent() {
   sceneWordEnd = [];
   var cursor = 0;
   sceneEntries.forEach(function (e) {
-    var n = e.html.trim() ? countPrompterWords(e.html) : 0;
+    var n = e.view ? e.view.words : 0;
     sceneRowIds.push(e.id);
     sceneWordStart.push(cursor);
     cursor += n;
