@@ -43,17 +43,38 @@ const say = (...a) => { if (!QUIET) console.log(...a); };
 
 /* ---------- versions ---------- */
 
-/* Numeric, dotted, longest-wins. Anything non-numeric in a segment sorts as 0,
-   so a "1.2.0-beta" never reads as newer than "1.2.0". */
+/* Numeric, dotted, longest-wins, with semver's rule for a pre-release:
+   "3.0.0-beta.1" is older than "3.0.0" and newer than "3.0.0-beta". Anything
+   non-numeric in a core segment sorts as 0. */
 export function compareVersions(a, b) {
-  const pa = String(a).split(".");
-  const pb = String(b).split(".");
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = parseInt(pa[i], 10) || 0;
-    const nb = parseInt(pb[i], 10) || 0;
+  const va = splitVersion(a), vb = splitVersion(b);
+  for (let i = 0; i < Math.max(va.core.length, vb.core.length); i++) {
+    const na = va.core[i] || 0, nb = vb.core[i] || 0;
     if (na !== nb) return na < nb ? -1 : 1;
   }
+  /* The same release: the release itself is newer than any pre-release of
+     it, so a 3.0.0-beta.1 copy is offered 3.0.0 when it ships. */
+  if (!va.pre.length || !vb.pre.length) return va.pre.length === vb.pre.length ? 0 : (va.pre.length ? -1 : 1);
+  for (let i = 0; i < Math.max(va.pre.length, vb.pre.length); i++) {
+    const x = va.pre[i], y = vb.pre[i];
+    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
+    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+    if (nx && ny) { if (+x !== +y) return +x < +y ? -1 : 1; continue; }
+    if (nx !== ny) return nx ? -1 : 1;
+    if (x !== y) return x < y ? -1 : 1;
+  }
   return 0;
+}
+
+/* "3.0.0-beta.1" -> core [3, 0, 0], pre ["beta", "1"]. Build metadata
+   ("+abc") plays no part in the order. */
+function splitVersion(v) {
+  const s = String(v).trim().replace(/\+.*$/, "");
+  const dash = s.indexOf("-");
+  return {
+    core: (dash === -1 ? s : s.slice(0, dash)).split(".").map((n) => parseInt(n, 10) || 0),
+    pre: dash === -1 ? [] : s.slice(dash + 1).split(".").filter(Boolean)
+  };
 }
 
 function localVersion() {
