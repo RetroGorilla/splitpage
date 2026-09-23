@@ -1,0 +1,82 @@
+# Follow My Voice: Windows blocking the microphone outright, named exactly
+# (issue #134), and no-signal/too-quiet naming the microphone (issue #118)
+# once one is known.
+#
+# desktop/voice/listen.ps1 checks the consent store and, unlike no-signal/
+# too-quiet, sends blocked-all/blocked-desktop with no grace period — a Deny
+# there is certain, not a guess from silence. The consent-store check itself
+# (SplitpageVoiceConsent, driven with a fake registry reader) is
+# desktop/test/voice-grace.test.mjs. This is the page's half, under the fake
+# desktop backend as in tests/72-desktop-voice.txt: blocked-all/
+# blocked-desktop show and clear exactly like no-signal/too-quiet already do
+# (tests/82-desktop-voice-clear.txt), and once a device event names the
+# microphone (tests/83-voice-mic-name.txt) no-signal and too-quiet name it
+# too instead of saying "the microphone".
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.D = window.__desktopTest; window.fakeV = D.makeFakeBackend({ voice: true }); D.setBackend(window.fakeV); window.st = function () { return document.getElementById('pp-voice-status').textContent; }; return true; })()
+
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 1
+eval (function(){ fakeV._voiceEmit({ type: 'start', lang: 'en-US' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect st() == Listening…
+
+# --- blocked-desktop: shown at once, names the exact setting to turn on ------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'blocked-desktop' }); return true; })()
+expect st().indexOf('blocking desktop apps') !== -1
+expect st().indexOf('Let desktop apps access your microphone') !== -1
+expect document.getElementById('pp-voice-status').classList.contains('error')
+expect document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- clear puts Listening back, the same as no-signal/too-quiet -------------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening…
+expect document.getElementById('pp-voice-status').classList.contains('listening')
+
+# --- blocked-all: the device-wide switch, a different setting named --------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'blocked-all' }); return true; })()
+expect st().indexOf('blocking apps') !== -1
+expect st().indexOf('desktop apps') === -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening…
+
+# --- no-signal and too-quiet name the microphone once one is known ---------
+eval (function(){ fakeV._voiceEmit({ type: 'end', reason: 'exited' }); return true; })()
+wait fakeV._voiceCalls.start === 2
+eval (function(){ fakeV._voiceEmit({ type: 'device', name: 'Microphone (Shure MV7+)' }); fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait st() === 'Listening — Microphone (Shure MV7+)'
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); return true; })()
+expect st().indexOf("Windows isn't hearing Microphone (Shure MV7+)") !== -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening — Microphone (Shure MV7+)
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'too-quiet' }); return true; })()
+expect st().indexOf('move closer to Microphone (Shure MV7+)') !== -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening — Microphone (Shure MV7+)
+
+# --- without a name, the plain wording still applies ------------------------
+jsclick #pp-voice
+wait fakeV._voiceCalls.stop === 1
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 3
+eval (function(){ fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); return true; })()
+expect st().indexOf("Windows isn't hearing the microphone") !== -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'too-quiet' }); return true; })()
+expect st().indexOf('move closer to the microphone') !== -1
+
+jsclick #pp-voice
+wait fakeV._voiceCalls.stop === 2
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+expect !window.splitpageDesktop
+quit
