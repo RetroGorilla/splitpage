@@ -16,6 +16,42 @@ You can also work with other people: [host a shared session](#hosting-a-shared-s
 so others on your network open and edit the same scripts live, or
 [connect to a server](#connecting-to-a-server) someone else is hosting.
 
+## What's new in 3.0
+
+3.0.0-beta.1 is a pre-release. Copies on 2.1 are not offered it: download it
+from the releases page. When 3.0.0 itself ships, a beta copy is offered it
+like any other update.
+
+- **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
+  formatting, tags, pasting, splitting, joining, moving and deleting scenes,
+  a comment until it is sent, a scene's status and picture, the production
+  panel and the title — see [Undo and redo](#writing-and-planning).
+- **Merging works a word at a time.** When two people edit the same scene,
+  their changes combine unless both changed the same words; only then is it a
+  conflict.
+- **Find and replace** finds a phrase even when part of it is bold, a link or
+  a tag.
+- **Pictures stay out of script text.** Pasting into a script cell keeps the
+  words and leaves pictures out; a picture already in a cell moves into a
+  comment on that scene. Cutting text moves its comment with it.
+- **Follow My Voice in the desktop app** through Windows' own speech
+  recognition, or **Present in browser** to run the teleprompter in Chrome or
+  Edge.
+- **Google Drive in the desktop app**, and **each tab has its own server or
+  tunnel connection**.
+- **Pictures are stored once**, outside the document, so scripts with many
+  pictures save and sync faster. Pictures in comments now print in the PDF
+  and Word exports.
+- **Faster with long scripts:** only the scenes that changed are redrawn.
+- **Shared sessions** bring in a collaborator's saved changes without waiting
+  for your next save; reviewers can only ever add comments.
+- **Resizable side panels**, a File menu in sections, and smoother header and
+  panel transitions.
+- Fixes: a PDF scene with a picture and no text is no longer drawn over by
+  the next scene; *Undo merge* after a save conflict puts your version back;
+  File ▸ Open keeps a file's formatting; the teleprompter covers the header;
+  autosave off means off.
+
 ## What's new in 2.1
 
 - **Merge a file that changed on disk.** When a script was edited outside
