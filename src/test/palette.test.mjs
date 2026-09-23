@@ -105,3 +105,25 @@ test("--text-faint is 4.5:1 on the page in both themes", () => {
   assert.ok(contrast(LIGHT["--text-faint"], LIGHT["--bg"]) >= 4.5, "light: " + contrast(LIGHT["--text-faint"], LIGHT["--bg"]).toFixed(2));
   assert.ok(contrast(DARK["--text-faint"], DARK["--bg"]) >= 4.5, "dark: " + contrast(DARK["--text-faint"], DARK["--bg"]).toFixed(2));
 });
+
+/* --broll (#142): the header badge and the script's "B-roll:" marker read it,
+   and for a while nothing defined it — the badge drew with no fill. */
+test("--broll is defined in every theme, off every other hue, and readable as text and as a fill", () => {
+  const badge = css.match(/\.broll-badge\s*\{([^}]*)\}/);
+  assert.ok(badge, "no .broll-badge rule");
+  assert.match(badge[1], /background:\s*var\(--broll\)/);
+  const on = badge[1].match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/);
+  assert.ok(on, ".broll-badge sets no text colour of its own, so it inherits .comments-badge's white");
+  for (const [name, block] of [["light", LIGHT], ["dark", DARK]]) {
+    const broll = block["--broll"];
+    assert.ok(broll, "no --broll in the " + name + " block");
+    for (const bg of ["--bg", "--surface"]) {
+      assert.ok(contrast(broll, block[bg]) >= 4.5, name + " --broll " + broll + " on " + bg + ": " + contrast(broll, block[bg]).toFixed(2));
+    }
+    assert.ok(contrast(block[on[1]], broll) >= 4.5, name + " badge text " + on[1] + " on --broll: " + contrast(block[on[1]], broll).toFixed(2));
+    const others = ["--visual", "--audio", ...TAG_CATEGORIES.map((c) => "--tag-" + c.id)];
+    for (const other of others) {
+      assert.ok(hueGap(broll, block[other]) >= 25, name + " --broll " + broll + " is within " + hueGap(broll, block[other]).toFixed(0) + "° of " + other);
+    }
+  }
+});
