@@ -310,7 +310,8 @@ export function createUndoHistory() {
     forget: forget,
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
     clear: function () { done.length = 0; undone.length = 0; },
-    sizes: function () { return { undo: done.length, redo: undone.length }; }
+    sizes: function () { return { undo: done.length, redo: undone.length }; },
+    top: function () { return done[done.length - 1] || null; }
   };
 }
 
@@ -484,6 +485,11 @@ export function breakUndoCoalescing() {
 }
 
 export function undoSizes() { return history.sizes(); }
+
+/* The entry Ctrl+Z would take back next, or null: a toast offering to undo
+   one edit (a paste attaching a picture, 21-events.js) asks whether it is
+   still that edit before it undoes anything. */
+export function lastUndoEntry() { flushEdits(); return history.top(); }
 
 /* Where a text step leaves the caret: the start of what differs, in the
    target cell's text as the DOM counts it (no line breaks; a b-roll key by

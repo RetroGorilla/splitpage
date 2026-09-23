@@ -7,8 +7,8 @@
 #   * a picture attached in the comment composer: the stored body names it
 #     by sha, it is in IndexedDB, the card shows it from a blob: URL;
 #   * a picture pasted as HTML into a reply: the same; pasted into a
-#     scene's cell it is dropped, never even interned (#85 design D7 —
-#     this used to assert it landed in the cell);
+#     scene's cell it stays out of the words (#85 design D7) and is
+#     attached to the scene as a comment (#124);
 #   * a .splitpage save carries every one of them inline (src="data:…"),
 #     and opening that file gives the stored form back;
 #   * the crash/sign-in stash carries them across a real reload as refs,
@@ -65,17 +65,18 @@ expect stateClean() && !window.__bad
 wait shown(document.querySelector('#comments-list .reply-body img[data-blob="' + R1SHA + '"]'))
 jsclick #comments-panel-close
 
-# ---- 3. a picture pasted as HTML into a scene's visual cell is dropped -----
+# ---- 3. a picture pasted as HTML into a scene's visual cell ---------------
 # A script cell holds words (#85 design D7): the paste's words land, its
-# picture does not — and is never even interned, so no bytes are kept for
-# it. (This used to assert the picture landed in the cell.)
+# picture does not — it is attached to the scene as a comment instead
+# (#124). (This used to assert the picture landed in the cell.)
 caret #rows .row:nth-child(2) .visual-cell .cell-editable
 eval (function(){ return pasteHtml(document.activeElement, 'before <img src="' + U[2] + '"> after'); })()
 wait F.state().rows[1].visualText.indexOf('before  after') !== -1
 eval (async function(){ window.V1SHA = await subtleHex(bytesOf(U[2])); return F.state().rows[1].visualText; })()
 expect F.state().rows[1].visualText.indexOf('<img') === -1
 expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable img') === null
-expect !B.recordFor(V1SHA)
+# #124: not dropped any more — attached to the scene as a comment, by sha
+expect F.state().comments.some(function(c){ return c.rowId === F.state().rows[1].id && c.field === 'visualText' && c.body.indexOf('data-blob="' + V1SHA + '"') !== -1; })
 expect stateClean()
 wait (async function(){ var ok = true; for (var s of [C1SHA, R1SHA]) { var rec = await B.idbRecord(s); ok = ok && !!rec && rec.isBlob; } return ok; })()
 wait [C1SHA, R1SHA].every(function(s){ return B.isDurableSync(s); })

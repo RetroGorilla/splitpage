@@ -43,7 +43,7 @@ import {
   typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
-import { copyFromCell, pasteIntoCell } from "./05c-clipboard.js";
+import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
 import {
   appendDraftMedia,
   draftRedo,
@@ -151,7 +151,8 @@ import {
   setCommentSortMode,
   syncAnchorResolvedClasses,
   toggleReplyComposer,
-  toggleResolve
+  toggleResolve,
+  updateCommentsCount
 } from "./10-comments.js";
 import {
   clearPendingFileRows,
@@ -163,8 +164,8 @@ import {
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "./11-import.js";
-import { markDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { caretAfterStep, configureUndo, redo, settleAfterApply, undo } from "./12a-undo.js";
+import { markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { caretAfterStep, configureUndo, lastUndoEntry, redo, settleAfterApply, undo } from "./12a-undo.js";
 import {
   armDriveDelete,
   armServerDelete,
@@ -883,13 +884,34 @@ function onRootFocusOut(e) {
 
 /* A paste or a drop into a script cell, through the model (05c-clipboard.js):
    the clipboard's HTML (else its text) read with fromHtml — a tag copied
-   from another scene stays a live tag, anything foreign is sanitised away,
-   a picture or a video card is dropped (design D7) — and put in place of
-   the selection as one undoable edit. */
-function insertIntoScriptCell(cellEl, html, text) {
-  var res = pasteIntoCell(cellEl, html, text);
+   from another scene stays a live tag, anything foreign is sanitised away
+   — and put in place of the selection as one undoable edit. A picture, a
+   video card, a video link or a video file never goes in the cell (design
+   D7): it is attached to the scene as a comment, in that same edit (#124).
+   Files are read first — a picture is made small and hashed — so a paste
+   carrying one goes in a moment later. */
+function insertIntoScriptCell(cellEl, html, text, files) {
+  if (hasMediaFiles(files)) {
+    var rowId = cellEl.getAttribute("data-id");
+    var field = cellEl.getAttribute("data-field");
+    readClipboardFiles(files, compressImageFile).then(function (extra) {
+      /* the same cell, unless a repaint replaced it meanwhile */
+      var live = cellEl.isConnected ? cellEl
+        : document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
+      if (live) insertIntoScriptCellNow(live, html, text, extra);
+    });
+    return;
+  }
+  insertIntoScriptCellNow(cellEl, html, text, null);
+}
+
+function insertIntoScriptCellNow(cellEl, html, text, extra) {
+  var before = lastUndoEntry();
+  var res = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
-  if (res.media) showToast("Pictures and videos don't go in the script — add them to a comment, or as the scene's picture.");
+  var lost = res.lost + (extra ? extra.lost : 0);
+  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be attached — only a link to it was copied. Save it, then paste or drop the file.", "warn");
+  if (res.attached.length) announceAttached(res, before);
   if (res.movedComments) {
     /* a cut comment's card follows its words to the new scene */
     syncAnchorResolvedClasses();
@@ -903,6 +925,30 @@ function insertIntoScriptCell(cellEl, html, text) {
    (05c-clipboard.js): a copy never carries a comment; a cut does, to the
    paste in this tab that moves it (design D6). A selection that is not
    inside one script cell is left to the browser. */
+/* "Picture attached to scene 4", with Undo: the paste's own undo entry —
+   the words and what was attached — taken back, so long as it is still the
+   last thing done; after anything else, Ctrl+Z is the way back. */
+function announceAttached(res, before) {
+  var pics = 0, vids = 0;
+  res.attached.forEach(function (c) { if (/<img/.test(c.body)) pics++; else vids++; });
+  function n(count, one) { return count === 1 ? one : count + " " + one + "s"; }
+  var what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
+    : pics ? n(pics, "picture") : n(vids, "video");
+  var msg = what.charAt(0).toUpperCase() + what.slice(1) + " attached to scene " + (res.rowIndex + 1);
+  updateCommentsCount();
+  if (!document.getElementById("comments-panel").hidden) {
+    captureReplyDrafts();
+    renderComments();
+  }
+  var entry = lastUndoEntry();
+  /* a server document's comments are sent, not undone (design D5) */
+  if (!entry || entry === before) { showToast(msg, "ok"); return; }
+  showActionToast(msg, "ok", "Undo", function () {
+    if (lastUndoEntry() === entry) undo();
+    else showToast("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
+  });
+}
+
 function onRootCopy(e) {
   onRootCopyOrCut(e, false);
 }
@@ -927,7 +973,7 @@ function onRootPaste(e) {
   if (isScriptCell(cellEl)) {
     /* a review session's script is read-only: nothing to paste into */
     if (reviewMode()) return;
-    insertIntoScriptCell(cellEl, cd.getData("text/html"), cd.getData("text/plain"));
+    insertIntoScriptCell(cellEl, cd.getData("text/html"), cd.getData("text/plain"), cd.files);
     return;
   }
   /* A comment's composer or a reply box: not script text, and pictures
@@ -1144,7 +1190,13 @@ function onRootDragLeave(e) {
 
 function onRootDrop(e) {
   var drop = imageDropTarget(e);
-  if (drop) {
+  /* A video file is no scene picture: dropped on the visual column it is
+     attached to the scene from that column's cell, like one dropped on
+     the words (#124). */
+  var dropFiles = e.dataTransfer && e.dataTransfer.files;
+  var videoOnly = drop && hasMediaFiles(dropFiles) &&
+    !Array.prototype.some.call(dropFiles, function (f) { return /^image\//.test(f.type || ""); });
+  if (drop && !videoOnly) {
     e.preventDefault();
     var cell = drop.closest(".visual-cell");
     if (cell) cell.classList.remove("drag-over");
@@ -1171,13 +1223,15 @@ function onRootDrop(e) {
      the way a paste does (insertIntoScriptCell), at the drop point. A drag
      carries no cut nonce, so a comment on dragged words stays where it was
      (design D6). */
-  var cellEl = e.target.closest && e.target.closest(".cell-editable");
+  var cellEl = (e.target.closest && e.target.closest(".cell-editable")) ||
+    (videoOnly ? drop.closest(".visual-cell").querySelector(".cell-editable") : null);
   if (cellEl) {
     e.preventDefault();
     var dt = e.dataTransfer;
     var html = dt ? dt.getData("text/html") : "";
     var text = dt ? dt.getData("text/plain") : "";
-    if (!html && !text) return;
+    var files = dt ? dt.files : null;
+    if (!html && !text && !hasMediaFiles(files)) return;
     if (isScriptCell(cellEl) && reviewMode()) return;
     /* Unlike paste, nothing has focused this cell or put a caret in it —
        the user was dragging, never clicked in. The insertion goes at the
@@ -1191,7 +1245,7 @@ function onRootDrop(e) {
         sel.addRange(range);
       }
     } catch (err) {}
-    if (isScriptCell(cellEl)) insertIntoScriptCell(cellEl, html, text);
+    if (isScriptCell(cellEl)) insertIntoScriptCell(cellEl, html, text, files);
   }
 }
 

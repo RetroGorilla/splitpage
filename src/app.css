@@ -631,6 +631,18 @@
   .toast.is-sticky { cursor: pointer; max-width: 340px; line-height: 1.45; }
   .toast.warn { border-color: var(--accent); color: var(--accent); }
   .toast.error { border-color: var(--danger); color: var(--danger); }
+  /* showActionToast() (12-dirty-toast.js): words, then one button */
+  .toast.has-action { display: flex; align-items: center; gap: 12px; }
+  .toast-action {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+  .toast-action:hover, .toast-action:focus-visible { background: var(--surface-2); }
   @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   /* set by showToast()'s dismiss() (12-dirty-toast.js) — toast-in in reverse */
   .toast.is-leaving {
