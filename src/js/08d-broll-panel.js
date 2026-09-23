@@ -223,6 +223,33 @@ function propOptionsHtml() {
     .map(function (n) { return '<option value="' + escapeHtml(n) + '"></option>'; }).join("");
 }
 
+/* The props as a line of text with a status dot before each name (#149):
+   "is it here yet" readable at a glance, on the compact line and in the
+   sheet, without opening anything. The dot's colour is its status class's
+   (app.css, from the tokens, so dark mode follows); its title is the word.
+   A prop the breakdown no longer has has no status, so no dot. The names
+   stay the element's only text, separated by ", ". */
+function propStatusDot(p) {
+  var st = tagStatus(p.status);
+  if (!st) return "";
+  return '<span class="broll-st-dot is-' + escapeHtml(st.id) + '" title="' + escapeHtml(st.label) +
+    '" role="img" aria-label="' + escapeHtml(st.label) + '"></span>';
+}
+
+function propListHtml(e) {
+  return e.props.map(function (p) {
+    return '<span class="broll-prop-item">' + propStatusDot(p) + escapeHtml(p.name) + '</span>';
+  }).join(", ");
+}
+
+/* "Kettle (Sourcing), Drone (Needed)": the same, for a title attribute. */
+function propListTitle(e) {
+  return e.props.map(function (p) {
+    var st = tagStatus(p.status);
+    return p.name + (st ? " (" + st.label + ")" : "");
+  }).join(", ");
+}
+
 function propsEditHtml(e) {
   var id = escapeHtml(e.id);
   return '<div class="broll-props" style="--prop:' + catColor("prop") + '">' +
@@ -380,8 +407,8 @@ function rowMetaHtml(e) {
   var who = personById(e.owner);
   if (who) parts.push('<span class="broll-meta-item">' + avatarHtml(who) + escapeHtml(who.name) + '</span>');
   if (e.props.length) {
-    parts.push('<span class="broll-meta-item broll-meta-props" style="--prop:' + catColor("prop") + '">' +
-      brollIcon("box", 12, "broll-prop-ico") + escapeHtml(e.props.map(function (p) { return p.name; }).join(", ")) + '</span>');
+    parts.push('<span class="broll-meta-item broll-meta-props" style="--prop:' + catColor("prop") + '" title="' +
+      escapeHtml(propListTitle(e)) + '">' + brollIcon("box", 12, "broll-prop-ico") + propListHtml(e) + '</span>');
   }
   return parts.join("");
 }
@@ -1304,7 +1331,7 @@ function pageRowHtml(e) {
           sceneLabel(e) + '">' + sceneLabel(e) + '</button>'
       : '<span class="broll-muted" title="' + (e.orphaned ? 'No longer in the script' : 'Added here') + '">—</span>') + '</td>' +
     '<td class="broll-page-c-props" data-label="Props" style="--prop:' + catColor("prop") + '">' +
-      (props ? '<span class="broll-page-ellipsis" title="' + escapeHtml(props) + '">' + escapeHtml(props) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
+      (props ? '<span class="broll-page-ellipsis" title="' + escapeHtml(propListTitle(e)) + '">' + propListHtml(e) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
     '<td class="broll-page-c-cuts" data-label="Cuts against">' +
       (e.audioRef ? '<span class="broll-page-ellipsis broll-page-cuts" title="' + escapeHtml(e.audioRef) + '">' + escapeHtml(e.audioRef) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
     '<td class="broll-page-c-owner" data-label="Assigned">' +
@@ -1357,6 +1384,11 @@ function shotRecordForFile(e) {
     flagged: !!e.reshoot,
     location: e.location || "",
     props: e.props.map(function (p) { return p.name; }),
+    /* for the printed sheet: "Kettle (sourcing)" */
+    propsWithStatus: e.props.map(function (p) {
+      var st = tagStatus(p.status);
+      return p.name + (st ? " (" + st.label.toLowerCase() + ")" : "");
+    }),
     cuts: e.audioRef || "",
     owner: who ? who.name : "",
     note: e.notes || "",

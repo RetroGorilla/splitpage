@@ -75,6 +75,7 @@ wait rec('bs5').props.length === 1 && !!prop('Ice scoop')
 key ctrl+shift KeyZ
 wait rec('bs5').props.length === 2
 wait metaProps('bs5') === 'Ice scoop, Kettle'
+expect Array.prototype.map.call(row('bs5').querySelectorAll('.broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Needed|Sourcing'
 
 # the script's own have no ×; a hand-added one comes off with its own
 click #broll-list .broll-row-main[data-id="bs1"]

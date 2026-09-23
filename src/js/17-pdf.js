@@ -957,7 +957,7 @@ export function buildShotListPdf(data) {
       if (r.scene) meta.push("Scene " + r.scene);
       if (r.location && g.label !== r.location) meta.push(r.location);
       if (r.owner) meta.push("Assigned: " + r.owner);
-      if (r.props.length) meta.push("Props: " + r.props.join(", "));
+      if (r.props.length) meta.push("Props: " + (r.propsWithStatus || r.props).join(", "));
       if (meta.length) details.push({ text: meta.join("   ·   ") });
       if (r.cuts) details.push({ text: "Cuts against: \u201C" + r.cuts.replace(/\s+/g, " ") + "\u201D" });
       if (r.flagged || r.note) details.push({ text: (r.note || "").replace(/\s+/g, " "), flag: r.flagged });

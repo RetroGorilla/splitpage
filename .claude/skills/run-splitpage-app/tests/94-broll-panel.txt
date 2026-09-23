@@ -91,6 +91,11 @@ expect row('bs1').querySelector('.broll-row-meta').textContent.indexOf('Harbour'
 expect row('bs1').querySelector('.broll-avatar').textContent === 'JS'
 expect row('bs1').querySelector('.broll-row-meta').textContent.indexOf('Jordan Sato') !== -1
 expect row('bs1').querySelector('.broll-meta-props').textContent === 'Fishing nets, Drone'
+# each prop's status as a dot before its name: Have it teal, Needed a hollow ring
+expect Array.prototype.map.call(row('bs1').querySelectorAll('.broll-meta-props .broll-st-dot'), function(d){ return d.className.replace('broll-st-dot ', '') + ':' + d.getAttribute('title'); }).join('|') === 'is-have:Have it|is-needed:Needed'
+expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(27, 122, 104)'
+expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-needed')).backgroundColor === 'rgba(0, 0, 0, 0)'
+expect row('bs1').querySelector('.broll-meta-props').getAttribute('title') === 'Fishing nets (Have it), Drone (Needed)'
 expect row('bs1').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
 expect !!row('bs2').querySelector('.broll-flag-ico') && !!row('bs2').querySelector('.broll-note-ico')
 expect !row('bs4').querySelector('.broll-flag-ico') && !row('bs4').querySelector('.broll-note-ico')
@@ -118,6 +123,9 @@ expect document.querySelector('#broll-list .broll-card .broll-seg button.is-acti
 expect document.querySelector('#broll-list .broll-card .broll-flag-btn').classList.contains('is-active')
 expect document.querySelector('#broll-list .broll-card .broll-scene-n').textContent === '01'
 expect parseFloat(getComputedStyle(document.querySelector('#broll-list .broll-card .broll-label')).width) === 96
+# one value column for every row: a flagged shot with no description line
+# (this one) as much as one with (bs1, below)
+expect new Set(Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-value'), function(v){ return Math.round((v.firstElementChild || v).getBoundingClientRect().left); })).size === 1
 click #broll-list .broll-card [data-action="broll-menu"]
 wait !!document.querySelector('#broll-list .broll-card .broll-menu')
 expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-menu-item'), function(b){ return b.textContent; }).join('|') === 'Rename in script|Delete from list'
@@ -136,6 +144,10 @@ click #broll-controls .broll-summary-line
 wait rec('bs2').notes === 'Go back before six.'
 click #broll-list .broll-card .broll-seg button[data-status="shot"]
 wait rec('bs2').status === 'shot'
+jsclick #broll-list .broll-row-main[data-id="bs1"]
+wait !!document.querySelector('#broll-list .broll-card[data-id="bs1"]')
+expect document.querySelector('#broll-list .broll-card .broll-card-desc').textContent === 'wide, then tight on one bird'
+expect new Set(Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-value'), function(v){ return Math.round((v.firstElementChild || v).getBoundingClientRect().left); })).size === 1
 
 # ---- 6. bulk: several lines, one change, one undo ----------------------
 eval ctrlClick('bs4')
