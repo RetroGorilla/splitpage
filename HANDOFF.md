@@ -282,7 +282,12 @@ the caret can't enter one and typing/backspace can't corrupt its
 ### 3.4 Tags are derived; the *registry* is not
 
 Which scenes a tag appears in is read live (`collectTags()`). Which items
-are tracked at all is real storage, `state.productionTags`.
+are tracked at all is real storage, `state.productionTags`. A mention is
+one stretch of one tag in the cell's document model (`tagsInField()`, via
+`cellOf()`, #85), not one tag span: two spans of one tag side by side,
+which older copies stored, are one mention, and an empty span is none —
+the count a cell keeps once anything edits it (`docs/DOCUMENT-MODEL.md`
+§10 step 3).
 `productionEntries()` merges registry + live mentions + owner/notes/status.
 It is a pure read since #84: one production index, derived lazily and kept
 until its inputs change — each row's id and two fields, each registry
@@ -1082,7 +1087,14 @@ against `mdSceneCellSource()`: equal keeps the block's HTML intact,
 different rebuilds via `legacyMdToHtml()` + `sanitizeHtml()` (comment
 anchors lost, `quotedText` kept); a differing row count asks
 (`#md-rows-modal`), never reconciles silently; no data block ⇒ ordinary
-lossy import (#32).
+lossy import (#32). The table's cells are `htmlToMarkdown()` of the
+block's HTML, **not** the document model's `toMarkdown()` that the plain
+Markdown export uses (#85): every copy of the app, older ones included,
+compares the table with its own `htmlToMarkdown()` of the block, so a cell
+written any other way is rebuilt from the table there, and an unchanged
+document would stop re-saving byte for byte. Reading also accepts the
+model's form as unchanged, so the writer can switch once no older copy is
+in use (`mdSceneCellSource()`, `sceneCellEdits()`).
 
 **Browser storage** (follows the reader, not the file): `splitpage-comment-author`,
 `splitpage-snapshots` (legacy, read-once Older-bucket migration source, do
@@ -1422,10 +1434,10 @@ evaluation order via `_entry.js`):
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
 | `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v2: `index` + `bodies`, one strict transaction per job), `hashText`, and — TEMPORARY until v3 — the v1 → v2 migrator, its read-only v1 reader and `seedV1HistoryDb` (tests) |
-| `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown, video link cards |
+| `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
-| `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, …), edits, steps and `mergeCells` |
+| `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, `toMarkdown`, …), edits, steps and `mergeCells` |
 | `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
 | `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6) |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
