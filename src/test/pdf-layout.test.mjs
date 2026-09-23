@@ -287,7 +287,7 @@ test("the same picture twice is embedded once and listed on every page that draw
 test("a comment picture that does not fit in what is left of a page starts the next page", async () => {
   const pic = cimg(400, 300);
   let broke = 0;
-  for (let n = 0; n <= 32; n++) {
+  for (let n = 0; n <= 46; n++) {
     const { ops } = commentOps(await commentPdf([
       { body: lines(n, "Push") + (n ? "<br>" : "") + pic.html + " After it." }
     ]));
@@ -304,6 +304,132 @@ test("a comment picture that does not fit in what is left of a page starts the n
     }
   }
   assert.ok(broke > 0, "no variant pushed the picture onto the next page");
+});
+
+/* ---- comment line spacing ----
+
+   The line-by-line room check (4dd30b3) drew every comment line as if it
+   began a new part of the thread — at y - SIZE under a y that drawLines
+   had already moved LEAD past the last baseline — so each wrapped line of
+   a comment or reply sat SIZE + LEAD = 22.5pt under the one before it
+   instead of LEAD = 13pt. Lines of one part are LEAD apart; a new part
+   (the header, the quote, the body, a reply's header, a reply's body)
+   starts SIZE further down, as it did before that change. */
+const LEAD = 13, SIZE = 9.5;
+const LINE_ROOM = LEAD - SIZE;   /* below a baseline, clear of the margin */
+
+/* The comments section's text as lines — one per baseline, in order —
+   each with its page, baseline, indent and words. */
+function commentLines(ops) {
+  const out = [];
+  ops.forEach((o) => {
+    if (o.kind !== "text") return;
+    const last = out[out.length - 1];
+    if (last && last.page === o.page && last.y === o.y) { last.words.push(o.str); return; }
+    out.push({ page: o.page, y: o.y, x: o.x, words: [o.str] });
+  });
+  return out;
+}
+const lineOf = (ls, word) => ls.findIndex((l) => l.words[0] === word);
+
+test("the lines of one comment paragraph are exactly one line height apart", async () => {
+  const para = (w, n) => Array.from({ length: n }, () => w).join(" ");
+  const { ops } = commentOps(await commentPdf([{
+    quotedText: para("quoted", 60),
+    body: lines(6, "Body") + "<br>" + para("wraps", 90),
+    replies: [
+      { id: "rp0", author: "Bob", body: para("replying", 70), createdAt: "2026-09-02T10:00:00Z" },
+      { id: "rp1", author: "Dee", body: lines(4, "Second"), createdAt: "2026-09-03T10:00:00Z" }
+    ]
+  }]));
+  checkThread(ops);
+  const ls = commentLines(ops);
+  /* each part's lines, by the word it starts with */
+  const part = (w) => ls.filter((l) => l.words[0] === w);
+  const quote = ls.filter((l) => /quoted/.test(l.words.join(" ")));
+  const body = ls.filter((l) => l.words[0] === "Body" || l.words[0] === "wraps");
+  for (const [name, p] of [["quote", quote], ["body", body], ["reply 1", part("replying")], ["reply 2", part("Second")]]) {
+    assert.ok(p.length >= 3, name + " wraps to several lines (" + p.length + ")");
+    p.slice(1).forEach((l, i) => {
+      if (l.page !== p[i].page) return;
+      assert.ok(Math.abs(p[i].y - l.y - LEAD) < 0.005, name + " line " + (i + 2) + " is " + (p[i].y - l.y).toFixed(2) + "pt under the one before, not " + LEAD);
+    });
+    /* nothing of another part between them */
+    assert.equal(ls.indexOf(p[p.length - 1]) - ls.indexOf(p[0]), p.length - 1, name + " is not contiguous");
+  }
+  assert.equal(new Set(ls.map((l) => l.page)).size, 1, "fits one page");
+  /* each new part starts one line plus SIZE under the last of the one
+     before it — header, quote, body, reply header, reply body, ... */
+  const starts = [0, ls.indexOf(quote[0]), ls.indexOf(body[0]), lineOf(ls, ">"), ls.indexOf(part("replying")[0])];
+  const secondHeader = ls.findIndex((l, i) => i > starts[4] && l.words[0] === ">");
+  starts.push(secondHeader, ls.indexOf(part("Second")[0]));
+  starts.slice(1).forEach((at, i) => {
+    assert.ok(at > starts[i], "part " + (i + 2) + " out of order");
+    assert.ok(Math.abs(ls[at - 1].y - ls[at].y - (LEAD + SIZE)) < 0.005,
+      "part " + (i + 2) + " starts " + (ls[at - 1].y - ls[at].y).toFixed(2) + "pt under the part before");
+  });
+  /* the body's two paragraphs — <br>-separated lines, then a wrapped one —
+     are one part: no extra gap between "Body 6" and the first "wraps" */
+  assert.equal(body.length, part("Body").length + part("wraps").length);
+});
+
+test("replies and pictures keep their order and the room around a picture", async () => {
+  const a = cimg(160, 120), b = cimg(90, 60);
+  const { ops } = commentOps(await commentPdf([{
+    body: lines(3, "Top") + a.html + lines(3, "Mid") + b.html + lines(2, "End"),
+    replies: [1, 2, 3].map((k) => ({ id: "rp" + k, author: "R" + k, body: lines(2, "Reply" + k) + (k === 2 ? a.html + "Tail" : ""), createdAt: "2026-09-0" + (k + 1) + "T10:00:00Z" }))
+  }]));
+  checkThread(ops);
+  const ls = commentLines(ops);
+  const imgs = ops.filter((o) => o.kind === "img");
+  assert.equal(imgs.length, 3);
+  const at = (k) => ops.findIndex((o) => o === k || (o.kind === "text" && o.str === k));
+  const order = ["Top", imgs[0], "Mid", imgs[1], "End", "Reply1", "Reply2", imgs[2], "Tail", "Reply3"].map(at);
+  assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), "out of order: " + order);
+  /* the text between pictures one line height apart */
+  const mid = ls.filter((l) => l.words[0] === "Mid");
+  assert.equal(mid.length, 3);
+  mid.slice(1).forEach((l, i) => assert.ok(Math.abs(mid[i].y - l.y - LEAD) < 0.005, "Mid lines " + (mid[i].y - l.y).toFixed(2) + "pt apart"));
+  assert.equal(new Set(ops.map((o) => o.page)).size, 1, "fits one page");
+  imgs.forEach((im) => {
+    const i = ops.indexOf(im), before = ops[i - 1], after = ops[i + 1];
+    /* a picture's top 3pt under the slot the line before leaves (LEAD
+       below its baseline); the next line's baseline SIZE + 7 under it */
+    assert.ok(Math.abs(before.y - LEAD - 3 - im.top) < 0.02, im.name + " top " + im.top + " after a line at " + before.y);
+    assert.ok(Math.abs(im.y - 7 - SIZE - after.y) < 0.02, im.name + " bottom " + im.y + " then a line at " + after.y);
+  });
+});
+
+test("a comment near the bottom of a page carries on at the top of the next, never below the margin", async () => {
+  let carried = 0, within = 0;
+  for (let n = 0; n <= 56; n++) {
+    const { ops } = commentOps(await commentPdf([
+      { body: lines(n, "Push") },
+      { body: lines(12, "Tail"), replies: [{ id: "rp0", author: "Bob", body: lines(5, "Answer"), createdAt: "2026-09-02T10:00:00Z" }] }
+    ]));
+    checkThread(ops);
+    const ls = commentLines(ops);
+    ls.forEach((l) => assert.ok(l.y - LINE_ROOM >= M - 0.005, "n=" + n + ": " + l.words.join(" ") + " at y=" + l.y + " is below the margin"));
+    ls.slice(1).forEach((l, i) => {
+      const prev = ls[i];
+      if (l.page === prev.page) return;
+      carried++;
+      /* within a part the page was full: one more line, LEAD under the
+         last, would have crossed the margin */
+      if (l.words[0] === prev.words[0]) {
+        within++;
+        assert.ok(prev.y - LEAD - LINE_ROOM < M, "n=" + n + ": broke after y=" + prev.y + " with room for another line");
+      }
+      /* and it carries on under "Comments (continued)", as the first line
+         of a part does */
+      assert.ok(Math.abs(l.y - (PH - M - 6 - 34 - SIZE)) < 0.005, "n=" + n + ": continued at y=" + l.y);
+    });
+    /* in order, all of it */
+    const words = ls.map((l) => l.words.join(" "));
+    const want = [...Array.from({ length: n }, (_, i) => "Push " + (i + 1)), ...Array.from({ length: 12 }, (_, i) => "Tail " + (i + 1)), ...Array.from({ length: 5 }, (_, i) => "Answer " + (i + 1))];
+    assert.deepEqual(words.filter((w) => /^(Push|Tail|Answer) /.test(w)), want, "n=" + n);
+  }
+  assert.ok(carried > 10 && within > 5, "only " + carried + " variants reached a second page, " + within + " mid-paragraph");
 });
 
 test("commentEntries() keeps its plain-text shape; pieces only when asked", () => {
