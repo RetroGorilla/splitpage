@@ -177,9 +177,19 @@ A comment's anchor is the set of runs whose `cmt` contains its id. There is
 no span to lose. `comment.rowId` / `comment.field` become derived and are
 kept in step by one function, so the server and old readers still get them.
 Invariant #18 goes away.
+**Built:** that function is `syncCommentAnchors(state)` (04c): every
+comment marked somewhere points at the first cell holding its mark, in
+document order (row by row, visual before audio); one marked nowhere keeps
+what it had. Split, join and a cut-then-paste call it in their own undo
+entry, and `migrateRows` calls it, so every load and merge comes out in
+step. HANDOFF invariant #18 now says this.
 
 - Splitting a row moves the runs, and their marks move with them. Joining
-  rows does the same.
+  rows does the same. **Built:** `splitRowFieldCore` (06-rows.js) is
+  `splitCell` at the caret; `mergeWriterRows` (19-writer.js) is
+  `joinCells`, whose glue space carries a comment (or link) the text on
+  both sides of it is in, so a phrase a split cut in two is one anchor
+  again when joined back.
 - **Copy** never copies a `cmt` mark. **Cut then paste** in the same tab
   moves it (D6).
   **Built** (`src/js/05c-clipboard.js`): a copy's clipboard HTML is the
@@ -540,7 +550,7 @@ until step 4.
    cells), `find-replace.test.mjs`.
 4. **Writers. Done for everything done at the selection.** Not by making
    `applySteps` the only door into `S.state` — that would have meant
-   rewriting all 33 write paths first — but in two halves:
+   rewriting all 33 write paths first — but in three parts:
    - every keystroke is stored canonical (`syncFieldFromDom` through the
      model), so state never holds unsanitised HTML any more;
    - everything structural in a script cell goes through `editCell`
@@ -550,11 +560,15 @@ until step 4.
      carries a comment; cut then paste moves it (D6). Pictures and video
      cards are dropped from pasted script text and moved out of existing
      cells into comments on load (D7).
+   - splitting a scene (Enter in the writer, Alt+Enter) is `splitCell` at
+     the caret and joining two (Backspace/Delete at a paragraph's edge) is
+     `joinCells`; comments follow their marks (`syncCommentAnchors`, §3.2).
+     Tests: `comment-anchors.test.mjs`, browser suite 78.
    Still on the old paths, because they already write through
    `sanitizeHtml` and are not at the selection: applying a tag from the
    composer to one or all occurrences, rename/remove through the panel,
-   split/join, Replace All's HTML fallback for a cell still holding a
-   picture.
+   Replace All's HTML fallback for a cell still holding a picture — and
+   split/join of a cell still holding one, cut and joined as HTML.
 5. **Undo stack. Done** (`12a-undo.js`), recording every edit by diffing
    after `markDirty()` rather than per path — see §7 and HANDOFF invariant
    #53. The browser's own undo is never used in a script cell.
@@ -567,8 +581,9 @@ until step 4.
    model and #53 added. `execCommand` is left only where there is no model
    behind the text (the comment composer and reply boxes) and as the
    fallback for a script cell still holding a picture (which the load-time
-   move of D7 empties). `repointCommentsForRows` stays: split and join
-   still move text as HTML.
+   move of D7 empties). `repointCommentsForRows` is gone: split and join
+   move runs, and `syncCommentAnchors` (§3.2) is the one place a comment's
+   `rowId`/`field` is derived from its mark.
 
 Steps 1–3 are about a week of agent sessions. Steps 4–6 are the bulk and
 the risk. Step 4 touches every editing path, and a regression there loses
