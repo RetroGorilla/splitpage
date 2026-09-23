@@ -861,7 +861,10 @@ in their own column, page numbers in the footer, and a production-breakdown
 table whose columns size themselves to what's actually in them instead of a
 fixed guess. Its comments section shows each picture in a comment or reply
 where it was, as the PDF does; Markdown, CSV and plain text write
-`[image]` in its place.
+`[image]` in its place. Open one of these `.docx` files again and you get
+the script's scenes back — its text and pictures — and nothing else: the
+production-breakdown and comments sections stay behind, so they never turn
+into extra scenes, and a picture from a comment never lands on a row.
 
 Neither is the same thing as **Save**. These are copies for reading and
 sharing: they carry the words, not the tagging, the comment anchors, the

@@ -663,6 +663,56 @@ function isBreakdownHeader(head) {
   return true;
 }
 
+/* ---- where a Splitpage export's script ends ----
+
+   buildDocx() writes the script as one table and then, when the document
+   has them, a "Production breakdown" section (heading + table) and a
+   "Comments" section (heading + a paragraph per comment line, reply and
+   picture). Neither is script: walked as prose, the headings came back as
+   bold rows, every comment line as a narration row, and a comment's
+   picture as a row picture. The breakdown table itself was already
+   skipped (isBreakdownHeader), its heading was not.
+
+   Recognised structurally, not by the words alone: the section starts at a
+   paragraph in the Heading1 style reading exactly one of the two headings
+   buildDocx() writes, AFTER a table in the "SplitpageTable" table style —
+   a style id only this export defines (styles.xml, __init below) and
+   nobody produces by typing. A Word document of the user's own with a
+   "Comments" heading has no such table and imports exactly as it always
+   did. Files Splitpage exported before this check carry the same shape,
+   so they reopen cleanly too — the export itself did not change.
+
+   The comments are dropped, not rebuilt: the export carries them as
+   plain text with a formatted date and a scene label, not the anchor
+   (row, field, offsets), the formatting or the timestamps a comment
+   record needs, and opening a .docx starts a new document with no
+   comments of its own (issue #7). */
+var EXPORT_TABLE_STYLE = "splitpagetable";
+var EXPORT_SECTION_HEADINGS = ["Production breakdown", "Comments"];
+
+function tableStyleName(tblEl) {
+  var tblPr = directChildren(tblEl, "tblPr")[0];
+  var st = tblPr && directChildren(tblPr, "tblStyle")[0];
+  if (!st) return "";
+  return (st.getAttributeNS(W_NS, "val") || st.getAttribute("w:val") || "").toLowerCase();
+}
+
+/* The index in `blocks` where a Splitpage export's own trailing sections
+   begin, or blocks.length when there are none (any other document). */
+function exportTailStart(blocks) {
+  var sawExportTable = false;
+  for (var i = 0; i < blocks.length; i++) {
+    var n = blocks[i];
+    if (n.localName === "tbl") {
+      if (tableStyleName(n) === EXPORT_TABLE_STYLE) sawExportTable = true;
+      continue;
+    }
+    if (sawExportTable && paraStyleName(n) === "heading1" &&
+        EXPORT_SECTION_HEADINGS.indexOf((n.textContent || "").trim()) !== -1) return i;
+  }
+  return blocks.length;
+}
+
 /* Work out which columns hold the visual and the audio. Tables in the wild
    have an extra scene-number column, and put the columns in either order. */
 function mapTableColumns(rowsText) {
@@ -710,6 +760,9 @@ export async function docxToRows(file) {
   var blocks = Array.prototype.filter.call(bodyEl.childNodes, function (n) {
     return n.nodeType === 1 && (n.localName === "p" || n.localName === "tbl");
   });
+  /* a Splitpage export ends at its script: its breakdown and comments
+     sections are not rows (exportTailStart above) */
+  blocks = blocks.slice(0, exportTailStart(blocks));
 
   /* Only read bold as "this is a direction" when the document uses it that
      way — sparingly, among plain paragraphs. In an all-bold document it
@@ -786,8 +839,8 @@ export async function docxToRows(file) {
          buildDocx() always adds a second Heading1 ("Comments" /
          "Production breakdown") once there's a saved comment or tracked
          item, which defeated that count on every one of its own exports:
-         the title paragraph became a bogus row, and the whole appended
-         section got walked as narration. Position (nothing kept yet) is
+         the title paragraph became a bogus row. (That appended section is
+         cut off before this walk now — exportTailStart.) Position (nothing kept yet) is
          the actual invariant the comment above describes — count of
          headings elsewhere in the document has nothing to do with it. */
       if (title === null && !rows.length && !pending) { title = plain; return; }
