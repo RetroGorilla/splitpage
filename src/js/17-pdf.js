@@ -209,6 +209,17 @@ export function buildPdf(jpegs, commentJpegs) {
   var GUT = 30, GAP = 16;
   var COLW = (PW - M * 2 - GUT - GAP) / 2;
   var SIZE = 9.5, LEAD = 13;
+  /* A row's rule sits ROW_TAIL below the bottom of its columns: a column
+     of n lines from cursor c ends (drawLines' return) at c - SIZE - n*LEAD,
+     and the rule goes 6 under the lower column's end — so a column's last
+     baseline sits LEAD + 6 = 19 above the rule, and the row as a whole
+     (its taller column, picture included) plus ROW_TAIL is the height its
+     rule needs to stay on or above the bottom margin. */
+  var ROW_TAIL = SIZE + 6;
+  /* The room a row gets on a fresh page: newPage() lands at PH - M, and
+     the row loop's own "y -= 6" plus drawColumnHeaders()'s 8 + 16 take
+     30 of it. */
+  var PAGE_ROOM = PH - 2 * M - 30;
 
   var pages = [];
   var ops = [];
@@ -263,6 +274,14 @@ export function buildPdf(jpegs, commentJpegs) {
 
   function columnHeight(lines) { return lines.length * LEAD; }
 
+  /* Where drawLines() would leave a column of n lines started at cursor
+     c (c - SIZE when n is 0), in the same arithmetic. */
+  function columnEnd(c, n) {
+    var yy = c - SIZE;
+    for (var i = 0; i < n; i++) yy -= LEAD;
+    return yy;
+  }
+
   function drawColumnHeaders() {
     text("VISUAL", M + GUT, y, "F2", 8);
     text("AUDIO", M + GUT + COLW + GAP, y, "F2", 8);
@@ -310,14 +329,28 @@ export function buildPdf(jpegs, commentJpegs) {
            header/rule/gap eat 30pt of that before the image is drawn —
            capping to the whole page's height (PH - 2*M) still left it
            30pt short of fitting even there. */
-        var maxH = PH - 2 * M - 30;
+        var maxH = PAGE_ROOM;
+        /* ...and when nothing will follow the picture onto a later page —
+           no visual text under it, and all the audio beside it fits on
+           its page — the row's rule is ROW_TAIL + 8 under the picture on
+           that same page, so the cap leaves room for that too, or the
+           rule would fall up to 23.5pt below the bottom margin (30.5 for
+           a picture at the old cap). With visual text the picture keeps
+           the whole page and the text (and the rule) carry on overleaf. */
+        if (!vLines.length && columnHeight(aLines) + ROW_TAIL <= PAGE_ROOM) maxH = PAGE_ROOM - 8 - ROW_TAIL;
         if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
         imgRef = { name: name, w: natW, h: natH };
         imgH = imgRef.h + 8;
       } catch (e) { /* skip an unreadable image */ }
     }
 
-    var need = Math.max(columnHeight(vLines) + imgH, columnHeight(aLines)) + 14;
+    /* ROW_TAIL, not the 14 of the row gap below the rule: with 14 a row
+       that passed this check by less than 1.5pt had its rule drawn up to
+       1.5pt under the bottom margin. A row with nothing in it keeps the
+       14 — it never enters the text loop, so its rule is drawn at its top
+       (y), which the 14 already keeps inside the margin. */
+    var empty = !vLines.length && !aLines.length && !imgRef;
+    var need = Math.max(columnHeight(vLines) + imgH, columnHeight(aLines)) + (empty ? 14 : ROW_TAIL);
     if (y - need < M && y < PH - M - 40) { newPage(); y -= 6; drawColumnHeaders(); }
 
     text(pad2(idx + 1), M, y - SIZE, "F2", 8);
@@ -344,6 +377,7 @@ export function buildPdf(jpegs, commentJpegs) {
        otherwise the overflow is emitted below the page edge and disappears. */
     var vRest = vLines, aRest = aLines;
     var vCursor = vy, aCursor = y;
+    var drewPic = vy !== y;
     var guard = 0;
     while ((vRest.length || aRest.length) && guard++ < 400) {
       /* A block of n lines starting at startY = cursor - SIZE has its
@@ -356,6 +390,22 @@ export function buildPdf(jpegs, commentJpegs) {
       var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
       var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
       var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
+      /* A chunk that finishes the row puts the row's rule 6 under the
+         lower column's end — 19 under its last baseline. Every baseline
+         clearing M does not make that rule clear it: a row finishing on a
+         continuation page could put it at M - 11.5, one starting a fresh
+         page under a picture anywhere down to M - 19. So when the rule
+         would fall below M, the lower column's last line goes overleaf
+         instead and the rule follows it there — never alone at the top
+         of a page. Only a chunk that would finish the row: a row that
+         fits whole passed the `need` check and never gets here short. */
+      if (vTake.length === vRest.length && aTake.length === aRest.length) {
+        var vLow = columnEnd(vCursor, vTake.length), aLow = columnEnd(aCursor, aTake.length);
+        if (Math.min(vLow, aLow) - 6 < M - 1e-6) {
+          if (vTake.length && (vLow <= aLow || !aTake.length)) vTake = vTake.slice(0, -1);
+          else if (aTake.length) aTake = aTake.slice(0, -1);
+        }
+      }
       var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
       var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;
       vRest = vRest.slice(vTake.length);
@@ -364,7 +414,12 @@ export function buildPdf(jpegs, commentJpegs) {
         y = Math.min(vEnd, aEnd) - 6;
         break;
       }
-      if (!vTake.length && !aTake.length) break;   /* nothing fits — bail out safely */
+      /* nothing fits — bail out safely. Unless this page holds the row's
+         picture: a picture filling its page left no room for a first line
+         of visual text under it, and bailing here dropped that text and
+         drew the rule at the top of the page, across the picture. */
+      if (!vTake.length && !aTake.length && !drewPic) break;
+      drewPic = false;
       newPage();
       y -= 6;
       drawColumnHeaders();
