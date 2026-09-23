@@ -31,6 +31,8 @@ import {
 } from "../js/08c-broll.js";
 import { renameTag } from "../js/07-production-tags.js";
 import { buildBreakdownCsv } from "../js/08-production-panels.js";
+import { brollShotListForPrint, buildBrollCsv } from "../js/08d-broll-panel.js";
+import { buildShotListPdf } from "../js/17-pdf.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 brollInit();
@@ -596,4 +598,35 @@ test("the breakdown CSV names the b-roll shots each prop is needed for, in a las
   assert.ok(kettle.endsWith(",drone over the pier"), kettle);
   const mug = lines.find((l) => l.startsWith("Prop,Red mug,"));
   assert.ok(mug.endsWith(",the red mug on the sill"), mug);
+});
+
+/* ---- the full-page shot list's files (#150) ---- */
+
+test("the shot list CSV: one row per shot in script order, with a Props column, nothing written", () => {
+  const s = propsDoc();
+  addBrollProp("b2", "Kettle");
+  s.brollShots[1].notes = "wide, then \"tight\"";
+  s.brollShots[1].reshoot = true;
+  s.rows.push({ id: "r2", visualText: "B-roll: an unanchored line", audioText: "" });
+  const before = JSON.stringify(s.brollShots);
+  const lines = buildBrollCsv().replace(/^\uFEFF/, "").split("\r\n");
+  assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
+  assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description");
+  assert.equal(lines.length, 4);
+  assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,");
+  assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",');
+  assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,");
+});
+
+test("the printed shot list is a PDF of the shots as shown, flagged ones marked", () => {
+  const s = propsDoc();
+  s.brollShots[1].reshoot = true;
+  s.brollShots[1].notes = "too dark";
+  const text = Buffer.from(buildShotListPdf(brollShotListForPrint())).toString("latin1");
+  assert.ok(text.startsWith("%PDF-1.4"));
+  assert.ok(text.includes("(the red mug on the sill) Tj"));
+  assert.ok(text.includes("(drone over the pier) Tj"));
+  assert.ok(text.includes("(FLAGGED  \u0097  ) Tj"), "FLAGGED in front of the note");
+  assert.ok(text.includes("Props: Red mug"));
+  assert.match(text, /\/Count 1 >>/);
 });
