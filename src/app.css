@@ -3523,107 +3523,257 @@
      that no script is open yet. z-index 130 puts it above the topbar (120)
      and below the side panels (140), the modals (150) and the tour (160),
      so the first-run wizard still appears over it and nothing here can
-     cover a dialog. */
+     cover a dialog.
+
+     A start screen since issue #144: a slim bar of its own, then the
+     heading, the New grid (Blank script plus the starters) with the
+     desktop-only Recent column beside it, the drop zone, and a footer of
+     links. Body text is Work Sans throughout; the mono face is kept for
+     the one thing that is literally a file name (a recent entry's).
+
+     --nt-line is the cards' hairline — a shade lighter than --border in
+     the light theme, so the cards sit on the cream rather than being
+     outlined on it; in the dark theme --border is already that quiet. */
   .newtab-page {
+    --nt-line: #E7E1D3;
     position: fixed; inset: 0; z-index: 130;
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body);
+    overflow-y: auto; overflow-x: hidden;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .newtab-page { --nt-line: var(--border); }
+  }
+  :root[data-theme="dark"] .newtab-page { --nt-line: var(--border); }
+  /* The page is its own scroller (openNewTabPage sets this). */
+  html.is-newtab-open { overflow: hidden; }
+
+  .newtab-page svg { flex: none; width: 16px; height: 16px; }
+  .newtab-page button { font-family: var(--font-body); }
+  .newtab-page button:focus-visible,
+  .newtab-page a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+  /* ---- the slim top bar ---- */
+  .newtab-bar {
+    position: sticky; top: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 24px;
     background: var(--bg);
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px;
-    overflow-y: auto;
+    border-bottom: 1px solid var(--nt-line);
   }
-  .newtab-inner { width: 100%; max-width: 620px; }
+  .newtab-wordmark {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .newtab-page .newtab-wordmark-mark { width: 20px; height: 20px; }
+  .newtab-wordmark-mark .is-visual { stroke: var(--visual); }
+  .newtab-wordmark-mark .is-audio { stroke: var(--audio); }
+  .newtab-bar-actions { display: flex; gap: 8px; }
+  .newtab-bar-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 12px;
+    font-size: 13.5px; font-weight: 500; line-height: 1;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text);
+    cursor: pointer; white-space: nowrap;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+                opacity var(--dur-fast) var(--ease-standard);
+  }
+  .newtab-bar-btn:hover { border-color: var(--text-faint); }
+  .newtab-bar-btn:active { transform: translateY(1px); }
+  /* --surface as the text colour: white on teal in the light theme, and the
+     dark ground on the bright teal of the dark one. */
+  .newtab-bar-btn.is-primary { background: var(--visual); border-color: var(--visual); color: var(--surface); }
+  .newtab-bar-btn.is-primary:hover { opacity: 0.9; }
+
+  /* ---- the content column ----
+     Narrower in the browser build, where there is no Recent column to sit
+     beside the grid; .has-recents (renderRecents) widens it. */
+  .newtab-inner {
+    max-width: 760px; margin: 0 auto;
+    padding: 44px 24px 48px;
+  }
+  .newtab-inner.has-recents { max-width: 1120px; }
   .newtab-title {
-    font-family: var(--font-display); font-size: 18px; letter-spacing: 0.02em;
-    margin: 0 0 4px;
+    margin: 0 0 6px;
+    font-family: var(--font-body); font-size: 36px; font-weight: 700;
+    line-height: 1.15; letter-spacing: -0.02em;
   }
-  .newtab-sub { margin: 0 0 18px; color: var(--text-dim); font-size: 13px; }
-  .newtab-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .newtab-sub { margin: 0 0 28px; font-size: 15px; color: var(--text-dim); }
+  .newtab-label {
+    margin: 0 0 10px;
+    font-family: var(--font-body); font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  .newtab-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr) 380px; }
+
+  /* ---- the New grid ---- */
+  .newtab-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .newtab-card {
-    display: flex; flex-direction: column; gap: 4px;
-    text-align: left; padding: 16px 18px;
-    border: 1px solid var(--border); border-radius: var(--radius);
+    display: flex; flex-direction: column; gap: 3px;
+    min-width: 0; padding: 12px;
+    text-align: left;
+    border: 1px solid var(--nt-line); border-radius: 12px;
     background: var(--surface); color: var(--text);
     cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+                box-shadow var(--dur-fast) var(--ease-standard);
   }
-  .newtab-card:hover { border-color: var(--visual); }
-  .newtab-card strong { font-size: 15px; }
-  .newtab-card span { font-size: 12.5px; color: var(--text-dim); }
-  .newtab-card-mark {
-    font-family: var(--font-display); font-size: 20px; line-height: 1;
-    color: var(--visual); margin-bottom: 6px;
+  .newtab-card:hover { border-color: var(--visual); box-shadow: var(--shadow); }
+  .newtab-card:active { transform: translateY(1px); }
+  .newtab-card-name { font-size: 15px; font-weight: 600; }
+  .newtab-card-desc { font-size: 13px; line-height: 1.4; color: var(--text-dim); }
+
+  /* The two-column picture of a starter: a teal stub per line of what is
+     seen, an orange one per line of what is said (starterPreviewHtml). */
+  .newtab-preview {
+    display: flex; flex-direction: column; justify-content: center; gap: 8px;
+    height: 92px; margin-bottom: 9px; padding: 12px 14px;
+    border-radius: 8px; background: var(--bg);
+    overflow: hidden;
   }
-  .newtab-hint { margin: 16px 0 0; font-size: 12.5px; color: var(--text-dim); }
-  .newtab-hint a { color: inherit; }
+  .newtab-preview-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .newtab-preview-col { display: flex; flex-direction: column; gap: 3px; }
+  .newtab-preview i { display: block; height: 4px; border-radius: 2px; opacity: 0.75; }
+  .newtab-preview i.is-visual { background: var(--visual); }
+  .newtab-preview i.is-audio { background: var(--audio); }
+  .newtab-preview.is-blank {
+    align-items: center;
+    background: none; border: 1.5px dashed var(--border);
+    color: var(--text-faint);
+    transition: color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+  }
+  .newtab-page .newtab-preview.is-blank svg { width: 26px; height: 26px; }
+  .newtab-card:hover .newtab-preview.is-blank { color: var(--visual); border-color: var(--visual); }
 
   /* ---- the recent-documents column (issue #15, desktop only) ----
-
-     A column, not a card: it holds a list rather than being one button, so
-     it shares the framing and the mark with .newtab-card and none of its
-     click behaviour. #newtab-cards only widens to three columns once the
-     column is actually shown (.has-recents), so the browser build's page
-     is untouched. */
-  .newtab-cards.has-recents { grid-template-columns: 1fr 1fr 1fr; }
-  .newtab-inner.has-recents { max-width: 880px; }
-  .newtab-col {
-    display: flex; flex-direction: column; gap: 4px;
-    text-align: left; padding: 16px 18px;
-    border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--surface); color: var(--text);
+     A list in a card rather than a card: the entries are the buttons. */
+  .newtab-recents { min-width: 0; }
+  .newtab-recents-box {
+    display: flex; flex-direction: column;
+    padding: 6px;
+    border: 1px solid var(--nt-line); border-radius: 12px;
+    background: var(--surface);
   }
-  .newtab-col strong { font-size: 15px; }
   .newtab-recents-list {
     display: flex; flex-direction: column; gap: 2px;
-    margin-top: 6px;
-    /* Capped at 20 entries by main, which is taller than a short window —
-       scroll the list rather than the page under a full-screen layer. */
-    max-height: 220px; overflow-y: auto;
+    /* Capped at 20 entries by main, which is taller than the grid beside
+       it — scroll the list rather than the page. */
+    max-height: 300px; overflow-y: auto;
   }
-  .newtab-recent { display: flex; align-items: center; gap: 4px; }
+  .newtab-recent { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+  .newtab-recent:hover { background: var(--bg); }
   .newtab-recent-open {
     flex: 1 1 auto; min-width: 0;
-    display: flex; flex-direction: column; gap: 1px;
-    text-align: left; padding: 5px 6px;
-    border: 0; border-radius: 6px; background: none; color: inherit;
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 8px 10px;
+    text-align: left;
+    border: 0; border-radius: 8px; background: none; color: inherit;
     cursor: pointer;
   }
-  .newtab-recent-open:hover { background: var(--bg); }
   .newtab-recent-title {
-    font-size: 13px;
+    font-size: 14px; font-weight: 500;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .newtab-recent-meta { display: flex; gap: 8px; min-width: 0; font-size: 12px; color: var(--text-dim); }
   .newtab-recent-name {
-    font-size: 11.5px; color: var(--text-dim);
+    min-width: 0;
+    font-family: var(--font-display); font-size: 11.5px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .newtab-recent-when { flex: none; }
   .newtab-recent-forget {
-    flex: 0 0 auto;
-    border: 0; background: none; color: var(--text-dim);
-    font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; margin-right: 4px; padding: 0;
+    border: 0; border-radius: 6px; background: none; color: var(--text-faint);
     cursor: pointer;
   }
-  .newtab-recent-forget:hover { color: var(--text); background: var(--bg); }
-  .newtab-recents-empty { font-size: 12.5px; color: var(--text-dim); padding: 5px 6px; }
+  .newtab-page .newtab-recent-forget svg { width: 14px; height: 14px; }
+  .newtab-recent-forget:hover { color: var(--text); background: var(--surface-2); }
+  .newtab-recents-empty { padding: 10px; font-size: 13px; color: var(--text-dim); }
   .newtab-recents-clear {
-    align-self: flex-start; margin-top: 8px;
+    align-self: flex-start; margin: 4px 10px 6px; padding: 2px 0;
     border: 0; background: none; color: var(--text-dim);
-    font-size: 12px; padding: 2px 0; cursor: pointer;
-    text-decoration: underline;
+    font-size: 13px; text-decoration: underline; text-underline-offset: 2px;
+    cursor: pointer;
   }
   .newtab-recents-clear:hover { color: var(--text); }
 
-  /* One column on a phone: two cards side by side at 375px leave neither
-     wide enough for its own sentence. The recents column folds in with
-     them — it is desktop-only, but a small desktop window hits this too. */
-  @media (max-width: 560px) {
-    .newtab-cards, .newtab-cards.has-recents { grid-template-columns: 1fr; }
+  /* ---- the drop zone ---- */
+  .newtab-drop {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin-top: 28px; padding: 22px 20px;
+    border: 1.5px dashed var(--border); border-radius: 12px;
+    color: var(--text-dim);
+    transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
   }
-  /* Three across needs room the two cards never did. The column drops
-     below the two cards and spans them; its list is capped so the × stays
-     beside the file name instead of drifting to the far edge. */
-  @media (max-width: 860px) and (min-width: 561px) {
-    .newtab-cards.has-recents { grid-template-columns: 1fr 1fr; }
-    .newtab-cards.has-recents .newtab-recents { grid-column: 1 / -1; }
-    .newtab-cards.has-recents .newtab-recents-list { max-width: 420px; }
+  .newtab-drop.is-over { border-color: var(--visual); background: var(--visual-soft); }
+  .newtab-page .newtab-drop-icon { width: 26px; height: 26px; color: var(--visual); }
+  .newtab-drop-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; }
+  .newtab-drop-text strong { font-size: 15px; font-weight: 600; color: var(--text); }
+  .newtab-drop-text a, .newtab-desktop a {
+    color: var(--visual); font-weight: 500;
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+
+  /* ---- the footer row ---- */
+  .newtab-foot {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;
+    margin-top: 22px;
+    font-size: 13px; color: var(--text-dim);
+  }
+  .newtab-foot > a {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--text-dim); text-decoration: none;
+  }
+  .newtab-foot > a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+  /* A line of its own: it is a different kind of thing from the three
+     links above it, and never fits beside them in the browser build's
+     narrower column anyway (the only build that shows it). */
+  .newtab-desktop {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+    flex-basis: 100%;
+    padding-top: 14px; border-top: 1px solid var(--nt-line);
+  }
+
+  /* Opened from this page (issue #144), the paste modal makes a new
+     document (11-import.js), so it has no rows of the user's to replace
+     and says so in its hint. */
+  .import-hint-new { display: none; }
+  #import-modal.is-new-document .import-hint-keep,
+  #import-modal.is-new-document .import-replace-toggle { display: none; }
+  #import-modal.is-new-document .import-hint-new { display: block; }
+  #import-modal.is-new-document .modal-footer-actions { margin-left: auto; }
+
+  /* The Recent column drops under the grid before the grid gets cramped:
+     two cards across want ~560px, and the column 380px beside them. */
+  @media (max-width: 1000px) {
+    .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr); }
+    .newtab-recents-list { max-height: 260px; }
+  }
+  @media (max-width: 640px) {
+    .newtab-bar { padding: 10px 16px; }
+    .newtab-long { display: none; }
+    .newtab-inner { padding: 28px 16px 36px; }
+    .newtab-title { font-size: 28px; }
+    .newtab-sub { margin-bottom: 22px; font-size: 14px; }
+    .newtab-drop { flex-direction: column; gap: 8px; text-align: center; }
+  }
+  /* One column on a phone, each card a row: the picture beside the name
+     rather than above it, so four cards are not four screens. */
+  @media (max-width: 520px) {
+    .newtab-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .newtab-card {
+      display: grid; grid-template-columns: 96px minmax(0, 1fr);
+      column-gap: 12px; row-gap: 2px; align-items: center;
+    }
+    .newtab-preview { grid-row: 1 / span 2; height: 64px; margin: 0; padding: 8px 10px; gap: 5px; }
+    .newtab-preview-row { gap: 6px; }
+    .newtab-preview-row:nth-child(n + 4) { display: none; }
+    .newtab-card-name { align-self: end; }
+    .newtab-card-desc { align-self: start; }
   }
 
   /* ---------- the local-file merge review pane (18a-local-merge.js) ---------- */

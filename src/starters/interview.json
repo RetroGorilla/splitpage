@@ -1,0 +1,184 @@
+{
+  "schema": 2,
+  "title": "Meet the Baker — Crumb & Co.",
+  "rows": [
+    {
+      "id": "r1",
+      "status": "ready",
+      "visualText": "Setup in the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"back kitchen\" contenteditable=\"false\">back kitchen</span> of <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Crumb &amp; Co.\" contenteditable=\"false\">Crumb &amp; Co.</span>: A-cam medium on <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Maya Ortiz\" contenteditable=\"false\">Maya Ortiz</span>, B-cam tight profile. <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Lav mic\" contenteditable=\"false\">Lav mic</span> on Maya, cable under her apron.",
+      "audioText": "Before we roll: thirty seconds of <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"room tone\" contenteditable=\"false\">room tone</span>, everyone still. Then slate and clap on both cameras.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r2",
+      "status": "ready",
+      "visualText": "A-cam on Maya. <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Name super\" contenteditable=\"false\">Name super</span>: “<span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Maya Ortiz\" contenteditable=\"false\">Maya Ortiz</span>, owner” over her first answer.<br><span class=\"broll-key\" data-broll-id=\"bs_iv_dough\" contenteditable=\"false\">B-roll:</span> hands shaping the first loaves on the floured bench, 5 a.m.",
+      "audioText": "<strong>Q1.</strong> Tell me who you are and what this place is.<br><em>Listen for a clean name-and-role line we can open the film on.</em>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r3",
+      "status": "todo",
+      "visualText": "Cutaway: the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"old shopfront photo\" contenteditable=\"false\">old shopfront photo</span> pinned up by the ovens.<br><span class=\"broll-key\" data-broll-id=\"bs_iv_counter\" contenteditable=\"false\">B-roll:</span> slow pan along the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"front counter\" contenteditable=\"false\">front counter</span> as the doors open",
+      "audioText": "<strong>Q2.</strong> Why a bakery — and why here, of all places?<br><em>Let her tell it. Don't fill the pauses; the best line usually comes after one.</em>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r4",
+      "status": "todo",
+      "visualText": "B-cam profile — hold on her face for the whole answer, no cutaways.",
+      "audioText": "<strong>Q3.</strong> What's the part of this job nobody sees?<br><em>Follow-up: “And what keeps you doing it anyway?”</em>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r5",
+      "status": "todo",
+      "visualText": "Cutaways of regulars at the counter. <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Release forms\" contenteditable=\"false\">Release forms</span> signed before anyone is on camera.<br><span class=\"broll-key\" data-broll-id=\"bs_iv_oven\" contenteditable=\"false\">B-roll:</span> oven door opening, a wall of steam, the first tray coming out",
+      "audioText": "<strong>Q4.</strong> Is there a customer who's been coming since day one?<br><em>If she names someone, ask whether we can film them this week.</em>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r6",
+      "status": "todo",
+      "visualText": "Wide two-shot, then Maya flips the door sign to OPEN. Hold five seconds for the <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"end card\" contenteditable=\"false\">end card</span>.",
+      "audioText": "<strong>Q5.</strong> If someone wanted to do what you did, what would you tell them?<br><em>Last question. Thank her — then keep rolling for ten seconds. People relax when they think it's over.</em>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    }
+  ],
+  "comments": [],
+  "people": [],
+  "productionTags": [
+    {
+      "cat": "location",
+      "name": "back kitchen",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_1jydjy51332kd9"
+    },
+    {
+      "cat": "location",
+      "name": "Crumb & Co.",
+      "status": "have",
+      "owner": "",
+      "notes": "Shoot Tuesday, before opening — they bake from 4 a.m.",
+      "id": "t_jzth471rvcryg"
+    },
+    {
+      "cat": "cast",
+      "name": "Maya Ortiz",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_zqb3cay4rub2"
+    },
+    {
+      "cat": "gear",
+      "name": "Lav mic",
+      "status": "have",
+      "owner": "",
+      "notes": "",
+      "id": "t_nzo4b69nw035"
+    },
+    {
+      "cat": "sound",
+      "name": "room tone",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_1og7m8x1l7twe8"
+    },
+    {
+      "cat": "vfx",
+      "name": "Name super",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_qpnnnd7xowlo"
+    },
+    {
+      "cat": "prop",
+      "name": "old shopfront photo",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_nq5qty1szx9c9"
+    },
+    {
+      "cat": "location",
+      "name": "front counter",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_awo57l1ek09at"
+    },
+    {
+      "cat": "prop",
+      "name": "Release forms",
+      "status": "sourcing",
+      "owner": "",
+      "notes": "One per person on camera. Print ten.",
+      "id": "t_1ad8l0i15380n0"
+    },
+    {
+      "cat": "vfx",
+      "name": "end card",
+      "status": "needed",
+      "owner": "",
+      "notes": "",
+      "id": "t_2dqp6s1m645ja"
+    }
+  ],
+  "brollShots": [
+    {
+      "id": "bs_iv_dough",
+      "name": "hands shaping the first loaves on the floured bench, 5 a.m.",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Q1. Tell me who you are and what this place is.\nListen for a clean name-and-role line we can open the film on.",
+      "location": "",
+      "origin": "script"
+    },
+    {
+      "id": "bs_iv_counter",
+      "name": "slow pan along the front counter as the doors open",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Q2. Why a bakery — and why here, of all places?\nLet her tell it. Don't fill the pauses; the best line usually comes after one.",
+      "location": "front counter",
+      "origin": "script"
+    },
+    {
+      "id": "bs_iv_oven",
+      "name": "oven door opening, a wall of steam, the first tray coming out",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Q4. Is there a customer who's been coming since day one?\nIf she names someone, ask whether we can film them this week.",
+      "location": "",
+      "origin": "script"
+    }
+  ],
+  "wordsPerMinute": 150,
+  "rev": 0
+}
