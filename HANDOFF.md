@@ -614,15 +614,26 @@ tabs**.
   `splitpage:draft-restore-done` or an explicit user decision — never
   crash/kill/session-end/quit. `buildDraftHeader` (`main.js:807`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
-- Desktop version history lives under `<userData>/history/docs/d-<docId>/`,
-  mirroring the browser's IndexedDB store; ids validated in renderer and
-  main, resolved path stays inside the history root (#38).
-  `ensureHistoryTable()` (`main.js:1563`) fscks first in the write queue;
-  `planHistoryEviction()` is no longer duplicated: #76 moved it, the meta
-  sanitiser and the eviction constants into `shared/history-policy.js`,
-  which both builds load — the browser through `03a-history-store.js`'s
-  re-export, main through `APP_ROOT`. The smoke case that existed only to
-  detect drift between the two copies went with them.
+- **Desktop version history** (#83, `main.js` §8b): one
+  `shared/history-store.js` (the store the browser runs too; policy from
+  `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
+  made once in `whenReady` before `registerIpc`. `<userData>/history/`:
+  `FORMAT` `"2"` (higher → read-only), `index.json` + `index.prev.json`
+  (every bucket in one index, two durable generations; a torn current
+  falls back to prev and is kept as `.corrupt-<ts>`), `bodies/` (a
+  `createBlobStore` folder of its own, content-addressed, refcounted by
+  the index; a dropped body is unlinked only after the next generation is
+  durable). Body before index; no fsck — a missing body drops its entries
+  on read. Ids validated in renderer and main (#38); the renderer names
+  only `(docId, snapshot id)`. Per-tab holds (`historyHolds`, dropped in
+  `forgetTab`) join every eviction. The 8 history IPC channels keep their
+  answer shapes; `history-list` answers `{migrating:true}` while the
+  one-time `desktop/history-v1-migrate.js` moves the v1 tree
+  (`docs/d-<docId>/`, `older/`) in and then into `history/v1-backup/`
+  (delete both in the release after). Test-mode faults:
+  `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `exit-mid-migration`,
+  `exit-after-migration-index`, `enospc-once`/`-always`;
+  `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
 - **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
   §8c). Images leave the document state and live in `<userData>/blobs`:
   `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
@@ -968,7 +979,7 @@ per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 
 **Per-document version history**, capped 50 snapshots/document, keyed by
 `docId`: browser IndexedDB (`splitpage-history`, `03a-history-store.js`,
-memory fallback), desktop files (`<userData>/history/docs/d-<docId>/`,
+memory fallback), desktop files (`<userData>/history/`,
 §3.13). Pre-tabs shared history migrated once into a synthetic "Older"
 document, expiring 90 days after that migration (`HISTORY_OLDER_TTL_MS`).
 Eviction order: expired Older, trim every doc to 50, Older oldest-first,
@@ -1303,13 +1314,15 @@ evaluation order via `_entry.js`):
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, history storage + fsck (policy from `shared/history-policy.js`), draft headers, file dialogs, server launcher, native menus, test mode |
+| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, server launcher, native menus, test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
+| `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency |
+| `desktop/history-v1-migrate.js` | one-time move of the pre-#83 folder tree into it, then into `history/v1-backup/`; temporary (§3.13) |
 | `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
@@ -1321,6 +1334,8 @@ evaluation order via `_entry.js`):
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
 | `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
+| `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks) |
+| `desktop/test/history-v1-migrate.test.mjs` | unit suite for `desktop/history-v1-migrate.js` over a real v1 fixture (broken index, orphan and truncated `.snap`, unstamped Older; kills at every step, rerun ends identical) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
