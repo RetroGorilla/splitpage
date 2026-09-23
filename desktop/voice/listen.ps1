@@ -9,7 +9,9 @@
 #   {"type":"start","lang":"en-US"}      listening
 #   {"type":"interim","text":"..."}      a guess that may still change
 #   {"type":"final","text":"..."}        a phrase the recogniser settled on
-#   {"type":"warning","code":"..."}      no-signal / too-quiet / too-noisy
+#   {"type":"warning","code":"..."}      no-signal / too-quiet / too-noisy,
+#                                        or clear: the no-signal / too-quiet
+#                                        it said last is over (issue #117)
 #   {"type":"error","code":"..."}        no-recognizer / audio-capture /
 #                                        recognizer-failed / helper-failed
 #
@@ -47,8 +49,74 @@ using System.Globalization;
 using System.Speech.Recognition;
 using System.Text;
 
+// When no-signal and too-quiet are worth saying (issue #117). The recogniser
+// raises NoSignal the moment it starts, while the room is still quiet, and
+// TooSoft for one quiet moment, so passed straight through they flash a
+// warning before anyone has spoken. This holds them back: nothing within
+// GraceMs of starting, no-signal only once GraceMs has gone by with no audio
+// level at or above LevelFloor and nothing recognised, too-quiet only when
+// the recogniser says it again at least GraceMs after it first did with
+// nothing recognised in between. Once one is shown, audio arriving (for
+// no-signal) or words arriving (for either) sends "clear".
+//
+// Pure: the caller passes the time in, in milliseconds, and sends whatever
+// code comes back (a warning, "clear", or null for nothing), so
+// desktop/test/voice-grace.test.mjs can run it with a clock of its own and
+// no microphone.
+public sealed class SplitpageVoiceGrace {
+  public const long GraceMs = 5000;
+  public const int LevelFloor = 1;   // AudioLevelUpdated runs 0-100
+  long started, lastSignal, lastSpeech, pendingSince;
+  string pending;   // reported by the recogniser, not shown yet
+  string shown;     // what is on screen, if it is one of these two
+
+  public SplitpageVoiceGrace(long now) {
+    started = lastSignal = lastSpeech = now;
+  }
+
+  public string Level(long now, int level) {
+    if (level < LevelFloor) return null;
+    lastSignal = now;
+    if (pending == "no-signal") pending = null;
+    if (shown == "no-signal") { shown = null; return "clear"; }
+    return null;
+  }
+
+  public string Heard(long now) {
+    lastSignal = lastSpeech = now;
+    pending = null;
+    if (shown != null) { shown = null; return "clear"; }
+    return null;
+  }
+
+  public string Problem(long now, string code) {
+    if (pending != code) { pending = code; pendingSince = now; return Tick(now); }
+    if (code == "too-quiet" && Due(now) && now - pendingSince >= GraceMs) return Show();
+    return Tick(now);
+  }
+
+  public string Tick(long now) {
+    if (pending == "no-signal" && Due(now)) return Show();
+    return null;
+  }
+
+  bool Due(long now) {
+    if (pending == null || pending == shown || now - started < GraceMs) return false;
+    return now - (pending == "no-signal" ? lastSignal : lastSpeech) >= GraceMs;
+  }
+
+  string Show() {
+    shown = pending;
+    pending = null;
+    return shown;
+  }
+}
+
 public static class SplitpageVoice {
   static readonly object Gate = new object();
+  static SplitpageVoiceGrace grace;
+  static System.Diagnostics.Stopwatch clock;
+  static System.Threading.Timer ticker;
 
   static string Json(string s) {
     var b = new StringBuilder("\"");
@@ -91,11 +159,14 @@ public static class SplitpageVoice {
       return null;
     }
     engine.LoadGrammar(new DictationGrammar());
-    engine.SpeechHypothesized += (s, e) => Emit("interim", "text", e.Result.Text);
-    engine.SpeechRecognized += (s, e) => Emit("final", "text", e.Result.Text);
+    clock = System.Diagnostics.Stopwatch.StartNew();
+    grace = new SplitpageVoiceGrace(0);
+    engine.SpeechHypothesized += (s, e) => { Warn(() => grace.Heard(Now())); Emit("interim", "text", e.Result.Text); };
+    engine.SpeechRecognized += (s, e) => { Warn(() => grace.Heard(Now())); Emit("final", "text", e.Result.Text); };
+    engine.AudioLevelUpdated += (s, e) => Warn(() => grace.Level(Now(), e.AudioLevel));
     engine.AudioSignalProblemOccurred += (s, e) => {
-      if (e.AudioSignalProblem == AudioSignalProblem.NoSignal) Emit("warning", "code", "no-signal");
-      else if (e.AudioSignalProblem == AudioSignalProblem.TooSoft) Emit("warning", "code", "too-quiet");
+      if (e.AudioSignalProblem == AudioSignalProblem.NoSignal) Warn(() => grace.Problem(Now(), "no-signal"));
+      else if (e.AudioSignalProblem == AudioSignalProblem.TooSoft) Warn(() => grace.Problem(Now(), "too-quiet"));
       else if (e.AudioSignalProblem == AudioSignalProblem.TooNoisy) Emit("warning", "code", "too-noisy");
     };
     engine.RecognizeCompleted += (s, e) => {
@@ -103,7 +174,24 @@ public static class SplitpageVoice {
     };
     engine.RecognizeAsync(RecognizeMode.Multiple);
     Emit("start", "lang", pick.Culture.Name);
+    // no-signal is due by the clock, not by another event: the recogniser
+    // may never raise it again after the first time.
+    ticker = new System.Threading.Timer(_ => Warn(() => grace.Tick(Now())), null, 250, 250);
     return engine;
+  }
+
+  static long Now() {
+    return clock.ElapsedMilliseconds;
+  }
+
+  // Sends what the grace period decided, if anything. Under Gate so the
+  // grace state is only ever touched by one of the recogniser's threads, or
+  // the timer's, at a time.
+  static void Warn(Func<string> decide) {
+    lock (Gate) {
+      string code = decide();
+      if (code != null) Emit("warning", "code", code);
+    }
   }
 }
 '@
