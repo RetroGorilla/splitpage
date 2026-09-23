@@ -8,9 +8,10 @@ import {
 } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
-import { blobImgHtml, rowImage } from "./02c-blobs.js";
+import { blobImgHtml } from "./02c-blobs.js";
+import { gallerySize, rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
+import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import {
   breakLine,
   cellLength,
@@ -209,19 +210,87 @@ function rowGutterHtml(row, index, review) {
    (02c-blobs.js) to fill in after ensureBytes. The src is part of the
    string, so the part repaints once the bytes are here — the signature
    stays the markup, and render() stays synchronous. */
+/* Since #135 the Image section is a gallery (02d-gallery.js): one picture
+   at a time — the one galleryIndex names, a view setting, never the
+   document's — with ‹ › and "2 / 3" when there is more than one, and
+   under it a caption of the slot's video links. A slot with links and no
+   picture shows a video placeholder. The picture of a slot whose link is
+   marked `poster` is that video's thumbnail, and opens it. */
+var galleryIndex = {};
+
+export function galleryIndexOf(row) {
+  var n = gallerySize(row);
+  var i = galleryIndex[row.id] || 0;
+  return n ? Math.max(0, Math.min(n - 1, i)) : 0;
+}
+
+export function setGalleryIndex(rowId, i) {
+  galleryIndex[rowId] = i;
+}
+
+function galleryLinkHtml(row, slotIdx, l) {
+  var key = escapeHtml(videoLinkKey(l));
+  var label = escapeHtml(videoLinkLabel(l));
+  var attrs = ' data-action="gallery-link" data-id="' + row.id + '" data-slot="' + slotIdx + '" data-key="' + key + '"';
+  var href = l.href ? safeHref(l.href) : null;
+  var link = href
+    ? '<a class="scene-gallery-link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer"' + attrs +
+        ' title="Open ' + escapeHtml(href) + '">▶ ' + label + '</a>'
+    : '<button type="button" class="scene-gallery-link is-file"' + attrs +
+        ' title="Video file: ' + label + '">▶ ' + label + '</button>';
+  return '<span class="scene-gallery-link-wrap">' + link +
+    (reviewMode() ? '' :
+      '<button type="button" class="scene-gallery-link-remove" data-action="gallery-link-remove" data-id="' + row.id +
+        '" data-slot="' + slotIdx + '" data-key="' + key + '" title="Take this link off" aria-label="Take ' + label + ' off">×</button>') +
+    '</span>';
+}
+
+function rowGalleryHtml(row, slots, review) {
+  var n = slots.length;
+  var i = galleryIndexOf(row);
+  var slot = slots[i];
+  var poster = slot.links.filter(function (l) { return l.poster; })[0] || null;
+  var pic;
+  if (slot.ref) pic = blobImgHtml(slot.ref);
+  else if (slot.dataUrl) pic = '<img src="' + escapeHtml(slot.dataUrl) + '" alt="">';
+  else pic = '<span class="scene-gallery-placeholder" aria-hidden="true">▶</span>';
+  if (poster) {
+    /* the thumbnail is the video's: a click on it opens the video */
+    pic = '<button type="button" class="scene-gallery-poster" data-action="gallery-link" data-id="' + row.id +
+      '" data-slot="' + i + '" data-key="' + escapeHtml(videoLinkKey(poster)) +
+      '" aria-label="Open video ' + escapeHtml(videoLinkLabel(poster)) + '">' + pic + '</button>';
+  }
+  var nav = n > 1
+    ? '<div class="scene-gallery-nav">' +
+        '<button type="button" class="scene-gallery-step" data-action="gallery-prev" data-id="' + row.id +
+          '" aria-label="Previous picture" title="Previous picture">‹</button>' +
+        '<span class="scene-gallery-count" aria-live="polite">' + (i + 1) + ' / ' + n + '</span>' +
+        '<button type="button" class="scene-gallery-step" data-action="gallery-next" data-id="' + row.id +
+          '" aria-label="Next picture" title="Next picture">›</button>' +
+      '</div>'
+    : '';
+  return '<div class="image-thumb-wrap scene-gallery" data-id="' + row.id + '" data-slot="' + i + '"' +
+      (n > 1 ? ' role="group" aria-roledescription="carousel" aria-label="Scene pictures"' : '') + '>' +
+      pic +
+      (review ? '' :
+        '<div class="image-thumb-actions">' +
+          '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Add another picture to this scene">Add</button>' +
+          '<button type="button" data-action="image-replace" data-id="' + row.id + '" data-slot="' + i + '">Replace</button>' +
+          '<button type="button" data-action="image-remove" data-id="' + row.id + '" data-slot="' + i + '">Remove</button>' +
+        '</div>') +
+      nav +
+    '</div>' +
+    (slot.links.length
+      ? '<div class="scene-gallery-caption">' + slot.links.map(function (l) { return galleryLinkHtml(row, i, l); }).join("") + '</div>'
+      : '');
+}
+
 function rowMediaHtml(row, review) {
   var imageBlock;
-  var img = rowImage(row);
+  var slots = rowSlots(row);
+  var img = slots.length ? slots[0] : null;
   if (img) {
-    imageBlock =
-      '<div class="image-thumb-wrap">' +
-        (img.ref ? blobImgHtml(img.ref) : '<img src="' + escapeHtml(img.dataUrl) + '" alt="">') +
-        (review ? '' :
-          '<div class="image-thumb-actions">' +
-            '<button type="button" data-action="image-replace" data-id="' + row.id + '">Replace</button>' +
-            '<button type="button" data-action="image-remove" data-id="' + row.id + '">Remove</button>' +
-          '</div>') +
-      '</div>';
+    imageBlock = rowGalleryHtml(row, slots, review);
   } else if (review) {
     imageBlock = "";
   } else {

@@ -71,10 +71,11 @@ function normalizeImageRef(x) {
 
 /* ---- which blobs a document refers to ----
 
-   Every sha a state names, once each, in first-seen order: rows' imageRef,
-   a conflict comment's imageValue (the image a merge could not place, #82
-   P2b), and the data-blob attribute of every <img> inside the state's HTML
-   — rows' visualText/audioText, comment bodies, reply bodies.
+   Every sha a state names, once each, in first-seen order: rows' imageRef
+   and each of their moreImages' (#135), a conflict comment's imageValue
+   (the image a merge could not place, #82 P2b), and the data-blob
+   attribute of every <img> inside the state's HTML — rows'
+   visualText/audioText, comment bodies, reply bodies.
 
    A regex over the HTML strings rather than a parse, so the server and the
    main process can run it with no DOM. It matches only inside an <img ...>
@@ -110,6 +111,10 @@ function refsIn(state) {
   rows.forEach(function (r) {
     if (!r || typeof r !== "object") return;
     addRecord(r.imageRef);
+    /* the scene's further pictures (#135): [{imageRef, links}] */
+    (Array.isArray(r.moreImages) ? r.moreImages : []).forEach(function (it) {
+      if (it && typeof it === "object") addRecord(it.imageRef);
+    });
     refsInHtml(r.visualText, add);
     refsInHtml(r.audioText, add);
   });

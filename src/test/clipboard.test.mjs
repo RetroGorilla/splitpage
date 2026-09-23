@@ -6,7 +6,8 @@
  * tab that cut knows, and a paste keeps comment marks only from HTML
  * carrying that tab's live nonce, for comments the document still has.
  * Pictures and video cards never land in a script cell; since #124 they
- * are listed to be attached to the scene as comments. A pasted b-roll
+ * are listed to be attached to the scene, and since #135 they go into its
+ * gallery (attachToGallery). A pasted b-roll
  * key gets an id of its own unless nothing in the document has its id.
  * The live half — a real ClipboardEvent, the undo entry, the comment card
  * following its words, the b-roll list — is browser suite
@@ -16,7 +17,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  attachmentComment, brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments,
+  attachToGallery, brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments,
   videoLink, videoLinksInText
 } from "../js/05c-clipboard.js";
 import { commentIds, fromHtml, projection, sliceCell, toHtml } from "../js/04c-doc-model.js";
@@ -135,16 +136,35 @@ test("what a paste attaches to its scene (#124): video links, cards, <video>, pi
   assert.deepEqual(bare.attach, [{ kind: "video", href: "https://youtu.be/abc" }]);
   /* skipImages: the files carry the picture */
   assert.equal(cellFromClipboard("<img src=\"https://example.com/p.png\">x", "", { skipImages: true }).lost, 0);
-  /* the comment: on the scene column, by the person, a card or a named file */
-  const c = attachmentComment("r1", "audioText", { kind: "video", href: "https://youtu.be/abc" }, "Ann", "2026-09-23T00:00:00.000Z");
-  assert.equal(c.rowId, "r1");
-  assert.equal(c.field, "audioText");
-  assert.equal(c.author, "Ann");
-  assert.equal(c.anchorId, c.id);
-  assert.ok(c.body.indexOf('class="video-embed-card"') !== -1 && c.body.indexOf('href="https://youtu.be/abc"') !== -1);
-  const f = attachmentComment("r1", "visualText", { kind: "videoFile", name: "<b>take</b>.mp4", size: 3 * 1048576 }, "Ann", "x");
-  assert.equal(f.body.indexOf("<b>"), -1);
-  assert.ok(f.body.indexOf("&lt;b&gt;take&lt;/b&gt;.mp4</strong> (3.0 MB)") !== -1);
+});
+
+test("what a paste attaches goes into the scene's gallery (#135)", () => {
+  const P1 = { sha256: "a".repeat(64), width: 4, height: 3, mime: "image/png" };
+  const P2 = { sha256: "b".repeat(64), width: 4, height: 3, mime: "image/png" };
+  /* an empty scene: a video gets the first slot, a placeholder, its link
+     marked as that slot's video; a picture after it fills that slot */
+  const row = { id: "r1", imageRef: null };
+  let got = attachToGallery(row, [{ kind: "video", href: "https://youtu.be/abc" }], 0);
+  assert.deepEqual(got, { pictures: 0, videos: 1, at: 0 });
+  assert.equal(row.imageRef, null);
+  assert.deepEqual(row.imageLinks, [{ href: "https://youtu.be/abc", poster: true }]);
+  attachToGallery(row, [{ kind: "image", ref: P1 }], 0);
+  assert.equal(row.imageRef.sha256, P1.sha256);
+  assert.equal(row.moreImages, undefined);
+  /* a second picture is added, never over the first; a video then goes
+     on the caption of the slot on screen, with no thumbnail */
+  got = attachToGallery(row, [{ kind: "image", ref: P2 }, { kind: "videoFile", name: "<b>take</b>.mp4", size: 3 }], 0);
+  assert.deepEqual(got, { pictures: 1, videos: 1, at: 1 });
+  assert.equal(row.imageRef.sha256, P1.sha256);
+  assert.deepEqual(row.moreImages, [{ imageRef: P2, links: [{ name: "take.mp4", size: 3 }] }]);
+  /* the same picture twice is one picture */
+  attachToGallery(row, [{ kind: "image", ref: P2 }], 0);
+  assert.equal(row.moreImages.length, 1);
+  /* a video file into an empty scene brings its first frame as the picture */
+  const row2 = { id: "r2", imageRef: null };
+  attachToGallery(row2, [{ kind: "videoFile", name: "b.mov", size: 9, poster: P2 }], 0);
+  assert.equal(row2.imageRef.sha256, P2.sha256);
+  assert.deepEqual(row2.imageLinks, [{ name: "b.mov", size: 9, poster: true }]);
 });
 
 test("plain text goes in as typing, a line break as a line break", () => {

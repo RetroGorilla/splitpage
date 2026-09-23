@@ -1,9 +1,10 @@
 import { S } from "./_state.js";
-import { escapeHtml, makeId } from "./02-state.js";
+import { makeId } from "./02-state.js";
 import { randomHexBytes } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import { findRowIndex, getEditorName } from "./03-sync.js";
-import { buildVideoCardEl, imageRefOf, inertBody, safeHref, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
+import { addGalleryPicture, addGalleryVideo } from "./02d-gallery.js";
+import { findRowIndex, stampRow } from "./03-sync.js";
+import { imageRefOf, inertBody, safeHref, storedHtmlFromDom } from "./04-richtext.js";
 import {
   cellLength,
   cellOf,
@@ -18,6 +19,7 @@ import {
   syncCommentAnchors,
   toHtml
 } from "./04c-doc-model.js";
+import { galleryIndexOf, setGalleryIndex } from "./05-render.js";
 import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { recordPastedBroll } from "./08c-broll.js";
 import { markDirty } from "./12-dirty-toast.js";
@@ -47,10 +49,10 @@ import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
      gets in — and replace the selection with it as one model edit
      (editCell): one undo entry, the caret after what was pasted. Pictures
      and video cards never go in the cell (D7): a script cell holds words.
-     Since #124 they are not dropped either: each picture, video card,
-     video link or video file becomes a comment on that scene and column —
-     the shape moveMediaOutOfCell (02-state.js) gives an old cell's — in
-     the same undo entry as the words that came with it.
+     Since #124 they are not dropped either, and since #135 each picture,
+     video card, video link or video file goes into the scene's gallery —
+     its Image section (attachToGallery, below) — in the same undo entry
+     as the words that came with it.
    - A pasted B-ROLL KEY gets an id of its own whenever the document
      already knows its id; only a cut moving it keeps it (freshBrollIds,
      below).
@@ -93,13 +95,14 @@ export function cutNonceIn(html) {
   return m ? m[1] : null;
 }
 
-/* ---- what a paste attaches to its scene (#124) ----
+/* ---- what a paste attaches to its scene (#124, #135) ----
 
    A picture, a video card, a link to a video or a video file pasted or
    dropped into a script cell is not script (D7), and not thrown away
-   either: it is attached to the scene as a comment on that row and
-   column. An item is {kind: "image", ref} (a registry record, #82),
-   {kind: "video", href} or {kind: "videoFile", name, size}.
+   either: it goes into the scene's gallery (attachToGallery). An item is
+   {kind: "image", ref} (a registry record, #82), {kind: "video", href} or
+   {kind: "videoFile", name, size, poster} (poster: its first frame's
+   record, or null).
 
    A link counts as a video when it is on a host video cards are made for
    (VIDEO_HOSTS) or names a video file. A video card is one whatever its
@@ -259,47 +262,30 @@ export function cellFromClipboard(html, text, opts) {
   return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
 }
 
-/* The comment attaching one item to a scene's column: what
-   moveMediaOutOfCell (02-state.js) makes of a picture found in a cell,
-   but made by the person pasting, now, with an id of its own. Not
-   anchored to any words — none were chosen. */
-export function attachmentComment(rowId, field, item, author, at) {
-  var body;
-  if (item.kind === "image") {
-    body = storedImageHtml(item.ref) || '<img class="comment-img" data-blob="' + item.ref.sha256 + '">';
-  } else if (item.kind === "video") {
-    body = buildVideoCardEl(item.href).outerHTML;
-  } else {
-    /* A video file has no address a card could open, and its bytes are
-       not the document's to carry (a picture's are; a video's are far too
-       big): the comment names it, for whoever has the file. */
-    body = "Video file: <strong>" + escapeHtml(item.name || "video") + "</strong>" +
-      (item.size ? " (" + fileSizeLabel(item.size) + ")" : "") + " — the file itself is not kept in the document.";
-  }
-  var id = makeId("c");
-  return {
-    id: id,
-    rowId: rowId,
-    field: field,
-    anchorId: id,
-    quotedText: "",
-    author: author || "Anonymous",
-    body: body,
-    resolved: false,
-    resolvedBy: null,
-    resolvedAt: null,
-    assignee: "",
-    createdAt: at,
-    updatedAt: at,
-    kind: "anchor",
-    replies: []
-  };
-}
-
-function fileSizeLabel(n) {
-  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + " GB";
-  if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
-  return Math.max(1, Math.round(n / 1024)) + " KB";
+/* What a paste attaches, put in the scene's gallery (#135, 02d-gallery.js)
+   rather than a comment (#124 made comments; the ones it made stay as
+   they are). A picture is added to the gallery — beside the ones there,
+   never over them. A video with the gallery empty gets a first slot of its
+   own: its thumbnail (a video file's first frame, `poster`) or a
+   placeholder, with its link under it; with a picture there, its link goes
+   under the picture at slot `at` (the one on screen, or one this paste
+   just added). The links live in the caption, not in the words. Returns
+   {pictures, videos, at}: how many of each, and the slot to show. */
+export function attachToGallery(row, attach, at) {
+  var out = { pictures: 0, videos: 0, at: at };
+  attach.forEach(function (item) {
+    if (item.kind === "image") {
+      out.at = addGalleryPicture(row, item.ref);
+      out.pictures++;
+      return;
+    }
+    var link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size };
+    var i = addGalleryVideo(row, link, out.at, item.poster || null);
+    if (i === -1) return;
+    out.at = i;
+    out.videos++;
+  });
+  return out;
 }
 
 /* ---- b-roll keys: one id, one line ----
@@ -436,8 +422,9 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
    reads them, readClipboardFiles below), and whether its pictures replace
    the HTML's. Returns
      {done, cellEl, media, lost, attached, rowIndex, field, movedComments}
-   attached: the comments made for the pictures and videos, on this
-   scene's column, in the same undo entry as the words (#124). done false
+   attached: null, or attachToGallery's {pictures, videos, at} for what
+   went into the scene's gallery, in the same undo entry as the words
+   (#135). done false
    means nothing went in: the cell holds a picture or a video card, which
    editCell does not edit (05b-cell-edit.js) and which no cell does since
    design D7. */
@@ -448,16 +435,16 @@ export function pasteIntoCell(cellEl, html, text, extra) {
   got.attach.forEach(function (item) { addAttachment(attach, item); });
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
-  var result = { done: true, cellEl: cellEl, media: got.media, lost: got.lost, attached: [],
+  var result = { done: true, cellEl: cellEl, media: got.media, lost: got.lost, attached: null,
                  rowIndex: findRowIndex(rowId), field: field, movedComments: false };
   function attachAll() {
-    var at = new Date().toISOString();
-    var author = getEditorName();
-    attach.forEach(function (item) {
-      var c = attachmentComment(rowId, field, item, author, at);
-      S.state.comments.push(c);
-      result.attached.push(c);
-    });
+    var row = S.state.rows[findRowIndex(rowId)];
+    if (!row || !attach.length) return;
+    var got2 = attachToGallery(row, attach, galleryIndexOf(row));
+    if (!got2.pictures && !got2.videos) return;
+    stampRow(row);
+    setGalleryIndex(rowId, got2.at);
+    result.attached = got2;
   }
   if (!cellLength(got.cell)) {
     if (!attach.length || result.rowIndex === -1) return result;
@@ -510,26 +497,38 @@ export function pasteIntoCell(cellEl, html, text, extra) {
 }
 
 /* What a paste's or a drop's files attach (#124), as a promise of
-   {attach, skipImages}: each picture made small and put in the image
-   registry the way the comment composer's Image button does it (#82), each
-   video file by its name. skipImages is true when a picture came as a
-   file — the HTML beside it (a picture copied from a page) names the same
-   one. Anything else is not this paste's to attach. */
-export function readClipboardFiles(files, compress) {
+   {attach, skipImages, lost}: each picture made small and put in the
+   image registry the way a scene picture is (#82), each video file by its
+   name, with its first frame as a picture when `video.frame(file)` can
+   read one (a data: URI, or null) and `video.grant(file)` told about it —
+   the desktop app remembers where it is, for its caption's link to open
+   (#135). skipImages is true when a picture came as a file — the HTML
+   beside it (a picture copied from a page) names the same one. Anything
+   else is not this paste's to attach. */
+export function readClipboardFiles(files, compress, video) {
+  video = video || {};
   var list = Array.prototype.slice.call(files || []);
   var attach = [];
   var skipImages = false;
   var jobs = list.map(function (file) {
     var type = String(file && file.type || "");
     if (type.indexOf("video/") === 0) {
-      attach.push({ kind: "videoFile", name: String(file.name || ""), size: file.size || 0 });
-      return Promise.resolve();
+      var item = { kind: "videoFile", name: String(file.name || ""), size: file.size || 0, poster: null };
+      attach.push(item);
+      if (video.grant) video.grant(file, { name: item.name, size: item.size });
+      if (!video.frame) return Promise.resolve();
+      return Promise.resolve(video.frame(file)).then(function (dataUrl) {
+        var rec = dataUrl ? internDataUrl(dataUrl) : null;
+        if (!rec) return;
+        persist([rec.sha256]);
+        item.poster = rec;
+      }, function () {});
     }
     if (type.indexOf("image/") !== 0) return Promise.resolve();
     skipImages = true;
     var slot = attach.length;
     attach.push(null);
-    return compress(file, 700, 0.72).then(function (dataUrl) {
+    return compress(file, 1000, 0.78).then(function (dataUrl) {
       var rec = internDataUrl(dataUrl);
       if (!rec) return;
       persist([rec.sha256]);

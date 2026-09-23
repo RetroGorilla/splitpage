@@ -1263,7 +1263,8 @@ function sha256Of(buf) {
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
-/* Every sha a state names: an image record (`imageRef` on a row, or the
+/* Every sha a state names: an image record (`imageRef` on a row or on one
+   of its further pictures in `moreImages`, #135, or the
    `imageValue` an image conflict card carries) and every `data-blob`
    attribute on a tag in any string in it — comment and reply bodies and a
    row's HTML fields included. Deliberately wider than any one client's
