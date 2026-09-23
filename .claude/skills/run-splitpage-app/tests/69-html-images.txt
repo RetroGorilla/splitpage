@@ -1,20 +1,20 @@
-# Images inside HTML out of the document state (#82 P6). A comment's,
-# a reply's or a pasted cell's picture is stored as
+# Images inside HTML out of the document state (#82 P6). A comment's
+# or a reply's picture is stored as
 #   <img class="comment-img" data-blob="<sha>" data-w data-h data-mime>
 # with NO src: the sanitiser (04-richtext.js) interns an inline data: image
 # into that form, and the hydrator (02c-blobs.js) gives the <img> a blob:
 # URL on screen only. What this pins, the way a user does it:
 #   * a picture attached in the comment composer: the stored body names it
 #     by sha, it is in IndexedDB, the card shows it from a blob: URL;
-#   * a picture pasted as HTML into a scene's cell and into a reply: the
-#     same, and typing on in the cell (syncFieldFromDom, which reads the
-#     live DOM) never carries the blob: src into the state;
+#   * a picture pasted as HTML into a reply: the same; pasted into a
+#     scene's cell it is dropped, never even interned (#85 design D7 —
+#     this used to assert it landed in the cell);
 #   * a .splitpage save carries every one of them inline (src="data:…"),
 #     and opening that file gives the stored form back;
 #   * the crash/sign-in stash carries them across a real reload as refs,
 #     and they render again out of IndexedDB;
 #   * an old document whose comment, reply and cell pictures are inline
-#     data: URIs opens content-addressed.
+#     data: URIs opens content-addressed, the cell's moved into a comment.
 # The sanitiser's own rules (idempotent, bad sha, never SVG) are
 # src/test/html-images.test.mjs. Every `eval` is one physical line.
 
@@ -65,25 +65,20 @@ expect stateClean() && !window.__bad
 wait shown(document.querySelector('#comments-list .reply-body img[data-blob="' + R1SHA + '"]'))
 jsclick #comments-panel-close
 
-# ---- 3. a picture pasted as HTML into a scene's visual cell -----------------
+# ---- 3. a picture pasted as HTML into a scene's visual cell is dropped -----
+# A script cell holds words (#85 design D7): the paste's words land, its
+# picture does not — and is never even interned, so no bytes are kept for
+# it. (This used to assert the picture landed in the cell.)
 caret #rows .row:nth-child(2) .visual-cell .cell-editable
 eval (function(){ return pasteHtml(document.activeElement, 'before <img src="' + U[2] + '"> after'); })()
-wait shown(document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable img[data-blob]'))
-# typing on in the cell reads the live DOM into state: the blob: src the
-# hydrator put there must not come with it
-press  typed on
-wait F.state().rows[1].visualText.indexOf('typed on') !== -1
+wait F.state().rows[1].visualText.indexOf('before  after') !== -1
 eval (async function(){ window.V1SHA = await subtleHex(bytesOf(U[2])); return F.state().rows[1].visualText; })()
-expect shaIn(F.state().rows[1].visualText) === V1SHA
+expect F.state().rows[1].visualText.indexOf('<img') === -1
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable img') === null
+expect !B.recordFor(V1SHA)
 expect stateClean()
-eval document.activeElement.blur()
-sleep 200
-expect F.state().rows[1].visualText.indexOf('<img class="comment-img" data-blob="' + V1SHA + '" data-w="70" data-h="50" data-mime="image/png">') !== -1
-expect stateClean()
-# blurring did not repaint the cell for the src alone: the same element, still shown
-expect shown(document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable img[data-blob="' + V1SHA + '"]'))
-wait (async function(){ var ok = true; for (var s of [C1SHA, R1SHA, V1SHA]) { var rec = await B.idbRecord(s); ok = ok && !!rec && rec.isBlob; } return ok; })()
-wait [C1SHA, R1SHA, V1SHA].every(function(s){ return B.isDurableSync(s); })
+wait (async function(){ var ok = true; for (var s of [C1SHA, R1SHA]) { var rec = await B.idbRecord(s); ok = ok && !!rec && rec.isBlob; } return ok; })()
+wait [C1SHA, R1SHA].every(function(s){ return B.isDurableSync(s); })
 
 # ---- 4. a .splitpage save carries them all inline -------------------------
 # Opened as a .splitpage file first (a fake handle, the way 68-images.txt
@@ -91,7 +86,7 @@ wait [C1SHA, R1SHA, V1SHA].every(function(s){ return B.isDurableSync(s); })
 # stored form again — then a real Save writes them inline once more.
 eval (function(){ window.BEFORE = JSON.stringify({ c: C1.body, r: R1.body, v: F.state().rows[1].visualText }); var first = F.buildSplitpage(); window.__opened = first; window.__saved = []; window.__h = { name: 'html-pictures.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ return { write: async function(d){ window.__saved.push(typeof d === 'string' ? d : await new Blob([d]).text()); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__saved[window.__saved.length - 1] || first], 'html-pictures.splitpage', { lastModified: window.__h._mtime }); } }; return F.openFile(new File([first], 'html-pictures.splitpage', { lastModified: window.__h._mtime }), window.__h).then(function(){ return first.length; }); })()
 wait F.docFile().kind === 'splitpage'
-expect __opened.indexOf('data-blob') === -1 && [C1SHA, R1SHA, V1SHA].every(function(s){ return __opened.indexOf(JSON.stringify('<img src="' + B.dataUrlForSync(s) + '" class="comment-img">').slice(1, -1)) !== -1; })
+expect __opened.indexOf('data-blob') === -1 && [C1SHA, R1SHA].every(function(s){ return __opened.indexOf(JSON.stringify('<img src="' + B.dataUrlForSync(s) + '" class="comment-img">').slice(1, -1)) !== -1; })
 eval (function(){ var c = F.state().comments.filter(function(x){ return x.id === C1.id; })[0]; window.AFTER = JSON.stringify({ c: c.body, r: c.replies[0].body, v: F.state().rows[1].visualText }); return AFTER === BEFORE; })()
 expect AFTER === BEFORE
 expect stateClean()
@@ -101,16 +96,13 @@ eval (function(){ window.SPJ = JSON.parse(__saved[0]); return __saved[0].length;
 expect __saved[0].indexOf('data-blob') === -1
 expect SPJ.comments.filter(function(c){ return c.id === C1.id; })[0].body.indexOf('<img src="' + B.dataUrlForSync(C1SHA) + '" class="comment-img">') !== -1
 expect SPJ.comments.filter(function(c){ return c.id === C1.id; })[0].replies[0].body.indexOf('<img src="' + B.dataUrlForSync(R1SHA) + '" class="comment-img">') !== -1
-expect SPJ.rows[1].visualText.indexOf('<img src="' + B.dataUrlForSync(V1SHA) + '" class="comment-img">') !== -1
 # the save left the page's own state as refs
 expect stateClean()
 # the .md project's data block carries them too
-expect (function(){ var md = F.buildMarkdown(); return [C1SHA, R1SHA, V1SHA].every(function(s){ return md.indexOf(B.dataUrlForSync(s)) !== -1; }) && md.indexOf('data-blob') === -1; })()
-# they are still on screen after the reopen
-wait shown(document.querySelector('#rows .visual-cell .cell-editable img[data-blob="' + V1SHA + '"]'))
+expect (function(){ var md = F.buildMarkdown(); return [C1SHA, R1SHA].every(function(s){ return md.indexOf(B.dataUrlForSync(s)) !== -1; }) && md.indexOf('data-blob') === -1; })()
 
 # ---- 5. the stash carries refs across a real reload; IndexedDB has the bytes
-eval (function(){ window.__stashed = F.stash(); var st = JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')); st.base = JSON.parse(sessionStorage.getItem('seed69')); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify(st)); sessionStorage.setItem('shas69', JSON.stringify([C1SHA, R1SHA, V1SHA])); return JSON.stringify({ ok: __stashed, blobs: !!st.blobs }); })()
+eval (function(){ window.__stashed = F.stash(); var st = JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')); st.base = JSON.parse(sessionStorage.getItem('seed69')); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify(st)); sessionStorage.setItem('shas69', JSON.stringify([C1SHA, R1SHA])); return JSON.stringify({ ok: __stashed, blobs: !!st.blobs }); })()
 expect __stashed === true
 expect !JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')).blobs
 expect sessionStorage.getItem('splitpage-conflict-stash').indexOf('data:image') === -1
@@ -119,7 +111,6 @@ eval (function(){ window.F = window.__splitpageFormats; window.B = window.__blob
 wait F.state() && JSON.stringify(F.state()).indexOf(SHAS[0]) !== -1
 expect SHAS.every(function(s){ return JSON.stringify(F.state()).indexOf(JSON.stringify('data-blob="' + s + '"').slice(1, -1)) !== -1; })
 expect JSON.stringify(F.state()).indexOf('data:image') === -1
-wait shown(document.querySelector('#rows .visual-cell .cell-editable img[data-blob="' + SHAS[2] + '"]'))
 jsclick #btn-comments
 wait shown(document.querySelector('#comments-list .comment-body img[data-blob="' + SHAS[0] + '"]')) && shown(document.querySelector('#comments-list .reply-body img[data-blob="' + SHAS[1] + '"]'))
 jsclick #comments-panel-close
@@ -127,18 +118,22 @@ jsclick #comments-panel-close
 expect SHAS.every(function(s){ return B.isDurableSync(s); })
 
 # ---- 6. an old document: comment, reply and cell pictures inline -----------
+# The cell's picture moves into a comment on that scene as the document is
+# read (#85 design D7) — it used to stay in the cell.
 eval (function(){ var mk = function(color, w, h){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL('image/png'); }; window.O = [mk('#a33', 41, 21), mk('#3a3', 43, 23), mk('#33a', 47, 27)]; window.OLDDOC = JSON.stringify({ schema: 2, title: 'Old HTML pictures', rows: [{ id: 'o1', visualText: 'pasted <img src="' + O[0] + '">', audioText: 'one', status: 'todo' }], comments: [{ id: 'oc1', rowId: 'o1', field: 'audioText', anchorId: 'oc1', quotedText: 'one', author: 'Old', body: 'look <img class="comment-img" src="' + O[1] + '">', resolved: false, kind: 'anchor', replies: [{ id: 'orp1', author: 'Older', body: 'and <img class="comment-img" src="' + O[2] + '">' }] }] }); return OLDDOC.length; })()
 eval (async function(){ window.OSHA = []; for (var u of O) { var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); var d = new Uint8Array(await crypto.subtle.digest('SHA-256', b)); OSHA.push(Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join('')); } await F.openFile(new File([OLDDOC], 'old-html.splitpage')); return OSHA; })()
 wait F.state().title === 'Old HTML pictures'
 expect JSON.stringify(F.state()).indexOf('data:image') === -1
-expect F.state().rows[0].visualText === 'pasted <img class="comment-img" data-blob="' + OSHA[0] + '" data-w="41" data-h="21" data-mime="image/png">'
+expect F.state().rows[0].visualText === 'pasted '
+expect F.state().comments.length === 2 && F.state().comments[1].rowId === 'o1' && F.state().comments[1].field === 'visualText' && F.state().comments[1].author === 'Splitpage'
+expect F.state().comments[1].body.indexOf('<br><img class="comment-img" data-blob="' + OSHA[0] + '" data-w="41" data-h="21" data-mime="image/png">') !== -1
 expect F.state().comments[0].body === 'look <img class="comment-img" data-blob="' + OSHA[1] + '" data-w="43" data-h="23" data-mime="image/png">'
 expect F.state().comments[0].replies[0].body === 'and <img class="comment-img" data-blob="' + OSHA[2] + '" data-w="47" data-h="27" data-mime="image/png">'
-wait shown(document.querySelector('#rows .row[data-id="o1"] .visual-cell img[data-blob="' + OSHA[0] + '"]'))
+expect document.querySelector('#rows .row[data-id="o1"] .visual-cell img') === null
 jsclick #btn-comments
-wait shown(document.querySelector('#comments-list .comment-body img[data-blob="' + OSHA[1] + '"]')) && shown(document.querySelector('#comments-list .reply-body img[data-blob="' + OSHA[2] + '"]'))
+wait shown(document.querySelector('#comments-list .comment-body img[data-blob="' + OSHA[0] + '"]')) && shown(document.querySelector('#comments-list .comment-body img[data-blob="' + OSHA[1] + '"]')) && shown(document.querySelector('#comments-list .reply-body img[data-blob="' + OSHA[2] + '"]'))
 wait OSHA.every(function(s){ return B.isDurableSync(s); })
 # and saving it again writes the same pictures inline, as it read them
-expect (function(){ var j = JSON.parse(F.buildSplitpage()); return j.rows[0].visualText.indexOf(O[0]) !== -1 && j.comments[0].body.indexOf(O[1]) !== -1 && j.comments[0].replies[0].body.indexOf(O[2]) !== -1; })()
+expect (function(){ var j = JSON.parse(F.buildSplitpage()); return j.rows[0].visualText === 'pasted ' && j.comments[1].body.indexOf(O[0]) !== -1 && j.comments[0].body.indexOf(O[1]) !== -1 && j.comments[0].replies[0].body.indexOf(O[2]) !== -1; })()
 
 logs
