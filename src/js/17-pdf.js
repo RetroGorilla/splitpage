@@ -287,6 +287,16 @@ export function buildPdf(jpegs) {
       vy -= imgRef.h + 8;
     }
 
+    /* The loop below is the only thing that moves y past the picture, and
+       a row with no text in either column never enters it — so y dropped
+       by the 14pt row gap alone and the next row was drawn over this
+       row's picture. End such a row where the loop would have ended it
+       with nothing to draw: its empty visual column starts below the
+       picture (vy), so min(vCursor, aCursor) - SIZE - 6 = vy - SIZE - 6.
+       A row with any text already gets that from the loop; a row with no
+       picture (vy === y) is left exactly as it was. */
+    if (vy !== y && !vLines.length && !aLines.length) y = vy - SIZE - 6;
+
     /* A row can be taller than a page. Draw what fits, break, and continue —
        otherwise the overflow is emitted below the page edge and disappears. */
     var vRest = vLines, aRest = aLines;
