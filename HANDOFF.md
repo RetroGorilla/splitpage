@@ -1099,8 +1099,8 @@ bytes, #82 — nothing deletes them yet, D4).
    for anything done at the selection, the edit functions of
    `04c-doc-model.js` (`replaceText`, `setMark`, `insertText`, …) for the
    rest, `toHtml()` to write the result. Where a path still edits HTML
-   (`tagFieldOccurrences()`, `eachTagSpan()`), it walks text nodes, never
-   regexes HTML.
+   (split/join, and the fallback the tag and b-roll edits keep for a cell
+   still holding a picture), it walks the DOM, never regexes HTML.
 3. **Never touch text inside a tag** (§3.3): the model's edits keep a
    comment or link over all of a tag or none of it, and find/replace never
    matches inside one.
