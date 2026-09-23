@@ -66,37 +66,41 @@
         <span class="brand">Splitpage</span>
       </div>
       <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
-      <div class="subtitle">Visual / Audio script — press Present to read it aloud</div>
-      <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
-        <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
-      </button>
-      <div class="file-chip" id="file-chip" hidden>
-        <span class="file-chip-icon">📄</span>
-        <span id="file-chip-name"></span>
-        <span class="file-chip-state" id="file-chip-state"></span>
-      </div>
-      <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
-           joined with the review credential and a hosted document is open:
-           the fields are not editable and the server would refuse the save
-           anyway, so say which before anyone types. -->
-      <div class="review-chip" id="review-chip" hidden
-           title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
-        <span class="review-chip-icon" aria-hidden="true">👁</span>
-        <span>Viewing · comments only</span>
-      </div>
-      <!-- Who else is in this hosted document, filled in by 13a-presence.js
-           from /api/presence. Empty and hidden on a local document, and never
-           part of the document itself. -->
-      <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
-      <span class="stat-chips">
-        <button type="button" class="stat-chip" id="runtime-chip"
-                title="Estimated read time for the Audio column — click to set your reading speed">
-          <span>⏱</span><span id="runtime-total">0:00</span>
-        </button>
-        <span class="stat-chip" id="progress-chip" hidden>
-          <span class="stat-dot"></span><span id="progress-text"></span>
+      <!-- One line of plain text under the title: file, runtime, who you are,
+           each separated by a dot drawn in CSS (.doc-meta in app.css) so a
+           hidden item never leaves a stray separator behind. -->
+      <div class="doc-meta">
+        <div class="file-chip" id="file-chip" hidden>
+          <span class="file-chip-icon">📄</span>
+          <span id="file-chip-name"></span>
+          <span class="file-chip-state" id="file-chip-state"></span>
+        </div>
+        <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
+             joined with the review credential and a hosted document is open:
+             the fields are not editable and the server would refuse the save
+             anyway, so say which before anyone types. -->
+        <div class="review-chip" id="review-chip" hidden
+             title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
+          <span class="review-chip-icon" aria-hidden="true">👁</span>
+          <span>Viewing · comments only</span>
+        </div>
+        <!-- Who else is in this hosted document, filled in by 13a-presence.js
+             from /api/presence. Empty and hidden on a local document, and never
+             part of the document itself. -->
+        <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
+        <span class="stat-chips">
+          <button type="button" class="stat-chip" id="runtime-chip"
+                  title="Estimated read time for the Audio column — click to set your reading speed">
+            <span>⏱</span><span id="runtime-total">0:00</span>
+          </button>
+          <span class="stat-chip" id="progress-chip" hidden>
+            <span class="stat-dot"></span><span id="progress-text"></span>
+          </span>
         </span>
-      </span>
+        <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
+          <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
+        </button>
+      </div>
     </div>
     <div class="toolbar">
       <div class="menu-wrap">
@@ -249,10 +253,12 @@
           </div>
         </div>
       </div>
-      <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
-      <button class="btn" id="btn-gear" type="button" title="Gear: an equipment list, tagged with <gear> or its own quick-add box">Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
-      <button class="btn" id="btn-broll" type="button" title="B-roll: start a line in the visual column with B-roll: and it lands on this list">B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
-      <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+      <div class="btn-group" role="group" aria-label="Panels">
+        <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
+        <button class="btn" id="btn-gear" type="button" title="Gear: an equipment list, tagged with <gear> or its own quick-add box">Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
+        <button class="btn" id="btn-broll" type="button" title="B-roll: start a line in the visual column with B-roll: and it lands on this list">B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
+        <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+      </div>
       <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
       <!-- Whether what is on screen is on disk yet, in words, next to the
            button that puts it there. Filled in by updateSaveStatus()

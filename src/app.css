@@ -175,36 +175,57 @@
      the dark-mode "typed text disappears into the selection" report. */
   ::selection { background: var(--visual-soft); color: var(--text); }
 
-  /* ---------- header ---------- */
+  /* ---------- header ----------
+     Two tight rows (issue: a denser menu bar). Row one is the brand, the
+     title and one line of plain-text facts about the document (.doc-meta);
+     row two is the toolbar. Both rows take the full width here; the
+     condensed state further down lets them share one. */
   .topbar {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
-    gap: 16px 24px;
-    margin-bottom: 22px;
+    gap: 8px 16px;
+    padding: 8px 0 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
   }
-  .brand-row { display: flex; align-items: baseline; gap: 10px; }
+  .topbar > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 0 12px;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .brand-row { display: flex; align-items: baseline; gap: 10px; flex: none; }
   .brand {
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 13px;
+    font-size: 11px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-faint);
   }
+  .brand::after { content: " /"; color: var(--border); }
   .doc-title {
     font-family: var(--font-body);
-    font-weight: 800;
-    font-size: 28px;
+    font-weight: 700;
+    font-size: 19px;
     letter-spacing: -0.01em;
     color: var(--text);
     background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    padding: 4px 8px;
-    margin: -4px -8px;
-    max-width: 60vw;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    /* As wide as the title and no wider, so the facts beside it sit next to
+       it rather than after a fixed-width gap. Browsers without
+       field-sizing keep the input's default width. */
+    field-sizing: content;
+    min-width: 6ch;
+    max-width: 40vw;
+    flex: none;
+    text-overflow: ellipsis;
   }
   .doc-title:hover { border-color: var(--border); }
   .doc-title:focus {
@@ -212,15 +233,72 @@
     border-color: var(--visual);
     background: var(--surface);
   }
-  .subtitle {
-    font-family: var(--font-display);
-    font-size: 12px;
-    color: var(--text-faint);
-    margin: 6px 2px 0;
-    letter-spacing: 0.02em;
-  }
 
-  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  /* The file, the runtime, who you are: plain text, one dot between each
+     item that is showing. The dot is drawn on the later item only when an
+     earlier sibling is visible, so a hidden chip never leaves one behind. */
+  .doc-meta {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    color: var(--text-dim);
+  }
+  .doc-meta > :not([hidden]) ~ :not([hidden])::before,
+  .doc-meta .stat-chip:not([hidden]) ~ .stat-chip:not([hidden])::before {
+    content: "·";
+    color: var(--text-faint);
+    margin: 0 8px;
+  }
+  /* The chips' own pill styling (further down) is for their other homes;
+     in this line they are text. */
+  .doc-meta .file-chip,
+  .doc-meta .identity-chip,
+  .doc-meta .stat-chip {
+    border: 0;
+    border-radius: 0;
+    background: none;
+    padding: 0;
+    margin: 0;
+    font-size: inherit;
+    color: inherit;
+    flex: none;
+  }
+  .doc-meta .stat-chips { gap: 0; margin: 0; flex: none; }
+  .doc-meta .file-chip-icon { display: none; }
+  .doc-meta .file-chip-state { margin-left: 6px; }
+  .doc-meta .review-chip,
+  .doc-meta .presence-bar { margin: 0; flex: none; }
+  .doc-meta button.stat-chip:hover,
+  .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }
+
+  .toolbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+  }
+  /* Everything after Write sits at the right edge. */
+  .toolbar > #btn-write { margin-right: auto; }
+  .toolbar .btn { font-size: 11px; letter-spacing: 0.04em; padding: 6px 10px; }
+  .toolbar .btn-accent { padding: 6px 14px; }
+  .toolbar .comments-badge {
+    min-width: 15px; height: 15px; line-height: 15px;
+    margin-left: 5px; font-size: 9.5px;
+  }
+  /* Production, Gear, B-roll and Comments open the same side panel slot,
+     so they read as one control. */
+  .btn-group { display: flex; }
+  .btn-group .btn { border-radius: 0; margin-left: -1px; }
+  .btn-group .btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
+  .btn-group .btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+  .btn-group .btn:hover,
+  .btn-group .btn:focus-visible { position: relative; z-index: 1; }
+
   .btn {
     font-family: var(--font-display);
     font-size: 12px;
@@ -2612,15 +2690,24 @@
     html { overflow-x: hidden; }
     #root { padding: 12px 12px 70px; }
 
-    /* header: title full-width, chips in a row, toolbar as a flex row of
-       equal buttons — no subtitle, no room for ceremony */
+    /* header: title full-width, the facts under it wrapping as they must,
+       toolbar as a flex row of equal buttons — no room for ceremony */
     .topbar { gap: 8px; margin-bottom: 12px; }
-    .topbar > div:first-child { width: 100%; }
-    .subtitle { display: none; }
+    .topbar > div:first-child { flex-wrap: wrap; row-gap: 4px; }
+    .brand-row { display: none; }
     .doc-title { max-width: 100%; width: 100%; font-size: 20px; box-sizing: border-box; }
-    .toolbar { width: 100%; gap: 6px; }
+    /* A dot can land at the start of a wrapped line here, so the items
+       are spaced apart instead. */
+    .doc-meta { flex-wrap: wrap; white-space: normal; gap: 2px 14px; }
+    .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: none; }
+    .toolbar { gap: 6px; }
+    .toolbar > #btn-write { margin-right: 0; }
+    /* The four panels get the first row to themselves; File, Write, Save
+       and Present share the second. */
+    .btn-group { flex: 1 1 100%; order: -1; }
+    .menu-wrap { display: flex; flex: 1 1 auto; }
+    .menu-wrap > .btn { flex: 1 1 auto; }
     .toolbar .btn { flex: 1 1 auto; padding: 11px 8px; font-size: 11px; text-align: center; }
-    .stat-chips { margin-left: 0; }
 
     .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
     /* panel is full viewport width here, so there's nothing to drag against */
@@ -3193,9 +3280,9 @@
   /* ---------- condensing header (BACKLOG: collapse into a toolbar on scroll)
      The page itself scrolls (there is no inner scroll container), so the
      header sticks to the viewport and sheds its decorative rows once the
-     script body starts passing underneath: the brand line and the subtitle
-     go, the title drops to a size that sits on one line with the buttons.
-     What stays is everything you reach for mid-write — title, file chip,
+     script body starts passing underneath: the brand line goes, the title
+     shrinks, and the title line and the toolbar share one row. What stays
+     is everything you reach for mid-write — title, file,
      Production / Gear / B-roll / Comments / Write, Save, Present.
 
      z-index 120 is deliberately below the side panels (140), the
@@ -3222,13 +3309,10 @@
      document, and must not escape the header to do it. */
   .topbar > div:first-child { position: relative; }
   .topbar.is-condensed {
-    align-items: center;
-    padding-bottom: 10px;
     margin-bottom: 12px;
-    box-shadow: 0 1px 0 var(--border), 0 8px 18px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
   }
-  .topbar.is-condensed:not(.is-condensing) .brand-row,
-  .topbar.is-condensed:not(.is-condensing) .subtitle { display: none; }
+  .topbar.is-condensed:not(.is-condensing) .brand-row { display: none; }
   /* A `display` flip cannot fade — the reason the sidebar below reaches for
      `allow-discrete` — but here the height those two rows occupy is the
      whole point of condensing, so waiting out a fade before taking it back
@@ -3239,29 +3323,24 @@
      everything else. That file drops the class when the fade is over and
      `display: none` above takes it from there. Expanding is the other way
      about: they return in flow and are faded in. */
-  .topbar.is-condensing .brand-row,
-  .topbar.is-condensing .subtitle {
+  .topbar.is-condensing .brand-row {
     position: absolute;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-exit) var(--ease-exit);
   }
   .topbar.is-condensed .doc-title {
-    font-size: 17px;
-    font-weight: 700;
-    max-width: 34vw;
-    text-overflow: ellipsis;
+    font-size: 16px;
+    max-width: 24vw;
   }
-  /* The title input and the chips share a row once the brand line is gone. */
-  .topbar.is-condensed > div:first-child {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px 14px;
+  /* Both rows share one: the toolbar keeps its natural width and the title
+     line takes what is left, its facts clipped from the end (the name
+     first). Too narrow for even 240px of it, and they wrap back to two. */
+  @media (min-width: 761px) {
+    .topbar.is-condensed > div:first-child { flex: 1 1 240px; }
+    .topbar.is-condensed .toolbar { flex: 0 0 auto; flex-wrap: nowrap; }
+    .topbar.is-condensed .toolbar > #btn-write { margin-right: 10px; }
   }
-  .topbar.is-condensed .identity-chip,
-  .topbar.is-condensed .file-chip,
-  .topbar.is-condensed .stat-chips { margin: 0; }
 
   /* A viewer who asked for less motion gets the condensed layout with no
      transition — the point is the space it saves, not the movement.
@@ -3271,8 +3350,7 @@
      file is trusted to prevent. */
   @media (prefers-reduced-motion: reduce) {
     .topbar { transition: none; }
-    .topbar.is-condensing .brand-row,
-    .topbar.is-condensing .subtitle { transition: none; }
+    .topbar.is-condensing .brand-row { transition: none; }
   }
 
   /* ---------- sidebar slide-in (BACKLOG: slide-in animation for sidebars)
