@@ -400,7 +400,12 @@
       <h2 id="import-title">Import a script</h2>
       <button type="button" class="modal-close" id="import-close" aria-label="Close">×</button>
     </div>
-    <p class="modal-hint">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
+    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
+    <!-- Opened from the New Tab page (issue #144), where there is no
+         document of the user's to keep: the import becomes a new one.
+         11-import.js puts .is-new-document on #import-modal, which swaps
+         this hint in for the one above and hides "Replace existing rows". -->
+    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns.</p>
     <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
       <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
@@ -1036,40 +1041,94 @@
 
 <!-- ===== the New Tab page (20j-newtab.js) =====
      What a new desktop tab (and a fresh copy in the browser) lands on
-     instead of the seeded demo: the two things a new tab is for. Not a
-     modal — an opaque full-page layer under the modals, so the first-run
-     wizard still shows over it. Showing it changes no state; only "New
-     script" replaces the document. -->
+     instead of the seeded demo: a start screen (issue #144). Not a modal —
+     an opaque full-page layer under the modals, so the first-run wizard
+     still shows over it. Showing it changes no state; only a card (Blank
+     script or a starter), an open, a drop or a paste replaces the
+     document.
+
+     The starter cards are built from STARTERS (_starters.js) by
+     20j-newtab.js, into #newtab-cards after Blank script, so a fourth
+     starter is a JSON file and a line in that list. Icons are inline
+     stroke SVG in currentColor, so they follow the theme. -->
 <div class="newtab-page" id="newtab-page" hidden>
+  <header class="newtab-bar">
+    <span class="newtab-wordmark">
+      <svg class="newtab-wordmark-mark" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="7.5" height="16" rx="2" class="is-visual"/><rect x="13.5" y="4" width="7.5" height="16" rx="2" class="is-audio"/></svg>
+      Splitpage
+    </span>
+    <div class="newtab-bar-actions">
+      <button type="button" class="newtab-bar-btn" data-newtab-action="join" aria-label="Join a shared session">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.25"/><path d="M3 19.5c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><path d="M16 5.2a3.25 3.25 0 0 1 0 5.6"/><path d="M18 14.8c1.6.6 2.7 2.2 3 4.7"/></svg>
+        <span>Join<span class="newtab-long"> a shared session</span></span>
+      </button>
+      <button type="button" class="newtab-bar-btn is-primary" data-newtab-action="open" aria-label="Open a file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-6.2l-2-2.5H5.5a2 2 0 0 0-2 2z"/></svg>
+        <span>Open<span class="newtab-long"> a file</span></span>
+      </button>
+    </div>
+  </header>
+
   <div class="newtab-inner" role="group" aria-labelledby="newtab-title">
-    <h2 class="newtab-title" id="newtab-title">New script, or open one</h2>
-    <p class="newtab-sub">Nothing is open in this tab yet.</p>
-    <div class="newtab-cards">
-      <button type="button" class="newtab-card" data-newtab-action="new">
-        <span class="newtab-card-mark" aria-hidden="true">+</span>
-        <strong>New script</strong>
-        <span>An empty script — one blank scene, and nothing else.</span>
-      </button>
-      <button type="button" class="newtab-card" data-newtab-action="open">
-        <span class="newtab-card-mark" aria-hidden="true">&#8594;</span>
-        <strong>Open a file</strong>
-        <span>.splitpage, .md, .docx, .txt, .csv, or a legacy .html.</span>
-      </button>
-      <!-- The third column (issue #15). DESKTOP ONLY: the list lives in the
+    <h2 class="newtab-title" id="newtab-title">Start a script</h2>
+    <p class="newtab-sub">Pick a layout, or carry on where you left off.</p>
+
+    <div class="newtab-main">
+      <section class="newtab-new" aria-labelledby="newtab-new-label">
+        <h3 class="newtab-label" id="newtab-new-label">New</h3>
+        <div class="newtab-cards" id="newtab-cards">
+          <button type="button" class="newtab-card" data-newtab-action="new">
+            <span class="newtab-preview is-blank" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <strong class="newtab-card-name">Blank script</strong>
+            <span class="newtab-card-desc">One empty scene, and nothing else.</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Recent documents (issue #15). DESKTOP ONLY: the list lives in the
            main process (desktop-state.json, contract DESKTOP-RECENTS), and
            the browser build has no equivalent, so this stays hidden there
-           and #newtab-cards keeps its two columns. -->
-      <div class="newtab-col newtab-recents" id="newtab-recents" hidden>
-        <span class="newtab-card-mark" aria-hidden="true">&#8635;</span>
-        <strong>Recent</strong>
-        <div class="newtab-recents-list" id="newtab-recents-list"></div>
-        <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
+           and .newtab-main keeps its one column. -->
+      <section class="newtab-recents" id="newtab-recents" aria-labelledby="newtab-recents-label" hidden>
+        <h3 class="newtab-label" id="newtab-recents-label">Recent</h3>
+        <div class="newtab-recents-box">
+          <div class="newtab-recents-list" id="newtab-recents-list"></div>
+          <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- The whole page takes a dropped file (20j-newtab.js); this is where
+         it says so, and it lights up while one is dragged over the page. -->
+    <div class="newtab-drop" id="newtab-drop">
+      <svg class="newtab-drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14.5v3a2.5 2.5 0 0 0 2.5 2.5h11a2.5 2.5 0 0 0 2.5-2.5v-3"/></svg>
+      <div class="newtab-drop-text">
+        <strong>Drop a script here</strong>
+        <span>.md, .splitpage, .docx, .txt or .csv — or <a href="#" data-newtab-action="paste">paste one</a> or <a href="#" data-newtab-action="gdoc">import a Google Doc link</a></span>
       </div>
     </div>
-    <p class="newtab-hint">
+
+    <footer class="newtab-foot">
+      <a href="#" data-newtab-action="tour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.8v6.4l5.3-3.2z"/></svg>
+        Take the one-minute tour
+      </a>
+      <a href="#" data-newtab-action="tagging-help">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12.3V4.8c0-.7.6-1.3 1.3-1.3h7.5l8.2 8.2a1.3 1.3 0 0 1 0 1.8l-7.3 7.3a1.3 1.3 0 0 1-1.8 0z"/><circle cx="8.2" cy="8.2" r="1.3"/></svg>
+        Tagging cheat sheet
+      </a>
       <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
-      — or press Esc.
-    </p>
+      <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
+           bridge is there. The link is desktopAppUrl() (20a-update.js), the
+           same page the desktop-app notice points at. -->
+      <span class="newtab-desktop" id="newtab-desktop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg>
+        <span>Want its own window and unlimited version history?</span>
+        <a href="https://github.com/RetroGorilla/splitpage-releases/releases/latest" id="newtab-desktop-link" target="_blank" rel="noopener">Get the desktop app</a>
+      </span>
+    </footer>
   </div>
 </div>
 
