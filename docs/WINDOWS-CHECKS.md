@@ -46,6 +46,11 @@ packaged smoke has to run again, and #86 has a by-hand check (§3).
 module to `electron-builder.yml`'s `files`; the packaged smoke's `blobs:`
 group is what proves it ships in the asar, and the only run where its
 rename retry and its best-effort folder fsync meet NTFS.
+#83 replaced the desktop history store: `desktop/history-fs-backend.js`,
+`desktop/history-v1-migrate.js` and `shared/history-store.js` must all ship
+(the packaged smoke's history groups prove it), and the first launch of a
+new build MOVES an existing profile's history into the new layout — a real
+profile is the one thing no test here has (§3).
 
 ## Before you start
 
@@ -288,6 +293,23 @@ that proves #76's `shared/` staging and #77's `files` entry.
   refuse consent once (the app should say sign-in was cancelled) and leave
   the consent tab open for over 5 minutes once (it should say it timed out).
 
+- **Version history moving to the new layout** (#83), on your real
+  profile. Before installing the new build, open two or three documents
+  that have history and note how many versions each lists (File ▸ History),
+  and the Older group's if there is one. Install, launch, and open the
+  same documents: the same versions, same labels and dates, and restoring
+  one works. `%APPDATA%\Splitpage\history\` now holds `FORMAT` (`2`),
+  `index.json`, `index.prev.json` after the first new snapshot, `bodies\`,
+  and `v1-backup\` with the old `docs\` and `older\` folders (kept for one
+  release; nothing in it is deleted). A launch that is quit while the move
+  runs must finish it on the next launch with nothing missing.
+- **Pictures as references** (#82), in the desktop app. Drop two or three
+  pictures into scenes, add one to a comment, save as `.splitpage`, quit,
+  relaunch: all still show. `%APPDATA%\Splitpage\blobs\sha256\` holds
+  them. The saved `.splitpage` still carries the pictures inside it: if a
+  1.x/2.x copy of Splitpage is to hand, it opens the file with the pictures.
+  Export to PDF with a PNG picture in it — it appears (it used to vanish).
+
 ## 4. The browser suites, on Windows
 
 `driver.mjs` runs them one at a time on Linux, and every suite in
@@ -331,5 +353,7 @@ Anything changed since then is due again in run 2.
 | upgrade over a 1.0.x install | a VM / Windows Sandbox | **never run** |
 | #73, #71, #98, #11 | dev + packaged smoke, `run-tests.ps1` | pass on Linux; **due in run 2** |
 | #86 Open in browser | by hand, desktop app | URL and served script verified; real browser launch **due in run 2** |
+| #83 history move on a real profile | by hand, desktop app | **due in run 2** |
+| #82 pictures in the desktop app | by hand + packaged smoke | **due in run 2** |
 | #8 Follow My Voice | by hand | unreachable by any agent |
 | browser suites | `run-tests.ps1` | pass on Linux; **Windows x64, run 1** (51 suites) |
