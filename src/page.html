@@ -624,6 +624,18 @@
 
 <!-- A .md project whose scene table gained or lost rows somewhere else.
      There is no right answer to guess at, so it is asked (20d-formats.js). -->
+<!-- a scene's gallery, all of it (#135, 05e-gallery-overlay.js fills #gallery-body) -->
+<div class="modal-backdrop scene-gallery-overlay" id="gallery-modal" hidden>
+  <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
+    <div class="modal-header">
+      <h2 id="gallery-title">Scene · Visual</h2>
+      <button type="button" class="modal-close" id="gallery-close" aria-label="Close">×</button>
+    </div>
+    <p class="modal-hint" id="gallery-summary"></p>
+    <div id="gallery-body"></div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="md-rows-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="md-rows-title">
     <div class="modal-header">

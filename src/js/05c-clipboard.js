@@ -268,18 +268,18 @@ export function cellFromClipboard(html, text, opts) {
    never over them. A video with the gallery empty gets a first slot of its
    own: its thumbnail (a video file's first frame, `poster`) or a
    placeholder, with its link under it; with a picture there, its link goes
-   under the picture at slot `at` (the one on screen, or one this paste
-   just added). The links live in the caption, not in the words. Returns
+   with the picture at slot `at` (the one last added or picked, or one
+   this paste just added). The links live in the caption, not in the words. Returns
    {pictures, videos, at}: how many of each, and the slot to show. */
 export function attachToGallery(row, attach, at) {
   var out = { pictures: 0, videos: 0, at: at };
   attach.forEach(function (item) {
     if (item.kind === "image") {
-      out.at = addGalleryPicture(row, item.ref);
+      out.at = addGalleryPicture(row, item.ref, item.name);
       out.pictures++;
       return;
     }
-    var link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size };
+    var link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size, duration: item.duration };
     var i = addGalleryVideo(row, link, out.at, item.poster || null);
     if (i === -1) return;
     out.at = i;
@@ -499,8 +499,8 @@ export function pasteIntoCell(cellEl, html, text, extra) {
 /* What a paste's or a drop's files attach (#124), as a promise of
    {attach, skipImages, lost}: each picture made small and put in the
    image registry the way a scene picture is (#82), each video file by its
-   name, with its first frame as a picture when `video.frame(file)` can
-   read one (a data: URI, or null) and `video.grant(file)` told about it —
+   name, with its first frame as a picture and its length when
+   `video.frame(file)` can read them ({dataUrl, duration}, or null) and `video.grant(file)` told about it —
    the desktop app remembers where it is, for its caption's link to open
    (#135). skipImages is true when a picture came as a file — the HTML
    beside it (a picture copied from a page) names the same one. Anything
@@ -517,8 +517,10 @@ export function readClipboardFiles(files, compress, video) {
       attach.push(item);
       if (video.grant) video.grant(file, { name: item.name, size: item.size });
       if (!video.frame) return Promise.resolve();
-      return Promise.resolve(video.frame(file)).then(function (dataUrl) {
-        var rec = dataUrl ? internDataUrl(dataUrl) : null;
+      return Promise.resolve(video.frame(file)).then(function (got) {
+        /* {dataUrl, duration}, or null */
+        if (got && got.duration) item.duration = got.duration;
+        var rec = got && got.dataUrl ? internDataUrl(got.dataUrl) : null;
         if (!rec) return;
         persist([rec.sha256]);
         item.poster = rec;
@@ -532,7 +534,7 @@ export function readClipboardFiles(files, compress, video) {
       var rec = internDataUrl(dataUrl);
       if (!rec) return;
       persist([rec.sha256]);
-      attach[slot] = { kind: "image", ref: rec };
+      attach[slot] = { kind: "image", ref: rec, name: String(file.name || "") };
     }, function () {});
   });
   return Promise.all(jobs).then(function () {

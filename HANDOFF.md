@@ -950,8 +950,9 @@ builds two fields.
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
     // the scene's gallery (#135, 02d-gallery.js), each key absent when empty:
-    "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "poster": true
-    "moreImages": [{ "imageRef": { /* as above */ }, "links": [ /* as imageLinks */ ] }],
+    "imageName": "wide.png",
+    "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
+    "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
     "status": "todo | ready | shot", "updatedAt": "ISO", "updatedBy": "name" }],
   "comments": [{ "id": "c1", "rowId": "r1", "field": "audioText | visualText | visualImage",
     "anchorId": "c1", "quotedText": "plain text", "author": "name", "body": "sanitised HTML",

@@ -1,11 +1,14 @@
 import { S } from "./_state.js";
 import { makeId } from "./02-state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import { addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, videoLinkKey } from "./02d-gallery.js";
+import {
+  addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
+} from "./02d-gallery.js";
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
-import { safeId, sanitizeHtml } from "./04-richtext.js";
+import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { render, setGalleryIndex, syncFieldFromDom } from "./05-render.js";
+import { galleryEdit } from "./05e-gallery-overlay.js";
 import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -370,38 +373,27 @@ export function handleImageFile(rowId, file, slot) {
     var rec = internDataUrl(dataUrl);
     if (!rec) throw new Error("not a picture the registry takes");
     persist([rec.sha256]);
-    var row = S.state.rows[idx];
-    var at = slot;
-    if (typeof slot === "number") replaceGalleryPicture(row, slot, rec);
-    else at = addGalleryPicture(row, rec);
-    setGalleryIndex(rowId, at);
-    stampRow(row);
-    markDirty();
-    render();
+    var replacing = typeof slot === "number";
+    galleryEdit(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
+      if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
+      setGalleryIndex(rowId, replacing ? slot : addGalleryPicture(row, rec, file.name));
+      return true;
+    });
   }).catch(function () { showToast("Could not use that image.", "error"); });
 }
 
 /* Takes one slot of the gallery away — its picture and its caption. */
 export function removeImage(rowId, slot) {
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
-  var row = S.state.rows[idx];
-  if (!removeGallerySlot(row, slot || 0)) return;
-  setGalleryIndex(rowId, Math.max(0, (slot || 0) - 1));
-  stampRow(row);
-  markDirty();
-  render();
+  galleryEdit(rowId, "Picture removed", function (row) {
+    if (!removeGallerySlot(row, slot || 0)) return false;
+    setGalleryIndex(rowId, Math.max(0, (slot || 0) - 1));
+    return true;
+  });
 }
 
 /* Takes one video link off a slot's caption (the × beside it). */
 export function removeImageLink(rowId, slot, key) {
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
-  var row = S.state.rows[idx];
-  if (!removeGalleryLink(row, slot, key)) return;
-  stampRow(row);
-  markDirty();
-  render();
+  galleryEdit(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
 }
 
 /* ---- video files in a scene's gallery (#135) ----
@@ -446,9 +438,32 @@ export function openVideoFile(link) {
   }, function () { showToast("Could not open “" + name + "”.", "error"); });
 }
 
+/* A caption's video, opened: a web address in the browser — the desktop
+   app hands it to the system's (the bridge's openExternal, which takes
+   http(s) only) — and a video file from this session's drop or paste
+   through the desktop bridge, which opens it with its own app only if
+   main granted it (openVideoFile). Everything goes through safeHref. */
+export function openGalleryLink(rowId, slot, key) {
+  var idx = findRowIndex(rowId);
+  if (idx === -1) return;
+  var s = rowSlots(S.state.rows[idx])[slot];
+  var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
+  if (!link) return;
+  if (link.href) {
+    var href = safeHref(link.href);
+    if (!href || !/^https?:\/\//i.test(href)) return;
+    if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(href); return; }
+    var win = window.open(href, "_blank", "noopener");
+    if (win) win.opener = null;
+    return;
+  }
+  openVideoFile(link);
+}
+
 /* A video file's first frame, as a JPEG data: URI no bigger than a scene
-   picture, or null when this browser cannot decode it (the gallery shows
-   a placeholder then). Read through a blob: URL in a <video> — the page's
+   picture, and its length in seconds: {dataUrl, duration}, or null when
+   this browser cannot decode it (the gallery shows a placeholder then).
+   Read through a blob: URL in a <video> — the page's
    policy allows media from blob: and nothing else (build.mjs's CSP) — and
    given up on after a few seconds. */
 export function videoFirstFrame(file) {
@@ -486,7 +501,7 @@ export function videoFirstFrame(file) {
         canvas.width = Math.max(1, Math.round(w * scale));
         canvas.height = Math.max(1, Math.round(h * scale));
         canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
-        done(canvas.toDataURL("image/jpeg", 0.78));
+        done({ dataUrl: canvas.toDataURL("image/jpeg", 0.78), duration: isFinite(v.duration) && v.duration > 0 ? v.duration : 0 });
       } catch (e) { done(null); }
     }
     v.src = url;

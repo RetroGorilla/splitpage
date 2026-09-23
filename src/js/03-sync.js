@@ -520,6 +520,8 @@ export function mergeStates(base, mine, theirs) {
       if (b && mv === bv) { tookTheirs = true; return; }            /* only they changed it */
       if (b && tv === bv) {                                         /* only I changed it */
         out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
+        /* the picture's file name goes with it (#135) */
+        if (m.imageName) out.imageName = m.imageName; else delete out.imageName;
         tookMine = true;
         return;
       }
