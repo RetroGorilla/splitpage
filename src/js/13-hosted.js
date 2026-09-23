@@ -36,7 +36,8 @@ import {
   intern as internBlob,
   recordFor as blobRecordFor,
   bytesForSync,
-  setRemoteSource
+  setRemoteSource,
+  forgetRemoteMisses
 } from "./02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
@@ -618,6 +619,7 @@ async function resumeServerDoc() {
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
     if (via !== conn) return false;
+    forgetRemoteMisses();
   } catch (err) {
     /* still signed out, or the document is gone — leave SERVER_RESUME_KEY
        (and the stash it points at) alone so a later reload can still
@@ -1117,6 +1119,8 @@ export async function openServerDoc(id) {
   }
   if (via !== conn) return false;
   if (!body || !body.state) { showToast("That document is empty.", "warn"); return false; }
+  /* New server state: a picture nobody had a moment ago may be there now. */
+  forgetRemoteMisses();
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
@@ -1551,6 +1555,7 @@ export async function saveToServer() {
            older than document ids saved it without one, it is still this
            document: keep our id rather than deriving a new one and splitting
            the history on every conflict. */
+        forgetRemoteMisses();
         var theirs = migrateDocument(cloneState(err.payload.state), {
           kind: "server",
           serverId: docId,
@@ -2125,6 +2130,7 @@ async function pullServerDoc(docId) {
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;   /* a save of ours landed first */
+  forgetRemoteMisses();
 
   /* Their copy came from this same server document, so an id-less one saved
      by a client older than document ids is still THIS document: keep ours
