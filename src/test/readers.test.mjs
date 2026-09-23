@@ -11,15 +11,17 @@
  * way editing builds them — each run wrapped on its own, its marks in a
  * random order — then sanitised, as every cell is on blur and on load.
  *
- * One reader gives something else on purpose, and is checked for exactly
+ * Two readers give something else on purpose, and are checked for exactly
  * that: the plain Markdown export writes Markdown that renders the cell's
- * formatting where the HTML walker's did not.
+ * formatting where the HTML walker's did not, and the production index
+ * counts a tag's stretches in the model rather than its spans.
  */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cellOf, toDocxRuns, toMarkdown, toPlainText } from "../js/04c-doc-model.js";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { tagsInField } from "../js/07-production-tags.js";
 import { htmlToPlainText, htmlToRuns } from "../js/14-export.js";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 import { STORED, tagSpan } from "./_stored-cells.mjs";
@@ -215,4 +217,30 @@ test("markdown: a cell htmlToMarkdown wrote without a flaw is written the same",
     const clean = sanitizeHtml(html);
     assert.equal(toMarkdown(cellOf(clean)), htmlToMarkdown(clean), html);
   }
+});
+
+/* ---- the production index ----
+
+   tagsInField reads the model (07-production-tags.js): one mention per
+   stretch of one tag. On every stored cell that is one per tag span, as
+   the HTML reader counted, with the same names; the shapes where the two
+   differ are tag-panel-model.test.mjs's. */
+function oldTagsInField(html) {
+  return [...inertBody(html).querySelectorAll(".tag-anchor")].map((el) => ({
+    catId: el.getAttribute("data-tag-cat"),
+    name: (el.getAttribute("data-tag-name") || "").trim(),
+    text: (el.textContent || "").trim()
+  })).filter((t) => t.catId && t.name);
+}
+
+test("production index: every stored cell has the mentions the span reader found", () => {
+  let tagged = 0;
+  for (const html of STORED) {
+    const before = oldTagsInField(html), after = tagsInField(html);
+    assert.deepEqual(after.map((t) => [t.catId, t.name]), before.map((t) => [t.catId, t.name]), html);
+    /* a line break inside a tag is "\n" in the model; textContent had none */
+    assert.deepEqual(after.map((t) => t.text.replace(/\s+/g, "")), before.map((t) => t.text.replace(/\s+/g, "")), html);
+    if (after.length) tagged++;
+  }
+  assert.ok(tagged > 100, "enough tagged cells: " + tagged);
 });
