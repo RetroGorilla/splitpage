@@ -255,7 +255,9 @@ Nothing outside one module writes a cell. `src/js/04c-doc-model.js`
   - Until step 2, `fromHtml` takes `tagId(cat, name)` and `toHtml`
     `tagOf(id)`; without them a tag's id is `t:<cat>:<name>`.
   - `toPlainText`, `toMarkdown` and `toDocxRuns` replace `htmlToPlainText`,
-    `htmlToMarkdown` and `htmlToRuns`.
+    `htmlToMarkdown` and `htmlToRuns`. `toMarkdown` writes the same
+    notation but not the same text: it lays its delimiters out for
+    CommonMark rather than following an element tree (step 3).
 - **Positions.** A position in a cell is a character offset into its
   plain-text projection, where an atom counts as one character. That is the
   coordinate the undo stack, find/replace, the teleprompter and caret
@@ -513,7 +515,7 @@ changes are combined"). What building it settled:
 | `08c-broll.js` | capture and rename become steps; the marker is an atom |
 | `09-find-replace.js` | searches the plain-text projection, so matches cross formatting; replace is `replaceText` |
 | `10-comments.js` | anchors from `cmt` marks; create/delete are steps |
-| `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` |
+| `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
 | `20-teleprompter.js` | word spans from runs |
 | `21-events.js` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
 | `server/server.js`, `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
@@ -531,8 +533,9 @@ until step 4.
    every construct the sanitiser keeps, the demo document and 400 seeded
    random cells: `toHtml` is a fixed point of `sanitizeHtml`;
    `fromHtml(toHtml(c))` is `normalizeCell(c)`; a cell's text is what its
-   stored HTML shows; `toPlainText` / `toMarkdown` / `toDocxRuns` equal
-   `htmlToPlainText` / `htmlToMarkdown` / `htmlToRuns` of `toHtml(c)`.
+   stored HTML shows; `toPlainText` / `toDocxRuns` equal
+   `htmlToPlainText` / `htmlToRuns` of `toHtml(c)`. (`toMarkdown` did
+   too, until step 3 made it better than `htmlToMarkdown`; see there.)
    (`toHtml(fromHtml(x))` is not `sanitizeHtml(x)` byte for byte: the
    sanitiser keeps whatever nesting it was given, `<em><strong>` or
    `<strong><em>`, and `toHtml` always writes one. The first save of an old
@@ -541,20 +544,59 @@ until step 4.
 2. **Registry ids. Done.** `productionTags[].id`, minted from the key and
    kept through renames; the registry merges by id; `registryTagHooks` for
    the model. No ids on spans (§3.1 says why). `src/test/tag-ids.test.mjs`.
-3. **Readers first. Done, mostly.** Word count, the plain-text, CSV,
-   Word and PDF exports, the teleprompter and find/replace read cells
-   through `cellOf`; find matches across formatting (never inside a tag or
-   across a b-roll key). So does the b-roll list (`brollInField`): the
-   same items as the HTML reader on every stored-shape cell. Left on HTML,
-   each with its reason in the code: plain Markdown export (the model's
-   fixed nesting changes the Markdown), the `.md` project format, and the
-   production index (`tagsInField` counts tag spans, one mention each; the
-   model joins two spans of one tag side by side into one run, keeps only
-   the inner of two nested tags, drops an empty one and splits one round a
-   b-roll key — shapes older copies of the app did store).
+3. **Readers first. Done**, but for the one reader that has to stay on
+   HTML. Word count, the plain-text, CSV, Word and PDF exports, the
+   teleprompter and find/replace read cells through `cellOf`; find matches
+   across formatting (never inside a tag or across a b-roll key). So does
+   the b-roll list (`brollInField`): the same items as the HTML reader on
+   every stored-shape cell. The last three:
+   - **The plain Markdown export** (`toMarkdownDoc`) is `toMarkdown`. The
+     HTML walker copied the elements' nesting into Markdown, which
+     CommonMark reads differently wherever a delimiter touches a space
+     (`**a **b`), two elements sit side by side (`**a****b**`) or two
+     marks cross; over the model's one fixed nesting it also wrote
+     `*x ****y***` for italic "x " then bold-italic "y". `toMarkdown` joins
+     what reads as one, keeps bold, italic, strike and the rest off white
+     space at their edges and out of blank lines, opens the longest-running
+     mark outermost, and writes `<strong>`/`<em>`/`<s>` for a delimiter
+     that still could not open or close where it stands (CommonMark's
+     flanking rules, the rule of 3, a line break read as white space and
+     as `<br>`). Checked when it was written against markdown-it and
+     commonmark.js on 31,515 stored-shape cells (the random cells are
+     harsh: spaces and line breaks at every edge), as a table cell and as
+     paragraphs: the HTML walker's Markdown rendered other formatting than
+     the cell's for 56–73% of them depending on reader and form,
+     `toMarkdown`'s for none in a table cell and 4–5 as paragraphs — each
+     a line starting with four spaces after a blank line, an indented code
+     block, which the HTML walker wrote the same — and never for a cell
+     the old one rendered right. Text is written as it is, as before: an
+     asterisk typed into a cell is not escaped. Import reads the three
+     fallback elements back (`legacyMdToHtml`).
+   - **The production index** (`tagsInField`) counts one mention per
+     stretch of one tag in the model, not per tag span. On shapes older
+     copies of the app stored they differ — two spans of one tag side by
+     side are one mention, a tag nested in a tag is the inner one with the
+     outer either side of it, an empty tag span is none, a b-roll key
+     inside a tag splits it — and the span count was the unstable one:
+     each of those cells is written in the model's shape the first time
+     anything edits it, so an item's count changed when someone fixed a
+     typo beside it. The panel, the breakdown exports and Remove label's
+     count all read it. On every other stored cell the two agree.
+   - **The `.md` project's table stays `htmlToMarkdown`**, the reason in
+     `mdSceneCellSource`: it is the comparison basis every copy of the app
+     that opens the file uses to tell a hand edit from an untouched cell,
+     and every copy in circulation renders with `htmlToMarkdown`. A table
+     written in the model's Markdown would read in an older copy as edited
+     by hand in every cell where the two differ, and be rebuilt from the
+     table, losing its comment anchors and b-roll key. It is also what
+     keeps an unchanged document's bytes the same. Reading already takes
+     the model's form as unchanged too, so a later release can switch the
+     writer once no copy from before this one is in use.
    Tests: `readers.test.mjs` (old and new readers over 1500 stored-shape
    cells), `find-replace.test.mjs`, `broll-model.test.mjs`,
-   `tag-panel-model.test.mjs`.
+   `tag-panel-model.test.mjs`, the `toMarkdown` cases in
+   `doc-model.test.mjs` and the `.md` round trip over stored-shape cells in
+   `formats.test.mjs`.
 4. **Writers. Done for everything done at the selection.** Not by making
    `applySteps` the only door into `S.state` — that would have meant
    rewriting all 33 write paths first — but in three parts:
