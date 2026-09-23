@@ -353,7 +353,9 @@ that proves #76's `shared/` staging and #77's `files` entry.
   (`docs/DOCUMENT-MODEL.md` §5). By hand, in the desktop app and in Edge:
   1. Type with a dead key (é, ñ on an international layout) and with the
      Windows emoji panel (Win+.) in a script cell: the characters land, and
-     Ctrl+Z takes them back a word at a time.
+     Ctrl+Z takes them back in the same bursts a pause of a second or so
+     breaks typing into (12a-undo.js `COALESCE_MS`), with the caret landing
+     back where that burst began.
   2. Turn on the Japanese IME and type a word with its conversion
      candidates: nothing is doubled or lost when you pick one.
   3. Right-click a misspelt word and pick a suggestion: the word changes,
