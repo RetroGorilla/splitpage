@@ -152,6 +152,17 @@ const CHANNELS = [
      handler runs. */
   { name: "splitpage:prompter-open-in-browser", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
+  /* ---- Follow My Voice on desktop (issue #8, main.js § 9d) -------------
+     Argument-free in the update bridge's style (invariant #28, #45): the
+     page asks whether it can listen, to start and to stop — for itself, the
+     tab main looks up from the sender. It never names an executable, a
+     script, an argument or a language. What is heard comes back on
+     splitpage:voice-event below, rebuilt field by field in
+     desktop/voice-helper.js (invariant #46). */
+  { name: "splitpage:voice-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:voice-start", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:voice-stop", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+
   /* ---- Google Drive (issue #10, main.js § 9c) --------------------------
      Main owns the whole OAuth flow: the loopback listener, PKCE, the token
      exchange, the tokens themselves, and every request to Google. So the
@@ -237,6 +248,7 @@ const CHANNELS = [
   { name: "splitpage:update-status", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:reassign-doc-id", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:draft-flush", direction: "receive", argsSchema: ["number"], allowedOrigins: APP },
+  { name: "splitpage:voice-event", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
 
   /* ---- the tab strip (TABSTRIP-BRIDGE, invariant #43) -----------------
      A separate origin, and every one of these is listed for that origin

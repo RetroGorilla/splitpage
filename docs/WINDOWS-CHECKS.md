@@ -309,8 +309,33 @@ that proves #76's `shared/` staging and #77's `files` entry.
   for a load.
 - **`fsync` durability** (#74). Not observable over HTTP. The suite's closest
   proxies are "no temp file left behind" and head-line consistency.
-- **Follow My Voice** (#8). Microphone capture is blocked in an agent sandbox,
-  so this can never be verified end to end by any Claude session.
+- **Follow My Voice in the desktop app** (#8). Microphone capture is blocked
+  in an agent sandbox, and no automated run may open one (invariant #33), so
+  the smoke suite drives main's listener with `desktop/test/fake-voice-helper.mjs`
+  instead of `listen.ps1`: nothing automated has run the real script, loaded
+  System.Speech or heard a voice. By hand, in the packaged app:
+  1. Open a saved script, open the teleprompter. The button reads **Follow My
+     Voice** (not "Open in browser…"). Press it: the status reads "Starting
+     Windows speech recognition…", then "Listening…", and Windows' microphone
+     indicator appears in the taskbar. If Windows asks about the microphone,
+     allow it.
+  2. Read two or three lines aloud. The prompter follows, word by word.
+     Skip a sentence: it catches up. Re-read a line: it goes back.
+  3. Press **Stop Following**: the microphone indicator goes within about two
+     seconds. In Task Manager, no `powershell.exe` is left under Splitpage.
+  4. Start it, then close the tab: same — indicator gone, no `powershell.exe`.
+     Start it, then quit the app: same.
+  5. Start it in one tab, then in a second: the first says "Another tab is
+     following your voice now" and stops; the second follows.
+  6. Turn off **Settings ▸ Privacy & security ▸ Microphone ▸ Let desktop apps
+     access your microphone** and start it: after a few seconds the status
+     should say Windows isn't hearing the microphone. (If it says nothing,
+     note it — System.Speech's no-signal warning may not fire for a privacy
+     block on every build.) Turn the setting back on.
+  7. Unplug the only microphone (or disable it in Sound settings) and start
+     it: "No microphone was found."
+  Record how long step 1 takes to reach "Listening…" — the first start
+  compiles a small C# shim through PowerShell's Add-Type.
 - **Teleprompter "Open in browser"** (#86). The smoke suite replaces
   `shell.openExternal` with a recorder in test mode, so it proves the URL
   main would open and the script it would serve — not that a real default
@@ -323,8 +348,7 @@ that proves #76's `shared/` staging and #77's `files` entry.
   it should do the same. No test presses a menu accelerator, so that key is
   also the check that accelerators fire at all under `titleBarStyle:
   "hidden"` — Ctrl+T/W/Tab and Ctrl+Alt+P/C lean on the same thing. Then
-  start Follow My Voice and read aloud — this is the one way Follow My Voice works from
-  the desktop app until #8 lands. It needs Chrome or Edge; Firefox has no
+  start Follow My Voice and read aloud in the browser. It needs Chrome or Edge; Firefox has no
   Web Speech, and the page says so. Also try it on an unsaved new document:
   it should ask you to save first, with no Save dialog popping up by
   itself.
@@ -413,5 +437,5 @@ Anything changed since then is due again in run 2.
 | #86 Open in browser | by hand, desktop app | save-first **Windows x64, run 2**; real browser launch **unverified** (that machine's default browser is broken); the menu route and the covered control bar were fixed after run 2 — re-check |
 | #83 history move on a real profile | by hand, desktop app | **Windows x64, run 2b** (incl. kills mid-move) |
 | #82 pictures in the desktop app | by hand + packaged smoke | **Windows x64, run 2b**; the PDF overlap it found was fixed after — re-check |
-| #8 Follow My Voice | by hand | unreachable by any agent |
+| #8 Follow My Voice (desktop) | by hand, packaged app (§3) | fake listener passes on Linux smoke; the real `listen.ps1` **never run** |
 | browser suites | `run-tests.ps1` | pass on Linux; **Windows x64, run 2b** (66 suites, 3039 checks) |

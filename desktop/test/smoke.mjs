@@ -5362,6 +5362,87 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
   }
 }
 
+/* Follow My Voice on desktop (issue #8, main.js section 9d). The real
+   listener is Windows' recogniser through powershell.exe, and no automated
+   run may open a microphone (invariant #33) — so main runs
+   desktop/test/fake-voice-helper.mjs instead, through
+   SPLITPAGE_TEST_VOICE_HELPER, and this drives everything around it: the
+   button offering to listen instead of the browser, the heard words moving
+   the prompter, stop, a second tab taking the microphone over, and the
+   listener going with its tab. */
+async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
+  const tag = target.name + " teleprompter: Follow My Voice on desktop";
+  const fixturePath = writeFixture(fixturesDir, "prompter-voice.splitpage", "Prompter — voice",
+    [["Wide shot", "The first line the reader says out loud."], ["Close up", "A second line comes after it."]]);
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "prompter-voice",
+      fixtures: [fixturePath],
+      env: {
+        SPLITPAGE_TEST_VOICE_HELPER: path.join(__dirname, "fake-voice-helper.mjs"),
+        FAKE_VOICE_TEXT: "the first line the reader says"
+      }
+    });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — voice"), 20000);
+    const dialogsBefore = await dialogsSeen(cdp);
+
+    const arity = await evalPage(cdp, "(function(){ var d = window.splitpageDesktop; return [d.voiceStatus.length, d.voiceStart.length, d.voiceStop.length].join(','); })()");
+    record(tag + ": voiceStatus/voiceStart/voiceStop take no argument", arity === "0,0,0", String(arity));
+
+    await evalPage(cdp, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
+    await poll(cdp, "!document.getElementById('prompter').hidden", 10000);
+    const btn = await poll(cdp, "(function(){ var b = document.getElementById('pp-voice'); return b && !b.disabled ? { text: b.textContent } : null; })()", 10000).catch(() => null);
+    record(tag + ": the voice button offers to listen here, not to open the browser",
+      !!btn && btn.text === "Follow My Voice", JSON.stringify(btn));
+
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    const listening = await poll(cdp, "(function(){ var b = document.getElementById('pp-voice'); return b.classList.contains('is-active') && b.textContent === 'Stop Following'; })()", 15000).catch(() => false);
+    record(tag + ": clicking it starts following", listening === true);
+    const tab1Id = await tabIdOfTarget(cdp);
+    const st1 = await shell(cdp, "voiceStatus", {});
+    record(tag + ": main runs one listener, for this tab", !!st1 && st1.running === true && st1.tabId === tab1Id && st1.started === 1, JSON.stringify(st1));
+    const spoken = await poll(cdp, "document.querySelectorAll('#prompter .w.spoken').length >= 5", 15000).catch(() => false);
+    record(tag + ": what the listener heard moves the prompter along the script", spoken === true);
+    const opens = await externalOpens(cdp);
+    record(tag + ": nothing is opened in the browser", opens.length === 0, JSON.stringify(opens));
+
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    const stopped = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
+    record(tag + ": Stop Following stops main's listener", !!stopped, JSON.stringify(stopped));
+    const idle = await evalPage(cdp, "document.getElementById('pp-voice').textContent");
+    record(tag + ": ... and the button is back to Follow My Voice", idle === "Follow My Voice", String(idle));
+
+    // --- a second tab takes the microphone over -------------------------
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    await poll(cdp, "document.getElementById('pp-voice').classList.contains('is-active')", 15000).catch(() => false);
+    const tab2Id = await shell(cdp, "createTab", {});
+    const tab2 = await connectTab(app, tab2Id);
+    await waitForRows(tab2, 20000);
+    await evalPage(tab2, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
+    await poll(tab2, "!document.getElementById('prompter').hidden", 10000);
+    await poll(tab2, "!document.getElementById('pp-voice').disabled", 10000).catch(() => false);
+    await evalPage(tab2, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    const taken = await poll(cdp, "(function(){ var t = document.getElementById('pp-voice-status').textContent; return t.indexOf('Another tab') !== -1 && !document.getElementById('pp-voice').classList.contains('is-active') ? t : null; })()", 15000).catch(() => null);
+    record(tag + ": the first tab is told another tab is following now, and stops", !!taken, String(taken));
+    const st2 = await shell(tab2, "voiceStatus", {});
+    record(tag + ": main's one listener now belongs to the second tab", !!st2 && st2.running === true && st2.tabId === tab2Id, JSON.stringify(st2));
+
+    // --- the listener goes with its tab ---------------------------------
+    await fireShell(cdp, "closeTab", { tabId: tab2Id });
+    const gone = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
+    record(tag + ": closing the listening tab stops its listener", !!gone, JSON.stringify(gone));
+    try { tab2.close(); } catch { /* already gone */ }
+    record(tag + ": no native dialog was raised by any of it", (await dialogsSeen(cdp)) === dialogsBefore);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+/* Without a listener (every automated run that does not name the fake, and
+   any machine that is not Windows) the button keeps Present in Browser. */
 async function caseTeleprompterOpenInBrowserServer(target) {
   const tag = target.name + " teleprompter: open in browser (--library server document)";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
@@ -6275,6 +6356,7 @@ async function runTargetSuite(target, groupFilter) {
     // --- issue #86: the teleprompter in the browser ---
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
     ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
+    ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
     // --- issue #10: Google Drive through a loopback OAuth redirect ---
     ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
     ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],

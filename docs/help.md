@@ -67,8 +67,8 @@ date](#keeping-it-up-to-date)).
 **Moving your data between the browser and desktop apps?** See
 [Moving between the browser app and the desktop app](#moving-between-the-browser-app-and-the-desktop-app).
 
-**Follow My Voice** doesn't run inside the desktop app yet, but the desktop
-teleprompter can hand your script to your browser, where it does: see below.
+**Follow My Voice** works in the Windows desktop app through Windows' own
+speech recognition — see [Desktop app](#desktop-app) below.
 
 ## Setting up
 
@@ -127,13 +127,19 @@ Splitpage also comes as a desktop app for Windows (x64 and ARM64): the same
 app in its own window, with native menus and Open/Save dialogs, and `.splitpage`
 files open in it when you double-click them. Editing, saving and hosting a
 shared session on your network all work the same as in the browser, with two
-exceptions for now:
+differences:
 
-- **Follow My Voice** doesn't run inside the desktop app yet. Instead, choose
-  **☰ File ▸ This document ▸ Present in browser (Follow My Voice)**, press
-  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, or use the **Open in browser
-  to use Follow My Voice** button on the teleprompter. Your default browser
-  opens straight into the teleprompter with the same script, and Follow My Voice
+- **Follow My Voice** uses Windows' own speech recognition, so it works
+  without an internet connection and nothing is sent anywhere. The first time,
+  Windows may ask whether Splitpage can use the microphone. If it says it isn't
+  hearing anything, check **Settings ▸ Privacy & security ▸ Microphone ▸ Let
+  desktop apps access your microphone**. If Windows has no speech recogniser
+  for your language, add one under **Settings ▸ Time & language ▸ Speech**.
+  Only one tab follows your voice at a time: starting it in another tab stops
+  it in the first. You can still read in your browser instead: choose
+  **☰ File ▸ This document ▸ Present in browser (Follow My Voice)** or press
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>. Your default browser opens
+  straight into the teleprompter with the same script, and Follow My Voice
   works there in Chrome or Edge. The browser shows a read-only copy: keep
   editing in the desktop app. If the script has never been saved, you'll be
   asked to save it first.

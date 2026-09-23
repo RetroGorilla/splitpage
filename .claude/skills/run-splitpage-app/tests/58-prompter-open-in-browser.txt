@@ -169,7 +169,7 @@ jsclick #btn-present
 wait !document.getElementById('prompter').hidden
 expect document.getElementById('pp-voice').disabled === true
 expect document.getElementById('pp-voice').textContent == Follow My Voice
-expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in the desktop app yet") !== -1
+expect document.getElementById('pp-voice-status').textContent.indexOf("isn't available in this desktop app") !== -1
 jsclick #btn-file
 wait !document.getElementById('file-menu').hidden
 expect document.getElementById('menu-present-browser').hidden === true

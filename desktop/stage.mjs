@@ -102,6 +102,17 @@ for (const filename of ["index.html", "tabstrip.js", "tabstrip.css"]) {
   console.log(`  tabstrip/${filename} (${data.length} bytes)`);
 }
 
+// voice/ (issue #8): Follow My Voice's listener. powershell.exe runs it by
+// path, and a path inside app.asar is not one it can read, so it lives here —
+// main.js finds it at APP_ROOT/voice when packaged, __dirname/voice in dev.
+const voiceDir = resolve(STAGE_DIR, "voice");
+await fs.mkdir(voiceDir, { recursive: true });
+for (const filename of ["listen.ps1"]) {
+  const data = await fs.readFile(resolve(__dirname, "voice", filename));
+  await fs.writeFile(resolve(voiceDir, filename), data);
+  console.log(`  voice/${filename} (${data.length} bytes)`);
+}
+
 // server/ (subdirectory). package.json travels with server.js and is not
 // optional: server.js is CommonJS, the repo root's package.json says
 // "type": "module" for the build tooling, and Node resolves the nearest one.
