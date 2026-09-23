@@ -34,8 +34,11 @@ beta copy is offered it like any other update.
 - **Markdown export** writes bold, italic and strikethrough that other
   Markdown readers show correctly, even where they overlap.
 - **Pictures stay out of script text.** Pasting into a script cell keeps the
-  words and leaves pictures out; a picture already in a cell moves into a
-  comment on that scene. Cutting text moves its comment with it.
+  words, and a picture or video that came with them — a picture, a video
+  card, a YouTube or Vimeo link, a video file — is attached to that scene as
+  a comment ("Picture attached to scene 4", with Undo). A picture already in
+  a cell moves into a comment on that scene. Cutting text moves its comment
+  with it.
 - **Follow My Voice in the desktop app** through Windows' own speech
   recognition, or **Present in browser** to run the teleprompter in Chrome or
   Edge.
@@ -723,6 +726,13 @@ visual column attaches a still — or just drag an image file from your desktop
 anywhere onto that column and drop it. Once a scene has one, hover it for
 **Replace** and **Remove**. A comment can carry a picture too (**🖼 Image**
 in the comment box), and a picture pasted into a scene or a reply is kept.
+Pasting or dropping a picture, a video link (YouTube, Vimeo, Loom and the
+like) or a video file into a scene's words attaches it to that scene as a
+comment on that column, and a toast says so with **Undo** — the words that
+came with it go in as usual, and one Ctrl+Z takes back both. A video file is
+named in the comment rather than stored: a script does not carry videos. A
+picture that was copied only as a link to a web page can't be kept; save it
+and paste or drop the file instead.
 
 **Where pictures are kept.** The script itself only names each picture; the
 picture is stored once, separately, wherever the script lives:

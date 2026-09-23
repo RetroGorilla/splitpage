@@ -10,7 +10,8 @@
 #     the new place and jumps there; a second paste of the same cut, or
 #     another tab's cut, brings no comment;
 #   * a picture or a video card pasted or dropped into a script cell is
-#     dropped, with a toast saying where pictures go;
+#     not put in it — since #124 it is attached to the scene as a
+#     comment, which tests/89-paste-media.txt covers in full;
 #   * a drop goes in through the model too.
 # The pure half is src/test/clipboard.test.mjs. Every `eval` is one
 # physical line.
@@ -109,13 +110,13 @@ eval clip('paste', cell('r1', 'visualText'), { 'text/html': ' see <img src="' + 
 wait st('r1', 'visualText') === 'one see  here '
 expect document.querySelector('#rows .row[data-id="r1"] .visual-cell img') === null
 expect document.querySelector('#rows .row[data-id="r1"] .visual-cell .video-embed-card') === null
-wait Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf("Pictures and videos don't go in the script") === 0; })
+wait Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf('Picture and video attached to scene 1') === 0; })
 # only a picture: nothing goes in
 eval selectText(cell('r1', 'visualText'), '', 'end')
 eval clip('paste', cell('r1', 'visualText'), { 'text/html': '<img src="' + PIC + '">' }).prevented
 sleep 200
 expect st('r1', 'visualText') === 'one see  here '
-expect JSON.stringify(F.state()).indexOf('data-blob') === -1
+expect st('r1', 'visualText').indexOf('data-blob') === -1
 
 # ---- 5. a drop goes in through the model -----------------------------------
 eval (function(){ var el = cell('r3', 'visualText'); el.scrollIntoView({ block: 'center' }); var r = el.getBoundingClientRect(); var dt = new DataTransfer(); dt.setData('text/html', '<b>dropped</b><img src="' + PIC + '">'); dt.setData('text/plain', 'dropped'); var ev = new DragEvent('drop', { bubbles: true, cancelable: true, clientX: r.right - 4, clientY: r.bottom - 4, dataTransfer: dt }); el.dispatchEvent(ev); return ev.defaultPrevented; })()

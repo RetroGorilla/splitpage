@@ -5,7 +5,8 @@
  * A copy never carries a comment. A cut does, tagged with a nonce only the
  * tab that cut knows, and a paste keeps comment marks only from HTML
  * carrying that tab's live nonce, for comments the document still has.
- * Pictures and video cards never land in a script cell. A pasted b-roll
+ * Pictures and video cards never land in a script cell; since #124 they
+ * are listed to be attached to the scene as comments. A pasted b-roll
  * key gets an id of its own unless nothing in the document has its id.
  * The live half — a real ClipboardEvent, the undo entry, the comment card
  * following its words, the b-roll list — is browser suite
@@ -15,7 +16,8 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments
+  attachmentComment, brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments,
+  videoLink, videoLinksInText
 } from "../js/05c-clipboard.js";
 import { commentIds, fromHtml, projection, sliceCell, toHtml } from "../js/04c-doc-model.js";
 
@@ -100,6 +102,49 @@ test("a Google Docs fragment's font-weight:normal wrapper cancels its own <b>, n
     '<span style="font-style:italic;font-weight:400;">GITAL</span></b>';
   const got = cellFromClipboard(html, "ignored", {});
   assert.equal(toHtml(got.cell), "<strong>GBOLD</strong> plain <em>GITAL</em>");
+});
+
+test("what a paste attaches to its scene (#124): video links, cards, <video>, pictures", () => {
+  assert.equal(videoLink("https://www.youtube.com/watch?v=abc"), "https://www.youtube.com/watch?v=abc");
+  assert.equal(videoLink("https://youtu.be/abc"), "https://youtu.be/abc");
+  assert.equal(videoLink("https://player.vimeo.com/video/1"), "https://player.vimeo.com/video/1");
+  assert.equal(videoLink("https://example.com/clip.MP4"), "https://example.com/clip.MP4");
+  assert.equal(videoLink("https://example.com/page"), null);
+  assert.equal(videoLink("https://notyoutube.com/x"), null);
+  assert.equal(videoLink("javascript:alert(1)//youtube.com"), null);
+  /* a bare link is the attachment; one inside words stays in them */
+  assert.deepEqual(videoLinksInText("  https://youtu.be/abc \n"), { text: "", links: ["https://youtu.be/abc"] });
+  assert.deepEqual(videoLinksInText("see https://youtu.be/abc."), { text: "see https://youtu.be/abc.", links: ["https://youtu.be/abc"] });
+  assert.deepEqual(videoLinksInText("see https://example.com"), { text: "see https://example.com", links: [] });
+  /* HTML: a card, a link whose words are its address, and a <video> go;
+     a link on other words keeps them; each video once */
+  const got = cellFromClipboard(
+    "Before <a class=\"video-embed-card\" href=\"https://vimeo.com/1\">Watch video</a>" +
+    "<a href=\"https://youtu.be/abc\">youtu.be/abc</a> <a href=\"https://youtu.be/abc\">the take</a> " +
+    "<video src=\"https://cdn.example.com/a.webm\"></video><img src=\"https://example.com/p.png\"> after", "", {});
+  assert.equal(projection(got.cell), "Before  the take  after");
+  assert.deepEqual(got.attach, [
+    { kind: "video", href: "https://vimeo.com/1" },
+    { kind: "video", href: "https://youtu.be/abc" },
+    { kind: "video", href: "https://cdn.example.com/a.webm" }
+  ]);
+  assert.equal(got.lost, 1);
+  /* a link alone in the HTML, with its address as the plain text: nothing in the cell */
+  const bare = cellFromClipboard("<a href=\"https://youtu.be/abc\">https://youtu.be/abc</a>", "https://youtu.be/abc", {});
+  assert.equal(projection(bare.cell), "");
+  assert.deepEqual(bare.attach, [{ kind: "video", href: "https://youtu.be/abc" }]);
+  /* skipImages: the files carry the picture */
+  assert.equal(cellFromClipboard("<img src=\"https://example.com/p.png\">x", "", { skipImages: true }).lost, 0);
+  /* the comment: on the scene column, by the person, a card or a named file */
+  const c = attachmentComment("r1", "audioText", { kind: "video", href: "https://youtu.be/abc" }, "Ann", "2026-09-23T00:00:00.000Z");
+  assert.equal(c.rowId, "r1");
+  assert.equal(c.field, "audioText");
+  assert.equal(c.author, "Ann");
+  assert.equal(c.anchorId, c.id);
+  assert.ok(c.body.indexOf('class="video-embed-card"') !== -1 && c.body.indexOf('href="https://youtu.be/abc"') !== -1);
+  const f = attachmentComment("r1", "visualText", { kind: "videoFile", name: "<b>take</b>.mp4", size: 3 * 1048576 }, "Ann", "x");
+  assert.equal(f.body.indexOf("<b>"), -1);
+  assert.ok(f.body.indexOf("&lt;b&gt;take&lt;/b&gt;.mp4</strong> (3.0 MB)") !== -1);
 });
 
 test("plain text goes in as typing, a line break as a line break", () => {
