@@ -311,6 +311,27 @@ test("the teleprompter's Open in browser takes no argument, from the app page on
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
+/* Issue #8, the same contract again (invariant #45): the page asks whether
+   it can listen, to start and to stop — for itself — and names nothing: no
+   executable, no script, no argument, no language. What it hears comes
+   back on one receive row, to the app page only. */
+test("Follow My Voice takes no argument, from the app page only", () => {
+  for (const name of ["splitpage:voice-status", "splitpage:voice-start", "splitpage:voice-stop"]) {
+    const row = channelFor(name, "invoke");
+    assert.ok(row, name + " declared");
+    assert.deepEqual([...row.argsSchema], [], name);
+    assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN], name);
+    assert.equal(checkArgs(row.argsSchema, []), null, name);
+    assert.ok(checkArgs(row.argsSchema, ["powershell.exe"]), name + ": an executable");
+    assert.ok(checkArgs(row.argsSchema, ["C:\\evil.ps1"]), name + ": a script path");
+    assert.ok(checkArgs(row.argsSchema, [{ lang: "en-US" }]), name + ": options");
+    assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === name), name + ": never the tab strip's");
+  }
+  const events = channelFor("splitpage:voice-event", "receive");
+  assert.ok(events, "voice-event declared");
+  assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
+});
+
 /* Issue #10 is the same contract a third time: main holds the OAuth
    listener and the tokens, so signing in, signing out and asking for status
    name nothing, and the Drive calls name a Drive id or an upload request —

@@ -1192,6 +1192,7 @@ bytes, #82 — nothing deletes them yet, D4).
     cap (which evicts oldest-first, never a document's newest snapshot),
     and list which documents have history — it cannot name a file or reach
     anything outside that folder.
+    Follow My Voice (#8) is the sixth: invariants #45–#47.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -1264,7 +1265,26 @@ bytes, #82 — nothing deletes them yet, D4).
     stop-sharing prompt; Windows session-end asks neither and discards
     nothing.** `desktop-state.json` is written durably through one queue.
 
-<!-- #45–#47: voice helper invariants, added with the V track -->
+45. **The page can only ask the voice listener to start or stop, for
+    itself.** `splitpage:voice-status`, `voice-start` and `voice-stop` take
+    no argument (invariant #28's rule). Main alone builds the command line —
+    Windows' own `powershell.exe` from `%SystemRoot%`, running
+    `voice/listen.ps1` from APP_ROOT — and the script takes no arguments and
+    reads nothing but stdin. A compromised page can at worst turn the
+    microphone listener on for its own tab, which the voice button does
+    anyway. Under `SPLITPAGE_TEST=1` the real listener never runs: only the
+    fake named by `SPLITPAGE_TEST_VOICE_HELPER`, or nothing.
+46. **What the listener says is rebuilt before the page sees it.**
+    `parseHelperLine` (`desktop/voice-helper.js`) keeps a type from a fixed
+    list, a capped `text`, a short lower-case `code` or a culture name, and
+    drops everything else; main adds the session number and sends it to the
+    tab that owns the session, no other. The page uses `text` as words to
+    match, never as markup.
+47. **One listener at a time, and it never outlives its tab or the app.**
+    One microphone: a second tab starting takes it over, and the first is
+    told (`end`, reason `taken`) rather than left to restart. `forgetTab`
+    and quit end the session; the script exits when its stdin closes, so
+    even a main-process crash stops it listening.
 
 48. **An exported bundle contains no key matching
     `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, asserted
@@ -1385,6 +1405,7 @@ evaluation order via `_entry.js`):
 | `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
+| `desktop/voice-helper.js` | Follow My Voice's listener process (#8): runs `desktop/voice/listen.ps1` with Windows' `powershell.exe`, rebuilds each JSON line it prints, one session at a time (#45–#47) |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
 | `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
@@ -1466,9 +1487,10 @@ can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 Longer-range sequencing and the pending decisions for Adam are
 tracked in the plan file, not here:
 `C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Follow My Voice on
-desktop is paused pending a fresh look (parked files under
-`.cache/voice-parked/`, plan companion `breezy-booping-toucan-VL.md` for an
-opt-in local model, not yet approved). Google Drive via loopback OAuth is
+desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
+`desktop/voice/listen.ps1`, driven by `desktop/voice-helper.js` (main.js
+§ 9d, invariants #45–#47); it has never heard a real voice from an agent
+session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3. Google Drive via loopback OAuth is
 built (#10, §3.13) and tested against a fake Google; it has never signed in
 to the real one, because that needs a Desktop-type OAuth client ID from a
 Google Cloud project only Adam can create — the by-hand check is in

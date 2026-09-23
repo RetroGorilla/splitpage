@@ -46,6 +46,10 @@ const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./pr
    request. Plain Node, no Electron, in electron-builder.yml's `files` for
    the same reason drafts.js is. */
 const { createGoogleDrive } = require("./google-drive");
+/* desktop/voice-helper.js: Follow My Voice's listener process on Windows
+   (issue #8, section 9d). Plain Node, no Electron, in electron-builder.yml's
+   `files` for the same reason drafts.js is. */
+const { createVoiceHelper } = require("./voice-helper");
 /* desktop/blob-store.js: the content-addressed blob folder images live in
    since issue #82 (section 8c) — <userData>/blobs, named by SHA-256. Plain
    Node, no Electron, in electron-builder.yml's `files` for the same reason
@@ -2299,9 +2303,10 @@ function runUpdateInstaller() {
 /* ---------------------------------------------------------------------
  * 9b. The teleprompter, in the browser (issue #86).
  *
- *     Follow My Voice needs the Web Speech API, which fails inside Electron
- *     (#8) and works in Chrome and Edge. So the teleprompter can hand the
- *     script to the default browser, starting straight in the prompter.
+ *     The browser build's Follow My Voice needs the Web Speech API, which
+ *     fails inside Electron and works in Chrome and Edge. Windows has its own
+ *     recogniser now (section 9d); everywhere, the teleprompter can also hand
+ *     the script to the default browser, starting straight in the prompter.
  *     The desktop tab stays open and stays the place the script is edited;
  *     the browser is a copy to read from.
  *
@@ -2484,6 +2489,74 @@ function googleDriveInstance() {
     });
   }
   return googleDrive;
+}
+
+/* ---------------------------------------------------------------------
+ * 9d. Follow My Voice on desktop (issue #8).
+ *
+ *     The Web Speech API fails inside Electron (section 9b says why), so on
+ *     Windows the teleprompter listens through Windows' own recogniser
+ *     instead: desktop/voice/listen.ps1, run by the system's powershell.exe,
+ *     one process per listening session, driven by desktop/voice-helper.js.
+ *
+ *     THE SAME CONTRACT AS THE UPDATE BRIDGE (invariant #28, and #45-#47).
+ *     voice-status, voice-start and voice-stop take no argument. The page
+ *     never names the executable, the script, an argument or a language;
+ *     main builds the one command line below from its own constants. What
+ *     comes back (splitpage:voice-event, to the calling tab only) is rebuilt
+ *     field by field in voice-helper.js: a type, a session number, and a
+ *     capped text, a short code or a culture name.
+ *
+ *     WHERE IT IS AVAILABLE. Windows with powershell.exe where Windows puts
+ *     it. Anywhere else voice-status answers {available:false} and the
+ *     teleprompter keeps offering Present in Browser (section 9b).
+ *
+ *     TEST MODE. Under SPLITPAGE_TEST=1 the real listener never runs.
+ *     SPLITPAGE_TEST_VOICE_HELPER names a Node script to run instead (with
+ *     this binary as Node), so smoke.mjs can drive start, events, stop,
+ *     take-over and tab close on any platform without a microphone; without
+ *     it, voice is unavailable and the teleprompter offers the browser.
+ * --------------------------------------------------------------------- */
+
+const VOICE_SCRIPT = app.isPackaged
+  ? path.join(APP_ROOT, "voice", "listen.ps1")
+  : path.join(__dirname, "voice", "listen.ps1");
+
+function voiceCommand() {
+  /* An automated run never opens the real microphone, on any platform
+     (invariant #33): it listens through the fake or not at all. */
+  if (TEST_MODE) {
+    if (!process.env.SPLITPAGE_TEST_VOICE_HELPER) return null;
+    return {
+      file: process.execPath,
+      args: [process.env.SPLITPAGE_TEST_VOICE_HELPER],
+      env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: "1" })
+    };
+  }
+  if (process.platform !== "win32") return null;
+  const systemRoot = process.env.SystemRoot || process.env.windir || "C:\\Windows";
+  const powershell = path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  if (!fs.existsSync(powershell) || !fs.existsSync(VOICE_SCRIPT)) return null;
+  return {
+    file: powershell,
+    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", VOICE_SCRIPT],
+    env: process.env
+  };
+}
+
+let voiceHelper = null;
+function voiceHelperInstance() {
+  if (!voiceHelper) {
+    voiceHelper = createVoiceHelper({
+      command: voiceCommand,
+      onEvent: (tabId, event) => {
+        const tab = tabs.get(tabId);
+        if (!tab || !tab.view || tab.view.webContents.isDestroyed()) return;
+        try { tab.view.webContents.send("splitpage:voice-event", event); } catch { /* going away */ }
+      }
+    });
+  }
+  return voiceHelper;
 }
 
 /* ---------------------------------------------------------------------
@@ -3010,6 +3083,8 @@ function forgetTab(tabId) {
   tabs.delete(tabId);
   /* A tab's browser copy of its script (section 9b) goes with the tab. */
   if (prompterShare) prompterShare.revoke(tabId);
+  /* So does its microphone listener (section 9d), if it had one. */
+  if (voiceHelper) voiceHelper.forget(tabId);
   const w = windowsById.get(tab.windowId);
   if (w) {
     const i = w.tabIds.indexOf(tabId);
@@ -4127,8 +4202,10 @@ function buildMenu() {
       { label: "Comments", accelerator: "CmdOrCtrl+Alt+C", click: () => sendMenuCommand("toggle-comments") },
       { label: "Write", click: () => sendMenuCommand("write") },
       { label: "Present", click: () => sendMenuCommand("present") },
-      /* Issue #86: Follow My Voice runs in Chrome/Edge and not in here (#8),
-         so this reads the same script from the default browser. The page
+      /* Issue #86: reads the same script from the default browser, where
+         Chrome/Edge's Follow My Voice works — the way to follow a voice on a
+         desktop without Windows' recogniser (section 9d), and an option
+         everywhere. The page
          decides whether it needs saving first (20f-desktop.js); main decides
          what URL that is (section 9b). This menu bar is never drawn on
          Windows (titleBarStyle "hidden": the tab strip is the title bar), so
@@ -4625,6 +4702,24 @@ function registerIpc() {
      from the calling tab's own record what that is and where it lives. */
   ipcHandle("splitpage:prompter-open-in-browser", async (event) => {
     return openPrompterInBrowser(tabOf(event));
+  });
+
+  /* ---- Follow My Voice (section 9d, issue #8) --------------------------
+     No argument either: the page asks whether it can listen, to start
+     listening and to stop, and main decides what runs. Start and stop act
+     for the calling tab only; events go back to that tab alone. */
+  ipcHandle("splitpage:voice-status", async () => {
+    return { available: voiceHelperInstance().available() };
+  });
+  ipcHandle("splitpage:voice-start", async (event) => {
+    const tab = tabOf(event);
+    if (!tab) return { ok: false, code: "NO_TAB" };
+    return voiceHelperInstance().start(tab.id);
+  });
+  ipcHandle("splitpage:voice-stop", async (event) => {
+    const tab = tabOf(event);
+    if (!tab) return { ok: true };
+    return voiceHelperInstance().stop(tab.id);
   });
 
   /* ---- Google Drive (section 9c, issue #10) ---------------------------
@@ -5336,6 +5431,10 @@ function registerIpc() {
            never a token or a script. */
         case "prompterShareStatus":
           return prompterShare ? prompterShare.status() : { listening: false, port: null, shares: [] };
+        /* Follow My Voice's listener (section 9d): whether one is running,
+           for which tab, its session and how many have started this run. */
+        case "voiceStatus":
+          return voiceHelperInstance().status();
         /* Google Drive (section 9c): which safeStorage backend this run got
            and which token endpoint the client is pointed at — never a token. */
         case "driveInfo": {
@@ -5551,6 +5650,9 @@ app.on("will-quit", () => {
      process's memory; closing the listener here is tidiness, not cleanup —
      there is nothing on disk to remove, on this path or on a crash. */
   if (prompterShare) prompterShare.closeAll();
+  /* The microphone listener (section 9d) stops with the app. Its stdin
+     closing would stop it anyway once this process is gone. */
+  if (voiceHelper) voiceHelper.stopAll();
   /* A Google sign-in still waiting for its browser callback (section 9c):
      close its loopback listener with the app. The tokens need nothing —
      the access token was only ever in memory, the refresh token is already
