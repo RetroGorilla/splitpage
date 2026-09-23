@@ -82,3 +82,23 @@ test("missingStateFields names what is actually absent", () => {
   assert.deepEqual(missingStateFields(null).sort(),
     STATE_FIELDS.filter((f) => f.def).map((f) => f.key).sort());
 });
+
+test("a b-roll shot keeps every field it has — props too — through a merge and a save", () => {
+  /* The same failure one level down (#149): a field on a shot record that
+     the list merge or the file does not carry is lost the same way a
+     top-level one was. mergeBrollShots clones a shot whole, and folds the
+     other side's copy into it field by field — props through its own set
+     merge — so every key migrateRows gives a shot has to come out of it. */
+  const doc = () => migrateRows({
+    productionTags: [{ cat: "prop", name: "Kettle" }],
+    brollShots: [{ id: "b1", name: "Rooftop", props: [{ name: "Kettle" }, { name: "Tarp" }] }]
+  });
+  const shotKeys = Object.keys(doc().brollShots[0]).sort();
+  assert.ok(shotKeys.includes("props"));
+  const merged = mergeStates(doc(), doc(), doc()).merged.brollShots[0];
+  assert.deepEqual(Object.keys(merged).sort(), shotKeys);
+  assert.deepEqual(merged.props, doc().brollShots[0].props);
+  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(doc()))).brollShots[0];
+  assert.deepEqual(Object.keys(round).sort(), shotKeys);
+  assert.deepEqual(round.props, doc().brollShots[0].props);
+});
