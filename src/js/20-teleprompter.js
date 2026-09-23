@@ -11,6 +11,7 @@ import {
   setTagOwner
 } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
+import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
 import { ONBOARD_KEY } from "./20b-onboarding.js";
@@ -1028,6 +1029,15 @@ function startPrompterLaunch(launch) {
   });
 }
 
+/* A review session (#30) draws the owner disabled and the notes read-only
+   and draws no rename or add-person box (08-production-panels.js); these
+   handlers refuse them anyway, as the click guard refuses a forced button
+   (21-events.js REVIEW_SAFE_ACTIONS), and redraw the card as it was. */
+function isTagField(t) {
+  return !!t.classList && (t.classList.contains("tag-owner-select") || t.classList.contains("tag-notes-input") ||
+    t.classList.contains("tag-rename-input") || t.classList.contains("tag-person-input"));
+}
+
 /* Shared by every panel that renders tagEntityHtml() cards. The card's own
    buttons (status pill, expand, rename, remove/delete) are all data-action
    and already work from any container through onRootClick — this wires
@@ -1040,6 +1050,13 @@ export function wireTagEntityContainer(id) {
   el.addEventListener("click", onRootClick);
   el.addEventListener("keydown", function (e) {
     if (!e.target.classList) return;
+    if (reviewMode() && e.key === "Enter" &&
+        (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input"))) {
+      e.preventDefault();
+      reviewBlocked();
+      renderProduction();
+      return;
+    }
     if (e.target.classList.contains("tag-rename-input")) {
       if (e.key === "Enter") { e.preventDefault(); saveTagRename(e.target.getAttribute("data-key")); }
       else if (e.key === "Escape") { e.preventDefault(); S.tagRenaming = null; renderProduction(); }
@@ -1051,11 +1068,19 @@ export function wireTagEntityContainer(id) {
     }
   });
   el.addEventListener("change", function (e) {
+    if (reviewMode()) {
+      if (isTagField(e.target)) { reviewBlocked(); renderProduction(); }
+      return;
+    }
     if (e.target.classList && e.target.classList.contains("tag-owner-select")) {
       setTagOwner(e.target.getAttribute("data-key"), e.target.value);
     }
   });
   el.addEventListener("input", function (e) {
+    if (reviewMode()) {
+      if (isTagField(e.target)) { reviewBlocked(); renderProduction(); }
+      return;
+    }
     if (e.target.classList && e.target.classList.contains("tag-notes-input")) {
       setTagNotes(e.target.getAttribute("data-key"), e.target.value);
     }
@@ -1063,6 +1088,7 @@ export function wireTagEntityContainer(id) {
   /* notes save continuously as you type (see setTagNotes); the autosave is
      held until you leave the box so it isn't queued on every keystroke */
   el.addEventListener("focusout", function (e) {
+    if (reviewMode()) return;
     if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
   });
 }
