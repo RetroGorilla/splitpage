@@ -7,7 +7,7 @@ import {
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
 import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
-import { render, setGalleryIndex, syncFieldFromDom } from "./05-render.js";
+import { render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
@@ -376,7 +376,7 @@ export function handleImageFile(rowId, file, slot) {
     var replacing = typeof slot === "number";
     galleryEdit(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
       if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
-      setGalleryIndex(rowId, replacing ? slot : addGalleryPicture(row, rec, file.name));
+      if (!replacing) addGalleryPicture(row, rec, file.name);
       return true;
     });
   }).catch(function () { showToast("Could not use that image.", "error"); });
@@ -385,9 +385,7 @@ export function handleImageFile(rowId, file, slot) {
 /* Takes one slot of the gallery away — its picture and its caption. */
 export function removeImage(rowId, slot) {
   galleryEdit(rowId, "Picture removed", function (row) {
-    if (!removeGallerySlot(row, slot || 0)) return false;
-    setGalleryIndex(rowId, Math.max(0, (slot || 0) - 1));
-    return true;
+    return removeGallerySlot(row, slot || 0);
   });
 }
 

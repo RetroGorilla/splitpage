@@ -27,9 +27,11 @@ import { normalizeImageRef } from "../../shared/blob-policy.js";
    the row for the first, `name` on an item for the rest — shown in the
    gallery's dialog; a pasted one has none.
 
-   The first slot may have links and no picture: a video pasted into a
-   scene with no picture gets a placeholder there. Every slot after it has
-   a picture. migrateRows (02-state.js) calls migrateGallery for each row;
+   Every video pasted or dropped into a scene is an item of its own: its
+   link, marked `poster`, and its thumbnail (a video file's first frame) as
+   the item's picture — or no picture, when there is none to be had (a web
+   link), and the gallery draws a placeholder. An item has a picture, a
+   poster link, or both. migrateRows (02-state.js) calls migrateGallery for each row;
    the merge (03-sync.js) merges imageLinks and moreImages as sets
    (mergeGalleryField), so two people adding pictures both keep theirs. */
 
@@ -89,22 +91,32 @@ export function normalizeVideoLinks(list) {
   return out;
 }
 
-/* A further picture: its record — or, in a file, its inline data: URI,
-   the way a row's first picture is carried (inlineStateImages,
-   02c-blobs.js), interned here — and its links. null when it is not one. */
+/* A further item: its picture's record — or, in a file, its inline data:
+   URI, the way a row's first picture is carried (inlineStateImages,
+   02c-blobs.js), interned here — and its links. A video with no thumbnail
+   has no picture, only its poster link. null when it is neither. */
 function normalizeGalleryItem(it) {
   if (!it || typeof it !== "object" || Array.isArray(it)) return null;
   var legacy = safeImageSrc(it.visualImage);
   var rec = legacy ? internDataUrl(legacy) : null;
   if (rec) queuePersist([rec.sha256]);
   var ref = rec || normalizeImageRef(it.imageRef);
-  if (!ref) return null;
-  var out = { imageRef: ref };
-  var name = normalizePictureName(it.name);
-  if (name) out.name = name;
   var links = normalizeVideoLinks(it.links);
+  if (!ref && !links.some(function (l) { return l.poster; })) return null;
+  var out = {};
+  if (ref) out.imageRef = ref;
+  var name = ref ? normalizePictureName(it.name) : "";
+  if (name) out.name = name;
   if (links.length) out.links = links;
   return out;
+}
+
+/* What makes an item the one it is: its picture, else its video. */
+function itemKey(it) {
+  if (!it) return "";
+  if (it.imageRef && it.imageRef.sha256) return it.imageRef.sha256;
+  var poster = (Array.isArray(it.links) ? it.links : []).filter(function (l) { return l && l.poster; })[0];
+  return poster ? "v:" + videoLinkKey(poster) : "";
 }
 
 /* migrateRows' part: the row's first picture is already settled (its
@@ -117,17 +129,18 @@ export function migrateGallery(r) {
   var links = normalizeVideoLinks(r.imageLinks);
   if (links.length) r.imageLinks = links; else delete r.imageLinks;
   var seen = {};
-  if (r.imageRef && r.imageRef.sha256) seen[r.imageRef.sha256] = true;
+  var firstKey = itemKey({ imageRef: r.imageRef, links: r.imageLinks });
+  if (firstKey) seen[firstKey] = true;
   var more = [];
   (Array.isArray(r.moreImages) ? r.moreImages : []).forEach(function (x) {
     var it = normalizeGalleryItem(x);
-    if (!it || seen[it.imageRef.sha256] || more.length >= MAX_MORE) return;
-    seen[it.imageRef.sha256] = true;
+    if (!it || seen[itemKey(it)] || more.length >= MAX_MORE) return;
+    seen[itemKey(it)] = true;
     more.push(it);
   });
   if (!r.imageRef && !r.imageLinks && more.length) {
     var first = more.shift();
-    r.imageRef = first.imageRef;
+    r.imageRef = first.imageRef || null;
     if (first.name) r.imageName = first.name;
     if (first.links) r.imageLinks = first.links;
   }
@@ -151,13 +164,21 @@ export function rowSlots(row) {
                name: img && typeof row.imageName === "string" ? row.imageName : "" });
   }
   (Array.isArray(row.moreImages) ? row.moreImages : []).forEach(function (it) {
-    var ref = it && normalizeImageRef(it.imageRef);
-    if (ref) out.push({ ref: ref, dataUrl: null, links: Array.isArray(it.links) ? it.links : [], name: typeof it.name === "string" ? it.name : "" });
+    if (!it || typeof it !== "object") return;
+    var ref = normalizeImageRef(it.imageRef);
+    var itLinks = Array.isArray(it.links) ? it.links : [];
+    if (!ref && !itLinks.some(function (l) { return l && l.poster; })) return;
+    out.push({ ref: ref, dataUrl: null, links: itLinks, name: ref && typeof it.name === "string" ? it.name : "" });
   });
   return out;
 }
 
-/* How many pictures (and placeholders) the scene's gallery shows. */
+/* Whether a slot is a video's tile. */
+function isVideoSlot(s) {
+  return s.links.some(function (l) { return l.poster; });
+}
+
+/* How many pictures and videos the scene's gallery shows. */
 export function gallerySize(row) {
   return rowSlots(row).length;
 }
@@ -192,8 +213,8 @@ export function rowVideoLinks(row) {
 function copy(v) { return JSON.parse(JSON.stringify(v)); }
 
 /* Writes `slots` ({ref, links, name}) back as the row's keys — empty ones
-   are left out. A slot after the
-   first with no picture has nowhere to go and is dropped. */
+   are left out. A slot after the first with neither a picture nor a video
+   is nothing, and is dropped. */
 export function setRowSlots(row, slots) {
   delete row.visualImage;
   var first = slots[0] || null;
@@ -202,9 +223,10 @@ export function setRowSlots(row, slots) {
   if (first && first.links && first.links.length) row.imageLinks = copy(first.links); else delete row.imageLinks;
   var more = [];
   slots.slice(1).forEach(function (s) {
-    if (!s || !s.ref) return;
-    var it = { imageRef: copy(s.ref) };
-    if (s.name) it.name = s.name;
+    if (!s || (!s.ref && !isVideoSlot(s))) return;
+    var it = {};
+    if (s.ref) it.imageRef = copy(s.ref);
+    if (s.ref && s.name) it.name = s.name;
     if (s.links && s.links.length) it.links = copy(s.links);
     more.push(it);
   });
@@ -218,7 +240,7 @@ function slotsOf(row) {
 }
 
 /* Adds a picture (a record) to the row: into an empty first slot — no
-   picture yet, whatever its caption — or after the others. A picture the
+   picture and no video of its own — or after the others. A picture the
    gallery already shows is not added twice. Returns the slot it is in. */
 export function addGalleryPicture(row, ref, name) {
   var slots = slotsOf(row);
@@ -228,33 +250,37 @@ export function addGalleryPicture(row, ref, name) {
   var at;
   name = normalizePictureName(name);
   if (!slots.length) { slots.push({ ref: ref, links: [], name: name }); at = 0; }
-  else if (!slots[0].ref) { slots[0].ref = ref; slots[0].name = name; at = 0; }
+  else if (!slots[0].ref && !isVideoSlot(slots[0])) { slots[0].ref = ref; slots[0].name = name; at = 0; }
   else { slots.push({ ref: ref, links: [], name: name }); at = slots.length - 1; }
   setRowSlots(row, slots);
   return at;
 }
 
-/* Adds a video's link. An empty gallery gets a first slot for it, whose
-   picture is `poster` (a record: a local file's first frame) or none — a
-   placeholder — and the link is marked as that picture's video. Otherwise
-   the link goes on the caption of slot `at` (the one last added or
-   picked) with no thumbnail: the picture there stays the picture. Returns the slot. */
-export function addGalleryVideo(row, link, at, poster) {
+/* Adds a video: an item of its own after the others (the cover when the
+   gallery is empty), its link marked as its `poster`, its picture
+   `poster` (a record: a local file's first frame) or none — a
+   placeholder. A video the gallery already has is not added twice.
+   Returns its slot, or -1 when the link is not one. */
+export function addGalleryVideo(row, link, poster) {
   var l = normalizeVideoLink(link);
   if (!l) return -1;
-  delete l.poster;
+  l.poster = true;
+  var key = videoLinkKey(l);
   var slots = slotsOf(row);
-  if (!slots.length) {
-    l.poster = true;
-    slots.push({ ref: poster || null, links: [l] });
+  for (var i = 0; i < slots.length; i++) {
+    if (slots[i].links.some(function (x) { return videoLinkKey(x) === key; })) return i;
+  }
+  var slot = { ref: poster || null, links: [l], name: "" };
+  if (slots.length === 1 && !slots[0].ref && !isVideoSlot(slots[0])) {
+    /* a first slot holding only caption links: the video takes it */
+    slot.links = slots[0].links.concat([l]);
+    slots[0] = slot;
     setRowSlots(row, slots);
     return 0;
   }
-  var i = at >= 0 && at < slots.length ? at : 0;
-  var key = videoLinkKey(l);
-  if (!slots[i].links.some(function (x) { return videoLinkKey(x) === key; })) slots[i].links.push(l);
+  slots.push(slot);
   setRowSlots(row, slots);
-  return i;
+  return slots.length - 1;
 }
 
 /* Replaces slot i's picture, keeping its caption. */
@@ -339,7 +365,6 @@ function mergeSet(base, mine, theirs, key, both) {
   return out;
 }
 
-function itemKey(it) { return it && it.imageRef ? it.imageRef.sha256 : ""; }
 
 /* The merged value of row field f ("imageLinks" or "moreImages") for
    base b (or null), mine m and theirs t — undefined when empty, so the

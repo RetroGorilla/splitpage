@@ -9,7 +9,7 @@ import {
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
-import { gallerySize, rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
+import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import {
@@ -222,23 +222,7 @@ function rowGutterHtml(row, index, review) {
    link is its `poster` is a video's tile: a play badge, and its length on
    the cover when known. Under the mosaic, one line per video link, at
    most three, then "+N more videos". Everything here is .scene-gallery*;
-   its styles are one block of app.css.
-
-   galleryIndex is the slot last added or picked in the dialog — a view
-   setting, never the document's: where a video pasted into a scene that
-   has pictures puts its link. */
-var galleryIndex = {};
-
-export function galleryIndexOf(row) {
-  var n = gallerySize(row);
-  var i = galleryIndex[row.id] || 0;
-  return n ? Math.max(0, Math.min(n - 1, i)) : 0;
-}
-
-export function setGalleryIndex(rowId, i) {
-  galleryIndex[rowId] = i;
-}
-
+   its styles are one block of app.css. */
 var GALLERY_CELL_MAX = 4;
 var GALLERY_CAPTION_MAX = 3;
 
