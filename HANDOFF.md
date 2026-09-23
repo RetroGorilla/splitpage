@@ -1450,7 +1450,7 @@ bytes, #82 — nothing deletes them yet, D4).
 
 ## 6. Map of the source
 
-`src/js/` (43 modules; filenames say where things live, and still set
+`src/js/` (44 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
@@ -1490,6 +1490,7 @@ evaluation order via `_entry.js`):
 | `17-pdf.js` | pdf, packing lists |
 | `18-local-files.js` | `openProjectFile`/`adoptProjectState`, save-back, File menu dispatch |
 | `18a-local-merge.js` | the on-disk conflict modal's "Merge them": the mergeable-file probe, the retained ancestor (`diskBase`), the field-by-field review pane and its word-level diff |
+| `18b-file-menu.js` | the File menu as a dropdown (#145): `toggleFileMenu`, the file card, `refreshFileMenu` (what is offered right now), `setMenuItemReason`/`setMenuItemLabel` (the second line and the label, never the button's textContent), shortcut chips from `data-keys`, submenus opening in place, Open recent, New script (`startNewScript`), the keyboard, and the browser's Ctrl+S / Ctrl+Shift+S / Ctrl+O (the desktop's are main's accelerators) |
 | `19-writer.js` | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | teleprompter and voice follow |
 | `20a-update.js` | update notice (desktop: Download/Install; portable: release-page signpost), desktop-app notice, About box |
@@ -1554,6 +1555,15 @@ other two (alphabetical order) — keeping only one full-screen modal open at
 a time (invariant #19). The wizard's own Escape/Tab handling listens in the
 bubble phase instead, since it can sit open, unnoticed, during an unrelated
 test.
+
+Since #145 the menu is a dropdown (`18b-file-menu.js`), but every item is
+still one `<button data-file-action>` inside `#file-menu`, exactly once — the
+desktop native menu clicks them (`runDesktopMenuCommand`). What an item's
+state is lives on the button (`hidden`, `disabled`, the `.mi-why` second line
+through `setMenuItemReason`), and a label is rewritten through
+`setMenuItemLabel`, never the button's `textContent`, which would take its
+icon with it. Items that are not actions (the Open recent / Import submenu
+parents) carry `data-submenu` instead, so no listener mistakes them for one.
 
 ### Merging main into a branch that has `src/`
 

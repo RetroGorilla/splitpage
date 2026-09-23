@@ -455,7 +455,7 @@ export async function handleImportFile(file) {
   if (!file) return;
   var kind = fileKindFromName(file.name); /* 18-local-files.js */
   if (kind === "splitpage" || kind === "html") {
-    showToast("That is a Splitpage project — open it with File ▸ Open a document…", "warn");
+    showToast("That is a Splitpage project — open it with File ▸ Open…", "warn");
     return;
   }
   if (kind === "docx" || kind === "csv") {
@@ -578,7 +578,7 @@ export function confirmGdocImport() {
     S.DESKTOP.openExternal(url);
     closeGdocModal();
     showToast("Opening the Doc as a .docx download in your browser — once it's in your Downloads " +
-      "folder, use File ▸ Open a document… to bring it in.", "ok", true);
+      "folder, use File ▸ Open… to bring it in.", "ok", true);
     return;
   }
   /* target=_blank rather than a same-tab anchor: a private/unshared doc
@@ -591,7 +591,7 @@ export function confirmGdocImport() {
   if (!win) { showToast("Your browser blocked the download — allow popups for this page and try again.", "warn"); return; }
   win.opener = null;
   closeGdocModal();
-  showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open a document… to bring it in.", "ok", true);
+  showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open… to bring it in.", "ok", true);
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

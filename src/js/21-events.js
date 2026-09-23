@@ -209,12 +209,10 @@ import {
   reloadProjectFromDisk,
   resumeFromHandle,
   saveBackToFile,
-  initFileMenuSections,
-  toggleFileMenu,
-  toggleFileMenuSection,
   tryResumeLastProject
 } from "./18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "./18a-local-merge.js";
+import { toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
 import {
   applyWriterSize,
   caretTextOffset,
@@ -1881,23 +1879,20 @@ function init() {
 
   document.getElementById("btn-file").addEventListener("click", function (e) {
     e.stopPropagation();
-    toggleFileMenu();
+    /* detail 0 is a click the keyboard made (Enter or Space on the
+       button): the menu then opens on its first item (18b-file-menu.js). */
+    toggleFileMenu(undefined, { focusFirst: e.detail === 0 });
   });
   document.getElementById("file-menu").addEventListener("click", function (e) {
-    /* Section headings (issue #51) are plain buttons with no
-       data-file-action, so they never reach handleFileMenuAction() or the
+    /* An item that opens a submenu (Open recent, Import) has no
+       data-file-action, so it never reaches handleFileMenuAction() or the
        other modules' capture-phase listeners on this same element —
-       toggling one is not a File action. */
-    var sectionToggle = e.target.closest(".menu-section-toggle");
-    if (sectionToggle) { toggleFileMenuSection(sectionToggle.getAttribute("data-menu-section")); return; }
+       opening one is not a File action. */
+    var parent = e.target.closest(".mi-parent");
+    if (parent) { toggleSubmenu(parent.getAttribute("data-submenu"), undefined, e.detail === 0); return; }
     var item = e.target.closest("[data-file-action]");
     if (item && !item.disabled) handleFileMenuAction(item.getAttribute("data-file-action"));
   });
-  /* Independent of the document loading — this is a per-device menu
-     preference, not document state — so it is set up right alongside the
-     rest of the File-menu wiring above rather than waiting on
-     initialStateReady below. */
-  initFileMenuSections();
   document.getElementById("file-menu-close").addEventListener("click", function (e) {
     e.stopPropagation();
     toggleFileMenu(false);
@@ -1911,7 +1906,7 @@ function init() {
     if (!e.target.closest(".menu-wrap")) toggleFileMenu(false);
   });
   window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("file-menu").hidden) toggleFileMenu(false);
+    if (e.key === "Escape" && !document.getElementById("file-menu").hidden) toggleFileMenu(false, { returnFocus: true });
   });
   document.getElementById("open-file-input").addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0];
