@@ -11,12 +11,10 @@ import {
 import { loadInitialState } from "./02-state.js";
 import { initDocIdentityChannel, syncDocIdentity } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import { gallerySize, rowSlots, videoLinkKey } from "./02d-gallery.js";
 import {
   SNAPSHOT_KEY,
   cloneState,
   closeHistoryPanel,
-  findRowIndex,
   getEditorName,
   promptForName,
   promptForWpm,
@@ -29,26 +27,25 @@ import {
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
-import { cssAttr, safeHref, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
+import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
   cancelLink,
   cancelVideo,
   confirmLink,
   confirmVideo,
   forgetStalePendingMarks,
-  galleryIndexOf,
   handleToolbarCmd,
   insertLineBreak,
   isScriptCell,
   render,
   renderRow,
-  setGalleryIndex,
   syncFieldFromDom,
   toggleCellFormat,
   typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
+import { openGalleryOverlay } from "./05e-gallery-overlay.js";
 import {
   appendDraftMedia,
   draftRedo,
@@ -71,7 +68,7 @@ import {
   handleImageFile,
   moveRow,
   moveRowTo,
-  openVideoFile,
+  openGalleryLink,
   removeImage,
   removeImageLink,
   setDropMarkerForRow,
@@ -527,7 +524,7 @@ export function onRootClick(e) {
   var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-add-more"], [data-action="image-replace"]');
   if (imgAdd) {
     S.pendingImageRowId = imgAdd.getAttribute("data-id");
-    /* Replace names the slot on screen; the paperclip and Add add (#135) */
+    /* Replace names its slot (a single picture); the paperclip and Add add (#135) */
     pendingImageSlot = imgAdd.getAttribute("data-action") === "image-replace"
       ? Number(imgAdd.getAttribute("data-slot")) || 0 : undefined;
     document.getElementById("file-input").click();
@@ -537,10 +534,15 @@ export function onRootClick(e) {
   var imgRemove = e.target.closest('[data-action="image-remove"]');
   if (imgRemove) { removeImage(imgRemove.getAttribute("data-id"), Number(imgRemove.getAttribute("data-slot")) || 0); return; }
 
-  /* the scene's gallery (#135): step through it, open a caption's video,
-     take a link off */
-  var step = e.target.closest('[data-action="gallery-prev"], [data-action="gallery-next"]');
-  if (step) { stepGallery(step.getAttribute("data-id"), step.getAttribute("data-action") === "gallery-next" ? 1 : -1); return; }
+  /* the scene's gallery (#135): a tile opens its dialog (05e-gallery-
+     overlay.js) at that item, "+N more videos" at its videos; a caption
+     line opens its video; × takes a link off */
+  var tile = e.target.closest('[data-action="gallery-open"], [data-action="gallery-open-videos"]');
+  if (tile) {
+    openGalleryOverlay(tile.getAttribute("data-id"), Number(tile.getAttribute("data-slot")) || 0,
+      tile.getAttribute("data-action") === "gallery-open-videos");
+    return;
+  }
 
   var linkOff = e.target.closest('[data-action="gallery-link-remove"]');
   if (linkOff) {
@@ -560,39 +562,7 @@ export function onRootClick(e) {
    undefined to add one (#135). */
 var pendingImageSlot;
 
-/* One step through a scene's gallery, wrapping at either end; the step
-   button keeps focus across the repaint (paintRow, 05-render.js). */
-function stepGallery(rowId, by) {
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
-  var row = S.state.rows[idx];
-  var n = gallerySize(row);
-  if (n < 2) return;
-  setGalleryIndex(rowId, (galleryIndexOf(row) + by + n) % n);
-  renderRow(rowId);
-}
 
-/* A caption's video, opened: a web address in the browser — the desktop
-   app hands it to the system's (the bridge's openExternal, which takes
-   http(s) only) — and a video file from this session's drop or paste
-   through the desktop bridge, which opens it with its own app only if
-   main granted it (openVideoFile). Everything goes through safeHref. */
-function openGalleryLink(rowId, slot, key) {
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
-  var s = rowSlots(S.state.rows[idx])[slot];
-  var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
-  if (!link) return;
-  if (link.href) {
-    var href = safeHref(link.href);
-    if (!href || !/^https?:\/\//i.test(href)) return;
-    if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(href); return; }
-    var win = window.open(href, "_blank", "noopener");
-    if (win) win.opener = null;
-    return;
-  }
-  openVideoFile(link);
-}
 
 function onRootMouseDown(e) {
   hideTagGhost();
@@ -1060,18 +1030,6 @@ function onRootKeydown(e) {
   if (e.target.matches && e.target.matches(".video-popover input")) {
     if (e.key === "Enter") { e.preventDefault(); confirmVideo(e.target.closest(".field-wrap")); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelVideo(e.target.closest(".field-wrap")); }
-    return;
-  }
-  /* ← / → on any control of a scene's gallery steps through it (#135);
-     the focus stays on the step buttons' side (renderRow keeps it) */
-  var galleryEl = (e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.altKey && !e.ctrlKey && !e.metaKey &&
-    e.target.closest && e.target.closest(".scene-gallery");
-  if (galleryEl) {
-    e.preventDefault();
-    var gid = galleryEl.getAttribute("data-id");
-    stepGallery(gid, e.key === "ArrowRight" ? 1 : -1);
-    var again = document.querySelector('#rows .scene-gallery[data-id="' + cssAttr(gid) + '"] [data-action="gallery-' + (e.key === "ArrowRight" ? "next" : "prev") + '"]');
-    if (again && (!document.activeElement || document.activeElement === document.body)) again.focus({ preventScroll: true });
     return;
   }
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;

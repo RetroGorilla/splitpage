@@ -994,8 +994,9 @@ export async function docxToRows(file) {
       var mrec = await pictureAt(pendingMore[mi]);
       if (mrec) more.push({ imageRef: mrec });
     }
+    /* each video is an item of its own, after the pictures (#135) */
+    (pendingLinks || []).forEach(function (l) { more.push({ links: [Object.assign({}, l, { poster: true })] }); });
     if (more.length) rows[ri].moreImages = more;
-    if (pendingLinks) rows[ri].imageLinks = pendingLinks;
   }
 
   return { title: title, rows: rows, looseText: "" };

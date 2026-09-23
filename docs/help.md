@@ -39,10 +39,10 @@ beta copy is offered it like any other update.
   **Image section** ("Picture added to scene 4", with Undo). A picture
   already in a cell moves into a comment on that scene. Cutting text moves
   its comment with it.
-- **A scene can hold several pictures.** Its Image section shows them one at
-  a time — ‹ and › (or ← →) step through them — with a small caption under
-  each holding its video links. A video pasted into a scene with no picture
-  gets a thumbnail there (a video file's first frame, or a placeholder).
+- **A scene can hold several pictures and videos.** Its Image section shows
+  the first as a large cover with the next ones beside it and a **+N** tile
+  for the rest, and one line per video underneath. Click any of them for
+  the whole set: reorder, make one the cover, remove, add.
 - **Follow My Voice in the desktop app** through Windows' own speech
   recognition, or **Present in browser** to run the teleprompter in any
   browser, Firefox included — the desktop app does the listening. **Use
@@ -735,26 +735,33 @@ changes the label and the tracked item together.
 **Reference images.** The small **📎 Image** link at the top of a scene's
 visual column attaches a still — or just drag an image file from your desktop
 anywhere onto that column and drop it. A scene can hold several: each one you
-add goes beside the others, and the Image section shows them one at a time,
-with **‹ ›** and a count (or ← and → once one of its buttons has focus). Hover
-a picture for **Add**, **Replace** and **Remove** — Replace and Remove act on
-the picture on screen. A comment can carry a picture too (**🖼 Image** in the
-comment box).
+add goes beside the others. With one, hover it for **Add**, **Replace** and
+**Remove**. With more, the first is a large cover with the next two or three
+beside it; a **+N** tile, showing the next one dimmed, stands for the rest.
+A video's tile has a ▶ badge (and its length on the cover, when known).
+
+Click any tile for the scene's whole gallery: a large preview with **‹ ›**,
+**Open** for a video, **Make cover** and **Remove**, and every item numbered
+below it — a dashed line marks which ones the scene shows before **+N**.
+Drag a tile to reorder, or pick one and press Shift+← / Shift+→; ← and →
+pick, Delete removes, Esc closes, and the **+** tile adds a picture. Each
+change is one Ctrl+Z, and its toast has **Undo**. A comment can carry a
+picture too (**🖼 Image** in the comment box).
 
 Pasting or dropping a picture, a video link (YouTube, Vimeo, Loom and the
 like) or a video file into a scene's words — or dropping it on the Image
 section — puts it in that scene's Image section, and a toast says so with
 **Undo**; the words that came with it go in as usual, and one Ctrl+Z takes
-back both. A picture is added beside any already there. A video's link goes
-in the small caption under a picture, not in your words: into a scene with
-no picture it brings a thumbnail of its own — a video file's first frame, or
-a plain video placeholder for a web link (Splitpage doesn't fetch pictures
-from video sites) — and into a scene that has one it is added under the
-picture on screen. Click a link, or a video's thumbnail, to open it: a web
-link in your browser; a video file in its own app, in the desktop app, as
-long as you dropped or pasted it since Splitpage started (the script keeps
-only its name, never the file or where it is). Hover a link for **×** to
-take it off. A picture that was copied only as a link to a web page can't
+back both. Each picture and each video is added after the ones already
+there. A video goes in the Image section, not in your words, as a tile of
+its own with a ▶ badge: its thumbnail is a video file's first frame, or a
+plain placeholder for a web link (Splitpage doesn't fetch pictures from
+video sites). Every video also gets a line under the pictures — up to three,
+then **+N more videos**. Click a line (or **Open** in the gallery) to open
+it: a web link in your browser; a video file in its own app, in the desktop
+app, as long as you dropped or pasted it since Splitpage started (the
+script keeps only its name, never the file or where it is). Hover a line
+for **×** to take it off. A picture that was copied only as a link to a web page can't
 be kept; save it and paste or drop the file instead.
 
 **Where pictures are kept.** The script itself only names each picture; the

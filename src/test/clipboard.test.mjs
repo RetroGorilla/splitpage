@@ -138,33 +138,31 @@ test("what a paste attaches to its scene (#124): video links, cards, <video>, pi
   assert.equal(cellFromClipboard("<img src=\"https://example.com/p.png\">x", "", { skipImages: true }).lost, 0);
 });
 
-test("what a paste attaches goes into the scene's gallery (#135)", () => {
+test("what a paste attaches goes into the scene's gallery, each its own item (#135)", () => {
   const P1 = { sha256: "a".repeat(64), width: 4, height: 3, mime: "image/png" };
   const P2 = { sha256: "b".repeat(64), width: 4, height: 3, mime: "image/png" };
-  /* an empty scene: a video gets the first slot, a placeholder, its link
-     marked as that slot's video; a picture after it fills that slot */
+  /* an empty scene: a video is the cover, a placeholder with its link as
+     its poster; a picture after it is an item of its own, never over it */
   const row = { id: "r1", imageRef: null };
-  let got = attachToGallery(row, [{ kind: "video", href: "https://youtu.be/abc" }], 0);
-  assert.deepEqual(got, { pictures: 0, videos: 1, at: 0 });
+  let got = attachToGallery(row, [{ kind: "video", href: "https://youtu.be/abc" }]);
+  assert.deepEqual(got, { pictures: 0, videos: 1 });
   assert.equal(row.imageRef, null);
   assert.deepEqual(row.imageLinks, [{ href: "https://youtu.be/abc", poster: true }]);
-  attachToGallery(row, [{ kind: "image", ref: P1 }], 0);
-  assert.equal(row.imageRef.sha256, P1.sha256);
-  assert.equal(row.moreImages, undefined);
-  /* a second picture is added, never over the first; a video then goes
-     on the caption of the slot on screen, with no thumbnail */
-  got = attachToGallery(row, [{ kind: "image", ref: P2 }, { kind: "videoFile", name: "<b>take</b>.mp4", size: 3 }], 0);
-  assert.deepEqual(got, { pictures: 1, videos: 1, at: 1 });
-  assert.equal(row.imageRef.sha256, P1.sha256);
-  assert.deepEqual(row.moreImages, [{ imageRef: P2, links: [{ name: "take.mp4", size: 3 }] }]);
-  /* the same picture twice is one picture */
-  attachToGallery(row, [{ kind: "image", ref: P2 }], 0);
-  assert.equal(row.moreImages.length, 1);
-  /* a video file into an empty scene brings its first frame as the picture */
-  const row2 = { id: "r2", imageRef: null };
-  attachToGallery(row2, [{ kind: "videoFile", name: "b.mov", size: 9, poster: P2 }], 0);
-  assert.equal(row2.imageRef.sha256, P2.sha256);
-  assert.deepEqual(row2.imageLinks, [{ name: "b.mov", size: 9, poster: true }]);
+  attachToGallery(row, [{ kind: "image", ref: P1 }]);
+  assert.equal(row.imageRef, null);
+  assert.deepEqual(row.moreImages, [{ imageRef: P1 }]);
+  /* a video into a scene with pictures: a tile of its own, after them */
+  got = attachToGallery(row, [{ kind: "image", ref: P2 }, { kind: "videoFile", name: "<b>take</b>.mp4", size: 3 }]);
+  assert.deepEqual(got, { pictures: 1, videos: 1 });
+  assert.deepEqual(row.moreImages, [{ imageRef: P1 }, { imageRef: P2 }, { links: [{ name: "take.mp4", size: 3, poster: true }] }]);
+  /* the same picture or video twice is one item */
+  attachToGallery(row, [{ kind: "image", ref: P2 }, { kind: "video", href: "https://youtu.be/abc" }]);
+  assert.equal(row.moreImages.length, 3);
+  /* a video file brings its first frame as its tile's picture */
+  const row2 = { id: "r2", imageRef: P1 };
+  attachToGallery(row2, [{ kind: "videoFile", name: "b.mov", size: 9, poster: P2 }]);
+  assert.equal(row2.imageRef.sha256, P1.sha256);
+  assert.deepEqual(row2.moreImages, [{ imageRef: P2, links: [{ name: "b.mov", size: 9, poster: true }] }]);
 });
 
 test("plain text goes in as typing, a line break as a line break", () => {
