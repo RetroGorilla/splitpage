@@ -6,8 +6,10 @@
  * out of the script, compiles it with Windows PowerShell's Add-Type exactly as
  * the listener does, and drives the class with a clock of its own: it never
  * calls SplitpageVoice.Start(), so no recogniser starts and no microphone is
- * opened (invariant #33). What the real recogniser raises, and when, is
- * docs/WINDOWS-CHECKS.md §3, by hand.
+ * opened (invariant #33). It also reads the default microphone's name the
+ * way the listener does (issue #118), which asks Core Audio for a property
+ * and does not open the device either. What the real recogniser raises, and
+ * when, is docs/WINDOWS-CHECKS.md §3, by hand.
  *
  * Windows only (System.Speech, powershell.exe): elsewhere it prints SKIP and
  * exits 0.
@@ -98,7 +100,9 @@ fs.writeFileSync(psFile, [
   "    if ($null -eq $r) { '-' } else { $r }",
   "  }",
   "  [Console]::Out.WriteLine(($out -join ' '))",
-  "}"
+  "}",
+  "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false",
+  "[Console]::Out.WriteLine('device:' + [SplitpageVoiceDevice]::DefaultCaptureName())"
 ].join("\r\n"));
 
 const ps = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
@@ -112,6 +116,7 @@ if (run.status !== 0) {
 const lines = run.stdout.trim().split(/\r?\n/);
 const got = {};
 Object.keys(scenarios).forEach((k, i) => { got[k] = (lines[i] || "").split(" "); });
+const deviceLine = lines[Object.keys(scenarios).length] || "";
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -152,6 +157,14 @@ test("too-quiet is never shown within the first five seconds", () => {
 
 test("the helper passes clear through to the page", () => {
   assert.deepEqual(parseHelperLine('{"type":"warning","code":"clear"}'), { type: "warning", code: "clear" });
+});
+
+test("the default microphone's name is read without starting anything (#118)", () => {
+  /* empty on a machine with no capture device; otherwise a name, trimmed */
+  assert.ok(deviceLine.startsWith("device:"), deviceLine);
+  const name = deviceLine.slice("device:".length);
+  assert.equal(name, name.trim());
+  console.log("       default microphone: " + (name || "(none)"));
 });
 
 const failures = [];

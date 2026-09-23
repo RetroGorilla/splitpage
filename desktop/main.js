@@ -2528,7 +2528,7 @@ function googleDriveInstance() {
  *     main builds the one command line below from its own constants. What
  *     comes back (splitpage:voice-event, to the calling tab only) is rebuilt
  *     field by field in voice-helper.js: a type, a session number, and a
- *     capped text, a short code or a culture name.
+ *     capped text, a short code, a culture name or a microphone's name.
  *
  *     WHERE IT IS AVAILABLE. Windows with powershell.exe where Windows puts
  *     it. Anywhere else voice-status answers {available:false} and the

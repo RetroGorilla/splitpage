@@ -455,6 +455,17 @@ function setVoiceStatus(msg, kind) {
   el.className = "pp-voice-status" + (kind ? " " + kind : "");
 }
 
+/* "Listening — <microphone>" (issue #118): which input is in use, so a
+   switch to another one (a Windows privacy block can quietly cause one)
+   can be seen. The name is the stream's track label in the browser and
+   what Windows calls the default microphone on desktop (listen.ps1's
+   device event); without one it is the plain fallback. Shown as text,
+   never markup (setVoiceStatus sets textContent). */
+var voiceMicName = "";
+function listeningStatus(fallback) {
+  return voiceMicName ? "Listening — " + voiceMicName : fallback;
+}
+
 /* What the voice button says when it is not following. On desktop it
    follows through Windows' own recogniser where main has one (issue #8,
    main.js section 9d); where it has none (not Windows, an older shell) it
@@ -612,7 +623,7 @@ function onSpeechTranscript() {
   if (S.speakCursor >= S.speakNorms.length - 1) {
     setVoiceStatus("Reached the end", "listening");
   } else if (S.voiceFollowActive) {
-    setVoiceStatus("Listening — following along", "listening");
+    setVoiceStatus(listeningStatus("Listening"), "listening");
   }
 }
 
@@ -664,6 +675,7 @@ export async function startVoiceFollow() {
   S.wordCursor = -1;
   S.speakCursor = -1;
   S.voiceRestarts = 0;
+  voiceMicName = "";
   clearSpokenHighlights();
 
   /* Take the microphone once, up front, on the click that asked for it —
@@ -691,6 +703,10 @@ export async function startVoiceFollow() {
     }
     /* stopped while the permission prompt was still up */
     if (mySession !== S.voiceSession) { releaseVoiceStream(); S.voiceStarting = false; return; }
+    try {
+      var track = S.voiceStream.getAudioTracks()[0];
+      voiceMicName = (track && track.label) || "";
+    } catch (e) {}
   }
 
   try {
@@ -714,19 +730,23 @@ export async function startVoiceFollow() {
         var el = document.getElementById("pp-voice-status");
         if (S.voiceFollowActive && el && (el.textContent === DESKTOP_VOICE_WARNINGS["no-signal"] ||
             el.textContent === DESKTOP_VOICE_WARNINGS["too-quiet"])) {
-          setVoiceStatus("Listening…", "listening");
+          setVoiceStatus(listeningStatus("Listening…"), "listening");
         }
         return;
       }
       var msg = DESKTOP_VOICE_WARNINGS[e && e.warning];
       if (msg && S.voiceFollowActive) setVoiceStatus(msg, "error");
     };
+    S.recognition.ondevice = function (e) {
+      if (mySession !== S.voiceSession) return;
+      voiceMicName = (e && typeof e.name === "string") ? e.name : "";
+    };
   }
   S.recognition.onstart = function () {
     S.voiceStarting = false;
     S.voiceFollowActive = true;
     updateVoiceButtonUI();
-    setVoiceStatus("Listening…", "listening");
+    setVoiceStatus(listeningStatus("Listening…"), "listening");
   };
   S.recognition.onresult = function (e) {
     var finalChunk = "", interimChunk = "";

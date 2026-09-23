@@ -169,8 +169,10 @@ differences:
 
 - **Follow My Voice** uses Windows' own speech recognition, so it works
   without an internet connection and nothing is sent anywhere. The first time,
-  Windows may ask whether Splitpage can use the microphone. If it says it isn't
-  hearing anything, check **Settings ▸ Privacy & security ▸ Microphone ▸ Let
+  Windows may ask whether Splitpage can use the microphone. While it listens,
+  the status line names the microphone it is using ("Listening — …"); if that
+  is the wrong one, change the default input under **Settings ▸ System ▸
+  Sound**. If it says it isn't hearing anything, check **Settings ▸ Privacy & security ▸ Microphone ▸ Let
   desktop apps access your microphone**. If Windows has no speech recogniser
   for your language, add one under **Settings ▸ Time & language ▸ Speech**.
   Only one tab follows your voice at a time: starting it in another tab stops
