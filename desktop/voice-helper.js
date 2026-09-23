@@ -63,6 +63,8 @@ function parseHelperLine(line) {
     event.text = raw.text.slice(0, MAX_TEXT);
   } else if (raw.type === "device") {
     if (typeof raw.name !== "string") return null;
+    /* eslint-disable-next-line no-control-regex -- stripping control characters
+       from a device name the helper reports is the point */
     const name = raw.name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME);
     if (!name) return null;
     event.name = name;
