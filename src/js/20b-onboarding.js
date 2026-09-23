@@ -557,10 +557,7 @@ export function __init() {
      at without waiting out a real reload. Nothing in the app reads this;
      the same trick window.__splitpageFormats (20d-formats.js) plays. */
   window.__onboarding = {
-    open: openOnboarding,
-    close: closeOnboarding,
     seedCheckPasses: seedCheckPasses,
-    readKey: readOnboardKey,
     /* → Promise<boolean>. WHY exposed: T3 (26-desktop-drafts.txt) needs to
        prove the wizard's gate itself — not just draftRestorePending's raw
        value — refuses to fire while a crash draft is still restoring

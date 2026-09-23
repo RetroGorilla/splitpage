@@ -16,6 +16,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -23,6 +24,7 @@ import {
   applyMarkdownProject,
   buildMarkdownProject,
   buildSplitpageFile,
+  fileImagesMissing,
   parseMarkdownProject,
   parseSplitpageFile
 } from "../js/20d-formats.js";
@@ -32,6 +34,9 @@ import {
 initTags();
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");
+const PNG_REF = { sha256: createHash("sha256").update(PNG_BYTES).digest("hex"), width: 1, height: 1, mime: "image/png" };
+const STORED_PNG = '<img class="comment-img" data-blob="' + PNG_REF.sha256 + '" data-w="1" data-h="1" data-mime="image/png">';
 const TAG = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span>';
 const ANCHOR = '<span class="cmt-anchor" data-cmt="ctest1">Anchored</span>';
 
@@ -111,7 +116,7 @@ test(".splitpage round-trips the whole document, byte for byte", () => {
   const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
   assert.equal(norm(back), norm(s));
   assert.equal(back.docId, s.docId);
-  assert.equal(back.rows[0].visualImage, PNG);
+  assert.deepEqual(back.rows[0].imageRef, PNG_REF);
   assert.equal(back.rows[0].status, "shot");
   assert.ok(back.rows[0].audioText.includes('data-tag-name="gaffer tape"'));
   assert.ok(back.rows[0].audioText.includes('data-cmt="ctest1"'));
@@ -190,7 +195,7 @@ test(".md round-trips the whole document, including what the table cannot say", 
     assert.equal(back.docId, s.docId);
     assert.ok(back.rows[0].audioText.includes('data-tag-name="gaffer tape"'), "tags survived");
     assert.ok(back.rows[0].audioText.includes('data-cmt="ctest1"'), "comment anchors survived");
-    assert.equal(back.rows[0].visualImage, PNG, "the image survived");
+    assert.deepEqual(back.rows[0].imageRef, PNG_REF, "the image survived");
     assert.equal(back.rows[0].status, "shot");
     assert.equal(back.wordsPerMinute, 175);
     assert.ok(back.people.some((p) => p.name === "Jordan"));
@@ -249,7 +254,7 @@ test("a cell edited outside Splitpage: the table wins for that cell only", () =>
     assert.ok(!back.rows[0].audioText.includes("cmt-anchor"));
     assert.ok(back.comments.some((c) => c.id === "ctest1" && c.quotedText === "gaffer tape"));
     /* Everything the table cannot show is untouched. */
-    assert.equal(back.rows[0].visualImage, PNG);
+    assert.deepEqual(back.rows[0].imageRef, PNG_REF);
     assert.equal(back.rows[0].status, "shot");
     assert.equal(back.wordsPerMinute, 175);
     assert.equal(back.rows.length, s.rows.length);
@@ -266,7 +271,76 @@ test("a Visual cell's inline image travels in the table and comes back", () => {
   const proj = parseMarkdownProject(md);
   return withState(proj.state, async () => {
     const back = await applyMarkdownProject(proj, { noAsk: true });
-    assert.equal(back.rows[0].visualImage, PNG);
+    assert.deepEqual(back.rows[0].imageRef, PNG_REF);
+  });
+});
+
+/* ---- pictures (#82): inline in the file, a ref in the page ------------- */
+
+test(".splitpage carries its pictures inline; the page names them by imageRef", () => {
+  const s = fixture();
+  assert.deepEqual(s.rows[0].imageRef, PNG_REF, "the migrated document holds a ref");
+  assert.equal("visualImage" in s.rows[0], false);
+  const text = buildSplitpageFile(s);
+  assert.ok(text.includes('"visualImage": "' + PNG + '"'), "the file holds the picture itself");
+  assert.ok(!text.includes('"imageRef"'), "and no ref an older client would not understand");
+  const parsed = parseSplitpageFile(text);
+  assert.equal(parsed.rows[0].visualImage, PNG, "parse does not migrate");
+  assert.deepEqual(migrateRows(parsed).rows[0].imageRef, PNG_REF, "opening it gives the ref back");
+});
+
+test("three pictures: the state stays small, the file carries all three", () => {
+  const big = (n) => {
+    /* a real PNG header, padded out to ~200 KB of IDAT-shaped filler */
+    const b = Buffer.alloc(200000 + n);
+    Buffer.from(PNG_BYTES).copy(b, 0, 0, 33);
+    b.write("IDAT", 37, "latin1");
+    for (let i = 41; i < b.length; i++) b[i] = (i * 31 + n) & 255;
+    return "data:image/png;base64," + b.toString("base64");
+  };
+  const s = migrateRows({ schema: 2, title: "Pictures", rows: [0, 1, 2].map((n) => ({ id: "p" + n, visualImage: big(n), audioText: "x" })) });
+  const shas = s.rows.map((r) => r.imageRef && r.imageRef.sha256);
+  assert.equal(new Set(shas).size, 3);
+  assert.ok(JSON.stringify(s).length < 10240, "state is " + JSON.stringify(s).length + " bytes");
+  const file = buildSplitpageFile(s);
+  assert.ok(file.length > 600000, "the file carries the bytes: " + file.length);
+  assert.equal((file.match(/"visualImage": "data:image\/png;base64,/g) || []).length, 3);
+});
+
+test("a picture whose bytes are nowhere stays a ref in the file, with no picture", () => {
+  const ghost = { sha256: "b".repeat(64), width: 4, height: 3, mime: "image/png" };
+  const s = migrateRows({ schema: 2, title: "Ghost", rows: [{ id: "g1", imageRef: ghost, audioText: "x" }] });
+  const parsed = JSON.parse(buildSplitpageFile(s));
+  assert.deepEqual(parsed.rows[0].imageRef, ghost);
+  assert.equal("visualImage" in parsed.rows[0], false);
+  assert.deepEqual(fileImagesMissing(s), [ghost.sha256]);
+  assert.deepEqual(fileImagesMissing(fixture()), []);
+});
+
+test("an image conflict card goes into the file with its picture in the body", () => {
+  const s = fixture();
+  s.comments.push({ id: "cimg", rowId: "r1", field: "visualImage", kind: "conflict", body: "", imageValue: PNG_REF, conflictField: "Visual image" });
+  const parsed = JSON.parse(buildSplitpageFile(s));
+  const card = parsed.comments.find((c) => c.id === "cimg");
+  assert.ok(card.body.includes('src="' + PNG + '"'), card.body);
+  const back = migrateRows(parsed).comments.find((c) => c.id === "cimg");
+  assert.deepEqual(back.imageValue, PNG_REF);
+  assert.equal(back.body, STORED_PNG, "back to the stored form, no data: in it");
+});
+
+test(".md: a cell an older client wrote with the picture spelled differently is unchanged", () => {
+  const s = fixture();
+  const md = withState(s, buildMarkdownProject);
+  /* the same picture, its base64 without its padding and the type
+     written as "image/jpg": what matters is the bytes */
+  const respelled = "data:image/jpg;base64," + PNG.slice(PNG.indexOf(",") + 1).replace(/=+$/, "");
+  const older = md.split(PNG).join(respelled);
+  assert.notEqual(older, md);
+  const proj = parseMarkdownProject(older);
+  return withState(proj.state, async () => {
+    const back = await applyMarkdownProject(proj, { noAsk: true });
+    assert.deepEqual(back.rows[0].imageRef, PNG_REF);
+    assert.equal(back.rows[0].visualText, s.rows[0].visualText, "not rebuilt from the table");
   });
 });
 

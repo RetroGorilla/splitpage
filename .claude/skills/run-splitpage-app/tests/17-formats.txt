@@ -25,10 +25,15 @@ expect document.querySelectorAll('#rows .tag-anchor').length == 2
 eval document.activeElement.blur()
 sleep 300
 
-# an inline image, a comment with a live anchor span, a scene status, a
-# reading speed, a crew member — and a cell full of the characters a fence
-# could collide with
-eval (function(){var s=F.state();var r=s.rows[0];r.visualImage='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';r.audioText='<span class="cmt-anchor" data-cmt="ctest1">Anchored</span> '+r.audioText;r.status='shot';if(s.rows[1])s.rows[1].visualText='a ~~~~ b | c `d` ~~~~~ and <u>underlined</u>';s.wordsPerMinute=175;s.people.push({id:'ptest1',name:'Jordan'});s.comments.push({id:'ctest1',rowId:r.id,field:'audioText',anchorId:'ctest1',quotedText:'gaffer tape',author:'Tester',body:'look here',resolved:false,kind:'anchor',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]});window.__base=__norm(s);window.__rows=s.rows.length;return s.rows.length;})()
+# a picture for the comment's body (#82 P6): a JPEG, so the PNG counts
+# below still count only the scene's picture. In the page it is the stored
+# form, <img data-blob> with no src; a file carries it inline.
+eval (function(){var c=document.createElement('canvas');c.width=24;c.height=16;var g=c.getContext('2d');g.fillStyle='#48c';g.fillRect(0,0,24,16);window.__cimgUrl=c.toDataURL('image/jpeg',0.9);window.__cimg=window.__blobsTest.internDataUrl(window.__cimgUrl);window.__cimgHtml='<img class="comment-img" data-blob="'+__cimg.sha256+'" data-w="24" data-h="16" data-mime="image/jpeg">';return __cimg.mime;})()
+expect window.__cimg.mime === 'image/jpeg'
+# an inline image, a comment with a live anchor span (and a picture), a
+# scene status, a reading speed, a crew member — and a cell full of the
+# characters a fence could collide with
+eval (function(){var s=F.state();var r=s.rows[0];r.visualImage='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';r.audioText='<span class="cmt-anchor" data-cmt="ctest1">Anchored</span> '+r.audioText;r.status='shot';if(s.rows[1])s.rows[1].visualText='a ~~~~ b | c `d` ~~~~~ and <u>underlined</u>';s.wordsPerMinute=175;s.people.push({id:'ptest1',name:'Jordan'});s.comments.push({id:'ctest1',rowId:r.id,field:'audioText',anchorId:'ctest1',quotedText:'gaffer tape',author:'Tester',body:'look here '+window.__cimgHtml,resolved:false,kind:'anchor',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),replies:[]});window.__base=__norm(s);window.__rows=s.rows.length;return s.rows.length;})()
 expect window.__rows > 1
 # the document's id (02b-doc-id.js) — captured once here, checked at every
 # round trip below
@@ -41,6 +46,9 @@ eval (function(){window.__sp=F.buildSplitpage();return window.__sp.length;})()
 expect JSON.parse(window.__sp).schema === 2
 expect Array.isArray(JSON.parse(window.__sp).rows)
 expect JSON.parse(window.__sp).rows.length === window.__rows
+# the comment's picture travels inline, as an older client wrote it
+expect JSON.parse(window.__sp).comments.filter(function(c){return c.id==='ctest1';})[0].body === 'look here <img src="'+window.__blobsTest.dataUrlForSync(__cimg.sha256)+'" class="comment-img">'
+expect window.__sp.indexOf('data-blob') === -1
 eval (function(){F.openFile(new File([window.__sp],'round.splitpage'));return true;})()
 wait F.docFile().kind === 'splitpage'
 expect __norm(F.state()) === window.__base
@@ -68,7 +76,13 @@ expect F.docId() === window.__id
 # tags, comment anchors and the image all survived the trip through Markdown
 expect document.querySelectorAll('#rows .tag-anchor').length == 2
 expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="ctest1"]').length == 1
-expect F.state().rows[0].visualImage.indexOf('data:image/png;base64,') === 0
+# the picture came back as a ref (#82): the page holds a record, the file
+# held it inline — in the table cell and in the data block (D2)
+expect F.state().rows[0].imageRef && /^[0-9a-f]{64}$/.test(F.state().rows[0].imageRef.sha256) && !('visualImage' in F.state().rows[0])
+expect window.__md.split('data:image/png;base64,iVBORw0KGgo').length === 3
+# the comment's picture is in the data block, inline, and back as a ref
+expect window.__md.indexOf(JSON.stringify(window.__blobsTest.dataUrlForSync(__cimg.sha256)).slice(1,-1)) !== -1 && window.__md.indexOf('data-blob') === -1
+expect F.state().comments.filter(function(c){return c.id==='ctest1';})[0].body === 'look here '+window.__cimgHtml
 expect F.state().rows[0].status === 'shot'
 expect F.state().wordsPerMinute === 175
 expect F.state().people.some(function(p){return p.name==='Jordan';})
@@ -94,7 +108,7 @@ expect F.state().rows[0].audioText.indexOf('data-tag-name="kitchen"') !== -1
 expect F.state().comments.some(function(c){return c.id==='ctest1' && c.quotedText==='gaffer tape';})
 expect F.state().rows[0].audioText.indexOf('cmt-anchor') === -1
 # everything the table cannot show is untouched
-expect F.state().rows[0].visualImage.indexOf('data:image/png;base64,') === 0
+expect F.state().rows[0].imageRef && F.buildSplitpage().indexOf('data:image/png;base64,iVBORw0KGgo') !== -1
 expect F.state().rows[0].status === 'shot'
 expect F.state().wordsPerMinute === 175
 expect F.state().rows.length === window.__rows

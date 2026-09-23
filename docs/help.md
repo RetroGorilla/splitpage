@@ -130,16 +130,18 @@ shared session on your network all work the same as in the browser, with two
 exceptions for now:
 
 - **Follow My Voice** doesn't run inside the desktop app yet. Instead, choose
-  **View ▸ Present in Browser (Follow My Voice)**, or the **Open in browser to
-  use Follow My Voice** button on the teleprompter. Your default browser opens
-  straight into the teleprompter with the same script, and Follow My Voice
+  **☰ File ▸ This document ▸ Present in browser (Follow My Voice)**, press
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, or use the **Open in browser
+  to use Follow My Voice** button on the teleprompter. Your default browser
+  opens straight into the teleprompter with the same script, and Follow My Voice
   works there in Chrome or Edge. The browser shows a read-only copy: keep
   editing in the desktop app. If the script has never been saved, you'll be
   asked to save it first.
-- **Google Drive files** can't be browsed from the desktop app, because Google's
-  sign-in only returns to a web address. **Import from Google Doc link** still
-  works: it opens the Doc's .docx download in your browser, and you then open
-  the downloaded file with File ▸ Open.
+- **Google Drive files** work differently in the desktop app: you sign in once
+  through your own browser instead of pasting an API key, and it needs a
+  Google Cloud client set up on the computer first — see **Google Drive files
+  ▸ In the desktop app** below. Rename, delete and new folder are browser-app
+  only for now.
 
 ### Moving between the browser app and the desktop app
 
@@ -161,7 +163,7 @@ preferences (whether you've seen the setup wizard, your author name, comment
 sorting preference, writer column width, and the tagging-help dismissal).
 
 **What does not travel:** server sign-in tokens or PINs, Google Drive API keys,
-and the documents themselves — those are files you already have on your
+the desktop app's Google Drive sign-in, and the documents themselves — those are files you already have on your
 computer.
 
 ### Tabs
@@ -342,6 +344,12 @@ and replies, so it does not matter what the other person's copy of Splitpage
 lets them click, or what they type into their browser's console. They cannot
 resolve or delete anyone's comments either. Restarting your session invalidates
 every review link and both codes.
+
+Reviewers can put pictures in their comments, within an allowance: each
+review link or code may upload about 20 MB of images per hour (the host can
+change it with `REVIEW_BLOB_BUDGET_BYTES`). Past that, the comment waits and
+Splitpage says so; try again later, or post it without the picture. The
+server takes PNG, JPEG, GIF and WebP up to 8 MB each.
 
 ## Connecting to a server
 
@@ -654,7 +662,28 @@ changes the label and the tracked item together.
 **Reference images.** The small **📎 Image** link at the top of a scene's
 visual column attaches a still — or just drag an image file from your desktop
 anywhere onto that column and drop it. Once a scene has one, hover it for
-**Replace** and **Remove**.
+**Replace** and **Remove**. A comment can carry a picture too (**🖼 Image**
+in the comment box), and a picture pasted into a scene or a reply is kept.
+
+**Where pictures are kept.** The script itself only names each picture; the
+picture is stored once, separately, wherever the script lives:
+
+- In a browser, in that browser's own storage for the page, next to your
+  version history.
+- In the desktop app, in its app-data folder (a `blobs` folder beside
+  `history`).
+- On a server, on the server, alongside the scripts.
+
+A file you save from Splitpage — `.splitpage`, `.md` or Standalone HTML —
+still carries every picture inside it, so it opens complete anywhere,
+including in an older copy of Splitpage. If a picture can't be found (a
+version restored after its picture was lost, say), it shows as
+**Image unavailable** and the rest of the script is untouched; a save then
+tells you how many images it could not include. Splitpage looks for a
+missing picture again whenever it redraws the spot, so one that turns up
+later simply appears. On a hosted script it asks the server again only
+when someone's newer version of the script arrives, or after a few
+minutes — not every time the screen redraws.
 
 **Reordering.** Drag a scene by the grip beside its number (the dots to the
 left — they brighten as you move over the row). The ↑ / ↓ buttons still work
@@ -700,6 +729,12 @@ If your sign-in expires while you are working, Splitpage notices, keeps your
 unsaved edits, and asks you to reload; signing back in reopens the document and
 merges them in, along with anything that changed while you were away.
 
+If the server has been updated and your open page is older than it, saving
+stops with **This page is out of date for this server** and asks you to
+reload. Do that: an older page cannot see the pictures a newer one stored, and
+the server refuses its saves rather than let it drop them. Your unsaved edits
+are kept and merged back in after the reload.
+
 None of this affects working locally. Opened from disk, the app behaves exactly
 as it always has, and **Save As** still gives you a local copy of a hosted
 script whenever you want one.
@@ -733,6 +768,47 @@ downloading work without signing in at all.
 Note: sign-in needs the page served over `http://`/`https://` — see
 **Running it** above for `start.bat`; it doesn't work opened straight off
 disk (`file://`).
+
+### In the desktop app
+
+The desktop app has no API key or Client ID form. Instead you **sign in with
+Google** in your own browser, once: the app opens Google's sign-in page,
+you choose your account and allow access, and the browser tab tells you to
+return to Splitpage. From then on the panel browses your whole Drive
+(starting at My Drive, or paste a folder link), downloads files to your
+computer (a Google Doc comes down as plain text), and uploads files — an
+upload with the same name as a file already in that folder replaces it with a
+new version rather than adding a second copy. Rename, delete and new folder are
+browser-app only for now. **Sign out** in the panel forgets the sign-in and
+tells Google to cancel it.
+
+The sign-in is kept in your system's secure storage (Windows' own credential
+encryption), never in your documents, drafts, or **Export app data**. On a
+Linux computer with no keyring, it lasts until you quit, and the panel says
+so.
+
+**Setting it up (once per computer).** Google only lets an app sign in on your
+behalf if it has a client ID from a Google Cloud project, and only the
+project's owner can make one:
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/apis/library/drive.googleapis.com),
+   pick or create a project and **enable the Google Drive API**.
+2. Under **APIs & Services ▸ OAuth consent screen**, set the app up and add the
+   `…/auth/drive` scope. Until Google verifies the app, add every Google
+   account that will sign in as a **test user**.
+3. Under **APIs & Services ▸ Credentials**, create an **OAuth client ID** of
+   type **Desktop app**, and download its JSON file.
+4. Save that file, unchanged, as `google-oauth-client.json` in Splitpage's
+   settings folder — the Google Drive panel shows the exact path while nothing
+   is set up (on Windows it is `%APPDATA%\Splitpage\google-oauth-client.json`).
+   Or, instead of the file, set the environment variables
+   `SPLITPAGE_GOOGLE_CLIENT_ID` and `SPLITPAGE_GOOGLE_CLIENT_SECRET` before
+   starting Splitpage. The file can also be written by hand as
+   `{"client_id": "…", "client_secret": "…"}`. Google calls the second value a
+   secret, but for a Desktop-app client it isn't one — every copy of the app
+   has it.
+
+No restart is needed after adding the file; just open the panel again.
 
 ## On a phone
 
@@ -783,7 +859,12 @@ Both carry the production breakdown and comments the same way.
 paragraph, character and table styles, a document theme font, scene numbers
 in their own column, page numbers in the footer, and a production-breakdown
 table whose columns size themselves to what's actually in them instead of a
-fixed guess.
+fixed guess. Its comments section shows each picture in a comment or reply
+where it was, as the PDF does; Markdown, CSV and plain text write
+`[image]` in its place. Open one of these `.docx` files again and you get
+the script's scenes back — its text and pictures — and nothing else: the
+production-breakdown and comments sections stay behind, so they never turn
+into extra scenes, and a picture from a comment never lands on a row.
 
 Neither is the same thing as **Save**. These are copies for reading and
 sharing: they carry the words, not the tagging, the comment anchors, the

@@ -17,6 +17,7 @@ import {
   normalizeDocId
 } from "./02b-doc-id.js";
 import {
+  acceptStash,
   applyMerge,
   clearStash,
   cloneState,
@@ -25,9 +26,19 @@ import {
   pushSnapshot,
   readStash,
   reportMerge,
+  setBaseState,
   stashLocalWork,
   updateIdentityChip
 } from "./03-sync.js";
+import {
+  ensureBytes,
+  inlineStateImages,
+  intern as internBlob,
+  recordFor as blobRecordFor,
+  bytesForSync,
+  setRemoteSource,
+  forgetRemoteMisses
+} from "./02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
 import { render } from "./05-render.js";
@@ -51,6 +62,7 @@ import {
   updateConnectMenu
 } from "./20e-connect.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -357,18 +369,70 @@ function readReviewKey() {
   } catch (e) { /* file:// in some browsers — the key is already stored */ }
 }
 
+/* ---- what this client is, and what the server can do (#82) ----
+
+   Every API call says which generation of client made it:
+   `x-splitpage-client: 2` is a client that knows what an image reference
+   (`imageRef`, `<img data-blob>`) is. The server refuses a document PUT
+   WITHOUT it — 426 client-too-old — once the stored document names a blob,
+   because an older client would save the script back with its pictures
+   gone (D7). This page is never that client, but a later server may ask for
+   a later number, and the answer then is the same: this page is out of
+   date, reload it (flagClientTooOld).
+
+   What the SERVER can do is read off its /api/health, once per connection
+   (#11: a connection is this tab's, and pointing the tab elsewhere is a new
+   record, so a WeakMap keyed by it forgets the old server's answer by
+   itself). `blobs: 1` is a server with the blob routes; anything else —
+   including a server that has not answered yet — is sent images inline
+   (serverStateFor).
+
+   A server from before #82 that is on ANOTHER origin does not list the new
+   header in its CORS preflight, so the browser would refuse every call
+   carrying it. detectServer() tries again without it when the probe cannot
+   get through at all, and remembers for this connection that the header
+   stays off; such a server has no blob routes and no 426 either. */
+var CLIENT_HEADER = "x-splitpage-client";
+var CLIENT_GENERATION = "2";
+var serverCaps = new WeakMap();
+
+function capsOf(c) {
+  return (c && serverCaps.get(c)) || { blobs: false, noClientHeader: false, known: false };
+}
+
+function noteCaps(c, health, noClientHeader) {
+  serverCaps.set(c, {
+    blobs: !!(health && Number(health.blobs) >= 1),
+    noClientHeader: !!noClientHeader,
+    known: true
+  });
+}
+
+/* The one place that decides whether blob refs may go to this tab's server. */
+function serverTakesBlobs() {
+  return capsOf(conn).blobs;
+}
+
+function clientHeaders(headers, opts) {
+  if (conn.token) headers["x-splitpage-token"] = conn.token;
+  if (!(opts && opts.noClientHeader) && !capsOf(conn).noClientHeader) headers[CLIENT_HEADER] = CLIENT_GENERATION;
+  return headers;
+}
+
 export async function apiFetch(path, opts) {
   opts = opts || {};
-  var headers = opts.body
-    ? { "Content-Type": "application/json", "Accept": "application/json" }
-    : { "Accept": "application/json" };
-  if (conn.token) headers["x-splitpage-token"] = conn.token;
+  var headers = opts.raw
+    ? { "Content-Type": opts.contentType || "application/octet-stream", "Accept": "application/json" }
+    : opts.body
+      ? { "Content-Type": "application/json", "Accept": "application/json" }
+      : { "Accept": "application/json" };
+  clientHeaders(headers, opts);
   var res;
   try {
     res = await fetch(apiUrl(path), {
       method: opts.method || "GET",
       headers: headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
       /* Same-origin keeps the Cloudflare Access cookie flowing, which is
          the whole point of serving app and API together. Cross-origin it
          is switched off deliberately: the token in the header is what
@@ -383,6 +447,9 @@ export async function apiFetch(path, opts) {
   }
 
   var ctype = res.headers.get("content-type") || "";
+  /* An upload refused for its size by something in front of the server (a
+     proxy's own HTML 413) is still "too large", not a lapsed sign-in. */
+  if (opts.raw && res.status === 413) throw ApiError("blob-too-large", "too-large");
   if (res.redirected || (!ctype.includes("application/json") && res.status !== 204)) {
     throw ApiError("auth", "signed out");
   }
@@ -413,11 +480,39 @@ export async function apiFetch(path, opts) {
     if (body429 && body429.error === "too-many-attempts") {
       throw ApiError("pin-blocked", "too many wrong codes — wait a minute and try again");
     }
+    /* A review link's hourly allowance for images (#82): the token is
+       fine, this upload is not, and it will be again in a while. */
+    if (body429 && body429.error === "review-budget") {
+      throw ApiError("review-budget", "this link's image allowance is used up for now");
+    }
   }
+  /* The server says this page is older than the document needs (#82 D7).
+     Neither a conflict nor a sign-out: nothing to merge, nothing to type —
+     only a reload fetches a client it will take. */
+  if (res.status === 426) throw ApiError("client-too-old", "this page is out of date");
 
   var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
   if (res.status === 409) { var c = ApiError("conflict"); c.payload = body; throw c; }
-  if (!res.ok) throw ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
+  /* The server's own "there is no such document" (a GET, PUT or DELETE of
+     api/docs/:id whose file is gone) gets a name of its own, the way a 409
+     does: callers ask `err.code === "not-found"`. Every other non-ok status
+     is named by its number with the server's reason as the message — a 404
+     that is about something else (a comment, "no-such-comment") stays
+     "404", and the comment routes read it that way (#99). */
+  if (res.status === 404 && body && body.error === "not-found") throw ApiError("not-found");
+  /* A write naming images the server does not hold (#82): `payload.missing`
+     is the list, which sendWithBlobs() uploads and retries. */
+  if (res.status === 422 && body && body.error === "missing-blobs") {
+    var mb = ApiError("missing-blobs", "an image in it is not on the server");
+    mb.payload = body;
+    throw mb;
+  }
+  if (opts.raw && res.status === 415) throw ApiError("blob-unsupported", (body && body.error) || "unsupported-type");
+  if (!res.ok) {
+    var ge = ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
+    ge.payload = body;
+    throw ge;
+  }
   return body;
 }
 
@@ -430,8 +525,8 @@ export var SERVER_RESUME_KEY = "splitpage-server-resume";
    draft instead of by a lapsed sign-in (20g-drafts.js arms it before
    detectServer() runs at boot). It is a var rather than a second
    sessionStorage key on purpose: the draft was read from disk, it may be far
-   bigger than sessionStorage would take, and stashLocalWork()'s quota
-   fallback strips images — which a recovered draft must not lose.
+   bigger than sessionStorage would take, and stashLocalWork() simply fails
+   on a document too big for it — which a recovered draft must not.
 
    {id, rev, base, mine, at, onDone(outcome)}. onDone is how the restore
    learns which way this went ('server-resumed' or 'not-found'); polling
@@ -439,14 +534,12 @@ export var SERVER_RESUME_KEY = "splitpage-server-resume";
    simply reopened the document. */
 S.draftServerResume = null;
 
-function flagServerSessionExpired() {
-  if (serverSessionExpired) return;
-  serverSessionExpired = true;
-  /* Stash before promising anything. stashLocalWork() was written for the
-     artifact shell's forced reload and had sat unused ever since; this is
-     the same situation it was built for — the only way back is a reload,
-     and everything typed since the last save would go with it. Only claim
-     the work is safe if it actually got persisted. */
+/* Stash before promising anything. stashLocalWork() was written for the
+   artifact shell's forced reload and had sat unused ever since; this is
+   the same situation it was built for — the only way back is a reload,
+   and everything typed since the last save would go with it. Only claim
+   the work is safe if it actually got persisted. → true when it was. */
+function stashForReload() {
   var stashed = false;
   if (onServerDoc()) {
     try {
@@ -455,9 +548,36 @@ function flagServerSessionExpired() {
       if (!stashed) sessionStorage.removeItem(SERVER_RESUME_KEY);
     } catch (e) { stashed = false; }
   }
+  return stashed;
+}
+
+function flagServerSessionExpired() {
+  if (serverSessionExpired) return;
+  serverSessionExpired = true;
+  var stashed = stashForReload();
   showToast(stashed
     ? "Your sign-in expired. Reload the page to sign in again — your unsaved edits are kept and will be merged back in."
     : "Your sign-in expired. Copy anything unsaved, then reload the page to sign in again.",
+    "warn", true);
+  updateFileChip();
+}
+
+/* 426 client-too-old (#82 D7): the server will not take a save from this
+   copy of the page, because the document holds something (an image
+   reference, today) a client this old would drop. Latched like a lapsed
+   sign-in, so autosave does not ask again and again for the same answer,
+   and resolved the same way — a reload, which also fetches the newer page
+   when this one was served by that server — with the same stash, so the
+   edits since the last save are merged back in after it. */
+var clientTooOld = false;
+
+function flagClientTooOld() {
+  if (clientTooOld) return;
+  clientTooOld = true;
+  var stashed = stashForReload();
+  showToast(stashed
+    ? "This page is out of date for this server. Reload it to keep saving — your unsaved edits are kept and will be merged back in."
+    : "This page is out of date for this server. Copy anything unsaved, then reload the page to keep saving.",
     "warn", true);
   updateFileChip();
 }
@@ -499,6 +619,7 @@ async function resumeServerDoc() {
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
     if (via !== conn) return false;
+    forgetRemoteMisses();
   } catch (err) {
     /* still signed out, or the document is gone — leave SERVER_RESUME_KEY
        (and the stash it points at) alone so a later reload can still
@@ -513,10 +634,10 @@ async function resumeServerDoc() {
        back its answer — it opens the edits as an unsaved local copy. Any
        other failure (signed out, no answer yet, a PIN still to type) leaves
        the override armed: finishServerDetect() calls this again once the
-       PIN dialog succeeds. The literal "404" is here because apiFetch()
-       names non-ok statuses by their number; "not-found" is what
-       saveToServer's own branch looks for. */
-    if (override && err && (err.code === "not-found" || err.code === "404")) {
+       PIN dialog succeeds. apiFetch() names the server's "no such
+       document" 404 "not-found" (#99), the same code saveToServer's own
+       branch looks for. */
+    if (override && err && err.code === "not-found") {
       S.draftServerResume = null;
       try { override.onDone("not-found"); } catch (e2) {}
     }
@@ -555,6 +676,8 @@ async function resumeServerDoc() {
     serverId: body.id,
     fallbackId: normalizeDocId(stash && stash.mine && stash.mine.docId) || null
   });
+  /* the pictures the stash carries, and an older build's stripped images */
+  if (stash) acceptStash(stash, theirs);
   setHome("server", { id: body.id, rev: body.rev || 0 });
   S.docIdWrittenOut = true;
   resetProductionPanelState();
@@ -591,7 +714,7 @@ async function resumeServerDoc() {
       return true;
     }
     S.state = theirs;
-    S.baseState = cloneState(S.state);
+    setBaseState(cloneState(S.state), "resumeServerDoc: reopened as the server has it, nothing to merge");
     clearDirty();
     render();
     updateIdentityChip();
@@ -610,7 +733,7 @@ async function resumeServerDoc() {
     /* fold the keystrokes typed on top of the blank interim document into
        what the stash already remembers as "mine", so both survive the
        three-way merge below rather than one silently replacing the other. */
-    mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine, false).merged;
+    mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine).merged;
   }
   /* TWO snapshots, and they hold different things — filing only one of
      them was the bug. `undoPoint` captures `theirs`, the version that was
@@ -642,7 +765,6 @@ async function resumeServerDoc() {
     base: stash.base || null,
     mine: mine,
     theirs: theirs,
-    imagesStripped: !!stash.imagesStripped,
     source: "server-resume",
     undoPoint: override ? theirs : null,
     keepLabel: override ? "Your unsaved changes, recovered" : null,
@@ -687,6 +809,29 @@ function handleApiError(err, whatFailed) {
       "Ask whoever is hosting for the editing code.", "warn", true);
     return;
   }
+  if (err && err.code === "client-too-old") { flagClientTooOld(); return; }
+  /* The image answers (#82): each says what to do about the picture, not
+     about the connection, which is fine. */
+  if (err && err.code === "review-budget") {
+    showToast(whatFailed + " — this review link has used up its allowance for images for now. " +
+      "Try again in an hour, or post it without the picture.", "warn", true);
+    return;
+  }
+  if (err && err.code === "blob-too-large") {
+    showToast(whatFailed + " — an image in it is larger than the server takes (8 MB). " +
+      "Use a smaller picture.", "warn", true);
+    return;
+  }
+  if (err && err.code === "blob-unsupported") {
+    showToast(whatFailed + " — an image in it is not a PNG, JPEG, GIF or WebP, which is all the server takes.",
+      "warn", true);
+    return;
+  }
+  if (err && err.code === "missing-blobs") {
+    showToast(whatFailed + " — an image in it is no longer on this device or on the server. " +
+      "Remove it and try again.", "warn", true);
+    return;
+  }
   showToast(whatFailed + " — " + ((err && err.message) || "please try again") + ".", "error");
 }
 
@@ -701,7 +846,7 @@ export async function detectServer() {
      must not be written over the new one's. */
   var probing = conn;
   try {
-    var health = await apiFetch("api/health");
+    var health = await probeHealth(probing);
     if (probing !== conn) return;
     S.serverMode.available = !!(health && health.ok);
     S.serverMode.readOnly = !!(health && health.readOnly);
@@ -758,6 +903,27 @@ export async function detectServer() {
   }
 
   finishServerDetect();
+}
+
+/* /api/health for THIS connection, recording what the server can do
+   (capsOf, above). A cross-origin server that cannot be reached at all is
+   asked once more without the client header: a server older than #82 does
+   not allow it in its preflight, and a refused preflight looks exactly
+   like "no answer" from here. */
+async function probeHealth(probing) {
+  var health;
+  try {
+    health = await apiFetch("api/health");
+  } catch (e) {
+    if (!(e && e.code === "offline" && probing.serverUrl) || probing !== conn) throw e;
+    health = await apiFetch("api/health", { noClientHeader: true });
+    /* A server that answers `blobs` does allow the header: the first try
+       failed for some other reason, and the header stays on. */
+    if (probing === conn) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
+    return health;
+  }
+  if (probing === conn) noteCaps(probing, health, false);
+  return health;
 }
 
 /* Everything that only makes sense once we are actually allowed in. Split
@@ -953,13 +1119,15 @@ export async function openServerDoc(id) {
   }
   if (via !== conn) return false;
   if (!body || !body.state) { showToast("That document is empty.", "warn"); return false; }
+  /* New server state: a picture nobody had a moment ago may be there now. */
+  forgetRemoteMisses();
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
   /* no fallback id: nothing this page holds is known to be this document,
      so an id-less server document derives one from its server id */
   S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
-  S.baseState = cloneState(S.state);
+  setBaseState(cloneState(S.state), "openServerDoc: the document as the server sent it");
   if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
   /* a hosted document and a local file are different homes for the same
      Save button — setHome() replaces whichever one this page had, so it
@@ -1002,14 +1170,18 @@ export async function publishToServer() {
   var via = conn;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
-      return apiFetch("api/docs", { method: "POST", body: { state: published, by: getEditorName() } });
+      return sendWithBlobs(published, function (sending, acceptMissing) {
+        var post = { state: sending, by: getEditorName() };
+        if (acceptMissing.length) post.acceptMissing = acceptMissing;
+        return apiFetch("api/docs", { method: "POST", body: post });
+      }, true);
     });
   } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
   /* Published to the server the tab WAS on; this tab has since been pointed
      elsewhere, so the copy there is not its home. */
   if (via !== conn) return false;
   setHome("server", { id: body.id, rev: body.rev || 1 });
-  S.baseState = published;
+  setBaseState(published, "publishToServer: what the server just accepted");
   /* Adopted only after the server has it, like Save As. The id check keeps
      a document opened while the POST was in flight from being re-id'd. */
   if (forkDocId && S.state.docId === oldId) {
@@ -1175,6 +1347,146 @@ export async function armServerDelete(btn, id) {
   }, 2800);
 }
 
+/* ---- images on the wire (#82) ----
+
+   A state names its images by sha (`row.imageRef`, `<img data-blob>`;
+   refsIn in shared/blob-policy.js finds them all) and the bytes travel on
+   their own. The server refuses a write naming a blob it does not hold —
+   422 missing-blobs — so every write that can name one goes through
+   sendWithBlobs():
+
+     1. POST api/blobs/missing with the state's refs;
+     2. PUT api/blobs/<sha>, raw bytes, for each one missing (the bytes from
+        this page's registry, or its local store — never asked of the server
+        that has just said it lacks them);
+     3. the write itself.
+
+   A 422 anyway (the server lost one in between, or the page could not tell
+   it was missing) uploads what the answer lists and tries ONCE more. That
+   retry is not one of saveToServer's three 409 rounds: it is the same
+   write, not a merge. A sha this page has no bytes for at all — a history
+   snapshot restored after its image was lost — can only be said to be gone:
+   a document write retries with `acceptMissing` naming it, which the server
+   takes as "I know" and stores the reference as it is (the image shows as
+   unavailable, and the record is kept for when the bytes turn up). A
+   comment has no such excuse, and fails with a toast.
+
+   A server without the blob routes (health without `blobs`, or one this tab
+   has not heard from) is sent the images INLINE instead — rows carrying
+   `visualImage: data:…` and HTML images a `src="data:…"`, the form a
+   .splitpage file keeps — because it would store a ref as a key it knows
+   nothing about and could never serve the bytes behind it. What the page
+   holds is not changed: only the copy that is sent. */
+
+var MISSING_BATCH = 2000; /* the server's cap on one /missing request */
+
+function uniqueShas(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (sha) {
+    if (isSha256Hex(sha) && out.indexOf(sha) === -1) out.push(sha);
+  });
+  return out;
+}
+
+/* Which of `shas` (unique, valid) this tab's server does not hold. */
+async function blobsMissingOnServer(shas) {
+  var out = [];
+  for (var i = 0; i < shas.length; i += MISSING_BATCH) {
+    var chunk = shas.slice(i, i + MISSING_BATCH);
+    var body = await apiFetch("api/blobs/missing", { method: "POST", body: { shas: chunk } });
+    uniqueShas(body && body.missing).forEach(function (sha) {
+      if (chunk.indexOf(sha) !== -1 && out.indexOf(sha) === -1) out.push(sha);
+    });
+  }
+  return out;
+}
+
+/* Puts every listed blob the server lacks onto it, one at a time. `known`
+   says the list already IS what the server lacks (a 422's), so it is not
+   asked again. → the shas this page has no bytes for, which were not
+   sent. Throws what an upload throws (blob-too-large, blob-unsupported,
+   review-budget, offline, ...). */
+async function uploadBlobs(shas, known) {
+  var list = uniqueShas(shas);
+  if (!list.length) return [];
+  var need = known ? list : await blobsMissingOnServer(list);
+  if (!need.length) return [];
+  var absent = await ensureBytes(need, { remote: false });
+  for (var i = 0; i < need.length; i++) {
+    var sha = need[i];
+    if (absent.indexOf(sha) !== -1) continue;
+    var bytes = bytesForSync(sha);
+    var rec = blobRecordFor(sha);
+    if (!bytes || !rec) { absent.push(sha); continue; }
+    await apiFetch("api/blobs/" + sha, { method: "PUT", raw: bytes, contentType: rec.mime });
+  }
+  return absent;
+}
+
+/* The copy of `state` a server without blob routes is sent: every image
+   this page can find the bytes for put back inline. An image whose bytes
+   are nowhere keeps its reference — dropping it would lose the record of
+   what was there, and an older server stores the key untouched. */
+async function inlineBlobsForServer(state, refs) {
+  if (!refs.length) return state;
+  await ensureBytes(refs);
+  var out = cloneState(state);
+  /* rows' imageRef, image-conflict cards' imageValue and every
+     <img data-blob> in the HTML, the way a .splitpage file carries them
+     (02c-blobs.js) */
+  inlineStateImages(out);
+  return out;
+}
+
+/* One write whose state may name blobs. `send(state, acceptMissing)` makes
+   the request (it is called at most twice) and returns its promise.
+   `canAccept`: a document write, which may say a blob is gone; a comment
+   may not. Throws what the write or an upload throws; `missing-blobs`
+   when an image is gone and the write may not say so. */
+async function sendWithBlobs(state, send, canAccept) {
+  var refs = refsIn(state);
+  if (!serverTakesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
+  if (refs.length) await uploadBlobs(refs, false);
+  try {
+    return await send(state, []);
+  } catch (err) {
+    if (!(err && err.code === "missing-blobs")) throw err;
+    var absent = await uploadBlobs(err.payload && err.payload.missing, true);
+    if (absent.length && !canAccept) throw err;
+    return send(state, absent);
+  }
+}
+
+/* A blob's bytes from this tab's server, into the page's registry — the
+   registry's remote source (setRemoteSource in __init). Not apiFetch():
+   a 200 here is raw bytes, which apiFetch would read as a lapsed sign-in.
+   The answer is re-hashed by the registry's intern() before it is
+   believed; bytes that are not an image, or not THIS image, are refused
+   (null) and the image stays missing. Anything else that goes wrong —
+   offline, 404, a sign-in page — is null too: the caller shows the image
+   as unavailable, and nothing here is worth a toast. */
+export async function fetchBlob(sha) {
+  if (!isSha256Hex(sha) || !serverTakesBlobs()) return null;
+  var res;
+  try {
+    res = await fetch(apiUrl("api/blobs/" + sha), {
+      method: "GET",
+      headers: clientHeaders({ "Accept": "image/*" }),
+      /* as apiFetch, and for the same reasons */
+      credentials: conn.serverUrl ? "omit" : "same-origin"
+    });
+  } catch (e) { return null; }
+  if (!res.ok || res.redirected) return null;
+  var bytes;
+  try { bytes = new Uint8Array(await res.arrayBuffer()); } catch (e) { return null; }
+  var rec = internBlob(bytes);
+  if (!rec || rec.sha256 !== sha) {
+    if (window.console) console.warn("Image from the server refused: it is not the image " + sha);
+    return null;
+  }
+  return bytesForSync(sha);
+}
+
 /* ---- the compare-and-set save ----
 
    Returns true when the document is safely on the server. A 409 means
@@ -1183,7 +1495,7 @@ export async function armServerDelete(btn, id) {
    against their rev. Bounded, because a busy document could otherwise spin
    here forever — three rounds is far more contention than a script gets. */
 export async function saveToServer() {
-  if (serverSessionExpired) return false;
+  if (serverSessionExpired || clientTooOld) return false;
   /* A review session has no PUT: the server refuses one outright (#71).
      What it has to send is its own comments, one at a time, below. */
   if (reviewMode()) return sendReviewWrites();
@@ -1214,19 +1526,23 @@ export async function saveToServer() {
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
-        return apiFetch("api/docs/" + encodeURIComponent(docId), {
-          method: "PUT",
-          body: { baseRev: baseRevAtSave, state: published, by: getEditorName() }
-        });
+        return sendWithBlobs(published, function (sending, acceptMissing) {
+          var put = { baseRev: baseRevAtSave, state: sending, by: getEditorName() };
+          if (acceptMissing.length) put.acceptMissing = acceptMissing;
+          return apiFetch("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
+        }, true);
       });
       if (serverHomeId() !== docId) return true; /* saved, but the open document has since changed */
       home.rev = body.rev;
-      S.baseState = published;
+      setBaseState(published, "saveToServer: what the server just accepted");
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
       /* reported only once the merged result is actually stored, so the
-         banner can never describe a merge that failed to save */
-      if (mergeResult) reportMerge(mergeResult, { alreadySaved: true });
+         banner can never describe a merge that failed to save. `undo:
+         "saved"` because it is stored: Undo merge can only put the user's
+         version back HERE, and the banner says the next save is what
+         replaces the merged copy (reportMerge, #97). */
+      if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
       if (serverHomeId() !== docId) return false;
@@ -1239,6 +1555,7 @@ export async function saveToServer() {
            older than document ids saved it without one, it is still this
            document: keep our id rather than deriving a new one and splitting
            the history on every conflict. */
+        forgetRemoteMisses();
         var theirs = migrateDocument(cloneState(err.payload.state), {
           kind: "server",
           serverId: docId,
@@ -1246,15 +1563,19 @@ export async function saveToServer() {
         });
         /* The undo point here is MINE — mid-save, what is on screen is
            what this call was trying to publish, so that is the version
-           the merge replaces.
+           the merge replaces — and "Undo merge" is armed at it like every
+           other merge's (#97; it used to be filed and never armed, so the
+           banner's button answered "No merge snapshot to undo.").
 
-           armUndo:false is this path's one divergence from every other
-           merge, and it is deliberate only in the sense that it is what
-           the code has always done: the snapshot is filed and "Undo merge"
-           is never pointed at it, so the button reportMerge puts on screen
-           below answers "No merge snapshot to undo." Arming it is a change
-           to what a user can do after a save conflict, not a refactor, so
-           it is left for its own issue rather than smuggled in here.
+           Only on the FIRST conflict of this save. A second 409 finds the
+           first round's merge on screen, which is not a version the user
+           ever had: filing that would point Undo at a half-merged
+           document and bury the one they were actually saving.
+
+           What Undo then does is local: see undoMerge (03-sync.js). The
+           merge is on the server by the time the banner offers it, and
+           the next save, at the rev that merged save came back with,
+           writes the restored version over it.
 
            report:false because the merged version is not on the server
            yet: the loop retries, and the 200 branch above reports it with
@@ -1265,8 +1586,7 @@ export async function saveToServer() {
           mine: S.state,
           theirs: theirs,
           source: "server-conflict",
-          undoPoint: cloneState(S.state),
-          armUndo: false,
+          undoPoint: mergeResult ? null : cloneState(S.state),
           /* if theirs won the id, the history written under ours follows it */
           historyFrom: prevDocId,
           report: false
@@ -1278,6 +1598,12 @@ export async function saveToServer() {
       }
 
       if (err && err.code === "not-found") {
+        /* Somebody deleted it on the server. There is nothing left to
+           compare-and-set against, so this page stops calling it home: the
+           server home is cleared through setHome() (#73), which also stops
+           autosave and the presence beat for it. What is on screen stays,
+           and stays dirty — it is now the only copy. (Dead until #99:
+           apiFetch() used to call this "404".) */
         showToast("That document is no longer on the server. Use “Put this script on the server” to publish it again.", "warn");
         setHome("none");
         updateFileChip();
@@ -1293,9 +1619,14 @@ export async function saveToServer() {
 
 /* ---- a reviewer's writes (#71) ----
 
-   A review token writes through two routes and nothing else:
-   POST api/docs/:id/comments (a new comment, or a reply) and
-   PATCH api/docs/:id/comments/:cid (resolve / unresolve). The server
+   A review token writes through one route and nothing else:
+   POST api/docs/:id/comments (a new comment, or a reply). It never
+   resolves or unresolves — the owner's decision, since authorship cannot be
+   established (an author is a typed name, and reviewers share one token),
+   so a reviewer's resolve would always be a resolve of somebody else's
+   comment. The server answers a reviewer's PATCH
+   api/docs/:id/comments/:cid with 403 reviewers-cannot-resolve, and
+   nothing here sends one. The server
    refuses a review PUT outright — it used to diff the whole uploaded script
    against the stored one to prove only a comment had moved, and that proof
    is gone. So saveToServer() never PUTs from a review session; it comes
@@ -1305,8 +1636,10 @@ export async function saveToServer() {
    path it always was, ending somewhere else.
 
    WHAT TO SEND is what this view holds that the server has not confirmed:
-   a comment in S.state that S.baseState does not have, a reply its thread
-   in the base does not have, a resolve the base does not agree with.
+   a comment in S.state that S.baseState does not have, and a reply its
+   thread in the base does not have. A resolved flag that differs from the
+   base is not sent — it is put back to the base's (dropLocalResolves), so
+   a review session never shows a resolve the server does not have.
    S.baseState is what the server last confirmed (HANDOFF §3.6), so the
    difference IS the outbox — which is why a comment typed while offline, or
    carried across a reload in the stash, goes out on the next save without
@@ -1318,7 +1651,7 @@ export async function saveToServer() {
    WHAT COMES BACK is adopted, not kept alongside: the server builds the
    stored comment itself (its clock, its bounded author), so the stored copy
    replaces ours in S.state and goes into S.baseState, keeping only what
-   this view has not sent yet (a reply still to go, a resolve still to go).
+   this view has not sent yet (a reply still to go).
    Only the one comment the answer is about is folded in (with, for a placed
    anchor, the one field its span sits in and that scene's stamp) — nothing
    else of the document changes on either side, so a later merge still sees
@@ -1379,7 +1712,7 @@ function rowIn(state, id) {
 function jsonCopy(v) { return JSON.parse(JSON.stringify(v)); }
 
 /* The next thing this view holds that the server has not confirmed, in
-   document order: a comment before its replies, a reply before a resolve. */
+   document order: a comment before its replies. */
 function nextReviewWrite() {
   var base = (S.baseState && S.baseState.comments) || [];
   var list = (S.state && S.state.comments) || [];
@@ -1400,10 +1733,29 @@ function nextReviewWrite() {
       var rkey = "r:" + c.id + ":" + (r && r.id);
       if (r && !had[r.id] && !reviewRefused[rkey]) return { kind: "reply", id: c.id, replyId: r.id, key: rkey };
     }
-    var xkey = "x:" + c.id + ":" + !!c.resolved;
-    if (!!c.resolved !== !!was.resolved && !reviewRefused[xkey]) return { kind: "resolve", id: c.id, key: xkey };
   }
   return null;
+}
+
+/* A reviewer cannot resolve (see above), so a resolved flag this view holds
+   that the server does not — only ever from a stash or a copy made before
+   that rule — goes back to what the server confirmed rather than sitting on
+   screen as if it had been saved. → true when anything changed. */
+function dropLocalResolves() {
+  var base = (S.baseState && S.baseState.comments) || [];
+  var changed = false;
+  ((S.state && S.state.comments) || []).forEach(function (c) {
+    if (!c || c.kind === "conflict") return;
+    var bi = commentIndexIn(base, c.id);
+    var was = bi === -1 ? null : base[bi];
+    var wasResolved = !!(was && was.resolved);
+    if (!!c.resolved === wasResolved) return;
+    c.resolved = wasResolved;
+    c.resolvedBy = was ? (was.resolvedBy || null) : null;
+    c.resolvedAt = was ? (was.resolvedAt || null) : null;
+    changed = true;
+  });
+  return changed;
 }
 
 /* One field's HTML as the server should see it: this comment's span in
@@ -1454,14 +1806,6 @@ function dropLocalAnchor(c) {
 function reviewRequest(op, c) {
   var path = "api/docs/" + encodeURIComponent(home.id) + "/comments";
   var by = getEditorName();
-  if (op.kind === "resolve") {
-    return {
-      path: path + "/" + encodeURIComponent(c.id),
-      method: "PATCH",
-      body: { resolved: !!c.resolved, by: by },
-      busy: c.resolved ? "Resolving…" : "Reopening…"
-    };
-  }
   if (op.kind === "reply") {
     var reply = null;
     (c.replies || []).forEach(function (r) { if (r && r.id === op.replyId) reply = r; });
@@ -1485,6 +1829,26 @@ function reviewRequest(op, c) {
   return { path: path, method: "POST", body: payload, busy: "Posting your comment…" };
 }
 
+/* A comment or reply body may hold images (#82 D6): uploaded first, or
+   inlined for a server without blob routes, like a document's. Only the
+   body is looked at — the anchor's HTML has to match the stored field tag
+   for tag, so any image in it is one the server already has. `req.body`
+   itself is left as it was: adoptReviewAnswer reads the anchor back off
+   it. */
+function sendReviewRequest(req) {
+  var isReply = !!req.body.reply;
+  var probe = { comments: [{ body: isReply ? req.body.reply.body : req.body.comment.body }] };
+  return sendWithBlobs(probe, function (sending) {
+    var body = req.body;
+    if (sending !== probe) {
+      body = jsonCopy(req.body);
+      if (isReply) body.reply.body = sending.comments[0].body;
+      else body.comment.body = sending.comments[0].body;
+    }
+    return apiFetch(req.path, { method: req.method, body: body });
+  }, false);
+}
+
 /* The server's copy of the one comment an answer is about, into the base
    and onto the screen. Returns true when something visible in the script
    changed (an anchor came back out), so the caller knows to re-render. */
@@ -1492,7 +1856,6 @@ function adoptReviewAnswer(op, sent, body) {
   var stored = body.comment;
   var baseList = S.baseState.comments || (S.baseState.comments = []);
   var bi = commentIndexIn(baseList, stored.id);
-  var wasResolved = bi === -1 ? false : !!baseList[bi].resolved;
   if (bi === -1) baseList.push(jsonCopy(stored));
   else baseList[bi] = jsonCopy(stored);
 
@@ -1506,12 +1869,7 @@ function adoptReviewAnswer(op, sent, body) {
     next.replies.forEach(function (r) { if (r) have[r.id] = true; });
     /* replies still to go stay, after the ones the server has */
     (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
-    /* and so does a resolve still to go */
-    if (op.kind !== "resolve" && !!local.resolved !== wasResolved) {
-      next.resolved = local.resolved;
-      next.resolvedBy = local.resolvedBy;
-      next.resolvedAt = local.resolvedAt;
-    }
+    /* the resolved flag is the server's: a reviewer never has one to send */
     list[si] = next;
   }
 
@@ -1551,7 +1909,10 @@ var REVIEW_REFUSALS = {
   "bad-comment": "the server could not read it as a comment",
   "bad-anchor": "the server could not read where it goes",
   "bad-comment-id": "the server could not read it as a comment",
-  "no-state": "the document on the server is empty"
+  "no-state": "the document on the server is empty",
+  "missing-blobs": "an image in it is no longer on this device or on the server",
+  "blob-too-large": "an image in it is larger than the server takes (8 MB)",
+  "blob-unsupported": "an image in it is not a PNG, JPEG, GIF or WebP"
 };
 
 /* A refusal that will be the same answer every time — keep the words on
@@ -1559,6 +1920,10 @@ var REVIEW_REFUSALS = {
    out, a PIN to type) is worth trying again. */
 function permanentReviewRefusal(err) {
   if (!err) return "";
+  /* the same picture is refused the same way every time (#82) */
+  if (err.code === "missing-blobs" || err.code === "blob-too-large" || err.code === "blob-unsupported") {
+    return REVIEW_REFUSALS[err.code];
+  }
   var reason = err.code === "conflict" ? (err.payload && err.payload.error) : err.message;
   if (err.code === "conflict" || err.code === "400" || err.code === "413" ||
       (err.code === "404" && reason === "no-such-comment")) {
@@ -1574,7 +1939,8 @@ async function sendReviewWrites() {
   /* openServerDoc() always sets one; without it there is no telling what
      the server has already confirmed, so nothing is sent. */
   if (!S.baseState) return false;
-  var redraw = false;
+  /* nothing to send for it, and nothing to keep showing either */
+  var redraw = dropLocalResolves();
   var sentAny = false;
   var sentKeys = {};
   reviewWriting = true;
@@ -1591,16 +1957,13 @@ async function sendReviewWrites() {
       var req = reviewRequest(op, c);
       var body;
       try {
-        body = await withBusyBar(req.busy, function () {
-          return apiFetch(req.path, { method: req.method, body: req.body });
-        });
+        body = await withBusyBar(req.busy, function () { return sendReviewRequest(req); });
       } catch (err) {
         if (serverHomeId() !== docId) return false;
         var why = permanentReviewRefusal(err);
         if (why) {
           reviewRefused[op.key] = true;
-          showToast((op.kind === "resolve" ? "That could not be marked resolved" :
-                     op.kind === "reply" ? "Your reply could not be posted" :
+          showToast((op.kind === "reply" ? "Your reply could not be posted" :
                      "Your comment could not be posted") +
                     " — " + why + ". It stays on this screen only, so copy anything you need.",
                     "warn", true);
@@ -1612,7 +1975,6 @@ async function sendReviewWrites() {
           return false;
         }
         handleApiError(err, op.kind === "reply" ? "Could not post your reply" :
-                            op.kind === "resolve" ? "Could not change that comment" :
                             "Could not post your comment");
         return false;
       }
@@ -1631,7 +1993,7 @@ async function sendReviewWrites() {
   var refusedHere = false;
   (S.state.comments || []).forEach(function (c) {
     if (!c) return;
-    if (reviewRefused["c:" + c.id] || reviewRefused["x:" + c.id + ":" + !!c.resolved]) refusedHere = true;
+    if (reviewRefused["c:" + c.id]) refusedHere = true;
     (c.replies || []).forEach(function (r) { if (r && reviewRefused["r:" + c.id + ":" + r.id]) refusedHere = true; });
   });
   if (!refusedHere) clearDirty();
@@ -1768,6 +2130,7 @@ async function pullServerDoc(docId) {
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;   /* a save of ours landed first */
+  forgetRemoteMisses();
 
   /* Their copy came from this same server document, so an id-less one saved
      by a client older than document ids is still THIS document: keep ours
@@ -1785,7 +2148,7 @@ async function pullServerDoc(docId) {
        own pull-merge, a save that only moved `lastEditedAt`, a second
        window catching up. Take the rev, so the next beat is quiet and the
        next save is judged against it, and touch nothing else. */
-    S.baseState = cloneState(theirs);
+    setBaseState(cloneState(theirs), "pullServerDoc: their save says what ours already said");
     updateFileChip();
     return;
   }
@@ -1811,12 +2174,12 @@ async function pullServerDoc(docId) {
      definition. Marking a CLEAN document dirty here is the loop described
      above, in one line.
 
-     The banner's "Undo merge" has nothing to undo, because this path files
-     no snapshot. That is the same answer saveToServer's 409 gives today
-     (applyMerge's armUndo:false, pinned by tests/54-server-conflict.txt),
-     and it is the honest one here: undoing a pull would mean throwing away
-     somebody else's work, which is not what that button promises. */
-  if (merged.result) reportMerge(merged.result, { alreadySaved: true });
+     `undo: false` takes "Undo merge" off the banner (#97). This path files
+     no snapshot, so the button would have nothing of this merge to undo —
+     and whatever it still pointed at would be from before somebody else's
+     saved work arrived, so undoing a pull means throwing that work away,
+     which is not what the button promises. The merge is still reported. */
+  if (merged.result) reportMerge(merged.result, { alreadySaved: true, undo: false });
   showToast("Merged in changes from " + (body.updatedBy || "someone else"), "ok");
 }
 
@@ -1855,6 +2218,7 @@ export async function launcherFetch(path, opts) {
   opts = opts || {};
   if (!launchToken) throw ApiError("no-launcher", "this copy was not started by the launcher");
   var headers = { "Accept": "application/json", "x-splitpage-launch": launchToken };
+  headers[CLIENT_HEADER] = CLIENT_GENERATION; /* same-origin only: no preflight to refuse it */
   if (opts.body) headers["Content-Type"] = "application/json";
   var res;
   try {
@@ -1943,20 +2307,267 @@ function saveDriveCreds(apiKey, clientId) {
   } catch (e) { /* not fatal — creds just won't survive a reload */ }
 }
 
-export function openDriveModal() {
-  /* Google Identity Services only ever authorizes an http/https origin
-     (Google Cloud Console has no "custom scheme" option for Authorized
-     JavaScript origins), and this page runs at splitpage://app — the menu
-     entry that reaches here is hidden on desktop for exactly that reason
-     (20f-desktop.js's initDesktop()). This is the defensive half, in case
-     something still calls the action directly (a native menu command, a
-     stale keyboard shortcut) — say why plainly instead of opening a modal
-     whose Sign in button can only ever fail. */
-  if (S.DESKTOP) {
-    showToast("Google Drive isn't available in the desktop app — sign-in needs a web address Google " +
-      "can redirect back to. Use File ▸ Open a document… instead.", "warn");
+/* ---- the desktop app's Drive (issue #10) ----
+
+   Google Identity Services only ever authorizes an http/https origin, and
+   the desktop page runs at splitpage://app, so none of the above can work
+   there. The desktop shell signs in instead — a loopback OAuth redirect
+   held by the MAIN process (desktop/google-drive.js, main.js § 9c) — and
+   performs every Drive request itself. What this page gets is the bridge's
+   six calls: driveStatus/driveSignIn/driveSignOut, which take no argument,
+   and driveList/driveDownload/driveUpload, which take a Drive id or an
+   upload request. It never holds a token, never names a URL, and there is
+   no API key and no Client ID form: the client is configured on the
+   machine (an environment variable or a JSON file in the settings folder),
+   and the modal says exactly where when nothing is.
+
+   The same modal, the same list and breadcrumb; what differs is the
+   account row, the setup panel, and that rename/delete/new folder are not
+   offered (the bridge does not carry them). An upload whose name matches
+   exactly one ordinary file in the folder replaces that file's content —
+   a new revision in Drive — instead of adding a second file of that name. */
+var driveDesktopStatus = null;
+
+function driveDesktopBridge() {
+  return !!(S.DESKTOP && typeof S.DESKTOP.driveStatus === "function");
+}
+
+var DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+var DRIVE_DOC_MIME = "application/vnd.google-apps.document";
+var DRIVE_ENV_VARS_FALLBACK = ["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"];
+
+/* Which of the modal's two sets of chrome is showing. Written both ways
+   because a browser suite swaps the desktop backend in and back out. */
+function applyDriveChrome(desktop) {
+  document.getElementById("drive-web-hint").hidden = desktop;
+  document.getElementById("drive-desktop-hint").hidden = !desktop;
+  document.getElementById("drive-desktop-setup").hidden = true;
+  if (desktop) document.getElementById("drive-setup").hidden = true;
+  var edit = document.querySelector("#drive-modal .drive-edit-creds");
+  if (edit) edit.hidden = desktop;
+  var nf = document.getElementById("drive-newfolder-toggle");
+  if (nf) nf.hidden = desktop;
+  var row = document.querySelector("#drive-modal .drive-connect-row");
+  if (row) row.hidden = false;
+  document.getElementById("drive-folder-input").placeholder = desktop
+    ? "Paste a Drive folder link or ID — or leave empty for My Drive"
+    : "Paste a Drive folder link or ID…";
+}
+
+function driveDesktopMessage(res) {
+  var code = res && res.code;
+  if (code === "SIGNED_OUT") return "Google no longer accepts this sign-in — sign in again.";
+  if (code === "NOT_CONFIGURED") return "no Google client is set up on this computer.";
+  if (code === "NETWORK") return "couldn't reach Google. Check your connection.";
+  if (code === "NOT_FOUND") return "it isn't there, or this Google account can't see it.";
+  if (code === "FORBIDDEN") return "this Google account doesn't have permission.";
+  if (code === "TOO_LARGE") return "it's larger than 64 MB.";
+  if (code === "UNSUPPORTED") return "Google Sheets, Slides and forms can't be downloaded here — open them in Drive.";
+  if (code === "NOT_A_FOLDER") return "that's a file, not a folder.";
+  if (code === "IS_A_FOLDER") return "that's a folder.";
+  if (code === "BAD_ARGS") return "Splitpage refused the request.";
+  return "something went wrong" + (code ? " (" + code + ")" : "") + ".";
+}
+
+async function driveDesktopCall(method, arg) {
+  try {
+    var res = await (arguments.length > 1 ? S.DESKTOP[method](arg) : S.DESKTOP[method]());
+    return res || { ok: false, code: "FAILED" };
+  } catch (e) {
+    return { ok: false, code: "FAILED" };
+  }
+}
+
+/* A Drive call answered SIGNED_OUT: the stored sign-in is gone (revoked in
+   the Google account, say). Show the signed-out modal rather than a list
+   nothing can refresh. */
+async function driveDesktopSignedOut(res) {
+  if (!res || res.code !== "SIGNED_OUT") return false;
+  driveResetBrowse();
+  await refreshDriveDesktop();
+  return true;
+}
+
+function driveResetBrowse() {
+  driveState.connected = false;
+  driveState.path = [];
+  driveState.items = [];
+  driveEditingId = null;
+}
+
+async function refreshDriveDesktop() {
+  var st = await driveDesktopCall("driveStatus");
+  driveDesktopStatus = st;
+  renderDriveDesktop();
+  if (st.ok && st.configured && st.signedIn && !driveState.connected) await driveConnect("");
+}
+
+function renderDriveDesktop() {
+  var st = driveDesktopStatus || {};
+  var configured = !!(st.ok && st.configured);
+  document.getElementById("drive-desktop-setup").hidden = configured;
+  document.getElementById("drive-main").hidden = !configured;
+  if (!configured) {
+    document.getElementById("drive-desktop-client-path").textContent =
+      st.clientFilePath || "google-oauth-client.json, in Splitpage's settings folder";
+    document.getElementById("drive-desktop-env-vars").textContent =
+      (Array.isArray(st.envVars) && st.envVars.length ? st.envVars : DRIVE_ENV_VARS_FALLBACK).join(" and ");
     return;
   }
+  driveState.signedIn = !!st.signedIn;
+  if (!driveState.signedIn) driveResetBrowse();
+  var row = document.querySelector("#drive-modal .drive-connect-row");
+  if (row) row.hidden = !driveState.signedIn;
+  document.getElementById("drive-browser").hidden = !(driveState.signedIn && driveState.connected);
+  renderDriveAccount();
+}
+
+function renderDriveAccountDesktop(el) {
+  var st = driveDesktopStatus || {};
+  if (st.signingIn) {
+    el.innerHTML = '<span class="drive-account-status">Finish signing in in your browser, then come back here.</span>' +
+      '<button type="button" class="btn" disabled>Waiting for Google…</button>';
+  } else if (driveState.signedIn) {
+    var who = st.email ? "Signed in as " + escapeHtml(st.email) : "Signed in";
+    var session = st.persisted ? "" : " — for this session only: this computer has no secure storage to keep the sign-in.";
+    el.innerHTML = '<span class="drive-account-status">✓ ' + who + escapeHtml(session) + '</span>' +
+      '<button type="button" class="btn" data-action="drive-signout">Sign out</button>';
+  } else {
+    el.innerHTML = '<span class="drive-account-status">Sign in to browse your Google Drive. Google opens in your browser.</span>' +
+      '<button type="button" class="btn btn-accent" data-action="drive-signin">Sign in with Google</button>';
+  }
+  updateDriveWriteButtons();
+}
+
+async function driveSignInDesktop() {
+  if (driveDesktopStatus && driveDesktopStatus.signingIn) return;
+  driveDesktopStatus = Object.assign({}, driveDesktopStatus, { signingIn: true });
+  renderDriveAccount();
+  var res = await driveDesktopCall("driveSignIn");
+  if (res.ok) {
+    driveDesktopStatus = res;
+    driveResetBrowse();
+    renderDriveDesktop();
+    showToast("Signed in to Google Drive" + (res.email ? " as " + res.email : "") + ".", "ok");
+    await driveConnect("");
+    return;
+  }
+  var code = res.code;
+  var msg = code === "DENIED" ? "Google sign-in was cancelled."
+    : code === "TIMEOUT" ? "Sign-in timed out — nothing came back from your browser within 5 minutes. Try again."
+    : code === "STATE_MISMATCH" ? "The reply from Google didn't match this sign-in, so it was refused. Try again."
+    : code === "NO_REFRESH_TOKEN" ? "Google didn't grant lasting access. Try again, and allow access when Google asks."
+    : code === "NO_BROWSER" ? "Couldn't open your browser for Google sign-in."
+    : code === "CANCELLED" ? "Sign-in was cancelled."
+    : code === "NOT_CONFIGURED" ? "No Google client is set up on this computer yet."
+    : "Couldn't finish signing in to Google Drive" + (code ? " (" + code + ")" : "") + ".";
+  showToast(msg, code === "DENIED" || code === "CANCELLED" ? "warn" : "error");
+  await refreshDriveDesktop();
+}
+
+async function driveSignOutDesktop() {
+  var res = await driveDesktopCall("driveSignOut");
+  driveResetBrowse();
+  driveDesktopStatus = res && res.status ? Object.assign({ ok: true }, res.status) : await driveDesktopCall("driveStatus");
+  renderDriveDesktop();
+  showToast("Signed out of Google Drive.", "ok");
+}
+
+async function driveConnectDesktop(rawInput) {
+  var raw = (rawInput || "").trim();
+  var id = raw ? parseDriveFolderId(raw) : "root";
+  if (!id) { showToast("That doesn't look like a Drive folder link or ID.", "warn"); return; }
+  var btn = document.getElementById("drive-connect-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Opening…"; }
+  try {
+    var res = await driveDesktopCall("driveList", id);
+    if (!res.ok) {
+      if (await driveDesktopSignedOut(res)) return;
+      showToast("Could not open that folder — " + driveDesktopMessage(res), res.code === "NOT_A_FOLDER" ? "warn" : "error");
+      return;
+    }
+    driveState.connected = true;
+    driveState.path = [id === "root"
+      ? { id: "root", name: "My Drive" }
+      : { id: (res.folder && res.folder.id) || id, name: (res.folder && res.folder.name) || "Drive folder" }];
+    driveState.items = Array.isArray(res.files) ? res.files : [];
+    driveEditingId = null;
+    document.getElementById("drive-browser").hidden = false;
+    renderDriveBreadcrumb();
+    renderDriveList();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Open folder"; }
+  }
+}
+
+async function driveListCurrentDesktop() {
+  var folder = driveState.path[driveState.path.length - 1];
+  if (!folder) return;
+  var list = document.getElementById("drive-list");
+  list.innerHTML = '<div class="drive-empty">Loading…</div>';
+  var res = await driveDesktopCall("driveList", folder.id);
+  if (!res.ok) {
+    if (await driveDesktopSignedOut(res)) return;
+    list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(driveDesktopMessage(res)) + '</div>';
+    return;
+  }
+  driveState.items = Array.isArray(res.files) ? res.files : [];
+  renderDriveBreadcrumb();
+  renderDriveList();
+}
+
+async function driveDownloadDesktop(it) {
+  if (it.mimeType !== DRIVE_DOC_MIME && /^application\/vnd\.google-apps\./.test(it.mimeType)) {
+    /* Same as the web build: Sheets, Slides, forms and the like have no
+       clean text form — send the person to Drive itself. */
+    S.DESKTOP.openExternal("https://drive.google.com/open?id=" + encodeURIComponent(it.id));
+    return;
+  }
+  var res = await driveDesktopCall("driveDownload", it.id);
+  if (!res.ok) {
+    if (await driveDesktopSignedOut(res)) return;
+    showToast("Could not download " + it.name + " — " + driveDesktopMessage(res), "error");
+    return;
+  }
+  var filename = it.name;
+  /* A Google Doc comes back as plain text (main exports it that way). */
+  if (it.mimeType === DRIVE_DOC_MIME && !/\.[a-z0-9]+$/i.test(filename)) filename += ".txt";
+  await deliverFile(filename, res.bytes);
+}
+
+async function driveUploadOneDesktop(file, parentId) {
+  var bytes = new Uint8Array(await file.arrayBuffer());
+  var same = driveState.items.filter(function (it) {
+    return it.name === file.name && it.mimeType !== DRIVE_FOLDER_MIME && !/^application\/vnd\.google-apps\./.test(it.mimeType);
+  });
+  var req = same.length === 1 ? { fileId: same[0].id, bytes: bytes } : { parentId: parentId, name: file.name, bytes: bytes };
+  if (file.type) req.mimeType = file.type;
+  var res = await driveDesktopCall("driveUpload", req);
+  if (!res.ok) {
+    var err = new Error(driveDesktopMessage(res));
+    err.driveResult = res;
+    throw err;
+  }
+  return same.length === 1 ? "updated" : "created";
+}
+
+export function openDriveModal() {
+  if (S.DESKTOP) {
+    /* A desktop shell without the Drive bridge (the entry is hidden then —
+       20f-desktop.js's initDesktop() — so this is the defensive half, for a
+       native menu command or a stale shortcut). */
+    if (!driveDesktopBridge()) {
+      showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open a document… instead.", "warn");
+      return;
+    }
+    document.getElementById("drive-modal").hidden = false;
+    document.getElementById("drive-folder-input").value = "";
+    applyDriveChrome(true);
+    document.getElementById("drive-main").hidden = true;
+    refreshDriveDesktop();
+    return;
+  }
+  applyDriveChrome(false);
   loadDriveCreds();
   document.getElementById("drive-modal").hidden = false;
   document.getElementById("drive-folder-input").value = driveLastFolder();
@@ -1968,6 +2579,7 @@ export function closeDriveModal() {
 }
 
 export function driveShowCredsForm() {
+  if (S.DESKTOP) return;
   document.getElementById("drive-setup").hidden = false;
   document.getElementById("drive-main").hidden = true;
 }
@@ -2009,6 +2621,9 @@ function parseDriveFolderId(input) {
 function driveApiKeyParam() { return "key=" + encodeURIComponent(driveCreds.apiKey); }
 
 async function driveFetch(url, opts) {
+  /* The one place this page talks to Google directly — never on desktop,
+     where main makes every Drive request and the page holds no token. */
+  if (S.DESKTOP) throw new Error("not available in the desktop app");
   opts = opts || {};
   var headers = opts.headers || {};
   if (driveState.accessToken && driveState.tokenExpiresAt > Date.now()) {
@@ -2027,6 +2642,7 @@ async function driveFetch(url, opts) {
 }
 
 export async function driveConnect(rawInput) {
+  if (driveDesktopBridge()) return driveConnectDesktop(rawInput);
   if (!driveHasCreds()) { showToast("Add your Google API key and Client ID first.", "warn"); return; }
   var id = parseDriveFolderId(rawInput);
   if (!id) { showToast("That doesn't look like a Drive folder link or ID.", "warn"); return; }
@@ -2055,6 +2671,7 @@ export async function driveConnect(rawInput) {
 }
 
 export async function driveListCurrent() {
+  if (driveDesktopBridge()) return driveListCurrentDesktop();
   var folder = driveState.path[driveState.path.length - 1];
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
@@ -2122,7 +2739,9 @@ function renderDriveList() {
     list.innerHTML = '<div class="drive-empty">This folder is empty.</div>';
     return;
   }
-  var canWrite = driveState.signedIn;
+  /* Rename and delete are the web build's; the desktop bridge does not
+     carry them (see the desktop section above). */
+  var canWrite = driveState.signedIn && !driveDesktopBridge();
   list.innerHTML = driveState.items.map(function (it) {
     var isFolder = it.mimeType === "application/vnd.google-apps.folder";
     if (driveEditingId === it.id) {
@@ -2174,6 +2793,7 @@ var DRIVE_EXPORT_MIME = {
 };
 
 async function driveDownloadFile(it) {
+  if (driveDesktopBridge()) return driveDownloadDesktop(it);
   var exportInfo = DRIVE_EXPORT_MIME[it.mimeType];
   var url, filename = it.name;
   if (exportInfo) {
@@ -2262,6 +2882,7 @@ export function toggleDriveNewFolder(force) {
 }
 
 export async function driveCreateFolder() {
+  if (driveDesktopBridge()) { toggleDriveNewFolder(false); return; }
   if (!driveState.signedIn) { showToast("Sign in with Google first.", "warn"); toggleDriveNewFolder(false); return; }
   var input = document.getElementById("drive-newfolder-input");
   var name = input ? input.value.trim() : "";
@@ -2306,15 +2927,22 @@ export async function driveUploadFiles(fileList) {
   if (!driveState.signedIn) { showToast("Sign in with Google first.", "warn"); return; }
   var parent = driveState.path[driveState.path.length - 1];
   var files = Array.prototype.slice.call(fileList || []);
-  if (!files.length) return;
-  var failed = 0;
+  if (!files.length || !parent) return;
+  var desktop = driveDesktopBridge();
+  var failed = 0, updated = 0;
   for (var i = 0; i < files.length; i++) {
-    try { await driveUploadOne(files[i], parent.id); }
-    catch (err) { failed++; showToast("Could not upload " + files[i].name + " — " + err.message, "error"); }
+    try {
+      if (desktop) { if (await driveUploadOneDesktop(files[i], parent.id) === "updated") updated++; }
+      else await driveUploadOne(files[i], parent.id);
+    } catch (err) {
+      failed++;
+      if (desktop && await driveDesktopSignedOut(err.driveResult)) return;
+      showToast("Could not upload " + files[i].name + " — " + err.message, "error");
+    }
   }
-  if (files.length - failed > 0) {
-    showToast("Uploaded " + (files.length - failed) + " file" + (files.length - failed === 1 ? "" : "s"), "ok");
-  }
+  var created = files.length - failed - updated;
+  if (created > 0) showToast("Uploaded " + created + " file" + (created === 1 ? "" : "s"), "ok");
+  if (updated > 0) showToast("Replaced " + updated + " file" + (updated === 1 ? "" : "s") + " of the same name with a new version", "ok");
   await driveListCurrent();
 }
 
@@ -2338,6 +2966,7 @@ function loadGisScript() {
 function renderDriveAccount() {
   var el = document.getElementById("drive-account");
   if (!el) return;
+  if (driveDesktopBridge()) { renderDriveAccountDesktop(el); return; }
   el.innerHTML = driveState.signedIn
     ? '<span class="drive-account-status">✓ Signed in — you can make changes here.</span>' +
       '<button type="button" class="btn" data-action="drive-signout">Sign out</button>'
@@ -2359,6 +2988,7 @@ function updateDriveWriteButtons() {
 }
 
 export async function driveSignIn() {
+  if (driveDesktopBridge()) return driveSignInDesktop();
   if (!driveCreds.clientId) { showToast("Add your OAuth Client ID first.", "warn"); return; }
   if (location.protocol === "file:") {
     showToast("Sign-in needs this page served over http/https, not opened from disk.", "warn");
@@ -2388,6 +3018,7 @@ export async function driveSignIn() {
 }
 
 export function driveSignOut() {
+  if (driveDesktopBridge()) return driveSignOutDesktop();
   if (driveState.accessToken && window.google && google.accounts && google.accounts.oauth2) {
     google.accounts.oauth2.revoke(driveState.accessToken, function () {});
   }
@@ -2402,6 +3033,11 @@ export function driveSignOut() {
    in filename order — the order these statements used to run in. */
 export function __init() {
   loadTabConnection();
+
+  /* A hosted document's images come from its server when this page has
+     not got them (#82): the registry's remote source, asked only after
+     the page's own store. */
+  setRemoteSource(function (sha) { return onServerDoc() ? fetchBlob(sha) : null; });
 
   readReviewKey();
 
@@ -2456,7 +3092,9 @@ export function __init() {
          a two-way merge: every field either side had touched came out a
          conflict rather than being reconciled against what the server last
          confirmed. `false` is for a suite that wants exactly that. */
-      if (onServerDoc() && opts.base !== false) S.baseState = cloneState(S.state);
+      if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
+      /* what /api/health's `blobs` would have said, when a suite says it */
+      if (opts.blobs !== undefined) noteCaps(conn, { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
       updateServerMenu();
       render();
@@ -2488,6 +3126,12 @@ export function __init() {
        watches a reviewer's comment go out through the comment routes (#71)
        and be folded back in. Copies, not the live objects. */
     base: function () { return S.baseState ? cloneState(S.baseState) : null; },
-    dirty: function () { return !!S.dirty; }
+    dirty: function () { return !!S.dirty; },
+    /* Images on the wire (#82), for tests/66-hosted-blobs.txt: the real
+       health probe, what it recorded for this connection, and the blob
+       fetch helper. */
+    detect: detectServer,
+    caps: function () { return Object.assign({}, capsOf(conn)); },
+    fetchBlob: fetchBlob
   };
 }

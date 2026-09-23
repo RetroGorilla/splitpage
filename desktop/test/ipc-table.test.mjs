@@ -249,6 +249,8 @@ test("checkArgs accepts what the channels really send", () => {
   assert.equal(checkArgs(channelFor("splitpage:history-list", "invoke").argsSchema, [null]), null);
   assert.equal(checkArgs(channelFor("splitpage:history-list", "invoke").argsSchema, [doc]), null);
   assert.equal(checkArgs(channelFor("splitpage:history-get", "invoke").argsSchema, [{ docId: doc }, "snap-1"]), null);
+  assert.equal(checkArgs(channelFor("splitpage:history-put", "invoke").argsSchema, [doc, {}, "{}", { protect: [] }]), null);
+  assert.equal(checkArgs(channelFor("splitpage:history-put", "invoke").argsSchema, [null, {}, "{}", { protect: [], older: true }]), null);
   assert.equal(checkArgs(channelFor("splitpage:write-file", "invoke").argsSchema, ["f1", "text"]), null);
   assert.equal(checkArgs(channelFor("splitpage:write-file", "invoke").argsSchema, ["f1", new Uint8Array(2)]), null);
   assert.equal(checkArgs(channelFor("splitpage:update-check", "invoke").argsSchema, []), null);
@@ -259,17 +261,39 @@ test("checkArgs accepts what the channels really send", () => {
 });
 
 test("checkArgs refuses the shapes the handlers used to refuse for themselves", () => {
+  const doc = () => "d0123456789abcdef0123456789abcdef";
   const bad = (name, direction, args) => checkArgs(channelFor(name, direction).argsSchema, args);
   assert.ok(bad("splitpage:tabstrip-activate", "send", ["not-a-tab-id"]), "a tab id that is not 32 hex");
   assert.ok(bad("splitpage:tabstrip-activate", "send", []), "no tab id at all");
   assert.ok(bad("splitpage:tabstrip-reorder", "send", ["0".repeat(32), 1.5]), "a fractional index");
-  assert.ok(bad("splitpage:history-put", "invoke", ["_older", {}, "{}", []]), "the Older bucket as a docId");
+  assert.ok(bad("splitpage:history-put", "invoke", ["_older", {}, "{}", {}]), "the Older bucket as a docId");
+  assert.ok(bad("splitpage:history-put", "invoke", ["_older", {}, "{}", { older: true }]), "the Older bucket as a docId, flag or no flag");
+  assert.ok(bad("splitpage:history-put", "invoke", [doc(), {}, "{}", []]), "a bare protect list where the options bag goes");
+  assert.ok(bad("splitpage:history-put", "invoke", [doc(), {}, "{}"]), "no options bag at all");
   assert.ok(bad("splitpage:history-get", "invoke", [{}, "../escape"]), "a snapshot id that is a path");
   assert.ok(bad("splitpage:update-install", "invoke", ["C:\\anything.exe"]), "an argument to an argument-free call");
   assert.ok(bad("splitpage:write-file", "invoke", ["f1", { not: "bytes" }]), "a body that is not bytes");
   assert.ok(bad("splitpage:open-external", "send", [{ url: "https://x" }]), "a url that is not a string");
   assert.ok(bad("splitpage:set-document-state", "send", [null]), "a null document state");
   assert.ok(bad("splitpage:read-file", "invoke", ["a", "b"]), "more arguments than the channel takes");
+});
+
+/* #83 step 4: version history is six channels. Usage rides on
+   history-list's answer, and an import into Older is history-put with
+   {older:true} — the bucket named by a flag, never by a docId string. */
+test("version history is exactly six app-only invoke channels", () => {
+  const names = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:history-")).map((c) => c.name).sort();
+  assert.deepEqual(names, [
+    "splitpage:history-copy", "splitpage:history-get", "splitpage:history-list",
+    "splitpage:history-list-docs", "splitpage:history-put", "splitpage:history-touch"
+  ]);
+  for (const name of names) {
+    const row = channelFor(name, "invoke");
+    assert.ok(row, name + " is an invoke");
+    assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN], name + " is the app page's alone");
+  }
+  assert.equal(channelFor("splitpage:history-usage", "invoke"), null, "usage folded into history-list");
+  assert.equal(channelFor("splitpage:history-import-older", "invoke"), null, "import-older folded into history-put");
 });
 
 /* Issue #86 is the update bridge's contract again (invariant #28): the page
@@ -285,6 +309,66 @@ test("the teleprompter's Open in browser takes no argument, from the app page on
   assert.ok(checkArgs(row.argsSchema, ["C:\\Users\\me\\script.md"]), "a path");
   assert.ok(checkArgs(row.argsSchema, [{ doc: "abc" }]), "a document id");
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
+});
+
+/* Issue #10 is the same contract a third time: main holds the OAuth
+   listener and the tokens, so signing in, signing out and asking for status
+   name nothing, and the Drive calls name a Drive id or an upload request —
+   never a URL, and nothing the tab strip can reach. The id's shape and the
+   upload's fields are checked in desktop/google-drive.js (its own test). */
+test("the Google Drive channels: argument-free account calls, id-only Drive calls, app page only", () => {
+  const row = (name) => channelFor(name, "invoke");
+  for (const name of ["splitpage:drive-status", "splitpage:drive-sign-in", "splitpage:drive-sign-out"]) {
+    assert.ok(row(name), name + " declared");
+    assert.deepEqual([...row(name).argsSchema], [], name + " takes no argument");
+    assert.ok(checkArgs(row(name).argsSchema, ["https://accounts.google.com/o/oauth2/v2/auth?client_id=evil"]), name + " refuses a URL");
+    assert.ok(checkArgs(row(name).argsSchema, [{ clientId: "evil" }]), name + " refuses a client");
+  }
+  assert.deepEqual([...row("splitpage:drive-list").argsSchema], ["string"]);
+  assert.deepEqual([...row("splitpage:drive-download").argsSchema], ["string"]);
+  assert.deepEqual([...row("splitpage:drive-upload").argsSchema], ["object"]);
+  assert.ok(checkArgs(row("splitpage:drive-list").argsSchema, []), "a list with no folder");
+  assert.ok(checkArgs(row("splitpage:drive-list").argsSchema, ["root", "https://www.googleapis.com/"]), "a second argument");
+  assert.ok(checkArgs(row("splitpage:drive-upload").argsSchema, ["name", "bytes"]), "an upload that is not one request object");
+  const drive = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:drive-"));
+  assert.equal(drive.length, 6);
+  for (const c of drive) {
+    assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN], c.name);
+    assert.equal(c.direction, "invoke", c.name);
+    assert.ok(!c.testOnly, c.name);
+  }
+});
+
+/* Issue #82: the blob channels name a blob by its SHA-256 and nothing else
+   (invariant #28) — the sha is typed, so a path, a URL, an uppercase or a
+   short sha never reaches a handler. What a schema cannot say (the bytes
+   are an image, hash to the sha, the missing list is shas and at most
+   2000) is main's and desktop/blob-store.js's, tested there. */
+test("the blob channels: a typed sha256, app page only", () => {
+  const sha = "0123456789abcdef".repeat(4);
+  const row = (name) => channelFor(name, "invoke");
+  assert.deepEqual([...row("splitpage:blob-put").argsSchema], ["sha256", "bytes"]);
+  assert.deepEqual([...row("splitpage:blob-get").argsSchema], ["sha256"]);
+  assert.deepEqual([...row("splitpage:blob-missing").argsSchema], ["array"]);
+  assert.equal(checkArgs(row("splitpage:blob-put").argsSchema, [sha, new Uint8Array(4)]), null);
+  assert.equal(checkArgs(row("splitpage:blob-get").argsSchema, [sha]), null);
+  assert.equal(checkArgs(row("splitpage:blob-missing").argsSchema, [[sha]]), null);
+  for (const bad of [sha.toUpperCase(), sha.slice(1), sha + "0", "../" + sha.slice(3),
+    "C:\\Users\\me\\blobs\\" + sha, "https://evil.example/" + sha, "", null, 42, { sha }]) {
+    assert.ok(checkArgs(row("splitpage:blob-get").argsSchema, [bad]), "blob-get refuses " + JSON.stringify(bad));
+    assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [bad, new Uint8Array(4)]), "blob-put refuses " + JSON.stringify(bad));
+  }
+  assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [sha]), "a put with no bytes");
+  assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [sha, { not: "bytes" }]), "a put whose body is not bytes");
+  assert.ok(checkArgs(row("splitpage:blob-put").argsSchema, [sha, new Uint8Array(4), "image/svg+xml"]), "a caller-supplied mime");
+  assert.ok(checkArgs(row("splitpage:blob-missing").argsSchema, [sha]), "a missing query that is not a list");
+  const blob = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:blob-"));
+  assert.equal(blob.length, 3);
+  for (const c of blob) {
+    assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN], c.name);
+    assert.equal(c.direction, "invoke", c.name);
+    assert.ok(!c.testOnly, c.name);
+  }
 });
 
 /* A malformed draft payload must reach the handler, which answers with a

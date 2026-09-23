@@ -11,7 +11,8 @@ import {
   reassignDocId,
   standaloneHtmlFor
 } from "./02b-doc-id.js";
-import { cloneState } from "./03-sync.js";
+import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "./02c-blobs.js";
+import { cloneState, setBaseState, stashLocalWork } from "./03-sync.js";
 import { plainText, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
@@ -53,8 +54,26 @@ import { openProjectFile } from "./18-local-files.js";
 
 /* ---- the native format ---- */
 
+/* The pictures go into the file inline, as they always have (#82 D1):
+   `visualImage: data:…` on the row, so the file is self-contained and an
+   older client reads it whole. The page itself names them by imageRef;
+   inlineStateImages turns one into the other, which is synchronous — a
+   caller that may not hold every picture's bytes awaits
+   ensureBytes(refsIn(state)) first (saveDoc does). One nobody has stays a
+   ref with no picture in the file; fileImagesMissing() says how many. */
+export function fileStateFor(s) {
+  var copy = migrateRows(cloneState(s || S.state));
+  inlineStateImages(copy);
+  return copy;
+}
+
 export function buildSplitpageFile(s) {
-  return JSON.stringify(migrateRows(cloneState(s || S.state)), null, 2);
+  return JSON.stringify(fileStateFor(s), null, 2);
+}
+
+/* The shas a file written from `s` right now could not carry. */
+export function fileImagesMissing(s) {
+  return missingInlineImages(s || S.state);
 }
 
 /* Throws on anything that isn't one of ours; the caller decides what to
@@ -192,13 +211,33 @@ function markdownCellToHtml(s, md) {
 function applyMarkdownVisualCell(s, row, md) {
   var text = String(md == null ? "" : md);
   var m = MD_IMAGE_PREFIX_RE.exec(text);
-  row.visualImage = m ? (safeImageSrc(m[1]) || null) : null;
+  var rec = m ? internDataUrl(safeImageSrc(m[1]) || "") : null;
+  if (rec) queuePersist([rec.sha256]);
+  /* A picture the file could not carry (its bytes were missing when it was
+     written) is not in the cell, and that is not the cell deleting it. */
+  var uncarried = !m && row.imageRef && !rowImageDataUrl(row);
+  delete row.visualImage;
+  if (!uncarried) row.imageRef = rec || null;
   if (m) text = text.slice(m[0].length);
   row.visualText = markdownCellToHtml(s, text);
 }
 
 function markdownCellChanged(cellText, was) {
   return String(cellText == null ? "" : cellText).trim() !== was;
+}
+
+/* The visual cell compared as what it shows: when the text differs only
+   in how the picture is spelled — an older client wrote the data: URI it
+   was handed, not the canonical one this page writes — the cell is the
+   same picture and the same words, and is unchanged (#82). */
+function markdownVisualCellChanged(cellText, was) {
+  if (!markdownCellChanged(cellText, was.visual)) return false;
+  var text = String(cellText == null ? "" : cellText).trim();
+  var m = MD_IMAGE_PREFIX_RE.exec(text);
+  if (!m) return true;
+  var rec = internDataUrl(safeImageSrc(m[1]) || "");
+  if (!rec || rec.sha256 !== was.image) return true;
+  return text.slice(m[0].length).trim() !== was.visualText;
 }
 
 /* Same row count on both sides: the block is authoritative except where
@@ -211,7 +250,7 @@ function reconcileMarkdownRows(s, table) {
     var cells = table[i];
     if (!cells) return;
     var was = mdSceneCellSource(row, i);
-    if (markdownCellChanged(cells.visualText, was.visual)) {
+    if (markdownVisualCellChanged(cells.visualText, was)) {
       applyMarkdownVisualCell(s, row, cells.visualText);
       changed++;
     }
@@ -229,9 +268,9 @@ function reconcileMarkdownRows(s, table) {
 function rowsFromMarkdownTable(s, table) {
   return table.map(function (cells, i) {
     var old = s.rows[i] || null;
-    var row = old || { id: makeId(), status: "todo", visualImage: null, updatedAt: "", updatedBy: null };
-    var was = old ? mdSceneCellSource(old, i) : { visual: "", audio: "" };
-    if (!old || markdownCellChanged(cells.visualText, was.visual)) {
+    var row = old || { id: makeId(), status: "todo", imageRef: null, updatedAt: "", updatedBy: null };
+    var was = old ? mdSceneCellSource(old, i) : { visual: "", visualText: "", image: null, audio: "" };
+    if (!old || markdownVisualCellChanged(cells.visualText, was)) {
       applyMarkdownVisualCell(s, row, cells.visualText);
     }
     if (!old || markdownCellChanged(cells.audioText, was.audio)) {
@@ -363,6 +402,9 @@ export function __init() {
        missingStateFields never needed a page (src/test/state-fields.test
        .mjs). */
     migrate: migrateRows,
+    /* The crash/sign-in stash (03-sync.js), for 68-images.txt: what it
+       carries across a reload now that images are refs (#82). */
+    stash: stashLocalWork,
     clone: cloneState,
     state: function () { return S.state; },
     /* The project-file home (_home.js), in the shape the suites have always
@@ -379,6 +421,6 @@ export function __init() {
        two-way fallback from outside — once a file has been opened, nothing
        a user can do takes the ancestor away again. */
     hasDiskBase: function () { return !!(fileHome() && fileHome().diskBase); },
-    forgetDiskBase: function () { if (fileHome()) fileHome().diskBase = null; S.baseState = null; return true; }
+    forgetDiskBase: function () { if (fileHome()) fileHome().diskBase = null; setBaseState(null, "__splitpageFormats.forgetDiskBase: test hook, drives the two-way fallback"); return true; }
   };
 }

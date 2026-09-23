@@ -24,8 +24,10 @@ import {
   mergedDocId,
   migrateDocument,
   normalizeDocId,
+  sha256Bytes,
   sha256Hex
 } from "../js/02b-doc-id.js";
+import { createHash } from "node:crypto";
 import { migrateRows } from "../js/02-state.js";
 
 const ID_A = "d" + "1".repeat(32);
@@ -51,6 +53,47 @@ test("SHA-256 vectors (FROZEN, HANDOFF invariant #37)", () => {
     "8e346e7e5984149a3f22192ed3c43eb61cd00558adc16d98b1811913d230696b");
   /* A lone surrogate: encoded as U+FFFD, the way TextEncoder does it. */
   assert.equal(sha256Hex("a\ud800b"), sha256Hex("a\ufffdb"));
+});
+
+test("sha256Bytes: the NIST FIPS 180-2 byte vectors (#82, image content addresses)", () => {
+  const bytes = (s) => new Uint8Array([...s].map((c) => c.charCodeAt(0)));
+  assert.equal(sha256Bytes(new Uint8Array(0)), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  assert.equal(sha256Bytes(bytes("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  /* 448 bits: 56 bytes, so the length no longer fits behind the 0x80 and
+     the padding spills into a second block. */
+  assert.equal(sha256Bytes(bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")),
+    "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+  /* 896 bits: 112 bytes — one whole block hashed in place, then the tail. */
+  assert.equal(sha256Bytes(bytes("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno" +
+    "ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu")),
+    "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1");
+  /* One million 'a': 15,625 whole blocks straight out of the caller's
+     array, and an empty tail block carrying only the padding. */
+  assert.equal(sha256Bytes(new Uint8Array(1000000).fill(0x61)),
+    "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+});
+
+test("sha256Bytes agrees with node:crypto at every padding boundary, and on views", () => {
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) >>> 0) >>> 24;
+  for (let n = 0; n <= 200; n++) {
+    const b = new Uint8Array(n).map(rnd);
+    assert.equal(sha256Bytes(b), createHash("sha256").update(b).digest("hex"), "length " + n);
+  }
+  /* A view into a larger buffer hashes only the view — index 0 is the
+     view's first byte, not the buffer's. */
+  const big = new Uint8Array(300).map(rnd);
+  const view = big.subarray(37, 37 + 150);
+  assert.equal(sha256Bytes(view), createHash("sha256").update(view).digest("hex"));
+  /* A plain array of byte values hashes the same as the typed array. */
+  assert.equal(sha256Bytes(Array.from(view)), sha256Bytes(view));
+});
+
+test("sha256Hex is sha256Bytes over UTF-8 — the split changed no string's hash", () => {
+  for (const s of ["", "abc", "日本", "héllo → 日本", "x".repeat(1000), "splitpage-file\n{}"]) {
+    assert.equal(sha256Hex(s), sha256Bytes(new TextEncoder().encode(s)), JSON.stringify(s));
+    assert.equal(sha256Hex(s), createHash("sha256").update(s, "utf8").digest("hex"));
+  }
 });
 
 test("deriveDocId is the frozen, domain-separated wrapper", () => {
@@ -110,6 +153,20 @@ test("migrateDocument derives a file's id from its bytes, not from today's migra
   /* One byte different is a different document. */
   const other = { title: "Legacy!", rows: [{ id: "r1", audioText: "one" }] };
   assert.notEqual(migrateDocument(other, { kind: "file" }).docId, out.docId);
+});
+
+test("a legacy file with a picture keeps its id: the seed is read before the image is interned (#82)", () => {
+  /* migrateRows replaces visualImage with an imageRef in place; the id has
+     to come from the bytes as they were in the file, or every legacy file
+     with a picture would get a new identity (and lose its history) the
+     first time a build with blobs opened it. */
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const seed = JSON.stringify({ title: "Legacy", rows: [{ id: "r1", audioText: "one", visualImage: png }] });
+  const out = migrateDocument(JSON.parse(seed), { kind: "file" });
+  assert.equal(out.docId, deriveDocId("splitpage-file", seed));
+  assert.ok(out.rows[0].imageRef && !("visualImage" in out.rows[0]), "and the picture did become a ref");
+  const refSeed = JSON.stringify(out.rows[0].imageRef);
+  assert.notEqual(deriveDocId("splitpage-file", seed.replace('"visualImage":"' + png + '"', '"imageRef":' + refSeed)), out.docId);
 });
 
 test("migrateDocument keeps an id the file already carries", () => {

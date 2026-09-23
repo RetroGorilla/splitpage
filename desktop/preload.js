@@ -306,13 +306,23 @@ if (location.origin === "splitpage://app") {
        (invariant #38) — nothing here can name a folder, and main validates
        both ids again before either reaches a path.
 
-       `protect` is the list of snapshots a restore is currently reading, so
-       main's eviction can skip them; src/js/03a-history-store.js fills it in
-       from protectHistorySnapshot and the page never has to think about it. */
-    historyPut(docId, meta, stateJson, protect) {
-      return invoke("splitpage:history-put", docId, meta, stateJson, protect || []);
+       historyPut's `opts` is the store's options bag: `protect` is the list
+       of snapshots a restore is currently reading, so main's eviction can
+       skip them (src/js/03a-history-store.js fills it in from
+       protectHistorySnapshot); `older: true` writes into the Older bucket,
+       and then docId must be null — Older is named by that flag, never by
+       a string (#83 step 4 folded history-import-older into this). Only a
+       literal true is passed on, so nothing else can smuggle the flag in. */
+    historyPut(docId, meta, stateJson, opts) {
+      const o = opts && typeof opts === "object" ? opts : {};
+      const wire = { protect: Array.isArray(o.protect) ? o.protect : [] };
+      if (o.older === true) wire.older = true;
+      return invoke("splitpage:history-put", docId, meta, stateJson, wire);
     },
 
+    /* {entries, older, olderExpiresAt, usage} — usage is main's
+       {totalBytes, capBytes, overCap, docCount, readOnly} (or null), which
+       used to be a call of its own. */
     historyList(docId) {
       return invoke("splitpage:history-list", docId == null ? null : docId);
     },
@@ -329,19 +339,39 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:history-touch", docId, title);
     },
 
-    historyImportOlder(entries) {
-      return invoke("splitpage:history-import-older", entries);
-    },
-
-    historyUsage() {
-      return invoke("splitpage:history-usage");
-    },
-
     /* Every document this store has history for — {docId, title,
        lastOpenedAt}[], Older excluded. Backs File > Export app data.. on
        desktop (20h-appdata.js / 03a-history-store.js's exportHistoryAll). */
     historyListDocs() {
       return invoke("splitpage:history-list-docs");
+    },
+
+    /* ---- content-addressed blobs (issue #82, main.js section 8c) ---------
+       Images live outside the document state, in <userData>/blobs, named by
+       the SHA-256 of their bytes. The page names a blob by that sha (64
+       lowercase hex) and nothing else — no path, no folder, no URL
+       (invariant #28). src/js/20f-desktop.js's makeDesktopBlobBackend turns
+       these into the page registry's backend.
+
+       blobPut(sha, bytes): the bytes must hash to the sha and be a PNG,
+       JPEG, GIF or WebP of at most 16 MiB. Answers {ok:true, stored} or
+       {ok:false, code}.
+       blobGet(sha): {bytes: Uint8Array, mime} or null.
+       blobMissing(shas): the subset of shas (at most 2000) main does not
+       hold. */
+    blobPut(sha, bytes) {
+      return invoke("splitpage:blob-put", sha, bytes);
+    },
+
+    blobGet(sha) {
+      return invoke("splitpage:blob-get", sha).then((got) => {
+        if (got && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
+        return got || null;
+      });
+    },
+
+    blobMissing(shas) {
+      return invoke("splitpage:blob-missing", shas);
     },
 
     getSessionInfo() {
@@ -385,6 +415,40 @@ if (location.origin === "splitpage://app") {
        or {ok:false, code} — never the URL. */
     openPrompterInBrowser() {
       return invoke("splitpage:prompter-open-in-browser");
+    },
+
+    /* ---- Google Drive (main.js section 9c, issue #10) -------------------
+       Main holds the OAuth listener, the tokens and every request to Google;
+       these hand back names, ids, bytes and {ok:false, code} — never a
+       token, never a URL. The account calls take no argument (invariant
+       #28): the page cannot name the address the browser is sent to. */
+    driveStatus() {
+      return invoke("splitpage:drive-status");
+    },
+
+    driveSignIn() {
+      return invoke("splitpage:drive-sign-in");
+    },
+
+    driveSignOut() {
+      return invoke("splitpage:drive-sign-out");
+    },
+
+    /* A Drive folder id ("root" is My Drive). */
+    driveList(folderId) {
+      return invoke("splitpage:drive-list", folderId);
+    },
+
+    /* A Drive file id. Answers {ok, file:{id, name, mimeType, size,
+       modifiedTime}, bytes}. */
+    driveDownload(fileId) {
+      return invoke("splitpage:drive-download", fileId);
+    },
+
+    /* {parentId, name, bytes, mimeType?} makes a new file in that folder;
+       {fileId, bytes, mimeType?} replaces an existing file's content. */
+    driveUpload(request) {
+      return invoke("splitpage:drive-upload", request);
     }
   };
 

@@ -3,6 +3,7 @@ import { fileHome } from "./_home.js";
 import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { normalizeDocId } from "./02b-doc-id.js";
+import { blobImgHtml, rowImage, rowImageKey } from "./02c-blobs.js";
 import { ROW_FIELDS, byId, cloneState, rowContentEqual } from "./03-sync.js";
 import { safeImageSrc } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
@@ -217,14 +218,15 @@ function mergeDiffModel(base, mine, theirs) {
     var m = mineRows[id] || null, t = theirRows[id] || null, bb = baseRows[id] || null;
     var entries = [];
     ROW_FIELDS.forEach(function (f) {
-      if (f === "visualImage") {
-        var mi = (m && m.visualImage) || null, ti = (t && t.visualImage) || null;
+      if (f === "imageRef") {
+        /* Compared as rowImageKey says: the sha the ref names. */
+        var mi = rowImageKey(m), ti = rowImageKey(t);
         if (mi === ti) return;
         entries.push({
           label: "Visual image",
-          outcome: mergeFieldOutcome(bb ? (bb.visualImage || null) : null, mi, ti),
-          mineHtml: mergeDiffImageHtml(mi),
-          theirsHtml: mergeDiffImageHtml(ti)
+          outcome: mergeFieldOutcome(bb ? rowImageKey(bb) : null, mi, ti),
+          mineHtml: mergeDiffImageHtml(m),
+          theirsHtml: mergeDiffImageHtml(t)
         });
         return;
       }
@@ -337,8 +339,12 @@ function mergeDiffPairHtml(mineText, theirText) {
   return { mine: mergeDiffSideHtml(ops, "del"), theirs: mergeDiffSideHtml(ops, "add") };
 }
 
-function mergeDiffImageHtml(src) {
-  var ok = src ? safeImageSrc(src) : null;
+/* A ref'd picture goes out as <img data-blob>, filled in by the hydrator
+   (02c-blobs.js) once its bytes are here. */
+function mergeDiffImageHtml(row) {
+  var img = rowImage(row);
+  if (img && img.ref) return blobImgHtml(img.ref, "diff-img");
+  var ok = img ? safeImageSrc(img.dataUrl) : null;
   return ok ? '<img class="diff-img" src="' + escapeHtml(ok) + '" alt="">'
             : '<em class="diff-empty">(no image)</em>';
 }

@@ -10,6 +10,7 @@ import {
 } from "./01b-hide-shot.js";
 import { loadInitialState } from "./02-state.js";
 import { initDocIdentityChannel, syncDocIdentity } from "./02b-doc-id.js";
+import { internDataUrl, persist } from "./02c-blobs.js";
 import {
   SNAPSHOT_KEY,
   cloneState,
@@ -19,12 +20,13 @@ import {
   promptForWpm,
   reportMerge,
   restoreSnapshotFromCard,
+  setBaseState,
   undoMerge,
   updateIdentityChip
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
-import { cssAttr, sanitizeHtml } from "./04-richtext.js";
+import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
   cancelLink,
   cancelVideo,
@@ -643,7 +645,10 @@ function onRootFocusOut(e) {
   var related = e.relatedTarget;
   if (wrap && related && wrap.contains(related)) return; /* focus moved within the same field (e.g. the link popover) — defer sanitizing */
   var clean = sanitizeHtml(cellEl.innerHTML);
-  if (clean !== cellEl.innerHTML) cellEl.innerHTML = clean;
+  /* compared without the src the hydrator gave each <img data-blob> — the
+     sanitised form never has one, and repainting the cell for that alone
+     would re-decode every picture in it on every blur */
+  if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
   syncFieldFromDom(cellEl);
   /* Leaving a field is the safe moment to anchor a B-roll marker that got
      into it without being typed — a paste, or the closing character
@@ -992,10 +997,24 @@ function init() {
 
   S.state = null;
   S.initialStateReady = loadInitialState().then(function (loaded) {
-    var applied = applyStashedWork(loaded);
-    S.state = applied.state;
-    S.baseState = cloneState(applied.report ? loaded : S.state);
-    render();
+    /* A stash that survived the reload is merged into `loaded`, adopted and
+       given its base by applyMerge (03-sync.js), the one writer of
+       `baseState` on a merge path (#96). The base is what this page loaded,
+       never the merge — and read only once the merge has begun, because
+       applyStashedWork gives `loaded` the stash's id first. `report: false`
+       keeps the banner below the chips and menus, where it always was, and
+       keeps a stash that matched the page from marking it dirty. */
+    var applied = applyStashedWork(loaded, null, {
+      newBase: function () { return cloneState(loaded); },
+      report: false
+    });
+    if (S.state !== applied.state) {
+      /* No stash, or one that belongs to a server document: nothing went
+         through applyMerge, so nothing has been adopted yet. */
+      S.state = applied.state;
+      setBaseState(cloneState(S.state), "boot: the version this page loaded, nothing to merge");
+      render();
+    }
     updateIdentityChip();
     /* Same reason as syncDocIdentity() below: a fresh load never goes
        through setSaveButtons(), the funnel these two hang off, so the
@@ -1462,13 +1481,18 @@ function init() {
     var file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
+    /* The picture goes into the image registry and is stored at once
+       (#82): the comment body names it by its sha, and the hydrator gives
+       the <img> its src on screen. */
     compressImageFile(file, 700, 0.72).then(function (dataUrl) {
+      var rec = internDataUrl(dataUrl);
+      if (!rec) throw new Error("not a picture the registry takes");
+      persist([rec.sha256]);
       var cellEl = document.getElementById("comment-body-editable");
-      var img = document.createElement("img");
-      img.className = "comment-img";
-      img.src = dataUrl;
+      var holder = document.createElement("div");
+      holder.innerHTML = storedImageHtml(rec);
       cellEl.appendChild(document.createElement("br"));
-      cellEl.appendChild(img);
+      cellEl.appendChild(holder.firstChild);
       cellEl.appendChild(document.createElement("br"));
     }).catch(function () { showToast("Could not use that image.", "error"); });
   });

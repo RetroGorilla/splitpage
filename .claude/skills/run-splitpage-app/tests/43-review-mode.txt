@@ -125,6 +125,16 @@ expect document.querySelectorAll('#comments-list .comment-card').length == 1
 expect document.querySelectorAll('#comments-list [data-action="toggle-resolve"]').length == 0
 expect document.querySelectorAll('#comments-list [data-action="delete-comment"]').length == 0
 expect document.querySelectorAll('#comments-list [data-action="toggle-reply"]').length == 1
+# Reviewers never resolve or unresolve (owner's decision: authorship cannot
+# be established, so any resolve would be of somebody else's comment). A
+# Resolve button forced into the card is refused by the click guard, with
+# the toast, and the comment is left exactly as it was.
+eval (function(){window.__dirtyBefore=window.__hostedTest.dirty();window.__resolvedBefore=JSON.stringify(window.__splitpageFormats.state().comments);var card=document.querySelector('#comments-list .comment-card');var b=document.createElement('button');b.type='button';b.id='forced-resolve';b.setAttribute('data-action','toggle-resolve');b.setAttribute('data-id',card.getAttribute('data-id'));card.appendChild(b);document.getElementById('toast-host').textContent='';return card.getAttribute('data-id');})()
+jsclick #forced-resolve
+sleep 300
+expect document.getElementById('toast-host').textContent.indexOf('Viewing only') !== -1
+expect JSON.stringify(window.__splitpageFormats.state().comments) === window.__resolvedBefore
+expect window.__hostedTest.dirty() === window.__dirtyBefore
 jsclick #comments-list [data-action="toggle-reply"]
 sleep 300
 expect document.querySelectorAll('#comments-list .reply-composer').length == 1

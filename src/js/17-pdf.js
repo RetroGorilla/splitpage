@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
 import { pad2 } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -10,7 +11,8 @@ import {
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, htmlToRuns, latin1Bytes } from "./14-export.js";
-import { dataUrlToBytes, jpegSize, safeAspect } from "./15-docx.js";
+import { jpegSize, safeAspect } from "./15-docx.js";
+import { sniffImageMime } from "../../shared/blob-policy.js";
 
 /* ================= pdf ================= */
 
@@ -100,11 +102,124 @@ function pdfWrapRuns(runs, maxWidth, size) {
   return lines;
 }
 
-export function buildPdf() {
+/* ---- pictures, as JPEG ----
+
+   This writer embeds images one way only, /Filter /DCTDecode — the image
+   stream IS a JPEG file. A PNG, GIF or WebP written the same way was a
+   stream no reader could decode: the picture silently never appeared
+   (#82 found it). So every picture is JPEG by the time buildPdf() sees it:
+   a JPEG as it is, anything else drawn onto a white canvas (PDF has no
+   use for its transparency here) and encoded — which needs the browser's
+   decoder, and is why this is async and done before buildPdf(). */
+var PDF_IMAGE_MAX_PX = 2000;
+
+function pdfJpegOf(pic) {
+  if (!pic) return Promise.resolve(null);
+  /* jpegSize: the CODED size, which is what /Width and /Height must say —
+     an EXIF-rotated record's width/height would not be. */
+  if (pic.mime === "image/jpeg") return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
+  return new Promise(function (resolve) {
+    var url;
+    try { url = URL.createObjectURL(new Blob([pic.bytes], { type: pic.mime })); } catch (e) { resolve(null); return; }
+    var img = new Image();
+    function done(v) {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      resolve(v);
+    }
+    img.onload = function () {
+      try {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var scale = Math.min(1, PDF_IMAGE_MAX_PX / Math.max(w, h, 1));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+          if (!blob) { done(null); return; }
+          blob.arrayBuffer().then(function (ab) {
+            var bytes = new Uint8Array(ab);
+            done({ bytes: bytes, size: jpegSize(bytes) });
+          }, function () { done(null); });
+        }, "image/jpeg", 0.9);
+      } catch (e) { done(null); }
+    };
+    img.onerror = function () { done(null); };
+    img.src = url;
+  });
+}
+
+/* One entry per row (by index): {bytes, size} or null. Bytes behind an
+   imageRef have to be in memory first — buildFileData awaits
+   ensureBytes() before it calls this. */
+export function pdfImagesFor(rows) {
+  return Promise.all((rows || []).map(function (row) {
+    return pdfJpegOf(rowImageBytes(row)).then(null, function () { return null; });
+  }));
+}
+
+/* A picture inside a comment or reply, by sha (commentEntries' pieces):
+   its bytes and type from the registry — the type sniffed, as a row's
+   is, since that is what the bytes are. null when the bytes are not here. */
+function commentPic(sha) {
+  var bytes = bytesForSync(sha);
+  if (!bytes) return null;
+  var rec = recordFor(sha);
+  var mime = sniffImageMime(bytes) || (rec && rec.mime);
+  return mime ? { bytes: bytes, mime: mime } : null;
+}
+
+function commentImageShas(entries) {
+  var out = [], seen = {};
+  function add(pieces) {
+    (pieces || []).forEach(function (p) {
+      if (p.image && !seen[p.image]) { seen[p.image] = true; out.push(p.image); }
+    });
+  }
+  entries.forEach(function (c) {
+    add(c.pieces);
+    c.replies.forEach(function (rp) { add(rp.pieces); });
+  });
+  return out;
+}
+
+/* Every picture in the comments and replies, as JPEG: {sha: {bytes,
+   size} | null}, null for one whose bytes are not here or will not
+   decode. Like pdfImagesFor, the bytes must be in memory first —
+   buildFileData's ensureBytes(refsIn(state)) covers comment and reply
+   bodies and an image conflict card's imageValue. */
+export function pdfCommentImagesFor() {
+  var shas = commentImageShas(commentEntries({ pieces: true }));
+  return Promise.all(shas.map(function (sha) {
+    return pdfJpegOf(commentPic(sha)).then(null, function () { return null; });
+  })).then(function (list) {
+    var out = {};
+    shas.forEach(function (sha, i) { out[sha] = list[i]; });
+    return out;
+  });
+}
+
+/* `jpegs` is pdfImagesFor(S.state.rows)'s answer and `commentJpegs`
+   pdfCommentImagesFor()'s. Without them only pictures that are already
+   JPEG are drawn. */
+export function buildPdf(jpegs, commentJpegs) {
   var PW = 612, PH = 792, M = 54;
   var GUT = 30, GAP = 16;
   var COLW = (PW - M * 2 - GUT - GAP) / 2;
   var SIZE = 9.5, LEAD = 13;
+  /* A row's rule sits ROW_TAIL below the bottom of its columns: a column
+     of n lines from cursor c ends (drawLines' return) at c - SIZE - n*LEAD,
+     and the rule goes 6 under the lower column's end — so a column's last
+     baseline sits LEAD + 6 = 19 above the rule, and the row as a whole
+     (its taller column, picture included) plus ROW_TAIL is the height its
+     rule needs to stay on or above the bottom margin. */
+  var ROW_TAIL = SIZE + 6;
+  /* The room a row gets on a fresh page: newPage() lands at PH - M, and
+     the row loop's own "y -= 6" plus drawColumnHeaders()'s 8 + 16 take
+     30 of it. */
+  var PAGE_ROOM = PH - 2 * M - 30;
 
   var pages = [];
   var ops = [];
@@ -159,6 +274,14 @@ export function buildPdf() {
 
   function columnHeight(lines) { return lines.length * LEAD; }
 
+  /* Where drawLines() would leave a column of n lines started at cursor
+     c (c - SIZE when n is 0), in the same arithmetic. */
+  function columnEnd(c, n) {
+    var yy = c - SIZE;
+    for (var i = 0; i < n; i++) yy -= LEAD;
+    return yy;
+  }
+
   function drawColumnHeaders() {
     text("VISUAL", M + GUT, y, "F2", 8);
     text("AUDIO", M + GUT + COLW + GAP, y, "F2", 8);
@@ -179,10 +302,15 @@ export function buildPdf() {
     var aLines = pdfWrapRuns(htmlToRuns(row.audioText), COLW, SIZE);
 
     var imgH = 0, imgRef = null;
-    if (row.visualImage) {
+    var jpeg = jpegs ? jpegs[idx] : null;
+    if (!jpegs) {
+      var pic = rowImageBytes(row);
+      if (pic && pic.mime === "image/jpeg") jpeg = { bytes: pic.bytes, size: jpegSize(pic.bytes) };
+    }
+    if (jpeg) {
       try {
-        var bytes = dataUrlToBytes(row.visualImage);
-        var dim = safeAspect(jpegSize(bytes));
+        var bytes = jpeg.bytes;
+        var dim = safeAspect(jpeg.size);
         var name = "Im" + (images.length + 1);
         images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
         var natW = COLW, natH = COLW * dim.ratio;
@@ -201,14 +329,28 @@ export function buildPdf() {
            header/rule/gap eat 30pt of that before the image is drawn —
            capping to the whole page's height (PH - 2*M) still left it
            30pt short of fitting even there. */
-        var maxH = PH - 2 * M - 30;
+        var maxH = PAGE_ROOM;
+        /* ...and when nothing will follow the picture onto a later page —
+           no visual text under it, and all the audio beside it fits on
+           its page — the row's rule is ROW_TAIL + 8 under the picture on
+           that same page, so the cap leaves room for that too, or the
+           rule would fall up to 23.5pt below the bottom margin (30.5 for
+           a picture at the old cap). With visual text the picture keeps
+           the whole page and the text (and the rule) carry on overleaf. */
+        if (!vLines.length && columnHeight(aLines) + ROW_TAIL <= PAGE_ROOM) maxH = PAGE_ROOM - 8 - ROW_TAIL;
         if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
         imgRef = { name: name, w: natW, h: natH };
         imgH = imgRef.h + 8;
       } catch (e) { /* skip an unreadable image */ }
     }
 
-    var need = Math.max(columnHeight(vLines) + imgH, columnHeight(aLines)) + 14;
+    /* ROW_TAIL, not the 14 of the row gap below the rule: with 14 a row
+       that passed this check by less than 1.5pt had its rule drawn up to
+       1.5pt under the bottom margin. A row with nothing in it keeps the
+       14 — it never enters the text loop, so its rule is drawn at its top
+       (y), which the 14 already keeps inside the margin. */
+    var empty = !vLines.length && !aLines.length && !imgRef;
+    var need = Math.max(columnHeight(vLines) + imgH, columnHeight(aLines)) + (empty ? 14 : ROW_TAIL);
     if (y - need < M && y < PH - M - 40) { newPage(); y -= 6; drawColumnHeaders(); }
 
     text(pad2(idx + 1), M, y - SIZE, "F2", 8);
@@ -221,10 +363,21 @@ export function buildPdf() {
       vy -= imgRef.h + 8;
     }
 
+    /* The loop below is the only thing that moves y past the picture, and
+       a row with no text in either column never enters it — so y dropped
+       by the 14pt row gap alone and the next row was drawn over this
+       row's picture. End such a row where the loop would have ended it
+       with nothing to draw: its empty visual column starts below the
+       picture (vy), so min(vCursor, aCursor) - SIZE - 6 = vy - SIZE - 6.
+       A row with any text already gets that from the loop; a row with no
+       picture (vy === y) is left exactly as it was. */
+    if (vy !== y && !vLines.length && !aLines.length) y = vy - SIZE - 6;
+
     /* A row can be taller than a page. Draw what fits, break, and continue —
        otherwise the overflow is emitted below the page edge and disappears. */
     var vRest = vLines, aRest = aLines;
     var vCursor = vy, aCursor = y;
+    var drewPic = vy !== y;
     var guard = 0;
     while ((vRest.length || aRest.length) && guard++ < 400) {
       /* A block of n lines starting at startY = cursor - SIZE has its
@@ -237,6 +390,22 @@ export function buildPdf() {
       var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
       var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
       var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
+      /* A chunk that finishes the row puts the row's rule 6 under the
+         lower column's end — 19 under its last baseline. Every baseline
+         clearing M does not make that rule clear it: a row finishing on a
+         continuation page could put it at M - 11.5, one starting a fresh
+         page under a picture anywhere down to M - 19. So when the rule
+         would fall below M, the lower column's last line goes overleaf
+         instead and the rule follows it there — never alone at the top
+         of a page. Only a chunk that would finish the row: a row that
+         fits whole passed the `need` check and never gets here short. */
+      if (vTake.length === vRest.length && aTake.length === aRest.length) {
+        var vLow = columnEnd(vCursor, vTake.length), aLow = columnEnd(aCursor, aTake.length);
+        if (Math.min(vLow, aLow) - 6 < M - 1e-6) {
+          if (vTake.length && (vLow <= aLow || !aTake.length)) vTake = vTake.slice(0, -1);
+          else if (aTake.length) aTake = aTake.slice(0, -1);
+        }
+      }
       var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
       var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;
       vRest = vRest.slice(vTake.length);
@@ -245,7 +414,12 @@ export function buildPdf() {
         y = Math.min(vEnd, aEnd) - 6;
         break;
       }
-      if (!vTake.length && !aTake.length) break;   /* nothing fits — bail out safely */
+      /* nothing fits — bail out safely. Unless this page holds the row's
+         picture: a picture filling its page left no room for a first line
+         of visual text under it, and bailing here dropped that text and
+         drew the rule at the top of the page, across the picture. */
+      if (!vTake.length && !aTake.length && !drewPic) break;
+      drewPic = false;
       newPage();
       y -= 6;
       drawColumnHeaders();
@@ -317,7 +491,7 @@ export function buildPdf() {
   }
 
   /* ---- comments ---- */
-  var comments = commentEntries();
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     newPage();
     text("Comments", M, y - 18, "F2", 16);
@@ -334,19 +508,85 @@ export function buildPdf() {
       }, []);
     }
 
+    /* Pictures in comments (#82 P6 stores them in the body as <img
+       data-blob>). Each is a block of its own in the thread, in the order
+       the body has it, at the body's indent: at most CIMG_MAXW of the
+       column's width and CIMG_MAXH tall — well under a fresh page's room,
+       so one always fits somewhere — its aspect kept, and never larger
+       than its own pixels at 96 dpi (0.75pt a pixel), so a small picture
+       stays small. A picture drawn twice is embedded once. One with no
+       bytes, or that would not convert, prints as "[image unavailable]". */
+    var CIMG_MAXW = 0.6, CIMG_MAXH = 260, CIMG_ABOVE = 3, CIMG_BELOW = 7;
+    var commentImageNames = {};
+
+    function commentJpeg(sha) {
+      if (commentJpegs) return commentJpegs[sha] || null;
+      var pic = commentPic(sha);
+      return pic && pic.mime === "image/jpeg" ? { bytes: pic.bytes, size: jpegSize(pic.bytes) } : null;
+    }
+
+    function commentPicItem(sha, x) {
+      var colW = PW - M - x;
+      var jpeg = commentJpeg(sha);
+      if (jpeg) {
+        try {
+          var dim = safeAspect(jpeg.size);
+          var name = commentImageNames[sha];
+          if (!name) {
+            name = "Im" + (images.length + 1);
+            images.push({ bytes: jpeg.bytes, w: dim.w, h: dim.h, name: name });
+            commentImageNames[sha] = name;
+          }
+          var scale = Math.min(0.75, colW * CIMG_MAXW / dim.w, CIMG_MAXH / dim.h);
+          return { pic: { name: name, w: dim.w * scale, h: dim.h * scale }, x: x };
+        } catch (e) { /* unreadable — fall through to the note */ }
+      }
+      return { line: pdfWrapRuns([{ text: "[image unavailable]", i: true }], colW, SIZE)[0], x: x };
+    }
+
+    /* A comment's or reply's body as thread items — {line, x} and {pic,
+       x} — in order. A body with no picture wraps exactly as it always
+       did, "(empty)" and all. */
+    function commentBodyItems(entry, x) {
+      var colW = PW - M - x;
+      var pieces = entry.pieces || [];
+      var hasPic = pieces.some(function (p) { return p.image; });
+      if (!hasPic) {
+        return pdfWrapRuns(linesToRuns(entry.body || "(empty)"), colW, SIZE)
+          .map(function (l) { return { line: l, x: x }; });
+      }
+      var items = [];
+      pieces.forEach(function (p) {
+        if (p.image) { items.push(commentPicItem(p.image, x)); return; }
+        pdfWrapRuns(linesToRuns(p.text), colW, SIZE).forEach(function (l) { items.push({ line: l, x: x }); });
+      });
+      return items;
+    }
+
+    /* Top CIMG_ABOVE below y (which a text line leaves LEAD under its
+       baseline, clear of descenders); the next line's glyphs start
+       CIMG_BELOW under the picture. */
+    function drawCommentPic(pic, x) {
+      var top = y - CIMG_ABOVE;
+      if (pageImages.indexOf(pic.name) === -1) pageImages.push(pic.name);
+      ops.push("q " + pic.w.toFixed(2) + " 0 0 " + pic.h.toFixed(2) + " " +
+        x.toFixed(2) + " " + (top - pic.h).toFixed(2) + " cm /" + pic.name + " Do Q");
+      y = top - pic.h - CIMG_BELOW;
+    }
+
     comments.forEach(function (c) {
       var headerLines = pdfWrapRuns([{ text: c.location +
         (c.resolved ? " (resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")" : "") +
         (c.assignee ? " [assigned to " + c.assignee + "]" : "") +
         "  —  " + c.author + (c.when ? ", " + c.when : ""), b: true }], FULLW, SIZE);
       var quoteLines = c.quoted ? pdfWrapRuns(linesToRuns("“" + c.quoted + "”"), FULLW - 12, SIZE) : [];
-      var bodyLines = pdfWrapRuns(linesToRuns(c.body || "(empty)"), FULLW - 12, SIZE);
+      var bodyItems = commentBodyItems(c, M + 12);
       var replyBlocks = c.replies.map(function (rp) {
         return {
           /* "↳" isn't in this PDF's WinAnsi glyph set (only the chars in
              WINANSI_MAP + 0x20-0xFF render) — plain ">" instead of "?" */
           headerLines: pdfWrapRuns([{ text: "> " + rp.author + (rp.when ? ", " + rp.when : "") + ":", b: true }], FULLW - 24, SIZE),
-          bodyLines: pdfWrapRuns(linesToRuns(rp.body || "(empty)"), FULLW - 24, SIZE)
+          bodyItems: commentBodyItems(rp, M + 24)
         };
       });
 
@@ -357,27 +597,59 @@ export function buildPdf() {
          replies still ran straight past the margin with no further
          check, silently losing whatever text landed below it. This
          mirrors how the scene-row loop above already paginates. */
-      var threadLines = [];
-      headerLines.forEach(function (l) { threadLines.push({ line: l, x: M }); });
-      quoteLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
-      bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 12 }); });
+      /* Each line carries its block — the header, the quote, the body, a
+         reply's header, a reply's body — so the layout can tell a wrapped
+         line from the start of the next part. */
+      var threadLines = [], block = 0;
+      function addBlock(items, x) {
+        block++;
+        items.forEach(function (it) {
+          threadLines.push(it.pic ? it : { line: it.line || it, x: it.line ? it.x : x, block: block });
+        });
+      }
+      addBlock(headerLines, M);
+      addBlock(quoteLines, M + 12);
+      addBlock(bodyItems);
       replyBlocks.forEach(function (rb) {
-        rb.headerLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
-        rb.bodyLines.forEach(function (l) { threadLines.push({ line: l, x: M + 24 }); });
+        addBlock(rb.headerLines, M + 24);
+        addBlock(rb.bodyItems);
       });
 
-      function ensureCommentRoom() {
-        if (y - LEAD < M) {
+      /* `need`: how far below y the next thing reaches — a line's LEAD,
+         or a picture's gap and height (commentBodyItems). Returns whether
+         it started a new page. */
+      function ensureCommentRoom(need) {
+        if (y - (need || LEAD) < M) {
           newPage(); y -= 6;
           text("Comments (continued)", M, y - 12, "F2", 12);
           y -= 34;
+          return true;
         }
+        return false;
       }
 
+      /* After a line y is its baseline - LEAD (what drawLines returns).
+         The next line of the same block goes LEAD under it — baseline y —
+         as the lines of a scene's text do; the first line of a block, or
+         the first after a picture or a page break, goes SIZE lower still
+         (baseline y - SIZE), the gap between the parts of a thread that
+         predates the line-by-line room check. That check drew every line
+         as a block's first, so a wrapped comment was spaced SIZE + LEAD
+         (22.5pt) a line rather than LEAD (13pt). Either way the line's
+         LEAD - SIZE of descender room below its baseline must clear M. */
+      var prevBlock = 0;
       ensureCommentRoom();
       threadLines.forEach(function (b) {
-        ensureCommentRoom();
-        y = drawLines([b.line], b.x, y - SIZE);
+        if (b.pic) {
+          ensureCommentRoom(CIMG_ABOVE + b.pic.h);
+          drawCommentPic(b.pic, b.x);
+          prevBlock = 0;
+          return;
+        }
+        var follows = b.block === prevBlock;
+        if (ensureCommentRoom(follows ? LEAD - SIZE : LEAD)) follows = false;
+        y = drawLines([b.line], b.x, follows ? y : y - SIZE);
+        prevBlock = b.block;
       });
       y -= 6;
       ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 4).toFixed(2) + " m " +

@@ -10,17 +10,28 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import {
+  ensureBytes,
+  has as hasBlob,
+  rowImage,
+  rowImageBytes,
+  rowImageDataUrl,
+  rowImageKey
+} from "./02c-blobs.js";
+import { refsIn } from "../../shared/blob-policy.js";
+import {
   RELOAD_GUARD_KEY,
+  acceptStash,
   applyMerge,
   clearStash,
   cloneState,
   getEditorName,
-  readStash
+  readStash,
+  setBaseState
 } from "./03-sync.js";
 import { htmlToMarkdown, inertBody } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
-import { commentEntries, nowIso } from "./10-comments.js";
+import { commentBodyText, commentEntries, nowIso } from "./10-comments.js";
 import {
   clearDirty,
   noteSaveStatus,
@@ -34,7 +45,6 @@ import {
   saveToServer,
   serverSessionExpired
 } from "./13-hosted.js";
-import { dataUrlToBytes } from "./15-docx.js";
 import {
   checkFileConflict,
   deliverFile,
@@ -42,7 +52,7 @@ import {
   showFileConflict,
   updateFileChip
 } from "./18-local-files.js";
-import { buildMarkdownProject, buildSplitpageFile } from "./20d-formats.js";
+import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -240,6 +250,13 @@ export async function saveDoc(opts) {
       }
     }
 
+    /* The file carries its pictures inline (#82 D1/D2), so their bytes
+       have to be in this page first — fetched from the blob store (or the
+       server) when they are not. One nobody has goes into the file as a
+       ref with no picture, and the user is told once the write lands. */
+    await ensureBytes(refsIn(published));
+    var imagesLeftOut = fileImagesMissing(published).length;
+
     var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
     var body;
     try {
@@ -265,7 +282,7 @@ export async function saveDoc(opts) {
          user asked for it — but it stays just a file on disk. */
       var stillOurs = S.state.docId === docIdAtSave;
       var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
-      if (stillOurs) S.baseState = published;
+      if (stillOurs) setBaseState(published, "saveDoc: the bytes just written to the file");
       if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
       adoptSavedCopyDocId(forkDocId, docIdAtSave);
       var docIdAfterSave = S.state.docId;
@@ -284,6 +301,7 @@ export async function saveDoc(opts) {
          typing is noise sitting on top of the work. */
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       else noteSaveStatus("Saved to " + targetHandle.name);
+      warnImagesLeftOut(imagesLeftOut, targetHandle.name);
     } else {
       /* no File System Access API (e.g. Firefox) — a plain download is the
          best this browser can do; the user re-opens the newest copy next
@@ -292,9 +310,10 @@ export async function saveDoc(opts) {
       if (ok) {
         wrote = true;
         var downloadedOurs = S.state.docId === docIdAtSave;
-        if (downloadedOurs) S.baseState = published;
+        if (downloadedOurs) setBaseState(published, "saveDoc: the copy just downloaded");
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         if (downloadedOurs && S.editSeq === seqAtSave) clearDirty();
+        warnImagesLeftOut(imagesLeftOut, filename);
       } else {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
       }
@@ -319,6 +338,16 @@ export async function saveDoc(opts) {
     S.saveButtonBusy = false;
     setSaveButtons(S.dirty ? "Save •" : "Save", false);
   }
+}
+
+/* A written file that could not carry every picture: its bytes were
+   nowhere to be had (a version restored after its image was lost, say).
+   The row keeps naming the picture, so nothing is deleted — but the file
+   does not show it, and the user should know before sending it on. */
+export function warnImagesLeftOut(n, name) {
+  if (!n) return;
+  showToast(n + (n === 1 ? " image" : " images") + " could not be included in " + name +
+    " — the picture" + (n === 1 ? " was" : "s were") + " not available on this computer.", "warn");
 }
 
 /* The one place a Save As fork becomes this document's identity (DOCID-API).
@@ -368,16 +397,20 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave) {
    one three-way merge, one "Before merging" snapshot, one undo point.
 
    `apply` is the rest of applyMerge's options (03-sync.js). Without it this
-   function merges and hands the result back for the caller to adopt, which
-   is what its three callers have always wanted: the boot path (21-events.js)
-   and the crash-draft restore (20g-drafts.js) each do something different
-   with it next. With it — only confirmFileMerge (18a-local-merge.js) — the
-   same applyMerge call finishes the job instead, so the file merge is one
-   call rather than a second copy of the sequence (#72). */
+   function merges and hands the result back for the caller to adopt. With
+   it the same applyMerge call finishes the job instead — adopt, base, redraw,
+   report — so no caller writes out a second copy of the sequence: the file
+   merge (confirmFileMerge, 18a-local-merge.js, #72), the boot stash
+   (21-events.js) and the crash-draft file merge (20g-drafts.js, #96), the
+   last with `awaitUndoPoint`, which makes the answer a Promise. The early
+   answers below (no stash, a server document's stash) never reach
+   applyMerge, so they adopt nothing: the caller still holds `loaded`. */
 export function applyStashedWork(loaded, override, apply) {
   var stash = override || readStash();
   if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
+  /* the pictures it carries, and an older build's stripped images (#82) */
+  acceptStash(stash, loaded);
   /* A stash left by a lapsed hosted session belongs to a document on the
      server, not to the page's own embedded one. Merging it into `loaded`
      here would splice someone's script into a blank default document —
@@ -404,7 +437,9 @@ export function applyStashedWork(loaded, override, apply) {
     var out = applyMerge(Object.assign(
       { theirs: loaded, source: "stash", mergeOnly: !apply }, extra, apply || {}
     ));
-    return { state: out.state, report: out.result, snapshot: out.snapshot };
+    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot }; }
+    /* `apply.awaitUndoPoint` makes applyMerge's answer a Promise */
+    return out && typeof out.then === "function" ? out.then(answer) : answer(out);
   }
 
   /* nothing changed under us after all */
@@ -418,7 +453,6 @@ export function applyStashedWork(loaded, override, apply) {
   return through({
     base: stash.base || null,
     mine: stash.mine,
-    imagesStripped: !!stash.imagesStripped,
     undoPoint: migrateRows(cloneState(loaded))
   });
 }
@@ -433,7 +467,8 @@ export function applyStashedWork(loaded, override, apply) {
    keystroke would serialize and re-write the whole document tens of times
    a sentence.
 
-   Both are gated the same way (autoSaveTarget below) and both go through
+   Both are gated the same way (the autosave preference, then
+   autoSaveTarget below) and both go through
    saveDoc({auto:true}), which writes exactly what a manual Save writes and
    differs only in what it says about it: no "Saved to …" toast per pause
    in the typing — the save-state indicator beside the Save button
@@ -579,6 +614,13 @@ export function resumeAutoSave() {
 var saveInFlight = false;
 var saveQueued = false;
 export function queueAutoSave() {
+  /* Off means off for a discrete action too, not only for typing. This
+     used to check only WHERE to write, so with autosave off every add,
+     move, status click, comment, find-and-replace and history restore still
+     wrote the file at once. Every caller marks the document dirty first,
+     so skipping here leaves the change on screen as unsaved work — the
+     indicator and the unload guard cover it until the user saves. */
+  if (!autoSaveEnabled) return;
   if (!autoSaveTarget()) return;
   if (autoSaveHalt) return;
   /* A pending timer would fire into a document this call is already
@@ -637,7 +679,8 @@ function appendMarkdownTail(lines) {
     lines.push("");
   }
 
-  var comments = commentEntries();
+  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -651,11 +694,11 @@ function appendMarkdownTail(lines) {
         lines.push("> " + c.quoted.split(/\r\n|\r|\n/).join("  \n> "));
         lines.push("");
       }
-      lines.push((c.body || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
+      lines.push((commentBodyText(c) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
       c.replies.forEach(function (rp) {
         lines.push("");
         lines.push("> ↳ **" + rp.author + "**" + (rp.when ? " · " + rp.when : "") + ":  " +
-                   (rp.body || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
+                   (commentBodyText(rp) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
       });
       lines.push("");
       lines.push("---");
@@ -683,20 +726,29 @@ function dataUrlImageExt(dataUrl) {
    writes the reference) and markdownExportImages() (which writes the
    bytes), so the two can never point at different names. */
 function markdownImagePath(row, i) {
-  return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(row.visualImage);
+  var img = rowImage(row);
+  return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(img && img.ref ? "data:" + img.ref.mime : img && img.dataUrl);
+}
+
+/* Whether the plain Markdown export shows the row's picture: a legacy
+   inline one always, a ref'd one when its bytes are here to be written
+   alongside (buildFileData awaits ensureBytes first) — a reference to a
+   file the zip does not carry would be a broken image. */
+function markdownHasPicture(row) {
+  var img = rowImage(row);
+  return !!img && (!!img.dataUrl || hasBlob(img.ref.sha256));
 }
 
 /* Every image the plain Markdown export needs to carry alongside it, as
-   real files rather than base64 text — dataUrlToBytes lives in
-   15-docx.js but every fragment shares one closure (build.mjs inlines
-   them into a single script), so it's already in scope here. */
+   real files rather than base64 text. */
 export function markdownExportImages() {
   var out = [];
   S.state.rows.forEach(function (row, i) {
-    if (!row.visualImage) return;
-    try {
-      out.push({ path: markdownImagePath(row, i), bytes: dataUrlToBytes(row.visualImage) });
-    } catch (e) { /* unreadable image data — the export just won't carry this one's picture */ }
+    /* A ref'd picture's bytes are in memory by now (buildFileData awaits
+       ensureBytes first); one nobody had, or unreadable legacy data, is
+       left out — the export just won't carry that one's picture. */
+    var pic = rowImage(row) && rowImageBytes(row);
+    if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
   });
   return out;
 }
@@ -726,7 +778,7 @@ export function toMarkdownDoc() {
   S.state.rows.forEach(function (row, i) {
     lines.push("### Scene " + pad2(i + 1));
     lines.push("");
-    if (row.visualImage) {
+    if (markdownHasPicture(row)) {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
       lines.push("");
     }
@@ -739,7 +791,7 @@ export function toMarkdownDoc() {
     if (amd) {
       lines.push(amd);
       lines.push("");
-    } else if (!vmd && !row.visualImage) {
+    } else if (!vmd && !markdownHasPicture(row)) {
       lines.push("_(blank scene)_");
       lines.push("");
     }
@@ -770,12 +822,21 @@ function mdRichTableCell(md) {
    table *row* and is undone again by parseMarkdownTable, so it is
    deliberately not part of this comparison basis. */
 export function mdSceneCellSource(row, i) {
-  var visual = htmlToMarkdown(row.visualText);
-  if (row.visualImage) {
-    visual = "![visual for scene " + pad2(i + 1) + "](" + row.visualImage + ")" + (visual ? "<br>" + visual : "");
+  var text = htmlToMarkdown(row.visualText);
+  var visual = text;
+  /* The picture inline, as it always was (#82 D2) — a legacy URI exactly as
+     stored, a ref'd one as its canonical data: URI. */
+  var image = rowImageDataUrl(row);
+  if (image) {
+    visual = "![visual for scene " + pad2(i + 1) + "](" + image + ")" + (visual ? "<br>" + visual : "");
   }
   return {
     visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
+    /* the same cell without its picture, and which picture — what the
+       reconcile compares when the whole cell differs only in how the
+       picture's base64 was spelled (an older client's file) */
+    visualText: String(text).replace(/\r\n|\r|\n/g, "<br>").trim(),
+    image: image ? rowImageKey(row) : null,
     audio: String(htmlToMarkdown(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
   };
 }

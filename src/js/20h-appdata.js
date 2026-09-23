@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import { SNAPSHOT_KEY } from "./03-sync.js";
 import {
   exportHistoryAll,
@@ -61,7 +62,23 @@ import {
    are ever read by buildAppDataBundle(); assertNoSecrets() is the
    independent second check (invariant #48) that catches it anyway if one
    of them — or anything that merely LOOKS like a credential — ever gets
-   added into this bundle by a future edit. */
+   added into this bundle by a future edit.
+
+   IMAGES (#82). History snapshots name their images by sha; the bytes live
+   in the blob store. The bundle carries them beside the history:
+
+     blobs:        {"<sha256 hex>": {mime, b64}} — every image an exported
+                   snapshot names whose bytes this page could get, once
+     missingBlobs: ["<sha256 hex>"] — the ones it could not; the export
+                   says so in a warning rather than dropping them quietly
+
+   Both come from exportHistoryAll() and count toward its 200 MB cap. The
+   keys are 64 lowercase hex characters and the values {mime, b64}: hex has
+   no t, o, k, s, p or l, so neither can ever match APPDATA_SECRET_RE
+   (which reads keys, not values). On import, importHistoryBundle verifies
+   and stores every blob BEFORE the snapshots that name it (#49). A bundle
+   with no `blobs` key — every file written before #82 — imports as it
+   always did. */
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
@@ -113,9 +130,16 @@ async function buildAppDataBundle() {
   }
 
   try {
-    bundle.history = await exportHistoryAll();
+    var history = await exportHistoryAll();
+    bundle.history = history;
+    bundle.blobs = history.blobs || {};
+    bundle.missingBlobs = history.missingBlobs || [];
+    delete history.blobs;
+    delete history.missingBlobs;
   } catch (e) {
     bundle.history = null;
+    bundle.blobs = {};
+    bundle.missingBlobs = [];
   }
 
   try {
@@ -181,7 +205,10 @@ function appDataFilename() {
    Gathers, asserts, then hands off to deliverFile() the same way every
    export in 18-local-files.js already does: a browser download, or the
    desktop native Save dialog. */
+var appDataLastExport = null;
+
 export async function exportAppData() {
+  appDataLastExport = null;
   showToast("Gathering your Splitpage data…");
   /* Let the toast actually paint before the (possibly large) history read
      below runs on this same thread. */
@@ -204,7 +231,22 @@ export async function exportAppData() {
     return;
   }
 
-  await deliverFile(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
+  var saved = await deliverFile(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
+  var missing = bundle.missingBlobs || [];
+  appDataLastExport = {
+    ok: !!saved,
+    images: Object.keys(bundle.blobs || {}).length,
+    missingBlobs: missing.slice(),
+    truncated: !!(bundle.history && bundle.history.truncated),
+    warning: null
+  };
+  if (saved && missing.length) {
+    appDataLastExport.warning = "Exported, but " + appDataPlural(missing.length, "image was", "images were") +
+      " missing from this device and could not be included. The snapshots that use " +
+      (missing.length === 1 ? "it" : "them") + " will show a placeholder.";
+    if (window.console) console.warn("Export app data: images not included (bytes not found):", missing);
+    showToast(appDataLastExport.warning, "warn", true);
+  }
 }
 
 /* ================= import (X2) ================= */
@@ -240,6 +282,19 @@ function appDataNormalizeHistory(h) {
     older: Array.isArray(h.older) ? h.older : [],
     truncated: !!h.truncated
   };
+}
+
+/* Shape only, like the history: a plain object of plain objects, passed on
+   whole for importHistoryBundle to verify blob by blob — dropping a bad
+   entry here would hide it from what that import reports. */
+function appDataNormalizeBlobs(b) {
+  if (!appDataIsPlainObject(b)) return null;
+  var out = {};
+  Object.keys(b).forEach(function (k) {
+    if (k === "__proto__") return;
+    out[k] = appDataIsPlainObject(b[k]) ? b[k] : null;
+  });
+  return out;
 }
 
 function appDataNormalizePrefs(p) {
@@ -301,6 +356,7 @@ function parseAppDataBundle(text) {
     appVersion: typeof raw.appVersion === "string" ? raw.appVersion : "",
     snapshots: Array.isArray(raw.snapshots) ? raw.snapshots : null,
     history: appDataNormalizeHistory(raw.history),
+    blobs: appDataNormalizeBlobs(raw.blobs),
     bookmarks: (Array.isArray(raw.bookmarks) ? raw.bookmarks : []).filter(function (b) {
       return appDataIsPlainObject(b) && typeof b.url === "string";
     }),
@@ -458,7 +514,7 @@ async function importAppData(text) {
     return refused;
   }
 
-  var summary = { ok: true, history: null, bookmarks: null, prefs: [], legacy: null, toast: "", warning: null };
+  var summary = { ok: true, history: null, blobs: null, bookmarks: null, prefs: [], legacy: null, toast: "", warning: null };
 
   /* The legacy shared list goes to Older, never back into localStorage
      ('splitpage-snapshots' is left exactly as this machine had it). Same
@@ -470,7 +526,9 @@ async function importAppData(text) {
     summary.legacy = legacy.length;
   }
   var hist = bundle.history || { docs: [], older: [] };
-  summary.history = await importHistoryBundle({ docs: hist.docs, older: hist.older.concat(legacy) });
+  /* blobs ride in with the history: importHistoryBundle stores them first */
+  summary.history = await importHistoryBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
+  summary.blobs = summary.history.blobs;
 
   try {
     summary.bookmarks = appDataMergeBookmarks(bundle.bookmarks);
@@ -487,13 +545,15 @@ async function importAppData(text) {
   }
 
   var h = summary.history;
+  var imgs = summary.blobs || { stored: 0, refused: [], failed: [] };
+  var badImages = imgs.refused.length + imgs.failed.length;
   var snapshots = h.added + h.older;
   summary.toast = "Imported " + appDataPlural(snapshots, "version-history snapshot", "version-history snapshots") +
     " across " + appDataPlural(h.docs, "document", "documents") + ", " +
     appDataPlural(summary.bookmarks.added, "server", "servers") + " and your preferences.";
   showToast(summary.toast, "ok");
 
-  if (h.skipped || h.failed || h.code || summary.bookmarks.skipped || summary.bookmarks.failed) {
+  if (h.skipped || h.failed || h.code || badImages || summary.bookmarks.skipped || summary.bookmarks.failed) {
     if (window.console) {
       console.warn("Import app data: not everything was imported.", {
         history: h, bookmarks: summary.bookmarks, prefsWritten: summary.prefs
@@ -509,6 +569,14 @@ async function importAppData(text) {
         appDataPlural(h.failed, "snapshot", "snapshots") + ", " +
         appDataPlural(summary.bookmarks.failed, "server", "servers") + ". Details are in the console.";
     }
+    showToast(summary.warning, "warn", true);
+  }
+  if (badImages) {
+    /* The snapshots still imported; only their pictures are missing. */
+    var imgWarning = appDataPlural(badImages, "image", "images") + " in that file could not be imported" +
+      " — the snapshots that use " + (badImages === 1 ? "it" : "them") + " will show a placeholder." +
+      " Details are in the console.";
+    summary.warning = summary.warning ? summary.warning + " " + imgWarning : imgWarning;
     showToast(summary.warning, "warn", true);
   }
 
@@ -562,6 +630,14 @@ export function __init() {
     assertNoSecrets: assertNoSecrets,
     parse: parseAppDataBundle,
     importText: importAppData,
-    summary: function () { return appDataLastSummary; }
+    summary: function () { return appDataLastSummary; },
+    /* File ▸ Export app data… end to end (deliverFile included), and what
+       it last reported: {ok, images, missingBlobs, truncated, warning} */
+    exportFile: exportAppData,
+    exportSummary: function () { return appDataLastExport; },
+    /* Points the image registry (02c-blobs.js) at a backend — e.g.
+       __desktopTest.makeBlobBackend(fake) — or, with null, back to its own
+       choice; either way it forgets which blobs it knew to be durable. */
+    useBlobBackend: function (backend) { setBlobBackend(backend || null); return true; }
   };
 }

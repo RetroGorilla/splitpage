@@ -1,5 +1,7 @@
 import { S } from "./_state.js";
 import { escapeHtml, makeId } from "./02-state.js";
+import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
+import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import { safeHref } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
@@ -29,6 +31,9 @@ export function dataUrlToBytes(dataUrl) {
   for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
+
+/* A picture's file extension inside a .docx, by the type its bytes are. */
+var DOCX_IMAGE_EXT = { "image/jpeg": "jpeg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
 
 /* read intrinsic pixel size straight out of the JPEG's SOF marker */
 export function jpegSize(bytes) {
@@ -106,6 +111,20 @@ function docxRunsXml(html, rels) {
   return out + '</w:p>';
 }
 
+/* One inline picture as a run: `img` is what rels.addImage returned, `id`
+   the drawing's id (unique in the document), cx/cy its size in EMU. */
+function docxDrawingRun(img, id, cx, cy) {
+  return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+    '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+    '<wp:docPr id="' + id + '" name="' + img.name + '"/><wp:cNvGraphicFramePr/>' +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + id + '" name="' + img.name + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
+    '<pic:blipFill><a:blip r:embed="' + img.rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
+    '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+}
+
 function docxCellXml(inner, widthDxa) {
   return '<w:tc><w:tcPr><w:tcW w:w="' + widthDxa + '" w:type="dxa"/>' +
     '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/>' +
@@ -155,11 +174,19 @@ export function buildDocx() {
       links.push(href);
       return "rIdL" + links.length;
     },
-    addImage: function (bytes) {
-      media.push(bytes);
-      return { rid: "rIdM" + media.length, name: "image" + media.length + ".jpeg" };
+    /* Each picture keeps the type it is, named and declared as that type
+       (#82): a PNG used to go in as "imageN.jpeg" under image/jpeg. */
+    addImage: function (bytes, mime) {
+      var ext = DOCX_IMAGE_EXT[mime] || "jpeg";
+      media.push({ bytes: bytes, ext: ext });
+      return { rid: "rIdM" + media.length, name: "image" + media.length + "." + ext };
     }
   };
+
+  /* sha -> the picture's media part and pixel size, or null when its bytes
+     are not here: each ref'd row picture, and each comment picture once
+     written, so a comment showing one of those again reuses its part */
+  var pictureParts = {};
 
   var body = "";
   body += '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
@@ -175,23 +202,20 @@ export function buildDocx() {
 
   S.state.rows.forEach(function (row, idx) {
     var visual = "";
-    if (row.visualImage) {
+    /* A ref'd picture's bytes are in memory by now: buildFileData
+       (18-local-files.js) awaits ensureBytes before building. One that
+       nobody had is left out, as an unreadable one always was. */
+    var pic = rowImage(row) && rowImageBytes(row);
+    if (pic) {
       try {
-        var bytes = dataUrlToBytes(row.visualImage);
-        var dim = safeAspect(jpegSize(bytes));
-        var img = rels.addImage(bytes);
+        var bytes = pic.bytes;
+        var dim = safeAspect(rowImage(row).ref ? { w: pic.width, h: pic.height } : jpegSize(bytes));
+        var img = rels.addImage(bytes, pic.mime);
         var maxW = 2750000; /* ~2.9in in EMU, fits the cell */
         var cx = Math.round(Math.min(maxW, dim.w * 9525));
         var cy = Math.round(cx * dim.ratio);
-        visual += '<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
-          '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
-          '<wp:docPr id="' + media.length + '" name="' + img.name + '"/><wp:cNvGraphicFramePr/>' +
-          '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
-          '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + media.length + '" name="' + img.name + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
-          '<pic:blipFill><a:blip r:embed="' + img.rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
-          '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
-          '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
-          '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+        visual += '<w:p>' + docxDrawingRun(img, media.length, cx, cy) + '</w:p>';
+        if (rowImage(row).ref) pictureParts[rowImage(row).ref.sha256] = { rid: img.rid, name: img.name, w: dim.w, h: dim.h };
       } catch (e) { /* unreadable image — skip it rather than break the export */ }
     }
     visual += docxRunsXml(row.visualText, rels);
@@ -236,10 +260,60 @@ export function buildDocx() {
       bRows + '</w:tbl>';
   }
 
-  var comments = commentEntries();
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     body += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
       '<w:r><w:t>Comments</w:t></w:r></w:p>';
+
+    /* Pictures in comments and replies (#82 P6 keeps them in the body as
+       <img data-blob>; commentEntries' pieces name them by sha). Each is a
+       paragraph of its own at its body's indent, in the order the body has
+       it — sized as the PDF sizes them: at most CIMG_MAXW of what is left
+       of the text column beside the indent and CIMG_MAXH tall, aspect kept,
+       and never larger than its own pixels at 96 dpi, so a small picture
+       stays small. Each is embedded as the type it is, like a row's; the
+       same picture twice — or one a row already shows — is one media
+       part (pictureParts). One whose bytes are not here
+       (buildFileData has already fetched every one it could) is an italic
+       "[image unavailable]" in its place. */
+    var CIMG_MAXW = 0.6, CIMG_MAXH = 3302000; /* 260pt, in EMU */
+    var drawingId = media.length;
+
+    function commentPictureXml(sha, indentDxa) {
+      var img = pictureParts[sha];
+      if (img === undefined) {
+        img = null;
+        var bytes = bytesForSync(sha);
+        var mime = bytes && sniffImageMime(bytes);
+        var dims = mime && imageDims(bytes);
+        if (dims && dims.width > 0 && dims.height > 0) {
+          img = rels.addImage(bytes, mime);
+          img.w = dims.width;
+          img.h = dims.height;
+        }
+        pictureParts[sha] = img;
+      }
+      if (!img) return docxLineBreakParagraph("[image unavailable]", indentDxa, "<w:i/>");
+      /* twips to EMU is x635 */
+      var scale = Math.min(9525, (10080 - indentDxa) * 635 * CIMG_MAXW / img.w, CIMG_MAXH / img.h);
+      var cx = Math.max(1, Math.round(img.w * scale));
+      var cy = Math.max(1, Math.round(img.h * scale));
+      return '<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:left="' + indentDxa + '"/></w:pPr>' +
+        docxDrawingRun(img, ++drawingId, cx, cy) + '</w:p>';
+    }
+
+    /* A comment's or reply's body in order. One with no picture is the one
+       paragraph it always was, "(empty)" and all. */
+    function commentBodyXml(entry, indentDxa) {
+      var pieces = entry.pieces || [];
+      if (!pieces.some(function (p) { return p.image; })) {
+        return docxLineBreakParagraph(entry.body || '(empty)', indentDxa, '');
+      }
+      return pieces.map(function (p) {
+        return p.image ? commentPictureXml(p.image, indentDxa) : docxLineBreakParagraph(p.text, indentDxa, '');
+      }).join("");
+    }
+
     comments.forEach(function (c) {
       body += '<w:p><w:pPr><w:spacing w:before="200" w:after="20"/></w:pPr>' +
         '<w:r><w:rPr><w:b/><w:color w:val="8A6D3B"/></w:rPr><w:t xml:space="preserve">' + xmlEscape(c.location +
@@ -250,12 +324,12 @@ export function buildDocx() {
       if (c.quoted) {
         body += docxLineBreakParagraph('“' + c.quoted + '”', 360, '<w:i/>');
       }
-      body += docxLineBreakParagraph(c.body || '(empty)', 360, '');
+      body += commentBodyXml(c, 360);
       c.replies.forEach(function (rp) {
         body += '<w:p><w:pPr><w:spacing w:before="60" w:after="0"/><w:ind w:left="720"/></w:pPr>' +
           '<w:r><w:rPr><w:b/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">↳ ' +
           xmlEscape(rp.author + (rp.when ? ', ' + rp.when : '')) + ': </w:t></w:r></w:p>';
-        body += docxLineBreakParagraph(rp.body || '(empty)', 720, '');
+        body += commentBodyXml(rp, 720);
       });
     });
   }
@@ -366,10 +440,18 @@ function packDocx(body, links, media) {
       ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"' +
       ' Target="' + xmlEscape(href) + '" TargetMode="External"/>';
   });
-  media.forEach(function (_, idx) {
+  media.forEach(function (m, idx) {
     relsXml += '<Relationship Id="rIdM' + (idx + 1) + '"' +
       ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"' +
-      ' Target="media/image' + (idx + 1) + '.jpeg"/>';
+      ' Target="media/image' + (idx + 1) + '.' + m.ext + '"/>';
+  });
+  /* jpeg is always declared, as it always was; another type only when a
+     picture of that type is in the package */
+  var extraTypes = "";
+  ["png", "gif", "webp"].forEach(function (ext) {
+    if (media.some(function (m) { return m.ext === ext; })) {
+      extraTypes += '<Default Extension="' + ext + '" ContentType="image/' + ext + '"/>';
+    }
   });
   relsXml += '</Relationships>';
 
@@ -379,7 +461,7 @@ function packDocx(body, links, media) {
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
-      '<Default Extension="jpeg" ContentType="image/jpeg"/>' +
+      '<Default Extension="jpeg" ContentType="image/jpeg"/>' + extraTypes +
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
       '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
       '<Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
@@ -396,8 +478,8 @@ function packDocx(body, links, media) {
     { name: "word/footer1.xml", data: strBytes(footerXml()) },
     { name: "word/_rels/document.xml.rels", data: strBytes(relsXml) }
   ];
-  media.forEach(function (bytes, idx) {
-    entries.push({ name: "word/media/image" + (idx + 1) + ".jpeg", data: bytes });
+  media.forEach(function (m, idx) {
+    entries.push({ name: "word/media/image" + (idx + 1) + "." + m.ext, data: m.bytes });
   });
 
   return zipWrite(entries);
@@ -581,6 +663,56 @@ function isBreakdownHeader(head) {
   return true;
 }
 
+/* ---- where a Splitpage export's script ends ----
+
+   buildDocx() writes the script as one table and then, when the document
+   has them, a "Production breakdown" section (heading + table) and a
+   "Comments" section (heading + a paragraph per comment line, reply and
+   picture). Neither is script: walked as prose, the headings came back as
+   bold rows, every comment line as a narration row, and a comment's
+   picture as a row picture. The breakdown table itself was already
+   skipped (isBreakdownHeader), its heading was not.
+
+   Recognised structurally, not by the words alone: the section starts at a
+   paragraph in the Heading1 style reading exactly one of the two headings
+   buildDocx() writes, AFTER a table in the "SplitpageTable" table style —
+   a style id only this export defines (styles.xml, __init below) and
+   nobody produces by typing. A Word document of the user's own with a
+   "Comments" heading has no such table and imports exactly as it always
+   did. Files Splitpage exported before this check carry the same shape,
+   so they reopen cleanly too — the export itself did not change.
+
+   The comments are dropped, not rebuilt: the export carries them as
+   plain text with a formatted date and a scene label, not the anchor
+   (row, field, offsets), the formatting or the timestamps a comment
+   record needs, and opening a .docx starts a new document with no
+   comments of its own (issue #7). */
+var EXPORT_TABLE_STYLE = "splitpagetable";
+var EXPORT_SECTION_HEADINGS = ["Production breakdown", "Comments"];
+
+function tableStyleName(tblEl) {
+  var tblPr = directChildren(tblEl, "tblPr")[0];
+  var st = tblPr && directChildren(tblPr, "tblStyle")[0];
+  if (!st) return "";
+  return (st.getAttributeNS(W_NS, "val") || st.getAttribute("w:val") || "").toLowerCase();
+}
+
+/* The index in `blocks` where a Splitpage export's own trailing sections
+   begin, or blocks.length when there are none (any other document). */
+function exportTailStart(blocks) {
+  var sawExportTable = false;
+  for (var i = 0; i < blocks.length; i++) {
+    var n = blocks[i];
+    if (n.localName === "tbl") {
+      if (tableStyleName(n) === EXPORT_TABLE_STYLE) sawExportTable = true;
+      continue;
+    }
+    if (sawExportTable && paraStyleName(n) === "heading1" &&
+        EXPORT_SECTION_HEADINGS.indexOf((n.textContent || "").trim()) !== -1) return i;
+  }
+  return blocks.length;
+}
+
 /* Work out which columns hold the visual and the audio. Tables in the wild
    have an extra scene-number column, and put the columns in either order. */
 function mapTableColumns(rowsText) {
@@ -628,6 +760,9 @@ export async function docxToRows(file) {
   var blocks = Array.prototype.filter.call(bodyEl.childNodes, function (n) {
     return n.nodeType === 1 && (n.localName === "p" || n.localName === "tbl");
   });
+  /* a Splitpage export ends at its script: its breakdown and comments
+     sections are not rows (exportTailStart above) */
+  blocks = blocks.slice(0, exportTailStart(blocks));
 
   /* Only read bold as "this is a direction" when the document uses it that
      way — sparingly, among plain paragraphs. In an all-bold document it
@@ -646,7 +781,7 @@ export async function docxToRows(file) {
     return {
       id: makeId(),
       visualText: fields.visualText || "",
-      visualImage: null,
+      imageRef: null,
       audioText: fields.audioText || "",
       _pendingImage: fields._pendingImage || null
     };
@@ -704,8 +839,8 @@ export async function docxToRows(file) {
          buildDocx() always adds a second Heading1 ("Comments" /
          "Production breakdown") once there's a saved comment or tracked
          item, which defeated that count on every one of its own exports:
-         the title paragraph became a bogus row, and the whole appended
-         section got walked as narration. Position (nothing kept yet) is
+         the title paragraph became a bogus row. (That appended section is
+         cut off before this walk now — exportTailStart.) Position (nothing kept yet) is
          the actual invariant the comment above describes — count of
          headings elsewhere in the document has nothing to do with it. */
       if (title === null && !rows.length && !pending) { title = plain; return; }
@@ -716,7 +851,7 @@ export async function docxToRows(file) {
 
     if (target) {
       /* an image paragraph is a visual: attach it to the row being built */
-      if (pending && !pending.visualImage && !pending._pendingImage) {
+      if (pending && !pending.imageRef && !pending._pendingImage) {
         pending._pendingImage = target;
         if (plain) pending.visualText = pending.visualText ? pending.visualText + "<br>" + html : html;
       } else {
@@ -755,8 +890,10 @@ export async function docxToRows(file) {
       var imgBytes = await zip.get(path);
       if (imgBytes) {
         var raw = bytesToDataUrl(imgBytes, mimeForPath(path));
-        /* the exporters embed JPEG only (DCTDecode / image/jpeg part) */
-        rows[ri].visualImage = await toJpegDataUrl(raw);
+        /* JPEG, at most 1000px — what a picture attached by hand becomes
+           too — then into the image registry (#82), named by its record */
+        var rec = internDataUrl(await toJpegDataUrl(raw));
+        if (rec) { queuePersist([rec.sha256]); rows[ri].imageRef = rec; }
       }
     } catch (e) { /* unreadable picture — keep the row, drop the image */ }
   }

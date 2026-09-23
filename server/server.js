@@ -34,6 +34,18 @@ const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public"
 /* A script with a few embedded images gets large. 25 MB is roomy for that and
    still small enough that a runaway client can't fill the array. */
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
+/* One image, uploaded on its own (#82). Images left the document for
+   content-addressed blobs under DATA_DIR/blobs, so a script no longer carries
+   its stills inside it; this is the cap on one still. */
+const MAX_BLOB_BYTES = Number(process.env.MAX_BLOB_BYTES || 8 * 1024 * 1024);
+/* How many bytes of images a REVIEW token may store per rolling hour — the
+   screenshots a reviewer pastes into comments. An editor has no such cap: an
+   editor can already write 25 MB per save. A reviewer otherwise could not
+   write to the disk at all, and this keeps "can comment" from becoming "can
+   fill the array". The library-wide review credential is one token shared by
+   everyone who holds it, so it is one budget shared by all of them. */
+const REVIEW_BLOB_BUDGET = Number(process.env.REVIEW_BLOB_BUDGET_BYTES || 20 * 1024 * 1024);
+const REVIEW_BLOB_WINDOW_MS = 60 * 60 * 1000;
 /* Set READ_ONLY=1 to publish a library nobody can write to. */
 const READ_ONLY = process.env.READ_ONLY === "1";
 /* Set NO_API=1 to serve the app and nothing else. The local launcher uses this
@@ -320,7 +332,7 @@ function corsHeaders(req) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Vary": "Origin",
-    "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch",
+    "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch, x-splitpage-client",
     /* PATCH is here for the one comment resolve route (#71). A preflight
        that does not name a method is a preflight that fails, and a route
        added without its method named here works from the app and from
@@ -532,14 +544,13 @@ async function syncDir(dir) {
    the two leaves the document there and EMPTY — the one outcome this whole
    dance exists to prevent (#74). So: write, fsync the temp file, rename,
    then fsync the directory that now holds the new name. */
-async function writeDoc(doc) {
-  const target = docPath(doc.id);
+async function writeFileDurable(target, data) {
   const tmp = target + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
   try {
     let handle;
     try {
       handle = await fsp.open(tmp, "w");
-      await handle.writeFile(encodeDoc(doc), "utf8");
+      await handle.writeFile(data, typeof data === "string" ? "utf8" : undefined);
       await handle.sync();
     } finally {
       if (handle) await handle.close();
@@ -550,6 +561,15 @@ async function writeDoc(doc) {
     throw err;
   }
   await syncDir(path.dirname(target));
+}
+
+async function writeDoc(doc, refs) {
+  await writeFileDurable(docPath(doc.id), encodeDoc(doc));
+  /* The refs of the state that just went to disk, filed under the rev it
+     went there as, so a review link asking for an image (and an old client's
+     PUT asking whether it may) does not have to parse the script back in to
+     find out (#82). Whoever wrote it had the state in hand anyway. */
+  noteRefs(doc.id, doc.rev || 0, refs || refsIn(doc.state));
 }
 
 /* ---------- http helpers ---------- */
@@ -601,6 +621,19 @@ function sendJson(res, status, body, opts) {
 const SMALL_BODY = 8 * 1024;
 
 function readBody(req, limit) {
+  return readRawBody(req, limit || MAX_BODY).then((buf) => {
+    try {
+      const text = buf.toString("utf8");
+      return text ? JSON.parse(text) : {};
+    } catch (err) {
+      throw Object.assign(new Error("bad-json"), { code: "BAD_JSON" });
+    }
+  });
+}
+
+/* The body as bytes, capped. An image upload (#82) is not JSON, and every
+   JSON body is these bytes parsed. */
+function readRawBody(req, limit) {
   const max = limit || MAX_BODY;
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -626,12 +659,7 @@ function readBody(req, limit) {
     });
     req.on("end", () => {
       if (aborted) return;
-      try {
-        const text = Buffer.concat(chunks).toString("utf8");
-        resolve(text ? JSON.parse(text) : {});
-      } catch (err) {
-        reject(Object.assign(new Error("bad-json"), { code: "BAD_JSON" }));
-      }
+      resolve(Buffer.concat(chunks));
     });
     req.on("error", reject);
   });
@@ -1173,6 +1201,401 @@ function commentAnswer(id, doc, comment, extra) {
   }, extra || {});
 }
 
+/* ---------- images, as content-addressed blobs (#82) ----------
+ *
+ * An image is stored once, under the SHA-256 of its bytes, and a document
+ * names it by that hash instead of carrying it: `row.imageRef.sha256` for a
+ * scene's still, `<img data-blob="<sha>">` inside a comment, a reply or a
+ * scene's HTML. The bytes live at DATA_DIR/blobs/<first two hex>/<sha>, raw,
+ * written the same durable way a document is (temp in the same directory,
+ * fsync, rename, fsync the directory).
+ *
+ * Global and content-addressed (owner's decision): two documents holding the
+ * same screenshot hold one file. Nothing here ever deletes one (also the
+ * owner's decision, for this issue); a successful save touches the mtime of
+ * every blob it names, so a collector written later can tell what is in use.
+ *
+ * The rule every durable write keeps: NO DURABLE RECORD NAMES A BLOB ITS
+ * STORE DOES NOT ALREADY HOLD DURABLY. Here that is the 422 below — a save
+ * or a comment naming a blob this server does not have is refused, and the
+ * client uploads it and asks again. The one exception is explicit: a save
+ * may list a sha in `acceptMissing` when the client KNOWS the bytes are gone
+ * for good (a history snapshot restored after its image was lost), so a
+ * missing picture cannot make a script unsaveable.
+ *
+ * Legacy states that carry their images inline as base64 are accepted
+ * forever; nothing here looks at them.
+ */
+const BLOBS_DIR = path.join(DATA_DIR, "blobs");
+const SHA_RE = /^[0-9a-f]{64}$/;
+/* The one client version this server needs to know about (D7): 2 is the
+   first that keeps blob references. An older client does not know an
+   `imageRef` is an image, and a save from one would write back a script
+   whose stills it could not see — so it is refused where that matters. */
+const CLIENT_BLOBS = 2;
+/* 2000 hashes and the JSON around them. */
+const MISSING_BODY = 256 * 1024;
+const MISSING_MAX = 2000;
+
+function isSha(value) {
+  return typeof value === "string" && SHA_RE.test(value);
+}
+
+function blobPath(sha) {
+  return path.join(BLOBS_DIR, sha.slice(0, 2), sha);
+}
+
+/* PNG, JPEG, GIF or WebP, from the first bytes, or "" for anything else.
+   Never SVG: an SVG is a document that can carry script, and a blob is
+   served from this origin. */
+function sniffImageMime(buf) {
+  if (!buf || buf.length < 12) return "";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  const head = buf.toString("latin1", 0, 12);
+  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
+  if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
+  return "";
+}
+
+function sha256Of(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+/* Every sha a state names: an image record (`imageRef` on a row, or the
+   `imageValue` an image conflict card carries) and every `data-blob`
+   attribute on a tag in any string in it — comment and reply bodies and a
+   row's HTML fields included. Deliberately wider than any one client's
+   walker: for the 422 check a wider net only asks for more of what must be
+   there anyway, and for a review link it only lets it see images its own
+   document shows. Attributes are read through htmlTokens(), so words that
+   merely LOOK like one in a script's text do not count. */
+function refsIn(state) {
+  const out = new Set();
+  const walk = (value, key, depth) => {
+    if (depth > 64) return;
+    if (typeof value === "string") {
+      if (value.indexOf("data-blob") !== -1) blobAttrsIn(value, out);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, "", depth + 1);
+      return;
+    }
+    if ((key === "imageRef" || key === "imageValue") && isSha(value.sha256)) out.add(value.sha256);
+    for (const k of Object.keys(value)) walk(value[k], k, depth + 1);
+  };
+  walk(state, "", 0);
+  return out;
+}
+
+function blobAttrsIn(html, out) {
+  for (const tk of htmlTokens(html)) {
+    if (tk.kind !== "open" || tk.attrs.indexOf("data-blob") === -1) continue;
+    const sha = attrValue(tk.attrs, "data-blob");
+    if (isSha(sha)) out.add(sha);
+  }
+}
+
+/* The refs of a stored document, by id and rev. writeDoc() files them as it
+   writes, so the common case is a lookup; a document this process has not
+   written since it started is parsed once. Bounded like everything else in
+   memory here. */
+const refsCache = new Map();   /* docId -> { rev, refs:Set } */
+const REFS_CACHE_MAX = 200;
+
+function noteRefs(id, rev, refs) {
+  refsCache.delete(id);
+  if (refsCache.size >= REFS_CACHE_MAX) refsCache.delete(refsCache.keys().next().value);
+  refsCache.set(id, { rev, refs });
+}
+
+/* A Set, or null when there is no such document. */
+async function storedRefsOf(id) {
+  const meta = await readDocMeta(id);
+  if (!meta) return null;
+  const rev = meta.rev || 0;
+  const hit = refsCache.get(id);
+  if (hit && hit.rev === rev) return hit.refs;
+  const doc = await readDoc(id);
+  if (!doc) return null;
+  const refs = refsIn(doc.state);
+  noteRefs(id, doc.rev || 0, refs);
+  return refs;
+}
+
+async function hasBlob(sha) {
+  try {
+    return (await fsp.stat(blobPath(sha))).isFile();
+  } catch (err) {
+    return false;
+  }
+}
+
+/* The shas in `shas` this server does not hold. */
+async function blobsMissing(shas) {
+  const missing = [];
+  for (const sha of shas) if (!(await hasBlob(sha))) missing.push(sha);
+  return missing;
+}
+
+/* Best effort, never awaited by anything that answers: a blob in use is a
+   blob whose mtime is recent, and that is all a later collector would ask. */
+function touchBlobs(shas) {
+  const now = new Date();
+  for (const sha of shas) fsp.utimes(blobPath(sha), now, now).catch(() => {});
+}
+
+async function writeBlob(sha, buf) {
+  const dir = path.dirname(blobPath(sha));
+  /* mkdir -p returns the first directory it had to create, if any. A new
+     directory is a new name in its parent, and a name is durable only once
+     the parent is synced — the same reason writeFileDurable() syncs the
+     directory it renamed into. */
+  const created = await fsp.mkdir(dir, { recursive: true });
+  if (created) {
+    await syncDir(BLOBS_DIR);
+    await syncDir(DATA_DIR);
+  }
+  await writeFileDurable(blobPath(sha), buf);
+}
+
+/* What a PUT or POST names that the store does not hold, minus what the
+   stored document already names (a ref that was already dangling cannot be
+   fixed by refusing the next save) and minus what the client said it knows
+   is gone (`acceptMissing`). Empty means the write may go ahead.
+   `docId` names the stored document, or is "" for a new one; its refs are
+   only looked up when something is actually missing, which on a server
+   holding every image is never. */
+async function refusedRefs(incoming, docId, acceptMissing) {
+  if (!incoming.size) return [];
+  const missing = await blobsMissing(incoming);
+  if (!missing.length) return [];
+  const accept = new Set(Array.isArray(acceptMissing) ? acceptMissing.filter(isSha) : []);
+  const stored = docId ? await storedRefsOf(docId) : null;
+  return missing.filter((sha) => !accept.has(sha) && !(stored && stored.has(sha)));
+}
+
+/* The images a new comment or reply body names that it may not name: ones
+   this server does not hold (the same 422 a save gets, and the same excuse
+   for one its document already names), and — for a per-document review link
+   — ones it can neither see in its document nor has uploaded itself, which
+   are answered as missing whether or not they are here, so posting a comment
+   is not a way to ask what the rest of the library holds. */
+async function commentRefsRefused(req, role, docId, html) {
+  const refs = new Set();
+  if (typeof html === "string" && html.indexOf("data-blob") !== -1) blobAttrsIn(html, refs);
+  if (!refs.size) return { refs, missing: [] };
+  const visible = await blobVisibility(req, role);
+  let stored;
+  const missing = [];
+  for (const sha of refs) {
+    if (visible && !visible(sha)) { missing.push(sha); continue; }
+    if (await hasBlob(sha)) continue;
+    if (stored === undefined) stored = (await storedRefsOf(docId)) || new Set();
+    if (!stored.has(sha)) missing.push(sha);
+  }
+  return { refs, missing };
+}
+
+/* Does this request come from a client that knows what a blob ref is? */
+function clientKnowsBlobs(req) {
+  const v = parseInt(String(req.headers["x-splitpage-client"] || ""), 10);
+  return isFinite(v) && v >= CLIENT_BLOBS;
+}
+
+/* ---------- a reviewer's image budget ----------
+ *
+ * A reviewer may upload the screenshots they paste into comments (D6), up to
+ * REVIEW_BLOB_BUDGET bytes per token per rolling hour. The bytes are RESERVED
+ * before the body is read — the declared length, or the whole per-blob cap
+ * for a chunked upload — so ten uploads started at once cannot each find the
+ * budget empty; the reservation is settled to what was actually stored when
+ * the upload ends, and to nothing when it fails.
+ *
+ * The ledger also remembers which shas a token has uploaded. A per-document
+ * review link sees only the images its document names — and the images it
+ * has itself handed over, because it holds those bytes already. That is what
+ * lets a comment carrying a fresh screenshot pass the 422 check below without
+ * the check telling a link-holder whether some OTHER document on this server
+ * holds an image with that hash.
+ */
+const reviewLedgers = new Map();   /* token -> [{ at, bytes, sha }] */
+
+function reviewLedger(token, now) {
+  const list = (reviewLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
+  if (list.length) reviewLedgers.set(token, list); else reviewLedgers.delete(token);
+  return list;
+}
+
+/* A file costs at least a block on the disk, and a floor on the charge is
+   also a ceiling on how many entries a ledger can hold. */
+const BLOB_MIN_CHARGE = 4096;
+
+function blobCharge(bytes) {
+  return Math.max(BLOB_MIN_CHARGE, bytes);
+}
+
+function reviewBytesUsed(token, now) {
+  let used = 0;
+  for (const e of reviewLedger(token, now)) used += e.bytes;
+  return used;
+}
+
+function reviewUploaded(token, sha) {
+  return reviewLedger(token, Date.now()).some((e) => e.sha === sha);
+}
+
+/* Which shas this caller may learn anything about. Everything, for an editor
+   and for the library-wide review credential (either can read every document
+   there is). For a per-document review link: what its document names, plus
+   what it uploaded itself. */
+async function blobVisibility(req, role) {
+  if (role !== "review") return null;
+  const scope = reviewScopeOf(req);
+  if (!scope) return null;
+  const token = String(req.headers["x-splitpage-token"] || "");
+  const refs = (await storedRefsOf(scope)) || new Set();
+  return (sha) => refs.has(sha) || reviewUploaded(token, sha);
+}
+
+/* GET, PUT and POST /missing under /api/blobs. Called after the gate, with
+   the caller's role. */
+async function handleBlobs(req, res, parts, role) {
+  if (parts[2] === "missing" && parts.length === 3) {
+    if (req.method !== "POST") return sendJson(res, 405, { error: "method-not-allowed" });
+    const body = await readBody(req, MISSING_BODY);
+    const shas = body && body.shas;
+    if (!Array.isArray(shas) || shas.length > MISSING_MAX || !shas.every(isSha)) {
+      return sendJson(res, 400, { error: "bad-shas" });
+    }
+    const unique = Array.from(new Set(shas));
+    const visible = await blobVisibility(req, role);
+    /* A per-document link is told the truth about what it may see, and that
+       everything else is missing. "Missing" costs it one upload of bytes it
+       already holds; the truth would tell it what the rest of the library
+       contains. */
+    const missing = [];
+    for (const sha of unique) {
+      if (visible && !visible(sha)) missing.push(sha);
+      else if (!(await hasBlob(sha))) missing.push(sha);
+    }
+    return sendJson(res, 200, { missing });
+  }
+
+  if (parts.length !== 3) return sendJson(res, 404, { error: "not-found" });
+  const sha = parts[2];
+
+  if (req.method === "GET") {
+    if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
+    const visible = await blobVisibility(req, role);
+    /* Not "forbidden": a link that may not see a blob is told it is not
+       there, exactly as if it were not, so asking reveals nothing. */
+    if (visible && !visible(sha)) return sendJson(res, 404, { error: "not-found" });
+    let buf;
+    try {
+      buf = await fsp.readFile(blobPath(sha));
+    } catch (err) {
+      if (err && err.code === "ENOENT") return sendJson(res, 404, { error: "not-found" });
+      throw err;
+    }
+    const mime = sniffImageMime(buf);
+    /* A file that is not what its name says — a bad disk, a hand edit — is
+       not served as if it were. Not deleted either (D4): the next upload of
+       the real bytes replaces it. */
+    if (!mime || sha256Of(buf) !== sha) {
+      console.error("[splitpage] blob " + sha + " does not match its name; not serving it");
+      return sendJson(res, 404, { error: "not-found" });
+    }
+    const headers = Object.assign({
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "ETag": "\"" + sha + "\"",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox"
+    }, res.corsHeaders || {});
+    const inm = String(req.headers["if-none-match"] || "");
+    if (inm.split(",").some((t) => t.trim().replace(/^W\//, "") === "\"" + sha + "\"")) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    headers["Content-Type"] = mime;
+    headers["Content-Length"] = buf.length;
+    res.writeHead(200, headers);
+    res.end(buf);
+    return;
+  }
+
+  if (req.method === "PUT") {
+    /* Everything that can refuse this without the bytes does so before a
+       byte is read (#74): the library, the hash's shape, the declared size,
+       and a reviewer's budget. */
+    if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
+    const declared = req.headers["content-length"] !== undefined
+      ? Number(req.headers["content-length"]) : NaN;
+    if (isFinite(declared) && declared > MAX_BLOB_BYTES) {
+      return sendJson(res, 413, { error: "too-large" });
+    }
+    let entry = null;
+    const token = String(req.headers["x-splitpage-token"] || "");
+    if (role === "review") {
+      const now = Date.now();
+      const reserve = blobCharge(isFinite(declared) && declared >= 0 ? declared : MAX_BLOB_BYTES);
+      if (reviewBytesUsed(token, now) + reserve > REVIEW_BLOB_BUDGET) {
+        return sendJson(res, 429, { error: "review-budget" });
+      }
+      entry = { at: now, bytes: reserve, sha: "" };
+      const list = reviewLedger(token, now);
+      list.push(entry);
+      reviewLedgers.set(token, list);
+    }
+    try {
+      const buf = await readRawBody(req, MAX_BLOB_BYTES);
+      if (sha256Of(buf) !== sha) return sendJson(res, 400, { error: "hash-mismatch" });
+      if (!sniffImageMime(buf)) return sendJson(res, 415, { error: "unsupported-type" });
+      const visible = await blobVisibility(req, role);
+      const truthful = !visible || visible(sha);
+      let present = false;
+      if (await hasBlob(sha)) {
+        /* Present only if it is what it says: a damaged copy is replaced by
+           the good bytes just received, never kept in their place. */
+        present = sha256Of(await fsp.readFile(blobPath(sha)).catch(() => Buffer.alloc(0))) === sha;
+      }
+      if (present) touchBlobs([sha]);
+      else await writeBlob(sha, buf);
+      if (entry && !(present && truthful)) {
+        /* Charged for what it cost the disk — or, for a per-document link
+           that is told "stored" about a blob it could not have known was
+           here, charged as though it had, so the two answers cannot be told
+           apart by the budget either. A re-upload of something the caller
+           could see anyway costs nothing and needs no entry (the finally
+           below drops it). */
+        entry.sha = sha;
+        entry.bytes = blobCharge(buf.length);
+        entry = null;
+      }
+      /* A per-document link is only told the blob was already here when it
+         could have seen it anyway; otherwise the answer is the one a new
+         upload gets, and says nothing about what else the library holds. */
+      if (present && truthful) return sendJson(res, 200, { stored: false });
+      return sendJson(res, 201, { stored: true });
+    } finally {
+      /* Refused, failed, or free: nothing charged, and no entry left behind
+         for a caller to grow the ledger with. */
+      if (entry) {
+        const list = reviewLedgers.get(token);
+        const at = list ? list.indexOf(entry) : -1;
+        if (at !== -1) list.splice(at, 1);
+      }
+    }
+  }
+
+  return sendJson(res, 405, { error: "method-not-allowed" });
+}
+
 /* ---------- API ---------- */
 
 async function handleApi(req, res, url) {
@@ -1192,6 +1615,9 @@ async function handleApi(req, res, url) {
       /* whether a second, comment-only credential exists at all — not what
          it is. A client needs this to know a review link is worth offering */
       reviewAvailable: REVIEW_ACTIVE,
+      /* This server stores images as blobs under /api/blobs (#82). A client
+         keeps its images as references only against a server that says so. */
+      blobs: 1,
       version: VERSION
     });
   }
@@ -1383,6 +1809,9 @@ async function handleApi(req, res, url) {
     });
   }
 
+  /* Images (#82): after the gate, like everything that reads or writes. */
+  if (parts[1] === "blobs") return handleBlobs(req, res, parts, role);
+
   if (parts[1] !== "docs") return sendJson(res, 404, { error: "not-found" });
 
   const id = parts[2];
@@ -1426,6 +1855,13 @@ async function handleApi(req, res, url) {
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
     }
+    /* Every image the new document names must already be here (#82) — a
+       new document has no stored refs to excuse a dangling one. */
+    const createRefs = refsIn(body.state);
+    const createMissing = await refusedRefs(createRefs, "", body.acceptMissing);
+    if (createMissing.length) {
+      return sendJson(res, 422, { error: "missing-blobs", missing: createMissing });
+    }
     /* slugify()'s uniqueness rests on 24 bits of random suffix — unlikely
        per call, but not impossible over a long-running/shared library's
        lifetime (birthday-bound collision). Unlike PUT's careful rev-based
@@ -1446,11 +1882,12 @@ async function handleApi(req, res, url) {
           updatedAt: new Date().toISOString(),
           updatedBy: who.name || body.by || null
         };
-        await writeDoc(d);
+        await writeDoc(d, createRefs);
         return d;
       });
       if (wrote) { newId = candidate; doc = wrote; break; }
     }
+    if (doc) touchBlobs(createRefs);
     if (!doc) return sendJson(res, 500, { error: "id-collision" });
     return sendJson(res, 201, { id: newId, rev: doc.rev, updatedAt: doc.updatedAt });
   }
@@ -1475,9 +1912,17 @@ async function handleApi(req, res, url) {
    * longer path than `/api/docs/:id` and would otherwise be answered as a
    * GET of the document — the extra segment silently ignored.
    *
-   * Open to both roles. An editor has PUT and does not need this, but there
-   * is nothing here an editor may not do, and a route that refuses the more
-   * privileged caller is a trap for whoever writes the client next.
+   * POST is open to both roles. An editor has PUT and does not need it, but
+   * there is nothing there an editor may not do, and a route that refuses the
+   * more privileged caller is a trap for whoever writes the client next.
+   *
+   * PATCH is an editor's only. Reviewers never resolve or unresolve a comment
+   * (the owner's decision): this server cannot tell who wrote a comment — an
+   * author is a name typed into a box, and every reviewer on a link shares
+   * the one token — so there is no "their own comment" a reviewer could be
+   * limited to, and a reviewer resolving anything would be resolving someone
+   * else's. The client already offers them no Resolve; this is the same rule
+   * held where a token alone cannot get round it.
    */
   if (parts[3] === "comments") {
     /* Nothing hangs off a comment: a reply is a POST to the collection
@@ -1491,11 +1936,16 @@ async function handleApi(req, res, url) {
     const cid = hasCid ? commentIdOf(parts[4]) : "";
     if (hasCid && !cid) return sendJson(res, 400, { error: "bad-comment-id" });
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    /* Refused on the role alone, before the body or the document is looked
+       at: which comment, and which way, make no difference to the answer. */
+    if (req.method === "PATCH" && role === "review") {
+      return sendJson(res, 403, { error: "reviewers-cannot-resolve" });
+    }
 
     /* Only now is a byte of the body read: the token was checked by the gate
-       above, the review link's scope by the check above that, and the method
-       and the path by the two lines above this one (#74). The cap is this
-       route's own — a comment, not a script. */
+       above, the review link's scope by the check above that, and the method,
+       the path and the role by the lines above this one (#74). The cap is
+       this route's own — a comment, not a script. */
     const body = await readBody(req, COMMENT_BODY);
     const now = new Date().toISOString();
     /* Cloudflare Access's word first, the client's claim second: the same
@@ -1539,6 +1989,10 @@ async function handleApi(req, res, url) {
       const parentId = commentIdOf(body.replyTo);
       const reply = cleanReply(body.reply, now, by);
       if (!parentId || !reply) return sendJson(res, 400, { error: "bad-comment" });
+      const replyRefs = await commentRefsRefused(req, role, id, reply.body);
+      if (replyRefs.missing.length) {
+        return sendJson(res, 422, { error: "missing-blobs", missing: replyRefs.missing });
+      }
       return withDocLock(id, async () => {
         const open = await openForComment(id);
         if (open.error) return sendJson(res, open.error.status, open.error.body);
@@ -1558,6 +2012,7 @@ async function handleApi(req, res, url) {
            then. */
         parent.updatedAt = now;
         const next = await writeCommentChange(id, open.doc, open.state, by, now);
+        touchBlobs(replyRefs.refs);
         return sendJson(res, 200, commentAnswer(id, next, parent, { changed: true, reply }));
       });
     }
@@ -1569,6 +2024,13 @@ async function handleApi(req, res, url) {
        out. Whether it is a REPEAT can only be judged inside. */
     if (body.anchor !== undefined && body.anchor !== null && typeof body.anchor !== "object") {
       return sendJson(res, 400, { error: "bad-anchor" });
+    }
+    /* The anchor's HTML needs no such check: placeAnchor() accepts it only
+       when it matches the stored field tag for tag, images included, so it
+       cannot bring a new ref in. */
+    const commentRefs = await commentRefsRefused(req, role, id, comment.body);
+    if (commentRefs.missing.length) {
+      return sendJson(res, 422, { error: "missing-blobs", missing: commentRefs.missing });
     }
     return withDocLock(id, async () => {
       const open = await openForComment(id);
@@ -1588,6 +2050,7 @@ async function handleApi(req, res, url) {
       if (placed === "bad") return sendJson(res, 400, { error: "bad-anchor" });
       open.state.comments.push(comment);
       const next = await writeCommentChange(id, open.doc, open.state, by, now);
+      touchBlobs(commentRefs.refs);
       return sendJson(res, 200, commentAnswer(id, next, comment, {
         changed: true,
         anchored: placed === "ok"
@@ -1614,10 +2077,24 @@ async function handleApi(req, res, url) {
        readBody() means a reviewer cannot make this process buffer a 25 MB
        upload just to be told no (#74). */
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
+    /* D7 (#82): a client that predates blob references reads an `imageRef`
+       as a key it does not know and a `data-blob` image as nothing at all,
+       so its save of a document holding either would write back a script
+       with its pictures gone from under it. Refused before the body, with a
+       status that says what to do about it: reload. A document holding no
+       refs is one an old client can still save, as it always could — and
+       the rev compare-and-set below covers a document that gains refs
+       between this check and the write, because the old client's baseRev
+       is then stale and it gets a 409. */
+    if (!clientKnowsBlobs(req)) {
+      const held = await storedRefsOf(id);
+      if (held && held.size) return sendJson(res, 426, { error: "client-too-old" });
+    }
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
     }
+    const putRefs = refsIn(body.state);
     const baseRev = Number(body.baseRev);
     if (!isFinite(baseRev) || baseRev < 0) return sendJson(res, 400, { error: "bad-base-rev" });
 
@@ -1646,6 +2123,13 @@ async function handleApi(req, res, url) {
         });
       }
 
+      /* After the rev check — a stale client has to merge before anything
+         else it is told matters — and before a byte is written: an image
+         this save names that is new to this document and not on this
+         server is refused, and the client uploads it and asks again (#82). */
+      const missing = await refusedRefs(putRefs, id, body.acceptMissing);
+      if (missing.length) return sendJson(res, 422, { error: "missing-blobs", missing });
+
       const doc = {
         id,
         rev: (meta.rev || 0) + 1,
@@ -1653,7 +2137,8 @@ async function handleApi(req, res, url) {
         updatedAt: new Date().toISOString(),
         updatedBy: who.name || body.by || meta.updatedBy || null
       };
-      await writeDoc(doc);
+      await writeDoc(doc, putRefs);
+      touchBlobs(putRefs);
       return sendJson(res, 200, { id, rev: doc.rev, updatedAt: doc.updatedAt, updatedBy: doc.updatedBy });
     });
   }

@@ -2,6 +2,8 @@ import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
+import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
   plainName,
@@ -9,12 +11,14 @@ import {
   safeHref,
   safeId,
   safeImageSrc,
-  sanitizeHtml
+  sanitizeHtml,
+  storedImageHtml
 } from "./04-richtext.js";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,
   collectTagsFromRows,
+  missingRegistryTags,
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
@@ -184,7 +188,19 @@ export function migrateRows(s) {
     r.status = rowStatus(r.status) ? r.status : "todo";
     r.visualText = sanitizeHtml(legacy ? legacyMdToHtml(r.visualText || "") : (r.visualText || ""));
     r.audioText = sanitizeHtml(legacy ? legacyMdToHtml(r.audioText || "") : (r.audioText || ""));
-    r.visualImage = safeImageSrc(r.visualImage) || null;
+    /* A row's picture is `imageRef`, a record naming bytes in the image
+       registry (02c-blobs.js, #82). A legacy inline `visualImage` data:
+       URI — every file, server copy, stash and snapshot from before, and
+       every .splitpage/.md written since (they carry their images inline)
+       — is interned here, synchronously, and replaced by its record;
+       a valid one wins over whatever imageRef the row also has. Anything
+       else is no picture. The bytes are queued to be stored durably; the
+       writers that must not name an unstored blob persist them first. */
+    var legacyImage = safeImageSrc(r.visualImage);
+    var interned = legacyImage ? internDataUrl(legacyImage) : null;
+    if (interned) queuePersist([interned.sha256]);
+    r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
+    delete r.visualImage;
     /* "" rather than null: formatTimestamp(iso) blanks out on an Invalid
        Date, and new Date(null) is a VALID date (the Unix epoch) while
        new Date("") is not — null here used to render as a fabricated
@@ -233,6 +249,23 @@ export function migrateRows(s) {
     c.author = plainName(c.author);
     if (!c.updatedAt) c.updatedAt = c.createdAt || null;
     if (c.kind !== "conflict") c.kind = "anchor";
+    /* An image conflict card (mergeStates) holds the user's picture as
+       `imageValue`, a record like a row's imageRef — the one "Use my
+       version" puts back — and its body is that picture in the stored HTML
+       form, <img data-blob> (#82 P6). An older card, and a file (which
+       writes the picture back into the body inline, for older clients:
+       inlineStateImages), has it as an <img src="data:…"> in the body,
+       which sanitizeHtml above has just interned into the stored form; a
+       picture in the body the registry now holds wins over the record, as
+       it did when the body was the only place it could be. */
+    if (c.kind === "conflict" && c.field === "visualImage") {
+      var bodyImg = /<img\b[^>]*\sdata-blob="([0-9a-f]{64})"/.exec(c.body);
+      var bodyRec = bodyImg ? recordFor(bodyImg[1]) : null;
+      c.imageValue = bodyRec || normalizeImageRef(c.imageValue) || null;
+      c.body = c.imageValue ? storedImageHtml(c.imageValue) : "";
+    } else if ("imageValue" in c) {
+      delete c.imageValue;
+    }
     /* resolvedBy/resolvedAt/assignee (#29). Free text, like author and
        updatedBy — there are no accounts here, nothing to verify against.
        Unresolving always clears both resolve fields, which is also what
@@ -299,6 +332,17 @@ export function migrateRows(s) {
     t.notes = plainText(t.notes).slice(0, 2000);
   });
   s.productionTags = s.productionTags.filter(function (t) { return t.name; });
+  /* ...and a registry the document already has gains an entry for any tag
+     live in its script that it lacks. This is the registry self-heal as a
+     migration step (#84): productionEntries() used to write these entries
+     itself, as a side effect of the first read after a load, so every
+     document already looked this way the moment it was on screen. Doing it
+     here keeps that, and keeps reads pure. It never resurrects anything a
+     user deleted — deleting a live item strips its labels from the script
+     too (removeTag), which is what makes it not live. */
+  missingRegistryTags(s.rows, s.productionTags).forEach(function (t) {
+    s.productionTags.push(t);
+  });
 
   /* The b-roll list (08c-broll.js). Like the production registry it is
      real storage rather than a pure read of the script, and for one more
