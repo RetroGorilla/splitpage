@@ -18,6 +18,8 @@
 #     input, Enter, the click guard), with the "Viewing only" toast, and the
 #     breakdown is left as it was — the guard, not the CSS, and not the body
 #     class either;
+#   * the two exports, the Production panel's CSV and the Gear panel's
+#     Packing list, still make their files and change nothing;
 #   * the same document as an editor gets every control back.
 # Like 43-review-mode.txt, the role comes from window.__hostedTest.setSession
 # (the harness cannot start server.js). Every `eval` is one physical line.
@@ -191,6 +193,44 @@ eval (function(){ untoast(); document.getElementById('gear-quickadd-input').valu
 sleep 200
 expect toasted()
 expect !tag('Reviewer lens') && !!tag('Slider')
+jsclick #gear-close
+
+# ---- 8b. the exports: files, not edits -------------------------------------
+# The Production panel's CSV and the Gear panel's Packing list build a file
+# from the document and write nothing to it, so the click guard lets them
+# through (REVIEW_SAFE_ACTIONS). Each file is caught at URL.createObjectURL
+# and named from its <a download>, whose click is swallowed so nothing
+# actually downloads.
+eval (function(){ window.__blobs = []; window.__names = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) { window.__names.push(this.download); return; } return c.apply(this, arguments); }; window.__state0 = JSON.stringify(F.state()); return true; })()
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden && document.querySelectorAll('#production-list .tag-entity').length === 6
+expect untoast()
+click #production-panel [data-action="export-breakdown"]
+wait window.__blobs.length === 1
+expect !toasted()
+wait document.getElementById('toast-host').textContent.indexOf('Exported') !== -1
+expect window.__names[0] === 'breakdown-review - breakdown.csv'
+expect window.__blobs[0].type === 'text/csv'
+eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
+expect window.__csv[0] === 'Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots'
+expect window.__csv.length === 7
+expect window.__csv.some(function(l){ return l.indexOf('Kettle,Sourcing,Jordan Sato') !== -1; })
+expect JSON.stringify(F.state()) === window.__state0
+jsclick #production-close
+jsclick #btn-gear
+wait !document.getElementById('gear-panel').hidden && document.querySelectorAll('#gear-list .tag-entity').length === 2
+expect untoast()
+click #gear-panel [data-action="export-packing-gear"]
+wait window.__blobs.length === 2
+expect !toasted()
+wait document.getElementById('toast-host').textContent.indexOf('Exported') !== -1
+expect window.__names[1] === 'breakdown-review - Gear packing list.pdf'
+expect window.__blobs[1].type === 'application/pdf'
+eval (async function(){ window.__pdf = new TextDecoder('latin1').decode(await window.__blobs[1].arrayBuffer()); return window.__pdf.length; })()
+expect window.__pdf.indexOf('%PDF') === 0
+expect window.__pdf.indexOf('(Slider') !== -1 && window.__pdf.indexOf('(Tripod') !== -1
+expect JSON.stringify(F.state()) === window.__state0
+expect window.__hostedTest.dirty() === window.__dirty0
 jsclick #gear-close
 
 # ---- 9. after all that, the breakdown is exactly as the server sent it ----
