@@ -1,0 +1,65 @@
+# Undo puts the caret back where the typing was (#119, caretAfterStep() in
+# src/js/12a-undo.js).
+#
+# Before this fix, caretAfterStep() was handed the step 12a-undo.js's own
+# step() already inverts for undo (before/after swapped) and then swapped
+# its fields again for "undo" — using the pair for the wrong direction
+# entirely, which sent the caret to 0 (typing at the end) or the end of the
+# cell (typing in the middle). Separately, its prefix/suffix diff grew the
+# common prefix past the true edit point whenever the inserted text shared
+# a character (typically a space) with what followed it, landing one
+# character later than it should. This suite types at the end, the start
+# and the middle of a cell, and appends an emoji, then checks the exact
+# plain-text caret offset after one Ctrl+Z — not just that the text came
+# back right.
+#
+# `type` (Input.insertText) inserts its whole string as one atomic edit —
+# matching both the emoji picker (Win+.) and the issue's own repro table,
+# which undoes each case in exactly one Ctrl+Z.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.aud = function () { return F.state().rows[0].audioText; }; window.cell = function () { return document.querySelectorAll('#rows .row')[0].querySelector('.audio-cell .cell-editable'); }; window.caretOffset = function () { var s = getSelection(); if (!s.rangeCount) return -1; var r = s.getRangeAt(0); var el = cell(); if (!el.contains(r.startContainer)) return -1; var p = document.createRange(); p.selectNodeContents(el); p.setEnd(r.startContainer, r.startOffset); return p.toString().length; }; window.__base = aud(); return window.__base.length; })()
+
+# --- typing at the END of the cell ------------------------------------------
+eval (function(){ var c = cell(); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+type  hello
+wait aud() === window.__base + ' hello'
+key ctrl KeyZ
+wait aud() === window.__base
+expect document.activeElement === cell()
+expect caretOffset() === window.__base.length
+
+# --- typing at the START of the cell ----------------------------------------
+# (no leading/trailing space here — the browser rewrites a space at the very
+# edge of a text node into a no-break space to keep it from collapsing,
+# which is a browser quirk this suite isn't about)
+eval (function(){ var c = cell(); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+type Hello
+wait aud() === 'Hello' + window.__base
+key ctrl KeyZ
+wait aud() === window.__base
+expect document.activeElement === cell()
+expect caretOffset() === 0
+
+# --- typing in the MIDDLE of the cell, right where the inserted text starts
+# with the same character ("Hey" + " test" + " — welcome...") — the
+# case that used to grow the common prefix one character too far ----------
+eval (function(){ var c = cell(); c.focus(); var t = c.firstChild; var r = document.createRange(); r.setStart(t, 3); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return t.nodeValue.slice(0, 3); })()
+expect window.__base.slice(0, 3) === 'Hey'
+type  test
+wait aud() === window.__base.slice(0, 3) + ' test' + window.__base.slice(3)
+key ctrl KeyZ
+wait aud() === window.__base
+expect document.activeElement === cell()
+expect caretOffset() === 3
+
+# --- an emoji, inserted whole (Win+.) at the end ----------------------------
+eval (function(){ var c = cell(); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+type  😀
+wait aud() === window.__base + ' 😀'
+key ctrl KeyZ
+wait aud() === window.__base
+expect document.activeElement === cell()
+expect caretOffset() === window.__base.length
+quit

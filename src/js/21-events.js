@@ -770,7 +770,7 @@ var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
    rows it touched stamped as edited now (they are, and a collaborator's
    merge needs to know), and — when it was one cell's text — the caret back
    in that cell where the change was. */
-function afterUndoApplied(steps, dir) {
+function afterUndoApplied(steps) {
   var cellStep = null;
   steps.forEach(function (st) {
     if (st.op !== "rowField") return;
@@ -795,7 +795,7 @@ function afterUndoApplied(steps, dir) {
     var cell = document.querySelector((writerOpen ? "#writer-doc " : "#rows ") + sel) || document.querySelector(sel);
     if (cell) {
       cell.focus();
-      placeCaretAtTextOffset(cell, caretAfterStep(cellStep, dir === "undo" ? "undo" : "redo"));
+      placeCaretAtTextOffset(cell, caretAfterStep(cellStep));
     }
   }
 }
