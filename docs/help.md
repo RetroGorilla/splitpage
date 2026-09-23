@@ -593,6 +593,58 @@ lists) exports a plain checklist — a box, the name, who's got it — meant to
 be printed and ticked off before you leave, not the six-column breakdown
 sheet trying to double as one.
 
+### B-roll
+
+Start a line in the **Visual** column with `B-roll:` and whatever follows it
+is a shot to go and get. The line becomes a small **B-ROLL** marker and the
+shot lands on the list behind **B-roll** in the header — typed, pasted or
+imported, it's picked up either way. Any lines under it, up to the next
+marker, are its description.
+
+The **B-roll** panel is one line per shot:
+
+- **The box on the left** marks a shot **Shot** or **To shoot** in one
+  click (and one Ctrl+Z takes it back). Shot lines go grey, so what's left
+  stands out.
+- **Under the name**: where it gets shot, who's getting it, and the props
+  it needs. A red flag means someone **flagged** it — a reshoot, or anything
+  else worth a second look; a page icon means it has a note. Hover a line
+  for **Go to scene**.
+- **At the top**: how many shots are in the can, and a bar with one segment
+  per shot — teal for shot, red for flagged. The chips below it — **All**,
+  **To shoot**, **Flagged**, **Shot** — cut the list down, and **Group:**
+  lays it out by **scene**, **location** or not at all. Both are remembered on
+  this device, not saved in the script.
+- **Grouped by scene**, each scene's heading carries the start of its Audio
+  line and how many of its shots are done. Shots you added in the panel
+  rather than in the script sit under **Added here**.
+
+**Click a shot** (or press Enter on it) to open its details: the status and
+the **Flag** button, the scene it's in, the **location**, who it's
+**assigned** to (or **+ Person** to add someone), its **props**, the line of
+audio it **cuts against** (seeded from the scene; the pencil edits it) and a
+**note**. The **⋯** menu has **Rename in script** — which rewrites the line
+in the script itself — and **Delete from list**, which forgets the shot but
+leaves the words in the script alone.
+
+**Props.** A prop tagged on a shot's own lines —
+`B-roll: steam off the [kettle]` — counts for that shot automatically. For one the script doesn't
+mention, type it into **Add prop** in the shot's details: pick one the
+script already tracks, or type a new name and it's added to the breakdown as
+a Prop, the way the Gear box adds things. Each prop shows how far along it
+is (Needed, Sourcing, Have it, Returned), and renaming it in the Production
+panel renames it here too. The breakdown CSV lists the b-roll shots that
+need each prop, and so does the Props packing list.
+
+**Several at once.** <kbd>Ctrl</kbd>+click lines to select them
+(<kbd>Shift</kbd>+click takes the run between two), and a bar appears at
+the bottom: mark them all shot, assign them, move them to one location, or
+flag them. Each of those is one step for Ctrl+Z. <kbd>Esc</kbd> or the **×**
+clears the selection.
+
+To add a shot nobody has written a scene for yet, type it into **Add a
+shot** at the foot of the panel.
+
 ## Writing and planning
 
 **The writer.** **✎ Write** in the header opens the Audio column on its own,

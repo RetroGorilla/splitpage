@@ -1503,6 +1503,8 @@ evaluation order via `_entry.js`):
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
+| `08c-broll.js` | the b-roll list itself: reading `B-roll:` lines off the model, the records in `state.brollShots`, anchoring (#21), a pasted key's record (invariant #54), the props a shot needs (#149, invariant #56), the badge and the idle refresh |
+| `08d-broll-panel.js` | how the b-roll list is shown and edited (#148): the side panel — one line per shot, summary bar, filter chips and Group menu (remembered per device, `splitpage-broll-view`), the compact detail card, multi-select and the bulk bar (one change, one undo) |
 | `09-find-replace.js` | find & replace |
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |

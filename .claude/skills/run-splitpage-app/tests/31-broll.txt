@@ -117,7 +117,7 @@ sleep 500
 # gone. Case 5 (mid-sentence) has no such line to find — the regex itself
 # never matches text that isn't at the very start of a line — so it stays
 # out of the count entirely.
-expect document.querySelectorAll('#broll-list .tag-entity').length == 5
+expect document.querySelectorAll('#broll-list .broll-row').length == 5
 expect document.getElementById('broll-badge').textContent == 5
 
 shot 31-broll
