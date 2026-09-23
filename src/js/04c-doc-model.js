@@ -321,16 +321,26 @@ function escAttr(t) {
 var FORMAT_TAG = { hl: "mark", b: "strong", i: "em", u: "u", s: "s" };
 
 /* The stored HTML for a cell: exactly the markup sanitizeHtml() writes,
-   nested in the fixed order above. */
+   nested in the fixed order above.
+
+   opts.textHtml(text, esc), when given, writes each stretch of text
+   instead of esc(text) — a stretch being what one text node of the output
+   would hold (never a line break), the b-roll key's word included. It is
+   how a reader that wants the cell's own markup around something of its
+   own, the teleprompter's per-word spans, gets it without parsing HTML.
+   What it returns goes in as it is, so it must escape what it writes. */
 export function toHtml(cell, opts) {
   var t = buildTree(cell, opts);
+  var textHtml = opts && opts.textHtml
+    ? function (s) { return opts.textHtml(s, escText); }
+    : escText;
   function render(node) {
     var out = "";
     node.kids.forEach(function (n) {
-      if (n.text !== undefined) { out += escText(n.text); return; }
+      if (n.text !== undefined) { out += textHtml(n.text); return; }
       if (n.br) { out += "<br>"; return; }
       if (n.atom) {
-        out += '<span class="broll-key" data-broll-id="' + escAttr(n.atom.id) + '" contenteditable="false">' + escText(n.atom.text) + "</span>";
+        out += '<span class="broll-key" data-broll-id="' + escAttr(n.atom.id) + '" contenteditable="false">' + textHtml(n.atom.text) + "</span>";
         return;
       }
       var inner = render(n);
