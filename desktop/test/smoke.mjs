@@ -3292,27 +3292,74 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     // "quit and restore → no reassignment": a graceful teardown persists the
     // session (both tabs), then a fresh launch on the same userDataDir
     // restores it — B's id is already unique, so nothing re-fires.
+    /* Evidence for the restore assertion below, captured because it failed
+       once on CI's fast runner (A came back as an untitled pristine tab, B
+       came back fine) and could not be reproduced here in eight runs. Main's
+       own view of every tab just before the quit, and the session file the
+       quit actually wrote, are what tell a race in A's last document-state
+       report apart from a race in the write. Printed only on failure. */
+    const preQuitListing = await shell(app.cdp, "listTargets", {}).catch((e) => ({ error: String(e && e.message || e) }));
     await teardown(app, tag + " (pre-quit)");
     app = null;
+    let persistedAtQuit = null;
+    try { persistedAtQuit = JSON.parse(fs.readFileSync(path.join(userDataDir, "desktop-state.json"), "utf8")); }
+    catch (e) { persistedAtQuit = { error: String(e && e.message || e) }; }
 
     const appRestored = await launchApp(target, { label: "dup-doc-id-restore", userDataDir });
     try {
+      /* Main restored both tabs from desktop-state.json with their paths.
+         Each restored page then boots the starter document before its file
+         is handed to it, and a report of that starter used to reach main as
+         "this tab holds no document" and wipe the path it was created for —
+         briefly on a slow machine, and for as long as it took on CI's fast
+         runner to fail the single read below. Sampled from the moment main
+         answers, rather than read once, so the wipe is caught even here
+         where it closes before a one-off read lands: main's record must
+         never lose either path, not merely have them back by the time
+         someone looks. */
+      const pathLost = [];
+      const sampleUntil = Date.now() + 4000;
+      while (Date.now() < sampleUntil) {
+        const l = await shell(appRestored.cdp, "listTargets", {}).catch(() => null);
+        const tabs = (l && l.windows && l.windows[0] && l.windows[0].tabs) || [];
+        for (const t of tabs) {
+          if (!t.path && !pathLost.some((x) => x.tabId === t.tabId)) pathLost.push({ tabId: t.tabId, pristine: t.pristine, title: t.title });
+        }
+        await sleep(50);
+      }
+      record(tag + ": main never loses a restored tab's path while its page boots (invariant #42)",
+        pathLost.length === 0, JSON.stringify(pathLost));
       await waitForRows(appRestored.cdp, 20000);
-      /* Polled, not read once: waitForRows is satisfied by whichever tab
-         boots first, and a restored tab reports its path only once its file
-         has been routed to it — a single read on a loaded machine once
-         caught B's tab still blank. A restore that really lost B never
-         lists it, so the poll still fails on the behaviour it is for. */
-      const sameFile = (t, p) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(p).toLowerCase();
-      let w = null, restoredA = null, restoredB = null;
-      await pollNode(async () => {
-        const listing = await shell(appRestored.cdp, "listTargets", {});
-        w = listing.windows[0];
-        restoredA = w && w.tabs.find((t) => sameFile(t, aPath));
-        restoredB = w && w.tabs.find((t) => sameFile(t, bPath));
-        return !!(restoredA && restoredB);
-      }, 15000).catch(() => null);
-      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB, JSON.stringify(w));
+      const listing = await shell(appRestored.cdp, "listTargets", {});
+      const w = listing.windows[0];
+      const restoredA = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(aPath).toLowerCase());
+      const restoredB = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(bPath).toLowerCase());
+      /* What each restored PAGE believes, captured only on failure: its
+         home, the launch intent main gave it, and whether it counts itself
+         pristine. A.md and B.md were made by Save As from an untouched
+         starter, so their content IS the starter's — this separates "a
+         report of the starter wiped main's record" from "the opened file
+         itself reads as no document". */
+      let pageViews = null;
+      if (!(restoredA && restoredB) && w && Array.isArray(w.tabs)) {
+        pageViews = [];
+        for (const t of w.tabs) {
+          let c = null;
+          try {
+            c = await connectTab(appRestored, t.tabId);
+            pageViews.push({ tabId: t.tabId, page: await evalPage(c,
+              "JSON.stringify({home: window.__hostedTest && window.__hostedTest.home && window.__hostedTest.home(), " +
+              "intent: window.splitpageDesktop && window.splitpageDesktop.launchIntent || null, " +
+              "docId: window.__splitpageFormats && window.__splitpageFormats.docId()})") });
+          } catch (e) { pageViews.push({ tabId: t.tabId, error: String(e && e.message || e) }); }
+          finally { try { if (c) c.close(); } catch {} }
+        }
+      }
+      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB,
+        JSON.stringify(w) + (restoredA && restoredB ? "" :
+          " || before quit, main held: " + JSON.stringify(preQuitListing) +
+          " || desktop-state.json after quit: " + JSON.stringify(persistedAtQuit) +
+          " || each restored page: " + JSON.stringify(pageViews)));
       if (restoredA && restoredB) {
         const cdpRA = await connectTab(appRestored, restoredA.tabId);
         const cdpRB = await connectTab(appRestored, restoredB.tabId);
