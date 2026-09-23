@@ -1,8 +1,9 @@
 # Structured document model — design (issue #85)
 
-Status: **draft for review.** Nothing here is built. The open decisions are
-listed at the end (§12) and are Adam's to make. Once they are made, this file
-is updated to say what was decided, and the build follows §10.
+Status: **decided, not built.** Adam made the decisions in §12 on
+2026-09-23; the sections below already reflect them. The build follows §10.
+#85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
+it.
 
 Line numbers are from `main` at `53eb67d`.
 
@@ -79,16 +80,14 @@ What that costs, with the current numbers:
 
 ## 3. The model
 
-A cell is an array of **runs**. A run is either text with marks, or one
-atomic inline object:
+A cell is an array of **runs**. A run is either text with marks, or the one
+atomic inline object, the b-roll key:
 
 ```js
 // a text run
 { text: "the red mug", marks: { b: true, tag: "t_8f2a", cmt: ["c12"] } }
 // an atomic run
 { atom: "broll", id: "bs_41" }                   // the "B-roll:" key
-{ atom: "image", sha256: "…", w: 640, h: 360, mime: "image/png" }
-{ atom: "video", href: "https://…", host: "youtube.com" }
 ```
 
 **Marks**, all optional:
@@ -150,7 +149,7 @@ Invariant #18 goes away.
 - Splitting a row moves the runs, and their marks move with them. Joining
   rows does the same.
 - **Copy** never copies a `cmt` mark. **Cut then paste** in the same tab
-  moves it (open decision D6).
+  moves it (D6).
 - Deleting all of a comment's text leaves the comment **detached**
   (`anchor: null`). It still shows in the panel with its quoted text, which
   is today's behaviour for a lost anchor.
@@ -159,11 +158,22 @@ Invariant #18 goes away.
 
 The b-roll key is an atom with the shot id. The shot's name is still the
 text after it up to the next line break, as today (08c:78-90). Only the key
-is special.
+is special. **It is the only atom.**
 
-Pictures and video cards are atoms. Blob refs (#82) live in atom fields
-instead of in `data-blob` attributes. `refsIn()` walks runs instead of
-regex-scanning HTML. Whether they belong in script cells at all is D7.
+**Script cells hold no pictures or video cards (D7).**
+
+- **Pasting.** A paste into a cell drops them. Comments keep both, and the
+  scene picture is still set the normal way.
+- **Existing documents.** A picture or video card already inside a cell is
+  **moved into a comment on the same scene** when the document is read:
+  - The comment holds the picture (by its blob ref, #82) or the link.
+  - It gets an id derived from the row id and the picture's sha or the
+    link, so reading the document twice, or merging two copies that both
+    moved it, makes one comment, not two.
+  - It is a load-time normalisation like `healTagRegistry()`: it does not
+    mark the document dirty on its own. It is written out with the next
+    real save.
+  - Nothing is lost: version history still has the original.
 
 ## 4. Operations
 
@@ -187,7 +197,7 @@ Nothing outside one module writes a cell. `src/js/doc-model.js`
   - `splitCell(cell, pos) → [a, b]` and `joinCells(a, b)`
   - `replaceText(cell, from, to, text)` keeps the marks of the replaced
     range's first run
-  - `insertAtom`
+  - `insertBrollKey`
 - **Steps.** Every document change is a list of steps, e.g.
   `{op:"cell", rowId, field, before, after}`, `{op:"rows", …}`,
   `{op:"registry", …}` or `{op:"comment", …}`. One step list is one undo
@@ -286,10 +296,15 @@ One stack per tab, of step lists (§4). What counts as one entry:
 - Every intercepted action is one entry:
   - a paste
   - a format
-  - applying or removing a tag, and renaming a tag in the panel
+  - applying or removing a tag
+  - renaming a tag, or changing its owner, notes or status, in the
+    production panel
   - adding or deleting a b-roll marker
-  - creating or deleting a comment (D5 decides which comment actions count)
+  - creating or deleting a comment (see below)
   - splitting, joining, adding, deleting or moving rows
+  - a scene's status (todo/ready/shot)
+  - setting or removing a scene's picture
+  - the document title
   - Replace All
   - an import into the current document
   - "Use my version" on a conflict card
@@ -299,15 +314,22 @@ One stack per tab, of step lists (§4). What counts as one entry:
   someone else. These change what the document is rather than edit it, and
   version history already covers them. `undoMerge` stays as it is.
 
-**Remote changes** (a pull, a 409 merge, a reload from disk, D4). Each
+**Remote changes** (a pull, a 409 merge, a reload from disk, D4). Only the
+touched cells are forgotten. Each
 entry's steps record the `before` of the cells they touch. When a merge
 changes a cell, entries touching that cell are dropped from the stack.
 Entries for untouched cells survive. So Ctrl+Z never reverts someone else's
 words, and never fails half way.
 
-**Comments on a server.** Posting a comment on a hosted document is a
-request to the server, and reviewers may already have seen it. Undoing it
-would mean deleting it on the server. D5 decides whether that is in scope.
+**Comments (D5).** Creating or deleting a comment is undoable, with one
+limit:
+
+- **In a local file**, always.
+- **On a server document**, only until the comment has reached the server.
+  Once the save or the comments-endpoint POST (#71) carrying it has been
+  accepted, its entry leaves the stack, and the comment is deleted the usual
+  way (the ✕ on the card). Undo never deletes something reviewers may
+  already have seen.
 
 ## 8. Merge
 
@@ -316,7 +338,7 @@ sides:
 
 1. Equal models: done. Only one side changed: take it (as today).
 2. Both changed:
-   - tokenise each side's plain-text projection into words and atoms
+   - tokenise each side's plain-text projection into words and b-roll keys
    - three-way merge the token sequences (diff3, the same algorithm as
      `git merge-file`)
    - then merge marks per token: a mark added or removed on one side is
@@ -324,8 +346,8 @@ sides:
      different values, theirs wins and it is reported
 3. Only overlapping token ranges changed on both sides are a conflict. For
    those, theirs stays live, and the conflict card holds **my version of
-   the whole cell**, as today. "Use my version" restores it as one undoable
-   step. (D3: whole cell, or only the conflicting sentence.)
+   the whole cell**, as today (D3). "Use my version" restores it as one
+   undoable step.
 
 This fixes the named case: a tag re-wrap (marks only) on one side plus a
 word edit on the other merges cleanly. The on-disk merge review
@@ -348,7 +370,7 @@ can no longer disagree.
 | `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` |
 | `20-teleprompter.js` | word spans from runs |
 | `21-events.js` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
-| `server/server.js`, `shared/blob-policy.js` | unchanged under D2 = keep HTML |
+| `server/server.js`, `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
 
 `execCommand` goes from 17 editing calls to none.
 
@@ -398,33 +420,16 @@ words.
 - **Performance.** The memo is keyed on the cell string, so an unchanged row
   costs a map lookup. The typing hot path parses one cell.
 
-## 12. Open decisions
+## 12. Decisions (2026-09-23)
 
-Each has a recommendation. They are asked in this order because the later
-ones depend on the earlier ones.
-
-- **D0 — When.** Ship 3.0 without #85 and build it for 3.1, or hold 3.0
-  until it lands? *Recommended: ship 3.0 now.* #100 is waiting on a 3.0
-  release anyway, and step 4 is the riskiest change the app has had.
-- **D1 — Editing engine.** Hybrid (§5), fully controlled, or ProseMirror?
-  *Recommended: hybrid.*
-- **D2 — Stored format.** Keep canonical HTML on disk and on the server
-  (§6), or move to runs (`schema: 3`) and lock out older clients?
-  *Recommended: keep HTML for now.*
-- **D3 — Conflict card contents.** My whole cell, as today, or only the
-  conflicting passage? *Recommended: whole cell.* It is the familiar card,
-  and word-level merge already makes conflicts rare.
-- **D4 — Undo after someone else's changes.** Drop the entries for the
-  cells their merge touched (§7), or clear the whole stack on any remote
-  change? *Recommended: drop only the touched cells.*
-- **D5 — Comments and undo.** Is creating or deleting a comment undoable?
-  On a hosted document that means deleting it from the server.
-  *Recommended: undoable locally; on a hosted document, only until it has
-  been sent.*
-- **D6 — Cut and paste of commented text.** Does the comment move with the
-  text, or stay behind detached? *Recommended: it moves within the same
-  tab.* Copy never duplicates it.
-- **D7 — Pictures and video cards in script cells.** They arrive only by
-  pasting. Keep them as atoms, or strip them on paste into a cell (the
-  scene picture is the real feature)? *Recommended: strip.* Fewer atom kinds,
-  and nobody has asked for inline pictures in a script line.
+| | Question | Decided |
+| --- | --- | --- |
+| D0 | When | **A 3.0 pre-release first, without #85; #85 goes into the full 3.0 release.** The update check reads GitHub's `releases/latest`, which skips pre-releases, so nobody is offered the pre-release automatically. #100 (deleting #83's history migration) waits for the release **after** the full 3.0: the migration has to reach everyone who updates normally, not just pre-release testers. |
+| D1 | Editing engine | **Hybrid** (§5): the browser types, Splitpage does everything else. |
+| D2 | Stored format | **Keep canonical HTML** in files and on the server (§6). Runs on disk can come later as its own change. |
+| D3 | Conflict card | **My whole cell**, as today. |
+| D4 | Undo after a merge | **Forget only the cells the merge touched.** |
+| D5 | Comments and undo | **Undoable until sent**: always in a local file; on a server document, until the server has it. |
+| D6 | Cut and paste of commented text | **The comment moves with the text** within the same tab. Copy never duplicates it. |
+| D7 | Pictures and video in script cells | **Stripped on paste.** Ones already in a cell are **moved into a comment** on that scene when the document is read (§3.3). |
+| — | Undo also covers | Scene status, scene picture, production-panel edits (owner, notes, status, rename), the document title. |
