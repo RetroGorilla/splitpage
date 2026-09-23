@@ -1,0 +1,128 @@
+# A pasted b-roll key is a line of its own (#85, src/js/05c-clipboard.js
+# freshBrollIds, 08c-broll.js recordPastedBroll and the anchoring pass):
+#
+#   * a copy of a "B-roll:" line pasted into another scene, into the same
+#     cell, or pasted a second time, gets a new id every time — never the
+#     id the first line's shot is found by — and a new record: not shot, no
+#     notes, seeded from the scene it landed in; the first shot keeps its
+#     status and notes;
+#   * the paste and its record are ONE undo entry;
+#   * a cut then its paste in this tab MOVES the line: the key keeps its id
+#     and the shot its status; a second paste of that cut, another tab's
+#     cut, or a drop, is a copy;
+#   * a key from another document whose id this one does not know keeps it;
+#   * a document already holding two keys with one id (pasted by an older
+#     version) is healed by the anchoring pass: the first line keeps the
+#     id, the second gets its own, and the list holds one record per id.
+# The pure half is src/test/clipboard.test.mjs and broll-model.test.mjs.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.KEY = function(id){ return '<span class="broll-key" data-broll-id="' + id + '" contenteditable="false">B-roll:</span>'; }; var doc = { schema: 2, title: 'B-roll paste', rows: [ { id: 'r1', visualText: KEY('bsGulls') + ' the gulls<br>over the pier', audioText: 'Waves on the rocks', status: 'todo' }, { id: 'r2', visualText: 'two', audioText: 'The town wakes up', status: 'todo' }, { id: 'r3', visualText: 'three', audioText: 'Golf hotel', status: 'todo' } ], brollShots: [ { id: 'bsGulls', name: 'the gulls', desc: 'over the pier', status: 'shot', reshoot: false, notes: 'got it at dawn', owner: '', audioRef: 'Waves on the rocks', location: '', origin: 'script' } ], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'broll-paste.splitpage')); return true; })()
+wait F.state().title === 'B-roll paste' && document.querySelector('#rows .row[data-id="r3"]')
+eval (function(){ window.cell = function(id, field){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (field === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.st = function(id, field){ return F.state().rows.filter(function(r){ return r.id === id; })[0][field]; }; window.selectText = function(el, needle, collapseEnd){ el.focus(); var text = el.textContent; var at = text.indexOf(needle); if (at === -1) throw new Error('no ' + needle); var from = at, to = at + needle.length; if (collapseEnd === 'end') { from = to = text.length; } var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); var n, seen = 0, r = document.createRange(), a = null, b = null; while ((n = w.nextNode())) { var len = n.nodeValue.length; if (!a && from <= seen + len) { a = [n, from - seen]; } if (!b && to <= seen + len) { b = [n, to - seen]; } seen += len; } r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); }; window.clip = function(type, el, data){ var dt = new DataTransfer(); if (data) Object.keys(data).forEach(function(k){ dt.setData(k, data[k]); }); var ev = new ClipboardEvent(type, { clipboardData: dt, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return { dt: dt, prevented: ev.defaultPrevented, html: dt.getData('text/html'), text: dt.getData('text/plain') }; }; window.keysIn = function(html){ var out = [], re = /data-broll-id="([^"]*)"/g, m; while ((m = re.exec(html || ''))) out.push(m[1]); return out; }; window.allKeys = function(){ var out = []; F.state().rows.forEach(function(r){ out = out.concat(keysIn(r.visualText), keysIn(r.audioText)); }); return out; }; window.unique = function(list){ return list.every(function(x, i){ return list.indexOf(x) === i; }); }; window.rec = function(id){ return F.state().brollShots.filter(function(r){ return r.id === id; })[0]; }; window.recIds = function(){ return F.state().brollShots.map(function(r){ return r.id; }); }; return true; })()
+expect allKeys().join() === 'bsGulls'
+expect recIds().join() === 'bsGulls'
+
+# ---- 1. a copy pasted into another scene is a new shot, as one undo entry --
+eval selectText(cell('r1', 'visualText'), 'B-roll: the gulls')
+eval (function(){ window.__c = clip('copy', cell('r1', 'visualText')); return __c.html; })()
+expect __c.prevented === true
+expect keysIn(__c.html).join() === 'bsGulls'
+eval selectText(cell('r2', 'visualText'), 'two')
+eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return clip('paste', cell('r2', 'visualText'), { 'text/html': __c.html, 'text/plain': __c.text }).prevented; })()
+wait keysIn(st('r2', 'visualText')).length === 1
+eval (function(){ window.__k1 = keysIn(st('r2', 'visualText'))[0]; return __k1; })()
+expect __k1 !== 'bsGulls' && /^bs[a-z0-9]+$/.test(__k1)
+expect st('r2', 'visualText') === KEY(__k1) + ' the gulls'
+expect cell('r2', 'visualText').querySelector('.broll-key').getAttribute('data-broll-id') === __k1
+expect unique(allKeys())
+# the copy's record: a new shot, seeded from scene 2, none of the first shot's own
+expect rec(__k1) && rec(__k1).status === 'unshot' && rec(__k1).notes === '' && rec(__k1).name === 'the gulls'
+expect rec(__k1).audioRef === 'The town wakes up'
+expect rec('bsGulls').status === 'shot' && rec('bsGulls').notes === 'got it at dawn'
+expect F.state().brollShots.length === 2
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+# one Ctrl+Z takes back the line and its record together
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait st('r2', 'visualText') === 'two'
+expect recIds().join() === 'bsGulls'
+key ctrl+shift KeyZ
+wait st('r2', 'visualText') === KEY(__k1) + ' the gulls'
+expect recIds().sort().join() === ['bsGulls', __k1].sort().join()
+
+# ---- 2. the same clipboard again, into the same cell and a third scene -----
+eval selectText(cell('r1', 'visualText'), '', 'end')
+eval clip('paste', cell('r1', 'visualText'), { 'text/html': '<br>' + __c.html, 'text/plain': __c.text }).prevented
+wait keysIn(st('r1', 'visualText')).length === 2
+eval selectText(cell('r3', 'visualText'), '', 'end')
+eval clip('paste', cell('r3', 'visualText'), { 'text/html': __c.html, 'text/plain': __c.text }).prevented
+wait keysIn(st('r3', 'visualText')).length === 1
+expect allKeys().length === 4
+expect unique(allKeys())
+expect keysIn(st('r1', 'visualText'))[0] === 'bsGulls'
+expect rec('bsGulls').status === 'shot'
+# the copy on its own line in scene 1 is a shot of its own; the one mid-line in scene 3 is no marker, and has no record
+eval (function(){ window.__k2 = keysIn(st('r1', 'visualText'))[1]; window.__k3 = keysIn(st('r3', 'visualText'))[0]; return __k2 + ' ' + __k3; })()
+expect rec(__k2) && rec(__k2).status === 'unshot'
+expect !rec(__k3)
+expect unique(recIds())
+
+# ---- 3. cut then paste moves the line: same id, same shot -------------------
+eval selectText(cell('r1', 'visualText'), 'B-roll: the gulls')
+eval (function(){ window.__cut = clip('cut', cell('r1', 'visualText')); return __cut.html; })()
+expect __cut.prevented === true
+wait keysIn(st('r1', 'visualText')).join() === __k2
+expect allKeys().indexOf('bsGulls') === -1
+# the shot waits, orphaned, for its line to come back
+expect rec('bsGulls').status === 'shot'
+eval selectText(cell('r3', 'visualText'), 'three')
+eval clip('paste', cell('r3', 'visualText'), { 'text/html': __cut.html, 'text/plain': __cut.text }).prevented
+wait keysIn(st('r3', 'visualText')).indexOf('bsGulls') === 0
+expect rec('bsGulls').status === 'shot' && rec('bsGulls').notes === 'got it at dawn'
+expect unique(allKeys())
+expect unique(recIds())
+# a second paste of the same cut is a copy
+eval selectText(cell('r2', 'visualText'), '', 'end')
+eval clip('paste', cell('r2', 'visualText'), { 'text/html': '<br>' + __cut.html, 'text/plain': __cut.text }).prevented
+wait keysIn(st('r2', 'visualText')).length === 2
+expect keysIn(st('r2', 'visualText'))[1] !== 'bsGulls'
+expect unique(allKeys())
+# another tab's cut of the same line is a copy too
+eval selectText(cell('r2', 'visualText'), '', 'end')
+eval clip('paste', cell('r2', 'visualText'), { 'text/html': '<br><span data-splitpage-cut="0123456789abcdef">' + KEY('bsGulls') + ' the gulls</span>', 'text/plain': 'B-roll: the gulls' }).prevented
+wait keysIn(st('r2', 'visualText')).length === 3
+expect unique(allKeys())
+expect rec('bsGulls').status === 'shot'
+
+# ---- 4. a drop is a copy -----------------------------------------------------
+eval (function(){ var el = cell('r3', 'audioText'); el.scrollIntoView({ block: 'center' }); var r = el.getBoundingClientRect(); var dt = new DataTransfer(); dt.setData('text/html', KEY('bsGulls') + ' dropped'); dt.setData('text/plain', 'B-roll: dropped'); var ev = new DragEvent('drop', { bubbles: true, cancelable: true, clientX: r.right - 4, clientY: r.bottom - 4, dataTransfer: dt }); el.dispatchEvent(ev); return ev.defaultPrevented; })()
+wait keysIn(st('r3', 'audioText')).length === 1
+expect keysIn(st('r3', 'audioText'))[0] !== 'bsGulls'
+expect unique(allKeys())
+
+# ---- 5. a key from another document keeps an id this one does not know ------
+eval selectText(cell('r1', 'visualText'), '', 'end')
+eval clip('paste', cell('r1', 'visualText'), { 'text/html': '<br>' + KEY('bsElsewhere') + ' puffins', 'text/plain': 'B-roll: puffins' }).prevented
+wait keysIn(st('r1', 'visualText')).indexOf('bsElsewhere') !== -1
+expect rec('bsElsewhere') && rec('bsElsewhere').name === 'puffins' && rec('bsElsewhere').status === 'unshot'
+expect unique(allKeys())
+expect unique(recIds())
+
+# ---- 6. a document already holding one id twice is healed -------------------
+eval (function(){ var doc = { schema: 2, title: 'B-roll twice', rows: [ { id: 'd1', visualText: KEY('bsTwin') + ' the gulls', audioText: 'one', status: 'todo' }, { id: 'd2', visualText: 'intro<br>' + KEY('bsTwin') + ' the gulls again', audioText: 'two', status: 'todo' } ], brollShots: [ { id: 'bsTwin', name: 'the gulls', desc: '', status: 'shot', reshoot: false, notes: 'first', owner: '', audioRef: '', location: '', origin: 'script' } ], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'broll-twice.splitpage')); return true; })()
+wait F.state().title === 'B-roll twice'
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+click #doc-title
+wait unique(allKeys()) && allKeys().length === 2
+expect keysIn(st('d1', 'visualText')).join() === 'bsTwin'
+expect rec('bsTwin').notes === 'first' && rec('bsTwin').status === 'shot'
+wait rec(keysIn(st('d2', 'visualText'))[0]) && rec(keysIn(st('d2', 'visualText'))[0]).name === 'the gulls again'
+expect unique(recIds())
+expect F.state().brollShots.length === 2
+
+logs

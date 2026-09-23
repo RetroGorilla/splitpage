@@ -1402,6 +1402,16 @@ bytes, #82 — nothing deletes them yet, D4).
     `absorbRemoteChange()`, and what an undo's own repaint heals by
     `settleAfterApply()`. On a server document, a change to the comments
     is never recorded (design D5).
+54. **A b-roll key's id is one line's** (`docs/DOCUMENT-MODEL.md` §3.3):
+    `state.brollShots` records are found by it, so two keys sharing one
+    make two lines claim one shot. A path that brings a key into the
+    script from outside it (paste, drop) gives it a new `makeId("bs")`
+    whenever the document already knows its id — `freshBrollIds`
+    (05c-clipboard.js) — except a cut then paste in the same tab, which
+    moves it and keeps it. A path that moves a key (split, join, cut) keeps
+    its id and never copies it. A new path that copies script text between
+    places does the same; the anchoring pass (08c-broll.js) re-keys any
+    second key that still gets through.
 ---
 
 ## 6. Map of the source
@@ -1427,7 +1437,7 @@ evaluation order via `_entry.js`):
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
 | `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, …), edits, steps and `mergeCells` |
 | `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
-| `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6) |
+| `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
 | `06-rows.js` | row add/move/drag, images |
