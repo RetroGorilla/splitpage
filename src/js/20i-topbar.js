@@ -21,9 +21,9 @@
    ---- why the movement is FLIP and not a transition on the header itself ----
 
    Almost nothing the condensed state changes can be transitioned where it
-   stands. The brand line and the subtitle go to `display: none`, the row
-   holding the title and the chips turns from a block into a flex row, and
-   the title drops from 28px to 17px: three discrete changes, which is why
+   stands. The brand line goes to `display: none`, the title line and the
+   toolbar go from two rows to one, and the title drops from 19px to 16px:
+   three discrete changes, which is why
    the header used to re-draw between two frames while the two properties
    that did ease (padding-bottom, box-shadow) eased past it.
 
@@ -52,11 +52,11 @@
      a scale. The glyphs are laid out once at their final size and the
      compositor does the rest; an eased font-size would re-shape text on
      every frame of every condense.
-   - The brand line and the subtitle, which cannot fade from `display: none`.
-     For the length of the movement .is-condensing takes them out of FLOW
-     rather than out of the layout (app.css), so the header re-flows around
-     them at once and they fade where they stood. Expanding is the other way
-     about: they come back in flow and are faded in.
+   - The brand line, which cannot fade from `display: none`. For the length
+     of the movement .is-condensing takes it out of FLOW rather than out of
+     the layout (app.css), so the header re-flows around it at once and it
+     fades where it stood. Expanding is the other way about: it comes back in
+     flow and is faded in.
 
    A scroll that reverses mid-movement measures the pixels as they are —
    getBoundingClientRect() reports the transformed box — and only then
@@ -100,7 +100,7 @@ export function __init() {
     }
 
     /* Every part the two states put in a different place: the brand row, the
-       title, the subtitle and the chips one by one, the toolbar as a whole
+       title and the line of facts after it, the toolbar as a whole
        (its buttons never move relative to each other), and then each sibling
        below the header, which all travel the same distance the header's own
        height changed by. */
@@ -146,8 +146,7 @@ export function __init() {
         const a = after[i];
         /* Gone: the CSS fade in .is-condensing is seeing it out. */
         if (!a.width && !a.height) continue;
-        /* Arrived from display:none — the brand line and the subtitle on the
-           way back up. Nowhere to travel from, so they simply appear. */
+        /* Arrived from display:none — the brand line on the way back up. Nowhere to travel from, so they simply appear. */
         if (!b.width && !b.height) {
           playing.push(el.animate(
             [{ opacity: 0 }, { opacity: 1 }],
@@ -160,9 +159,9 @@ export function __init() {
         const scale = (el.id === "doc-title" && a.height) ? b.height / a.height : 1;
         /* Opacity is named here only when it actually differs, and that is not
            tidiness. A web animation outranks a transition in the cascade, so a
-           keyframe pair saying "1 to 1" would hold the two rows the header is
-           shedding at full opacity for the whole 180ms and the CSS fade they
-           exist for would never be seen. The after-measurement is taken in the
+           keyframe pair saying "1 to 1" would hold the brand line the header is
+           shedding at full opacity for the whole 180ms and the CSS fade it
+           exists for would never be seen. The after-measurement is taken in the
            frame the class landed, before that transition has moved, so "the
            same" is exactly what it reads. What it does catch is the reversal:
            a row caught half-faded has a real difference to travel back. */

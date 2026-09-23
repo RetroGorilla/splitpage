@@ -57,7 +57,7 @@ expect document.documentElement.scrollHeight > window.innerHeight + 600
 
 eval (function(){window.__tb=function(){return document.querySelector('.topbar');};window.__h=function(){return window.__tb().getBoundingClientRect().height;};window.__cs=function(sel,p){var el=document.querySelector(sel);return el?getComputedStyle(el)[p]:'(no '+sel+')';};window.__anims=function(sel){var el=document.querySelector(sel);return el&&el.getAnimations?el.getAnimations().length:-1;};window.__scroll=function(y){window.scrollTo(0,y);return true;};window.__pad=function(){return parseFloat(getComputedStyle(document.getElementById('root')).paddingRight);};window.__openW=function(){return parseFloat(getComputedStyle(document.body).getPropertyValue('--open-panel-width'));};return true;})()
 expect true
-eval (function(){window.__snap=function(name){var t=window.__tb();window[name]={condensed:t.classList.contains('is-condensed'),condensing:t.classList.contains('is-condensing'),h:window.__h(),anims:window.__anims('.topbar .toolbar'),bar:window.__cs('.topbar .toolbar','transform'),rows:window.__cs('#rows','transform'),title:window.__cs('#doc-title','transform'),brandPos:window.__cs('.brand-row','position'),brandDisplay:window.__cs('.brand-row','display'),brandOpacity:parseFloat(window.__cs('.brand-row','opacity')),subOpacity:parseFloat(window.__cs('.subtitle','opacity'))};return name+' = '+JSON.stringify(window[name]);};return true;})()
+eval (function(){window.__snap=function(name){var t=window.__tb();window[name]={condensed:t.classList.contains('is-condensed'),condensing:t.classList.contains('is-condensing'),h:window.__h(),anims:window.__anims('.topbar .toolbar'),bar:window.__cs('.topbar .toolbar','transform'),rows:window.__cs('#rows','transform'),title:window.__cs('#doc-title','transform'),brandPos:window.__cs('.brand-row','position'),brandDisplay:window.__cs('.brand-row','display'),brandOpacity:parseFloat(window.__cs('.brand-row','opacity'))};return name+' = '+JSON.stringify(window[name]);};return true;})()
 expect true
 
 # =============================================================================
@@ -69,7 +69,8 @@ expect true
 expect getComputedStyle(document.querySelector('.topbar')).transitionProperty == box-shadow
 expect getComputedStyle(document.querySelector('.topbar')).transitionDuration == 0.18s
 eval (function(){window.__expandedH=window.__h();return 'expanded header = '+Math.round(window.__expandedH)+'px';})()
-expect window.__expandedH > 80
+# two rows since the denser header: ~80px expanded, ~48px condensed
+expect window.__expandedH > 64
 
 # --- condensing: the layout is final in the frame the class flips, and the
 # --- pixels are put back with a transform that is still running
@@ -82,11 +83,10 @@ expect window.__mc.condensing
 expect window.__mc.h < window.__expandedH - 20
 expect window.__mc.anims == 1
 expect window.__mc.bar !== 'none'
-# the brand line and the subtitle are out of FLOW, not out of the layout, so
-# they can fade where they stood instead of vanishing in one frame
+# the brand line is out of FLOW, not out of the layout, so
+# it can fade where it stood instead of vanishing in one frame
 expect window.__mc.brandPos == absolute
 expect window.__mc.brandOpacity < 1
-expect window.__mc.subOpacity < 1
 # the title changes size as well as place, so its transform carries a scale
 expect window.__mc.title.indexOf('matrix') === 0
 
@@ -99,7 +99,7 @@ expect window.__sc.bar == none
 expect window.__sc.anims == 0
 eval (function(){window.__condensedH=window.__sc.h;return 'condensed header = '+Math.round(window.__condensedH)+'px';})()
 
-# --- expanding: the two rows come back in flow and are faded in, and the
+# --- expanding: the brand line comes back in flow and is faded in, and the
 # --- document below travels with the header instead of jumping
 eval window.__scroll(0)
 sleep 60
