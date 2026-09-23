@@ -624,7 +624,8 @@ function releaseVoiceStream() {
 
 /* What a desktop listener's warnings mean (desktop/voice/listen.ps1). They
    do not stop anything — the recogniser keeps listening — they say why it
-   may not be following. */
+   may not be following. The listener holds no-signal and too-quiet back
+   for a few seconds itself (issue #117), so they are shown as they come. */
 var DESKTOP_VOICE_WARNINGS = {
   "no-signal": "Windows isn't hearing the microphone — check it's plugged in, and that Settings › Privacy & security › Microphone lets desktop apps use it.",
   "too-quiet": "Speak up a little, or move closer to the microphone.",
@@ -707,6 +708,16 @@ export async function startVoiceFollow() {
   if (desktop) {
     setVoiceStatus("Starting Windows speech recognition…", "");
     S.recognition.onwarning = function (e) {
+      /* "clear": the listener hears the microphone again (issue #117). Only
+         a warning still on screen gives way — anything since stays. */
+      if (e && e.warning === "clear") {
+        var el = document.getElementById("pp-voice-status");
+        if (S.voiceFollowActive && el && (el.textContent === DESKTOP_VOICE_WARNINGS["no-signal"] ||
+            el.textContent === DESKTOP_VOICE_WARNINGS["too-quiet"])) {
+          setVoiceStatus("Listening…", "listening");
+        }
+        return;
+      }
       var msg = DESKTOP_VOICE_WARNINGS[e && e.warning];
       if (msg && S.voiceFollowActive) setVoiceStatus(msg, "error");
     };
