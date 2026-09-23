@@ -1,7 +1,7 @@
 # Structured document model — design (issue #85)
 
-Status: **decided; steps 1–2 of §10 built** (`src/js/04c-doc-model.js`,
-nothing in the app calls it yet). Adam made the decisions in §12 on
+Status: **decided; steps 1, 2 and 6 of §10 built** (`src/js/04c-doc-model.js`;
+the merge is the only part of the app that calls it so far). Adam made the decisions in §12 on
 2026-09-23; the sections below already reflect them. The build follows §10.
 #85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
 it.
@@ -398,6 +398,49 @@ word edit on the other merges cleanly. The on-disk merge review
 (18a-local-merge.js) uses the same function, so its preview and its outcome
 can no longer disagree.
 
+**Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
+`03-sync.js` is the one decision, returning `{html, outcome}` with outcome
+`same`, `mine`, `theirs`, `merged` or `conflict`; `mergeRow` and the
+on-disk review both call it (the review labels `merged` "both sets of
+changes are combined"). What building it settled:
+
+- **Each side is read through its own registry.** `textMergeContext()`
+  builds `registryTagHooks` for base, mine and theirs from each side's own
+  `productionTags`, so a span renamed on one side (the registry entry and
+  its spans' `data-tag-name`, as `renameTag` does) resolves to the same id
+  on all three: a rename is not a change to the cell.
+- **The result names tags the way the merged registry does.** The registry
+  is merged before the rows. A cell taken whole from one side is rewritten
+  through the model only when the merged registry renamed a tag that side's
+  spans name (checked once per side per merge, then per cell only if it has
+  a tag span); otherwise its string goes in untouched. So a rename on one
+  side plus a text edit on the other comes out with both. A tag id the
+  merged registry no longer holds keeps the name a side gave it, so no span
+  is dropped; `migrateRows`' heal re-registers it, as before.
+- **Strings first, models only where they differ.** Equal strings are
+  equal. Different strings are parsed, and two that read as the same cell
+  (a different nesting, say) are the same: theirs' string is kept and
+  nothing counts as an edit. "Only one side changed" is judged by model
+  too, so a side that merely re-serialised a cell never wins or conflicts.
+  When the merged cell equals one side's, that side's own HTML goes in
+  rather than a rewrite.
+- **A cell with a picture or video card is compared as a string**, whole,
+  as before: `fromHtml` leaves them out (D7), so merging one through the
+  model would drop it. This goes when §3.3's load-time move to comments is
+  built.
+- **No ancestor** (a two-way merge, or a row base does not have): equal
+  models are no conflict; any other difference is one, as before.
+- **Stats.** A row whose cell combined both sides counts in `rowsFromMe`
+  ("rows you edited"): my edit is in it. `rowsFromThem` now counts rows
+  where their change was actually taken (by model), not every row whose
+  string differs from base.
+- **Not done:** a mark both sides set differently goes to theirs, but
+  `mergeCells`' `markConflicts` count is not surfaced anywhere yet. Rows
+  only one side has (added, or kept over a delete) are still copied as
+  they are, so one added on my side still names a tag by the name my
+  registry had, even if theirs renamed it; the heal registers that name
+  again beside the renamed entry, as it always did.
+
 ## 9. What changes where
 
 | Area | Change |
@@ -448,7 +491,10 @@ until step 4.
    one: several PRs, with a browser-suite pass per PR.
 5. **Undo stack.** The browser's native undo is disabled at the same time,
    since leaving it half on is worse than either.
-6. **Merge per §8.** The on-disk merge review switches with it.
+6. **Merge per §8. Done** — built ahead of steps 4–5, since it only needs
+   the model and the registry ids. The on-disk merge review switched with
+   it. §8 lists what building it settled. Tests: the "a word at a time"
+   section of `src/test/merge-states.test.mjs`.
 7. **Delete what is left:** `execCommand`, `repointCommentsForRows`,
    `lastSplitUndo`, and the invariants the model makes impossible to break
    (#2, #3, #18). HANDOFF is updated.
