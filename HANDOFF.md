@@ -1094,9 +1094,16 @@ bytes, #82 — nothing deletes them yet, D4).
 
 1. **Edit with the Edit tool, one site at a time.** Never in-place regex
    substitution (`sed`/`perl -pi`) on `index.html` — no git to restore from.
-2. **Mutate text by walking text nodes, never by regexing HTML.** See
-   `replaceInHtml()`/`tagFieldOccurrences()`.
-3. **Never touch text inside `.tag-anchor`** (§3.3).
+2. **Change a script cell through the document model, never by editing its
+   HTML** (#85, `docs/DOCUMENT-MODEL.md`): `editCell()` (05b-cell-edit.js)
+   for anything done at the selection, the edit functions of
+   `04c-doc-model.js` (`replaceText`, `setMark`, `insertText`, …) for the
+   rest, `toHtml()` to write the result. Where a path still edits HTML
+   (`tagFieldOccurrences()`, `eachTagSpan()`), it walks text nodes, never
+   regexes HTML.
+3. **Never touch text inside a tag** (§3.3): the model's edits keep a
+   comment or link over all of a tag or none of it, and find/replace never
+   matches inside one.
 4. **New top-level state field ⇒ update `migrateRows()` *and* `mergeStates()`**
    (§3.2).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
@@ -1112,7 +1119,11 @@ bytes, #82 — nothing deletes them yet, D4).
 8. **Escape values going into CSS attribute selectors** with `cssAttr()` —
    stripping quotes isn't enough, a backslash reads as a CSS escape.
 9. **Markdown table cells need `mdCell()`**; a raw `|` shears the row.
-10. **`sanitizeHtml()` on anything reconstructed** before it re-enters state.
+10. **Anything entering a script cell goes through `fromHtml()` or a model
+    edit**, which only produce canonical, sanitised cells;
+    `syncFieldFromDom()` stores every keystroke that way. `sanitizeHtml()`
+    on anything else reconstructed (a comment body) before it re-enters
+    state.
 11. **A control nested inside `.tag-entity-head` must be checked *before*
     `tag-expand`** in the click delegation's sequential `if` chain.
 12. **A modifier-click on a breakdown card outranks every control inside
@@ -1131,7 +1142,9 @@ bytes, #82 — nothing deletes them yet, D4).
 17. **A hint about the document must never edit the document** (§3.8).
 18. **A comment is anchored twice — by `rowId` and by its `.cmt-anchor`
     span — and anything moving text between rows must move both.**
-    `repointCommentsForRows()` is the fix; `splitRowFieldCore()` calls it.
+    `repointCommentsForRows()` is the fix; `splitRowFieldCore()` calls it,
+    and a cut-and-paste moving a comment (05c-clipboard.js) repoints it in
+    the same undo entry.
 19. **A full-screen overlay must own the focus and the stacking, not just
     the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
     `#writer` lets modals/toasts through.
@@ -1363,6 +1376,16 @@ bytes, #82 — nothing deletes them yet, D4).
       stores blobs before snapshots (#49); file writers inline everything
       (#31, #32). Capture stays synchronous (#39) — only the job awaits.
 
+53. **Every edit of the document ends in `markDirty()`, and nothing that is
+    not an edit is recorded as one** (#85, `12a-undo.js`). The undo stack
+    learns about an edit by diffing after `markDirty()`, so an edit path
+    needs no undo code of its own — and a change that is not somebody's
+    edit must say so, or Ctrl+Z will take it back: a new document is
+    picked up by `render()` (`trackDocument`), someone else's merge by
+    `noteRemoteChange()` (called in `applyMerge`), a reload in place by
+    `absorbRemoteChange()`, and what an undo's own repaint heals by
+    `settleAfterApply()`. On a server document, a change to the comments
+    is never recorded (design D5).
 ---
 
 ## 6. Map of the source
@@ -1386,6 +1409,10 @@ evaluation order via `_entry.js`):
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown, video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
+| `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, …), edits, steps and `mergeCells` |
+| `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
+| `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6) |
+| `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |

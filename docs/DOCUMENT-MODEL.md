@@ -1,7 +1,9 @@
 # Structured document model — design (issue #85)
 
-Status: **decided; steps 1, 2 and 6 of §10 built** (`src/js/04c-doc-model.js`;
-the merge is the only part of the app that calls it so far). Adam made the decisions in §12 on
+Status: **decided; built, except the parts §10 lists as left** — the model
+(`src/js/04c-doc-model.js`), registry ids, the readers, the writers at the
+selection (`05b-cell-edit.js`, `05c-clipboard.js`), undo (`12a-undo.js`)
+and the word-level merge. Adam made the decisions in §12 on
 2026-09-23; the sections below already reflect them. The build follows §10.
 #85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
 it.
@@ -528,22 +530,45 @@ until step 4.
 2. **Registry ids. Done.** `productionTags[].id`, minted from the key and
    kept through renames; the registry merges by id; `registryTagHooks` for
    the model. No ids on spans (§3.1 says why). `src/test/tag-ids.test.mjs`.
-3. **Readers first.** Exports, word count, the production index, b-roll,
-   the teleprompter and find all read runs through the memo. This is where
-   cross-formatting find starts working.
-4. **Writers.** `applySteps` becomes the only way into `S.state`. Paths are
-   moved one by one, in the §2 inventory's order, and a debug assertion
-   catches any cell whose HTML is not `toHtml` of its runs. This is the big
-   one: several PRs, with a browser-suite pass per PR.
-5. **Undo stack.** The browser's native undo is disabled at the same time,
-   since leaving it half on is worse than either.
+3. **Readers first. Done, mostly.** Word count, the plain-text, CSV,
+   Word and PDF exports, the teleprompter and find/replace read cells
+   through `cellOf`; find matches across formatting (never inside a tag or
+   across a b-roll key). Left on HTML, each with its reason in the code:
+   plain Markdown export (the model's fixed nesting changes the Markdown),
+   the `.md` project format, the production index and the b-roll reader.
+   Tests: `readers.test.mjs` (old and new readers over 1500 stored-shape
+   cells), `find-replace.test.mjs`.
+4. **Writers. Done for everything done at the selection.** Not by making
+   `applySteps` the only door into `S.state` — that would have meant
+   rewriting all 33 write paths first — but in two halves:
+   - every keystroke is stored canonical (`syncFieldFromDom` through the
+     model), so state never holds unsanitised HTML any more;
+   - everything structural in a script cell goes through `editCell`
+     (`05b-cell-edit.js`): bold/italic/underline/strike/highlight (with a
+     collapsed caret too), links, Enter, the three tag routes, the b-roll
+     key, paste, drop, copy and cut (`05c-clipboard.js`). Copy never
+     carries a comment; cut then paste moves it (D6). Pictures and video
+     cards are dropped from pasted script text and moved out of existing
+     cells into comments on load (D7).
+   Still on the old paths, because they already write through
+   `sanitizeHtml` and are not at the selection: applying a tag from the
+   composer to one or all occurrences, rename/remove through the panel,
+   split/join, Replace All's HTML fallback for a cell still holding a
+   picture.
+5. **Undo stack. Done** (`12a-undo.js`), recording every edit by diffing
+   after `markDirty()` rather than per path — see §7 and HANDOFF invariant
+   #53. The browser's own undo is never used in a script cell.
 6. **Merge per §8. Done** — built ahead of steps 4–5, since it only needs
    the model and the registry ids. The on-disk merge review switched with
    it. §8 lists what building it settled. Tests: the "a word at a time"
    section of `src/test/merge-states.test.mjs`.
-7. **Delete what is left:** `execCommand`, `repointCommentsForRows`,
-   `lastSplitUndo`, and the invariants the model makes impossible to break
-   (#2, #3, #18). HANDOFF is updated.
+7. **Delete what is left. Partly done.** `lastSplitUndo` and the move undo
+   are gone; HANDOFF invariants #2, #3, #10 and #18 are rewritten for the
+   model and #53 added. `execCommand` is left only where there is no model
+   behind the text (the comment composer and reply boxes) and as the
+   fallback for a script cell still holding a picture (which the load-time
+   move of D7 empties). `repointCommentsForRows` stays: split and join
+   still move text as HTML.
 
 Steps 1–3 are about a week of agent sessions. Steps 4–6 are the bulk and
 the risk. Step 4 touches every editing path, and a regression there loses
