@@ -180,6 +180,15 @@ Invariant #18 goes away.
   rows does the same.
 - **Copy** never copies a `cmt` mark. **Cut then paste** in the same tab
   moves it (D6).
+  **Built** (`src/js/05c-clipboard.js`): a copy's clipboard HTML is the
+  slice's `toHtml` with every `cmt` mark stripped. A cut keeps them and
+  wraps the HTML in `<span data-splitpage-cut="nonce">`, the nonce random
+  and held only in that tab's memory. A paste keeps `cmt` marks only when
+  the HTML names the live nonce, and only for comments the document still
+  has; the paste spends the nonce, so a second paste of the same cut, a
+  drag, another tab's cut or another app brings words only. The moved
+  comment's `rowId`/`field` follow it to the pasted cell in the same undo
+  entry as the paste (`editCell`'s `also`).
 - Deleting all of a comment's text leaves the comment **detached**
   (`anchor: null`). It still shows in the panel with its quoted text, which
   is today's behaviour for a lost anchor.
@@ -204,6 +213,18 @@ is special. **It is the only atom.**
     mark the document dirty on its own. It is written out with the next
     real save.
   - Nothing is lost: version history still has the original.
+  - **Built:** paste and drop go through `fromHtml` with pictures and video
+    cards taken out before the sanitiser (so a pasted `data:` picture is
+    never even interned), and a toast says where they go instead.
+    `migrateRows` (02-state.js, `moveMediaOutOfCell`) does the move: the
+    comment is by "Splitpage", dated the row's `updatedAt`, with an empty
+    quote and a line saying where it came from; its id is
+    `mediaCommentId(rowId, field, "img:"+sha | "video:"+href)`. Like every
+    loaded comment without an `anchorId`, it gets its own id there, which
+    no span carries: it is not anchored to any words. The places that
+    still handle a cell holding a picture (`syncFieldFromDom`, `editCell`,
+    `mergeTextField`) only matter now for a document an older copy of the
+    app wrote after this one read it.
 
 ## 4. Operations
 
@@ -426,8 +447,8 @@ changes are combined"). What building it settled:
   rather than a rewrite.
 - **A cell with a picture or video card is compared as a string**, whole,
   as before: `fromHtml` leaves them out (D7), so merging one through the
-  model would drop it. This goes when §3.3's load-time move to comments is
-  built.
+  model would drop it. Since §3.3's load-time move to comments this only
+  happens for a side an older copy of the app wrote.
 - **No ancestor** (a two-way merge, or a row base does not have): equal
   models are no conflict; any other difference is one, as before.
 - **Stats.** A row whose cell combined both sides counts in `rowsFromMe`
