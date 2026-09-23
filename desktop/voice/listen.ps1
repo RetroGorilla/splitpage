@@ -12,9 +12,10 @@
 #   {"type":"start","lang":"en-US"}      listening
 #   {"type":"interim","text":"..."}      a guess that may still change
 #   {"type":"final","text":"..."}        a phrase the recogniser settled on
-#   {"type":"warning","code":"..."}      no-signal / too-quiet / too-noisy,
-#                                        or clear: the no-signal / too-quiet
-#                                        it said last is over (issue #117)
+#   {"type":"warning","code":"..."}      no-signal / too-quiet / too-noisy /
+#                                        blocked-all / blocked-desktop, or
+#                                        clear: whichever of those it said
+#                                        last is over (issue #117, #134)
 #   {"type":"error","code":"..."}        no-recognizer / audio-capture /
 #                                        recognizer-failed / helper-failed
 #
@@ -189,11 +190,65 @@ public sealed class SplitpageVoiceGrace {
   }
 }
 
+// Whether Windows is outright blocking the microphone (issue #134), read
+// from the consent store the Privacy & security ▸ Microphone switches write
+// to. Unlike no-signal/too-quiet this needs no grace period: a "Deny" here
+// is certain, not a guess from silence.
+//
+// Check() takes the registry lookup as a delegate rather than reading the
+// registry itself, so desktop/test/voice-grace.test.mjs can drive every
+// combination with a fake reader and never touch the real registry or open
+// a microphone (invariant #33).
+public static class SplitpageVoiceConsent {
+  // hklm-all:      HKLM ConsentStore\microphone Value       (device-wide
+  //                "Microphone access" switch, every user and app)
+  // hkcu-all:      HKCU ConsentStore\microphone Value       (this user,
+  //                "Let apps access your microphone")
+  // hkcu-desktop:  HKCU ConsentStore\microphone\NonPackaged Value (this
+  //                user, "Let desktop apps access your microphone")
+  // A reader returns "Allow", "Deny", or null when the value has never been
+  // set (which Windows treats as allowed).
+  public static string Check(Func<string, string> read) {
+    if (read("hklm-all") == "Deny") return "blocked-all";
+    if (read("hkcu-all") == "Deny") return "blocked-all";
+    if (read("hkcu-desktop") == "Deny") return "blocked-desktop";
+    return null;
+  }
+
+  public static string ReadRegistry(string key) {
+    try {
+      string root, path;
+      switch (key) {
+        case "hklm-all":
+          root = "HKEY_LOCAL_MACHINE";
+          path = @"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
+          break;
+        case "hkcu-all":
+          root = "HKEY_CURRENT_USER";
+          path = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
+          break;
+        case "hkcu-desktop":
+          root = "HKEY_CURRENT_USER";
+          path = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged";
+          break;
+        default:
+          return null;
+      }
+      object value = Microsoft.Win32.Registry.GetValue(root + "\\" + path, "Value", null);
+      return value as string;
+    } catch (Exception) {
+      return null;
+    }
+  }
+}
+
 public static class SplitpageVoice {
   static readonly object Gate = new object();
   static SplitpageVoiceGrace grace;
   static System.Diagnostics.Stopwatch clock;
   static System.Threading.Timer ticker;
+  static System.Threading.Timer consentTicker;
+  static string consentShown; // "blocked-all"/"blocked-desktop"/null, under Gate
 
   static string Json(string s) {
     var b = new StringBuilder("\"");
@@ -256,7 +311,23 @@ public static class SplitpageVoice {
     // no-signal is due by the clock, not by another event: the recogniser
     // may never raise it again after the first time.
     ticker = new System.Threading.Timer(_ => Warn(() => grace.Tick(Now())), null, 250, 250);
+    // Blocked is certain the moment it's true, so it's checked once right
+    // away (no grace period) and then every few seconds so turning the
+    // setting back on clears the warning without pressing anything.
+    CheckConsent();
+    consentTicker = new System.Threading.Timer(_ => CheckConsent(), null, 3000, 3000);
     return engine;
+  }
+
+  static void CheckConsent() {
+    string code = SplitpageVoiceConsent.Check(SplitpageVoiceConsent.ReadRegistry);
+    lock (Gate) {
+      if (code == consentShown) return;
+      bool wasShown = consentShown != null;
+      consentShown = code;
+      if (code != null) Emit("warning", "code", code);
+      else if (wasShown) Emit("warning", "code", "clear");
+    }
   }
 
   static long Now() {
