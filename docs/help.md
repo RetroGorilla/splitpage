@@ -41,7 +41,9 @@ beta copy is offered it like any other update.
   with it.
 - **Follow My Voice in the desktop app** through Windows' own speech
   recognition, or **Present in browser** to run the teleprompter in any
-  browser, Firefox included — the desktop app does the listening.
+  browser, Firefox included — the desktop app does the listening. **Use
+  Chromium Speech Recognition** opens it in Edge or Chrome instead, to use
+  that browser's own recognition.
 - **Google Drive in the desktop app**, and **each tab has its own server or
   tunnel connection**.
 - **Pictures are stored once**, outside the document, so scripts with many
@@ -187,7 +189,10 @@ differences:
   passes the words to the page, so keep it running while you read. The
   browser shows a read-only copy: keep
   editing in the desktop app. If the script has never been saved, you'll be
-  asked to save it first.
+  asked to save it first. To use Chrome's or Edge's own speech recognition
+  instead, choose **☰ File ▸ This document ▸ Use Chromium Speech
+  Recognition**: it opens the same copy in an installed Chromium browser
+  (Edge, Chrome, Brave…) whatever your default browser is.
 - **Google Drive files** work differently in the desktop app: you sign in once
   through your own browser instead of pasting an API key, and it needs a
   Google Cloud client set up on the computer first — see **Google Drive files

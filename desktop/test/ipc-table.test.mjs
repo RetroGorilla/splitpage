@@ -311,6 +311,19 @@ test("the teleprompter's Open in browser takes no argument, from the app page on
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
+/* Issue #123: the same again for Present in Chromium — the page never
+   names the browser, its path or the URL. */
+test("Use Chromium Speech Recognition takes no argument, from the app page only", () => {
+  const row = channelFor("splitpage:prompter-open-in-chromium", "invoke");
+  assert.ok(row, "declared");
+  assert.deepEqual([...row.argsSchema], []);
+  assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN]);
+  assert.equal(checkArgs(row.argsSchema, []), null);
+  assert.ok(checkArgs(row.argsSchema, ["C:\\Windows\\System32\\calc.exe"]), "a path");
+  assert.ok(checkArgs(row.argsSchema, ["http://evil.example/"]), "a URL");
+  assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
+});
+
 /* Issue #8, the same contract again (invariant #45): the page asks whether
    it can listen, to start and to stop — for itself — and names nothing: no
    executable, no script, no argument, no language. What it hears comes
