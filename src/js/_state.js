@@ -85,7 +85,9 @@ export const S = {
   /* 06-rows declares it; 06-rows, 19-writer assign it. */
   lastMoveUndo: undefined,
   /* true while an undo or a redo is being put on screen (21-events.js
-     afterUndoApplied): syncFieldFromDom reads nothing back meanwhile */
+     afterUndoApplied), or a cell edited through the model repainted
+     (05b-cell-edit.js editCell): syncFieldFromDom reads nothing back
+     meanwhile */
   undoApplying: false,
 
   /* 00-prelude declares it; 00-prelude, 21-events assign it. */

@@ -196,6 +196,7 @@ the thing you changed is a pure function of a document.
 | `tests/69-html-images.txt` | images inside HTML out of the document state (#82 P6), end to end in a real page: a picture attached in the comment composer, one pasted as HTML into a reply, and one pasted as HTML into a scene's visual cell are stored as `<img class="comment-img" data-blob data-w data-h data-mime>` with no `src` (no `data:image`, no `blob:` in state — typing on in the cell, which reads the live DOM, included), are in the `splitpage-blobs` IndexedDB database on their own, and show through `blob:` URLs on the card, the reply and the cell; opening the document as a `.splitpage` (all three inline as `<img src="data:…" class="comment-img">`) gives the stored form back and a real Save writes them inline again, as does the `.md` data block; the stash carries only refs across a real `goto`, after which all three render out of IndexedDB; and an old document with inline comment, reply and cell images opens content-addressed and saves them back inline |
 | `tests/70-history-idb-migration.txt` | the browser's one-time move of version history from the v1 IndexedDB layout into v2 (#83, 03c-history-idb.js's migrator as the backend's first job): a raw v1 database written through `__historyTest.seedV1` (page backend closed, database deleted, then reload) — every snapshot with a body readable after the reload through `getHistorySnapshot` (`__historyTest.read`), titles/dates/Older's `migratedAt`/`expiresAt` as v1 had them, a lost body dropped, two snapshots of the same content sharing one body, the v1 stores emptied; then the same fixture with `injectFault('migrate-stop-after:2')` (kept in sessionStorage across the reload): the move stops, everything still reads (v2 plus the read-only v1 reader), a capture stays pending with ONE toast and the panel's one notice line; the fault cleared, a reload resumes and ends byte-identical (`__historyTest.inspect`) to the straight move. Before each reload the document is left clean, or its `beforeunload` would hold the navigation |
 | `tests/71-prompter-bar-wrap.txt` | the teleprompter's control bar staying clickable wherever it wraps (the `.prompter-viewport` / `.prompter-scroll` rules in `app.css`): at 1400x864 (with scene mode's buttons, so it wraps under the container's fallback fonts too), 1000x864, 1100x700, 740x420 (the narrow-screen layout) and 375x600, every visible button and input in the bar is the element at its own centre (`elementFromPoint`), the scroller is exactly the box above the bar, and the reading line sits at that box's middle AND at `clientHeight / 2` (the offset scene mode's boundary checks use), a cued scene's first word lands on it, and the first and last lines still reach it — plus Mirror + Flip once. Resized in place with the prompter open (a `rows() > 1` guard at each size keeps it from passing on a bar that never wrapped); on the pre-fix CSS it is 15/42 |
+| `tests/75-format-model.txt` | formatting and line breaks in a script cell as edits of its model (#85, design §5 — `toggleCellFormat`/`insertLineBreak` over `editCell`), asserted on state: Ctrl+B over a selection writing `<strong>` at once as one undo entry (Ctrl+Z / Ctrl+Shift+Z), the selection surviving the repaint and lighting the toolbar, bold across an existing run's edge making one run and the same key taking it off, italic and strike from the toolbar, highlight off on the second click, a link as `<a target rel>` with the caret just past it, B with nothing selected bolding what is typed next (and off again), Enter at the end of a cell leaving the sentinel pair so typing lands on the new line, one break mid-line, a break replacing a selection, and a cell still holding a picture and a comment composer both still on the browser's own commands |
 
 ## The server's own tests
 
@@ -472,10 +473,13 @@ the app.
   was solid every time (`tests/11-comments-sort-persist.txt`). If a reload
   check needs to run after a script has already done real work, give it its
   own suite rather than trusting it to survive at the end of a busy one.
-- **Don't assert formatting on the live DOM.** Chromium's `execCommand` emits
-  `<span style="font-weight: bold">`, not `<b>`. Splitpage's sanitiser turns
-  that into `<strong>` on focusout — so a bold/italic assertion belongs *after*
-  the field has been left, otherwise you are testing the browser, not the app.
+- **Don't assert formatting on the live DOM of a comment or reply box.**
+  There it is still the browser's `execCommand`, which emits `<b>` or
+  `<span style="font-weight: bold">` depending on the browser, and the
+  sanitiser turns that into `<strong>` only when the body is posted. A
+  *script cell* formats through the document model (#85): `<strong>`,
+  `<em>`, `<mark>`, `<a>` are in state the moment the key is pressed, so
+  assert on `F.state()` right away (`tests/75-format-model.txt`).
 - **Test scripts are read as UTF-8** — they didn't used to be. `Get-Content`
   on PS 5.1 decodes a BOM-less file with the system ANSI codepage, so a `•`
   or an em dash inside an assertion arrived as mojibake and failed against an
