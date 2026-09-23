@@ -199,6 +199,17 @@ test("legacyMdToHtml round-trips everything htmlToMarkdown can emit", () => {
   assert.equal(legacyMdToHtml("**b** and *i*"), "<strong>b</strong> and <em>i</em>");
 });
 
+test("legacyMdToHtml reads the elements the model's toMarkdown falls back to", () => {
+  /* the plain Markdown export (toMarkdown, 04c-doc-model.js) writes these
+     where a delimiter could not open or close; Import reads it back */
+  assert.equal(legacyMdToHtml('a<strong>"q"</strong>b'), "a<strong>&quot;q&quot;</strong>b");
+  assert.equal(legacyMdToHtml("*de* <em>fgh</em> <strong>a <em>b</em></strong>"), "<em>de</em> <em>fgh</em> <strong>a <em>b</em></strong>");
+  assert.equal(legacyMdToHtml("x<S>y</S>"), "x<s>y</s>");
+  /* only a closed pair; anything else stays the text it was */
+  assert.equal(legacyMdToHtml("<em>open"), "&lt;em&gt;open");
+  assert.equal(legacyMdToHtml("<strong>a</em>"), "&lt;strong&gt;a&lt;/em&gt;");
+});
+
 test("legacyMdToHtml does not double-encode a link's query string", () => {
   /* safeHref only validates a scheme prefix; escaping the already-escaped
      URL a second time turned "&" into "&amp;amp;" and corrupted the link. */

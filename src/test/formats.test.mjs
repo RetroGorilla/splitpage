@@ -19,7 +19,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
+import { htmlToMarkdown } from "../js/04-richtext.js";
 import { __init as initTags } from "../js/07-production-tags.js";
+import { mdSceneCellSource } from "../js/14-export.js";
 import {
   applyMarkdownProject,
   buildMarkdownProject,
@@ -28,6 +30,7 @@ import {
   parseMarkdownProject,
   parseSplitpageFile
 } from "../js/20d-formats.js";
+import { STORED } from "./_stored-cells.mjs";
 
 /* See migrate-rows.test.mjs: this __init() only builds the memoised tag
    reader, and the Markdown writer's production breakdown needs it. */
@@ -381,5 +384,77 @@ test("the .md title heading beats the block's title", () => {
   return withState(proj.state, async () => {
     const back = await applyMarkdownProject(proj, { noAsk: true });
     assert.equal(back.title, "Renamed Elsewhere");
+  });
+});
+
+/* ---- the table and the document model (#85 step 3) ----
+
+   The table's cells stay htmlToMarkdown() of the block's HTML: every copy
+   of the app, older ones included, reads a cell that differs from its own
+   rendering of the block as edited by hand, and rebuilds it (see
+   mdSceneCellSource, 14-export.js). These pin the round trip on cells as
+   they are really stored, and the one thing reading does for a later
+   switch: a cell in the model's Markdown is unchanged as well. */
+
+function storedDocument() {
+  const rows = [];
+  for (let k = 0; k + 1 < STORED.length; k += 2) {
+    rows.push({ id: "r" + k, visualText: STORED[k], audioText: STORED[k + 1], status: "todo" });
+  }
+  const comments = ["c0", "c1", "c2"].map((id) => ({
+    id, rowId: "r0", field: "audioText", anchorId: id, quotedText: "", author: "Tester", body: "note",
+    resolved: false, kind: "anchor", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", replies: []
+  }));
+  return migrateRows({ schema: 2, title: "Stored", rows, comments, docId: "d" + "8".repeat(32) });
+}
+
+test(".md: stored-shape cells come back byte for byte, and a second save writes the same file", async () => {
+  const s = storedDocument();
+  const html = s.rows.map((r) => [r.visualText, r.audioText]);
+  const md = withState(s, buildMarkdownProject);
+  const proj = parseMarkdownProject(md);
+  await withState(proj.state, async () => {
+    const back = await applyMarkdownProject(proj, { noAsk: true });
+    assert.deepEqual(back.rows.map((r) => [r.visualText, r.audioText]), html, "no cell rebuilt from the table");
+    assert.equal(withState(back, buildMarkdownProject), md);
+  });
+});
+
+test(".md: the table is htmlToMarkdown of the stored HTML, which is not the model's Markdown", () => {
+  let differs = 0;
+  for (let i = 0; i < STORED.length; i++) {
+    const row = { id: "r", visualText: "", audioText: STORED[i], imageRef: null };
+    const table = mdSceneCellSource(row, 0).audio;
+    assert.equal(table, htmlToMarkdown(STORED[i]).replace(/\n/g, "<br>").trim());
+    if (mdSceneCellSource(row, 0, true).audio !== table) differs++;
+  }
+  /* writing these any other way would make every copy that reads with
+     htmlToMarkdown rebuild them from the table */
+  assert.ok(differs > 100, "cells whose two renderings differ: " + differs);
+});
+
+test(".md: a table cell in the model's Markdown reads as unchanged", async () => {
+  const s = migrateRows({
+    schema: 2, title: "Model",
+    rows: [{ id: "r1", visualText: "", audioText: '<strong>bo</strong><span class="cmt-anchor" data-cmt="c1"><strong>ld</strong></span> <em>x </em>' + TAG }],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "ld", author: "T", body: "b",
+      resolved: false, kind: "anchor", createdAt: "", updatedAt: "", replies: [] }],
+    productionTags: [{ cat: "prop", name: "gaffer tape" }]
+  });
+  const md = withState(s, buildMarkdownProject);
+  const was = mdSceneCellSource(s.rows[0], 0).audio, model = mdSceneCellSource(s.rows[0], 0, true).audio;
+  assert.equal(was, "**bo****ld** *x *gaffer tape");
+  assert.equal(model, "**bold** *x* gaffer tape");
+  const proj = parseMarkdownProject(md.replace("| " + was + " |", "| " + model + " |"));
+  await withState(proj.state, async () => {
+    const back = await applyMarkdownProject(proj, { noAsk: true });
+    assert.equal(back.rows[0].audioText, s.rows[0].audioText, "kept, anchor and tag and all");
+  });
+  /* and a real edit is still an edit */
+  const edited = parseMarkdownProject(md.replace("| " + was + " |", "| " + model + " now |"));
+  await withState(edited.state, async () => {
+    const back = await applyMarkdownProject(edited, { noAsk: true });
+    assert.match(back.rows[0].audioText, /now/);
+    assert.doesNotMatch(back.rows[0].audioText, /cmt-anchor/);
   });
 });
