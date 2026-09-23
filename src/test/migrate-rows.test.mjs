@@ -23,7 +23,7 @@ import { createHash } from "node:crypto";
 import { legacyMdToHtml, migrateRows } from "../js/02-state.js";
 import { dataUrlForSync } from "../js/02c-blobs.js";
 import { DEFAULT_WPM } from "../js/01-scene-status.js";
-import { __init as initTags, collectTagsFromRows } from "../js/07-production-tags.js";
+import { __init as initTags, collectTagsFromRows, mintTagId } from "../js/07-production-tags.js";
 
 /* One of migrateRows' branches — back-filling the production registry out
    of a script that predates it — reads the tags in a cell through
@@ -315,7 +315,8 @@ test("productionTags: a live tag missing from an existing registry is healed in,
     productionTags: [{ cat: "prop", name: "Kettle", owner: "", notes: "", status: "have" }, { cat: "location", name: "roof" }]
   });
   assert.deepEqual(s.productionTags.map((t) => t.cat + ":" + t.name), ["prop:Kettle", "location:roof", "prop:gaffer tape"]);
-  assert.deepEqual(s.productionTags[2], { cat: "prop", name: "gaffer tape", owner: "", notes: "", status: "needed" });
+  assert.deepEqual(s.productionTags[2], { cat: "prop", name: "gaffer tape", owner: "", notes: "", status: "needed",
+                                          id: mintTagId("prop", "gaffer tape") });
   const twice = migrateRows(JSON.parse(JSON.stringify(s)));
   assert.deepEqual(twice.productionTags, s.productionTags);
 });
