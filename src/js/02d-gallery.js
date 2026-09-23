@@ -4,22 +4,28 @@ import { normalizeImageRef } from "../../shared/blob-policy.js";
 
 /* ================= a scene's pictures: the gallery (#135) =================
 
-   A scene's Image section holds a small gallery: pictures shown one at a
-   time as a carousel, each with a caption of video links under it. In the
+   A scene's Image section holds a small gallery: pictures and videos,
+   drawn as a mosaic with a line per video under it (05-render.js) and
+   shown whole in a dialog (05e-gallery-overlay.js). In the
    document a row keeps its first picture exactly where it always did, so
    every reader of one picture — and every older copy of the app — goes on
    working, and the rest beside it:
 
      imageRef     the first picture (#82), or null
      imageLinks   the first picture's caption: [link], absent when empty
-     moreImages   the pictures after it: [{imageRef, links?}], absent when
-                  there are none
+     imageName    the first picture's file name, absent when unknown
+     moreImages   the pictures after it: [{imageRef, name?, links?}], absent
+                  when there are none
 
    A link is {href} (an http(s) address, through safeHref) or {name, size}
    (a video file: its name only — its bytes and where it sits on someone's
-   disk are not the document's). `poster: true` on a link says the
-   picture above it IS that video's thumbnail, so clicking the picture
-   opens it too.
+   disk are not the document's), with its length in seconds as
+   `duration` when it is known (a file's). `poster: true` on a link says
+   the picture above it IS that video's thumbnail: its tile is a video's.
+
+   A picture may carry the name of the file it came from — `imageName` on
+   the row for the first, `name` on an item for the rest — shown in the
+   gallery's dialog; a pasted one has none.
 
    The first slot may have links and no picture: a video pasted into a
    scene with no picture gets a placeholder there. Every slot after it has
@@ -47,8 +53,18 @@ export function normalizeVideoLink(x) {
   } else {
     return null;
   }
+  if (typeof x.duration === "number" && isFinite(x.duration) && x.duration > 0 && x.duration < 1e7) {
+    out.duration = Math.round(x.duration * 10) / 10;
+  }
   if (x.poster === true) out.poster = true;
   return out;
+}
+
+/* A picture's file name, one line of plain text, or "". */
+export function normalizePictureName(v) {
+  if (typeof v !== "string") return "";
+  /* eslint-disable-next-line no-control-regex -- a file name is one line */
+  return plainText(v).replace(/[\u0000-\u001F]+/g, " ").trim().slice(0, 200);
 }
 
 /* One key per distinct video: what a caption holds once, and what the
@@ -84,6 +100,8 @@ function normalizeGalleryItem(it) {
   var ref = rec || normalizeImageRef(it.imageRef);
   if (!ref) return null;
   var out = { imageRef: ref };
+  var name = normalizePictureName(it.name);
+  if (name) out.name = name;
   var links = normalizeVideoLinks(it.links);
   if (links.length) out.links = links;
   return out;
@@ -94,6 +112,8 @@ function normalizeGalleryItem(it) {
    and writes exactly as it did. A picture repeated is one picture. A
    first slot left with nothing in it while pictures follow takes the next. */
 export function migrateGallery(r) {
+  var imageName = r.imageRef ? normalizePictureName(r.imageName) : "";
+  if (imageName) r.imageName = imageName; else delete r.imageName;
   var links = normalizeVideoLinks(r.imageLinks);
   if (links.length) r.imageLinks = links; else delete r.imageLinks;
   var seen = {};
@@ -108,6 +128,7 @@ export function migrateGallery(r) {
   if (!r.imageRef && !r.imageLinks && more.length) {
     var first = more.shift();
     r.imageRef = first.imageRef;
+    if (first.name) r.imageName = first.name;
     if (first.links) r.imageLinks = first.links;
   }
   if (more.length) r.moreImages = more; else delete r.moreImages;
@@ -115,19 +136,23 @@ export function migrateGallery(r) {
 
 /* ---- reading and writing a row's slots ----
 
-   A slot is {ref, dataUrl, links}: ref a record (or null), dataUrl a
-   legacy inline picture (the first slot of a row that has not been
-   through migrateRows), links its caption. Slot 0 is there when the row
+   A slot is {ref, dataUrl, links, name}: ref a record (or null), dataUrl
+   a legacy inline picture (the first slot of a row that has not been
+   through migrateRows), links its caption, name its picture's file name
+   ("" when unknown). Slot 0 is there when the row
    has a first picture or first-slot links. */
 export function rowSlots(row) {
   var out = [];
   if (!row || typeof row !== "object") return out;
   var img = rowImage(row);
   var links = Array.isArray(row.imageLinks) ? row.imageLinks : [];
-  if (img || links.length) out.push({ ref: img ? img.ref : null, dataUrl: img ? img.dataUrl : null, links: links });
+  if (img || links.length) {
+    out.push({ ref: img ? img.ref : null, dataUrl: img ? img.dataUrl : null, links: links,
+               name: img && typeof row.imageName === "string" ? row.imageName : "" });
+  }
   (Array.isArray(row.moreImages) ? row.moreImages : []).forEach(function (it) {
     var ref = it && normalizeImageRef(it.imageRef);
-    if (ref) out.push({ ref: ref, dataUrl: null, links: Array.isArray(it.links) ? it.links : [] });
+    if (ref) out.push({ ref: ref, dataUrl: null, links: Array.isArray(it.links) ? it.links : [], name: typeof it.name === "string" ? it.name : "" });
   });
   return out;
 }
@@ -166,18 +191,20 @@ export function rowVideoLinks(row) {
 
 function copy(v) { return JSON.parse(JSON.stringify(v)); }
 
-/* Writes `slots` ({ref, links}) back as the row's three keys — only
-   what changed is changed, and empty ones are left out. A slot after the
+/* Writes `slots` ({ref, links, name}) back as the row's keys — empty ones
+   are left out. A slot after the
    first with no picture has nowhere to go and is dropped. */
 export function setRowSlots(row, slots) {
   delete row.visualImage;
   var first = slots[0] || null;
   row.imageRef = first && first.ref ? copy(first.ref) : null;
+  if (first && first.ref && first.name) row.imageName = first.name; else delete row.imageName;
   if (first && first.links && first.links.length) row.imageLinks = copy(first.links); else delete row.imageLinks;
   var more = [];
   slots.slice(1).forEach(function (s) {
     if (!s || !s.ref) return;
     var it = { imageRef: copy(s.ref) };
+    if (s.name) it.name = s.name;
     if (s.links && s.links.length) it.links = copy(s.links);
     more.push(it);
   });
@@ -186,22 +213,23 @@ export function setRowSlots(row, slots) {
 
 function slotsOf(row) {
   return rowSlots(row).map(function (s) {
-    return { ref: s.ref, links: s.links.slice() };
+    return { ref: s.ref, links: s.links.slice(), name: s.name };
   });
 }
 
 /* Adds a picture (a record) to the row: into an empty first slot — no
    picture yet, whatever its caption — or after the others. A picture the
    gallery already shows is not added twice. Returns the slot it is in. */
-export function addGalleryPicture(row, ref) {
+export function addGalleryPicture(row, ref, name) {
   var slots = slotsOf(row);
   for (var i = 0; i < slots.length; i++) {
     if (slots[i].ref && slots[i].ref.sha256 === ref.sha256) return i;
   }
   var at;
-  if (!slots.length) { slots.push({ ref: ref, links: [] }); at = 0; }
-  else if (!slots[0].ref) { slots[0].ref = ref; at = 0; }
-  else { slots.push({ ref: ref, links: [] }); at = slots.length - 1; }
+  name = normalizePictureName(name);
+  if (!slots.length) { slots.push({ ref: ref, links: [], name: name }); at = 0; }
+  else if (!slots[0].ref) { slots[0].ref = ref; slots[0].name = name; at = 0; }
+  else { slots.push({ ref: ref, links: [], name: name }); at = slots.length - 1; }
   setRowSlots(row, slots);
   return at;
 }
@@ -209,8 +237,8 @@ export function addGalleryPicture(row, ref) {
 /* Adds a video's link. An empty gallery gets a first slot for it, whose
    picture is `poster` (a record: a local file's first frame) or none — a
    placeholder — and the link is marked as that picture's video. Otherwise
-   the link goes on the caption of slot `at` (the one on screen) with no
-   thumbnail: the picture there stays the picture. Returns the slot. */
+   the link goes on the caption of slot `at` (the one last added or
+   picked) with no thumbnail: the picture there stays the picture. Returns the slot. */
 export function addGalleryVideo(row, link, at, poster) {
   var l = normalizeVideoLink(link);
   if (!l) return -1;
@@ -230,7 +258,7 @@ export function addGalleryVideo(row, link, at, poster) {
 }
 
 /* Replaces slot i's picture, keeping its caption. */
-export function replaceGalleryPicture(row, i, ref) {
+export function replaceGalleryPicture(row, i, ref, name) {
   var slots = slotsOf(row);
   if (!slots[i]) return false;
   if (slots.some(function (s, k) { return k !== i && s.ref && s.ref.sha256 === ref.sha256; })) {
@@ -238,7 +266,18 @@ export function replaceGalleryPicture(row, i, ref) {
     slots.splice(i, 1);
   } else {
     slots[i].ref = ref;
+    slots[i].name = normalizePictureName(name);
   }
+  setRowSlots(row, slots);
+  return true;
+}
+
+/* Moves slot `from` to place `to` (Make cover is to = 0). */
+export function moveGallerySlot(row, from, to) {
+  var slots = slotsOf(row);
+  if (!slots[from] || to < 0 || to >= slots.length || from === to) return false;
+  var s = slots.splice(from, 1)[0];
+  slots.splice(to, 0, s);
   setRowSlots(row, slots);
   return true;
 }
