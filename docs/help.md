@@ -31,6 +31,8 @@ like any other update.
   tagged the same words differently; only then is it a conflict.
 - **Find and replace** finds a phrase even when part of it is bold, a link or
   a tag.
+- **Markdown export** writes bold, italic and strikethrough that other
+  Markdown readers show correctly, even where they overlap.
 - **Pictures stay out of script text.** Pasting into a script cell keeps the
   words and leaves pictures out; a picture already in a cell moves into a
   comment on that scene. Cutting text moves its comment with it.
