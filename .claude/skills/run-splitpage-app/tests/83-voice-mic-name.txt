@@ -1,0 +1,105 @@
+# Follow My Voice says which microphone it listens to (issue #118):
+# "Listening — <microphone>" where "Listening — following along" used to be,
+# and plain "Listening" when nothing names the microphone.
+#
+# Desktop: desktop/voice/listen.ps1 reads Windows' default capture device's
+# name and sends {"type":"device","name":...} just before start; here the
+# fake desktop backend (as in tests/72-desktop-voice.txt) plays that in. The
+# Core Audio lookup itself is desktop/test/voice-grace.test.mjs, the line's
+# parsing desktop/test/voice-helper.test.mjs.
+#
+# Browser: the name is the microphone stream's track label. getUserMedia is
+# replaced by one handing back a fake stream, and the browser recognizer's
+# start/stop by ones that open no microphone and talk to no server: start
+# just fires onstart, and the suite plays results into onresult itself.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.D = window.__desktopTest; window.fakeV = D.makeFakeBackend({ voice: true }); D.setBackend(window.fakeV); window.st = function () { return document.getElementById('pp-voice-status').textContent; }; return true; })()
+eval (function(){ window.__gumReal = navigator.mediaDevices.getUserMedia; return true; })()
+
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+eval (function(){ window.__w = Array.prototype.map.call(document.querySelectorAll('#prompter .w'), function (e) { return e.textContent; }).filter(function (t) { return /[a-z0-9]/i.test(t); }); window.__say = function (a, b) { return window.__w.slice(a, b).join(' '); }; return window.__w.length; })()
+expect window.__w.length >= 12
+
+# --- desktop: the device line names it, as text ------------------------------
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 1
+eval (function(){ fakeV._voiceEmit({ type: 'device', name: 'Microphone (USB <b>Mic</b>)' }); fakeV._voiceEmit({ type: 'start', lang: 'en-US' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect st() == Listening — Microphone (USB <b>Mic</b>)
+expect document.querySelector('#pp-voice-status b') === null
+# following along says the same thing, where it used to say "following along"
+eval (function(){ fakeV._voiceEmit({ type: 'final', text: __say(0, 5) }); return true; })()
+wait document.querySelectorAll('#prompter .w.spoken').length >= 4
+expect st() == Listening — Microphone (USB <b>Mic</b>)
+expect st().indexOf('following along') === -1
+
+# --- a restarted listener on another microphone: the new name ----------------
+eval (function(){ fakeV._voiceEmit({ type: 'end', reason: 'exited' }); return true; })()
+wait fakeV._voiceCalls.start === 2
+eval (function(){ fakeV._voiceEmit({ type: 'device', name: 'Headset (Bluetooth)' }); fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait st() === 'Listening — Headset (Bluetooth)'
+eval (function(){ fakeV._voiceEmit({ type: 'final', text: __say(5, 8) }); return true; })()
+sleep 200
+expect st() == Listening — Headset (Bluetooth)
+
+# --- a warning clearing (#117) goes back to the name -------------------------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening — Headset (Bluetooth)
+
+# --- no name: plain Listening, and last session's name is not kept -----------
+jsclick #pp-voice
+wait fakeV._voiceCalls.stop === 1
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 3
+eval (function(){ fakeV._voiceEmit({ type: 'start' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect st() == Listening…
+eval (function(){ fakeV._voiceEmit({ type: 'final', text: __say(0, 5) }); return true; })()
+sleep 200
+expect st() == Listening
+jsclick #pp-voice
+wait fakeV._voiceCalls.stop === 2
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval (function(){ D.restoreBackend(); return !window.splitpageDesktop; })()
+
+# --- browser: the stream's track label ---------------------------------------
+eval (function(){ window.__Rec = window.SpeechRecognition || window.webkitSpeechRecognition; return !!window.__Rec; })()
+expect !!window.__Rec
+eval (function(){ var P = window.__Rec.prototype; window.__recReal = { start: P.start, stop: P.stop, abort: P.abort }; P.start = function () { var self = this; window.__rec = self; setTimeout(function () { if (self.onstart) self.onstart(); }, 0); }; P.stop = function () {}; P.abort = function () {}; return true; })()
+eval (function(){ window.__label = 'Default - Microphone Array (Fake Audio)'; window.__stopped = 0; navigator.mediaDevices.getUserMedia = function () { var track = { kind: 'audio', label: window.__label, stop: function () { window.__stopped++; } }; return Promise.resolve({ getAudioTracks: function () { return [track]; }, getTracks: function () { return [track]; } }); }; return true; })()
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+jsclick #pp-voice
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect st() == Listening — Default - Microphone Array (Fake Audio)
+eval (function(){ window.__rec.onresult({ resultIndex: 0, results: [{ isFinal: true, length: 1, 0: { transcript: __say(0, 5) } }] }); return true; })()
+wait document.querySelectorAll('#prompter .w.spoken').length >= 4
+expect st() == Listening — Default - Microphone Array (Fake Audio)
+jsclick #pp-voice
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+expect window.__stopped === 1
+
+# a stream whose track has no label (some browsers before permission): plain
+eval (function(){ window.__label = ''; return true; })()
+jsclick #pp-voice
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect st() == Listening…
+eval (function(){ window.__rec.onresult({ resultIndex: 0, results: [{ isFinal: true, length: 1, 0: { transcript: __say(5, 9) } }] }); return true; })()
+sleep 200
+expect st() == Listening
+jsclick #pp-voice
+wait !document.getElementById('pp-voice').classList.contains('is-active')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+eval (function(){ var P = window.__Rec.prototype; P.start = window.__recReal.start; P.stop = window.__recReal.stop; P.abort = window.__recReal.abort; navigator.mediaDevices.getUserMedia = window.__gumReal; return true; })()
+quit

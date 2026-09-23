@@ -1346,10 +1346,11 @@ bytes, #82 — nothing deletes them yet, D4).
     fake named by `SPLITPAGE_TEST_VOICE_HELPER`, or nothing.
 46. **What the listener says is rebuilt before the page sees it.**
     `parseHelperLine` (`desktop/voice-helper.js`) keeps a type from a fixed
-    list, a capped `text`, a short lower-case `code` or a culture name, and
+    list, a capped `text`, a short lower-case `code`, a culture name or a
+    capped microphone `name` without control characters (#118), and
     drops everything else; main adds the session number and sends it to the
     tab that owns the session, no other. The page uses `text` as words to
-    match, never as markup.
+    match and `name` as status text, never as markup.
 47. **One listener at a time, and it never outlives its tab or the app.**
     One microphone: a second tab starting takes it over, and the first is
     told (`end`, reason `taken`) rather than left to restart. `forgetTab`

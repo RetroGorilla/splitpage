@@ -5397,7 +5397,8 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
       fixtures: [fixturePath],
       env: {
         SPLITPAGE_TEST_VOICE_HELPER: path.join(__dirname, "fake-voice-helper.mjs"),
-        FAKE_VOICE_TEXT: "the first line the reader says"
+        FAKE_VOICE_TEXT: "the first line the reader says",
+        FAKE_VOICE_DEVICE: "Microphone (Smoke Test)"
       }
     });
     const cdp = app.cdp;
@@ -5422,6 +5423,9 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
     record(tag + ": main runs one listener, for this tab", !!st1 && st1.running === true && st1.tabId === tab1Id && st1.started === 1, JSON.stringify(st1));
     const spoken = await poll(cdp, "document.querySelectorAll('#prompter .w.spoken').length >= 5", 15000).catch(() => false);
     record(tag + ": what the listener heard moves the prompter along the script", spoken === true);
+    const micStatus = await evalPage(cdp, "document.getElementById('pp-voice-status').textContent");
+    record(tag + ": the status names the microphone the listener said it uses (#118)",
+      micStatus === "Listening — Microphone (Smoke Test)", String(micStatus));
     const opens = await externalOpens(cdp);
     record(tag + ": nothing is opened in the browser", opens.length === 0, JSON.stringify(opens));
 

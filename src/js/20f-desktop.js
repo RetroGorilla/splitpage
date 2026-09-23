@@ -382,6 +382,7 @@ export function createDesktopRecognition() {
     onerror: null,
     onend: null,
     onwarning: null,
+    ondevice: null,
     _running: false,
     _session: null,
     _early: [],
@@ -400,6 +401,9 @@ export function createDesktopRecognition() {
       if (!rec._running) return;
       if (event.type === "start") {
         rec._fire("onstart");
+      } else if (event.type === "device") {
+        /* the microphone Windows listens to, just before start (#118) */
+        if (typeof event.name === "string") rec._fire("ondevice", { name: event.name });
       } else if (event.type === "interim" || event.type === "final") {
         if (typeof event.text !== "string") return;
         var result = { isFinal: event.type === "final", length: 1, 0: { transcript: event.text } };

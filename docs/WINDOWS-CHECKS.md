@@ -316,14 +316,17 @@ that proves #76's `shared/` staging and #77's `files` entry.
   System.Speech or heard a voice. By hand, in the packaged app:
   1. Open a saved script, open the teleprompter. The button reads **Follow My
      Voice** (not "Open in browser…"). Press it: the status reads "Starting
-     Windows speech recognition…", then "Listening…", and Windows' microphone
+     Windows speech recognition…", then "Listening — <your microphone>" (#118:
+     the name Windows gives the default input in Settings ▸ System ▸ Sound;
+     plain "Listening…" if it has none), and Windows' microphone
      indicator appears in the taskbar. If Windows asks about the microphone,
      allow it. Stay silent for ten seconds: no warning appears (#117 — the
      listener holds "isn't hearing the microphone" and "Speak up" back for
      about five seconds, and a working microphone in a quiet room should
      never get the first one).
   2. Read two or three lines aloud. The prompter follows, word by word.
-     Skip a sentence: it catches up. Re-read a line: it goes back.
+     Skip a sentence: it catches up. Re-read a line: it goes back. The
+     status still names the microphone (it no longer says "following along").
   3. Press **Stop Following**: the microphone indicator goes within about two
      seconds. In Task Manager, no `powershell.exe` is left under Splitpage.
   4. Start it, then close the tab: same — indicator gone, no `powershell.exe`.
@@ -334,9 +337,12 @@ that proves #76's `shared/` staging and #77's `files` entry.
      access your microphone** and start it: after about five seconds (not at
      once) the status should say Windows isn't hearing the microphone. (If it
      says nothing, note it — System.Speech's no-signal warning may not fire
-     for a privacy block on every build.) Turn the setting back on. Muting the
-     microphone in Sound settings should do the same, and unmuting it should
-     put "Listening…" back without pressing anything.
+     for a privacy block on every build.) Write down which microphone the
+     status names while blocked: if it is a different one from step 1,
+     Windows switched inputs rather than blocking the app (#118). Turn the
+     setting back on. Muting the microphone in Sound settings should do the
+     same, and unmuting it should put "Listening — <your microphone>" back
+     without pressing anything.
   7. Unplug the only microphone (or disable it in Sound settings) and start
      it: "No microphone was found."
   Record how long step 1 takes to reach "Listening…" — the first start
