@@ -318,7 +318,10 @@ that proves #76's `shared/` staging and #77's `files` entry.
      Voice** (not "Open in browser…"). Press it: the status reads "Starting
      Windows speech recognition…", then "Listening…", and Windows' microphone
      indicator appears in the taskbar. If Windows asks about the microphone,
-     allow it.
+     allow it. Stay silent for ten seconds: no warning appears (#117 — the
+     listener holds "isn't hearing the microphone" and "Speak up" back for
+     about five seconds, and a working microphone in a quiet room should
+     never get the first one).
   2. Read two or three lines aloud. The prompter follows, word by word.
      Skip a sentence: it catches up. Re-read a line: it goes back.
   3. Press **Stop Following**: the microphone indicator goes within about two
@@ -328,10 +331,12 @@ that proves #76's `shared/` staging and #77's `files` entry.
   5. Start it in one tab, then in a second: the first says "Another tab is
      following your voice now" and stops; the second follows.
   6. Turn off **Settings ▸ Privacy & security ▸ Microphone ▸ Let desktop apps
-     access your microphone** and start it: after a few seconds the status
-     should say Windows isn't hearing the microphone. (If it says nothing,
-     note it — System.Speech's no-signal warning may not fire for a privacy
-     block on every build.) Turn the setting back on.
+     access your microphone** and start it: after about five seconds (not at
+     once) the status should say Windows isn't hearing the microphone. (If it
+     says nothing, note it — System.Speech's no-signal warning may not fire
+     for a privacy block on every build.) Turn the setting back on. Muting the
+     microphone in Sound settings should do the same, and unmuting it should
+     put "Listening…" back without pressing anything.
   7. Unplug the only microphone (or disable it in Sound settings) and start
      it: "No microphone was found."
   Record how long step 1 takes to reach "Listening…" — the first start
