@@ -220,16 +220,25 @@ export function editCell(cellEl, fn) {
     stampRow(row);
     markDirty();
   }
-  /* repaint this one cell */
+  /* repaint this one cell. In #rows that replaces the focused cell, and
+     Chrome fires its focusout while it is still in the page: read back
+     then (syncFieldFromDom), it would put the text from before this edit
+     over it. So nothing is read back until the new cell has focus — the
+     same guard an undo's repaint uses. */
   var fresh = cellEl;
-  if (cellEl.closest("#rows")) {
-    renderRow(rowId);
-    fresh = findCell(cellEl, rowId, field) || cellEl;
-  } else {
-    cellEl.innerHTML = next;
-    ensureTrailingCaretSpot(cellEl);
+  S.undoApplying = true;
+  try {
+    if (cellEl.closest("#rows")) {
+      renderRow(rowId);
+      fresh = findCell(cellEl, rowId, field) || cellEl;
+    } else {
+      cellEl.innerHTML = next;
+      ensureTrailingCaretSpot(cellEl);
+    }
+    fresh.focus({ preventScroll: true });
+  } finally {
+    S.undoApplying = false;
   }
-  fresh.focus({ preventScroll: true });
   if (out.sel) setCellSelection(fresh, out.sel.from, out.sel.to);
   /* one entry of its own: the next keystroke starts another */
   flushEdits();

@@ -1,0 +1,176 @@
+# Formatting and line breaks through the document model (#85, design §5;
+# src/js/05-render.js toggleCellFormat / insertLineBreak, over
+# src/js/05b-cell-edit.js editCell).
+#
+# In a script cell, B/I/U/S, highlight, a link and Enter are edits of the
+# cell's model, not execCommand: state gets the canonical markup
+# (<strong>, <mark>, <a target rel>) at once rather than after a blur, the
+# toggle is decided by the model (every character already has it -> off),
+# the selection survives the repaint, and each is one undo entry. With
+# nothing selected, B/I/U applies to what is typed next. A cell still
+# holding a picture, and a comment composer (not a document cell), keep the
+# browser's commands. The
+# pure core is src/test/doc-model.test.mjs ("the editor's formatting
+# edits").
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.cellA = function(){ return document.querySelector('#rows .row .audio-cell .cell-editable'); }; window.cellV = function(){ return document.querySelector('#rows .row .visual-cell .cell-editable'); }; window.aud = function(){ return F.state().rows[0].audioText; }; window.vis = function(){ return F.state().rows[0].visualText; }; window.tb = function(cmd){ return document.querySelector('#rows .row .audio-cell .mini-toolbar [data-cmd="' + cmd + '"]'); }; window.selText = function(el, a, b){ var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null); var n, seen = 0, sn = null, so = 0, en = null, eo = 0; while ((n = w.nextNode())) { var len = n.nodeValue.replace(/​/g, '').length; if (!sn && a <= seen + len) { sn = n; so = a - seen; } if (!en && b <= seen + len) { en = n; eo = b - seen; } seen += len; } el.focus(); var r = document.createRange(); r.setStart(sn, so); r.setEnd(en, eo); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return r.toString(); }; window.clearCell = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); return el.innerHTML; }; return true; })()
+
+caret #rows .row .audio-cell .cell-editable
+eval clearCell(cellA())
+type one two three four
+sleep 300
+expect aud().indexOf('one two three four') !== -1
+
+# --- bold on a selection: <strong> in state, one undo entry ------------------
+eval selText(cellA(), 4, 7)
+eval window.__u0 = U.sizes().undo
+key ctrl KeyB
+sleep 200
+expect aud().indexOf('one <strong>two</strong> three four') !== -1
+expect U.sizes().undo === window.__u0 + 1
+# the selection is still the word, in the repainted cell, and the bar says so
+expect getSelection().toString() == two
+expect tb('bold').classList.contains('is-active')
+key ctrl KeyZ
+sleep 200
+expect aud().indexOf('<strong>') === -1
+expect aud().indexOf('one two three four') !== -1
+key ctrl+shift KeyZ
+sleep 200
+expect aud().indexOf('one <strong>two</strong> three four') !== -1
+
+# --- across the edge of an existing bold run: one run, then off -------------
+eval selText(cellA(), 4, 13)
+sleep 100
+# part of it is bold, so the button is not lit: pressing it would bold
+expect !tb('bold').classList.contains('is-active')
+key ctrl KeyB
+sleep 200
+expect aud().indexOf('one <strong>two three</strong> four') !== -1
+expect tb('bold').classList.contains('is-active')
+# every character bold now: the same key takes it off
+key ctrl KeyB
+sleep 200
+expect aud().indexOf('<strong>') === -1
+expect aud().indexOf('one two three four') !== -1
+
+# --- the toolbar's buttons: italic, strike -----------------------------------
+eval selText(cellA(), 0, 3)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="italic"]
+sleep 200
+expect aud().indexOf('<em>one</em> two') === 0
+eval selText(cellA(), 0, 3)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="strikeThrough"]
+sleep 200
+expect aud().indexOf('<em><s>one</s></em> two') === 0
+expect tb('strikeThrough').classList.contains('is-active')
+
+# --- highlight toggles off on the second click ------------------------------
+eval selText(cellA(), 14, 18)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="highlight"]
+sleep 200
+expect aud().indexOf('three <mark>four</mark>') !== -1
+expect tb('highlight').classList.contains('is-active')
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="highlight"]
+sleep 200
+expect aud().indexOf('<mark>') === -1
+expect aud().indexOf('three four') !== -1
+expect !tb('highlight').classList.contains('is-active')
+
+# --- a link on a selection ---------------------------------------------------
+eval selText(cellA(), 8, 13)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="link"]
+sleep 200
+expect !document.querySelector('#rows .row .audio-cell .link-popover').hidden
+eval (function(){ document.querySelector('#rows .row .audio-cell .link-popover input').value = 'example.com/page'; return true; })()
+jsclick #rows .row .audio-cell [data-action="link-confirm"]
+sleep 200
+expect aud().indexOf('two <a href="https://example.com/page" target="_blank" rel="noopener">three</a> four') !== -1
+# the caret is in the cell again, just past the link rather than inside it
+expect document.activeElement === cellA()
+expect getSelection().isCollapsed && !getSelection().anchorNode.parentNode.closest('a')
+
+# --- B with nothing selected: what is typed next is bold --------------------
+eval (function(){ var n = cellA().textContent.replace(/​/g, '').length; return selText(cellA(), n, n) === ''; })()
+key ctrl KeyB
+sleep 100
+expect tb('bold').classList.contains('is-active')
+press XY
+sleep 300
+expect aud().indexOf('four<strong>XY</strong>') !== -1
+# and B again there turns it off for what follows
+key ctrl KeyB
+sleep 100
+expect !tb('bold').classList.contains('is-active')
+press Z
+sleep 300
+expect aud().indexOf('<strong>XY</strong>Z') !== -1
+
+# --- Enter: at the end of a cell the next line gets a box, typing lands on it
+caret #rows .row .visual-cell .cell-editable
+eval clearCell(cellV())
+type the end
+sleep 200
+eval window.__h0 = cellV().getBoundingClientRect().height
+eval (function(){ return selText(cellV(), 7, 7) === ''; })()
+key Enter
+sleep 200
+# the sentinel: two breaks, the caret between them
+expect vis().indexOf('the end<br><br>') === 0
+expect document.activeElement.getBoundingClientRect().height > window.__h0
+press next
+sleep 300
+expect document.activeElement.innerHTML.indexOf('the end<br>next') === 0
+expect vis().indexOf('the end<br>next') === 0
+# in the middle of a line, one break and nothing else
+eval (function(){ return selText(cellV(), 4, 4) === ''; })()
+key shift Enter
+sleep 200
+press X
+sleep 300
+expect vis().indexOf('the <br>Xend<br>next') === 0
+# a break over a selection replaces it
+eval selText(cellV(), 0, 3)
+key Enter
+sleep 200
+expect vis().indexOf('<br> <br>Xend') === 0
+key ctrl KeyZ
+sleep 200
+expect vis().indexOf('the <br>Xend<br>next') === 0
+
+# --- a cell still holding a picture: the model has no place for it (design
+# D7), so editCell declines and the browser's commands still do the work ---
+eval (function(){ var r = F.state().rows[1]; r.visualText = 'pic <img class="comment-img" data-blob="' + 'a'.repeat(64) + '" data-w="4" data-h="3" data-mime="image/png"> words'; window.__renderTest.render(); return true; })()
+eval (function(){ var c = document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable'); var t = c.lastChild; var r = document.createRange(); r.setStart(t, t.nodeValue.indexOf('words')); r.setEnd(t, t.nodeValue.indexOf('words') + 5); c.focus(); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); })()
+key ctrl KeyB
+sleep 200
+eval document.activeElement.blur()
+sleep 200
+expect F.state().rows[1].visualText.indexOf('<strong>words</strong>') !== -1
+expect F.state().rows[1].visualText.indexOf('<img') !== -1
+eval (function(){ var c = document.querySelectorAll('#rows .row')[1].querySelector('.visual-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+key Enter
+press end
+sleep 200
+eval document.activeElement.blur()
+sleep 200
+expect F.state().rows[1].visualText.indexOf('<br>end') !== -1
+expect F.state().rows[1].visualText.indexOf('<img') !== -1
+
+# --- a comment composer is not a document cell: the browser's own bold ------
+eval selText(cellA(), 0, 3)
+jsclick #rows .row .audio-cell .mini-toolbar [data-cmd="comment"]
+sleep 300
+expect !document.getElementById('comment-modal').hidden
+eval (function(){ var b = document.getElementById('comment-body-editable'); b.focus(); document.execCommand('insertText', false, 'a note'); var r = document.createRange(); r.selectNodeContents(b); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return b.textContent; })()
+key ctrl KeyB
+sleep 100
+expect /<b>|<strong>|font-weight/.test(document.getElementById('comment-body-editable').innerHTML)
+key Escape
+sleep 300
+expect document.getElementById('comment-modal').hidden
+quit
