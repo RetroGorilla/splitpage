@@ -1967,6 +1967,24 @@
   }
   .tag-notes-input:focus { outline: none; border-color: var(--visual); }
 
+  /* A review session (#30, 08-production-panels.js): the open card's status
+     and owner are drawn disabled and its notes read-only, so the values stay
+     readable at full strength rather than greyed, with nothing about them
+     that looks clickable; the head's pill is a label. The bulk bar is never
+     drawn for a reviewer; hidden here as well, as the b-roll one is. */
+  .tag-status-pill.is-static { cursor: inherit; }
+  .tag-status-pill.is-static:hover { background: color-mix(in srgb, var(--st) 12%, var(--surface)); }
+  .tag-status-seg button:disabled { cursor: default; }
+  .tag-status-seg button:disabled:not(.is-active):hover { color: var(--text-faint); }
+  /* no caret and no box: a name to read */
+  .tag-owner-select:disabled {
+    cursor: default; opacity: 1; color: var(--text);
+    appearance: none; -webkit-appearance: none; background: transparent; border-color: transparent; padding-left: 0;
+  }
+  .tag-notes-input[readonly] { resize: none; cursor: default; }
+  .tag-notes-input[readonly]:focus { border-color: var(--border); }
+  body.is-review #production-bulk { display: none; }
+
   .tag-person-head { justify-content: flex-start; }
   .tag-person-name { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--text); font-weight: 700; }
   .tag-person-head .tag-group-count { margin-left: 2px; }
