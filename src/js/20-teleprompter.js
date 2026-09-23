@@ -642,12 +642,32 @@ function releaseVoiceStream() {
 /* What a desktop listener's warnings mean (desktop/voice/listen.ps1). They
    do not stop anything — the recogniser keeps listening — they say why it
    may not be following. The listener holds no-signal and too-quiet back
-   for a few seconds itself (issue #117), so they are shown as they come. */
+   for a few seconds itself (issue #117), so they are shown as they come.
+   blocked-all/blocked-desktop (#134) are certain rather than a guess from
+   silence, so the listener sends those at once, with no grace period.
+   no-signal and too-quiet name the microphone (issue #118) when it is
+   known; without one they fall back to "the microphone". Functions rather
+   than plain strings because the name can change between one warning and
+   the next. */
 var DESKTOP_VOICE_WARNINGS = {
-  "no-signal": "Windows isn't hearing the microphone — check it's plugged in, and that Settings › Privacy & security › Microphone lets desktop apps use it.",
-  "too-quiet": "Speak up a little, or move closer to the microphone.",
-  "too-noisy": "It's noisy here — Follow My Voice may lose its place."
+  "no-signal": function () {
+    return "Windows isn't hearing " + (voiceMicName || "the microphone") +
+      " — check it's plugged in, and that Settings › Privacy & security › Microphone lets desktop apps use it.";
+  },
+  "too-quiet": function () {
+    return "Speak up a little, or move closer to " + (voiceMicName || "the microphone") + ".";
+  },
+  "too-noisy": function () {
+    return "It's noisy here — Follow My Voice may lose its place.";
+  },
+  "blocked-all": function () {
+    return "Windows is blocking apps from using the microphone — turn on Settings › Privacy & security › Microphone.";
+  },
+  "blocked-desktop": function () {
+    return "Windows is blocking desktop apps from using the microphone — turn on Settings › Privacy & security › Microphone › Let desktop apps access your microphone.";
+  }
 };
+var CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
 
 export async function startVoiceFollow() {
   /* Belt and braces: updateVoiceAvailability() already sets the button up
@@ -734,18 +754,23 @@ export async function startVoiceFollow() {
   if (desktop || relayed) {
     setVoiceStatus(relayed ? "Starting speech recognition in the Splitpage desktop app…" : "Starting Windows speech recognition…", "");
     S.recognition.onwarning = function (e) {
-      /* "clear": the listener hears the microphone again (issue #117). Only
-         a warning still on screen gives way — anything since stays. */
+      /* "clear": the listener hears the microphone again, or (#134) the
+         blocking setting was turned back on. Only a warning still on
+         screen gives way — anything since stays. */
       if (e && e.warning === "clear") {
         var el = document.getElementById("pp-voice-status");
-        if (S.voiceFollowActive && el && (el.textContent === DESKTOP_VOICE_WARNINGS["no-signal"] ||
-            el.textContent === DESKTOP_VOICE_WARNINGS["too-quiet"])) {
-          setVoiceStatus(listeningStatus("Listening…"), "listening");
+        if (S.voiceFollowActive && el) {
+          for (var i = 0; i < CLEARABLE_VOICE_WARNINGS.length; i++) {
+            if (el.textContent === DESKTOP_VOICE_WARNINGS[CLEARABLE_VOICE_WARNINGS[i]]()) {
+              setVoiceStatus(listeningStatus("Listening…"), "listening");
+              break;
+            }
+          }
         }
         return;
       }
-      var msg = DESKTOP_VOICE_WARNINGS[e && e.warning];
-      if (msg && S.voiceFollowActive) setVoiceStatus(msg, "error");
+      var warn = DESKTOP_VOICE_WARNINGS[e && e.warning];
+      if (warn && S.voiceFollowActive) setVoiceStatus(warn(), "error");
     };
     S.recognition.ondevice = function (e) {
       if (mySession !== S.voiceSession) return;
