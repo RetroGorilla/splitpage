@@ -242,4 +242,75 @@ expect (function(){ var i = __cl.at(__cl.imgs[0].n), p = __cl.ops[i - 1], im = _
 # the picture nobody has is a short note, where it was
 expect (function(){ var i = __cl.at('[image'); return i > __cl.at('GONEBEFORE') && __cl.ops[i + 1].s === 'unavailable]' && __cl.at('GONEAFTER') > i; })()
 
+# =============================================================================
+# Word, Markdown, CSV and .txt — pictures in comments and replies. The .docx
+# embeds each in its place in the thread, as the type it is; the text
+# formats write "[image]" there. Thread 1 has a PNG and a JPEG in its body,
+# a reply with a JPEG between text and a picture-only reply showing the
+# body's PNG again (one media part); thread 2 is an image conflict card,
+# picture only (it used to read "(empty)"); thread 3 names a picture nobody
+# has. Opened through the real open path, exported through the File menu.
+# =============================================================================
+
+eval (function(){ var pic = function(w, h, color, type){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(w / 4, h / 4, w / 2, h / 2); return c.toDataURL(type, 0.9); }; var im = function(u){ return '<img src="' + u + '" class="comment-img">'; }; var p = { png: pic(120, 80, '#a3c', 'image/png'), jpg: pic(200, 300, '#3ac', 'image/jpeg'), reply: pic(640, 480, '#ca3', 'image/jpeg'), conflict: pic(320, 240, '#3c6', 'image/png') }; var doc = { schema: 2, title: 'Comment pictures docx', rows: [0, 1, 2].map(function(i){ return { id: 'dx-row-' + i, visualText: 'Scene ' + i, audioText: 'Audio ' + i, status: 'todo' }; }), comments: [ { id: 'dx-c1', rowId: 'dx-row-0', field: 'audioText', author: 'Ann', createdAt: '2026-09-01T10:00:00Z', body: 'DXBEFORE ' + im(p.png) + ' DXBETWEEN<br>' + im(p.jpg) + 'DXAFTER', replies: [ { id: 'dx-r1', author: 'Bob', createdAt: '2026-09-02T10:00:00Z', body: 'DXREPLY ' + im(p.reply) + ' DXREPLYAFTER' }, { id: 'dx-r2', author: 'Cy', createdAt: '2026-09-03T10:00:00Z', body: im(p.png) } ] }, { id: 'dx-c2', kind: 'conflict', rowId: 'dx-row-1', field: 'visualImage', conflictField: 'Visual image', author: 'Dee', createdAt: '2026-09-04T10:00:00Z', body: im(p.conflict), replies: [] }, { id: 'dx-c3', rowId: 'dx-row-2', field: 'audioText', author: 'Ann', createdAt: '2026-09-05T10:00:00Z', body: 'DXGONE <img class="comment-img" data-blob="' + 'd'.repeat(64) + '"> DXGONEAFTER', replies: [] } ] }; F.openFile(new File([JSON.stringify(doc)], 'comment-pictures-docx.splitpage')); return true; })()
+wait F.state().title === 'Comment pictures docx' && F.state().comments.length === 3
+expect F.state().comments[1].imageValue && /^[0-9a-f]{64}$/.test(F.state().comments[1].imageValue.sha256) && (F.state().comments[0].body.match(/data-blob="[0-9a-f]{64}"/g) || []).length === 2
+
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ var files = window.__unzip(new Uint8Array(await window.__blobs[window.__blobs.length - 1].arrayBuffer())), dec = new TextDecoder(), W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'; var parse = function(n){ return new DOMParser().parseFromString(dec.decode(files[n]), 'application/xml'); }; var doc = parse('word/document.xml'), rels = {}; [].forEach.call(parse('word/_rels/document.xml.rels').getElementsByTagName('Relationship'), function(r){ rels[r.getAttribute('Id')] = r.getAttribute('Target'); }); var ps = [].filter.call(doc.getElementsByTagNameNS(W, 'body')[0].childNodes, function(n){ return n.localName === 'p'; }); var start = -1; ps.forEach(function(p, i){ if (start < 0 && p.textContent === 'Comments') start = i; }); var seq = ps.slice(start + 1).map(function(p){ var b = p.getElementsByTagName('a:blip')[0], ind = p.getElementsByTagNameNS(W, 'ind')[0], e = p.getElementsByTagName('wp:extent')[0]; return b ? { img: rels[b.getAttributeNS(R, 'embed')], cx: +e.getAttribute('cx'), cy: +e.getAttribute('cy'), ind: ind ? +ind.getAttributeNS(W, 'left') : 0 } : { s: p.textContent, i: p.getElementsByTagNameNS(W, 'i').length > 0 }; }); var ids = [].map.call(doc.getElementsByTagName('wp:docPr'), function(d){ return d.getAttribute('id'); }); window.__dx = { names: Object.keys(files), media: Object.keys(rels).filter(function(k){ return /^media\//.test(rels[k]); }).map(function(k){ return rels[k]; }), types: dec.decode(files['[Content_Types].xml']), parses: !doc.querySelector('parsererror') && start >= 0, seq: seq, key: seq.map(function(x){ return x.img ? 'IMG:' + x.img : x.s; }), ids: ids }; return JSON.stringify({ media: __dx.media, key: __dx.key }); })()
+expect __dx.parses
+# four media parts — the body's PNG and JPEG, the reply's JPEG, the conflict
+# card's PNG — each named and declared as its type; the PNG the second reply
+# shows again is the same part
+expect JSON.stringify(__dx.media) === JSON.stringify(['media/image1.png', 'media/image2.jpeg', 'media/image3.jpeg', 'media/image4.png'])
+expect ['word/media/image1.png', 'word/media/image2.jpeg', 'word/media/image3.jpeg', 'word/media/image4.png'].every(function(n){ return __dx.names.indexOf(n) !== -1; })
+expect __dx.types.indexOf('<Default Extension="png" ContentType="image/png"/>') !== -1 && __dx.types.indexOf('<Default Extension="jpeg" ContentType="image/jpeg"/>') !== -1
+expect __dx.ids.length === 5 && __dx.ids.filter(function(v, i, a){ return a.indexOf(v) === i; }).length === 5
+# in the order the bodies have them, at the comment's and the reply's indent
+expect (function(){ var k = __dx.key, at = function(s, f){ return k.indexOf(s, f || 0); }, r = at('DXREPLY'); var o = [at('DXBEFORE'), at('IMG:media/image1.png'), at('DXBETWEEN'), at('IMG:media/image2.jpeg'), at('DXAFTER'), r, at('IMG:media/image3.jpeg'), at('DXREPLYAFTER'), at('IMG:media/image1.png', r)]; return o.every(function(v, i){ return v >= 0 && (i === 0 || v > o[i - 1]); }) && __dx.seq[o[1]].ind === 360 && __dx.seq[o[6]].ind === 720 && __dx.seq[o[8]].ind === 720; })()
+# sized like the PDF: the small PNG at its own pixels at 96 dpi, the portrait
+# JPEG kept portrait, the reply's large JPEG at 60% of the reply column, 4:3
+expect (function(){ var s = __dx.seq.filter(function(x){ return x.img; }); return s[0].cx === 120 * 9525 && s[0].cy === 80 * 9525 && s[1].cx === 200 * 9525 && s[1].cy === 300 * 9525 && s[2].cx === Math.round(9360 * 635 * 0.6) && Math.abs(s[2].cx / s[2].cy - 4 / 3) < 0.001; })()
+# the conflict card prints its picture, not "(empty)"
+expect __dx.key.indexOf('(empty)') === -1 && __dx.key.indexOf('IMG:media/image4.png') > __dx.key.indexOf('DXREPLYAFTER')
+# the picture nobody has: an italic note where it was
+expect (function(){ var i = __dx.key.indexOf('DXGONE'); return i > 0 && __dx.key[i + 1] === '[image unavailable]' && __dx.seq[i + 1].i && __dx.key[i + 2] === 'DXGONEAFTER'; })()
+
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__dxMd = await window.__blobs[window.__blobs.length - 1].text(); return window.__dxMd.slice(window.__dxMd.indexOf('## Comments')); })()
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md-table"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__dxMdTable = await window.__blobs[window.__blobs.length - 1].text(); return true; })()
+# Markdown, both shapes: "[image]" where each picture was, nothing "(empty)"
+expect [__dxMd, __dxMdTable].every(function(md){ var t = md.slice(md.indexOf('## Comments')); return t.indexOf('DXBEFORE  \n[image]  \nDXBETWEEN  \n[image]  \nDXAFTER') !== -1 && t.indexOf('DXREPLY  \n> [image]  \n> DXREPLYAFTER') !== -1 && /\*\*Cy\*\*[^\n]*:  \[image\]\n/.test(t) && /Dee[^\n]*\n\n\[image\]\n/.test(t) && t.indexOf('DXGONE  \n[image]  \nDXGONEAFTER') !== -1 && t.indexOf('(empty)') === -1; })
+
+eval (function(){ window.__nBlobs = window.__blobs.length; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-csv"]
+wait window.__blobs.length > window.__nBlobs
+eval (async function(){ window.__dxCsv = await window.__blobs[window.__blobs.length - 1].text(); return window.__dxCsv.slice(window.__dxCsv.indexOf('Comments')); })()
+# CSV: the Comment column, in reading order; the picture-only reply and the
+# conflict card read "[image]"
+expect __dxCsv.indexOf('"DXBEFORE\n[image]\nDXBETWEEN\n[image]\nDXAFTER"') !== -1 && __dxCsv.indexOf('"DXREPLY\n[image]\nDXREPLYAFTER"') !== -1 && __dxCsv.indexOf('"DXGONE\n[image]\nDXGONEAFTER"') !== -1
+expect __dxCsv.split('\r\n').filter(function(l){ return /,\[image\]$/.test(l); }).length === 2 && /↳ Cy,[^\r\n]*,\[image\]\r\n/.test(__dxCsv) && /,Dee,[^\r\n]*,\[image\]\r\n/.test(__dxCsv)
+
+# .txt — written only back to a foreign .txt (its import home): open one,
+# carry this document's comments into it, Save to file, read what was written
+eval (function(){ window.__dxComments = JSON.parse(JSON.stringify(F.state().comments)); window.__txtBody = null; window.__txtH = { name: 'dx.txt', createWritable: async function(){ return { write: async function(b){ window.__txtBody = b; }, close: async function(){} }; }, getFile: async function(){ return new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }); } }; return F.openFile(new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }), window.__txtH); })()
+wait window.__hostedTest.home().kind === 'import' && window.__hostedTest.home().name === 'dx.txt'
+eval (function(){ var rid = F.state().rows[0].id; F.state().comments = __dxComments.map(function(c){ c.rowId = rid; return c; }); return F.state().comments.length; })()
+jsclick #btn-file
+jsclick #menu-save-back
+wait window.__txtBody !== null
+eval (async function(){ var b = window.__txtBody; window.__dxTxt = typeof b === 'string' ? b : await new Blob([b]).text(); return window.__dxTxt.slice(window.__dxTxt.indexOf('COMMENTS')); })()
+expect __dxTxt.indexOf('  DXBEFORE\n  [image]\n  DXBETWEEN\n  [image]\n  DXAFTER') !== -1 && /> Bob, [^\n]*: DXREPLY\n    \[image\]\n    DXREPLYAFTER/.test(__dxTxt) && /> Cy, [^\n]*: \[image\]\n/.test(__dxTxt) && /Dee[^\n]*\n  \[image\]\n/.test(__dxTxt) && __dxTxt.indexOf('  DXGONE\n  [image]\n  DXGONEAFTER') !== -1 && __dxTxt.indexOf('(empty)') === -1
+
 quit

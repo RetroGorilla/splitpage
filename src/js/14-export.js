@@ -31,7 +31,7 @@ import {
 import { htmlToMarkdown, inertBody } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
-import { commentEntries, nowIso } from "./10-comments.js";
+import { commentBodyText, commentEntries, nowIso } from "./10-comments.js";
 import {
   clearDirty,
   noteSaveStatus,
@@ -679,7 +679,8 @@ function appendMarkdownTail(lines) {
     lines.push("");
   }
 
-  var comments = commentEntries();
+  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -693,11 +694,11 @@ function appendMarkdownTail(lines) {
         lines.push("> " + c.quoted.split(/\r\n|\r|\n/).join("  \n> "));
         lines.push("");
       }
-      lines.push((c.body || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
+      lines.push((commentBodyText(c) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
       c.replies.forEach(function (rp) {
         lines.push("");
         lines.push("> ↳ **" + rp.author + "**" + (rp.when ? " · " + rp.when : "") + ":  " +
-                   (rp.body || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
+                   (commentBodyText(rp) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
       });
       lines.push("");
       lines.push("---");
