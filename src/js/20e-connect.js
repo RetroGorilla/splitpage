@@ -12,7 +12,8 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
-import { deliverFile, toggleFileMenu, updateFileChip } from "./18-local-files.js";
+import { deliverFile, updateFileChip } from "./18-local-files.js";
+import { setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 
 /* ================= connecting to a server =================
@@ -82,9 +83,9 @@ function bookmarkById(id) {
 export function updateConnectMenu() {
   var item = document.getElementById("menu-servers");
   if (!item) return;
-  if (!conn.serverUrl) { item.textContent = "Servers…"; return; }
+  if (!conn.serverUrl) { setMenuItemLabel(item, "Servers…"); return; }
   var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
-  item.textContent = "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")";
+  setMenuItemLabel(item, "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")");
 }
 
 export function shortHost(url) {

@@ -1112,6 +1112,407 @@
   .import-scan-hint { grid-column: 2; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
   .modal-footer-actions { display: flex; gap: 8px; }
 
+  /* ---------- the command menu (issue #147) ----------
+     A search box centred over the script with a scrim behind it: 640px
+     wide, a 60px input row, the matches grouped under it with their
+     shortcut chips. Above the side panels, the writer and the modals'
+     layer (it never opens over a modal, so it never has to sit above one). */
+  .cmdk-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 170;
+    background: rgba(20, 18, 14, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 12vh 16px 16px;
+    opacity: 1;
+    transition: opacity var(--dur-enter) var(--ease-enter);
+  }
+  @starting-style {
+    .cmdk-backdrop:not([hidden]) { opacity: 0; }
+    .cmdk-backdrop:not([hidden]) .cmdk-panel { transform: translateY(-6px) scale(0.99); }
+  }
+  .cmdk-panel {
+    width: 640px;
+    max-width: 100%;
+    max-height: min(560px, 76vh);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 2px 6px rgba(30, 25, 15, 0.08), 0 28px 60px -18px rgba(30, 25, 15, 0.45);
+    overflow: hidden;
+    font-family: var(--font-body);
+    transition: transform var(--dur-enter) var(--ease-enter);
+  }
+  .cmdk-input-row {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 60px;
+    padding: 0 16px 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cmdk-search-icon {
+    flex: none;
+    width: 19px;
+    height: 19px;
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #cmdk-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 17px;
+    color: var(--text);
+  }
+  #cmdk-input::placeholder { color: var(--text-faint); }
+  .cmdk-esc, .cmdk-foot kbd {
+    flex: none;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    line-height: 17px;
+    padding: 1px 6px;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+  .cmdk-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding: 6px;
+  }
+  .cmdk-group {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 10px 12px 4px;
+  }
+  .cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
+    padding: 6px 12px;
+    border-radius: 9px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .cmdk-item.is-active { background: color-mix(in srgb, var(--visual) 12%, var(--surface)); }
+  .cmdk-item[aria-disabled="true"] { cursor: default; }
+  .cmdk-item[aria-disabled="true"] .cmdk-label,
+  .cmdk-item[aria-disabled="true"] .cmdk-icon { color: var(--text-faint); }
+  .cmdk-item[aria-disabled="true"].is-active { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+  .cmdk-icon {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cmdk-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .cmdk-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmdk-label mark { background: none; color: inherit; font-weight: 700; }
+  .cmdk-why { font-size: 12px; color: var(--text-dim); line-height: 1.3; margin-top: 1px; }
+  .cmdk-state { font-size: 12px; color: var(--text-dim); }
+  .cmdk-keys { flex: none; display: inline-flex; gap: 3px; }
+  .cmdk-keys kbd {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 5px;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    line-height: 17px;
+    text-align: center;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+  .cmdk-empty { padding: 26px 16px; text-align: center; font-size: 14px; color: var(--text-dim); }
+  .cmdk-foot {
+    flex: none;
+    display: flex;
+    gap: 16px;
+    padding: 9px 16px;
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 55%, var(--surface));
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .cmdk-foot kbd { margin-right: 3px; padding: 0 5px; }
+  @media (max-width: 760px) {
+    .cmdk-backdrop { padding: 10px; }
+    .cmdk-panel { max-height: calc(100vh - 20px); }
+    #cmdk-input { font-size: 16px; }
+    .cmdk-item { min-height: 44px; }
+  }
+  @media (max-width: 760px) and (hover: none) {
+    .cmdk-keys, .cmdk-esc, .cmdk-foot { display: none; }
+  }
+
+  /* ---------- the Export dialog (issue #146) ----------
+     Formats on the left as radio cards in two groups, what the chosen one
+     will make on the right: a small page, one line of what is in it, the
+     options that format has, and the file name. */
+  .modal-panel.export-panel {
+    max-width: 940px;
+    height: min(720px, calc(100vh - 48px));
+    max-height: none;
+    border-radius: 18px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .export-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 12px 26px;
+  }
+  .export-head h2 { font-family: var(--font-body); font-size: 19px; font-weight: 700; margin: 0; color: var(--text); }
+  .export-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .export-formats {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6px 22px 20px 26px;
+  }
+  .export-group-head {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin: 14px 0 8px;
+  }
+  .export-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .export-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 2px 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+                background var(--dur-fast) var(--ease-standard);
+  }
+  .export-card:hover { border-color: var(--text-faint); }
+  /* the radio is the card: it stays in the tab order and the arrow keys,
+     and the card draws its state */
+  .export-card input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+  }
+  .export-card:has(input:checked) {
+    border-color: var(--visual);
+    background: color-mix(in srgb, var(--visual) 7%, var(--surface));
+    box-shadow: 0 0 0 1px var(--visual);
+  }
+  .export-card:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .export-card-icon {
+    grid-row: span 2;
+    width: 30px;
+    height: 30px;
+    padding: 6px;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .export-card:has(input:checked) .export-card-icon { color: var(--visual); }
+  .export-card-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .export-card-ext {
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    padding-top: 1px;
+  }
+  .export-card-purpose { grid-column: 2 / 4; font-size: 12.5px; line-height: 1.35; color: var(--text-dim); }
+  .export-card.is-unavailable .export-card-name,
+  .export-card.is-unavailable .export-card-icon { color: var(--text-faint); }
+
+  .export-side {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px 26px 20px 22px;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .export-preview-tray { display: flex; justify-content: center; padding: 4px 0 2px; }
+  /* A sketch of the first page, not a render of it: the real title and the
+     first scenes' words in the layout the format gives them. */
+  .export-preview {
+    width: 200px;
+    height: 258px;
+    overflow: hidden;
+    padding: 16px 14px;
+    background: #FFFFFF;
+    color: #221F1A;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(30, 25, 15, 0.08), 0 10px 24px -14px rgba(30, 25, 15, 0.35);
+    font-family: var(--font-body);
+    font-size: 6.5px;
+    line-height: 1.4;
+    position: relative;
+  }
+  .export-preview::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 40px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), #FFFFFF);
+  }
+  .pv-title { font-size: 10px; font-weight: 700; margin-bottom: 6px; }
+  .pv-sub { font-size: 7px; font-weight: 600; margin: 6px 0 3px; }
+  .pv-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .pv-table th { text-align: left; font-weight: 700; border-bottom: 0.5px solid #9B9484; padding: 1px 2px; }
+  .pv-table td { vertical-align: top; border-bottom: 0.5px solid #DCD5C4; padding: 2px; overflow: hidden; word-wrap: break-word; }
+  .pv-table .pv-no { width: 14px; color: #6E6858; }
+  .pv-img { display: block; height: 16px; margin-bottom: 1px; background: #E3F1EC; border-radius: 1px; }
+  .pv-mono { font-family: var(--font-display); font-size: 5.8px; white-space: pre-wrap; word-break: break-word; }
+  .pv-para { margin: 0 0 5px; }
+  .pv-grid td { font-family: var(--font-display); font-size: 5.5px; border: 0.5px solid #DCD5C4; }
+  .pv-app { margin: -16px -14px; }
+  .pv-app-bar { height: 14px; background: #F6F4EC; border-bottom: 0.5px solid #DCD5C4; padding: 3px 8px; font-weight: 700; font-size: 6px; }
+  .pv-app .pv-table { margin: 8px; width: calc(100% - 16px); }
+  .pv-app td:first-child { background: #F0F6F4; }
+  .pv-app td:last-child { background: #FBF3EE; }
+  .pv-check { display: flex; gap: 4px; align-items: baseline; margin-bottom: 3px; }
+  .pv-check::before { content: ""; flex: none; width: 5px; height: 5px; border: 0.6px solid #221F1A; border-radius: 1px; }
+
+  .export-summary { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); text-align: center; }
+  .export-options { display: flex; flex-direction: column; gap: 10px; }
+  .export-option-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 5px; }
+  .export-seg {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    padding: 2px;
+    gap: 2px;
+  }
+  .export-seg label {
+    flex: 1 1 0;
+    position: relative;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 6px 8px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .export-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+  .export-seg label:has(input:checked) { background: var(--visual-soft); color: var(--text); font-weight: 600; }
+  .export-seg label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .export-field { display: flex; flex-direction: column; gap: 4px; }
+  .export-field-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .export-filename {
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    overflow-wrap: anywhere;
+  }
+  .export-why {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--danger);
+    background: var(--danger-soft);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .export-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 22px 16px 26px;
+  }
+  .export-note { flex: 1 1 auto; margin: 0; font-size: 13px; color: var(--text-dim); line-height: 1.4; }
+  .export-note-link {
+    font: inherit;
+    color: var(--visual);
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .export-note-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+  @media (max-width: 760px) {
+    .modal-panel.export-panel { display: block; height: auto; max-height: calc(100vh - 20px); overflow-y: auto; padding: 0; }
+    .export-body { display: block; border-bottom: none; }
+    .export-formats { overflow: visible; padding: 4px 16px 16px; }
+    .export-cards { grid-template-columns: minmax(0, 1fr); }
+    .export-side { overflow: visible; border-left: none; border-top: 1px solid var(--border); padding: 16px; }
+    .export-head { padding: 14px 12px 10px 16px; }
+    /* the choice and Export stay in reach while the cards scroll under */
+    .export-foot {
+      position: sticky;
+      bottom: 0;
+      flex-wrap: wrap;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .export-foot .modal-footer-actions { margin-left: auto; }
+  }
+
   /* ---------- production tags ---------- */
   /* A tag is a light tint of its category with a 2px rule under it — no
      icon in the text (#143: tried in the mockups and rejected; an icon in a
@@ -1783,162 +2184,268 @@
   }
 
   /* ---------- file menu + open-document chip ---------- */
-  /* The File menu is a LEFT DRAWER, not a dropdown: it carries forty-odd
-     entries and a dropdown that long runs off the bottom of the window on
-     any normal laptop. Full height, its own scroll, a backdrop to click
-     away — the markup and the ids are unchanged, only where it sits. */
+  /* The File menu is a DROPDOWN under its button (issue #145): a file card,
+     four plain headed groups and a footer, short enough to hang off the
+     button now that the thirteen export items are one Export… entry. It
+     scrolls inside itself when the window is shorter than it is —
+     18b-file-menu.js sets its max-height from where the button sits. At
+     phone width it becomes a sheet from the bottom of the screen with a
+     scrim behind it (the 760px block further down). */
+  .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
   .menu-wrap { position: relative; }
   .menu-backdrop {
     position: fixed;
     inset: 0;
     z-index: 159;
     background: rgba(0, 0, 0, 0.32);
-    opacity: 1;
-    transition: opacity var(--dur-enter) var(--ease-enter),
-                display var(--dur-enter) allow-discrete;
-  }
-  .menu-backdrop[hidden] {
     display: none;
-    opacity: 0;
-    transition: opacity var(--dur-exit) var(--ease-exit),
-                display var(--dur-exit) allow-discrete;
-  }
-  @starting-style {
-    .menu-backdrop:not([hidden]) { opacity: 0; }
   }
   .menu {
-    position: fixed;
-    top: 0;
+    --menu-hover: color-mix(in srgb, var(--text) 6%, var(--surface));
+    position: absolute;
+    top: calc(100% + 6px);
     left: 0;
-    bottom: 0;
     z-index: 160;
-    width: 288px;
-    max-width: 86vw;
+    width: 372px;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 120px);
     display: flex;
     flex-direction: column;
     background: var(--surface);
-    border: none;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 2px 4px rgba(30, 25, 15, 0.06), 0 18px 40px -12px rgba(30, 25, 15, 0.28);
     padding: 0;
-    /* Was `animation: menu-slide-in`, which could only ever play one way:
-       the drawer slid in over 140ms and then vanished in a single frame on
-       close, because [hidden] is display:none and a keyframe animation has
-       nothing to say about an element that is gone. A transition with
-       `display ... allow-discrete` (the same mechanism the side panels use)
-       holds the drawer on screen for its exit, so it leaves the way it
-       arrived. */
-    transform: translateX(0);
-    transition: transform var(--dur-enter) var(--ease-enter),
-                display var(--dur-enter) allow-discrete;
-  }
-  .menu[hidden] {
-    display: none;
-    transform: translateX(-100%);
-    transition: transform var(--dur-exit) var(--ease-exit),
-                display var(--dur-exit) allow-discrete;
+    overflow: hidden;
+    font-family: var(--font-body);
+    text-transform: none;
+    letter-spacing: normal;
+    opacity: 1;
+    transform: translateY(0);
+    transform-origin: top left;
+    transition: opacity var(--dur-enter) var(--ease-enter),
+                transform var(--dur-enter) var(--ease-enter);
   }
   @starting-style {
-    .menu:not([hidden]) { transform: translateX(-100%); }
+    .menu:not([hidden]) { opacity: 0; transform: translateY(-4px); }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .menu, .menu-backdrop { transition: none; }
-    .menu[hidden] { transform: translateX(0); }
+  .menu:focus { outline: none; }
+  :root[data-theme="dark"] .menu { box-shadow: 0 2px 4px rgba(0,0,0,0.4), 0 18px 40px -12px rgba(0,0,0,0.8); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .menu { box-shadow: 0 2px 4px rgba(0,0,0,0.4), 0 18px 40px -12px rgba(0,0,0,0.8); }
   }
-  /* stays put while the entries scroll under it */
-  .menu-head {
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 12px 10px 10px 14px;
-    border-bottom: 1px solid var(--border);
-  }
+  /* the sheet's own title bar — a dropdown needs none */
+  .menu-head { display: none; }
   .menu-title {
-    font-family: var(--font-display);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-faint);
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
   }
   .menu-close {
     flex: none;
     font-size: 15px;
     line-height: 1;
-    color: var(--text-faint);
+    color: var(--text-dim);
     background: none;
     border: none;
-    border-radius: 6px;
-    padding: 5px 8px;
+    border-radius: 8px;
+    padding: 8px 10px;
     cursor: pointer;
   }
-  .menu-close:hover { background: var(--surface-2); color: var(--text); }
+  .menu-close:hover { background: var(--menu-hover); color: var(--text); }
   .menu-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .menu-body {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 5px;
-    padding-bottom: calc(5px + env(safe-area-inset-bottom));
+    scrollbar-width: thin;
+    padding: 6px;
   }
-  .menu-body button {
-    display: block;
+
+  /* One item: icon, label (with an optional second line saying why it
+     cannot work right now), then shortcut chips or a switch at the end. */
+  .mi {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     width: 100%;
+    min-height: 36px;
+    padding: 6px 10px;
     text-align: left;
     font-family: var(--font-body);
-    font-size: 13.5px;
+    font-size: 14px;
+    line-height: 1.25;
     color: var(--text);
     background: none;
     border: none;
-    border-radius: 6px;
-    padding: 8px 10px;
+    border-radius: 8px;
     cursor: pointer;
   }
-  .menu-body button:hover:not(:disabled) { background: var(--surface-2); }
-  .menu-body button:disabled { color: var(--text-faint); cursor: default; }
-  .menu-body button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .menu-sep { height: 1px; background: var(--border); margin: 5px 2px; }
-  .menu-label {
-    font-family: var(--font-display);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-faint);
-    padding: 7px 10px 4px;
-  }
-  /* ---- collapsible File-menu sections (issue #51) ---- */
-  .menu-section-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: none;
-    border-radius: 6px;
-    padding: 2px 10px;
-    cursor: pointer;
-  }
-  /* same look as .menu-label, just inside a clickable heading row */
-  .menu-section-toggle .menu-label { padding: 5px 0; }
-  .menu-section-toggle:hover { background: var(--surface-2); }
-  .menu-section-toggle:hover .menu-label { color: var(--text); }
-  .menu-section-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .menu-section-chevron {
+  .mi:hover:not(:disabled), .mi:focus-visible { background: var(--menu-hover); }
+  .mi:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .mi:disabled { cursor: default; }
+  .mi:disabled .mi-label, .mi:disabled .mi-icon { color: var(--text-faint); }
+  .mi-icon {
     flex: none;
-    font-size: 9px;
+    width: 17px;
+    height: 17px;
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .mi-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .mi-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mi-why {
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--text-dim);
+    white-space: normal;
+    margin-top: 1px;
+  }
+  .mi-keys { flex: none; display: inline-flex; gap: 3px; margin-left: 8px; }
+  .mi-keys kbd, .cmdk-keys kbd, .export-foot kbd {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 5px;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    line-height: 17px;
+    text-align: center;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+  }
+  .mi-chevron {
+    flex: none;
+    width: 15px;
+    height: 15px;
     color: var(--text-faint);
-    transition: transform 120ms ease;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--dur-fast) var(--ease-standard);
   }
-  .menu-section-toggle[aria-expanded="false"] .menu-section-chevron { transform: rotate(-90deg); }
-  @media (prefers-reduced-motion: reduce) {
-    .menu-section-chevron { transition: none; }
+  .mi-parent[aria-expanded="true"] { background: var(--menu-hover); }
+  .mi-parent[aria-expanded="true"] .mi-chevron { transform: rotate(90deg); }
+  /* A submenu opens in place, under the item that owns it — a flyout
+     would be clipped by the list's own scroll and has nowhere to go on a
+     phone. Indented to the parent's label, with a rule down its left. */
+  .menu-sub {
+    margin: 2px 0 4px 18px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border);
   }
-  .menu-section-body { padding-top: 2px; }
+  .menu-sub-empty { font-size: 13px; color: var(--text-dim); padding: 8px 10px; }
+
+  /* On/off items are switches, not "…: on" text. aria-checked is the state. */
+  .mi-switch-track {
+    flex: none;
+    position: relative;
+    width: 30px;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--border);
+    transition: background var(--dur-fast) var(--ease-standard);
+  }
+  .mi-switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform var(--dur-fast) var(--ease-standard);
+  }
+  .mi-switch[aria-checked="true"] .mi-switch-track { background: var(--visual); }
+  .mi-switch[aria-checked="true"] .mi-switch-thumb { transform: translateX(12px); }
+  .mi-switch .mi-keys { margin-left: 0; }
+
+  .menu-group { padding: 4px 0 2px; }
+  .menu-group + .menu-group, .fm-card + .menu-group, .mi-command + .menu-group { border-top: 1px solid var(--border); margin-top: 4px; }
+  .menu-group-head {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 8px 10px 4px;
+  }
+
+  /* The file card: which file, whether it is all there yet, and the two
+     things every save touches. */
+  .fm-card {
+    background: var(--bg);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 6px;
+  }
+  .fm-card-file { display: flex; align-items: center; gap: 10px; padding: 8px 10px 6px; }
+  .fm-card-icon {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+    border-radius: 7px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .fm-card-text { min-width: 0; }
+  .fm-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fm-card-meta { font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }
+  .fm-card-meta .is-unsaved { color: var(--accent); }
+  .fm-card .mi:hover:not(:disabled), .fm-card .mi:focus-visible { background: color-mix(in srgb, var(--text) 6%, var(--bg)); }
+  /* Save to file is only an item while there is a foreign file to write
+     back to; disabled the rest of the time, and then it is not offered. */
+  .fm-card .mi[data-file-action="save-back"]:disabled { display: none; }
+
+  .menu-foot {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 6px;
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 55%, var(--surface));
+  }
+  .mi.mi-foot {
+    width: auto;
+    min-height: 30px;
+    gap: 6px;
+    padding: 4px 9px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .mi-foot .mi-icon { width: 15px; height: 15px; }
+  .mi-foot:hover:not(:disabled) { color: var(--text); }
+  .mi-foot .mi-keys { margin-left: 2px; }
+  /* A phone's keyboard has no Ctrl, so a chip there only takes room. */
+  @media (max-width: 760px) and (hover: none) {
+    .mi-keys { display: none; }
+  }
 
   .file-chip {
     display: inline-flex;
@@ -2894,12 +3401,35 @@
     .prompter-bar .div-sep { display: none; }
     .prompter-bar button { padding: 10px 12px; }
 
-    /* the drawer takes most of a phone screen, but never all of it — a strip
-       of backdrop stays tappable so it can be dismissed without hunting for
-       the × */
-    .menu-wrap .menu { width: 300px; max-width: calc(100vw - 48px); }
-    .menu-body button { padding: 11px 12px; }
-    .menu-section-toggle { padding: 6px 12px; }
+    /* The File menu becomes a sheet from the bottom of the screen: the whole
+       width, a scrim behind it to tap away, its own close button, and
+       finger-sized items. */
+    .menu-wrap .menu {
+      position: fixed;
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      max-width: none;
+      max-height: 86vh;
+      border-radius: 14px 14px 0 0;
+      border-bottom: none;
+      padding-bottom: env(safe-area-inset-bottom);
+      transform-origin: bottom center;
+    }
+    @starting-style {
+      .menu-wrap .menu:not([hidden]) { opacity: 0; transform: translateY(24px); }
+    }
+    .menu-backdrop { display: block; }
+    .menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 8px 4px 16px;
+    }
+    .mi { min-height: 44px; }
+    .mi.mi-foot { min-height: 38px; }
 
     .add-row-btn { width: 100%; padding: 13px 0; }
 

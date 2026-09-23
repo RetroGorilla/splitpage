@@ -36,9 +36,10 @@ expect !document.getElementById('file-menu').hidden
 expect document.getElementById('menu-share-link') !== null
 expect document.getElementById('menu-share-link').hidden == false
 expect document.getElementById('menu-share-link').disabled == false
-# it lives in the headed, collapsible Server section (issue #51), next to
+# it lives in the File menu's Share group (issue #145), next to
 # Servers…, the other tool that is never hidden either
-expect document.getElementById('menu-share-link').closest('#menu-section-server') !== null
+expect document.getElementById('menu-share-link').closest('.menu-group').getAttribute('data-menu-group') == share
+expect document.getElementById('menu-share-link').querySelector('.mi-why').textContent == No server connected — set one up first
 expect document.getElementById('menu-share-link').title.indexOf('same document') !== -1
 jsclick #file-menu-close
 

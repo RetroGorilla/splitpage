@@ -32,7 +32,7 @@ jsclick #btn-file
 wait !document.getElementById('file-menu').hidden
 expect document.getElementById('menu-present-chromium').hidden === false
 expect document.getElementById('menu-present-chromium').textContent == Use Chromium Speech Recognition
-expect document.getElementById('menu-present-chromium').closest('.menu-section-body').id == menu-section-document
+expect document.getElementById('menu-present-chromium').closest('.menu-group').getAttribute('data-menu-group') == document
 expect document.getElementById('menu-present-chromium').previousElementSibling.id == menu-present-browser
 jsclick #menu-present-chromium
 wait window.fakeC._chromiumCalls === 1
