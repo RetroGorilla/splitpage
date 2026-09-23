@@ -22,7 +22,7 @@ import {
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
+import { brollPropsRenamed, runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
@@ -1456,6 +1456,9 @@ export function renameTag(cat, oldName, newName) {
       }
       var oi = S.state.productionTags.indexOf(oldEntry);
       if (oi !== -1) S.state.productionTags.splice(oi, 1);
+      /* a b-roll shot that needed the folded-away entry needs the one it
+         folded into (#149) */
+      brollPropsRenamed(oldEntry.id, cat === "prop" ? oldEntry.name : "", collision.id, collision.name);
     }
   }
   /* an orphaned item has no live spans to rename, but its registry entry
@@ -1463,7 +1466,10 @@ export function renameTag(cat, oldName, newName) {
      one the next time productionEntries() reads it */
   var spanCount = eachTaggedField(cat, oldName, clean);
   var entry = registryEntry(cat, oldName);
-  if (entry) entry.name = clean;
+  if (entry) {
+    entry.name = clean;
+    brollPropsRenamed(entry.id, cat === "prop" ? oldName : "", entry.id, clean);
+  }
   return spanCount > 0 || !!entry;
 }
 

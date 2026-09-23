@@ -68,7 +68,7 @@ expect document.querySelector('#rows .row:nth-child(5) .visual-cell .cell-editab
 # script, not the list: 2 anchored plus this one
 jsclick #btn-broll
 sleep 600
-expect document.querySelectorAll('#broll-list .tag-entity').length == 3
+expect document.querySelectorAll('#broll-list .broll-row').length == 3
 expect document.querySelectorAll('#broll-list .broll-loose-badge').length == 1
 
 # --- the no is remembered too, and is changeable --------------------------

@@ -28,6 +28,7 @@ import {
   tagCategory
 } from "./07-production-tags.js";
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
+import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
 import { openFindBar } from "./09-find-replace.js";
 import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
 import {
@@ -66,7 +67,7 @@ import {
   narrationRows
 } from "./15-docx.js";
 import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildPackingListPdf, buildPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
+import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
 import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
@@ -193,6 +194,8 @@ function updateHeaderFileChip() {
 export function exportFileName(kind, baseName, opts) {
   opts = opts || {};
   if (kind === "breakdown") return baseName + " - breakdown.csv";
+  if (kind === "b-roll csv") return baseName + " - b-roll shot list.csv";
+  if (kind === "b-roll pdf") return baseName + " - b-roll shot list.pdf";
   if (kind === "narration-docx") return baseName + " - narration.docx";
   if (kind === "narration-txt") return baseName + " - narration.txt";
   if (kind.indexOf("packing-") === 0) {
@@ -222,6 +225,9 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "docx") return { data: buildDocx(), filename: filename };
   if (kind === "csv") return { data: buildCsv(), filename: filename };
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
+  /* the b-roll shot list's own two (#150, 08d-broll-panel.js) */
+  if (kind === "b-roll csv") return { data: buildBrollCsv(), filename: filename };
+  if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint()), filename: filename };
   if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: filename };
   if (kind === "txt") return { data: htmlToPlainScript(), filename: filename };
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };

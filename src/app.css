@@ -3817,89 +3817,466 @@
   .broll-key:hover { color: var(--text); border-bottom-color: var(--broll); }
   .broll-badge { background: var(--broll); }
 
-  /* An item whose line still has no marker of its own (brollEntryFrom's
-     `markerless`). Shaped like the orphan badge it sits beside, but in the
-     b-roll colour rather than the danger one: nothing is broken yet. */
-  .broll-loose-badge {
-    font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em;
-    color: var(--broll); background: color-mix(in srgb, var(--broll) 14%, transparent); border-radius: 999px;
-    padding: 2px 8px; white-space: nowrap; flex: none;
+  /* ---------- the b-roll panel (08d-broll-panel.js, #148) ----------
+
+     One line per shot. The only colours of its own are the three states a
+     shot can be in — shot (the app's teal, --ok), to shoot (a quiet
+     paper tone) and flagged (--danger) — and the categories' own colours,
+     read from TAG_CATEGORIES and set inline as --loc and --prop. Sentence
+     case in the body face throughout; the display face only for scene
+     numbers and counts. */
+  .broll-panel, .broll-page {
+    --broll-todo: #E4DDCD;
+    --broll-flag-tint: #FFF7F5;
+    --broll-dark: #221F1A;         /* the bulk bar and the Print button */
+    --broll-dark-text: #FFFFFF;
+    --broll-on-ok: #FFFFFF;        /* a tick, or a word, on the teal */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .broll-panel, :root:not([data-theme="light"]) .broll-page {
+      --broll-todo: #3B3427;
+      --broll-flag-tint: color-mix(in srgb, var(--danger) 9%, var(--surface));
+      --broll-dark: #0B0A08;
+      --broll-dark-text: #F3EFE5;
+      --broll-on-ok: #16130F;
+    }
+  }
+  :root[data-theme="dark"] .broll-panel, :root[data-theme="dark"] .broll-page {
+    --broll-todo: #3B3427;
+    --broll-flag-tint: color-mix(in srgb, var(--danger) 9%, var(--surface));
+    --broll-dark: #0B0A08;
+    --broll-dark-text: #F3EFE5;
+    --broll-on-ok: #16130F;
   }
 
-  .broll-quickadd input[type="text"] {
+  .broll-ico { flex: none; display: block; }
+  .broll-muted { color: var(--text-faint); }
+  .broll-panel .comments-panel-head { gap: 8px; }
+  .broll-panel .comments-panel-head h2 { margin-right: auto; }
+
+  /* the summary: a sentence, then a bar with one segment per shot */
+  .broll-controls { flex: none; border-bottom: 1px solid var(--border); padding: 12px 18px 10px; }
+  .broll-controls:empty { display: none; }
+  .broll-summary-line { font-size: 13px; color: var(--text-dim); line-height: 1.3; }
+  .broll-summary-n { font-size: 20px; font-weight: 700; color: var(--text); margin-right: 2px; font-variant-numeric: tabular-nums; }
+  .broll-bar { display: flex; gap: 2px; height: 6px; margin-top: 8px; }
+  .broll-bar-seg { flex: 1 1 0; min-width: 1px; border-radius: 2px; background: var(--broll-todo); }
+  .broll-bar-seg.is-shot { background: var(--ok); }
+  .broll-bar-seg.is-flagged { background: var(--danger); }
+
+  /* filter chips, and the Group menu beside them */
+  .broll-controls-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .broll-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-right: auto; }
+  .broll-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 500; line-height: 1;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface); color: var(--text-dim);
+    padding: 6px 10px; cursor: pointer;
+  }
+  .broll-chip:hover { color: var(--text); border-color: var(--text-faint); }
+  .broll-chip-n { font-family: var(--font-display); font-size: 11px; color: var(--text-faint); }
+  .broll-chip.is-active { background: var(--text); border-color: var(--text); color: var(--surface); }
+  .broll-chip.is-active .broll-chip-n { color: inherit; opacity: 0.7; }
+  .broll-group-wrap { position: relative; }
+  .broll-group-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--font-body); font-size: 12.5px; color: var(--text-dim);
+    background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+    padding: 5px 6px; cursor: pointer;
+  }
+  .broll-group-btn:hover, .broll-group-btn[aria-expanded="true"] { color: var(--text); background: var(--surface-2); }
+  .broll-menu {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 5;
+    min-width: 160px; padding: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+  }
+  .broll-menu-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+    font-family: var(--font-body); font-size: 13px; text-align: left; color: var(--text);
+    background: none; border: 0; border-radius: 4px; padding: 7px 9px; cursor: pointer;
+  }
+  .broll-menu-item:hover, .broll-menu-item:focus-visible { background: var(--surface-2); }
+  .broll-menu-item.danger { color: var(--danger); }
+
+  /* the list: groups, their heads, one line per shot */
+  .broll-list { padding: 4px 0 12px; }
+  .broll-empty { text-align: center; color: var(--text-faint); font-size: 13px; padding: 30px 24px; line-height: 1.5; }
+  .broll-group-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 14px 18px 4px; font-size: 12px; color: var(--text-faint);
+  }
+  .broll-group-scene { flex: none; font-family: var(--font-display); font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .broll-group-title {
+    display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0;
+    font-size: 12.5px; font-weight: 600; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .broll-group-sub {
+    flex: 1 1 auto; min-width: 0; font-style: italic; color: var(--text-faint);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .broll-group-count { margin-left: auto; flex: none; font-family: var(--font-display); font-size: 11.5px; color: var(--text-faint); }
+  .broll-group-count.is-done { color: var(--ok); font-weight: 600; }
+  .broll-loc-pin { display: inline-flex; color: var(--loc, var(--text-faint)); }
+
+  .broll-row {
+    position: relative; display: flex; align-items: center; gap: 2px;
+    min-height: 52px; padding: 0 12px 0 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .broll-row:hover { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+  .broll-row.is-open { background: var(--surface-2); border-bottom-color: transparent; }
+  .broll-row.is-selected { background: color-mix(in srgb, var(--ok) 9%, var(--surface)); box-shadow: inset 3px 0 0 var(--ok); }
+  /* a 20px box in a 40px target */
+  .broll-check {
+    flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+    background: none; border: 0; padding: 0; margin: 0; cursor: pointer; border-radius: 50%;
+  }
+  .broll-check-box {
+    width: 20px; height: 20px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px solid var(--text-faint); background: var(--surface); color: transparent;
+    transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+  }
+  .broll-check:hover .broll-check-box { border-color: var(--ok); }
+  .broll-check[aria-checked="true"] .broll-check-box { background: var(--ok); border-color: var(--ok); color: var(--broll-on-ok); }
+  .broll-row-main {
+    flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-self: stretch; justify-content: center;
+    background: none; border: 0; padding: 7px 4px; margin: 0; text-align: left; cursor: pointer; color: inherit; font: inherit;
+  }
+  .broll-row-name {
+    font-size: 14px; font-weight: 500; line-height: 18px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .broll-row.is-shot .broll-row-name { color: var(--text-dim); }
+  .broll-row-meta {
+    display: flex; align-items: center; gap: 4px 10px; min-width: 0;
+    font-size: 12px; line-height: 16px; color: var(--text-faint);
+    overflow: hidden; white-space: nowrap;
+  }
+  .broll-row-meta:empty { display: none; }
+  .broll-meta-item { display: inline-flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+  .broll-meta-props { flex: 1 1 auto; display: block; overflow: hidden; text-overflow: ellipsis; }
+  .broll-meta-props .broll-prop-ico { display: inline-block; vertical-align: -2px; margin-right: 4px; color: var(--prop, var(--text-faint)); }
+  .broll-avatar {
+    flex: none; width: 16px; height: 16px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0; color: var(--text-dim);
+    background: var(--surface-2); border: 1px solid var(--border);
+  }
+  .broll-row-icons { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 4px; }
+  .broll-state-ico { display: inline-flex; color: var(--text-faint); }
+  .broll-flag-ico { color: var(--danger); }
+  .broll-loose-badge, .broll-orphan-ico { color: var(--text-faint); opacity: 0.85; }
+  /* over the right end of the line on hover or focus, never taking room */
+  .broll-row-go {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    display: none; align-items: center; gap: 4px;
+    font-family: var(--font-body); font-size: 12px; color: var(--text-dim);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 9px; cursor: pointer; box-shadow: 0 1px 2px rgba(30,25,15,0.08);
+  }
+  .broll-row-go:hover { color: var(--text); border-color: var(--text-faint); }
+  .broll-row:hover .broll-row-go, .broll-row:focus-within .broll-row-go { display: inline-flex; }
+  @media (hover: none) { .broll-row:hover .broll-row-go { display: none; } }
+
+  /* the open shot: label–value rows */
+  .broll-card {
+    margin: 0 12px 10px; padding: 6px 14px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .broll-row.is-open + .broll-card { margin-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+  .broll-card-head { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  .broll-card-desc { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; white-space: pre-wrap; }
+  .broll-more-wrap { position: relative; margin-left: auto; }
+  .broll-field { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: start; gap: 10px; padding: 6px 0; }
+  .broll-label { font-size: 13px; color: var(--text-dim); line-height: 30px; }
+  .broll-value { min-width: 0; display: flex; flex-direction: column; gap: 6px; justify-content: center; min-height: 30px; font-size: 13px; }
+  .broll-field-status .broll-value, .broll-value.is-inline { flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
+  .broll-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .broll-seg button {
+    font-family: var(--font-body); font-size: 12.5px; color: var(--text-dim);
+    background: var(--surface); border: 0; border-right: 1px solid var(--border);
+    padding: 6px 12px; cursor: pointer;
+  }
+  .broll-seg button:last-child { border-right: 0; }
+  .broll-seg button:hover { color: var(--text); }
+  .broll-seg button.is-active { background: var(--text); color: var(--surface); }
+  .broll-seg button.is-active[data-status="shot"] { background: var(--ok); color: var(--broll-on-ok); }
+  .broll-flag-btn, .broll-picker, .broll-small-btn, .broll-link, .broll-icon-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-body); font-size: 12.5px; color: var(--text-dim);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 10px; cursor: pointer;
+  }
+  .broll-flag-btn:hover, .broll-picker:hover, .broll-small-btn:hover, .broll-icon-btn:hover { color: var(--text); border-color: var(--text-faint); }
+  .broll-flag-btn.is-active {
+    color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+    background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  }
+  .broll-link { border-color: transparent; background: none; padding: 5px 6px; color: var(--visual); }
+  .broll-link:hover { text-decoration: underline; }
+  .broll-icon-btn { padding: 5px; border-color: transparent; background: none; }
+  .broll-scene-n { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--text); }
+  .broll-picker { align-self: flex-start; max-width: 100%; min-width: 150px; justify-content: flex-start; color: var(--text); }
+  .broll-picker .broll-picker-caret { margin-left: auto; color: var(--text-faint); }
+  .broll-owner-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .broll-owner-select, .broll-loc-input, .broll-person-input, .broll-rename-input {
+    font-family: var(--font-body); font-size: 13px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 8px; min-width: 0;
+  }
+  .broll-owner-select { max-width: 100%; cursor: pointer; }
+  .broll-loc-input { width: 100%; }
+  .broll-rename-input { flex: 1; }
+  .broll-owner-select:focus, .broll-loc-input:focus, .broll-person-input:focus, .broll-rename-input:focus,
+  .broll-ref-input:focus, .broll-notes-input:focus { outline: none; border-color: var(--visual); }
+  .broll-cuts { display: flex; align-items: flex-start; gap: 6px; }
+  .broll-quote {
+    flex: 1; min-width: 0; margin: 0; padding: 2px 0 2px 10px;
+    border-left: 3px solid var(--audio); font-style: italic; color: var(--text-dim);
+    font-size: 13px; line-height: 1.5; white-space: pre-wrap;
+  }
+  .broll-ref-input, .broll-notes-input {
+    width: 100%; font-family: var(--font-body); font-size: 13px; line-height: 1.5;
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text); resize: vertical;
+  }
+
+  /* A prop a shot needs (#149), in the Prop category's colour (--prop) with
+     its breakdown status beside it. */
+  .broll-props { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .broll-prop-chip {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    font-size: 12px; line-height: 1.3; color: var(--text);
+    border: 1px solid color-mix(in srgb, var(--prop, var(--text-dim)) 40%, var(--border));
+    background: color-mix(in srgb, var(--prop, var(--text-dim)) 9%, var(--surface));
+    border-radius: 999px; padding: 3px 4px 3px 9px;
+  }
+  .broll-prop-chip.is-untracked { border-style: dashed; color: var(--text-dim); }
+  .broll-prop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .broll-prop-st {
+    flex: none; font-size: 11px; color: var(--st);
+    background: color-mix(in srgb, var(--st) 12%, var(--surface));
+    border-radius: 999px; padding: 1px 7px;
+  }
+  .broll-prop-chip:not(:has(.broll-prop-remove)) { padding-right: 5px; }
+  .broll-prop-chip:not(:has(.broll-prop-st, .broll-prop-remove)) { padding-right: 9px; }
+  .broll-prop-remove {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border: 0; border-radius: 50%; padding: 0;
+    background: transparent; color: var(--text-faint); cursor: pointer;
+  }
+  .broll-prop-remove:hover, .broll-prop-remove:focus-visible { color: var(--text); background: var(--surface-2); }
+  .broll-prop-input {
+    width: 130px; font-family: var(--font-body); font-size: 12.5px;
+    padding: 4px 10px; border: 1px dashed var(--border); border-radius: 999px;
+    background: transparent; color: var(--text);
+  }
+  .broll-prop-input:focus { outline: none; border-style: solid; border-color: var(--prop, var(--visual)); }
+
+  /* the bulk bar: dark, pinned under the list while anything is selected */
+  .broll-bulk {
+    flex: none; padding: 8px 10px 8px 14px; background: var(--broll-dark); color: var(--broll-dark-text);
+    border-top: 1px solid var(--border);
+  }
+  .broll-bulk-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .broll-bulk-select { max-width: 104px; min-width: 0; }
+  .broll-bulk-row + .broll-bulk-row { margin-top: 6px; }
+  .broll-bulk-n { font-size: 13px; font-weight: 600; margin-right: 4px; }
+  .broll-bulk-btn, .broll-bulk-select {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-body); font-size: 12.5px; color: inherit;
+    background: color-mix(in srgb, var(--broll-dark-text) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--broll-dark-text) 22%, transparent);
+    border-radius: var(--radius-sm); padding: 5px 8px; cursor: pointer;
+  }
+  .broll-bulk-select option { color: var(--text); background: var(--surface); }
+  .broll-bulk-btn:hover, .broll-bulk-select:hover { background: color-mix(in srgb, var(--broll-dark-text) 22%, transparent); }
+  .broll-bulk-clear {
+    margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%; border: 0; background: none; color: inherit; cursor: pointer;
+  }
+  .broll-bulk-clear:hover { background: color-mix(in srgb, var(--broll-dark-text) 16%, transparent); }
+  #broll-bulk-input {
+    flex: 1; min-width: 120px; font-family: var(--font-body); font-size: 13px;
+    padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid transparent;
+    background: var(--surface); color: var(--text);
+  }
+
+  /* adding a shot: at the foot of the panel */
+  .broll-add.gear-quickadd { border-bottom: 0; border-top: 1px solid var(--border); padding: 10px 18px 12px; }
+  .broll-add-row { display: flex; gap: 6px; }
+  .broll-add input[type="text"] {
     flex: 1; min-width: 0;
     font-family: var(--font-body); font-size: 13.5px;
-    padding: 8px 9px;
+    padding: 7px 9px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--bg); color: var(--text);
   }
-  .broll-quickadd input[type="text"]:focus { outline: none; border-color: var(--broll); }
+  .broll-add input[type="text"]:focus { outline: none; border-color: var(--visual); }
   #broll-add-save {
-    flex: none;
-    font-family: var(--font-display); font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.03em;
-    border: 1px solid var(--broll); background: color-mix(in srgb, var(--broll) 12%, transparent);
-    color: var(--broll);
-    border-radius: 5px; padding: 7px 12px; cursor: pointer;
+    flex: none; font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius-sm); padding: 6px 14px; cursor: pointer;
   }
-  #broll-add-save:hover { background: var(--broll); color: var(--accent-contrast); }
+  #broll-add-save:hover { border-color: var(--text-faint); }
+  .broll-add-hint { margin-top: 6px; font-size: 12px; color: var(--text-faint); }
+  .broll-add-hint code { font-family: var(--font-display); font-size: 11.5px; }
 
-  .broll-entity { --dot: var(--broll); }
-  .broll-entity.is-reshoot { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); }
-  .broll-desc {
-    font-size: 12.5px; color: var(--text-dim); line-height: 1.5;
-    margin-top: 6px; white-space: pre-wrap;
+  @media (max-width: 760px) {
+    .broll-add input[type="text"], .broll-loc-input, .broll-person-input, .broll-rename-input,
+    .broll-notes-input, .broll-ref-input, .broll-prop-input, #broll-bulk-input, .broll-owner-select { font-size: 16px; }
+    .broll-field { grid-template-columns: 1fr; gap: 2px; }
+    .broll-label { line-height: 1.4; }
   }
-  /* The line of audio this shot cuts against — seeded from the scene, then
-     the item's own. Set off the way a quotation is, because that is what it
-     is: somebody else's words, carried along for reference. */
-  .broll-ref {
-    font-size: 12.5px; font-style: italic; color: var(--text-dim); line-height: 1.45;
-    border-left: 2px solid var(--audio); padding-left: 9px; margin-top: 7px;
-    white-space: pre-wrap;
+
+  /* the panel head's "Open as a full page" */
+  .broll-head-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: var(--radius-sm);
+    background: none; border: 0; color: var(--text-faint); cursor: pointer;
   }
-  .broll-ref.is-empty { font-style: normal; color: var(--text-faint); border-left-color: var(--border); }
-  .broll-flagline {
-    display: flex; align-items: flex-start; gap: 7px;
-    font-size: 12.5px; color: var(--warn); line-height: 1.45; margin-top: 7px;
-  }
-  .broll-flag-mark {
-    flex: none;
-    font-family: var(--font-display); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
-    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
-    border-radius: 999px; padding: 2px 7px;
-  }
-  .broll-flag-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 4px; }
-  .broll-flag-hint { font-size: 11px; color: var(--text-faint); line-height: 1.4; }
-  .broll-flag-btn {
-    flex: none;
-    font-family: var(--font-display); font-size: 11px;
-    border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
-    border-radius: 5px; padding: 5px 9px; cursor: pointer;
-  }
-  .broll-flag-btn:hover { color: var(--text); }
-  .broll-flag-btn.is-active {
-    border-color: var(--warn); color: var(--warn);
-    background: color-mix(in srgb, var(--warn) 12%, transparent);
-  }
-  .broll-loc-chip {
-    font-family: var(--font-display); font-size: 10.5px;
-    color: var(--visual); border: 1px solid color-mix(in srgb, var(--visual) 40%, transparent);
-    border-radius: 999px; padding: 2px 8px;
-  }
-  .broll-location-input, .broll-rename-input {
-    width: 100%; font-family: var(--font-body); font-size: 13px;
-    padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  .broll-head-btn:hover, .broll-head-btn:focus-visible { color: var(--text); background: var(--surface-2); }
+
+  /* ---------- the full-page shot list (08d-broll-panel.js, #150) ----------
+
+     Over the whole screen at the writer's level (145): above the side
+     panels, which it closes, and below the modals and toasts. A sheet in a
+     white card, a row per shot 46px tall. */
+  .broll-page {
+    position: fixed; inset: 0; z-index: 145;
     background: var(--bg); color: var(--text);
+    overflow-y: auto; overflow-x: hidden;
   }
-  .broll-rename-input { margin-top: 7px; }
-  .broll-location-input:focus, .broll-rename-input:focus { outline: none; border-color: var(--broll); }
-  .broll-ref-input, .broll-notes-input {
-    width: 100%; font-family: var(--font-body); font-size: 13px; line-height: 1.5;
-    padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--bg); color: var(--text); resize: vertical;
+  body.broll-page-open { overflow: hidden; }
+  .broll-page-inner { max-width: 1240px; margin: 0 auto; padding: 18px 32px 48px; }
+  .broll-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-body); font-size: 13.5px; font-weight: 500; color: var(--text-dim);
+    background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+    padding: 6px 10px 6px 6px; margin-left: -6px; cursor: pointer;
   }
-  .broll-ref-input:focus, .broll-notes-input:focus { outline: none; border-color: var(--broll); }
+  .broll-back:hover, .broll-back:focus-visible { color: var(--text); background: var(--surface-2); }
+  .broll-page-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 14px 24px; margin-top: 14px; }
+  .broll-page-titles h1 { font-family: var(--font-body); font-size: 26px; font-weight: 700; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+  .broll-page-summary { margin-top: 4px; font-size: 14px; color: var(--text-dim); }
+  .broll-page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .broll-page-group-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); margin-right: 4px; }
+  .broll-page-group-pick select, .broll-page-btn {
+    font-family: var(--font-body); font-size: 13px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 7px 12px; cursor: pointer;
+  }
+  .broll-page-group-pick select { padding: 6px 8px; }
+  .broll-page-btn:hover { border-color: var(--text-faint); }
+  /* filled with the text colour, like a selected chip: dark on paper, and
+     the lightest thing on the screen in dark mode */
+  .broll-page-btn.is-dark { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 500; }
+  .broll-page-btn.is-dark:hover { opacity: 0.9; }
+  .broll-page-filters { margin: 18px 0 14px; }
+  .broll-page-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .broll-page-card .broll-empty { padding: 48px 24px; }
+  .broll-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .broll-page-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  .broll-page-w-check { width: 52px; }
+  .broll-page-w-shot { width: 25%; }
+  .broll-page-w-scene { width: 72px; }
+  .broll-page-w-props { width: 15%; }
+  .broll-page-w-cuts { width: 21%; }
+  .broll-page-w-owner { width: 150px; }
+  .broll-page-w-note { width: 20%; }
+  .broll-page-table thead th {
+    text-align: left; font-size: 12px; font-weight: 600; color: var(--text-dim);
+    padding: 11px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .broll-page-group th {
+    text-align: left; font-weight: 600; padding: 16px 12px 8px 16px;
+    border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+  }
+  .broll-page-group-in { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .broll-page-group-name { font-size: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .broll-page-group-scene { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--text); }
+  .broll-page-group-count { margin-left: 6px; font-family: var(--font-display); font-size: 12px; font-weight: 400; color: var(--text-faint); }
+  .broll-page-group-count.is-done { color: var(--ok); font-weight: 600; }
+  .broll-page-group .broll-avatar { width: 20px; height: 20px; font-size: 9.5px; }
+  .broll-page-row td {
+    height: 46px; padding: 0 10px; vertical-align: middle;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .broll-page-row:last-child td { border-bottom: 0; }
+  .broll-page-row:hover td { background: color-mix(in srgb, var(--surface-2) 40%, transparent); }
+  .broll-page-row.is-flagged td { background: var(--broll-flag-tint); }
+  .broll-page-row td.broll-page-c-check { padding: 0 2px 0 6px; }
+  .broll-page-c-shot { font-size: 14px; font-weight: 500; }
+  .broll-page-c-shot .broll-row-name { display: inline; }
+  .broll-page-row.is-shot .broll-row-name { color: var(--text-dim); }
+  .broll-page-c-shot .broll-state-ico { display: inline-flex; vertical-align: -2px; margin-left: 6px; }
+  .broll-page-scene {
+    font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--visual);
+    background: none; border: 0; padding: 4px 6px; margin-left: -6px; border-radius: 4px; cursor: pointer;
+  }
+  .broll-page-scene:hover { text-decoration: underline; background: var(--visual-soft); }
+  .broll-page-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .broll-page-cuts { font-style: italic; color: var(--text-dim); }
+  .broll-page-c-props { color: var(--text-dim); }
+  .broll-page-owner {
+    width: 100%; font-family: var(--font-body); font-size: 13px; color: var(--text);
+    background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 5px 4px; cursor: pointer;
+  }
+  .broll-page-owner:hover, .broll-page-owner:focus { border-color: var(--border); background: var(--bg); outline: none; }
+  .broll-page-c-note { position: relative; }
+  .broll-page-c-note .broll-flag-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: inline-flex; color: var(--danger); }
+  .broll-page-row.is-flagged .broll-page-note { padding-left: 24px; }
+  .broll-page-note {
+    width: 100%; font-family: var(--font-body); font-size: 13px; color: var(--text); line-height: 1.3;
+    background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 6px 6px; resize: none;
+    text-overflow: ellipsis;
+  }
+  .broll-page-note::placeholder { color: transparent; }
+  .broll-page-row:hover .broll-page-note::placeholder, .broll-page-note:focus::placeholder { color: var(--text-faint); }
+  .broll-page-note:hover { border-color: var(--border); }
+  .broll-page-note:focus { outline: none; border-color: var(--visual); background: var(--bg); }
+
+  /* A phone: the table becomes a stack of rows, each field on its own line
+     with its name beside it; nothing wider than the screen. */
+  @media (max-width: 760px) {
+    .broll-page-inner { padding: 10px 16px 40px; }
+    .broll-page-titles h1 { font-size: 22px; }
+    .broll-page-actions { width: 100%; }
+    .broll-page-group-pick select, .broll-page-note, .broll-page-owner { font-size: 16px; }
+    .broll-page-table, .broll-page-table tbody, .broll-page-table tr, .broll-page-table td, .broll-page-table th { display: block; width: 100%; }
+    .broll-page-table colgroup, .broll-page-table thead { display: none; }
+    .broll-page-group th { padding: 14px 14px 8px; }
+    .broll-page-row {
+      display: grid !important; grid-template-columns: 44px minmax(0, 1fr); column-gap: 4px;
+      padding: 8px 12px 10px 4px; border-bottom: 1px solid var(--border);
+    }
+    .broll-page-row td { height: auto; padding: 2px 0; border: 0; white-space: normal; grid-column: 2; }
+    .broll-page-row td.broll-page-c-check { grid-column: 1; grid-row: 1 / span 6; padding: 0; }
+    .broll-page-row td:not(.broll-page-c-check):not(.broll-page-c-shot) {
+      display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; font-size: 13px;
+    }
+    .broll-page-row td:not(.broll-page-c-check):not(.broll-page-c-shot)::before {
+      content: attr(data-label); color: var(--text-faint); font-size: 12.5px;
+    }
+    .broll-page-c-shot { padding-top: 9px !important; }
+    .broll-page-row td, .broll-page-row:hover td, .broll-page-row.is-flagged td { background: none; }
+    .broll-page-row.is-flagged { background: var(--broll-flag-tint); }
+    .broll-page-scene { justify-self: start; }
+    .broll-page-c-note .broll-flag-ico { position: static; transform: none; grid-column: 2; grid-row: 1; }
+    .broll-page-row.is-flagged .broll-page-note { padding-left: 6px; }
+    .broll-page-row.is-flagged .broll-page-c-note { grid-template-columns: 92px 20px minmax(0, 1fr) !important; }
+    .broll-page-row.is-flagged .broll-page-c-note .broll-flag-ico { grid-column: 2; }
+    .broll-page-row.is-flagged .broll-page-c-note .broll-page-note { grid-column: 3; }
+    .broll-page-note::placeholder { color: var(--text-faint); }
+  }
 
   /* ---------- condensing header (BACKLOG: collapse into a toolbar on scroll)
      The page itself scrolls (there is no inner scroll container), so the
