@@ -118,6 +118,9 @@ var MERGE_OUTCOME_TEXT = {
   theirs: "The file's version is taken",
   mine: "Your version is kept",
   conflict: "Changed on both sides — the file's version goes live, yours is kept as a comment",
+  /* shown for a "conflict" (and styled as one) that is only a link or a
+     tag both sides set differently: everything else in the cell merged */
+  conflictMarks: "Linked or tagged differently on both sides — the file's link or tag goes live with the rest combined, yours is kept as a comment",
   merged: "Changed on both sides — both sets of changes are combined",
   status: "Whichever got further wins",
   both: "Both sides are kept"
@@ -239,9 +242,10 @@ function mergeDiffModel(base, mine, theirs) {
          cells can read identically while differing in a tag or a comment
          anchor, and two different strings can be the same cell. A scene
          only one side has is decided by mergeRowFate() and shown whole. */
-      var outcome = m && t
-        ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx).outcome
-        : mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null);
+      var decided = m && t
+        ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx)
+        : { outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null) };
+      var outcome = decided.outcome;
       if (outcome === "same" || outcome === null) return;
       var mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
       /* A difference in formatting, a tag or a comment anchor alone has
@@ -252,6 +256,7 @@ function mergeDiffModel(base, mine, theirs) {
       entries.push({
         label: f === "audioText" ? "Audio" : "Visual",
         outcome: outcome,
+        text: decided.marks ? MERGE_OUTCOME_TEXT.conflictMarks : undefined,
         mineHtml: pair.mine,
         theirsHtml: pair.theirs
       });
@@ -369,7 +374,7 @@ function mergeDiffImageHtml(row) {
 function mergeEntryHtml(e) {
   return '<div class="merge-entry" data-outcome="' + escapeHtml(e.outcome || "both") + '">' +
     '<div class="merge-entry-head">' + escapeHtml(e.label) +
-      '<span class="merge-entry-outcome">' + escapeHtml(MERGE_OUTCOME_TEXT[e.outcome] || "") + "</span></div>" +
+      '<span class="merge-entry-outcome">' + escapeHtml(e.text || MERGE_OUTCOME_TEXT[e.outcome] || "") + "</span></div>" +
     '<div class="merge-sides">' +
       '<div class="merge-side"><div class="merge-side-head">Open here</div>' +
         '<div class="merge-side-body">' + e.mineHtml + "</div></div>" +

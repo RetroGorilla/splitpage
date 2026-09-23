@@ -29,6 +29,7 @@ import {
   setBaseState
 } from "./03-sync.js";
 import { htmlToMarkdown, inertBody } from "./04-richtext.js";
+import { cellOf, toMarkdown } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentBodyText, commentEntries, nowIso } from "./10-comments.js";
@@ -764,14 +765,12 @@ export function markdownExportImages() {
    the embedded 2 MB a phone photo becomes made this file unreadable as
    text and enormous for what it is.
 
-   The cells stay on htmlToMarkdown() rather than the document model's
-   toMarkdown() (#85 step 3 moved the other exports). Markdown's emphasis
-   follows the nesting of the elements, and the model writes one fixed
-   nesting (bold outside italic) where the stored cell keeps whatever the
-   editor made: italic "x " then bold-italic "y" is "*x **y***" from the
-   stored <em>x <strong>y</strong></em>, but "*x ****y***" — whose first
-   "*" no longer closes — from the model. Until the model picks its
-   nesting per stretch, the HTML here gives the better file. */
+   The cells are the document model's toMarkdown() (#85 step 3), which lays
+   its delimiters out for CommonMark rather than copying the elements'
+   nesting the way htmlToMarkdown() does ("**a****b**", "**a **b" and the
+   like came out of that). This file is only ever read, by people and
+   Markdown renderers, so writing it better changes nothing anyone relies
+   on — unlike the table of a saved .md project (mdSceneCellSource below). */
 export function toMarkdownDoc() {
   var lines = [];
   lines.push("# " + (S.state.title || "Untitled Script"));
@@ -791,12 +790,12 @@ export function toMarkdownDoc() {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
       lines.push("");
     }
-    var vmd = htmlToMarkdown(row.visualText);
+    var vmd = toMarkdown(cellOf(row.visualText));
     if (vmd) {
       lines.push("*Visual —* " + vmd);
       lines.push("");
     }
-    var amd = htmlToMarkdown(row.audioText);
+    var amd = toMarkdown(cellOf(row.audioText));
     if (amd) {
       lines.push(amd);
       lines.push("");
@@ -829,9 +828,30 @@ function mdRichTableCell(md) {
    Newlines are folded to <br> here because that is part of what the cell
    *says*; the pipe-escaping mdRichTableCell adds is a property of the
    table *row* and is undone again by parseMarkdownTable, so it is
-   deliberately not part of this comparison basis. */
-export function mdSceneCellSource(row, i) {
-  var text = htmlToMarkdown(row.visualText);
+   deliberately not part of this comparison basis.
+
+   The cells are htmlToMarkdown() of the stored HTML, NOT the document
+   model's toMarkdown() (#85 step 3), which the plain export above uses and
+   which writes better Markdown. This comparison is a contract with every
+   copy of the app that will ever open the file, older ones included (a
+   second machine, a desktop install not yet updated, the 3.0 pre-release):
+   each decides whether a cell was edited outside Splitpage by comparing
+   the table with ITS OWN rendering of the data block's HTML, and every
+   copy in circulation renders with htmlToMarkdown(). A cell written any
+   other way ("**ab**" for the "**a****b**" the stored HTML gives, a space
+   moved outside a delimiter) reads there as edited by hand and is rebuilt
+   from the table: its comment anchors and b-roll key gone, its tags
+   re-found by name at best. The same writer is what keeps an unchanged
+   document's bytes the same from one save to the next, which a file kept
+   under version control needs, and what makes a file an older copy wrote
+   open here unchanged.
+
+   Reading already takes the model's form as unchanged too (`model` true,
+   reconcileMarkdownRows, 20d-formats.js): once no copy from before that is
+   in use, the writer can switch without any copy misreading a file. */
+export function mdSceneCellSource(row, i, model) {
+  var toMd = model ? function (html) { return toMarkdown(cellOf(html)); } : htmlToMarkdown;
+  var text = toMd(row.visualText);
   var visual = text;
   /* The picture inline, as it always was (#82 D2) — a legacy URI exactly as
      stored, a ref'd one as its canonical data: URI. */
@@ -846,7 +866,7 @@ export function mdSceneCellSource(row, i) {
        picture's base64 was spelled (an older client's file) */
     visualText: String(text).replace(/\r\n|\r|\n/g, "<br>").trim(),
     image: image ? rowImageKey(row) : null,
-    audio: String(htmlToMarkdown(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
+    audio: String(toMd(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
   };
 }
 

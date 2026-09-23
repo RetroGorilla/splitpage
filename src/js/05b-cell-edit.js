@@ -28,13 +28,23 @@ import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
    browser may have made while typing ends in one, a zero-width caret spot
    is nothing, a b-roll key is one character whatever its letters.
 
-   A cell still holding a picture or a video card (pasted before design D7
-   kept them out of script text) is not edited through the model — the
-   model has no place for them — and editCell answers null for it, so the
-   caller keeps its old way for that cell. */
+   A cell still holding a picture or a video card is not edited through the
+   model — the model has no place for them — and editCell answers null for
+   it. No cell does any more: design D7 keeps them out of pasted script
+   text, and every document is read through migrateRows, which moves any
+   already in a cell into a comment. The check stays as the guard it is,
+   and nothing edits such a cell any other way. (A comment or reply draft,
+   which may hold them, is 05d-draft-edit.js.) */
 
-function isBrollKey(node) {
-  return node.nodeType === 1 && node.classList && node.classList.contains("broll-key");
+/* One position whatever is inside it: the b-roll key, and — in a comment
+   or reply draft (05d-draft-edit.js), where the model sees each as one
+   placeholder character — a picture or a video card. */
+var ATOM_SELECTOR = ".broll-key, .video-embed-card";
+
+function isAtomEl(node) {
+  if (node.nodeType !== 1) return false;
+  if (node.tagName === "IMG") return true;
+  return !!(node.classList && (node.classList.contains("broll-key") || node.classList.contains("video-embed-card")));
 }
 
 function isBlankPara(node) {
@@ -43,7 +53,7 @@ function isBlankPara(node) {
 
 /* Calls visit(kind, node, len) for every piece of the cell in reading
    order: "text" (a text node; len = its characters without zero-width
-   spaces), "atom" (a b-roll key, len 1), "br" (len 1), "end" (the line
+   spaces), "atom" (a b-roll key, a picture or a video card, len 1), "br" (len 1), "end" (the line
    break a <div>/<p> ends in, len 1; node = the element). Stops when visit
    returns true. */
 function walkCell(cellEl, visit) {
@@ -54,8 +64,7 @@ function walkCell(cellEl, visit) {
         if (visit("text", c, c.nodeValue.replace(/\u200B/g, "").length)) stop = true;
       } else if (c.nodeType === 1) {
         if (c.tagName === "BR") { if (visit("br", c, 1)) stop = true; continue; }
-        if (c.tagName === "IMG") continue;
-        if (isBrollKey(c)) { if (visit("atom", c, 1)) stop = true; continue; }
+        if (isAtomEl(c)) { if (visit("atom", c, 1)) stop = true; continue; }
         if (c.tagName === "DIV" || c.tagName === "P") {
           if (!isBlankPara(c)) walk(c);
           if (!stop && visit("end", c, 1)) stop = true;
@@ -109,7 +118,7 @@ function posAfterNode(cellEl, c) {
 export function domToPos(cellEl, node, offset) {
   if (node !== cellEl && !cellEl.contains(node)) return null;
   var key = node.nodeType === 3 ? node.parentNode : node;
-  var atom = key && key.closest ? key.closest(".broll-key") : null;
+  var atom = key && key.closest ? key.closest(ATOM_SELECTOR) : null;
   if (atom && cellEl.contains(atom)) {
     /* inside a b-roll key's letters: before it at its very start, after it
        anywhere else */

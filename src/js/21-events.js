@@ -45,6 +45,17 @@ import {
 } from "./05-render.js";
 import { copyFromCell, pasteIntoCell } from "./05c-clipboard.js";
 import {
+  appendDraftMedia,
+  draftRedo,
+  draftUndo,
+  isDraftBox,
+  noteDraftBeforeInput,
+  noteDraftComposition,
+  noteDraftFocus,
+  noteDraftInput,
+  pasteIntoDraft
+} from "./05d-draft-edit.js";
+import {
   addRow,
   addRowAndFocus,
   armDelete,
@@ -644,6 +655,84 @@ function onUndoKey(e) {
   return true;
 }
 
+/* Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y in a comment's composer or
+   a reply box: that box's own history (05d-draft-edit.js), never the
+   browser's. Its edits are made through the model, which the browser's own
+   undo stack never saw, so it must never run there — the key is taken even
+   when there is nothing left to undo. Not during an IME composition, whose
+   keys are the IME's. */
+function onDraftUndoKey(e, box) {
+  if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return false;
+  var redoing = isRedoKey(e);
+  if (!redoing && !(isUndoKey(e) && !e.shiftKey)) return false;
+  if (!isDraftBox(box)) return false;
+  e.preventDefault();
+  if (redoing) draftRedo(box); else draftUndo(box);
+  return true;
+}
+
+/* beforeinput in a comment's composer or a reply box: the browser's own
+   undo and redo (a menu's Undo) answered from the box's history; a
+   character typed where B/I/U is pending goes in through the model, as in
+   a script cell (onFormatBeforeInput); anything else is typing the browser
+   is about to do, which the box's history notes (05d-draft-edit.js). */
+function onDraftBeforeInput(e) {
+  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (!box || !isDraftBox(box)) return;
+  if (e.inputType === "historyUndo" || e.inputType === "historyRedo") {
+    e.preventDefault();
+    if (e.inputType === "historyRedo") draftRedo(box); else draftUndo(box);
+    return;
+  }
+  if (e.inputType === "insertText" && !e.isComposing && e.data && typePendingMarks(box, e.data)) {
+    e.preventDefault();
+    return;
+  }
+  noteDraftBeforeInput(box, e);
+}
+
+function onDraftFocusIn(e) {
+  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (box) noteDraftFocus(box);
+}
+
+function onDraftComposition(e) {
+  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (box) noteDraftComposition(box, e.type === "compositionstart");
+}
+
+/* A drop into a comment's composer or a reply box from anywhere else goes
+   in the way a paste does (pasteIntoDraft): through the sanitiser, as one
+   edit of the draft. Words dragged within the same box are the browser's
+   own move, recorded as typing. */
+var draftDragSource = null;
+function onDraftDragStart(e) {
+  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
+  draftDragSource = box && isDraftBox(box) ? box : null;
+}
+function onDraftDragEnd() {
+  draftDragSource = null;
+}
+function onDraftDrop(e) {
+  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (!box || !isDraftBox(box) || draftDragSource === box) return;
+  var dt = e.dataTransfer;
+  var html = dt ? dt.getData("text/html") : "";
+  var text = dt ? dt.getData("text/plain") : "";
+  if (!html && !text) return;
+  e.preventDefault();
+  box.focus();
+  try {
+    var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (range && box.contains(range.startContainer)) {
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  } catch (err) {}
+  pasteIntoDraft(box, html, text);
+}
+
 function onUndoBeforeInput(e) {
   if (e.inputType !== "historyUndo" && e.inputType !== "historyRedo") return;
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
@@ -718,7 +807,9 @@ function onUndoRefused(reason, dir) {
 function onRootInput(e) {
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
-  if (!isScriptCell(cellEl)) return;
+  /* a comment's composer or a reply box: the browser typed, and the box's
+     own history notes it (05d-draft-edit.js) */
+  if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
   maybeAutoTagShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
   syncFieldFromDom(cellEl);
@@ -794,15 +885,10 @@ function onRootFocusOut(e) {
    the clipboard's HTML (else its text) read with fromHtml — a tag copied
    from another scene stays a live tag, anything foreign is sanitised away,
    a picture or a video card is dropped (design D7) — and put in place of
-   the selection as one undoable edit. A cell still holding a picture is
-   not edited through the model, and gets what it always got instead. */
+   the selection as one undoable edit. */
 function insertIntoScriptCell(cellEl, html, text) {
   var res = pasteIntoCell(cellEl, html, text);
-  if (!res.done) {
-    if (res.fallback.html) document.execCommand("insertHTML", false, res.fallback.html);
-    else if (res.fallback.text) document.execCommand("insertText", false, res.fallback.text);
-    return;
-  }
+  if (!res.done) return;
   if (res.media) showToast("Pictures and videos don't go in the script — add them to a comment, or as the scene's picture.");
   if (res.movedComments) {
     /* a cut comment's card follows its words to the new scene */
@@ -849,14 +935,9 @@ function onRootPaste(e) {
      once it has been through sanitizeHtml/walkSanitize — the same gate
      every other route into a body's markup goes through — so raw HTML
      pasted in from outside Splitpage (a foreign <script>, inline style,
-     etc.) never gets in. */
-  var html = cd.getData("text/html");
-  if (html) {
-    var clean = sanitizeHtml(html);
-    if (clean) { document.execCommand("insertHTML", false, clean); return; }
-  }
-  var text = cd.getData("text/plain");
-  document.execCommand("insertText", false, text);
+     etc.) never gets in. One edit of the draft (05d-draft-edit.js), which
+     the box's own Ctrl+Z takes back. */
+  pasteIntoDraft(cellEl, cd.getData("text/html"), cd.getData("text/plain"));
 }
 
 function onRootKeydown(e) {
@@ -881,7 +962,9 @@ function onRootKeydown(e) {
   /* Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y are the document's undo
      and redo (12a-undo.js), never the browser's own contenteditable
      history: every repaint destroyed that, and it only ever knew about the
-     one cell. onUndoKey handles it, the same way it does outside a cell. */
+     one cell. onUndoKey handles it, the same way it does outside a cell. A
+     comment's composer or a reply box has a history of its own. */
+  if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   if (onUndoKey(e)) return;
   /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
      The untagged-mention prompt only ever gets the key when nothing more
@@ -967,9 +1050,9 @@ function onRootKeydown(e) {
     addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
     return;
   }
-  /* Enter and Shift+Enter, and Ctrl+B/I/U: in a script cell, edits of its
-     model (05-render.js); in a comment or reply box, or a cell with a
-     picture in it, the browser's own commands, as before. */
+  /* Enter and Shift+Enter, and Ctrl+B/I/U: edits through the model
+     (05-render.js) — of the cell in a script cell, of the draft in a
+     comment or reply box. */
   if (e.key === "Enter") {
     e.preventDefault();
     syncFieldFromDom(insertLineBreak(cellEl));
@@ -978,13 +1061,7 @@ function onRootKeydown(e) {
   var fmtCmd = mod ? FORMAT_KEYS[String(e.key || "").toLowerCase()] : null;
   if (fmtCmd) {
     e.preventDefault();
-    var fmtCell = toggleCellFormat(cellEl, fmtCmd);
-    if (!fmtCell) {
-      document.execCommand(fmtCmd);
-      syncFieldFromDom(cellEl);
-      fmtCell = cellEl;
-    }
-    refreshFormatState(fmtCell);
+    refreshFormatState(toggleCellFormat(cellEl, fmtCmd) || cellEl);
   }
 }
 
@@ -1115,7 +1192,6 @@ function onRootDrop(e) {
       }
     } catch (err) {}
     if (isScriptCell(cellEl)) insertIntoScriptCell(cellEl, html, text);
-    else if (text) document.execCommand("insertText", false, text);
   }
 }
 
@@ -1646,6 +1722,14 @@ function init() {
     el.addEventListener("focusout", onRootFocusOut);
     el.addEventListener("paste", onRootPaste);
     el.addEventListener("keydown", onRootKeydown);
+    /* a draft's own undo history and its drops (05d-draft-edit.js) */
+    el.addEventListener("focusin", onDraftFocusIn);
+    el.addEventListener("beforeinput", onDraftBeforeInput);
+    el.addEventListener("compositionstart", onDraftComposition);
+    el.addEventListener("compositionend", onDraftComposition);
+    el.addEventListener("dragstart", onDraftDragStart);
+    el.addEventListener("dragend", onDraftDragEnd);
+    el.addEventListener("drop", onDraftDrop);
   });
 
   document.getElementById("btn-comments").addEventListener("click", function () {
@@ -1685,12 +1769,9 @@ function init() {
       var rec = internDataUrl(dataUrl);
       if (!rec) throw new Error("not a picture the registry takes");
       persist([rec.sha256]);
-      var cellEl = document.getElementById("comment-body-editable");
-      var holder = document.createElement("div");
-      holder.innerHTML = storedImageHtml(rec);
-      cellEl.appendChild(document.createElement("br"));
-      cellEl.appendChild(holder.firstChild);
-      cellEl.appendChild(document.createElement("br"));
+      /* on a line of its own at the end, as one edit of the draft that its
+         Ctrl+Z takes back (05d-draft-edit.js) */
+      appendDraftMedia(document.getElementById("comment-body-editable"), storedImageHtml(rec));
     }).catch(function () { showToast("Could not use that image.", "error"); });
   });
   window.addEventListener("keydown", function (e) {

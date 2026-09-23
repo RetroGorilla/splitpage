@@ -133,6 +133,12 @@ export function legacyMdToHtml(text) {
   out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
   out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
   out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
+  /* and the elements the document model's toMarkdown() writes where a
+     delimiter could not open or close where it stands (04c-doc-model.js):
+     the plain Markdown export, read back in through Import */
+  ["strong", "em", "s"].forEach(function (tag) {
+    out = out.replace(new RegExp("&lt;" + tag + "&gt;([\\s\\S]*?)&lt;\\/" + tag + "&gt;", "gi"), "<" + tag + ">$1</" + tag + ">");
+  });
   out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
     /* `url` was captured out of `out`, which escapeHtml() already ran over
