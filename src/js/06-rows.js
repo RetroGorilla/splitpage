@@ -12,8 +12,6 @@ import { placeCaretAtTextOffset, repointCommentsForRows } from "./19-writer.js";
 /* ================= row actions ================= */
 
 export function addRow(afterId) {
-  lastSplitUndo = null;
-  S.lastMoveUndo = null;
   var row = { id: makeId(), visualText: "", imageRef: null, audioText: "",
               status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
   if (afterId) {
@@ -65,12 +63,8 @@ export function splitRowFieldCore(cellEl) {
   if (!sel.rangeCount) return null;
   var range = sel.getRangeAt(0);
   if (!cellEl.contains(range.startContainer)) return null;
-  /* A new row is about to be spliced in, which can land right between the
-     two rows lastMoveUndo names — invalidate it here rather than trust
-     every caller to remember. */
-  S.lastMoveUndo = null;
   /* captured before any mutation below — the field's whole content as it
-     stood the instant the split was requested, for undoSplitCellField */
+     stood the instant the split was requested */
   var originalHtml = sanitizeHtml(cellEl.innerHTML);
   var rowId = S.state.rows[idx].id;
   if (!range.collapsed) range.deleteContents();
@@ -94,65 +88,12 @@ export function splitRowFieldCore(cellEl) {
   return { idx: idx, created: created, field: field, rowId: rowId, originalHtml: originalHtml };
 }
 
-/* One-level undo for splitCellField (Alt+Enter). The DOM rebuild in
-   render() tears down the contenteditable the browser's own undo history
-   lives on, so native Ctrl+Z has nothing left to act on after a split —
-   this is the app-level replacement, scoped tightly enough that it never
-   clobbers work done after the split it remembers:
-     - any other row-structural edit (add/delete/move/another split)
-       clears it, so a stale entry can never resurrect a row a later
-       action already accounted for;
-     - undoSplitCellField itself refuses unless both halves still hold
-       exactly what the split put there, so text typed into either cell
-       afterwards is never silently discarded. */
-var lastSplitUndo = null;
-
-/* Same discipline, for a single-step reorder (the gutter's own ↑/↓
-   buttons and Alt+Up/Alt+Down — see swapAdjacentRows/undoMoveRow below):
-   any other row-structural edit clears it, and it refuses once the two
-   rows it names are no longer sitting right next to each other, so a
-   stale entry never swaps a pair a later action already moved apart. */
-S.lastMoveUndo = null;
-
 export function splitCellField(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  lastSplitUndo = {
-    rowId: res.rowId,
-    field: res.field,
-    originalHtml: res.originalHtml,
-    createdId: res.created.id,
-    remainderHtml: S.state.rows[res.idx][res.field],
-    createdHtml: res.created[res.field]
-  };
   markDirty();
   render();
   focusRowField(res.created.id, res.field, 0);
-}
-
-/* Ctrl/Cmd+Z right after Alt+Enter: puts the field back together on the
-   original row and removes the row the split created. Returns true when it
-   actually undid something, so the caller knows to swallow the keystroke
-   rather than let a native undo fight it. */
-export function undoSplitCellField() {
-  var undo = lastSplitUndo;
-  if (!undo) return false;
-  lastSplitUndo = null;
-  var rowIdx = findRowIndex(undo.rowId);
-  var createdIdx = findRowIndex(undo.createdId);
-  if (rowIdx === -1 || createdIdx === -1) return false;
-  /* either half touched since the split (typed into, tagged, formatted) —
-     undoing now would throw that edit away, so decline instead */
-  if (S.state.rows[rowIdx][undo.field] !== undo.remainderHtml) return false;
-  if (S.state.rows[createdIdx][undo.field] !== undo.createdHtml) return false;
-  var removed = S.state.rows.splice(createdIdx, 1)[0];
-  S.state.rows[rowIdx][undo.field] = undo.originalHtml;
-  stampRow(S.state.rows[rowIdx]);
-  repointCommentsForRows([S.state.rows[rowIdx], removed]);
-  markDirty();
-  render();
-  focusRowField(undo.rowId, undo.field, 0);
-  return true;
 }
 
 /* Land the caret at a plain-text offset inside a specific field of a
@@ -279,8 +220,6 @@ export function updateDragScroll(clientX, clientY) {
 }
 
 export function moveRowTo(id, targetId, after) {
-  lastSplitUndo = null;
-  S.lastMoveUndo = null;
   var from = findRowIndex(id);
   var to = findRowIndex(targetId);
   if (from === -1 || to === -1 || from === to) return;
@@ -297,8 +236,6 @@ export function moveRowTo(id, targetId, after) {
 function deleteRow(id) {
   var idx = findRowIndex(id);
   if (idx === -1) return;
-  lastSplitUndo = null;
-  S.lastMoveUndo = null;
   S.state.rows.splice(idx, 1);
   markDirty();
   render();
@@ -307,24 +244,19 @@ function deleteRow(id) {
 /* The one place state.rows actually swaps two adjacent scenes for a
    single-step move — shared by the gutter's ↑/↓ buttons (moveRow, via
    click) and Alt+Up/Alt+Down (via onRootKeydown, both #rows and the
-   writer). Records lastMoveUndo and syncs exactly the way dragging a row
-   does (moveRowTo just above: one markDirty(), one queueAutoSave()), but
-   does not render — callers differ on whether the split view, the
-   writer, or both need repainting afterward, and on how precisely the
-   caret has to land, so that is left to them. `field`/`offset` are
-   optional and only matter for restoring an exact caret position on
-   undo; the gutter buttons have no caret to restore and omit them.
+   writer). Syncs exactly the way dragging a row does (moveRowTo just
+   above: one markDirty(), one queueAutoSave()) — which is also what makes
+   it one undo entry (12a-undo.js) — but does not render: callers differ on
+   whether the split view, the writer, or both need repainting afterward,
+   and on how precisely the caret has to land, so that is left to them.
    Returns false at either end (no wrap) or if the row is gone. */
-export function swapAdjacentRows(id, dir, field, offset) {
+export function swapAdjacentRows(id, dir) {
   var idx = findRowIndex(id);
   var j = idx + dir;
-  lastSplitUndo = null;
   if (idx === -1 || j < 0 || j >= S.state.rows.length) return false;
-  var otherId = S.state.rows[j].id;
   var tmp = S.state.rows[idx];
   S.state.rows[idx] = S.state.rows[j];
   S.state.rows[j] = tmp;
-  S.lastMoveUndo = { movedId: id, otherId: otherId, field: field || null, offset: offset || 0 };
   markDirty();
   queueAutoSave();
   return true;
@@ -333,30 +265,6 @@ export function swapAdjacentRows(id, dir, field, offset) {
 export function moveRow(id, dir) {
   if (!swapAdjacentRows(id, dir)) return;
   render();
-}
-
-/* Ctrl/Cmd+Z right after a move: swaps the same two rows back. Swapping
-   twice restores the original arrangement regardless of which direction
-   the move went, so this needs no record of that — only of which two rows
-   it touched. Declines once they are no longer adjacent (something else
-   restructured the rows in between — an add, a delete, a split landing
-   between them) rather than swap whatever now happens to be there.
-   Returns the undo record on success (for the caller to restore the
-   caret from) or false. Does not render, for the same reason
-   swapAdjacentRows doesn't. */
-export function undoMoveRow() {
-  var undo = S.lastMoveUndo;
-  if (!undo) return false;
-  S.lastMoveUndo = null;
-  var idxA = findRowIndex(undo.movedId);
-  var idxB = findRowIndex(undo.otherId);
-  if (idxA === -1 || idxB === -1 || Math.abs(idxA - idxB) !== 1) return false;
-  var tmp = S.state.rows[idxA];
-  S.state.rows[idxA] = S.state.rows[idxB];
-  S.state.rows[idxB] = tmp;
-  markDirty();
-  queueAutoSave();
-  return undo;
 }
 
 export function armDelete(btn, id) {
