@@ -193,10 +193,10 @@ export function setCellSelection(cellEl, from, to) {
    else fn changes in the document (a tag's registry entry) is part of the
    same undo entry; fn should change it only once it has decided to answer
    a cell. The result may also carry also(): more of the same edit (a paste
-   moving a comment's anchor), run just before the cell is written. Returns
-   the cell element (the same one, repainted in place), or
-   null when nothing was done — the cell holds a picture or a video card,
-   or fn declined. */
+   moving a comment's anchor), run just after the cell is written into
+   state, so it sees the document as the edit leaves it. Returns the cell
+   element (the same one, repainted in place), or null when nothing was
+   done — the cell holds a picture or a video card, or fn declined. */
 export function editCell(cellEl, fn) {
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
@@ -215,14 +215,14 @@ export function editCell(cellEl, fn) {
   breakUndoCoalescing();
   var out = fn(fromHtml(html), sel);
   if (!out || !out.cell) return null;
-  if (out.also) {
-    out.also();
-    markDirty();
-  }
   var next = toHtml(out.cell);
   if (next !== html) {
     row[field] = next;
     stampRow(row);
+    markDirty();
+  }
+  if (out.also) {
+    out.also();
     markDirty();
   }
   /* Repaint this one cell IN PLACE — its contents, never the element — the

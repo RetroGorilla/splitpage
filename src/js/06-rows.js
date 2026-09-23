@@ -3,11 +3,14 @@ import { makeId } from "./02-state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
 import { safeId, sanitizeHtml } from "./04-richtext.js";
-import { render } from "./05-render.js";
+import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
+import { render, syncFieldFromDom } from "./05-render.js";
+import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
+import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
-import { placeCaretAtTextOffset, repointCommentsForRows } from "./19-writer.js";
+import { placeCaretAtTextOffset } from "./19-writer.js";
 
 /* ================= row actions ================= */
 
@@ -54,38 +57,54 @@ export function addRowAndFocus(afterId, field) {
    row's OTHER field — the column that was not being written in — is left
    completely alone, still whole, still on the original row. Returns
    {idx, created, field}, or null if the caret was not actually in a field
-   of a live row (the caller does nothing in that case). */
+   of a live row (the caller does nothing in that case).
+
+   Through the model (#85, design §3.2): the cell is read from state as
+   runs, a selection is deleted first, and splitCell cuts it at the caret —
+   so every mark goes with its words, and a comment whose phrase the caret
+   was inside is marked in both halves. Its rowId/field then follow the
+   marks (syncCommentAnchors). The caller's one markDirty() makes all of
+   it — both cells, the new row, the comment — one undo entry. */
 export function splitRowFieldCore(cellEl) {
   var idx = findRowIndex(cellEl.getAttribute("data-id"));
   var field = cellEl.getAttribute("data-field");
-  if (idx === -1 || !field) return null;
-  var sel = window.getSelection();
-  if (!sel.rangeCount) return null;
-  var range = sel.getRangeAt(0);
-  if (!cellEl.contains(range.startContainer)) return null;
-  /* captured before any mutation below — the field's whole content as it
-     stood the instant the split was requested */
-  var originalHtml = sanitizeHtml(cellEl.innerHTML);
-  var rowId = S.state.rows[idx].id;
-  if (!range.collapsed) range.deleteContents();
+  if (idx === -1 || (field !== "visualText" && field !== "audioText")) return null;
+  /* What was typed a moment ago goes into state first, and into the undo
+     stack as its own entry, so Ctrl+Z after Enter takes back the split and
+     leaves the typing. */
+  syncFieldFromDom(cellEl);
+  var sel = cellSelection(cellEl);
+  if (!sel) return null;
+  breakUndoCoalescing();
+  var row = S.state.rows[idx];
+  var html = row[field] || "";
+  var halves = /<img|video-embed-card/.test(html)
+    ? splitMediaCellInDom(cellEl)
+    : splitCell(deleteRange(fromHtml(html), sel.from, sel.to), sel.from).map(function (c) { return toHtml(c); });
 
+  row[field] = halves[0];
+  stampRow(row);
+  var created = { id: makeId(), visualText: "", imageRef: null, audioText: "",
+                   status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
+  created[field] = halves[1];
+  S.state.rows.splice(idx + 1, 0, created);
+  syncCommentAnchors(S.state);
+  return { idx: idx, created: created, field: field };
+}
+
+/* A cell still holding a picture or a video card (pasted before design D7
+   kept them out of script text; migrateRows moves them out on load) is one
+   the model has no place for, so it is cut the way it always was: by a DOM
+   range from the caret to the end. Returns the two halves' HTML. */
+function splitMediaCellInDom(cellEl) {
+  var range = window.getSelection().getRangeAt(0);
+  if (!range.collapsed) range.deleteContents();
   var tail = document.createRange();
   tail.setStart(range.startContainer, range.startOffset);
   tail.setEnd(cellEl, cellEl.childNodes.length);
   var holder = document.createElement("div");
   holder.appendChild(tail.extractContents());
-
-  S.state.rows[idx][field] = sanitizeHtml(cellEl.innerHTML);
-  stampRow(S.state.rows[idx]);
-
-  var created = { id: makeId(), visualText: "", imageRef: null, audioText: "",
-                   status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
-  created[field] = sanitizeHtml(holder.innerHTML);
-  S.state.rows.splice(idx + 1, 0, created);
-  /* half the field's text just moved to a new row — any comment anchored
-     in that half has to move with it */
-  repointCommentsForRows([S.state.rows[idx], created]);
-  return { idx: idx, created: created, field: field, rowId: rowId, originalHtml: originalHtml };
+  return [sanitizeHtml(cellEl.innerHTML), sanitizeHtml(holder.innerHTML)];
 }
 
 export function splitCellField(cellEl) {
