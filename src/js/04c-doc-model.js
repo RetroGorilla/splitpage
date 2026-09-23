@@ -223,6 +223,37 @@ export function fromHtml(html, opts) {
   return normalizeCell(runs, opts);
 }
 
+/* ---- a cached reader, for the readers (§10 step 3) ----
+
+   cellOf(html) is fromHtml(html) with the model's own tag names
+   ("t:<cat>:<name>"), cached by the HTML string itself, the contentMemo
+   reasoning (07-production-tags.js): a key that is the input cannot go
+   stale. Readers that only need words, formatting and category+name —
+   exports, word count, the teleprompter, find — read cells through it and
+   never parse HTML themselves. The returned cell is SHARED with every other
+   caller for the same HTML: read it, never mutate it. Budgeted by
+   characters, like contentMemo. */
+var CELL_CACHE_BUDGET = 2000000;
+var cellCache = new Map();
+var cellCacheChars = 0;
+
+export function cellOf(html) {
+  var key = html == null ? "" : String(html);
+  var hit = cellCache.get(key);
+  if (hit !== undefined) return hit;
+  var cell = fromHtml(key);
+  if (cellCacheChars > CELL_CACHE_BUDGET) { cellCache.clear(); cellCacheChars = 0; }
+  cellCache.set(key, cell);
+  cellCacheChars += key.length;
+  return cell;
+}
+
+/* A "t:<cat>:<name>" tag name (what cellOf gives) as {cat, name}, or null
+   for a registry id. */
+export function tagNameOf(id) {
+  return defaultTagOf(id);
+}
+
 /* ---- the one nesting, shared by every writer ----
 
    Elements open outermost first in this order: each comment (by id), the

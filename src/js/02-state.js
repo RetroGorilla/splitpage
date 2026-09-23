@@ -18,6 +18,7 @@ import {
   TAG_CATEGORIES,
   TAG_STATUSES,
   collectTagsFromRows,
+  ensureTagIds,
   missingRegistryTags,
   tagCategory,
   tagStatus
@@ -343,6 +344,10 @@ export function migrateRows(s) {
   missingRegistryTags(s.rows, s.productionTags).forEach(function (t) {
     s.productionTags.push(t);
   });
+  /* Every entry has an id the document model can name it by (#85): minted
+     from its key for a file from before ids, or an entry an older copy of
+     the app merged without one. */
+  ensureTagIds(s.productionTags);
 
   /* The b-roll list (08c-broll.js). Like the production registry it is
      real storage rather than a pure read of the script, and for one more

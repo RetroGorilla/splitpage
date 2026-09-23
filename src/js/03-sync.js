@@ -595,33 +595,48 @@ export function mergePeople(basePeople, minePeople, theirPeople) {
 }
 
 export function mergeProductionTags(baseTags, mineTags, theirTags) {
-  var tagKey = function (t) { return t.name ? registryKey(t.cat, t.name) : ""; };
+  /* Merged by id (#85): a renamed item keeps its id, so a rename on one
+     side and an assignment on the other are one item with both, not a
+     delete plus an add. An entry with no id (from before ids; migrateRows
+     gives every entry one, so only a caller that skipped it) falls back to
+     its key. */
+  var idOf = function (t) { return t.id || (t.name ? "key:" + registryKey(t.cat, t.name) : ""); };
   var tagPrint = function (t) {
-    return JSON.stringify([t.owner || "", t.notes || "",
+    return JSON.stringify([t.cat || "", t.name || "", t.owner || "", t.notes || "",
                            (tagStatus(t.status) || TAG_STATUSES[0]).id]);
   };
-  var dropped = droppedListKeys(baseTags, mineTags, theirTags, tagKey, tagPrint);
-  var out = [], byKey = {};
+  var dropped = droppedListKeys(baseTags, mineTags, theirTags, idOf, tagPrint);
+  var baseById = {};
+  (baseTags || []).forEach(function (t) { if (t && t.name) baseById[idOf(t)] = t; });
+  var out = [], byId = {};
+  function entryOf(t) {
+    var e = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
+              status: (tagStatus(t.status) || TAG_STATUSES[0]).id };
+    if (t.id) e.id = t.id;
+    return e;
+  }
   (theirTags || []).forEach(function (t) {
     if (!t || !t.name) return;
-    var k = registryKey(t.cat, t.name);
-    if (dropped[k]) return;
-    if (byKey[k]) return;
-    byKey[k] = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
-                 status: (tagStatus(t.status) || TAG_STATUSES[0]).id };
-    out.push(byKey[k]);
+    var k = idOf(t);
+    if (dropped[k] || byId[k]) return;
+    byId[k] = entryOf(t);
+    out.push(byId[k]);
   });
   (mineTags || []).forEach(function (t) {
     if (!t || !t.name) return;
-    var k = registryKey(t.cat, t.name);
+    var k = idOf(t);
     if (dropped[k]) return;
-    var existing = byKey[k];
+    var existing = byId[k];
     if (!existing) {
-      byKey[k] = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
-                   status: (tagStatus(t.status) || TAG_STATUSES[0]).id };
-      out.push(byKey[k]);
+      byId[k] = entryOf(t);
+      out.push(byId[k]);
       return;
     }
+    /* a rename (or a category change) is taken from whichever side made
+       it; both did, differently — theirs, like any other scalar */
+    var b = baseById[k];
+    if (b && existing.name === b.name && t.name !== b.name) existing.name = t.name;
+    if (b && existing.cat === b.cat && t.cat !== b.cat) existing.cat = t.cat;
     /* same item on both sides: never let an empty field overwrite a filled
        one — an assignment or a note only I made still survives the merge */
     if (!existing.owner && t.owner) existing.owner = t.owner;
@@ -632,7 +647,21 @@ export function mergeProductionTags(baseTags, mineTags, theirTags) {
       existing.status = (tagStatus(t.status) || TAG_STATUSES[0]).id;
     }
   });
-  return out;
+  /* Two ids can now name one item: both of us tagged a new name in a way
+     that minted different ids, or one renamed onto a name the other had
+     added. Fold them the way renameTag() folds a rename onto an existing
+     name — the first keeps its id, an empty field never overwrites a
+     filled one, and status keeps whichever is furthest along. */
+  var byKey = {};
+  return out.filter(function (e) {
+    var key = registryKey(e.cat, e.name);
+    var first = byKey[key];
+    if (!first) { byKey[key] = e; return true; }
+    if (!first.owner && e.owner) first.owner = e.owner;
+    if (!first.notes && e.notes) first.notes = e.notes;
+    if (tagStatusRank(e.status) > tagStatusRank(first.status)) first.status = e.status;
+    return false;
+  });
 }
 
 /* The b-roll list merges by id, not by name — two people can legitimately

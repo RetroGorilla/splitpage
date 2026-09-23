@@ -251,7 +251,105 @@ export function registryEntry(cat, name) {
 
 export function registerProductionTag(cat, name) {
   if (registryEntry(cat, name)) return;
-  S.state.productionTags.push({ cat: cat, name: name, owner: "", notes: "", status: TAG_STATUSES[0].id });
+  S.state.productionTags.push({ id: mintTagId(cat, name, S.state.productionTags), cat: cat, name: name,
+                                owner: "", notes: "", status: TAG_STATUSES[0].id });
+}
+
+/* ---- registry ids (#85, docs/DOCUMENT-MODEL.md §3.1) ----
+
+   Every registry entry has an id, and the structured document model names
+   a tag by it: a renamed item keeps its id, so the merge can tell a rename
+   from a delete plus an add, and (from step 4) a rename touches the one
+   registry record. The stored HTML still names a tag by category and name
+   (design D2) — older copies of the app read those spans, and a span's
+   name is always its entry's — so ids live in the registry only, and a
+   span is matched to its entry by that (category, name) key.
+
+   An id is minted from the entry's key when the entry is created, so two
+   people tagging the same thing independently mint the same id and their
+   registries merge without a fold. A later rename keeps it. Should the id
+   an entry's key would mint already be taken (a rename freed a name and
+   the name came back as a new item), a counter goes on the end. */
+var TAG_ID_RE = /^t_[a-z0-9]{1,16}(-[0-9]{1,6})?$/;
+
+export function isTagId(id) {
+  return typeof id === "string" && TAG_ID_RE.test(id);
+}
+
+/* FNV-1a over the key, twice with different offsets: 64 bits, as two
+   base-36 halves. Not a security boundary — a name nobody chose to collide
+   with another, and a collision only costs a counter. */
+function tagKeyHash(key) {
+  var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+  for (var i = 0; i < key.length; i++) {
+    var c = key.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x01000193) ^ (b >>> 15);
+  }
+  return (a >>> 0).toString(36) + (b >>> 0).toString(36);
+}
+
+/* taken: a registry (or any list of entries with ids) the new id must not
+   collide with. */
+export function mintTagId(cat, name, taken) {
+  var used = Object.create(null);
+  (taken || []).forEach(function (t) { if (t && t.id) used[t.id] = true; });
+  var base = "t_" + tagKeyHash(registryKey(cat, name)).slice(0, 16);
+  if (!used[base]) return base;
+  for (var n = 2; ; n++) if (!used[base + "-" + n]) return base + "-" + n;
+}
+
+/* In place: every entry ends up with a valid id no other entry has. The
+   first holder of an id keeps it; a later duplicate, or an entry with none
+   (a file from before ids, or one an older copy of the app merged), gets
+   one minted from its key. */
+export function ensureTagIds(registry) {
+  var seen = Object.create(null);
+  var need = [];
+  (registry || []).forEach(function (t) {
+    if (!t) return;
+    if (isTagId(t.id) && !seen[t.id]) { seen[t.id] = true; return; }
+    need.push(t);
+  });
+  need.forEach(function (t) {
+    t.id = mintTagId(t.cat, t.name, registry);
+  });
+  return registry;
+}
+
+export function registryEntryById(id) {
+  for (var i = 0; i < S.state.productionTags.length; i++) {
+    var t = S.state.productionTags[i];
+    if (t && t.id === id) return t;
+  }
+  return null;
+}
+
+/* What the document model (04c-doc-model.js) needs to turn a tag span into
+   a registry id and back: fromHtml's tagId(cat, name) and toHtml's
+   tagOf(id). A span no entry matches (a tag typed a moment ago that the
+   heal has not registered yet) keeps the model's own "t:<cat>:<name>" name
+   for it, which toHtml writes back unchanged. */
+export function registryTagHooks(registry) {
+  var byKey = Object.create(null), byId = Object.create(null);
+  (registry || []).forEach(function (t) {
+    if (!t || !t.id || !t.name) return;
+    var k = registryKey(t.cat, t.name);
+    if (!byKey[k]) byKey[k] = t;
+    byId[t.id] = t;
+  });
+  return {
+    tagId: function (cat, name) {
+      var t = byKey[registryKey(cat, name)];
+      return t ? t.id : "t:" + cat + ":" + name;
+    },
+    tagOf: function (id) {
+      var t = byId[id];
+      if (t) return { cat: t.cat, name: t.name };
+      var m = /^t:([a-z]+):([\s\S]+)$/.exec(String(id));
+      return m ? { cat: m[1], name: m[2] } : null;
+    }
+  };
 }
 
 /* ---- people ----
@@ -306,8 +404,9 @@ export function deleteProductionTagEntry(cat, name) {
 
    Derived lazily and kept until its inputs change: the rows' ids, in
    order, the tags each field holds (tagsInField, per field) and each
-   registry entry's five fields. They are compared rather than tracked, the
-   same reasoning as contentMemo above — a key that is the input itself
+   registry entry's six fields (its id among them). They are compared
+   rather than tracked, the same reasoning as contentMemo above — a key
+   that is the input itself
    cannot go stale, and there is no mutation site anyone can forget to
    invalidate. A field whose HTML is the same string as last time is one
    pointer check; one that changed is re-read through the tagsInField memo
@@ -322,8 +421,8 @@ var prodIndexDerived = 0;
 function registrySignature(tags) {
   var sig = [];
   tags.forEach(function (t) {
-    if (!t) { sig.push(null, null, null, null, null); return; }
-    sig.push(t.cat, t.name, t.owner, t.notes, t.status);
+    if (!t) { sig.push(null, null, null, null, null, null); return; }
+    sig.push(t.cat, t.name, t.owner, t.notes, t.status, t.id);
   });
   return sig;
 }
@@ -345,7 +444,7 @@ var ROW_SIG_SLOTS = 5;
 
 function prodIndexFresh(ix) {
   var rows = S.state.rows, tags = S.state.productionTags;
-  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 5) return false;
+  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 6) return false;
   var rs = ix.rowSig;
   for (var i = 0, j = 0; i < rows.length; i++, j += ROW_SIG_SLOTS) {
     var r = rows[i];
@@ -364,11 +463,11 @@ function prodIndexFresh(ix) {
     }
   }
   var ts = ix.tagSig;
-  for (i = 0, j = 0; i < tags.length; i++, j += 5) {
+  for (i = 0, j = 0; i < tags.length; i++, j += 6) {
     var t = tags[i];
     if (!t) { if (ts[j] !== null) return false; continue; }
     if (ts[j] !== t.cat || ts[j + 1] !== t.name || ts[j + 2] !== t.owner ||
-        ts[j + 3] !== t.notes || ts[j + 4] !== t.status) return false;
+        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id) return false;
   }
   return true;
 }
@@ -390,6 +489,7 @@ function deriveProductionIndex() {
     var liveMatch = liveByKey[key];
     out.push({
       key: key,
+      id: t.id || null,
       cat: cat,
       name: liveMatch ? liveMatch.name : t.name, /* prefer the script's current casing while it's live */
       mentions: liveMatch ? liveMatch.mentions : [],
@@ -404,7 +504,7 @@ function deriveProductionIndex() {
     if (seen[key]) return;
     seen[key] = true;
     unregistered.push(t);
-    out.push({ key: key, cat: t.cat, name: t.name, mentions: t.mentions,
+    out.push({ key: key, id: null, cat: t.cat, name: t.name, mentions: t.mentions,
                orphaned: false, owner: "", notes: "", status: TAG_STATUSES[0].id });
   });
 
@@ -461,7 +561,12 @@ export function healTagRegistry() {
   var ix = productionIndex();
   if (!ix.unregistered.length) return 0;
   var n = ix.unregistered.length;
-  ix.unregistered.forEach(function (t) { registerProductionTag(t.cat.id, t.name); });
+  ix.unregistered.forEach(function (t) {
+    registerProductionTag(t.cat.id, t.name);
+    /* the one thing registering changes about the entry: it has an id now */
+    var reg = registryEntry(t.cat.id, t.name);
+    ix.entries.forEach(function (e) { if (e.key === registryKey(t.cat.id, t.name) && reg) e.id = reg.id; });
+  });
   ix.unregistered = [];
   ix.tagSig = registrySignature(S.state.productionTags);
   return n;
