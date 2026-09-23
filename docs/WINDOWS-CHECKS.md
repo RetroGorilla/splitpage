@@ -336,6 +336,21 @@ that proves #76's `shared/` staging and #77's `files` entry.
      it: "No microphone was found."
   Record how long step 1 takes to reach "Listening…" — the first start
   compiles a small C# shim through PowerShell's Add-Type.
+- **Typing through the document model** (#85). The browser suites drive
+  keys and clipboard events, not a real keyboard layout, an input method
+  or a spellchecker — the three things the design leaves to the browser
+  (`docs/DOCUMENT-MODEL.md` §5). By hand, in the desktop app and in Edge:
+  1. Type with a dead key (é, ñ on an international layout) and with the
+     Windows emoji panel (Win+.) in a script cell: the characters land, and
+     Ctrl+Z takes them back a word at a time.
+  2. Turn on the Japanese IME and type a word with its conversion
+     candidates: nothing is doubled or lost when you pick one.
+  3. Right-click a misspelt word and pick a suggestion: the word changes,
+     and Ctrl+Z puts the misspelling back.
+  4. Paste a formatted paragraph from Word: it lands bold/italic intact, as
+     one Ctrl+Z.
+  5. Cut commented words and paste them in another scene: the comment card
+     now names the other scene.
 - **Teleprompter "Open in browser"** (#86). The smoke suite replaces
   `shell.openExternal` with a recorder in test mode, so it proves the URL
   main would open and the script it would serve — not that a real default

@@ -1,10 +1,11 @@
 # Structured document model — design (issue #85)
 
-Status: **decided; built, except the parts §10 lists as left** — the model
-(`src/js/04c-doc-model.js`), registry ids, the readers, the writers at the
-selection (`05b-cell-edit.js`, `05c-clipboard.js`), undo (`12a-undo.js`)
-and the word-level merge. Adam made the decisions in §12 on
-2026-09-23; the sections below already reflect them. The build follows §10.
+Status: **built** (2026-09-23), with the few leftovers §10 names — the
+model (`04c-doc-model.js`), registry ids, the readers, every edit of a
+script cell (`05b-cell-edit.js`, `05c-clipboard.js`, the tag panel, split
+and join), undo (`12a-undo.js`) and the word-level merge. Adam made the
+decisions in §12; the sections below reflect them. Not yet run on Windows:
+the by-hand pass in `docs/WINDOWS-CHECKS.md` covers it with the rest.
 #85 ships in the full 3.0 release. A 3.0 pre-release goes out first without
 it.
 
