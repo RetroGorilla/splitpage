@@ -5343,8 +5343,11 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     record(tag + ": main holds no share afterwards", !!status2 && status2.listening === false && status2.shares.length === 0, JSON.stringify(status2));
 
     // --- D: a document with nowhere to live is not saved behind the back -
+    /* Through the page's own File drawer this time, the route Windows has:
+       its title bar is the tab strip, so the View menu is never drawn. */
     const pristineBefore = await dialogsSeen(witness);
-    await evalPage(witness, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const inPage = await evalPage(witness, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-browser'); var shown = !!b && !b.hidden && !document.getElementById('file-menu').hidden; if (shown) b.click(); return shown; })()");
+    record(tag + ": File ▸ This document ▸ Present in browser is offered in the desktop app", inPage === true, String(inPage));
     const saveFirst = await toastContaining(witness, "Save this script first", 10000);
     record(tag + ": an unsaved new document is told to save first", !!saveFirst, String(saveFirst));
     await sleep(500);

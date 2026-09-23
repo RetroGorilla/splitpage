@@ -852,7 +852,7 @@ async function launchPrompterFromScript(token) {
   if (!body || typeof body.name !== "string" || typeof body.text !== "string") {
     try { sessionStorage.removeItem(PROMPTER_LAUNCH_KEY); } catch (e) {}
     showToast("This teleprompter link has expired — open it again from the Splitpage desktop app " +
-              "(View ▸ Present in Browser).", "warn", true);
+              "(File ▸ Present in browser).", "warn", true);
     return false;
   }
   var file = new File([body.text], body.name, { type: "text/plain" });

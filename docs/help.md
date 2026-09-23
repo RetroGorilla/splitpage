@@ -130,9 +130,10 @@ shared session on your network all work the same as in the browser, with two
 exceptions for now:
 
 - **Follow My Voice** doesn't run inside the desktop app yet. Instead, choose
-  **View ▸ Present in Browser (Follow My Voice)**, or the **Open in browser to
-  use Follow My Voice** button on the teleprompter. Your default browser opens
-  straight into the teleprompter with the same script, and Follow My Voice
+  **☰ File ▸ This document ▸ Present in browser (Follow My Voice)**, press
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, or use the **Open in browser
+  to use Follow My Voice** button on the teleprompter. Your default browser
+  opens straight into the teleprompter with the same script, and Follow My Voice
   works there in Chrome or Edge. The browser shows a read-only copy: keep
   editing in the desktop app. If the script has never been saved, you'll be
   asked to save it first.

@@ -73,7 +73,9 @@ import {
   parseMarkdownProject,
   parseSplitpageFile
 } from "./20d-formats.js";
-import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import {
+  canOpenPrompterInBrowser, makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser
+} from "./20f-desktop.js";
 import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 
@@ -970,6 +972,13 @@ export function toggleFileMenu(force) {
   if (backdrop) backdrop.hidden = !open;
   btn.setAttribute("aria-expanded", open ? "true" : "false");
   if (open) {
+    /* Desktop only, and only a bridge that can do it (issue #86): decided
+       each time the drawer opens rather than once at boot, the same way the
+       teleprompter's own voice button decides when it opens — a browser
+       suite swaps a fake bridge in after boot, and an older bridge without
+       the call has nothing to offer. */
+    var presentBrowser = document.getElementById("menu-present-browser");
+    if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
     /* the drawer is tall and scrolls; a reopen should start at the top
        rather than wherever the last visit left it */
     var body = menu.querySelector(".menu-body");
@@ -1066,6 +1075,7 @@ export function handleFileMenuAction(action) {
   else if (action === "server-publish") publishToServer();
   else if (action === "share-link") publishAndCopyShareLink();
   else if (action === "find") openFindBar();
+  else if (action === "prompter-open-in-browser") openPrompterInBrowser();
   else if (action === "export-app-data") exportAppData();
   else if (action === "import-app-data") openImportAppData();
   else if (action === "tagging-help") showTaggingHelp();

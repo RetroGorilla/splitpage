@@ -315,9 +315,15 @@ that proves #76's `shared/` staging and #77's `files` entry.
   `shell.openExternal` with a recorder in test mode, so it proves the URL
   main would open and the script it would serve — not that a real default
   browser launches. By hand, in the desktop app: open a saved script, then
-  View ▸ **Present in Browser (Follow My Voice)**. The default browser should
-  open straight into the teleprompter with the same text. Then start Follow
-  My Voice and read aloud — this is the one way Follow My Voice works from
+  **☰ File ▸ This document ▸ Present in browser (Follow My Voice)** — the
+  in-page twin of View ▸ Present in Browser, which run 2 found unreachable
+  here because the hidden title bar leaves no menu bar (Alt shows nothing).
+  The default browser should open straight into the teleprompter with the
+  same text. Then press **Ctrl+Shift+P** (the native item's accelerator):
+  it should do the same. No test presses a menu accelerator, so that key is
+  also the check that accelerators fire at all under `titleBarStyle:
+  "hidden"` — Ctrl+T/W/Tab and Ctrl+Alt+P/C lean on the same thing. Then
+  start Follow My Voice and read aloud — this is the one way Follow My Voice works from
   the desktop app until #8 lands. It needs Chrome or Edge; Firefox has no
   Web Speech, and the page says so. Also try it on an unsaved new document:
   it should ask you to save first, with no Save dialog popping up by

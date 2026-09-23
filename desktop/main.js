@@ -4130,8 +4130,19 @@ function buildMenu() {
       /* Issue #86: Follow My Voice runs in Chrome/Edge and not in here (#8),
          so this reads the same script from the default browser. The page
          decides whether it needs saving first (20f-desktop.js); main decides
-         what URL that is (section 9b). */
-      { label: "Present in Browser (Follow My Voice)", click: () => sendMenuCommand("prompter-open-in-browser") },
+         what URL that is (section 9b). This menu bar is never drawn on
+         Windows (titleBarStyle "hidden": the tab strip is the title bar), so
+         the page carries the same command as File ▸ This document ▸ Present
+         in browser, and this item is what the accelerator hangs off.
+         Ctrl/Cmd+Shift+P: no page keydown handler uses Shift+P (21-events.js
+         takes Ctrl+F and Ctrl/Cmd+Alt+H only), no other item here uses it,
+         and a Shift chord cannot be an AltGr character the way a Ctrl+Alt
+         letter can on Czech, Hungarian or Polish layouts. */
+      {
+        label: "Present in Browser (Follow My Voice)",
+        accelerator: "CmdOrCtrl+Shift+P",
+        click: () => sendMenuCommand("prompter-open-in-browser")
+      },
       { type: "separator" },
       /* Issue #25: collapses scenes marked Shot into a thin strip. The
          renderer owns the on/off state (per-device localStorage, not this
