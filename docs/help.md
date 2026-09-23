@@ -659,6 +659,19 @@ Open is the old "Hide resolved" behaviour under a new name — and its
 person, each with its own count. The filter is remembered on this device
 only; it never touches the saved document.
 
+**Undo and redo.** <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Z</kbd> undoes the
+last thing you did to the script, and <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
+(or <kbd>Ctrl</kbd>+<kbd>Y</kbd>) redoes it — typing a word at a time, and
+everything else too: a deleted or moved scene, a split, a tag, a status, a
+picture, a comment, Replace All, changes in the Production panel. It works
+from anywhere in the script and in the writer, not only from the cell you
+were typing in. A text box of its own (the title, a search, a comment you
+are writing) keeps its own undo while you are in it. When someone else's
+changes are merged into your copy, undo forgets only the scenes their
+changes touched, so it never takes back their words. On a document hosted
+on a server, a comment you have posted is already with everyone else, so
+undo leaves it alone — delete it the usual way.
+
 **Find and replace.** <kbd>Ctrl</kbd>+<kbd>F</kbd>. Enter and
 Shift+Enter step through matches; **Aa** toggles case-sensitivity.
 Formatting, links and comment anchors survive a replace untouched. Text
