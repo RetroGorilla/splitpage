@@ -706,15 +706,74 @@ export function splitCell(cell, pos) {
   return [sliceCell(cell, 0, pos), sliceCell(cell, pos)];
 }
 
-/* glue (a string, e.g. "\n") goes between the two, unmarked. */
+/* glue (a string, e.g. " ") goes between the two. It carries no formatting,
+   but it does carry a comment or a link the text on both sides of it is in
+   (breakLine's rule): a scene split through a commented phrase and joined
+   back is one anchor again, not two with a gap between them. */
 export function joinCells(a, b, glue) {
   var runs = normalizeCell(a).slice();
-  if (glue) runs.push({ text: glue, marks: {} });
-  return normalizeCell(runs.concat(normalizeCell(b)));
+  var rest = normalizeCell(b);
+  if (glue) {
+    var marks = {};
+    var last = runs[runs.length - 1], first = rest[0];
+    if (last && first) {
+      if (last.marks.href && last.marks.href === first.marks.href) marks.href = last.marks.href;
+      var cmt = (last.marks.cmt || []).filter(function (id) { return (first.marks.cmt || []).indexOf(id) !== -1; });
+      if (cmt.length) marks.cmt = cmt;
+    }
+    runs.push({ text: glue, marks: marks });
+  }
+  return normalizeCell(runs.concat(rest));
 }
 
 export function sameCell(a, b) {
   return JSON.stringify(normalizeCell(a)) === JSON.stringify(normalizeCell(b));
+}
+
+/* ---- where a comment is (design §3.2) ----
+
+   A comment's anchor is its cmt mark in the script's cells: the words
+   carry it wherever they go — split into a new scene, joined into the one
+   above, cut and pasted. comment.rowId / comment.field only SAY where that
+   is, for the panel's "Row 03 · Audio", its script-order sort, the jump
+   and the server; this is the one function that keeps them in step, run
+   wherever text moves between rows (a split, a join, a paste, a merge or
+   a load through migrateRows).
+
+   Each comment marked somewhere points at the first cell holding its mark,
+   in document order (row by row, the visual column before the audio, the
+   panel's own order). A comment whose mark is nowhere — its words deleted
+   — keeps what it had: it is detached, and still shows in the panel with
+   its quote. A conflict card and a title comment have no mark and are
+   never touched. Mutates the comments in place; returns how many moved.
+
+   Only cells whose HTML holds an anchor at all are read, and through
+   cellOf's cache, so a document of a thousand scenes and one comment costs
+   a thousand indexOf calls. */
+export function syncCommentAnchors(state) {
+  var comments = state && state.comments;
+  if (!Array.isArray(comments) || !comments.length) return 0;
+  var where = Object.create(null);
+  (state.rows || []).forEach(function (row) {
+    if (!row) return;
+    ["visualText", "audioText"].forEach(function (field) {
+      var html = row[field];
+      if (typeof html !== "string" || html.indexOf("cmt-anchor") === -1) return;
+      commentIds(cellOf(html)).forEach(function (id) {
+        if (!where[id]) where[id] = { rowId: row.id, field: field };
+      });
+    });
+  });
+  var moved = 0;
+  comments.forEach(function (c) {
+    if (!c || typeof c !== "object" || c.kind === "conflict" || c.field === "title") return;
+    var at = where[c.anchorId || c.id];
+    if (!at || (c.rowId === at.rowId && c.field === at.field)) return;
+    c.rowId = at.rowId;
+    c.field = at.field;
+    moved++;
+  });
+  return moved;
 }
 
 /* ---- steps (undo/redo) ----

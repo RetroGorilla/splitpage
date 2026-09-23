@@ -507,7 +507,8 @@ row's `data-id`/`data-field` — no parse step, no second copy of the
 document. Only two operations change the row list: **`splitWriterRow()`**
 (Enter, via shared `splitRowFieldCore()`, §3.10) and **`mergeWriterRows()`**
 (Backspace/Delete at an edge; refuses when both rows have a visual; status
-accumulates by rank). `caretAtEdge()` must not count empty inline wrappers —
+accumulates by rank; the narration joined as models by `joinCells`, whose
+glue space stays inside a comment both sides are in). `caretAtEdge()` must not count empty inline wrappers —
 `Range.cloneContents()`'s empty `<strong></strong>` clone looked like
 content, blocking join on any scene starting with formatting.
 
@@ -525,7 +526,12 @@ Alt+Enter in `#rows` does what the writer's Enter always did: split the
 focused field at the caret, leaving the *other* column untouched on the
 original row. **`splitRowFieldCore(cellEl)`** is the shared core (reads
 `field` off `data-field`); `splitWriterRow()`/`splitCellField()` each add
-their own render/refocus. Alt+Enter never reaches `onRootKeydown` inside the
+their own render/refocus. It splits the cell's model (#85): the caret as a
+model position (`cellSelection`), a selection deleted first, `splitCell`,
+each half written back with `toHtml`, the comments re-pointed by
+`syncCommentAnchors` (invariant #18) — one undo entry with the caller's
+`markDirty()`. A cell still holding a picture (pasted before design D7) is
+the one case still cut by a DOM range. Alt+Enter never reaches `onRootKeydown` inside the
 writer (its capture handler treats every Enter as a split).
 
 `keepCaretInView(cellEl)` is a near-always-no-op scroll (only fires outside a
@@ -1140,11 +1146,21 @@ bytes, #82 — nothing deletes them yet, D4).
     panels.** `openWriter()` closes Production, Comments, find. Writer sits
     at `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
-18. **A comment is anchored twice — by `rowId` and by its `.cmt-anchor`
-    span — and anything moving text between rows must move both.**
-    `repointCommentsForRows()` is the fix; `splitRowFieldCore()` calls it,
-    and a cut-and-paste moving a comment (05c-clipboard.js) repoints it in
-    the same undo entry.
+18. **A comment's anchor is its `cmt` mark in the script; `rowId`/`field`
+    only say where that is, and one function keeps them saying it** (#85,
+    design §3.2). The mark is the `.cmt-anchor` span, and it moves with its
+    words because every path that moves words between rows moves them as
+    runs: a split (`splitRowFieldCore()`, `splitCell`), a join
+    (`mergeWriterRows()`, `joinCells`), a cut then paste
+    (05c-clipboard.js). Each then calls **`syncCommentAnchors(state)`**
+    (04c-doc-model.js) in the same undo entry, which points every comment
+    whose mark is somewhere at the first cell holding it, in document
+    order; a comment whose words are gone keeps what it had (detached).
+    `migrateRows()` calls it too, so every load and every merge — which
+    can bring one side's split against the other side's old `rowId` —
+    comes out in step. A new path that moves words between rows calls it;
+    nothing else may write a comment's `rowId`/`field` for an anchored
+    comment.
 19. **A full-screen overlay must own the focus and the stacking, not just
     the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
     `#writer` lets modals/toasts through.
