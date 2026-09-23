@@ -35,10 +35,14 @@ beta copy is offered it like any other update.
   Markdown readers show correctly, even where they overlap.
 - **Pictures stay out of script text.** Pasting into a script cell keeps the
   words, and a picture or video that came with them — a picture, a video
-  card, a YouTube or Vimeo link, a video file — is attached to that scene as
-  a comment ("Picture attached to scene 4", with Undo). A picture already in
-  a cell moves into a comment on that scene. Cutting text moves its comment
-  with it.
+  card, a YouTube or Vimeo link, a video file — goes into that scene's
+  **Image section** ("Picture added to scene 4", with Undo). A picture
+  already in a cell moves into a comment on that scene. Cutting text moves
+  its comment with it.
+- **A scene can hold several pictures.** Its Image section shows them one at
+  a time — ‹ and › (or ← →) step through them — with a small caption under
+  each holding its video links. A video pasted into a scene with no picture
+  gets a thumbnail there (a video file's first frame, or a placeholder).
 - **Follow My Voice in the desktop app** through Windows' own speech
   recognition, or **Present in browser** to run the teleprompter in any
   browser, Firefox included — the desktop app does the listening. **Use
@@ -730,16 +734,28 @@ changes the label and the tracked item together.
 
 **Reference images.** The small **📎 Image** link at the top of a scene's
 visual column attaches a still — or just drag an image file from your desktop
-anywhere onto that column and drop it. Once a scene has one, hover it for
-**Replace** and **Remove**. A comment can carry a picture too (**🖼 Image**
-in the comment box), and a picture pasted into a scene or a reply is kept.
+anywhere onto that column and drop it. A scene can hold several: each one you
+add goes beside the others, and the Image section shows them one at a time,
+with **‹ ›** and a count (or ← and → once one of its buttons has focus). Hover
+a picture for **Add**, **Replace** and **Remove** — Replace and Remove act on
+the picture on screen. A comment can carry a picture too (**🖼 Image** in the
+comment box).
+
 Pasting or dropping a picture, a video link (YouTube, Vimeo, Loom and the
-like) or a video file into a scene's words attaches it to that scene as a
-comment on that column, and a toast says so with **Undo** — the words that
-came with it go in as usual, and one Ctrl+Z takes back both. A video file is
-named in the comment rather than stored: a script does not carry videos. A
-picture that was copied only as a link to a web page can't be kept; save it
-and paste or drop the file instead.
+like) or a video file into a scene's words — or dropping it on the Image
+section — puts it in that scene's Image section, and a toast says so with
+**Undo**; the words that came with it go in as usual, and one Ctrl+Z takes
+back both. A picture is added beside any already there. A video's link goes
+in the small caption under a picture, not in your words: into a scene with
+no picture it brings a thumbnail of its own — a video file's first frame, or
+a plain video placeholder for a web link (Splitpage doesn't fetch pictures
+from video sites) — and into a scene that has one it is added under the
+picture on screen. Click a link, or a video's thumbnail, to open it: a web
+link in your browser; a video file in its own app, in the desktop app, as
+long as you dropped or pasted it since Splitpage started (the script keeps
+only its name, never the file or where it is). Hover a link for **×** to
+take it off. A picture that was copied only as a link to a web page can't
+be kept; save it and paste or drop the file instead.
 
 **Where pictures are kept.** The script itself only names each picture; the
 picture is stored once, separately, wherever the script lives:

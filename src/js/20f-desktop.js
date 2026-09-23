@@ -1005,7 +1005,23 @@ function makeFakeDesktopBackend(opts) {
     getSessionInfo: function () {
       return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
     },
-    openExternal: function () {},
+    /* recorded, for a suite to read back (#135's caption links) */
+    openExternal: function (url) { (this._externalOpens = this._externalOpens || []).push(url); },
+    /* A scene's video file (#135): the real bridge reads the File's path in
+       the preload and main answers a token; this grants any File by its
+       name, and records what a token opens. */
+    grantVideoFile: function (file) {
+      this._videoGrants = this._videoGrants || {};
+      var token = "t" + Object.keys(this._videoGrants).length;
+      this._videoGrants[token] = file && file.name;
+      return Promise.resolve(token);
+    },
+    openVideoFile: function (token) {
+      var name = this._videoGrants && this._videoGrants[token];
+      if (!name) return Promise.resolve({ ok: false, code: "UNKNOWN" });
+      (this._videoOpens = this._videoOpens || []).push(name);
+      return Promise.resolve({ ok: true });
+    },
     /* The teleprompter's Open in browser (issue #86). Argument-free, like
        the real bridge; records what this page had told main about itself
        at the moment it asked (the real handler reads exactly that), and
