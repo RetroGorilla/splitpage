@@ -167,7 +167,7 @@ test("revoking the last share closes the listener", async () => {
   assert.equal(share.status().listening, true);
   assert.equal(share.revoke("tab1"), true);
   assert.equal(share.revoke("tab1"), false);
-  assert.deepEqual(share.status(), { listening: false, port: null, shares: [] });
+  assert.deepEqual(share.status(), { listening: false, port: null, shares: [], voiceStreams: 0 });
   await assert.rejects(request(port, "/"), /ECONNREFUSED|ECONNRESET|socket hang up/);
 });
 
@@ -209,7 +209,201 @@ test("closeAll drops every share and the listener", async () => {
   await share.publish("tab1", "a.md", "x");
   await share.publish("tab2", "b.md", "y");
   share.closeAll();
-  assert.deepEqual(share.status(), { listening: false, port: null, shares: [] });
+  assert.deepEqual(share.status(), { listening: false, port: null, shares: [], voiceStreams: 0 });
+});
+
+/* ---- the voice relay (issue #122) ------------------------------------ */
+
+/* A fake of main's voice helper: start answers a session, and `emit` plays
+   an event for that session back through the share, as main's onEvent does. */
+function makeVoice(share, answer) {
+  const log = [];
+  let session = 0;
+  let current = null;
+  const voice = {
+    log,
+    start(ownerId) {
+      log.push(["start", ownerId]);
+      if (answer) return answer;
+      current = { ownerId, session: ++session };
+      return { ok: true, session: current.session };
+    },
+    stop(ownerId, s) { log.push(["stop", ownerId, s]); if (current && current.session === s) current = null; },
+    emit(event) { if (current) share().pushVoice(current.ownerId, Object.assign({ session: current.session }, event)); },
+    get current() { return current; }
+  };
+  return voice;
+}
+
+/* Opens a relay stream and collects its `data:` events. */
+function openStream(port, pathname, headers) {
+  return new Promise((resolve, reject) => {
+    const events = [];
+    const req = http.request({
+      host: "127.0.0.1", port, path: pathname, method: "GET",
+      headers: Object.assign({ host: `127.0.0.1:${port}`, accept: "text/event-stream" }, headers || {})
+    }, (res) => {
+      let buf = "";
+      const ended = new Promise((r) => res.on("close", r));
+      res.setEncoding("utf8");
+      res.on("data", (d) => {
+        buf += d;
+        let i;
+        while ((i = buf.indexOf("\n\n")) !== -1) {
+          const block = buf.slice(0, i); buf = buf.slice(i + 2);
+          if (block.startsWith("data: ")) events.push(JSON.parse(block.slice(6)));
+        }
+      });
+      resolve({ status: res.statusCode, headers: res.headers, events, ended, close: () => req.destroy() });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+const tick = (ms) => new Promise((r) => setTimeout(r, ms || 30));
+async function until(fn, ms) {
+  const end = Date.now() + (ms || 3000);
+  while (Date.now() < end) { if (fn()) return true; await tick(10); }
+  return false;
+}
+
+function parseVoice(url) {
+  const m = /[#&]voice=(\d+)-([0-9a-f]{64})$/.exec(url);
+  return m ? { port: Number(m[1]), token: m[2] } : null;
+}
+
+test("with a listener, a share carries a voice token of its own in the fragment", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const url = await share.publish("tab1", "a.md", "x", { voice: true });
+    const { token } = parseShareUrl(url.replace(/&voice=.*$/, ""));
+    const v = parseVoice(url);
+    assert.ok(token && v, url);
+    assert.notEqual(v.token, token, "the relay token is not the script token");
+    assert.equal(v.port, share.status().port);
+    const plain = await share.publish("tab2", "b.md", "y");
+    assert.equal(parseVoice(plain), null, "no voice unless asked for");
+    const noVoice = makeShare();
+    try { assert.equal(parseVoice(await noVoice.publish("tab1", "a.md", "x", { voice: true })), null, "no voice without a listener"); }
+    finally { noVoice.closeAll(); }
+  } finally { share.closeAll(); }
+});
+
+test("opening the stream starts the listener; its events arrive as data lines; closing it stops that session", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token);
+    assert.equal(s.status, 200);
+    assert.match(s.headers["content-type"], /^text\/event-stream/);
+    assert.equal(s.headers["cache-control"], "no-store");
+    assert.equal(s.headers["access-control-allow-origin"], undefined, "no CORS for an origin nobody named");
+    assert.ok(await until(() => voice.log.length === 1));
+    assert.deepEqual(voice.log[0], ["start", "tab1"]);
+    assert.equal(share.status().voiceStreams, 1);
+    voice.emit({ type: "start", lang: "en-US" });
+    voice.emit({ type: "final", text: "hello world" });
+    voice.emit({ type: "device", name: "USB mic" });
+    /* another session's event is not this stream's */
+    share.pushVoice("tab1", { type: "final", session: 999, text: "stale" });
+    assert.ok(await until(() => s.events.length === 3), JSON.stringify(s.events));
+    assert.deepEqual(s.events.map((e) => e.type), ["start", "final", "device"]);
+    assert.equal(s.events[1].text, "hello world");
+    assert.equal(s.events[2].name, "USB mic", "an event type this file does not know passes through");
+    s.close();
+    assert.ok(await until(() => voice.log.length === 2));
+    assert.deepEqual(voice.log[1], ["stop", "tab1", 1]);
+    assert.ok(await until(() => share.status().voiceStreams === 0));
+  } finally { share.closeAll(); }
+});
+
+test("an end event from the helper closes the stream without a stop", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token);
+    assert.ok(await until(() => voice.current));
+    voice.emit({ type: "end", reason: "taken" });
+    await s.ended;
+    assert.deepEqual(s.events.map((e) => e.type + ":" + (e.reason || "")), ["end:taken"]);
+    assert.equal(voice.log.filter((l) => l[0] === "stop").length, 0);
+  } finally { share.closeAll(); }
+});
+
+test("a refused start is an error then an end, and the stream closes", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share, { ok: false, code: "UNAVAILABLE" });
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token);
+    await s.ended;
+    assert.deepEqual(s.events, [{ type: "error", code: "unavailable" }, { type: "end", reason: "exited" }]);
+  } finally { share.closeAll(); }
+});
+
+test("sharing again, or revoking, ends the old relay; a wrong or old token is 404", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice });
+  try {
+    const v1 = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    assert.equal((await request(v1.port, "/prompter-voice/" + "0".repeat(64))).status, 404);
+    const s1 = await openStream(v1.port, "/prompter-voice/" + v1.token);
+    assert.ok(await until(() => voice.current));
+    const v2 = parseVoice(await share.publish("tab1", "a.md", "x2", { voice: true }));
+    await s1.ended;
+    assert.equal(s1.events[s1.events.length - 1].reason, "revoked");
+    assert.deepEqual(voice.log[voice.log.length - 1], ["stop", "tab1", 1]);
+    assert.equal((await request(v1.port, "/prompter-voice/" + v1.token)).status, 404);
+    const s2 = await openStream(v2.port, "/prompter-voice/" + v2.token);
+    assert.ok(await until(() => voice.current && voice.current.session === 2));
+    share.revoke("tab1");
+    await s2.ended;
+    assert.equal(s2.events[s2.events.length - 1].reason, "revoked");
+    assert.deepEqual(voice.log[voice.log.length - 1], ["stop", "tab1", 2]);
+  } finally { share.closeAll(); }
+});
+
+test("a relay-only share serves no script, and lets the document server's origin read it", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice, corsOrigins: () => ["http://127.0.0.1:8791"] });
+  try {
+    const param = await share.publishVoice("tab9");
+    const v = parseVoice("#" + param);
+    assert.ok(v, param);
+    const s = await openStream(v.port, "/prompter-voice/" + v.token, { origin: "http://127.0.0.1:8791" });
+    assert.equal(s.headers["access-control-allow-origin"], "http://127.0.0.1:8791");
+    s.close();
+    const other = await openStream(v.port, "/prompter-voice/" + v.token, { origin: "http://evil.example" });
+    assert.equal(other.headers["access-control-allow-origin"], undefined);
+    other.close();
+    const forged = await request(v.port, "/prompter-voice/" + v.token, { headers: { host: "rebind.example:" + v.port } });
+    assert.equal(forged.status, 403);
+  } finally { share.closeAll(); }
+});
+
+test("a relay in use outlives the share's TTL; an idle one does not", async () => {
+  const ref = {};
+  const voice = makeVoice(() => ref.share);
+  const share = ref.share = makeShare({ voice, ttlMs: 150 });
+  try {
+    const v = parseVoice(await share.publish("tab1", "a.md", "x", { voice: true }));
+    const s = await openStream(v.port, "/prompter-voice/" + v.token);
+    assert.ok(await until(() => voice.current));
+    await tick(400);
+    assert.ok(share.status().shares.includes("tab1"), "kept while the stream is open");
+    s.close();
+    assert.ok(await until(() => !share.status().shares.includes("tab1"), 2000), "dropped once it is not");
+  } finally { share.closeAll(); }
 });
 
 const failures = [];

@@ -40,8 +40,8 @@ beta copy is offered it like any other update.
   a cell moves into a comment on that scene. Cutting text moves its comment
   with it.
 - **Follow My Voice in the desktop app** through Windows' own speech
-  recognition, or **Present in browser** to run the teleprompter in Chrome or
-  Edge.
+  recognition, or **Present in browser** to run the teleprompter in any
+  browser, Firefox included — the desktop app does the listening.
 - **Google Drive in the desktop app**, and **each tab has its own server or
   tunnel connection**.
 - **Pictures are stored once**, outside the document, so scripts with many
@@ -183,7 +183,9 @@ differences:
   **☰ File ▸ This document ▸ Present in browser (Follow My Voice)** or press
   <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>. Your default browser opens
   straight into the teleprompter with the same script, and Follow My Voice
-  works there in Chrome or Edge. The browser shows a read-only copy: keep
+  works there in any browser, Firefox included: the desktop app listens and
+  passes the words to the page, so keep it running while you read. The
+  browser shows a read-only copy: keep
   editing in the desktop app. If the script has never been saved, you'll be
   asked to save it first.
 - **Google Drive files** work differently in the desktop app: you sign in once

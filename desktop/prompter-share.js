@@ -36,6 +36,9 @@
  *                             stays in local mode instead of probing
  *   GET /prompter-script/<t>  the shared script as JSON {name, text}, only
  *                             for the exact 256-bit token main put in the URL
+ *   GET /prompter-voice/<t>   Follow My Voice relayed from the desktop app
+ *                             (issue #122): a text/event-stream, for a second
+ *                             256-bit token of its own — see VOICE RELAY
  *   anything else             404
  *
  * Bound to 127.0.0.1 only. The Host header must name this listener
@@ -45,6 +48,21 @@
  * can make the request but never read the answer. The token travels in the
  * URL's FRAGMENT (#script=…), which a browser never sends to any server, and
  * the page takes it out of the address bar once read.
+ *
+ * VOICE RELAY (issue #122). Firefox has no Web Speech recogniser, and the
+ * desktop app already runs Windows' own (desktop/voice-helper.js, #8). So
+ * when main has a listener it gives the share a voice token too
+ * (#…&voice=<port>-<token>), and the page opens an EventSource on
+ * /prompter-voice/<token> when Follow My Voice is pressed. The stream
+ * opening is what starts the listener (opts.voice.start, for the share's
+ * owner) and the stream closing — Stop Following, the browser tab closing,
+ * the share going — is what stops it, so a listener never outlives the page
+ * that asked for it. Every event the helper sends for that session goes
+ * down the stream as one `data:` line of JSON, exactly as voice-helper.js's
+ * own parser rebuilt it: whatever types that lets through pass through here
+ * unchanged. The page is served either by this listener or by the desktop's
+ * document server (a server tab), so the one other origin allowed to read a
+ * stream is whatever opts.corsOrigins() names.
  *
  * LIFETIME. One share per desktop tab: sharing again from the same tab
  * replaces that tab's previous one. A share is dropped when its tab closes,
@@ -87,6 +105,15 @@ const SHAREABLE_EXTENSIONS = [".splitpage", ".md", ".html", ".htm"];
 
 const TOKEN_RE = /^[0-9a-f]{64}$/;
 const SCRIPT_PATH_RE = /^\/prompter-script\/([0-9a-f]{64})$/;
+const VOICE_PATH_RE = /^\/prompter-voice\/([0-9a-f]{64})$/;
+
+/* A comment line down an idle voice stream this often, so a browser tab that
+   vanished without closing its socket is noticed and its listener stopped. */
+const VOICE_HEARTBEAT_MS = 15000;
+
+/* What main's voice-start refusals mean to the page (the same words the
+   desktop tab's own recogniser uses, 20f-desktop.js). */
+const VOICE_START_ERRORS = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed" };
 
 function isShareableName(name) {
   return SHAREABLE_EXTENSIONS.includes(path.extname(String(name || "")).toLowerCase());
@@ -114,6 +141,11 @@ function portIsFree(port, host) {
  *   preferredPort     default PREFERRED_PORT (tests pass 0 for "any")
  *   ttlMs             default SHARE_TTL_MS
  *   now()             clock, for tests
+ *   voice             {start(ownerId) -> {ok, session} | {ok:false, code},
+ *                      stop(ownerId, session)} — the relay's listener;
+ *                     without it no share is given a voice token
+ *   corsOrigins()     -> string[]  the other origins allowed to read a
+ *                     voice stream (the desktop's document server)
  */
 function createPrompterShare(options) {
   const opts = options || {};
@@ -123,6 +155,8 @@ function createPrompterShare(options) {
   const preferredPort = opts.preferredPort === undefined ? PREFERRED_PORT : opts.preferredPort;
   const ttlMs = opts.ttlMs || SHARE_TTL_MS;
   const now = typeof opts.now === "function" ? opts.now : Date.now;
+  const voice = opts.voice && typeof opts.voice.start === "function" ? opts.voice : null;
+  const corsOrigins = typeof opts.corsOrigins === "function" ? opts.corsOrigins : () => [];
 
   const staticTable = {};
   for (const [route, entry] of Object.entries(opts.staticAllowlist || {})) {
@@ -130,7 +164,8 @@ function createPrompterShare(options) {
     staticTable[route] = entry;
   }
 
-  /* ownerId -> {token, name, text, expiresAt, timer} */
+  /* ownerId -> {token, voiceToken, name, text, expiresAt, timer, streams}.
+     A relay-only share (publishVoice) has no token and no text. */
   const shares = new Map();
   let server = null;
   let port = null;
@@ -141,19 +176,112 @@ function createPrompterShare(options) {
     if (!share) return false;
     clearTimeout(share.timer);
     shares.delete(ownerId);
+    endStreams(share, "revoked");
     if (!shares.size) stopServer();
     return true;
+  }
+
+  /* The TTL is for reloading the page; a relay still in use keeps its share
+     alive for as long as it is. */
+  function armExpiry(ownerId, share) {
+    clearTimeout(share.timer);
+    share.timer = setTimeout(() => {
+      if (shares.get(ownerId) !== share) return;
+      if (share.streams.size) { share.expiresAt = now() + ttlMs; armExpiry(ownerId, share); return; }
+      dropShare(ownerId);
+    }, Math.max(0, share.expiresAt - now()));
+    if (typeof share.timer.unref === "function") share.timer.unref();
+  }
+
+  function writeVoice(stream, event) {
+    try { stream.res.write("data: " + JSON.stringify(event) + "\n\n"); } catch { /* socket gone */ }
+  }
+
+  function endStreams(share, reason) {
+    for (const stream of [...share.streams]) {
+      writeVoice(stream, { type: "end", session: stream.session, reason });
+      stream.close();
+    }
   }
 
   /* {ownerId, share, expired} for the share this token names, or null. An
      expired one is reported rather than dropped here: dropping the last
      share closes the listener, and that must wait until the answer saying
      "expired" has actually been sent on it. */
-  function shareForToken(token) {
+  function shareForToken(token, field) {
+    const key = field || "token";
     for (const [ownerId, share] of shares) {
-      if (tokensEqual(share.token, token)) return { ownerId, share, expired: share.expiresAt <= now() };
+      if (tokensEqual(share[key], token)) return { ownerId, share, expired: share.expiresAt <= now() };
     }
     return null;
+  }
+
+  /* The page's EventSource. Opening it starts the listener for the share's
+     owner; closing it, from either end, stops that session and no other. */
+  function openVoiceStream(req, res, found) {
+    const headers = {
+      "content-type": "text/event-stream; charset=utf-8",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "cache-control": "no-store"
+    };
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && corsOrigins().includes(origin)) {
+      headers["access-control-allow-origin"] = origin;
+      headers.vary = "Origin";
+    }
+    res.writeHead(200, headers);
+    if (req.method === "HEAD") { res.end(); return; }
+    const { ownerId, share } = found;
+    const stream = {
+      res,
+      session: null,
+      closed: false,
+      heartbeat: null,
+      close() {
+        if (stream.closed) return;
+        stream.closed = true;
+        clearInterval(stream.heartbeat);
+        share.streams.delete(stream);
+        try { res.end(); } catch { /* socket gone */ }
+        const session = stream.session;
+        stream.session = null;
+        if (session != null) {
+          try { voice.stop(ownerId, session); } catch { /* main is going */ }
+        }
+      }
+    };
+    share.streams.add(stream);
+    res.on("close", () => stream.close());
+    /* Headers out now: an EventSource reports "open" only once it has them. */
+    res.write(": relay\n\n");
+    stream.heartbeat = setInterval(() => {
+      try { res.write(": ping\n\n"); } catch { stream.close(); }
+    }, VOICE_HEARTBEAT_MS);
+    if (typeof stream.heartbeat.unref === "function") stream.heartbeat.unref();
+    share.expiresAt = now() + ttlMs;
+    let answer;
+    try { answer = voice.start(ownerId); } catch { answer = { ok: false, code: "SPAWN_FAILED" }; }
+    if (stream.closed) return;
+    if (!answer || !answer.ok || typeof answer.session !== "number") {
+      writeVoice(stream, { type: "error", code: VOICE_START_ERRORS[answer && answer.code] || "helper-failed" });
+      writeVoice(stream, { type: "end", reason: "exited" });
+      stream.close();
+      return;
+    }
+    stream.session = answer.session;
+  }
+
+  /* One event of one listening session, from main's voice helper, down the
+     stream that session belongs to. An "end" closes the stream after it. */
+  function pushVoice(ownerId, event) {
+    const share = shares.get(ownerId);
+    if (!share || !event || typeof event !== "object") return;
+    for (const stream of [...share.streams]) {
+      if (stream.session == null || stream.session !== event.session) continue;
+      writeVoice(stream, event);
+      if (event.type === "end") { stream.session = null; stream.close(); }
+    }
   }
 
   function hostAllowed(hostHeader) {
@@ -203,6 +331,17 @@ function createPrompterShare(options) {
       }
       send(res, 200, { "content-type": "application/json; charset=utf-8" },
         req.method === "HEAD" ? undefined : JSON.stringify({ name: found.share.name, text: found.share.text }));
+      return;
+    }
+
+    const voiceMatch = VOICE_PATH_RE.exec(pathname);
+    if (voiceMatch) {
+      const found = voice ? shareForToken(voiceMatch[1], "voiceToken") : null;
+      if (!found || found.expired) {
+        send(res, 404, { "content-type": "application/json" }, JSON.stringify({ error: "expired" }));
+        return;
+      }
+      openVoiceStream(req, res, found);
       return;
     }
 
@@ -266,20 +405,55 @@ function createPrompterShare(options) {
      `ownerId` (a tab id), replacing whatever that tab shared before. Answers
      the URL main opens: the app page on this listener, told to start in the
      teleprompter, with the token in the fragment. */
-  async function publish(ownerId, name, text) {
+  function replaceShare(ownerId, share) {
+    const previous = shares.get(ownerId);
+    if (previous) {
+      clearTimeout(previous.timer);
+      /* The browser tab the last link opened reads an older copy now; its
+         relay goes rather than listening on for a page nobody watches. */
+      endStreams(previous, "revoked");
+    }
+    shares.set(ownerId, share);
+    armExpiry(ownerId, share);
+  }
+
+  function voiceParam(listening, share) {
+    return share.voiceToken ? `voice=${listening}-${share.voiceToken}` : "";
+  }
+
+  /* publishOpts.voice: give the share a relay too (ignored without
+     opts.voice). */
+  async function publish(ownerId, name, text, publishOpts) {
     if (typeof ownerId !== "string" || !ownerId) throw new Error("prompter-share: no owner");
     if (!isShareableName(name)) throw new Error("prompter-share: not a project file");
     if (typeof text !== "string") throw new Error("prompter-share: no text");
     if (Buffer.byteLength(text, "utf8") > MAX_SCRIPT_BYTES) throw new Error("prompter-share: too large");
     const listening = await ensureServer();
-    const previous = shares.get(ownerId);
-    if (previous) clearTimeout(previous.timer);
+    const withVoice = !!(voice && publishOpts && publishOpts.voice);
     const token = crypto.randomBytes(32).toString("hex");
-    const share = { token, name: path.basename(name), text, expiresAt: now() + ttlMs, timer: null };
-    share.timer = setTimeout(() => { if (shares.get(ownerId) === share) dropShare(ownerId); }, ttlMs);
-    if (typeof share.timer.unref === "function") share.timer.unref();
-    shares.set(ownerId, share);
-    return `http://${host}:${listening}/?teleprompter=1#script=${token}`;
+    const share = {
+      token,
+      voiceToken: withVoice ? crypto.randomBytes(32).toString("hex") : null,
+      name: path.basename(name), text, expiresAt: now() + ttlMs, timer: null, streams: new Set()
+    };
+    replaceShare(ownerId, share);
+    const relay = voiceParam(listening, share);
+    return `http://${host}:${listening}/?teleprompter=1#script=${token}` + (relay ? "&" + relay : "");
+  }
+
+  /* A relay with no script, for a page something else serves (a server
+     tab's document, on the desktop's own document server). Answers the
+     fragment parameter to hand that page: `voice=<port>-<token>`. */
+  async function publishVoice(ownerId) {
+    if (typeof ownerId !== "string" || !ownerId) throw new Error("prompter-share: no owner");
+    if (!voice) throw new Error("prompter-share: no voice relay");
+    const listening = await ensureServer();
+    const share = {
+      token: null, voiceToken: crypto.randomBytes(32).toString("hex"),
+      name: "", text: null, expiresAt: now() + ttlMs, timer: null, streams: new Set()
+    };
+    replaceShare(ownerId, share);
+    return voiceParam(listening, share);
   }
 
   function closeAll() {
@@ -287,17 +461,22 @@ function createPrompterShare(options) {
       const share = shares.get(ownerId);
       clearTimeout(share.timer);
       shares.delete(ownerId);
+      endStreams(share, "quit");
     }
     stopServer();
   }
 
   return {
     publish,
+    publishVoice,
+    pushVoice,
     revoke: dropShare,
     closeAll,
     /* For tests and nothing else: what is live, without the text or tokens. */
     status() {
-      return { listening: server != null, port, shares: [...shares.keys()] };
+      let voiceStreams = 0;
+      for (const share of shares.values()) voiceStreams += share.streams.size;
+      return { listening: server != null, port, shares: [...shares.keys()], voiceStreams };
     }
   };
 }
