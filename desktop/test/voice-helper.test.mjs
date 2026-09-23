@@ -65,6 +65,15 @@ test("parseHelperLine drops anything else", () => {
   }
 });
 
+test("parseHelperLine keeps a microphone's name as plain, capped text (#118)", () => {
+  assert.deepEqual(parseHelperLine('{"type":"device","name":"Microphone (USB Audio)"}'), { type: "device", name: "Microphone (USB Audio)" });
+  assert.deepEqual(parseHelperLine(JSON.stringify({ type: "device", name: "  Mic\u0000\n <b>x</b> ", code: "x" })), { type: "device", name: "Mic <b>x</b>" });
+  assert.equal(parseHelperLine(JSON.stringify({ type: "device", name: "m".repeat(500) })).name.length, 120);
+  for (const line of ['{"type":"device"}', '{"type":"device","name":7}', JSON.stringify({ type: "device", name: " \u0007 " })]) {
+    assert.equal(parseHelperLine(line), null, line);
+  }
+});
+
 test("parseHelperLine caps text", () => {
   const long = "a".repeat(5000);
   assert.equal(parseHelperLine(JSON.stringify({ type: "final", text: long })).text.length, 2000);
@@ -93,6 +102,20 @@ test("a session's events reach its tab, tagged with its session", async () => {
   assert.equal(events.at(-1).type, "end");
   assert.equal(events.at(-1).reason, "stopped");
   assert.equal(helper.status().running, false);
+});
+
+test("the microphone's name reaches the tab before start (#118)", async () => {
+  process.env.FAKE_VOICE_DEVICE = "Microphone (Fake Array)";
+  try {
+    const { helper, events } = makeHelper("listen");
+    const answer = helper.start("t1");
+    await until(() => events.some((e) => e.type === "final"));
+    assert.deepEqual(events.map((e) => e.type), ["device", "start", "interim", "final"]);
+    assert.deepEqual(events[0], { tabId: "t1", session: answer.session, type: "device", name: "Microphone (Fake Array)" });
+    helper.stopAll();
+  } finally {
+    delete process.env.FAKE_VOICE_DEVICE;
+  }
 });
 
 test("junk from the helper never reaches the page", async () => {

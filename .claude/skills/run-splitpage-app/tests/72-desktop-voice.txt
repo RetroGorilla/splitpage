@@ -49,7 +49,7 @@ eval window.__spokenAt = document.querySelectorAll('#prompter .w.spoken').length
 eval (function(){ fakeV._voiceEmit({ session: 999, type: 'final', text: __say(5, 10) }); return true; })()
 sleep 200
 expect document.querySelectorAll('#prompter .w.spoken').length === window.__spokenAt
-expect document.getElementById('pp-voice-status').textContent.indexOf('following along') !== -1
+expect document.getElementById('pp-voice-status').textContent == Listening
 
 # a warning says why it may not follow, and changes nothing else
 eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); return true; })()
