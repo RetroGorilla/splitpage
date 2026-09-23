@@ -25,6 +25,7 @@ expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-
 expect getComputedStyle(document.querySelector('#broll-page .broll-page-c-props'), '::before').content === '"Props"'
 expect parseFloat(getComputedStyle(document.querySelector('#broll-page .broll-page-note')).fontSize) >= 16
 expect document.querySelector('#broll-page .broll-page-row[data-id="bs1"] .broll-page-c-props').textContent === 'Fishing nets, Drone'
+expect document.querySelectorAll('#broll-page .broll-page-row[data-id="bs1"] .broll-page-c-props .broll-st-dot').length === 2
 
 # still works the same: a tick lands on the record
 click #broll-page .broll-page-row[data-id="bs5"] .broll-check
