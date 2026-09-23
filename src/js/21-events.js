@@ -1577,6 +1577,22 @@ function init() {
   document.getElementById("history-close").addEventListener("click", closeHistoryPanel);
   document.getElementById("history-panel").addEventListener("click", onRootClick);
 
+  /* Mousedown, not click, is where the default has to be prevented (issue:
+     Production wouldn't open after scrolling past #138's denser header).
+     .topbar is `position: sticky`, and while scrolled it sits in its
+     condensed, one-row state; a plain contenteditable cell was focused
+     when the toolbar button was pressed. Letting the mousedown move focus
+     to the button made the browser scroll the (un-stuck, static) header
+     back into view to reveal it — snapping the topbar out of .is-condensed
+     between the mousedown and the mouseup a real click delivers a few
+     pixels apart, so the button was gone from under the pointer by the
+     time the up-event landed and no click ever fired. The buttons never
+     needed focus for their click handler to run, so simply not taking it
+     leaves the header - and the pointer - exactly where they were. */
+  document.querySelector(".toolbar").addEventListener("mousedown", function (e) {
+    if (e.target.closest(".btn")) e.preventDefault();
+  });
+
   document.getElementById("btn-production").addEventListener("click", function () {
     if (!S.state) { showToast("Still loading...", "warn"); return; }
     var panel = document.getElementById("production-panel");
