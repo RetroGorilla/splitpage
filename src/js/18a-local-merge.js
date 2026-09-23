@@ -4,7 +4,7 @@ import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { normalizeDocId } from "./02b-doc-id.js";
 import { blobImgHtml, rowImage, rowImageKey } from "./02c-blobs.js";
-import { ROW_FIELDS, byId, cloneState, rowContentEqual } from "./03-sync.js";
+import { ROW_FIELDS, byId, cloneState, mergeTextField, rowContentEqual, textMergeContext } from "./03-sync.js";
 import { safeImageSrc } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import {
@@ -118,14 +118,17 @@ var MERGE_OUTCOME_TEXT = {
   theirs: "The file's version is taken",
   mine: "Your version is kept",
   conflict: "Changed on both sides — the file's version goes live, yours is kept as a comment",
+  merged: "Changed on both sides — both sets of changes are combined",
   status: "Whichever got further wins",
   both: "Both sides are kept"
 };
 
-/* Mirrors mergeRow()'s ladder in 03-sync.js exactly: the pane has to say
+/* Mirrors mergeRow()'s ladder in 03-sync.js exactly for the fields it
+   still compares whole — the title and the picture: the pane has to say
    what the merge is actually going to do, not something close to it. `b`
    is null when there is no ancestor, which is what makes every difference
-   a conflict in a two-way merge. */
+   a conflict in a two-way merge. A script cell is decided by the merge's
+   own mergeTextField() instead (#85). */
 function mergeFieldOutcome(b, m, t) {
   if (m === t) return null;
   if (b !== null && m === b) return "theirs";
@@ -210,6 +213,7 @@ function mergeDiffModel(base, mine, theirs) {
   }
 
   var baseRows = byId(b && b.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
+  var textCtx = textMergeContext(b, mine, theirs);
   var order = [], seen = {}, sceneNo = {};
   theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
   mine.rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
@@ -230,15 +234,24 @@ function mergeDiffModel(base, mine, theirs) {
         });
         return;
       }
+      /* Decided the way mergeStates decides it, by mergeTextField() on the
+         cells themselves rather than the plain text diffed below: two
+         cells can read identically while differing in a tag or a comment
+         anchor, and two different strings can be the same cell. A scene
+         only one side has is decided by mergeRowFate() and shown whole. */
+      var outcome = m && t
+        ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx).outcome
+        : mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null);
+      if (outcome === "same" || outcome === null) return;
       var mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
-      if (mv === tv) return;
+      /* A difference in formatting, a tag or a comment anchor alone has
+         nothing to show side by side as text — unless it is a conflict,
+         which leaves a card behind and so is always listed. */
+      if (mv === tv && outcome !== "conflict") return;
       var pair = mergeDiffPairHtml(mv, tv);
       entries.push({
         label: f === "audioText" ? "Audio" : "Visual",
-        /* On the raw HTML, not the plain text just diffed: that is what
-           mergeStates compares, and two cells can read identically while
-           differing in a tag span or a comment anchor. */
-        outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null),
+        outcome: outcome,
         mineHtml: pair.mine,
         theirsHtml: pair.theirs
       });
