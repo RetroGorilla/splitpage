@@ -3,6 +3,7 @@ import { SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
+import { noteRemoteChange } from "./12a-undo.js";
 import { isSha256Hex, normalizeImageRef, refsIn } from "../../shared/blob-policy.js";
 import {
   adoptRestoredState,
@@ -1255,6 +1256,10 @@ export function applyMerge(opts) {
   }
 
   function adopt() {
+    /* Someone else's changes arriving are not an edit of this tab's: the
+       undo stack records what was typed here first, then forgets what the
+       merge changed (design D4), so Ctrl+Z never reverts their words. */
+    noteRemoteChange(next);
     S.state = next;
     /* Before the undo point is armed: noteMergedDocId may have just moved
        this document's history to the merged id, and undoMerge compares what
