@@ -978,13 +978,36 @@ Never in the seed, `#state-data`, or Standalone HTML export. Join key for
 per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 
 **Per-document version history**, capped 50 snapshots/document, keyed by
-`docId`: browser IndexedDB (`splitpage-history`, `03a-history-store.js`,
-memory fallback), desktop files (`<userData>/history/`,
-§3.13). Pre-tabs shared history migrated once into a synthetic "Older"
-document, expiring 90 days after that migration (`HISTORY_OLDER_TTL_MS`).
+`docId`. ONE store since #83, `shared/history-store.js` (put-if-absent by
+snapshot id, the stamp after the bucket's newest, the trim to 50, cap
+eviction, the quota retry, Older's creation and expiry, holds, index-only
+copy, which bodies may go), run over a backend per place: in the browser
+over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v2: an `index`
+store, one DocRecord `{bucket, title, lastOpenedAt, migratedAt?,
+expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
+`{sha, stateJson}`, one row per distinct content, shared by every entry
+naming it), or over the shared memory backend when IndexedDB will not open
+(for the rest of that page); on the desktop in main, over its folder
+backend (§3.13), with `03a-history-store.js`'s `desktopHistoryBackend` a
+thin IPC client. Totals are computed from the index (no stored counters);
+a body goes only in the commit that stops naming it, and is written before
+the commit that names it. Pre-tabs shared history migrated once into a
+synthetic "Older" document, expiring 90 days after that migration
+(`HISTORY_OLDER_TTL_MS`; an expiry ≤ 0 is "not stamped", never "expired").
 Eviction order: expired Older, trim every doc to 50, Older oldest-first,
 then docs by `lastOpenedAt` ascending — a doc's newest snapshot is never
 evicted.
+
+The browser's v1 layout (`docs` with byte/count counters, `snapMeta`
+`[docId, id]` + `byDocAt`, `snapBody` `[docId, id]`) is moved into v2 by
+03c's migrator, TEMPORARY until a v3 drops those stores: the backend's
+first job, one snapshot per transaction (body put if absent, meta + sha
+merged into the bucket's record, the v1 rows deleted), so it resumes from
+whatever is left. While it runs, the panel answers from the page with one
+line saying so; if it cannot finish (quota, io), reads merge the v2 index
+with a read-only view of the v1 rows and every write answers `io`, so
+captures stay pending in the page with ONE toast and one panel line (the
+same for a database a newer build wrote, served read-only).
 
 **Crash-safe drafts** (desktop only, §3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
@@ -1020,7 +1043,8 @@ lossy import (#32).
 not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 `splitpage-tagging-help-dismissed`, `splitpage-files` (IndexedDB,
 `FileSystemFileHandle` for resume-on-launch), `splitpage-history`
-(IndexedDB, per-document history), `splitpage-blobs` (IndexedDB, store
+(IndexedDB v2, per-document history: `index` + `bodies`, plus the v1
+stores until the one-time move has emptied them — see above), `splitpage-blobs` (IndexedDB, store
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
 
@@ -1177,6 +1201,8 @@ bytes, #82 — nothing deletes them yet, D4).
 38. **Version history is addressed only by `(docId, snapshot id)`**,
     validated in renderer and main; the resolved path must stay inside the
     history folder. The Older bucket is reachable only via `{older: true}`.
+    The shared store (`shared/history-store.js`) refuses every other bucket
+    itself, in the browser and in main alike.
 39. **`pushSnapshot()` captures synchronously, and no save ever waits on
     history.** A restore overwrites the document only after its "Before
     restoring" backup is stored or an explicit second confirm.
@@ -1277,7 +1303,8 @@ evaluation order via `_entry.js`):
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
 | `02c-blobs.js` | image blob registry (#82): `intern`/`internDataUrl` (sync hash, sniff, measure), `recordFor`/`urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`/`queuePersist`, a row's picture (`rowImage`, `rowImageUrl`, `rowImageBytes`, `blobImgHtml`), the file writers' `inlineStateImages`/`inlineStateJson`, the document-wide hydrator for `img[data-blob]` ("Image unavailable" when nobody has it), IndexedDB `splitpage-blobs` + memory backends (`setBackend` for the desktop folder), `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
-| `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
+| `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
+| `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v2: `index` + `bodies`, one strict transaction per job), `hashText`, and — TEMPORARY until v3 — the v1 → v2 migrator, its read-only v1 reader and `seedV1HistoryDb` (tests) |
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown, video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
@@ -1305,7 +1332,7 @@ evaluation order via `_entry.js`):
 | `20d-formats.js` | the two document formats, hand-edit reconcile |
 | `20e-connect.js` | join-PIN dialog, server bookmarks, SSH helper |
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
-| `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
+| `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `21-events.js` | all event wiring, `init()` |

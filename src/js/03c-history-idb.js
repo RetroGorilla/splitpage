@@ -3,9 +3,9 @@
  * as a backend for shared/history-store.js — and, clearly marked below and
  * TEMPORARY, the one-time move of the v1 IndexedDB rows into it.
  *
- * NOT WIRED IN YET (step 2b). Nothing in the app imports this file; step 3b
- * switches 03a-history-store.js over to createHistoryStore() on top of it.
- * It has no __init(): nothing here reads the DOM or storage at evaluation
+ * 03a-history-store.js builds the browser's one createHistoryStore() on top
+ * of it (step 3b), falling back to the shared memory backend when IndexedDB
+ * will not open. It has no __init(): nothing here reads the DOM or storage at evaluation
  * time — the factory is handed its indexedDB, so node --test runs it over
  * fake-indexeddb (src/test/history-idb.test.mjs).
  *

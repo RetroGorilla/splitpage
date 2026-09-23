@@ -5,14 +5,13 @@ import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
 import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import {
   HISTORY_OLDER_KEY,
-  HISTORY_OLDER_TTL_MS,
-  HISTORY_PER_DOC,
   HISTORY_SNAP_ID_RE,
-  historyStampAfter,
   historyUtf8Length,
   isPristineSeedDocument,
   sanitizeHistoryMeta
 } from "./03a-history-store.js";
+import { hashText as historyHashText } from "./03c-history-idb.js";
+import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
@@ -695,10 +694,10 @@ export function makeDesktopBlobBackend(bridge) {
    it — same trick window.__splitpageFormats (20d-formats.js) plays. */
 /* opts.blobs === true adds the three blob-bridge members (issue #82) —
    see addFakeDesktopBlobs below.
-   opts.history === true gives the fake the seven HISTORY-IPC methods, kept
-   in memory, validating with the SAME regexes the real main process uses
-   (normalizeDocId and HISTORY_SNAP_ID_RE, both from 03a-history-store.js)
-   and applying the same "50 newest per document" trim. That is enough for
+   opts.history === true gives the fake the eight HISTORY-IPC methods over
+   the real shared/history-store.js on a memory backend (#83), validating
+   with the SAME regexes the real main process uses (normalizeDocId and
+   HISTORY_SNAP_ID_RE, both from 03a-history-store.js). That is enough for
    a browser suite to prove the desktop path is taken — a capture lands in
    the desktop store, never in IndexedDB and never in localStorage — without
    a real Electron shell. _historyDump() hands the whole store back for
@@ -1091,163 +1090,104 @@ function addFakeDesktopDrive(backend) {
   backend._driveCalls = calls;
 }
 
-/* The HISTORY-IPC surface, faked in memory. Deliberately the same SHAPES
-   desktop/main.js answers with ({ok:true, sizeBytes, duplicate?, evicted,
-   overCap} and friends), because the code under test is the translator in
-   03a-history-store.js's desktopHistoryBackend — a fake that answered a
-   tidier shape would prove nothing about it. Invalid arguments REJECT, the
-   way main's handlers do, so the 'invalid' path is reachable too. */
+/* The HISTORY-IPC surface, faked in memory — and since #83 over the REAL
+   store: shared/history-store.js on the shared memory backend, the same
+   store desktop/main.js runs over its folder backend. What is fake is only
+   the IPC edge, and it keeps main's SHAPES ({ok:true, sizeBytes,
+   duplicate?, evicted, overCap} and friends), because the code under test
+   is the translator in 03a-history-store.js's desktopHistoryBackend — a fake
+   that answered a tidier shape would prove nothing about it. Invalid
+   arguments REJECT, the way main's handlers do, so the 'invalid' path is
+   reachable too. The held snapshots a put or a get carries are remembered
+   per bridge, as main remembers them per tab, and unioned into every
+   eviction. No cap: main's is the disk's, and no suite fills one here. */
 function addFakeDesktopHistory(backend) {
-  var buckets = {};   /* bucket -> [{meta, stateJson}], oldest first */
-  var records = {};   /* bucket -> {title, lastOpenedAt, migratedAt, expiresAt} */
+  var mem = createMemoryHistoryBackend({ name: "desktop-fake", persistent: true });
+  var held = [];
+  var store = createHistoryStore({
+    backend: mem,
+    now: Date.now,
+    hashText: historyHashText,
+    holds: function () { return held; }
+  });
 
-  function listOf(bucket) { return buckets[bucket] || (buckets[bucket] = []); }
-  function recordOf(bucket) { return records[bucket] || (records[bucket] = { title: "", lastOpenedAt: 0 }); }
-  function bytesOf(bucket) {
-    return listOf(bucket).reduce(function (n, e) { return n + (e.meta.sizeBytes || 0); }, 0);
-  }
-  function findIn(bucket, id) {
-    var list = buckets[bucket] || [];
-    for (var i = 0; i < list.length; i++) if (list[i].meta.id === id) return list[i];
-    return null;
-  }
-  function metasNewestFirst(bucket) {
-    return (buckets[bucket] || []).slice().reverse().map(function (e) { return sanitizeHistoryMeta(e.meta); });
-  }
-  function trim(bucket) {
-    /* A document keeps its 50 newest; the Older bucket is only ever emptied
-       as a whole, so it is never trimmed. */
-    if (bucket === HISTORY_OLDER_KEY) return 0;
-    var list = listOf(bucket), dropped = 0;
-    while (list.length > HISTORY_PER_DOC) { list.shift(); dropped++; }
-    return dropped;
-  }
   function bucketOf(query) {
     if (query && query.older === true) return HISTORY_OLDER_KEY;
     return normalizeDocId(query && query.docId) || null;
   }
+  function invalid(what) { return Promise.reject(new Error("history: " + what)); }
 
-  backend.historyPut = function (docId, meta, stateJson) {
+  backend.historyPut = function (docId, meta, stateJson, protect) {
     var id = normalizeDocId(docId);
     var m = sanitizeHistoryMeta(meta);
-    if (!id || !m || typeof stateJson !== "string") return Promise.reject(new Error("history: invalid put"));
-    var existing = findIn(id, m.id);
-    if (existing) return Promise.resolve({ ok: true, sizeBytes: existing.meta.sizeBytes, duplicate: true, evicted: 0, overCap: false });
-    var list = listOf(id), rec = recordOf(id);
-    m.sizeBytes = historyUtf8Length(stateJson);
-    historyStampAfter(m, list.length ? list[list.length - 1].meta.atMs : null);
-    list.push({ meta: m, stateJson: stateJson });
-    if (m.title) rec.title = m.title;
-    rec.lastOpenedAt = Date.now();
-    return Promise.resolve({ ok: true, sizeBytes: m.sizeBytes, duplicate: false, evicted: trim(id), overCap: false });
+    if (!id || !m || typeof stateJson !== "string") return invalid("invalid put");
+    if (Array.isArray(protect)) held = protect.slice();
+    return store.put(id, m, stateJson).then(function (r) {
+      if (!r.stored) return { ok: false, code: r.code };
+      return { ok: true, sizeBytes: historyUtf8Length(stateJson), duplicate: !!r.duplicate, evicted: r.evicted || 0, overCap: !!r.overCap };
+    });
   };
 
   backend.historyList = function (docId) {
     var id = docId == null ? null : normalizeDocId(docId);
-    if (docId != null && !id) return Promise.reject(new Error("history: invalid document id"));
-    var older = records[HISTORY_OLDER_KEY];
-    return Promise.resolve({
-      entries: id ? metasNewestFirst(id) : [],
-      older: metasNewestFirst(HISTORY_OLDER_KEY),
-      olderExpiresAt: older && older.expiresAt != null ? older.expiresAt : null
+    if (docId != null && !id) return invalid("invalid document id");
+    return store.list(id).then(function (r) {
+      /* main's metas carry no document id: on its side the bucket is the
+         document, and the renderer stamps it back on */
+      return { entries: r.entries.map(sanitizeHistoryMeta), older: r.older.map(sanitizeHistoryMeta), olderExpiresAt: r.olderExpiresAt };
     });
   };
 
   backend.historyGet = function (query, snapshotId) {
     var bucket = bucketOf(query);
-    if (!bucket) return Promise.reject(new Error("history: invalid document id"));
-    if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) {
-      return Promise.reject(new Error("history: invalid snapshot id"));
-    }
-    var hit = findIn(bucket, snapshotId);
-    return Promise.resolve(hit ? { meta: sanitizeHistoryMeta(hit.meta), stateJson: hit.stateJson } : null);
+    if (!bucket) return invalid("invalid document id");
+    if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) return invalid("invalid snapshot id");
+    if (query && Array.isArray(query.protect)) held = query.protect.slice();
+    return store.get(bucket, snapshotId).then(function (hit) {
+      return hit ? { meta: sanitizeHistoryMeta(hit.meta), stateJson: hit.stateJson } : null;
+    });
   };
 
   backend.historyCopy = function (fromDocId, toDocId) {
     var from = normalizeDocId(fromDocId), to = normalizeDocId(toDocId);
-    if (!from || !to) return Promise.reject(new Error("history: invalid document id"));
-    if (from === to) return Promise.resolve({ ok: true, copied: 0 });
-    if (!buckets[from] && !buckets[to]) return Promise.resolve({ ok: true, copied: 0 });
-    var dst = listOf(to), copied = 0;
-    (buckets[from] || []).forEach(function (e) {
-      if (findIn(to, e.meta.id)) return;      /* ids are kept: a second copy is a no-op */
-      dst.push({ meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson });
-      copied++;
-    });
-    dst.sort(function (a, b) { return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : 1); });
-    recordOf(to).lastOpenedAt = Date.now();
-    trim(to);
-    return Promise.resolve({ ok: true, copied: copied });
+    if (!from || !to) return invalid("invalid document id");
+    return store.copy(from, to);
   };
 
   backend.historyTouch = function (docId, title) {
     var id = normalizeDocId(docId);
-    if (!id) return Promise.reject(new Error("history: invalid document id"));
-    /* Never creates a record, same as the real store. */
-    if (buckets[id] && buckets[id].length) {
-      var rec = recordOf(id);
-      rec.lastOpenedAt = Date.now();
-      var t = String(title == null ? "" : title).slice(0, 300);
-      if (t) rec.title = t;
-    }
-    return Promise.resolve();
+    if (!id) return invalid("invalid document id");
+    return store.touch(id, title);
   };
 
   backend.historyImportOlder = function (entries) {
-    if (!Array.isArray(entries)) return Promise.reject(new Error("history: invalid import"));
-    var fresh = !records[HISTORY_OLDER_KEY];
-    var list = listOf(HISTORY_OLDER_KEY), rec = recordOf(HISTORY_OLDER_KEY), added = 0;
-    if (fresh) {
-      /* migratedAt/expiresAt only on creation: re-running an interrupted
-         migration must never extend the 90 days. */
-      rec.migratedAt = Date.now();
-      rec.expiresAt = rec.migratedAt + HISTORY_OLDER_TTL_MS;
-    }
-    entries.forEach(function (e) {
-      var m = sanitizeHistoryMeta(e && e.meta);
-      if (!m || typeof (e && e.stateJson) !== "string" || findIn(HISTORY_OLDER_KEY, m.id)) return;
-      m.sizeBytes = historyUtf8Length(e.stateJson);
-      list.push({ meta: m, stateJson: e.stateJson });
-      added++;
-    });
-    return Promise.resolve({ ok: true, count: list.length, added: added });
+    if (!Array.isArray(entries)) return invalid("invalid import");
+    return store.importOlder(entries);
   };
 
-  backend.historyUsage = function () {
-    var total = 0, docCount = 0;
-    Object.keys(buckets).forEach(function (k) {
-      total += bytesOf(k);
-      if (k !== HISTORY_OLDER_KEY) docCount++;
-    });
-    return Promise.resolve({ totalBytes: total, capBytes: Infinity, overCap: false, docCount: docCount, readOnly: false });
-  };
+  backend.historyUsage = function () { return store.usage(); };
 
-  /* The real bridge's splitpage:history-list-docs twin (desktop/main.js) —
-     every bucket that has ever had a put/touch against it, Older excluded,
-     exactly the documents historyPut()/historyTouch() above created a
-     record for. Backs desktopHistoryBackend.rawDocIds()/rawDoc()
-     (03a-history-store.js), which is what lets exportHistoryAll() run
-     against this fake the same way it runs against the real desktop store. */
-  backend.historyListDocs = function () {
-    var out = [];
-    Object.keys(records).forEach(function (bucket) {
-      if (bucket === HISTORY_OLDER_KEY) return;
-      var rec = records[bucket];
-      out.push({ docId: bucket, title: rec.title || "", lastOpenedAt: rec.lastOpenedAt || 0 });
-    });
-    return Promise.resolve(out);
-  };
+  /* main's splitpage:history-list-docs: every document the store has a
+     record for, Older excluded — what desktopHistoryBackend.rawDocIds()/
+     rawDoc() (03a-history-store.js) read, which is what lets
+     exportHistoryAll() run against this fake the way it runs against the
+     real desktop store. */
+  backend.historyListDocs = function () { return store.listDocs(); };
 
-  /* The whole store: bucket -> [{meta, stateJson}], oldest first. */
+  /* The whole store, synchronously: bucket -> [{meta, stateJson}], oldest
+     first (bodies looked up by sha). */
   backend._historyDump = function () {
-    var out = {};
-    Object.keys(buckets).forEach(function (k) {
-      out[k] = buckets[k].map(function (e) {
-        return { meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson };
+    var raw = mem.inspect(), out = {};
+    Object.keys(raw.index).forEach(function (bucket) {
+      out[bucket] = (raw.index[bucket].snapshots || []).map(function (s) {
+        return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[s.sha] };
       });
     });
     return out;
   };
+  /* the store and its memory backend, for a suite that needs more */
+  backend._historyStore = store;
+  backend._historyBackend = mem;
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

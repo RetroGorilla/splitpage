@@ -149,14 +149,16 @@ eval (function(){localStorage.removeItem('splitpage-snapshots'); return true;})(
 eval (async function(){ await H.resetForTest(); H.setNow(10000000); window.__expLegacy = [{id:'exp1', at:new Date(1000).toISOString(), label:'Exp1', by:'A', state:{rows:[{id:'r1',audioText:'exp-one'}]}}, {id:'exp2', at:new Date(2000).toISOString(), label:'Exp2', by:'B', state:{rows:[{id:'r1',audioText:'exp-two'}]}}]; localStorage.setItem('splitpage-snapshots', JSON.stringify(window.__expLegacy)); await H.migrate(); window.__expX = await openFixture(did('m2'), 'Every Doc X'); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
+# (a reopened panel shows its previous list until the new render lands, and
+# that one also had Older showing — so wait for the count itself)
 wait !document.getElementById('history-older').hidden
-expect document.querySelectorAll('#history-older-list .history-card').length === 2
+wait document.querySelectorAll('#history-older-list .history-card').length === 2
 jsclick #history-close
 eval (async function(){ window.__expY = await openFixture(did('m3'), 'Every Doc Y'); return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait !document.getElementById('history-older').hidden
-expect document.querySelectorAll('#history-older-list .history-card').length === 2
+wait document.querySelectorAll('#history-older-list .history-card').length === 2
 eval (function(){window.__expCardId = document.querySelector('#history-older-list [data-action="restore-snapshot"]').getAttribute('data-id'); return window.__expCardId;})()
 jsclick #history-older-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden

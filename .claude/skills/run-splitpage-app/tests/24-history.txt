@@ -116,7 +116,7 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait !document.getElementById('history-panel').hidden
 wait document.querySelectorAll('#history-list .history-card').length === 1
-expect document.getElementById('history-list').textContent.indexOf('isoA-1.txt') !== -1
+wait document.getElementById('history-list').textContent.indexOf('isoA-1.txt') !== -1
 eval (async function(){ window.__isoB = await openFixture(did('c3'), 'Doc Iso B'); return true; })()
 wait document.getElementById('history-list').textContent.indexOf('isoA-1.txt') === -1
 expect document.querySelectorAll('#history-list .history-card').length === 0
@@ -160,6 +160,10 @@ eval (async function(){ await H.resetForTest(); window.__rsA = await openFixture
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+# A reopened panel shows its last list until the new render lands, and that
+# list can have the same number of cards — so every open below also waits
+# for a card of the document it is about before clicking one.
+wait document.getElementById('history-list').textContent.indexOf('rs-1.txt') !== -1
 jsclick #history-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden
 eval (async function(){ await H.idle(); window.__rsAfter = await H.listRaw(__rsA); return window.__rsAfter.length; })()
@@ -181,6 +185,7 @@ expect window.__cpToRec.count === 2
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 2
+wait document.getElementById('history-list').textContent.indexOf('cp-2.txt') !== -1
 jsclick #history-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden
 expect F.docId() === __cpTo
@@ -201,6 +206,7 @@ eval (async function(){ await H.resetForTest(); window.__qaId = await openFixtur
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+wait document.getElementById('history-list').textContent.indexOf('qa-1.txt') !== -1
 # a failed backup attempt still leaves its own (pending) card in the panel,
 # newest first — so every later query targets THIS card's own data-id, not
 # whichever button happens to render first
@@ -221,6 +227,7 @@ eval (async function(){ await H.resetForTest(); window.__mvA = await openFixture
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+wait document.getElementById('history-list').textContent.indexOf('mv-1.txt') !== -1
 eval (function(){window.__mvToastBefore = document.querySelectorAll('.toast.warn').length; H.injectFault('delay-put'); return true;})()
 jsclick #history-list [data-action="restore-snapshot"]
 eval (async function(){ await openFixture(__mvB, 'Somewhere Else'); return true; })()
@@ -240,6 +247,7 @@ eval (async function(){ await H.resetForTest(); window.__edId = await openFixtur
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+wait document.getElementById('history-list').textContent.indexOf('ed-1.txt') !== -1
 # injectFault, the click and markDirtyForTest+release all run in ONE eval
 # (no intervening driver round-trip) so the ordering is never a race: the
 # 100ms pause gives the click's internal chain (getHistorySnapshot's async
@@ -448,6 +456,9 @@ eval (async function(){ await H.resetForTest(); window.__escId = await openFixtu
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list .history-card').length === 1
+# the panel keeps its last list while hidden, so the count alone can be met
+# by the previous render: wait for THIS document's card before the checks
+wait document.getElementById('history-list').textContent.indexOf('<script>evil</script>.txt') !== -1
 expect document.querySelectorAll('#history-list script').length === 0
 expect document.querySelectorAll('#history-list img').length === 0
 expect document.getElementById('history-list').innerHTML.indexOf('<script>evil') === -1

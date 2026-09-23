@@ -971,7 +971,14 @@ export async function renderHistory() {
   if (subtitle) subtitle.textContent = HISTORY_SUBTITLES[data.backend] || HISTORY_SUBTITLE_DEFAULT;
 
   var entries = Array.isArray(data.entries) ? data.entries : [];
-  if (!entries.length) {
+  /* One line while the store is moving to its new format, could not finish
+     that, or is read-only (#83, listDocHistory): in place of "No snapshots"
+     when the list is empty — which it may only look — else in place of the
+     usage line. */
+  var notice = typeof data.notice === "string" ? data.notice : "";
+  if (!entries.length && notice) {
+    listEl.innerHTML = '<div class="comments-empty history-notice">' + escapeHtml(notice) + '</div>';
+  } else if (!entries.length) {
     listEl.innerHTML = '<div class="comments-empty">No snapshots of this document yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</div>';
   } else {
     listEl.innerHTML = entries.map(function (m) { return historyCardHtml(m, "doc"); }).join("");
@@ -993,7 +1000,7 @@ export async function renderHistory() {
 
   var usageEl = document.getElementById("history-usage");
   if (usageEl) {
-    var usageText = historyUsageText(data.backend, data.usage);
+    var usageText = notice ? (entries.length ? notice : "") : historyUsageText(data.backend, data.usage);
     usageEl.textContent = usageText;
     usageEl.hidden = !usageText;
   }
