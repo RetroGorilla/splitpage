@@ -3,13 +3,12 @@ import { escapeHtml, makeId } from "./02-state.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import { safeHref } from "./04-richtext.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
+import { cellOf, toDocxRuns, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
 import {
   htmlToPlainText,
-  htmlToRuns,
   strBytes,
   xmlEscape,
   zipRead,
@@ -85,8 +84,13 @@ function fitColumnWidths(totalWidth, minChars, headers, rowsCells) {
   return widths;
 }
 
+/* A cell's runs come from the document model (#85), not a walk of its
+   HTML: the same text in the same formats, except that neighbours in one
+   format the stored markup happened to keep in separate elements
+   (<strong>a</strong><strong>b</strong>) are one <w:r>, which Word draws
+   exactly as it drew two. */
 function docxRunsXml(html, rels) {
-  var runs = htmlToRuns(html);
+  var runs = toDocxRuns(cellOf(html));
   if (!runs.length) return '<w:p/>';
   var out = '<w:p>';
   var openLink = null;
