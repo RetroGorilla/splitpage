@@ -22,7 +22,7 @@ import {
   applySidePanelWidth,
   readSidePanelWidth
 } from "./03b-side-panels.js";
-import { safeId } from "./04-richtext.js";
+import { safeId, storedImageHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -466,16 +466,17 @@ export function mergeStates(base, mine, theirs) {
   }
 
   /* every unreconcilable field becomes a comment holding my version. A
-     picture is held as `imageValue`, the record itself, with an empty
-     body — the card draws it (10-comments.js), and a file writes it back
-     into the body for older clients (inlineStateImages, 02c-blobs.js).
-     The comment's field keeps the old name "visualImage" (#82 D5). */
+     picture is held as `imageValue`, the record itself — what "Use my
+     version" puts back — and the body shows it in the stored HTML form,
+     <img data-blob> (#82 P6); a file writes it into the body inline for
+     older clients (inlineStateImages, 02c-blobs.js). The comment's field
+     keeps the old name "visualImage" (#82 D5). */
   conflicts.forEach(function (c) {
     var image = c.field === "imageRef";
     var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
       c.field === "title" ? "Title" : "Visual image";
     var isEmpty = !c.mine;
-    var bodyHtml = image ? ""
+    var bodyHtml = image ? storedImageHtml(c.mine)
       : c.field === "title" ? escapeHtml(c.mine || "")
       : (c.mine || "");
     mergedComments.push({

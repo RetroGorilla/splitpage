@@ -788,8 +788,11 @@ function commentCardHtml(c) {
 }
 
 /* An image conflict's picture is its `imageValue` record (#82), drawn as
-   an <img data-blob> the hydrator (02c-blobs.js) fills in; everything
-   else is the stored body. */
+   an <img data-blob> the hydrator (02c-blobs.js) fills in. The stored body
+   names the same picture (<img data-blob>, P6) for anything that reads
+   bodies generically, but the record is the source of truth — it is what
+   "Use my version" puts back — so the card draws the record. Every other
+   body is drawn as stored; its <img data-blob>s are hydrated the same way. */
 function conflictBodyHtml(c) {
   if (c.field === "visualImage") {
     var ref = normalizeImageRef(c.imageValue);

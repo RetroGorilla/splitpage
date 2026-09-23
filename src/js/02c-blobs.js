@@ -21,7 +21,10 @@ import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } fro
    desktop shell (20f-desktop.js) installs the blob folder as the backend.
    No database is opened until the first ensureBytes() or persist() that
    actually has a sha to ask about. HTML images (comments, replies, pasted
-   cell HTML) are still inline data: URIs — P6 moves them.
+   cell HTML) are refs too (P6): the sanitiser (04-richtext.js) interns an
+   inline <img src="data:…"> into <img class="comment-img" data-blob="<sha>"
+   data-w data-h data-mime>, with no stored src, and the hydrator below
+   gives it one on screen.
 
    Two halves, and the split is the point:
 
@@ -385,9 +388,13 @@ function blobAttr(s) {
    format on disk is unchanged and an older client reads it whole. This
    turns a (migrated, already cloned — it is changed in place) state into
    that form: every row's imageRef whose bytes this page holds becomes
-   `visualImage: data:…` again, and an image-conflict comment's
-   `imageValue` gets the picture back in its body the way older clients
-   wrote it (the record stays, so a newer client needs no parsing).
+   `visualImage: data:…` again, an image-conflict comment's `imageValue`
+   gets the picture back in its body the way older clients wrote it (the
+   record stays, so a newer client needs no parsing), and every
+   <img data-blob> in the state's HTML — rows' visualText/audioText,
+   comment and reply bodies — becomes <img src="data:…" class="comment-img">,
+   which is what an older client wrote and what its sanitiser keeps. A
+   newer client's sanitiser interns it back into the data-blob form.
 
    Synchronous, so the caller awaits ensureBytes(refsIn(state)) first.
    What still is not here stays a ref with no inline copy — the row keeps
@@ -418,12 +425,47 @@ export function inlineStateImages(s, only) {
     var url = pick(r.imageRef);
     if (url) { r.visualImage = url; delete r.imageRef; }
   });
+  function html(h) {
+    if (typeof h !== "string" || h.indexOf("data-blob") === -1) return h;
+    return h.replace(IMG_TAG_RE, function (tag) {
+      var m = IMG_BLOB_ATTR_RE.exec(tag);
+      var sha = m ? (m[1] || m[2] || m[3]) : null;
+      if (!sha || (want && !want[sha])) return tag;
+      var url = dataUrlForSync(sha);
+      if (!url) {
+        if (missing.indexOf(sha) === -1) missing.push(sha);
+        return tag;
+      }
+      return inlineImgTag(url);
+    });
+  }
+  (Array.isArray(s.rows) ? s.rows : []).forEach(function (r) {
+    if (!r || typeof r !== "object") return;
+    r.visualText = html(r.visualText);
+    r.audioText = html(r.audioText);
+  });
   (Array.isArray(s.comments) ? s.comments : []).forEach(function (c) {
-    if (!c || typeof c !== "object" || !c.imageValue) return;
-    var url = pick(c.imageValue);
-    if (url) c.body = '<img src="' + url + '" class="comment-img">';
+    if (!c || typeof c !== "object") return;
+    var url = c.imageValue ? pick(c.imageValue) : null;
+    if (url) c.body = inlineImgTag(url);
+    else c.body = html(c.body);
+    (Array.isArray(c.replies) ? c.replies : []).forEach(function (rep) {
+      if (rep && typeof rep === "object") rep.body = html(rep.body);
+    });
   });
   return missing;
+}
+
+/* An <img> tag and its data-blob, read the way refsIn (shared/blob-policy.js)
+   reads them — the stored HTML is the sanitiser's, but a state handed to a
+   writer need not have been through it. */
+var IMG_TAG_RE = /<img\b[^>]*>/gi;
+var IMG_BLOB_ATTR_RE = /\sdata-blob\s*=\s*(?:"([0-9a-f]{64})"|'([0-9a-f]{64})'|([0-9a-f]{64})(?=[\s/>]))/i;
+
+/* the inline form, attribute for attribute what an older client's
+   sanitiser wrote */
+function inlineImgTag(url) {
+  return '<img src="' + url + '" class="comment-img">';
 }
 
 /* inlineStateImages over a JSON string, for a record already serialised

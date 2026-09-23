@@ -1,11 +1,11 @@
 # The hosted client's half of image blobs (#82 P5, 13-hosted.js; the server
 # half is server/server.js, tested by tools/test-server.mjs).
 #
-# Nothing in the app creates an `imageRef` yet — that is the later schema
-# switch — so the states here are given refs by hand: a row's
+# Most states here are given refs by hand — a row's
 # `imageRef: {sha256, width, height, mime}` and a comment body's
 # `<img data-blob="<sha>">`, with the bytes put in the page's registry
-# through window.__blobsTest (02c-blobs.js) from real canvas PNGs.
+# through window.__blobsTest (02c-blobs.js) from real canvas PNGs — and one
+# reviewer comment is written through the comment composer (#82 P6).
 #
 # The harness cannot start server.js, so `fetch` is replaced for every URL
 # with `api/` in it, the way 54-server-conflict.txt and 57-review-comments.txt
@@ -23,7 +23,8 @@
 #     in that order, and a second save uploads nothing;
 #   * a 422 missing-blobs uploads what it lists and retries once;
 #   * a 422 for bytes nobody has retries with `acceptMissing`;
-#   * a reviewer's comment with an image: missing -> PUT blob -> POST; a 429
+#   * a reviewer's comment with an image (by hand, and from the composer):
+#     missing -> PUT blob -> POST; a 429
 #     review-budget is a toast about the image allowance and the comment
 #     waits; an image nobody has is a refusal, never `acceptMissing`;
 #   * the blob fetch helper re-hashes what the server sends and refuses a
@@ -145,6 +146,24 @@ expect !('acceptMissing' in __srv.calls.filter(function(c){ return c.path === 'a
 wait __toasts().some(function(t){ return t.indexOf('no longer on this device') !== -1; })
 eval (async function(){ __srv.calls = []; await F.save(); return __seq(); })()
 expect __seq() === ''
+
+# the same through the comment composer (#82 P6): the picture attached
+# there is interned, the body names it by sha, and the POST waits for it
+eval (function(){var c=document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable');var t=c.firstChild;while(t&&t.nodeType!==3)t=t.firstChild||t.nextSibling;var r=document.createRange();r.setStart(t,0);r.setEnd(t,Math.min(3,t.length));var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);return s.toString();})()
+jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar [data-cmd="comment"]
+wait !document.getElementById('comment-modal').hidden
+eval (function(){ var c = document.createElement('canvas'); c.width = 33; c.height = 21; var g = c.getContext('2d'); g.fillStyle = '#c3c'; g.fillRect(0, 0, 33, 21); var url = c.toDataURL('image/png'); var inp = document.getElementById('comment-image-input'); var dt = new DataTransfer(); dt.items.add(new File([__b64bytes(url)], 'm.png', { type: 'image/png' })); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait document.querySelector('#comment-body-editable img[data-blob]')
+eval (function(){ window.MSHA = document.querySelector('#comment-body-editable img[data-blob]').getAttribute('data-blob'); __name[MSHA] = 'M'; var b = document.getElementById('comment-body-editable'); b.focus(); document.execCommand('insertText', false, 'COMPOSEDREVIEW'); return MSHA; })()
+jsclick #comment-post
+wait F.state().comments.some(function(c){ return c.body.indexOf('COMPOSEDREVIEW') !== -1; })
+eval (async function(){ __srv.calls = []; await F.save(); return __seq(); })()
+# (without GETs: re-rendering the comments list shows c-rz's image again,
+# and the hydrator asks the server for Z once more — nobody has it)
+expect __seq().split(' | ').filter(function(x){ return x.indexOf('GET ') !== 0; }).join(' | ') === 'POST api/blobs/missing 200 | PUT api/blobs/M 201 | POST api/docs/doc-b/comments 200'
+expect JSON.stringify(__srv.calls.filter(function(c){ return c.path === 'api/blobs/missing'; })[0].shas) === JSON.stringify([MSHA])
+expect (function(){ var b = __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b/comments'; })[0].body.comment.body; return b.indexOf('data-blob="' + MSHA + '"') !== -1 && b.indexOf('data:') === -1 && b.indexOf('src=') === -1; })()
+expect H.base().comments.some(function(c){ return c.body.indexOf('COMPOSEDREVIEW') !== -1; })
 
 # ---- 7. an older server on another origin: its preflight refuses the header
 eval (async function(){ __srv.role = 'edit'; H.pointTabAt('http://old.example/'); __srv.corsOld = 'http://old.example/'; __srv.health = { ok: true, version: 'old' }; __srv.calls = []; await H.detect(); return JSON.stringify(__srv.calls.map(function(c){ return c.path + ':' + c.client + ':' + c.status; })); })()

@@ -144,9 +144,11 @@ export function isInsideTagOrLink(el) {
    forget to invalidate — the failure mode of a version counter, and the one
    that would quietly show the wrong breakdown. Cleared wholesale when it
    grows past a bound, since editing mints a new key per keystroke. */
-/* Budgeted by CHARACTERS, not by entry count. A field can carry a pasted
-   image as a data: URI (walkSanitize allows <img>), so one entry can be
-   megabytes — and typing in such a field mints a new key per keystroke.
+/* Budgeted by CHARACTERS, not by entry count. A field used to carry a
+   pasted image as a data: URI, so one entry could be megabytes — and
+   typing in such a field mints a new key per keystroke. Since #82 an image
+   in a field is a short <img data-blob> reference (walkSanitize), but the
+   budget costs nothing and does not depend on that staying true.
    Capping at "1200 entries" would have been a memory leak measured in
    gigabytes; capping at ~2M characters is a few MB whatever the mix.
    Keys are the very strings state already holds, so a live entry costs a

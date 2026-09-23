@@ -149,7 +149,10 @@ click #merge-review-confirm
 wait F.state().comments.some(function(c){ return c.kind === 'conflict' && c.field === 'visualImage'; })
 eval (function(){ window.__card = F.state().comments.filter(function(c){ return c.kind === 'conflict' && c.field === 'visualImage'; })[0]; return __card.id; })()
 expect F.state().rows[0].imageRef.sha256 === PB.sha256
-expect __card.imageValue.sha256 === PC.sha256 && __card.body === '' && __card.emptyValue === false
+# the record is the picture; the body names the same one in the stored
+# HTML form, <img data-blob> with no src (#82 P6)
+expect __card.imageValue.sha256 === PC.sha256 && __card.emptyValue === false
+expect __card.body === '<img class="comment-img" data-blob="' + PC.sha256 + '" data-w="' + PC.width + '" data-h="' + PC.height + '" data-mime="' + PC.mime + '">'
 expect JSON.stringify(F.state()).indexOf('data:image') === -1
 jsclick #merge-review
 wait !!document.querySelector('.comment-card[data-id="' + __card.id + '"] img.comment-img[data-blob="' + PC.sha256 + '"]')
