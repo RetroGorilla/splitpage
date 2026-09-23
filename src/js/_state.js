@@ -87,6 +87,9 @@ export const S = {
   /* true while an undo or a redo is being put on screen (21-events.js
      afterUndoApplied): syncFieldFromDom reads nothing back meanwhile */
   undoApplying: false,
+  /* true while editCell (05b-cell-edit.js) repaints the cell it just
+     wrote: the focusout of the cell being replaced reads nothing back */
+  cellRepainting: false,
 
   /* 00-prelude declares it; 00-prelude, 21-events assign it. */
   pendingImageRowId: undefined,

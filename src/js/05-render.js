@@ -630,8 +630,10 @@ export function syncFieldFromDom(cellEl) {
      say — reading it back would put that over whatever replaced it. This is
      how an undo's repaint (12a-undo.js) was being reverted by the focusout
      of the very cell it repainted. And nothing is read back while an undo
-     or a redo is being put on screen. */
-  if (!cellEl.isConnected || S.undoApplying) return;
+     or a redo is being put on screen, or while editCell repaints the cell
+     it has just written (the one being replaced is still connected when
+     the browser tells it it lost focus). */
+  if (!cellEl.isConnected || S.undoApplying || S.cellRepainting) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);

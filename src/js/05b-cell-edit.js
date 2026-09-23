@@ -197,9 +197,14 @@ function findCell(like, rowId, field) {
 }
 
 /* fn(cell, sel) -> {cell, sel: {from, to}} to change the cell, or null to
-   leave it. sel is null when the selection is not in this cell. Returns
-   the (possibly new) cell element, or null when nothing was done — the
-   cell holds a picture or a video card, or fn declined. */
+   leave it. sel is null when the selection is not in this cell. The
+   result may also carry also(): anything else in the document the same
+   edit changes (a paste moving a comment's anchor), run just before the
+   cell is written so it lands in the same undo entry — fn itself runs
+   before the typing ahead of it is recorded, so a change made there would
+   be counted as that typing. Returns the (possibly new) cell element, or
+   null when nothing was done — the cell holds a picture or a video card,
+   or fn declined. */
 export function editCell(cellEl, fn) {
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
@@ -214,6 +219,10 @@ export function editCell(cellEl, fn) {
   var out = fn(fromHtml(html), sel);
   if (!out || !out.cell) return null;
   breakUndoCoalescing();
+  if (out.also) {
+    out.also();
+    markDirty();
+  }
   var next = toHtml(out.cell);
   if (next !== html) {
     row[field] = next;
@@ -223,7 +232,17 @@ export function editCell(cellEl, fn) {
   /* repaint this one cell */
   var fresh = cellEl;
   if (cellEl.closest("#rows")) {
-    renderRow(rowId);
+    /* Replacing the focused cell makes the browser fire focusout on it
+       while it is still in the page, holding the words from before this
+       edit — and onRootFocusOut reads a cell back into state. Nothing is
+       read back meanwhile (syncFieldFromDom), or the edit is undone as
+       soon as it is painted. */
+    S.cellRepainting = true;
+    try {
+      renderRow(rowId);
+    } finally {
+      S.cellRepainting = false;
+    }
     fresh = findCell(cellEl, rowId, field) || cellEl;
   } else {
     cellEl.innerHTML = next;
