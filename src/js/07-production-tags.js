@@ -9,7 +9,9 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
+import { namedTagId, projection, replaceWithTag } from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
+import { domToPos, editCell } from "./05b-cell-edit.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -708,10 +710,10 @@ var AUTO_TAG_MAX_LEN = 60;
    of the closing character triggers it (never paste, import, or a merge) —
    see the inputType/data guard below — and only within the text node that
    holds the caret, so it can never reach across a <br> or out of the field.
-   Done via execCommand (like Enter and Ctrl+B elsewhere in this file) so
-   it lands on the native undo stack: one Ctrl+Z removes just the auto-tag
-   and leaves the plain "[phrase]" text behind, which is the whole escape
-   hatch for anyone who wanted literal brackets. */
+   The tag goes in as an edit of the cell's model (tagTextRange below), an
+   undo entry of its own after the typing's: one Ctrl+Z removes just the
+   auto-tag and leaves the plain "[phrase]" text behind, which is the whole
+   escape hatch for anyone who wanted literal brackets. */
 export function maybeAutoTagShortcut(e, cellEl) {
   /* insertText is only ever the browser's label for text the user (or their
      IME/keyboard) actually typed — never paste, undo, or a programmatic
@@ -744,46 +746,77 @@ export function maybeAutoTagShortcut(e, cellEl) {
   var trimmed = phrase.trim();
   if (!trimmed || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
 
-  var wrapRange = document.createRange();
-  wrapRange.setStart(node, openAt);
-  wrapRange.setEnd(node, offset);
-  sel.removeAllRanges();
-  sel.addRange(wrapRange);
-
-  /* contenteditable="false" makes the tag an atomic unit: a browser will
-     never place the text caret inside it, however it's approached — typed
-     straight through (this insert), clicked back into later, arrowed
-     into, anything. That's what actually stops later typing from silently
-     growing the tag (or backspacing from silently shrinking it) into no
-     longer matching its own stored name — a point-in-time caret nudge
-     right after insertion, tried earlier, only ever covered this one
-     moment and not, say, clicking back in after a pause to keep writing. */
-  var html = '<span class="tag-anchor" data-tag-cat="' + escapeHtml(rule.cat) + '" data-tag-name="' +
-    escapeHtml(trimmed) + '" contenteditable="false">' + escapeHtml(trimmed) + '</span>';
-  document.execCommand("insertHTML", false, html);
-
-  /* Belt and suspenders: land the caret explicitly right after the tag
-     rather than trusting whatever the browser defaulted to. */
-  var afterSel = window.getSelection();
-  if (afterSel.rangeCount) {
-    var landed = afterSel.getRangeAt(0).startContainer;
-    var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
-    if (tagEl) {
-      /* A tag typed at the very end of the cell leaves nothing after it to
-         put the caret at — see ensureTrailingCaretSpot's note. */
-      ensureTrailingCaretSpot(tagEl.parentNode);
-      var out = document.createRange();
-      out.setStartAfter(tagEl);
-      out.collapse(true);
-      afterSel.removeAllRanges();
-      afterSel.addRange(out);
-    }
-  }
-
-  registerProductionTag(rule.cat, trimmed);
-  syncFieldFromDom(cellEl);
+  /* the brackets go, and the phrase inside them becomes the tag */
+  tagTextRange(cellEl, node, openAt, offset, trimmed, rule.cat, trimmed);
   updateTagBadges();
   renderProduction();
+}
+
+/* ---- putting a tag into a cell ----
+
+   The three typed routes to a tag — a shortcut closing, Tab on the ghost,
+   Tab on an untagged mention — end the same way: characters a..b of one
+   text node in the cell become `text`, tagged (cat, name), with the caret
+   just after it. That is an edit of the cell's model (#85, design §5):
+   editCell() reads the cell, replaceWithTag() makes the change, and the
+   cell is written and repainted with the caret put back — one undo entry,
+   which holds the registry entry a new tag makes as well, so one Ctrl+Z
+   takes back exactly the tag and leaves the words.
+
+   The range is found in the DOM, by the text-node rules each route always
+   used (never across a line break, a tag, a link or a formatting
+   boundary), and only then turned into model positions; the model has to
+   read the same words there, or it is not used.
+
+   A tag is contenteditable="false" in the editor, an atomic unit: a browser
+   will never place the text caret inside it, however it's approached —
+   typed straight through, clicked back into later, arrowed into, anything.
+   That's what actually stops later typing from silently growing the tag
+   (or backspacing from silently shrinking it) into no longer matching its
+   own stored name. A tag at the very end of the cell leaves nothing after
+   it to put the caret at; the repaint's ensureTrailingCaretSpot sees to it. */
+function tagTextRange(cellEl, node, a, b, text, cat, name) {
+  var taken = false;
+  editCell(cellEl, function (cell) {
+    var from = domToPos(cellEl, node, a), to = domToPos(cellEl, node, b);
+    if (from === null || to === null) return null;
+    if (projection(cell).slice(from, to) !== node.data.slice(a, b).replace(/\u200B/g, "")) return null;
+    var r = replaceWithTag(cell, from, to, text, namedTagId(cat, name));
+    registerProductionTag(cat, name);
+    taken = true;
+    return { cell: r.cell, sel: { from: r.end, to: r.end } };
+  });
+  if (taken) return;
+  /* The model could not take it — the cell still holds a picture or a video
+     card (see editCell) — so the old way: the span straight into the DOM. */
+  execInsertTag(node, a, b, text, cat, name);
+  registerProductionTag(cat, name);
+  syncFieldFromDom(cellEl);
+}
+
+function execInsertTag(node, a, b, text, cat, name) {
+  var sel = window.getSelection();
+  var wrapRange = document.createRange();
+  wrapRange.setStart(node, a);
+  wrapRange.setEnd(node, b);
+  sel.removeAllRanges();
+  sel.addRange(wrapRange);
+  var html = '<span class="tag-anchor" data-tag-cat="' + escapeHtml(cat) + '" data-tag-name="' +
+    escapeHtml(name) + '" contenteditable="false">' + escapeHtml(text) + '</span>';
+  document.execCommand("insertHTML", false, html);
+  /* land the caret explicitly right after the tag rather than trusting
+     whatever the browser defaulted to */
+  var afterSel = window.getSelection();
+  if (!afterSel.rangeCount) return;
+  var landed = afterSel.getRangeAt(0).startContainer;
+  var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
+  if (!tagEl) return;
+  ensureTrailingCaretSpot(tagEl.parentNode);
+  var out = document.createRange();
+  out.setStartAfter(tagEl);
+  out.collapse(true);
+  afterSel.removeAllRanges();
+  afterSel.addRange(out);
 }
 
 /* ---- Tab-to-autocomplete an existing tag name, Obsidian-style ----
@@ -888,33 +921,9 @@ export function acceptTagGhost() {
   var r = sel.getRangeAt(0);
   if (r.startContainer !== g.node || r.startOffset !== g.offset) { hideTagGhost(); return false; }
 
-  var wrapRange = document.createRange();
-  wrapRange.setStart(g.node, g.openAt);
-  wrapRange.setEnd(g.node, g.offset);
-  sel.removeAllRanges();
-  sel.addRange(wrapRange);
-
-  var html = '<span class="tag-anchor" data-tag-cat="' + escapeHtml(g.entry.cat.id) + '" data-tag-name="' +
-    escapeHtml(g.entry.name) + '" contenteditable="false">' + escapeHtml(g.entry.name) + '</span>';
-  document.execCommand("insertHTML", false, html);
-
-  var afterSel = window.getSelection();
-  if (afterSel.rangeCount) {
-    var landed = afterSel.getRangeAt(0).startContainer;
-    var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
-    if (tagEl) {
-      ensureTrailingCaretSpot(tagEl.parentNode);
-      var out = document.createRange();
-      out.setStartAfter(tagEl);
-      out.collapse(true);
-      afterSel.removeAllRanges();
-      afterSel.addRange(out);
-    }
-  }
-
   hideTagGhost();
-  registerProductionTag(g.entry.cat.id, g.entry.name);
-  syncFieldFromDom(g.cellEl);
+  /* the opening bracket and the half-typed name become the whole name */
+  tagTextRange(g.cellEl, g.node, g.openAt, g.offset, g.entry.name, g.entry.cat.id, g.entry.name);
   updateTagBadges();
   renderProduction();
   return true;
@@ -1145,39 +1154,18 @@ export function acceptUntaggedMention() {
     scheduleUntaggedScan();
     return false;
   }
-  var sel = window.getSelection();
-  try {
-    sel.removeAllRanges();
-    sel.addRange(s.range);
-  } catch (e) { hideUntaggedPrompt(); return false; }
-
-  /* The text keeps the casing it was written in; the registry keeps its
-     own. Same split tagFieldOccurrences makes, and it is what stops
-     labelling "Gaffer Tape" from forking a second breakdown item.
-     execCommand, like every other route to a tag in this file, so one
-     Ctrl+Z puts the plain words back. */
-  var html = '<span class="tag-anchor" data-tag-cat="' + escapeHtml(s.entry.cat.id) +
-    '" data-tag-name="' + escapeHtml(s.entry.name) + '" contenteditable="false">' +
-    escapeHtml(s.text) + '</span>';
-  document.execCommand("insertHTML", false, html);
-
-  var after = window.getSelection();
-  if (after.rangeCount) {
-    var landed = after.getRangeAt(0).startContainer;
-    var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
-    if (tagEl) {
-      ensureTrailingCaretSpot(tagEl.parentNode);
-      var out = document.createRange();
-      out.setStartAfter(tagEl);
-      out.collapse(true);
-      after.removeAllRanges();
-      after.addRange(out);
-    }
-  }
+  /* A mention is found inside one text node (collectUntaggedInCell), so
+     its range starts and ends in that one node. */
+  var node = s.range.startContainer;
+  if (node.nodeType !== 3 || s.range.endContainer !== node) { hideUntaggedPrompt(); return false; }
 
   hideUntaggedPrompt();
-  registerProductionTag(s.entry.cat.id, s.entry.name);
-  syncFieldFromDom(s.cellEl);
+  /* The text keeps the casing it was written in; the registry keeps its
+     own. Same split tagFieldOccurrences makes, and it is what stops
+     labelling "Gaffer Tape" from forking a second breakdown item. Through
+     the model like every other typed route to a tag (tagTextRange), so one
+     Ctrl+Z puts the plain words back. */
+  tagTextRange(s.cellEl, node, s.range.startOffset, s.range.endOffset, s.text, s.entry.cat.id, s.entry.name);
   updateTagBadges();
   renderProduction();
   scanUntaggedMentions();

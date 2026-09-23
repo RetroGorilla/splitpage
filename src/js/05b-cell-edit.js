@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { ensureTrailingCaretSpot } from "./04-richtext.js";
 import { fromHtml, toHtml } from "./04c-doc-model.js";
-import { renderRow, syncFieldFromDom } from "./05-render.js";
+import { syncFieldFromDom } from "./05-render.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 
@@ -188,18 +188,13 @@ export function setCellSelection(cellEl, from, to) {
   sel.addRange(range);
 }
 
-/* The cell element for (rowId, field) in the same view as `like` — #rows
-   or the writer — after a repaint may have replaced it. */
-function findCell(like, rowId, field) {
-  var root = like.closest("#writer-doc") || like.closest("#rows") || document;
-  var sel = '.cell-editable[data-id="' + String(rowId).replace(/"/g, '\\"') + '"][data-field="' + field + '"]';
-  return (root && root.querySelector(sel)) || document.querySelector(sel);
-}
-
 /* fn(cell, sel) -> {cell, sel: {from, to}} to change the cell, or null to
-   leave it. sel is null when the selection is not in this cell. Returns
-   the (possibly new) cell element, or null when nothing was done — the
-   cell holds a picture or a video card, or fn declined. */
+   leave it. sel is null when the selection is not in this cell. Anything
+   else fn changes in the document (a tag's registry entry) is part of the
+   same undo entry; fn should change it only once it has decided to answer
+   a cell. Returns the cell element (the same one, repainted in place), or
+   null when nothing was done — the cell holds a picture or a video card,
+   or fn declined. */
 export function editCell(cellEl, fn) {
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
@@ -211,39 +206,36 @@ export function editCell(cellEl, fn) {
   var html = row[field] || "";
   if (/<img|video-embed-card/.test(html)) return null;
   var sel = cellSelection(cellEl);
+  /* Recorded and closed BEFORE fn runs, not after: fn may change more of
+     the document than the cell — a new tag's registry entry — and that
+     belongs in this edit's entry, so one Ctrl+Z takes back the tag and the
+     entry it made, and leaves what was typed. */
+  breakUndoCoalescing();
   var out = fn(fromHtml(html), sel);
   if (!out || !out.cell) return null;
-  breakUndoCoalescing();
   var next = toHtml(out.cell);
   if (next !== html) {
     row[field] = next;
     stampRow(row);
     markDirty();
   }
-  /* repaint this one cell. In #rows that replaces the focused cell, and
-     Chrome fires its focusout while it is still in the page: read back
-     then (syncFieldFromDom), it would put the text from before this edit
-     over it. So nothing is read back until the new cell has focus — the
-     same guard an undo's repaint uses. */
-  var fresh = cellEl;
-  S.undoApplying = true;
-  try {
-    if (cellEl.closest("#rows")) {
-      renderRow(rowId);
-      fresh = findCell(cellEl, rowId, field) || cellEl;
-    } else {
-      cellEl.innerHTML = next;
-      ensureTrailingCaretSpot(cellEl);
-    }
-    fresh.focus({ preventScroll: true });
-  } finally {
-    S.undoApplying = false;
-  }
-  if (out.sel) setCellSelection(fresh, out.sel.from, out.sel.to);
+  /* Repaint this one cell IN PLACE — its contents, never the element — the
+     way a keystroke leaves it. Replacing the element (renderRow) took focus
+     from it mid-edit, and Chrome fires focusout on a focused element as it
+     is removed, while it is still connected: onRootFocusOut then read the
+     old contents back over the edit just written. Kept, the cell stays
+     focused, stays the node everyone holds, and syncFieldFromDom records
+     that it shows what state says (noteFieldPainted), so the next render
+     leaves it alone. */
+  cellEl.innerHTML = next;
+  ensureTrailingCaretSpot(cellEl);
+  syncFieldFromDom(cellEl);
+  cellEl.focus({ preventScroll: true });
+  if (out.sel) setCellSelection(cellEl, out.sel.from, out.sel.to);
   /* one entry of its own: the next keystroke starts another */
   flushEdits();
   breakUndoCoalescing();
-  return fresh;
+  return cellEl;
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
