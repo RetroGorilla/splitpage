@@ -1,0 +1,177 @@
+# ---------------------------------------------------------------------------
+# 53-service-worker.txt — sw.js: the stamped cache name and what stays out of
+# the cache (issue #79).
+#
+# The worker only registers over http(s) (21-events.js skips file:// and the
+# desktop shell), which is exactly what this harness serves, so this is one of
+# the few suites that can drive the real thing rather than a stand-in.
+#
+# What it proves:
+#   - the cache is named from VERSION, not the old fixed "splitpage-v1", and
+#     the name in Cache Storage matches the <meta> build.mjs stamped into the
+#     same build — so a deploy renames it;
+#   - activate deletes every cache that is not that one, which is what makes
+#     the rename reclaim the old release's space instead of doubling it;
+#   - the page is fetched network-first: a deliberately poisoned cache entry
+#     loses to the server, and the fresh response is written back over it;
+#   - nothing with a query string is ever written — a `?doc=` load adds no
+#     entry at all, and neither does a 200 that merely has a `?` on the end;
+#   - update-status.json and api/ are never written.
+#
+# What it does NOT prove, because this harness cannot take the network away
+# mid-suite (there is no driver command for CDP's network emulation, and the
+# server it runs is the one serving the page): the offline fallback itself.
+# The closest it gets is the last assertion of the network-first block — the
+# cached /index.html is a real, whole app page, which is what that fallback
+# has to hand back. The offline reload is the by-hand check in issue #79.
+#
+# Also weaker than it looks: api/ answers 404 here (it needs server.js), and
+# so does update-status.json unless a launcher run left one in the repo root
+# (it is gitignored; see below) — and a 404 was never cached even before #79. The query-string assertions carry the
+# weight instead — those run against a real 200, with release.json fetched
+# WITHOUT a query first, as the control proving an ordinary same-origin 200
+# does land in the cache.
+# ---------------------------------------------------------------------------
+
+open /index.html
+expect document.querySelectorAll('#rows .row').length > 0
+
+# 21-events.js registers on window load, and sw.js calls skipWaiting() then
+# clients.claim() — so this page becomes controlled without a second load.
+wait navigator.serviceWorker.controller
+
+# ---- the name carries the release --------------------------------------
+#
+# Both sides come from the same build: build.mjs writes VERSION into
+# page.html's {{VERSION}} meta and into sw.js's cache-name line, so comparing
+# them here fails if either stamping is dropped, and keeps passing across a
+# version bump without editing this file.
+
+eval window.__ver = document.querySelector('meta[name="splitpage-version"]').content
+expect window.__ver.length > 0
+
+eval (async function(){ var names = await caches.keys(); var out = []; for (var i = 0; i < names.length; i++) { var c = await caches.open(names[i]); var k = await c.keys(); for (var j = 0; j < k.length; j++) { var u = new URL(k[j].url); out.push(u.pathname + u.search); } } out.sort(); window.__swCaches = names; window.__swEntries = out; return names.join(',') + ' :: ' + out.join(' | '); })()
+
+expect window.__swCaches.length == 1
+expect window.__swCaches[0] === 'splitpage-' + window.__ver
+expect window.__swCaches[0] !== 'splitpage-v1'
+
+# The shell is there, which is the whole reason the worker exists.
+expect window.__swEntries.indexOf('/index.html') !== -1
+expect window.__swEntries.indexOf('/') !== -1
+expect window.__swEntries.indexOf('/manifest.webmanifest') !== -1
+expect window.__swEntries.indexOf('/icon.svg') !== -1
+
+# ---- the page is network-first -----------------------------------------
+#
+# Put a copy in the cache that could not possibly have come from the server,
+# reload, and see which one wins. Cache-first — what sw.js did before #79 —
+# serves the stale copy, which is the deploy-takes-two-loads bug in
+# miniature. Network-first serves the real page and overwrites the bad entry.
+
+eval (async function(){ var c = await caches.open(window.__swCaches[0]); await c.put('/index.html', new Response('<!doctype html><title>SW53-POISON</title><body>not from the server', { headers: { 'Content-Type': 'text/html; charset=utf-8' } })); var hit = await c.match('/index.html'); window.__poisoned = (await hit.text()).indexOf('SW53-POISON') !== -1; return window.__poisoned; })()
+expect window.__poisoned
+
+goto /index.html
+wait navigator.serviceWorker.controller
+expect document.querySelectorAll('#rows .row').length > 0
+expect document.title.indexOf('SW53-POISON') === -1
+
+# ...and the response that won was written back, so the copy the offline
+# fallback would serve is a whole app page rather than the poison. The write
+# is fire-and-forget behind the response (nothing waits on Cache Storage to
+# hand the page over), so give it a moment to land.
+sleep 800
+eval (async function(){ var names = await caches.keys(); var c = await caches.open(names[0]); var hit = await c.match('/index.html'); var t = hit ? await hit.text() : ''; window.__swCaches = names; window.__cachedFresh = t.indexOf('SW53-POISON') === -1 && t.indexOf('id="rows"') !== -1; return window.__cachedFresh; })()
+expect window.__cachedFresh
+
+# ---- a ?doc= load adds nothing -----------------------------------------
+#
+# Each shared link is a distinct URL serving the same 1.4MB index.html, so
+# before #79 every document anyone opened left its own copy behind. The
+# baseline goes through localStorage because the navigation below throws the
+# window away.
+
+eval (async function(){ var names = await caches.keys(); var out = []; for (var i = 0; i < names.length; i++) { var c = await caches.open(names[i]); var k = await c.keys(); for (var j = 0; j < k.length; j++) { var u = new URL(k[j].url); out.push(u.pathname + u.search); } } out.sort(); localStorage.setItem('__swBaseline', out.join(' | ')); return out.join(' | '); })()
+
+goto /index.html?doc=sw-cache-probe-79
+wait navigator.serviceWorker.controller
+expect document.querySelectorAll('#rows .row').length > 0
+
+eval (async function(){ var names = await caches.keys(); var out = []; for (var i = 0; i < names.length; i++) { var c = await caches.open(names[i]); var k = await c.keys(); for (var j = 0; j < k.length; j++) { var u = new URL(k[j].url); out.push(u.pathname + u.search); } } out.sort(); window.__swCaches = names; window.__swEntries = out; window.__swSame = (out.join(' | ') === localStorage.getItem('__swBaseline')); return out.join(' | '); })()
+
+expect window.__swSame
+eval window.__docEntries = window.__swEntries.filter(function(e){ return e.indexOf('doc=') !== -1; }).length
+expect window.__docEntries == 0
+
+# ---- the query-string rule, against a real 200 -------------------------
+#
+# release.json is an ordinary same-origin file the shell does not precache.
+# Fetched plainly it must land in the cache — that is the control, and
+# without it "nothing appeared" would only prove the fetch 404'd. Fetched
+# with a query string it must not, even though the server answers both the
+# same way.
+
+eval (async function(){ var r = await fetch('release.json'); window.__plainStatus = r.status; return r.status; })()
+expect window.__plainStatus == 200
+sleep 800
+
+eval (async function(){ var names = await caches.keys(); var c = await caches.open(names[0]); var k = await c.keys(); window.__swEntries = k.map(function(r){ var u = new URL(r.url); return u.pathname + u.search; }).sort(); return window.__swEntries.join(' | '); })()
+expect window.__swEntries.indexOf('/release.json') !== -1
+
+eval (async function(){ var r = await fetch('release.json?sw-probe=1'); window.__queryStatus = r.status; return r.status; })()
+expect window.__queryStatus == 200
+sleep 800
+
+eval (async function(){ var names = await caches.keys(); var c = await caches.open(names[0]); var k = await c.keys(); window.__swEntries = k.map(function(r){ var u = new URL(r.url); return u.pathname + u.search; }).sort(); window.__searchEntries = window.__swEntries.filter(function(e){ return e.indexOf('?') !== -1; }).length; return window.__swEntries.join(' | '); })()
+expect window.__searchEntries == 0
+
+# ---- update-status.json and api/ ---------------------------------------
+#
+# The first is fetched with `cache: "no-store"`, which a service worker does
+# not see; the second is the hosted document and its revisions. api/ 404s in
+# this harness. update-status.json usually does too, but it is gitignored and
+# the launcher writes it into the repo root (`node start.mjs`), and this
+# harness serves the repo root — so a checkout that has ever run the launcher
+# answers 200. That is not a failure: a real 200 that still never reaches the
+# cache is the stronger case. Its status is logged, not asserted; the leak
+# check below is the assertion either way.
+
+eval (async function(){ var a = await fetch('update-status.json', { cache: 'no-store' }); var b = await fetch('api/docs/sw-cache-probe'); window.__probeStatuses = a.status + '/' + b.status; window.__apiStatus = b.status; return window.__probeStatuses; })()
+expect window.__apiStatus == 404
+sleep 800
+
+eval (async function(){ var names = await caches.keys(); var c = await caches.open(names[0]); var k = await c.keys(); window.__swEntries = k.map(function(r){ var u = new URL(r.url); return u.pathname + u.search; }).sort(); window.__leaks = window.__swEntries.filter(function(e){ return e.indexOf('update-status') !== -1 || e.indexOf('/api/') !== -1; }).length; return window.__swEntries.join(' | '); })()
+expect window.__leaks == 0
+
+# ---- activate drops the caches that are not this release's -------------
+#
+# A stamped name only stops the disk filling up if something deletes the old
+# one. "splitpage-v1" here stands in for the previous release's cache: make
+# one, put the worker through another install/activate, and it should be
+# gone while this release's is untouched.
+
+eval (async function(){ await caches.open('splitpage-v1'); var k = await caches.keys(); window.__withOld = k.indexOf('splitpage-v1') !== -1; return k.sort().join(','); })()
+expect window.__withOld
+
+# Registering a DIFFERENT script url for the same scope is what re-runs
+# install and activate — the same pair a deploy runs. unregister() followed
+# by register() of the same url does not: while this page is still
+# controlled the registration is only marked for removal, and registering it
+# again revives the very same one without installing anything. The query
+# string is ignored by the worker itself (a browser fetches a worker script
+# outside its own fetch handler) and by this harness's server, which routes
+# on the path. Waiting for state "activated" rather than merely for it to be
+# reg.active is the point: the cleanup runs inside activate's waitUntil, and
+# the state is still "activating" until that settles.
+
+eval (async function(){ await navigator.serviceWorker.register('sw.js?sw-suite=53'); for (var i = 0; i < 100; i++) { var reg = await navigator.serviceWorker.getRegistration(); var w = reg && reg.active; if (w && w.scriptURL.indexOf('sw-suite=53') !== -1 && w.state === 'activated') { window.__reactivated = true; return w.scriptURL + ':' + w.state; } await new Promise(function(r){ setTimeout(r, 200); }); } window.__reactivated = false; return 'timed out waiting for the replacement worker to activate'; })()
+expect window.__reactivated
+sleep 800
+
+eval (async function(){ var k = await caches.keys(); window.__swCaches = k; window.__oldGone = k.indexOf('splitpage-v1') === -1; return k.sort().join(','); })()
+expect window.__oldGone
+expect window.__swCaches.length == 1
+expect window.__swCaches.indexOf('splitpage-' + document.querySelector('meta[name="splitpage-version"]').content) !== -1
+
+eval localStorage.removeItem('__swBaseline')

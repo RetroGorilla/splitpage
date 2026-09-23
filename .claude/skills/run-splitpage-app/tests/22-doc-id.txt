@@ -7,6 +7,12 @@
 # drives window.__splitpageFormats (20d-formats.js, the same trick
 # 17-formats.txt plays) and window.__desktopTest (20f-desktop.js, the same
 # trick 21-desktop-shim.txt plays) directly.
+#
+# The pure half of 02b-doc-id.js no longer lives here: the SHA-256 vectors,
+# the deriveDocId golden value, the hostile-id cases, the mergedDocId truth
+# table and decideDuplicateLoser moved to src/test/doc-id.test.mjs, which
+# imports the module and needs no browser at all (#67). What is left is
+# everything that only means something inside a running page.
 
 open
 
@@ -18,21 +24,6 @@ expect /^d[0-9a-f]{32}$/.test(F.docId())
 expect JSON.parse(document.getElementById('state-data').textContent).docId === undefined
 expect !document.getElementById('btn-save').classList.contains('is-dirty')
 expect !F.writtenOut()
-
-# ---- SHA-256 vectors (FROZEN, HANDOFF invariant #37) ----------------------
-expect F.sha256Hex('') === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
-expect F.sha256Hex('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-# golden value recorded from the implementation (step A's report)
-expect F.deriveDocId('splitpage-file','{}') === 'd2a0ba3956fe408d5a1dc4b5791283f16'
-
-# ---- a hostile or missing id is replaced; a valid one is kept -------------
-eval (function(){function h(v){var b=F.clone(F.state());b.docId=v;return F.migrate(b).docId;} window.__h1=h('../../x'); window.__h2=h(('d'+'a'.repeat(32)).toUpperCase()); window.__h3=h(42); window.__h4=h('<img>'); window.__hvKeep=h('d'+'0'.repeat(32)); return [window.__h1,window.__h2,window.__h3,window.__h4,window.__hvKeep];})()
-expect /^d[0-9a-f]{32}$/.test(window.__h1)
-expect window.__h1 !== '../../x'
-expect /^d[0-9a-f]{32}$/.test(window.__h2)
-expect /^d[0-9a-f]{32}$/.test(window.__h3)
-expect /^d[0-9a-f]{32}$/.test(window.__h4)
-expect window.__hvKeep === ('d'+'0'.repeat(32))
 
 # ---- reassignDocId (orchestrator overrides.md #1) -------------------------
 # Runs on the fresh boot doc, while it is provably not dirty, so "it never
@@ -242,33 +233,11 @@ eval (function(){F.openFile(new File([window.__legMdBlockEdited],'legacy-block-e
 wait F.docFile().kind === 'md'
 expect F.docId() !== window.__legMdId1
 
-# ---- mergedDocId truth table (the literal at 03-sync.js:317-328) ----------
-eval (function(){window.__A='d'+'1'.repeat(32); window.__B='d'+'2'.repeat(32); window.__C='d'+'3'.repeat(32); window.__D='d'+'4'.repeat(32); return true;})()
-expect F.mergedDocId({docId:window.__A},{docId:window.__A},{docId:window.__A}) === window.__A
-expect F.mergedDocId({docId:window.__A},{docId:window.__A},{docId:window.__D}) === window.__D
-expect F.mergedDocId({docId:window.__A},{docId:window.__D},{docId:window.__A}) === window.__D
-expect F.mergedDocId(null,{docId:window.__A},{docId:window.__B}) === window.__B
-expect F.mergedDocId({docId:window.__A},{docId:window.__B},{docId:window.__C}) === window.__C
-
-# the same results through mergeStates' own literal, with rows identical on
-# both sides so only docId is in play
-eval (function(){var s = F.clone(F.state()); var mine = F.clone(s); mine.docId = window.__A; var theirs = F.clone(s); theirs.docId = window.__B; window.__mr1 = F.mergeStates(null, mine, theirs).merged.docId; return window.__mr1;})()
-expect window.__mr1 === window.__B
-eval (function(){var s = F.clone(F.state()); var base = F.clone(s); base.docId = window.__A; var mine = F.clone(s); mine.docId = window.__A; var theirs = F.clone(s); theirs.docId = window.__D; window.__mr2 = F.mergeStates(base, mine, theirs).merged.docId; return window.__mr2;})()
-expect window.__mr2 === window.__D
-
 # ---- adoptRestoredState keeps the id, whatever the snapshot carries -------
 eval (function(){window.__arBefore = F.state().docId; var snap = F.clone(F.state()); snap.docId = 'd'+'9'.repeat(32); snap.title = snap.title + ' (restored)'; window.__arResult = F.adoptRestoredState(snap); return window.__arResult.docId;})()
 expect window.__arResult.docId === window.__arBefore
 expect F.docId() === window.__arBefore
 expect F.state().title.indexOf('(restored)') !== -1
-
-# ---- decideDuplicateLoser: pure and symmetric ------------------------------
-expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'n1'},{docId:window.__A,home:'file:b.md',at:200,nonce:'n2'}).nonce === 'n2'
-expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'n1'},{docId:window.__B,home:'file:b.md',at:200,nonce:'n2'}) === null
-expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'n1'},{docId:window.__A,home:'file:a.md',at:200,nonce:'n2'}) === null
-expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'nX'},{docId:window.__A,home:'file:b.md',at:100,nonce:'nX'}) === null
-expect F.decideDuplicateLoser({docId:window.__A,home:'file:a.md',at:100,nonce:'aaa'},{docId:window.__A,home:'file:b.md',at:100,nonce:'bbb'}).nonce === 'bbb'
 
 # ---- the fake-channel reassignment: a duplicate claim makes this tab lose -
 eval (function(){window.__dupSrc = F.buildMarkdown(); F.openFile(new File([window.__dupSrc],'dup-test.md')); return true;})()

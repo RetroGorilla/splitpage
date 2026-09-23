@@ -1,0 +1,115 @@
+# What typing and a structural edit cost in a long script (issue #84).
+#
+# render() reconciles #rows by row id instead of rebuilding it, renderRow()
+# repaints one row's changed parts, and the breakdown is one production
+# index derived lazily and shared by everything the one idle refresh runs.
+# window.__renderTest (05-render.js) counts full renders, rows and fields
+# repainted, production-index derivations and idle refreshes; this suite
+# reads them around real gestures on a 300-scene document:
+#
+#   - typing into one cell with real key events does no full render and
+#     repaints no row, and each idle refresh derives the breakdown at most
+#     once — however many jobs (badges, runtime, untagged scan, b-roll)
+#     it ran; prose derives it not at all, and closing a tag once;
+#   - a structural edit somewhere else (insert, move, delete — driven with
+#     jsclick, which leaves focus where it is, as a server merge landing
+#     mid-sentence would) leaves the focused cell focused, the same DOM
+#     node, with the caret at the same offset, and every untouched field
+#     in the document the same node it was.
+
+open
+
+# --- a 300-scene document, through the real open path ----------------------
+eval (async function(){var rows=[];for(var i=0;i<300;i++){rows.push({id:'r'+i,status:'todo',visualText:'Shot '+i+' with the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle" contenteditable="false">kettle</span> on the table',audioText:'Line '+i+' is what gets said over this shot.'});}var doc={schema:2,title:'Perf',rows:rows,comments:[],people:[],productionTags:[{cat:'prop',name:'kettle'}]};await window.__splitpageFormats.openFile(new File([JSON.stringify(doc)],'perf.splitpage'));return document.querySelectorAll('#rows .row').length;})()
+wait document.querySelectorAll('#rows .row').length === 300
+sleep 800
+expect document.getElementById('production-badge').textContent == 1
+
+# --- typing: no render, no row repainted, one derivation per idle refresh ---
+eval (function(){window.__cell=document.querySelector('#rows .row[data-id="r150"] .audio-cell .cell-editable');window.__other=document.querySelector('#rows .row[data-id="r250"] .visual-cell .cell-editable');return !!window.__cell;})()
+caret #rows .row[data-id="r150"] .audio-cell .cell-editable
+eval window.__renderTest.reset()
+press  and then some more words
+sleep 800
+eval JSON.stringify(window.__renderTest.counts())
+expect window.__renderTest.counts().render === 0
+expect window.__renderTest.counts().rowsPainted === 0
+expect window.__renderTest.counts().cellsPainted === 0
+expect window.__renderTest.counts().idleFlushes >= 1
+expect window.__renderTest.counts().productionDerived <= window.__renderTest.counts().idleFlushes
+# prose changes no tag, so the index it would have derived is still good
+expect window.__renderTest.counts().productionDerived === 0
+expect document.activeElement === window.__cell
+expect window.__cell.textContent.indexOf('over this shot. and then some more words') !== -1
+
+# --- typing a tag: the one keystroke that changes the breakdown derives it
+# once, however many readers (badge, gear count, panel, untagged scan, Tab
+# completion inside the open bracket) ask afterwards
+eval window.__renderTest.reset()
+press  with a [teapot]
+sleep 800
+eval JSON.stringify(window.__renderTest.counts())
+expect window.__renderTest.counts().render === 0
+expect window.__renderTest.counts().rowsPainted === 0
+expect window.__renderTest.counts().productionDerived === 1
+expect !!window.__cell.querySelector('.tag-anchor[data-tag-name="teapot"]')
+expect document.getElementById('production-badge').textContent == 2
+expect document.activeElement === window.__cell
+
+# --- a structural edit elsewhere keeps the caret where it was ---------------
+# Caret into the middle of the line, 10 characters in.
+eval (function(){var c=window.__cell;var t=c.firstChild;var r=document.createRange();r.setStart(t,10);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+eval (function(){window.__caretAt=function(){var s=getSelection();if(!s.rangeCount)return -1;var r=s.getRangeAt(0);if(!window.__cell.contains(r.startContainer))return -2;var p=document.createRange();p.selectNodeContents(window.__cell);p.setEnd(r.startContainer,r.startOffset);return p.toString().length;};return window.__caretAt();})()
+expect window.__caretAt() === 10
+eval window.__renderTest.reset()
+
+# insert a scene below scene 11
+jsclick #rows .row[data-id="r10"] [data-action="insert-below"]
+expect document.querySelectorAll('#rows .row').length === 301
+eval JSON.stringify(window.__renderTest.counts())
+expect window.__renderTest.counts().render === 1
+# the new scene's two fields are the only fields built; the scenes below it
+# repaint their gutters (their numbers moved) and nothing else
+expect window.__renderTest.counts().cellsPainted === 2
+expect window.__renderTest.counts().productionDerived <= 1
+expect document.activeElement === window.__cell
+expect window.__cell.isConnected
+expect window.__caretAt() === 10
+expect window.__other.isConnected
+expect document.querySelector('#rows .row[data-id="r150"] .row-num').textContent == 152
+
+# move scene 201 up
+jsclick #rows .row[data-id="r200"] [data-action="move-up"]
+expect document.querySelectorAll('#rows .row')[200].getAttribute('data-id') == r200
+expect document.activeElement === window.__cell
+expect window.__caretAt() === 10
+expect window.__other.isConnected
+
+# delete scene 3 (the delete button arms, then confirms)
+jsclick #rows .row[data-id="r2"] [data-action="delete-row"]
+jsclick #rows .row[data-id="r2"] [data-action="delete-row"]
+expect document.querySelectorAll('#rows .row').length === 300
+expect !document.querySelector('#rows .row[data-id="r2"]')
+expect document.activeElement === window.__cell
+expect window.__caretAt() === 10
+expect window.__other.isConnected
+expect window.__renderTest.counts().render === 3
+
+# ...and typing still lands where the caret was
+press X
+expect window.__cell.textContent.indexOf('Line 150 iXs what') === 0
+
+# --- a status click repaints one row, not the document ---------------------
+eval document.activeElement.blur()
+eval window.__renderTest.reset()
+jsclick #rows .row[data-id="r20"] [data-action="cycle-status"]
+expect window.__renderTest.counts().render === 0
+expect window.__renderTest.counts().rowsPainted === 1
+expect window.__renderTest.counts().cellsPainted === 0
+expect document.querySelector('#rows .row[data-id="r20"] .status-dot').className == status-dot is-half
+expect window.__other.isConnected
+
+# --- nothing was lost: #rows says exactly what state says -----------------
+# Scene order, and every field's text, against the document itself.
+eval (function(){var st=JSON.parse(window.__splitpageFormats.buildSplitpage());var els=document.querySelectorAll('#rows .row');window.__agree=els.length===st.rows.length&&st.rows.every(function(r,i){var el=els[i];if(el.getAttribute('data-id')!==r.id)return false;var v=el.querySelector('.visual-cell .cell-editable'),a=el.querySelector('.audio-cell .cell-editable');return v.innerHTML.replace(/\u200B/g,'')===r.visualText&&a.innerHTML.replace(/\u200B/g,'')===r.audioText&&el.querySelector('.row-num').textContent===String(i+1<10?'0'+(i+1):i+1);});return window.__agree;})()
+expect window.__agree === true

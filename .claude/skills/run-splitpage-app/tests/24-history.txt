@@ -23,8 +23,8 @@ eval (function(){window.F = window.__splitpageFormats; window.D = window.__deskt
 expect true
 
 # openFixture(id, title): serialize the CURRENT document under a chosen id
-# and title, then reopen it as a .splitpage project — docFileHandle.kind
-# becomes 'splitpage' (never pristine again) and the id is kept verbatim
+# and title, then reopen it as a .splitpage project — the home becomes a
+# 'splitpage' file (F.docFile().kind, never pristine again) and the id is kept verbatim
 # (migrateDocument keeps an already-valid embedded id).
 #
 # ONE FILE NAME for every fixture in this suite, deliberately. The browser's
@@ -116,7 +116,7 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait !document.getElementById('history-panel').hidden
 wait document.querySelectorAll('#history-list .history-card').length === 1
-expect document.getElementById('history-list').textContent.indexOf('isoA-1.txt') !== -1
+wait document.getElementById('history-list').textContent.indexOf('isoA-1.txt') !== -1
 eval (async function(){ window.__isoB = await openFixture(did('c3'), 'Doc Iso B'); return true; })()
 wait document.getElementById('history-list').textContent.indexOf('isoA-1.txt') === -1
 expect document.querySelectorAll('#history-list .history-card').length === 0
@@ -160,6 +160,10 @@ eval (async function(){ await H.resetForTest(); window.__rsA = await openFixture
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+# A reopened panel shows its last list until the new render lands, and that
+# list can have the same number of cards — so every open below also waits
+# for a card of the document it is about before clicking one.
+wait document.getElementById('history-list').textContent.indexOf('rs-1.txt') !== -1
 jsclick #history-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden
 eval (async function(){ await H.idle(); window.__rsAfter = await H.listRaw(__rsA); return window.__rsAfter.length; })()
@@ -181,6 +185,7 @@ expect window.__cpToRec.count === 2
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 2
+wait document.getElementById('history-list').textContent.indexOf('cp-2.txt') !== -1
 jsclick #history-list [data-action="restore-snapshot"]
 wait document.getElementById('history-panel').hidden
 expect F.docId() === __cpTo
@@ -201,6 +206,7 @@ eval (async function(){ await H.resetForTest(); window.__qaId = await openFixtur
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+wait document.getElementById('history-list').textContent.indexOf('qa-1.txt') !== -1
 # a failed backup attempt still leaves its own (pending) card in the panel,
 # newest first — so every later query targets THIS card's own data-id, not
 # whichever button happens to render first
@@ -221,6 +227,7 @@ eval (async function(){ await H.resetForTest(); window.__mvA = await openFixture
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+wait document.getElementById('history-list').textContent.indexOf('mv-1.txt') !== -1
 eval (function(){window.__mvToastBefore = document.querySelectorAll('.toast.warn').length; H.injectFault('delay-put'); return true;})()
 jsclick #history-list [data-action="restore-snapshot"]
 eval (async function(){ await openFixture(__mvB, 'Somewhere Else'); return true; })()
@@ -240,6 +247,7 @@ eval (async function(){ await H.resetForTest(); window.__edId = await openFixtur
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list [data-action="restore-snapshot"]').length === 1
+wait document.getElementById('history-list').textContent.indexOf('ed-1.txt') !== -1
 # injectFault, the click and markDirtyForTest+release all run in ONE eval
 # (no intervening driver round-trip) so the ordering is never a race: the
 # 100ms pause gives the click's internal chain (getHistorySnapshot's async
@@ -365,56 +373,14 @@ expect window.__evRawB2[window.__evRawB2.length - 1].label.indexOf('evB-3.txt') 
 eval (function(){H.setCapOverride(null); H.setNow(null); return true;})()
 
 # =============================================================================
-# eviction planner fixtures (a)-(f) — planHistoryEviction is PURE, exercised
-# directly with no backend at all.
+# planHistoryEviction's own fixtures (a)-(g) used to sit here, driven through
+# window.__historyTest.planEviction even though the planner is pure and needs
+# no backend at all. They are src/test/history-eviction.test.mjs now (#67).
+# The hook is gone too (#76): it only survived for desktop/test/smoke.mjs's
+# caseHistoryPlannerTwin, which held main.js's line-for-line copy of the
+# planner against the renderer's. There is one copy now — shared/history-
+# policy.js, which both builds import — so there is nothing left to compare.
 # =============================================================================
-eval (async function(){ await H.resetForTest(); return true; })()
-
-# (a) every document trimmed to perDoc even with no cap
-eval (function(){window.__pa = H.planEviction([{docId: did('e0'), lastOpenedAt: 1, snapshots: [{id:'s1',atMs:1,sizeBytes:10},{id:'s2',atMs:2,sizeBytes:10},{id:'s3',atMs:3,sizeBytes:10},{id:'s4',atMs:4,sizeBytes:10},{id:'s5',atMs:5,sizeBytes:10}]}], Infinity, 100, {perDoc: 3}); return window.__pa;})()
-expect window.__pa.deletes.length === 2
-expect window.__pa.deletes[0].id === 's1'
-expect window.__pa.deletes[1].id === 's2'
-expect window.__pa.overCap === false
-
-# (b) an expired Older bucket is removed as a whole, even with no cap;
-# an unexpired one is kept untouched
-eval (function(){window.__pb1 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 500, snapshots: [{id:'o1',atMs:1,sizeBytes:5},{id:'o2',atMs:2,sizeBytes:5}]}], Infinity, 1000, {}); window.__pb2 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 5000, snapshots: [{id:'o1',atMs:1,sizeBytes:5},{id:'o2',atMs:2,sizeBytes:5}]}], Infinity, 1000, {}); return [window.__pb1.deletes.length, window.__pb2.deletes.length];})()
-expect window.__pb1.deletes.length === 2
-expect window.__pb2.deletes.length === 0
-
-# (c) under cap pressure, Older (unexpired) is evicted before a normal doc
-eval (function(){window.__pc = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 999999, snapshots: [{id:'o1',atMs:1,sizeBytes:50},{id:'o2',atMs:2,sizeBytes:50}]}, {docId: did('e1'), lastOpenedAt: 5, snapshots: [{id:'d1',atMs:3,sizeBytes:50},{id:'d2',atMs:4,sizeBytes:50}]}], 150, 100, {});return window.__pc;})()
-expect window.__pc.deletes.length === 1
-expect window.__pc.deletes[0].docId === '_older'
-expect window.__pc.totalAfter <= 150
-
-# (d) least-recently-opened document goes first; ties break by docId
-eval (function(){window.__pd = H.planEviction([{docId: did('e3'), lastOpenedAt: 10, snapshots: [{id:'x1',atMs:1,sizeBytes:50},{id:'x2',atMs:2,sizeBytes:50}]}, {docId: did('e2'), lastOpenedAt: 10, snapshots: [{id:'y1',atMs:1,sizeBytes:50},{id:'y2',atMs:2,sizeBytes:50}]}], 150, 100, {}); return window.__pd;})()
-expect window.__pd.deletes.length === 1
-expect window.__pd.deletes[0].docId === did('e2')
-
-# (e) a document's newest snapshot is never deleted; overCap is reported
-eval (function(){window.__pe = H.planEviction([{docId: did('e4'), lastOpenedAt: 1, snapshots: [{id:'z1',atMs:1,sizeBytes:1000}]}], 10, 100, {}); return window.__pe;})()
-expect window.__pe.deletes.length === 0
-expect window.__pe.overCap === true
-expect window.__pe.totalAfter === 1000
-
-# (f) garbage input is tolerated, never throws
-eval (function(){try { window.__pf = H.planEviction([null, {}, {docId: 42, snapshots: 'nope'}, {docId: did('e5'), snapshots: [null, {id:'ok'}, {id:'g1', atMs:'bad', sizeBytes:-5}]}], 'not a number', 'also not a number', {perDoc: -3, olderKey: 7}); window.__pfOk = true; } catch (e) { window.__pfOk = false; } return [window.__pfOk, window.__pf && window.__pf.deletes];})()
-expect window.__pfOk === true
-expect Array.isArray(window.__pf.deletes)
-
-# (g) a protected snapshot is never deleted: not as the oldest Older entry
-# under cap pressure (the next one goes instead), and not by a document's
-# oldest-first eviction, which then reports overCap rather than delete the
-# newest
-eval (function(){window.__pg1 = H.planEviction([{docId: '_older', lastOpenedAt: 0, expiresAt: 999999, snapshots: [{id:'o1',atMs:1,sizeBytes:50},{id:'o2',atMs:2,sizeBytes:50}]}], 50, 100, {protect: [{docId: '_older', id: 'o1'}]}); window.__pg2 = H.planEviction([{docId: did('f3'), lastOpenedAt: 1, snapshots: [{id:'p1',atMs:1,sizeBytes:50},{id:'p2',atMs:2,sizeBytes:50},{id:'p3',atMs:3,sizeBytes:50}]}], 50, 100, {protect: [{docId: did('f3'), id: 'p1'}]}); return [window.__pg1.deletes, window.__pg2.deletes, window.__pg2.overCap];})()
-expect window.__pg1.deletes.length === 1
-expect window.__pg1.deletes[0].id === 'o2'
-expect window.__pg2.deletes.length === 1
-expect window.__pg2.deletes[0].id === 'p2'
-expect window.__pg2.overCap === true
 
 # =============================================================================
 # two same-origin instances (a hidden iframe) racing 20+20 puts on the same
@@ -490,6 +456,9 @@ eval (async function(){ await H.resetForTest(); window.__escId = await openFixtu
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 wait document.querySelectorAll('#history-list .history-card').length === 1
+# the panel keeps its last list while hidden, so the count alone can be met
+# by the previous render: wait for THIS document's card before the checks
+wait document.getElementById('history-list').textContent.indexOf('<script>evil</script>.txt') !== -1
 expect document.querySelectorAll('#history-list script').length === 0
 expect document.querySelectorAll('#history-list img').length === 0
 expect document.getElementById('history-list').innerHTML.indexOf('<script>evil') === -1

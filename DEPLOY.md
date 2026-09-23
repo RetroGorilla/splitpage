@@ -32,15 +32,26 @@ Follow §3 before you share the link with anyone.
 > if you installed the *Compose Manager* plugin from Community Applications.
 > The steps below use plain `docker`, which always works. If you do have
 > Compose Manager, `docker compose up -d --build` in the source folder does the
-> same thing and you can skip to §3.
+> same thing and you can skip to §3 — but note that `docker-compose.yml` lives
+> in the repository, and a repository checkout has no `index.html` to build
+> from until you run `node build.mjs` in it. Deploying from the CI artifact
+> (§2.1) avoids the question entirely.
 
 ### 2.1 Get the files onto the server
 
-> **Build first if you are copying from the repository.** `index.html` is
-> generated from the repo's own `src/` folder — run `node build.mjs` and copy
-> the *result*. A checkout that has never been built either has no
-> `index.html` or has a stale one, and the container will happily serve it.
-> `node build.mjs --check` tells you which you have.
+**Take them from CI.** `index.html` is generated and is *not* in the
+repository — every green CI run builds it and uploads the deployable set as
+an artifact called **`splitpage-app`**. On the repository's **Actions** tab,
+open the run for the commit you want to deploy, and download `splitpage-app`
+from the *Artifacts* box at the bottom of the page. GitHub hands you a zip;
+its contents are exactly what goes on the server, `Dockerfile` included, so
+the unzipped folder is already a working `docker build` context.
+
+> **Building it yourself instead.** From a checkout: `npm install` once, then
+> `node build.mjs`, and copy `index.html`, `sw.js`, `manifest.webmanifest`,
+> `icon.svg`, `Dockerfile` and `server/` yourself. A checkout that has never
+> been built has no `index.html` at all — that is normal, not a broken clone.
+> `node build.mjs --check` says whether the copy you have is current.
 >
 > The folder you make on the server below is also called `src`, which is an
 > unrelated coincidence: it holds the *built* app, not the repo's source.
@@ -48,7 +59,7 @@ Follow §3 before you share the link with anyone.
 In Windows Explorer, open `\\TOWER\appdata` (replace `TOWER` with your
 server's name — the same one you use for other shares). Create a folder
 `splitpage`, and inside it a folder `src`, then copy the whole contents of
-`splitpage-app` into `src`.
+the unzipped artifact into `src`.
 
 You should end up with:
 
@@ -60,7 +71,11 @@ You should end up with:
     sw.js
     Dockerfile
     server/server.js
+    server/package.json
 ```
+
+That is the whole build context. There is no `src/` of the repo's own on the
+server and no Node build step in the image: the app arrives already built.
 
 *If `\\TOWER\appdata` won't open*, the share isn't exported over SMB. In the
 Unraid web UI: **Shares → appdata → SMB Security Settings → Export = Yes**.
@@ -119,7 +134,8 @@ docker rm -f splitpage
 
 ### Updating later
 
-Copy the changed files into `src` again, then:
+Download the `splitpage-app` artifact from the newer CI run, copy its
+contents into `src` again (overwriting), then:
 
 ```bash
 docker rm -f splitpage && docker build -t splitpage /mnt/user/appdata/splitpage/src && docker run -d --name splitpage --restart unless-stopped -p 8791:8791 -v /mnt/user/appdata/splitpage/data:/data --user 99:100 splitpage
@@ -127,11 +143,32 @@ docker rm -f splitpage && docker build -t splitpage /mnt/user/appdata/splitpage/
 
 Your documents live in the `data` volume, which this does not touch.
 
+Anyone with the app open while you update should reload it. A page older than
+the server can no longer save a document that has images in it: the server
+answers with "This page is out of date for this server", because an older page
+would drop the images it cannot see.
+
 ### Where your documents live
 
 One JSON file per script in `/mnt/user/appdata/splitpage/data`. That is the
 whole database — no index, nothing to rebuild. **Back it up by copying the
 folder.** Include it in your normal Unraid appdata backup and you are covered.
+
+Each file is written with a summary on its first line and the script on its
+second:
+
+```json
+{"id":"kitchen-ab12","rev":7,"updatedAt":"…","updatedBy":"…","title":"Kitchen","rows":9,
+"state":{ …the whole script… }}
+```
+
+It is still one JSON object — the newline is whitespace, so anything that
+reads JSON reads it unchanged. The point of the split is that the picker can
+list twenty scripts, and a save can check the revision it is replacing,
+without parsing twenty scripts in full. Documents written by an older version
+have no such line; they are read the old way and quietly rewritten with one
+the next time they are listed or saved. Each save is fsynced and renamed into
+place, so a power cut leaves the previous version, never a half-written one.
 
 ---
 
@@ -234,8 +271,31 @@ same data folder on a different hostname with its own, broader Access policy.
 **Deleting is immediate.** The picker's × asks once, then the document is gone
 from the server. Your backup of the data folder is the undo.
 
-**Large scripts.** Embedded images make documents big; the cap is 25 MB per
-document (`MAX_BODY_BYTES`). Raise it if you hit it.
+**Large scripts.** The cap is 25 MB per document (`MAX_BODY_BYTES`). Raise it
+if you hit it.
+
+That cap is for saving a whole script. Posting a comment has its own, much
+smaller one — half a megabyte, fixed — because a comment is a comment, and a
+review session that can only comment should never be able to make the server
+buffer a script-sized upload. Raising `MAX_BODY_BYTES` does not raise it, and
+nothing a reviewer legitimately sends comes close to it.
+
+**Images.** Current versions of the app keep images out of the document:
+each image is uploaded once, on its own, and stored under
+`data/blobs/<2 characters>/<its SHA-256>`, so the documents themselves stay
+small. Back `blobs/` up with the rest of the folder — a document that names an
+image whose file is gone shows a placeholder in its place. Nothing deletes an
+image file today, even when no document uses it any more.
+
+One image is capped at 8 MiB (`MAX_BLOB_BYTES`), and only PNG, JPEG, GIF and
+WebP are accepted. Review sessions may upload the screenshots they paste into
+comments, up to 20 MiB per review token per hour
+(`REVIEW_BLOB_BUDGET_BYTES`); editors have no such limit. Everyone who uses the
+library-wide review PIN or key shares one token, and so one allowance.
+
+An older copy of the app cannot save over a document that holds images stored
+this way (it would drop them) — the server refuses with "client too old", and
+reloading the page fixes it.
 
 **`JOIN_PIN` is not a substitute for Access.** Setting `JOIN_PIN` in the
 container's environment makes every `/api/*` route except `/api/health` and
@@ -252,6 +312,19 @@ If you do set it: the token is minted per process and held only in memory, so a
 redeploy signs everyone out; wrong PINs are limited to ten a minute per address;
 and neither the PIN nor the token is ever written to disk, logged, or served by
 the static handler.
+
+**`TRUST_PROXY=1`** tells that rate limit to count `X-Forwarded-For` instead of
+the socket. Set it when the container only ever hears from a proxy — a
+Cloudflare tunnel, nginx, or Docker's own NAT — because there every request
+arrives from the same address and the limit is one bucket for the whole house:
+one stranger's ten wrong guesses lock everybody out for a minute. Only the
+first entry of the header is read, and anything that is not an address is
+ignored.
+
+**Do not set it if anything can reach the port directly.** `X-Forwarded-For` is
+just a request header: whoever can talk to the port writes what they like in
+it, so trusting it there hands a guesser a fresh allowance per guess and turns
+the limit off. Off is the default for that reason.
 
 **`ALLOW_ORIGINS`** is a comma-separated allowlist of origins permitted to call
 the API cross-origin. Empty (the default) means same-origin only, which is what
@@ -340,20 +413,21 @@ build `npm install` fetches by default (`desktop/.npmrc`, `arch=arm64` — see
 HANDOFF.md §2); `desktop/test/smoke.mjs`'s dev-target runs, including the
 tabs cases, execute against that native ARM64 Electron, not under emulation.
 
-### Where they differ from the old (deprecated) IExpress recipe
+### Where they differ from the IExpress recipe that used to be here
 
-The old `start.bat` + `package.mjs --installer` + `installer/install.ps1` recipe
-shipped a PowerShell installer wrapped in IExpress; it is deprecated (see the
-header comment in `package.mjs`) but still builds, since `package.mjs` without
-`--installer` still produces the portable zip every release ships for 1.0.x
-compatibility (§7). The Electron-built installers, which 2.0.0 ships instead:
+Until 3.0 there was a second Windows installer: `package.mjs --installer` wrapped
+`installer/install.ps1`, `installer/uninstall.ps1` and a downloaded `node.exe`
+in a self-extracting archive built by `iexpress.exe`. It had been deprecated
+since 2.0.0 and unpublished since then; it is **deleted** now, along with
+`installer/`, `tools/fetch-runtime.mjs` and the `--installer` flag itself. The
+Electron-built installers, which ship instead:
 
 - Run natively inside Electron's window frame with native title bar and menus
 - Have stable `splitpage://app` origin, so localStorage/IndexedDB/version history
   survive across launches regardless of port changes
 - Use `electron-builder`'s NSIS configuration instead of IExpress
-- Carry their own runtime: Electron bundles Chromium and Node, so the portable
-  Node the IExpress setups ship is not used
+- Carry their own runtime: Electron bundles Chromium and Node, so no separate
+  portable Node has to be downloaded and packed
 - Support both x64 and ARM64 architectures with native binaries
 
 ---
@@ -369,17 +443,17 @@ node package.mjs
 cd desktop && npm run dist:win
 ```
 
-`node package.mjs` (no `--installer`) writes `dist/splitpage-<version>.zip`. The
-`--installer` (IExpress) branch of `package.mjs` is deprecated — see its file
-header — and is not part of this recipe; it may still be run by hand as a
-historical fallback, but its output (`SplitpageSetup-<version>-*.exe`) is not
-published. `npm run dist:win` runs `stage.mjs`, `electron-builder`, and finishes
-with `verify-dist.mjs` (§6); do not publish if it does not print ALL PASS.
+`node package.mjs` writes `dist/splitpage-<version>.zip` and nothing else — it
+has no flags left. `npm run dist:win` runs `stage.mjs`, `electron-builder`, and
+finishes with `verify-dist.mjs` (§6); do not publish if it does not print ALL
+PASS.
 
-The zip is still required every release, 2.0.0 included: the 1.0.x updater
-(`update.mjs`) hard-fails unless the release has an asset matching
-`/^splitpage-.*\.zip$/`, and that is how a 1.0.x install updates itself in
-place to the current browser app (see §6 and the 1.0.x removal note below).
+Ship the zip every release. It is the portable app, and it is also what a
+pre-3.0 copy looks for: the 1.0.x/2.x launcher hard-fails its own update unless
+the release carries an asset matching `/^splitpage-.*\.zip$/`. A 3.0 copy no
+longer installs it by itself — that self-update path is gone, and the portable
+copy is updated by unzipping a newer release over it — but leaving the asset off
+would break the copies still running the old launcher.
 
 On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
 
@@ -405,7 +479,16 @@ The 2.0.0 installer also removes a detected 1.0.x install from
 data folder untouched; see the `customInit` macro committed in
 `desktop/build/installer.nsh`.
 
-Existing installations will check the mirror on startup and offer the update. The `release.json` file in the repo controls the mirror URL, so if you need to change where releases come from, update that file and the next build will point there.
+Existing installations check the mirror on startup and say when there is
+something newer; the desktop app offers to install it.
+
+**Where that mirror URL comes from.** `SPLITPAGE_UPDATE_API`, or the default
+compiled into `update.mjs` and `desktop/main.js`, and nothing else. `release.json`
+used to be copied into each release's `.splitpage-release.json` as an
+`updateApi` field that the next update check would follow; #64 made that field
+ignored (a release naming where the next release comes from is a redirect
+nobody could revoke) and #75 stopped writing it. To move the mirror, change the
+default in those two files and cut a release from it.
 
 ---
 
@@ -416,5 +499,7 @@ Existing installations will check the mirror on startup and offer the update. Th
 | App loads, but no server items in the File menu | The app can't reach `/api/health` — it's being served as static files, not by this container. Check the tunnel points at the container's port. |
 | "Your sign-in expired" straight after signing in | Access is returning its login page to API calls. Usually the Access application covers a *path* rather than the whole hostname — it must cover `splitpage.yourdomain.com` entirely, `/api/` included. |
 | `EACCES` in the logs | Data volume permissions — see §2. |
-| Saves fail with 413 | Document over `MAX_BODY_BYTES`. Raise it and restart. |
+| Saves fail with 413 | Document over `MAX_BODY_BYTES`, or one image over `MAX_BLOB_BYTES`. Raise it and restart. |
+| "This page is out of date for this server" | The page was loaded before the server was updated, and the document holds images. Reload the page. |
+| Pictures show as "Image unavailable" | The image files under `data/blobs/` are missing — restored from a backup that did not include `blobs/`, or copied without it. Restore `blobs/` too. |
 | Everyone shows as the same person in comments | Access isn't passing an identity, so Splitpage falls back to asking for a name. Confirm the Access app is on and the tunnel isn't bypassing it. |

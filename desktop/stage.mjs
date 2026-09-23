@@ -6,14 +6,15 @@
  * 1. Runs the repo's build (build.mjs) to regenerate index.html
  * 2. Verifies desktop/package.json version matches ../VERSION (single source of truth)
  * 3. Recreates desktop/.stage/splitpage/ with the exact files electron-builder
- *    will embed as extraResources, matched to the allowlist in main.js:protocol.handle()
+ *    will embed as extraResources: the allowlist in main.js:protocol.handle(),
+ *    the document server, and shared/ (which main.js requires at startup)
  *
  * Run: node stage.mjs (from desktop/)
  */
 
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
-import { resolve, dirname, join } from "node:path";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -67,18 +68,23 @@ try {
 // Create stage directory
 await fs.mkdir(STAGE_DIR, { recursive: true });
 
-// Files to copy from repo root (the allowlist in main.js:protocol.handle())
+// Files to copy from repo root (the allowlist in main.js:protocol.handle()).
+// [source path in the repo, name inside the stage] — the two differ only for
+// the user guide, which lives in docs/ but is served flat like everything
+// else. It used to be README.md; #80 split the user-facing half out into
+// docs/help.md so that editing the repo's README no longer changes what the
+// desktop app ships.
 const files = [
-  "index.html",
-  "manifest.webmanifest",
-  "icon.svg",
-  "sw.js",
-  "README.md",
-  "VERSION"
+  ["index.html", "index.html"],
+  ["manifest.webmanifest", "manifest.webmanifest"],
+  ["icon.svg", "icon.svg"],
+  ["sw.js", "sw.js"],
+  ["docs/help.md", "help.md"],
+  ["VERSION", "VERSION"]
 ];
 
-for (const filename of files) {
-  const src = resolve(REPO_ROOT, filename);
+for (const [from, filename] of files) {
+  const src = resolve(REPO_ROOT, from);
   const dst = resolve(STAGE_DIR, filename);
   const data = await fs.readFile(src);
   await fs.writeFile(dst, data);
@@ -96,12 +102,40 @@ for (const filename of ["index.html", "tabstrip.js", "tabstrip.css"]) {
   console.log(`  tabstrip/${filename} (${data.length} bytes)`);
 }
 
-// server/server.js (subdirectory)
+// server/ (subdirectory). package.json travels with server.js and is not
+// optional: server.js is CommonJS, the repo root's package.json says
+// "type": "module" for the build tooling, and Node resolves the nearest one.
+// Stage server.js alone next to a module-typed root and the first require()
+// throws.
 const serverDir = resolve(STAGE_DIR, "server");
 await fs.mkdir(serverDir, { recursive: true });
-const serverSrc = resolve(REPO_ROOT, "server", "server.js");
-const serverData = await fs.readFile(serverSrc);
-await fs.writeFile(resolve(serverDir, "server.js"), serverData);
-console.log(`  server/server.js (${serverData.length} bytes)`);
+for (const filename of ["server.js", "package.json"]) {
+  const data = await fs.readFile(resolve(REPO_ROOT, "server", filename));
+  await fs.writeFile(resolve(serverDir, filename), data);
+  console.log(`  server/${filename} (${data.length} bytes)`);
+}
+
+// shared/ (issue #76). main.js REQUIRES these at startup — the history
+// eviction planner, the meta clamps, the duplicate-id rules — so a packaged
+// app without them does not launch. They cannot live in the asar beside
+// main.js: main.js resolves them from APP_ROOT, which is the repo root in dev
+// and resources/splitpage here, and one path has to work in both.
+// package.json travels with them for the same reason server/'s does: they are
+// CommonJS, the repo root's package.json says "type": "module", and node
+// resolves the nearest one. blob-policy.js (#82: the image-record gate, the
+// reference walker and the image sniffer) is staged with them because the
+// desktop blob store will require it the same way (#82 P3); until then it is
+// shipped and unused. history-store.js (#83: the one version-history store,
+// over a backend each build supplies) requires history-policy.js and
+// doc-id-policy.js by relative path, so all three have to sit side by side
+// here; main.js requires it at startup once #83 step 3a lands, and a packaged
+// app without it would then fail at that require.
+const sharedDir = resolve(STAGE_DIR, "shared");
+await fs.mkdir(sharedDir, { recursive: true });
+for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js", "blob-policy.js", "history-store.js"]) {
+  const data = await fs.readFile(resolve(REPO_ROOT, "shared", filename));
+  await fs.writeFile(resolve(sharedDir, filename), data);
+  console.log(`  shared/${filename} (${data.length} bytes)`);
+}
 
 console.log(`\nStaging complete. Ready to run: npx electron-builder --config electron-builder.yml`);

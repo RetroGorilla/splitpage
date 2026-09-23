@@ -83,8 +83,9 @@ Joining someone else's server over SSH:
   and opens the browser at http://localhost:<local>/. Nothing of yours is
   served; closing this window closes the tunnel.
 
-Updates install at launch and never while the app is open (see update.mjs):
-  node update.mjs   downloads one, and the next start puts it in place.
+Updates are not installed by this launcher (#75): it only looks for one and
+says so. "node update.mjs" prints the same answer from a terminal; unzip a
+newer release over this copy, or use the desktop app, which updates itself.
 `);
   process.exit(0);
 }
@@ -238,25 +239,13 @@ if (has("--tunnel")) {
   await new Promise(() => {});
 }
 
-/* ---------- install anything update.mjs staged ----------
- *
- * Here, before the server starts and before a browser has the app open: this
- * is the one moment when replacing index.html is safe. update.mjs only ever
- * downloads and verifies; the swap happens exactly here.
+/* This launcher used to install a staged update here, before the server
+ * started and before a browser had the app open — the one moment when
+ * replacing index.html was safe. The whole staging-and-swap path is gone
+ * (#75): a portable copy is updated by unzipping a newer one over it, and
+ * the desktop app has its own updater. Nothing this process does now writes
+ * to the app's own files, which is one fewer way for a launch to fail.
  */
-
-let applied = null;
-if (existsSync(join(ROOT, "update.mjs"))) {
-  try {
-    const updater = await import("./update.mjs");
-    applied = updater.apply({ log: (m) => console.log(m) });
-  } catch (err) {
-    /* A failed update rolls itself back, so the old version is still intact
-       and the right thing to do is start it and say what happened. */
-    console.error(`  update could not be installed: ${err.message}`);
-    console.error("  starting the version you already had.");
-  }
-}
 
 /* ---------- build, if this is a source checkout ---------- */
 
@@ -335,14 +324,19 @@ function writeStatus(extra) {
      than carried, so it goes false by itself once the update is installed. */
   const latest = extra.latest !== undefined ? extra.latest : (previous.latest ?? null);
   const status = {
-    /* Carry the whole previous status forward, not just `latest` — a
-       field like justUpdated (set right after applying a staged update,
-       for the frontend to show a "you're now on vX" banner) used to be
-       silently dropped the moment ANY later writeStatus() call didn't
-       itself re-supply it, which the background update-check does
-       moments later. Fields below override this as intended; `extra`
+    /* Carry the whole previous status forward, not just `latest`: a field
+       any one writeStatus() call does not itself re-supply used to be
+       silently dropped, and the background update-check makes such a call
+       moments after boot. Fields below override this as intended; `extra`
        (the caller's actual update) always wins last. */
     ...previous,
+    /* ...except these two, which are the staging path's and are always null
+       now that it is gone (#75). Carrying them forward would leave a
+       `pending` written by an older launcher in the file for good, and the
+       page would go on saying "restart to finish installing it" about an
+       update that can no longer be installed that way. */
+    pending: null,
+    justUpdated: null,
     version,
     checkedAt: new Date().toISOString(),
     latest,
@@ -366,7 +360,7 @@ function writeStatus(extra) {
    first, so a fresh launch showed a stale (or blank) verdict and only picked
    the real one up on the NEXT launch. The page polls while this is true. */
 const willCheck = !has("--no-update-check") && !!updater;
-writeStatus({ pending: updater ? updater.pending() : null, justUpdated: applied, checking: willCheck });
+writeStatus({ checking: willCheck });
 
 /* Deliberately not awaited: a slow or unreachable update server must never
    delay the app opening. Whatever it finds lands in the file, and the page
@@ -383,12 +377,11 @@ if (willCheck) {
       writeStatus({
         latest,
         updateAvailable: !!latest && updater.compareVersions(latest, current) > 0,
-        pending: updater.pending(),
         checking: false,
         error: undefined
       });
     } catch (err) {
-      writeStatus({ error: err.message, pending: updater.pending(), checking: false });
+      writeStatus({ error: err.message, checking: false });
     }
   })();
 }

@@ -26,7 +26,6 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const child_process = require("node:child_process");
 
 const PORT = Number(process.env.PORT || 8791);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -35,6 +34,18 @@ const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public"
 /* A script with a few embedded images gets large. 25 MB is roomy for that and
    still small enough that a runaway client can't fill the array. */
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
+/* One image, uploaded on its own (#82). Images left the document for
+   content-addressed blobs under DATA_DIR/blobs, so a script no longer carries
+   its stills inside it; this is the cap on one still. */
+const MAX_BLOB_BYTES = Number(process.env.MAX_BLOB_BYTES || 8 * 1024 * 1024);
+/* How many bytes of images a REVIEW token may store per rolling hour — the
+   screenshots a reviewer pastes into comments. An editor has no such cap: an
+   editor can already write 25 MB per save. A reviewer otherwise could not
+   write to the disk at all, and this keeps "can comment" from becoming "can
+   fill the array". The library-wide review credential is one token shared by
+   everyone who holds it, so it is one budget shared by all of them. */
+const REVIEW_BLOB_BUDGET = Number(process.env.REVIEW_BLOB_BUDGET_BYTES || 20 * 1024 * 1024);
+const REVIEW_BLOB_WINDOW_MS = 60 * 60 * 1000;
 /* Set READ_ONLY=1 to publish a library nobody can write to. */
 const READ_ONLY = process.env.READ_ONLY === "1";
 /* Set NO_API=1 to serve the app and nothing else. The local launcher uses this
@@ -224,7 +235,43 @@ const PIN_WINDOW_MS = 60 * 1000;
 const PIN_MAX_FAILURES = 10;
 const pinFailures = new Map();
 
+/* ---------- who the limiter counts against ----------
+ *
+ * The socket's own address, unless TRUST_PROXY=1 says something in front of
+ * this process is rewriting it. Behind cloudflared, a reverse proxy or plain
+ * Docker NAT every request arrives from the same address, so the bucket above
+ * is one bucket for everybody: one stranger's ten wrong guesses lock the whole
+ * house out for a minute (#74).
+ *
+ * Off by default, and that default matters. X-Forwarded-For is a request
+ * header like any other — anyone talking to this port directly can write
+ * whatever they like in it, so honouring it unconditionally would hand every
+ * guesser a fresh bucket per guess and turn the limiter off. It is only worth
+ * anything when a proxy you control is the ONLY way in, which is the one case
+ * the operator is asserting by setting this.
+ *
+ * The FIRST entry, because a proxy appends: "client, proxy1, proxy2". Anything
+ * that is not plausibly an address is ignored rather than used as a key — a
+ * header of junk should fall back to the socket, not mint a bucket named after
+ * the junk.
+ */
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
+
+function forwardedIp(req) {
+  const header = req.headers["x-forwarded-for"];
+  /* Node joins a repeated header into an array; a proxy that sets it twice
+     means the same list, so read it as one. */
+  const raw = Array.isArray(header) ? header.join(",") : String(header || "");
+  const first = raw.split(",")[0].trim().replace(/^\[|\]$/g, "");
+  return IP_RE.test(first) ? first : "";
+}
+
 function clientIp(req) {
+  if (TRUST_PROXY) {
+    const forwarded = forwardedIp(req);
+    if (forwarded) return forwarded;
+  }
   return String((req.socket && req.socket.remoteAddress) || "unknown");
 }
 
@@ -285,8 +332,13 @@ function corsHeaders(req) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Vary": "Origin",
-    "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
+    "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch, x-splitpage-client",
+    /* PATCH is here for the one comment resolve route (#71). A preflight
+       that does not name a method is a preflight that fails, and a route
+       added without its method named here works from the app and from
+       nowhere else — which is a bug nobody meets until the day somebody
+       sets ALLOW_ORIGINS. */
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
   };
 }
 
@@ -372,22 +424,165 @@ async function readDoc(id) {
   }
 }
 
+/* ---------- the head line ----------
+ *
+ * A document file is written with its own summary on the first line and the
+ * state on the second:
+ *
+ *     {"id":"kitchen-ab12","rev":7,"updatedAt":"…","title":"Kitchen","rows":9,
+ *     "state":{ …the whole script… }}
+ *
+ * It is still one JSON object and still one file — the newline is whitespace
+ * JSON ignores, so `cp -r` is still the backup and readDoc() is unchanged.
+ * What it buys is that the three things nothing else needs the script for —
+ * the rev a PUT compares against, and the title and timestamp the picker
+ * lists — can be had by reading the first few hundred bytes instead of
+ * parsing 25 MB of state per document (#74). The picker used to parse every
+ * script in the library in full to draw a list of their names.
+ *
+ * Deliberately IN the file rather than in a sidecar beside it: a sidecar is a
+ * second write that a crash can land between, and a rev that disagrees with
+ * the document it describes is worse than no rev at all. This one arrives
+ * with the rename or not at all.
+ *
+ * Documents written before this existed have no head line. Every reader below
+ * falls back to a full parse for those, and the list route quietly rewrites
+ * one when it meets it, so a library upgrades itself as it is used.
+ */
+const DOC_HEAD_MAX = 8192;
+
+/* A title is as long as whoever pasted it made it, and the head line has to
+   fit in the one small read below. The copy in the summary is held short;
+   the document's own state still carries the title in full, so nothing is
+   lost — a picker entry is a line in a list, not a document. */
+const HEAD_TITLE_MAX = 512;
+
+/* The summary as it is stored: every top-level field of the document except
+   the state, plus the two things the picker wants out of the state. */
+function headOf(doc) {
+  const head = {};
+  for (const key of Object.keys(doc)) {
+    if (key !== "state") head[key] = doc[key];
+  }
+  const state = doc.state || {};
+  head.title = String(state.title || "Untitled Script").slice(0, HEAD_TITLE_MAX);
+  head.rows = Array.isArray(state.rows) ? state.rows.length : 0;
+  return head;
+}
+
+function encodeDoc(doc) {
+  const head = JSON.stringify(headOf(doc));
+  /* "{…}" + "{…}" spliced into one object: drop the head's closing brace and
+     continue it with the state on the next line. headOf always returns at
+     least title and rows, so there is never a dangling comma here. */
+  return head.slice(0, -1) + ",\n\"state\":" + JSON.stringify(doc.state) + "}";
+}
+
+/* The head line alone, or null for a document that has none (written before
+   this existed, or carrying a title longer than the read below) — in which
+   case the caller parses the whole file instead. */
+async function readDocHead(id) {
+  let handle;
+  try {
+    handle = await fsp.open(docPath(id), "r");
+  } catch (err) {
+    if (err && err.code === "ENOENT") return null;
+    throw err;
+  }
+  try {
+    const buf = Buffer.alloc(DOC_HEAD_MAX);
+    const { bytesRead } = await handle.read(buf, 0, DOC_HEAD_MAX, 0);
+    const text = buf.toString("utf8", 0, bytesRead);
+    const end = text.indexOf("\n");
+    if (end === -1) return null;
+    /* Everything before the newline, closed off: the trailing comma is the
+       one encodeDoc put there to join the head to the state. A title cannot
+       smuggle a newline in — JSON.stringify escapes it. */
+    const line = text.slice(0, end).replace(/,$/, "") + "}";
+    const head = JSON.parse(line);
+    if (!head || typeof head !== "object" || typeof head.rev !== "number") return null;
+    return head;
+  } catch (err) {
+    /* An unreadable head is never fatal: it only means this document is read
+       the old way. A corrupt file still fails loudly in readDoc(). */
+    return null;
+  } finally {
+    await handle.close().catch(() => {});
+  }
+}
+
+/* rev, title and timestamps, by whichever route is cheapest for this file. */
+async function readDocMeta(id) {
+  const head = await readDocHead(id);
+  if (head) return head;
+  const doc = await readDoc(id);
+  return doc ? headOf(doc) : null;
+}
+
+/* fsync a directory so a rename in it is on the disk and not only in the
+   page cache. Best effort: Windows cannot open a directory for reading at
+   all, and some filesystems refuse the sync — neither is a reason to fail a
+   save that has otherwise succeeded. */
+async function syncDir(dir) {
+  let handle;
+  try {
+    handle = await fsp.open(dir, "r");
+    await handle.sync();
+  } catch (err) {
+    /* nothing to do about it here */
+  } finally {
+    if (handle) await handle.close().catch(() => {});
+  }
+}
+
 /* Write to a temp file in the same directory and rename over the target.
    Rename is atomic within a filesystem, so a crash or a full disk leaves the
-   previous version intact rather than a half-written one. */
-async function writeDoc(doc) {
-  const target = docPath(doc.id);
+   previous version intact rather than a half-written one.
+
+   Atomic is not the same as durable. Without the fsync below, the rename can
+   reach the disk before the bytes it points at do, and a power cut between
+   the two leaves the document there and EMPTY — the one outcome this whole
+   dance exists to prevent (#74). So: write, fsync the temp file, rename,
+   then fsync the directory that now holds the new name. */
+async function writeFileDurable(target, data) {
   const tmp = target + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
-  await fsp.writeFile(tmp, JSON.stringify(doc), "utf8");
   try {
+    let handle;
+    try {
+      handle = await fsp.open(tmp, "w");
+      await handle.writeFile(data, typeof data === "string" ? "utf8" : undefined);
+      await handle.sync();
+    } finally {
+      if (handle) await handle.close();
+    }
     await fsp.rename(tmp, target);
   } catch (err) {
     await fsp.unlink(tmp).catch(() => {});
     throw err;
   }
+  await syncDir(path.dirname(target));
+}
+
+async function writeDoc(doc, refs) {
+  await writeFileDurable(docPath(doc.id), encodeDoc(doc));
+  /* The refs of the state that just went to disk, filed under the rev it
+     went there as, so a review link asking for an image (and an old client's
+     PUT asking whether it may) does not have to parse the script back in to
+     find out (#82). Whoever wrote it had the state in hand anyway. */
+  noteRefs(doc.id, doc.rev || 0, refs || refsIn(doc.state));
 }
 
 /* ---------- http helpers ---------- */
+
+/* Is this request still sending a body nobody has read? A message the parser
+   has finished is not, and neither is a GET, which announces no body to
+   leave behind — so the common answer here is "no" and the connection is
+   kept alive as it always was. */
+function stillUploading(req) {
+  if (!req || req.complete) return false;
+  if (req.headers["transfer-encoding"]) return true;
+  return Number(req.headers["content-length"] || 0) > 0;
+}
 
 function sendJson(res, status, body, opts) {
   const payload = JSON.stringify(body);
@@ -398,11 +593,17 @@ function sendJson(res, status, body, opts) {
        stale rev would make the client think it is up to date and clobber */
     "Cache-Control": "no-store"
   };
-  /* Set when we are answering without having read the rest of the request
-     body (an over-length upload). The client is still sending; keeping the
-     connection alive would leave its unread bytes in front of the next
-     request on it, so this response ends the connection. */
-  if (opts && opts.close) headers["Connection"] = "close";
+  /* Answering without having read the rest of the request body: an
+     over-length upload, or — since #74 — any refusal that happens before
+     readBody(), which is now every gated route's 401. The client is still
+     sending; keeping the connection alive would leave its unread bytes in
+     front of the next request on it, so this response ends the connection
+     and Node discards what is still arriving.
+
+     `res.req` is Node's own back-reference to the request, which is what
+     lets this be decided here rather than at forty call sites: a route
+     added later cannot forget it, exactly as with the CORS headers below. */
+  if (stillUploading(res.req) || (opts && opts.close)) headers["Connection"] = "close";
   /* Stamped on the response object by the request handler below, where the
      request is still in scope. Doing it there rather than threading `req`
      through every sendJson() call site means a route added later cannot
@@ -413,7 +614,27 @@ function sendJson(res, status, body, opts) {
   res.end(payload);
 }
 
-function readBody(req) {
+/* Small enough for a PIN, a link key or a heartbeat, which is all the two
+   routes that read a body before they know who is asking ever carry. MAX_BODY
+   is sized for a script with images in it, and a caller who has not proved
+   anything yet has no business sending one (#74). */
+const SMALL_BODY = 8 * 1024;
+
+function readBody(req, limit) {
+  return readRawBody(req, limit || MAX_BODY).then((buf) => {
+    try {
+      const text = buf.toString("utf8");
+      return text ? JSON.parse(text) : {};
+    } catch (err) {
+      throw Object.assign(new Error("bad-json"), { code: "BAD_JSON" });
+    }
+  });
+}
+
+/* The body as bytes, capped. An image upload (#82) is not JSON, and every
+   JSON body is these bytes parsed. */
+function readRawBody(req, limit) {
+  const max = limit || MAX_BODY;
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
@@ -421,7 +642,7 @@ function readBody(req) {
     req.on("data", (chunk) => {
       if (aborted) return;
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         /* Pause rather than destroy. req.destroy() tears the socket down
            immediately, so the 413 below never reaches the client and it sees
            a connection reset instead of a message telling it the document is
@@ -438,46 +659,80 @@ function readBody(req) {
     });
     req.on("end", () => {
       if (aborted) return;
-      try {
-        const text = Buffer.concat(chunks).toString("utf8");
-        resolve(text ? JSON.parse(text) : {});
-      } catch (err) {
-        reject(Object.assign(new Error("bad-json"), { code: "BAD_JSON" }));
-      }
+      resolve(Buffer.concat(chunks));
     });
     req.on("error", reject);
   });
 }
 
 /* A summary for the picker: enough to choose a document without shipping
-   every row of every script to build a list. */
-function summarise(doc) {
-  const state = doc.state || {};
+   every row of every script to build a list. Built from the head line when
+   there is one — which is the whole point of the head line, since drawing a
+   list of names used to mean parsing every script in the library in full. */
+function summarise(head) {
   return {
-    id: doc.id,
-    title: (state.title || "Untitled Script"),
-    rev: doc.rev || 0,
-    rows: Array.isArray(state.rows) ? state.rows.length : 0,
-    updatedAt: doc.updatedAt || null,
-    updatedBy: doc.updatedBy || null
+    id: head.id,
+    title: (head.title || "Untitled Script"),
+    rev: head.rev || 0,
+    rows: typeof head.rows === "number" ? head.rows : 0,
+    updatedAt: head.updatedAt || null,
+    updatedBy: head.updatedBy || null
   };
+}
+
+/* Documents this process has already offered a head line to. Once each: a
+   file that cannot be given a readable one — a name so long it does not fit
+   the read, a filesystem that refused the write — would otherwise be
+   rewritten by every listing for as long as the server runs. */
+const headUpgraded = new Set();
+
+/* One document's line in the picker, or null if it is not there. Reads the
+   head line; falls back to the whole file for a document saved before head
+   lines existed, and — unless this library is published read-only — rewrites
+   that document with one so the next listing is cheap. The rewrite is the
+   same content under the same lock as any other write, so it cannot race a
+   save or change what the document says. */
+async function summaryOf(id) {
+  const head = await readDocHead(id).catch(() => null);
+  if (head) return summarise(head);
+  const doc = await readDoc(id).catch(() => null);
+  if (!doc) return null;
+  if (!READ_ONLY && !headUpgraded.has(id)) {
+    headUpgraded.add(id);
+    withDocLock(id, async () => {
+      if (await readDocHead(id)) return; /* somebody rewrote it first */
+      const current = await readDoc(id);
+      /* Only ever rewrite a file that names itself: an id that disagrees
+         with its filename is not something a listing should be repairing. */
+      if (current && current.id === id) await writeDoc(current);
+    }).catch(() => { /* a listing is not the place to fail over this */ });
+  }
+  return summarise(headOf(doc));
 }
 
 /* ---------- the launcher's routes ----------
  *
- * This is the ONE place in the process that runs another program (invariant
- * #28), and it exists so the first-run wizard can offer "put this copy in
- * the Start Menu" without the user going to find a command line.
+ * One route, and all it does is describe this process: where the copy of the
+ * app it is serving sits on disk, and what it is running on. The first-run
+ * wizard asks, so that step 2 can name the folder rather than talk about it
+ * in the abstract.
  *
- * Three locks, all of which must be open:
+ * It used to do more, and what it did is why the locks below exist.
+ * `register` spawned `installer/install.ps1` to put this folder in the Start
+ * Menu, and `update/stage` spawned `update.mjs stage --json` to download a
+ * release. #75 deleted both of those programs, so both routes went with
+ * them — and with them the last place this server started another process
+ * at all (invariant #28 is now a flat no, with no exception attached).
+ *
+ * The locks stay exactly as they were. They are the reason a route here
+ * could exist in the first place, they are cheap, and `root` is still an
+ * absolute path off somebody's disk, which is nobody else's business:
  *   1. a launch token, minted by start.mjs for this launch and handed to the
  *      page in the URL fragment — so another tab in the same browser, which
  *      can reach localhost just as easily, cannot call this;
  *   2. HOST === "127.0.0.1" — never under --host, where the port is on the
- *      network and "install something" would be a remote code execution
- *      route with a friendly name;
- *   3. the script it runs is a fixed path inside this installation. Nothing
- *      from the request reaches a command line.
+ *      network.
+ * Anything that ever lands here next inherits both.
  *
  * A refusal is 404, not 401: when these conditions are not met the routes
  * genuinely do not exist, and saying so gives a prober nothing to work with.
@@ -490,145 +745,14 @@ function launcherAllowed(req) {
   return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(LAUNCH_TOKEN));
 }
 
-/* Is there an Add/Remove Programs entry pointing at THIS folder? Not "is
-   Splitpage installed" — a portable copy sitting next to an installed one
-   must still be able to offer to register itself. */
-function installedHere(root) {
-  if (process.platform !== "win32") return false;
-  const key = "\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Splitpage";
-  for (const hive of ["HKCU", "HKLM"]) {
-    let out;
-    try {
-      out = child_process.spawnSync("reg", ["query", hive + key, "/v", "InstallLocation"],
-        { encoding: "utf8", windowsHide: true, timeout: 5000 });
-    } catch (e) { continue; }
-    if (!out || out.status !== 0 || !out.stdout) continue;
-    const m = /InstallLocation\s+REG_SZ\s+(.+)/i.exec(out.stdout);
-    if (!m) continue;
-    try {
-      if (path.resolve(m[1].trim()) === path.resolve(root)) return true;
-    } catch (e) { /* an unparseable path is not this one */ }
-  }
-  return false;
-}
-
-/* Staging outcomes that mean this server could not run the updater at all,
-   as opposed to the updater running and reporting something about the
-   release. Only these are HTTP failures — see the route below. */
-const STAGE_INFRA_ERRORS = new Set(["updater-missing", "could-not-run", "no-answer"]);
-
-/* One staging run at a time, for the whole process. Two concurrent runs would
-   both rm -rf and rebuild the same .update/staged tree, and the loser could
-   delete files the winner had already verified — so a second caller joins the
-   run in flight instead of starting another. */
-let updateStaging = null;
-
-/* Download-and-verify the newest release into .update/, by spawning the
-   updater that already knows how (update.mjs). Nothing here installs
-   anything: staging only writes under .update/, and the swap happens at the
-   next launch, in start.mjs, when no browser has the app open. That split is
-   what keeps this route safe to expose at all — see update.mjs's header.
-   The command line is this process's own node binary and a fixed path inside
-   this installation; no part of the request reaches it. */
-function stageUpdate(root) {
-  if (updateStaging) return updateStaging;
-  const script = path.join(root, "update.mjs");
-  if (!fs.existsSync(script)) return Promise.resolve({ error: "updater-missing" });
-
-  updateStaging = new Promise((resolve) => {
-    const child = child_process.spawn(process.execPath, [script, "stage", "--json"], {
-      cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"]
-    });
-    let out = "";
-    let errOut = "";
-    child.stdout.on("data", (chunk) => { if (out.length < 64000) out += chunk; });
-    child.stderr.on("data", (chunk) => { if (errOut.length < 8000) errOut += chunk; });
-    /* A release zip over a slow link is legitimately slow; a hung one still
-       has to end. Ten minutes, then the child is killed and the caller is
-       told, rather than the request hanging until the browser gives up. */
-    const timer = setTimeout(() => { try { child.kill(); } catch (e) {} }, 600000);
-    const finish = (value) => { clearTimeout(timer); resolve(value); };
-    child.on("error", (err) => finish({ error: "could-not-run", detail: String(err && err.message) }));
-    child.on("exit", () => {
-      /* --json prints exactly one JSON line, but stdout is still a pipe that
-         anything the child's runtime writes (a Node deprecation warning) can
-         land in. Take the last line that parses, not the first or the whole. */
-      let parsed = null;
-      for (const line of out.split(/\r?\n/).reverse()) {
-        if (!line.trim()) continue;
-        try { parsed = JSON.parse(line); break; } catch (e) { /* not the answer line */ }
-      }
-      if (!parsed) return finish({ error: "no-answer", detail: (errOut || out).trim().slice(0, 500) });
-      finish(parsed);
-    });
-  }).finally(() => { updateStaging = null; });
-
-  return updateStaging;
-}
-
 function handleLauncher(req, res, parts) {
   if (!launcherAllowed(req)) return sendJson(res, 404, { error: "not-found" });
 
-  const root = path.resolve(STATIC_DIR);
-  const script = path.join(root, "installer", "install.ps1");
-
   if (parts[2] === "info" && req.method === "GET") {
     return sendJson(res, 200, {
-      root,
-      installed: installedHere(root),
+      root: path.resolve(STATIC_DIR),
       arch: process.arch,
-      platform: process.platform,
-      canRegister: process.platform === "win32" && fs.existsSync(script)
-    });
-  }
-
-  if (parts[2] === "register" && req.method === "POST") {
-    if (process.platform !== "win32") {
-      return sendJson(res, 501, { error: "not-supported" });
-    }
-    if (!fs.existsSync(script)) return sendJson(res, 500, { error: "installer-missing" });
-    return new Promise((resolve) => {
-      /* An argument array, never a shell, and every argument is a constant
-         or a path this process computed for itself. */
-      const child = child_process.spawn("powershell.exe", [
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
-        "-InPlace", "-Dir", root
-      ], { cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-      let output = "";
-      const take = (chunk) => { if (output.length < 8000) output += chunk; };
-      child.stdout.on("data", take);
-      child.stderr.on("data", take);
-      const timer = setTimeout(() => child.kill(), 120000);
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        resolve(sendJson(res, 500, { error: "could-not-run", detail: String(err && err.message) }));
-      });
-      child.on("exit", (code) => {
-        clearTimeout(timer);
-        if (code === 0) resolve(sendJson(res, 200, { ok: true, root, output: output.trim() }));
-        else resolve(sendJson(res, 500, { error: "install-failed", code, output: output.trim() }));
-      });
-    });
-  }
-
-  /* "Download the update now", the button in the app's update bar. It answers
-     with what update.mjs decided: staged (restart to finish), already up to
-     date, or an error the page can show verbatim — notably "local-edits",
-     which means staging stopped rather than overwrite a file the user
-     changed by hand. */
-  if (parts[2] === "update" && parts[3] === "stage" && req.method === "POST") {
-    return stageUpdate(root).then((result) => {
-      if (!result) return sendJson(res, 500, { error: "no-answer" });
-      /* "The updater could not be run" is a server fault and answers 5xx.
-         "The updater ran and said no" — it is already up to date, or it
-         refused to overwrite files the user edited — is a successful request
-         with an answer in it, and answers 200: the page needs to read
-         `error` to say WHICH, and an HTTP error status reduces all of them
-         to a status code on the way through launcherFetch. */
-      if (STAGE_INFRA_ERRORS.has(result.error)) {
-        return sendJson(res, result.error === "updater-missing" ? 501 : 500, result);
-      }
-      return sendJson(res, 200, result);
+      platform: process.platform
     });
   }
 
@@ -672,7 +796,13 @@ function sweepPresence(now) {
    browser, so it is bounded and whitelisted on the way in. The name is the
    one free-text field and is only ever rendered as text. */
 function presenceWord(value, max) {
-  return String(value == null ? "" : value).replace(/[ -]/g, "").trim().slice(0, max);
+  /* C0 controls and DEL. These used to be three LITERAL control bytes sitting
+     inside the character class in this file — invisible in every editor and
+     one careless re-encode away from silently changing meaning. Written as
+     \x escapes now, the same way desktop/main.js:draftScalarString already
+     wrote the identical class, and for the reason its comment gives (#68). */
+  /* eslint-disable-next-line no-control-regex -- stripping them is the job. */
+  return String(value == null ? "" : value).replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, max);
 }
 
 function presenceHandle(value) {
@@ -680,82 +810,192 @@ function presenceHandle(value) {
   return /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : "";
 }
 
-/* ---------- what a review session may write ----------
+/* ---------- the rev a heartbeat carries (issue #69) ----------
  *
- * Enforcement here is a COMPARISON, not a list of permitted operations: the
- * client sends whole documents, so the only honest question is whether the
- * document it sent differs from the stored one in ways that nothing but
- * posting a comment could have produced. Three kinds of difference are:
+ * The beat is the only thing in hosted mode that round-trips on its own, so
+ * it is also the pull channel: it names the document's current rev and the
+ * client goes and gets the document when that number has moved past the one
+ * it is holding. Nothing else about the document is sent — the client does
+ * a normal GET, which is the one request that already knows how to hand a
+ * whole script back.
  *
- *   1. comments added, and replies appended to comments that were already
- *      there. Nothing that was already stored may change — not a body, not
- *      `resolved`, not an existing reply. "Authored in this request" is
- *      enforced structurally, by only ever allowing additions, rather than
- *      by trusting `author`, which is a name somebody typed into a box and
- *      not an identity this server could check.
- *   2. the `.cmt-anchor` span a new comment wraps around the words it is
- *      about. That is a genuine edit to a row's HTML — the anchor lives in
- *      the text — so a scene's visual/audio field may differ, but only by
- *      the wrapping of one of THIS request's new comment ids, and only in a
- *      way that leaves every character, tag, link, image and line break
- *      exactly where it was.
- *   3. `rev`/`lastEditedBy`/`lastEditedAt`, and `updatedAt`/`updatedBy` on a
- *      scene that gained an anchor: bookkeeping, not content.
+ * readDocHead() and NOT readDocMeta(): one positional read of the first 8KB
+ * (#74), never a parse. This runs every two seconds for every tab in every
+ * open document, and parsing a script with base64 stills in it at that rate
+ * — to read one number off the front of it — is exactly what the head line
+ * was added to stop. A document written before head lines existed therefore
+ * answers with no rev at all rather than being parsed here: it has no pull
+ * channel until the next listing or the next save gives it a head line,
+ * which both do on their own.
  *
- * Everything else — title, scene text, order, status, images, the production
- * registry, people, reading speed — must arrive exactly as it is stored, or
- * the write is refused with 403 review-only and nothing is written.
+ * Failure is silence, not an error. A beat is a heartbeat; it must not turn
+ * a missing or unreadable file into something the other end has to handle.
+ */
+async function presenceRev(docId) {
+  try {
+    const head = await readDocHead(docId);
+    return head && typeof head.rev === "number" ? head.rev : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+/* ---------- a comment, without the document around it (#71) ----------
+ *
+ * This is the ONLY way a review token writes anything. It used to be a
+ * whole-document PUT that the server accepted only if it could prove, by
+ * comparing the upload against the stored script key by key (with a
+ * hand-rolled HTML tokenizer for the scene text), that nothing but a comment
+ * had moved. That was an expensive way to post four words, and it failed in
+ * ways nobody could explain from the outside — #62 was a reviewer seeing
+ * "review-only" because their copy carried `brollShots: []` and the stored
+ * one, saved before that field existed, carried no such key. It would have
+ * broken again with every field the state ever gained.
+ *
+ * So: a route that takes the comment and nothing else. The reviewer never
+ * sends the state, the server never diffs a document, and the two facts the
+ * comparison existed to prove — that a comment may only be ADDED, and that
+ * nothing else in the document may move — are no longer assertions to
+ * check but the only operations this code can perform. A review PUT is now
+ * refused outright, before its body is read (#71).
+ *
+ * Three things this route is careful about:
+ *
+ *   1. it reads the stored document INSIDE the document's lock and appends
+ *      to what it finds there. There is no baseRev and no compare-and-set,
+ *      because there is nothing to conflict over: two reviewers commenting
+ *      in the same second queue behind each other and both comments land.
+ *      A read-modify-write outside the lock would have the second one
+ *      overwrite the first, which is the exact failure the whole-document
+ *      PUT had to hand a 409 back to avoid;
+ *   2. it is idempotent by comment id. A client that posts, loses the
+ *      answer to a dropped connection and posts again gets the comment it
+ *      already has and the rev it is already at, not a second copy of its
+ *      own comment;
+ *   3. it bounds every field on the way in. The server has no DOM and does
+ *      not sanitise HTML — it never has, on any route; the client does that
+ *      on the way in and on the way out (migrateRows is the only door).
+ *      What this adds is a SHAPE: a comment that reaches storage from here
+ *      has the keys a comment has, sized the way a comment is sized, and
+ *      carries no other key at all.
  */
 
-function deepEqual(a, b) {
-  if (a === b) return true;
-  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
-  if (Array.isArray(a)) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
-    return true;
-  }
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  for (const key of keys) {
-    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-    if (!deepEqual(a[key], b[key])) return false;
-  }
-  return true;
+/* One comment, with at most a pasted screenshot inside it and at most one
+   scene field's worth of HTML beside it for the anchor. Deliberately its own
+   cap rather than MAX_BODY: MAX_BODY is 25 MB because a whole script full of
+   embedded images has to fit through PUT, and the entire point of this route
+   is that a reviewer never sends one (#71, #74). Equally deliberately not
+   SMALL_BODY, which is sized for a PIN: a comment with a screenshot pasted
+   into it is a normal comment and must not be refused. */
+const COMMENT_BODY = 512 * 1024;
+const COMMENT_HTML_MAX = 256 * 1024;   /* one comment body, or one anchored field */
+const COMMENT_NAME_MAX = 80;           /* matches the client's plainName() */
+const COMMENT_QUOTE_MAX = 2000;
+/* Bounds on the document rather than on the request: a reviewer who is
+   allowed to append forever is a reviewer who can grow a script past the
+   25 MB it can be saved in, one legitimate comment at a time. */
+const DOC_COMMENTS_MAX = 2000;
+const COMMENT_REPLIES_MAX = 500;
+
+/* Names, quotes and assignees are plain text and only ever rendered as text,
+   exactly as on the client (plainText/plainName in 04-richtext.js): markup
+   stripped, control characters dropped, bounded. */
+function commentText(value, max) {
+  return String(value == null ? "" : value)
+    .replace(/<[^>]*>/g, "")
+    /* eslint-disable-next-line no-control-regex -- C0 controls, minus the
+       tab/LF/CR a comment may legitimately contain, are what this strips. */
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim()
+    .slice(0, max);
 }
 
-function unionKeys(a, b) {
-  const out = new Set(Object.keys(a || {}));
-  for (const key of Object.keys(b || {})) out.add(key);
-  return out;
+/* A comment id ends up in a CSS attribute selector and in a `data-cmt`
+   attribute in someone else's browser, so it is whitelisted rather than
+   sanitised — the same reasoning as a document id, and the same character
+   set the client's safeId() leaves behind. */
+function commentIdOf(value) {
+  const id = String(value == null ? "" : value);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : "";
 }
 
-function refuse(reason) { return { ok: false, reason }; }
-
-/* A stored document and a client's normalised copy of it can differ by
-   absence alone. migrateRows() on the client fills every field in, so a
-   document last saved before `brollShots` existed has no such key while the
-   reviewer's copy sends `brollShots: []` — and deepEqual(undefined, []) is
-   false, so every comment on such a document came back 403 review-only
-   (#62). The same happens for any field added later, and for row keys like
-   `updatedBy: null` against a row that simply has no `updatedBy`.
-
-   Missing, null, "" and an empty array or object all say the same thing
-   here: nothing is recorded. Compare them as equal. Anything with content
-   on either side still goes through deepEqual unchanged, so this loosens
-   what "unchanged" means and never what a reviewer may change. */
-function isBlankValue(v) {
-  if (v === undefined || v === null || v === "") return true;
-  if (Array.isArray(v)) return v.length === 0;
-  if (typeof v === "object") return Object.keys(v).length === 0;
-  return false;
+/* The comment as it will be stored, or null for anything that is not one.
+ *
+ * Built key by key rather than copied and cleaned, so a field this server
+ * has never heard of cannot arrive through here. `resolved` is hard-coded
+ * false and the timestamps are this process's clock: a comment is born
+ * unresolved, and when it was posted is something the server knows and the
+ * poster only claims.
+ */
+function cleanComment(input, now, fallbackAuthor) {
+  if (!input || typeof input !== "object") return null;
+  const id = commentIdOf(input.id);
+  if (!id) return null;
+  const body = typeof input.body === "string" ? input.body : "";
+  if (!body || body.length > COMMENT_HTML_MAX) return null;
+  /* A title comment is the merge's document-level conflict card: it belongs
+     to no row, and the client's migrateRows nulls its rowId and anchorId to
+     keep it from being folded into one. Every other comment names a row. */
+  const onTitle = input.field === "title";
+  const rowId = commentIdOf(input.rowId);
+  if (!onTitle && !rowId) return null;
+  return {
+    id,
+    rowId: onTitle ? null : rowId,
+    field: onTitle ? "title"
+      : (input.field === "visualText" || input.field === "visualImage") ? input.field : "audioText",
+    anchorId: onTitle ? null : (commentIdOf(input.anchorId) || id),
+    quotedText: commentText(input.quotedText, COMMENT_QUOTE_MAX),
+    author: commentText(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
+    body,
+    resolved: false,
+    resolvedBy: null,
+    resolvedAt: null,
+    assignee: commentText(input.assignee, COMMENT_NAME_MAX),
+    createdAt: now,
+    updatedAt: now,
+    kind: input.kind === "conflict" ? "conflict" : "anchor",
+    replies: []
+  };
 }
 
-function sameOrBothBlank(a, b) {
-  if (isBlankValue(a) && isBlankValue(b)) return true;
-  return deepEqual(a, b);
+function cleanReply(input, now, fallbackAuthor) {
+  if (!input || typeof input !== "object") return null;
+  const id = commentIdOf(input.id);
+  if (!id) return null;
+  const body = typeof input.body === "string" ? input.body : "";
+  if (!body || body.length > COMMENT_HTML_MAX) return null;
+  return {
+    id,
+    author: commentText(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
+    body,
+    createdAt: now
+  };
 }
+
+/* ---------- the anchor ----------
+ *
+ * The one place a comment touches the script itself: the `.cmt-anchor` span
+ * wrapped around the words it is about lives in the row's HTML, so posting a
+ * comment on a phrase is genuinely an edit to that phrase's field.
+ *
+ * The request carries that ONE field's new HTML — a scene, not a script — and
+ * it is accepted only if unwrapping this comment's own anchor out of it gives
+ * back the same words, links, images and line breaks as what is stored.
+ *
+ * That comparison is the one piece of the old whole-document proof that
+ * survives (#71), and it survives because this is the one question that
+ * still needs it: "is this the same scene text with a span around some of
+ * it?" cannot be answered by comparing strings. Wrapping a selection that
+ * crosses a <strong> boundary splits that element in two, and unwrapping the
+ * span cannot glue it back together; a browser may also re-serialise an
+ * element's attributes in another order. So the field is compared as a
+ * sequence of text runs, each labelled with the inline elements around it —
+ * fieldSignature() below, over the quote-aware tokenizer htmlTokens(). It
+ * looks at one field of one row and nothing else, so unlike the document
+ * compare it replaced it has no opinion about the shape of the state and
+ * nothing to rot when that shape changes.
+ */
 
 /* Attributes as a set rather than as written, so two serialisations of the
    same element compare equal whatever order or spacing they came out in. */
@@ -826,7 +1066,7 @@ function anchorIdOf(attrs) {
 /* A field as the sequence of its text runs, each labelled with the inline
    elements wrapped around it, plus <br>/<img> in place (sanitizeHtml never
    lets a div or a p through — they come back as <br> — so there is no block
-   structure left to preserve). `dropIds` unwraps the comment anchors this
+   structure left to preserve). `dropId` unwraps the one comment anchor the
    request is adding, which is what makes "the same words, now with a comment
    on some of them" compare equal to what is stored.
  *
@@ -836,7 +1076,7 @@ function anchorIdOf(attrs) {
  * unwrapping the anchor again cannot glue it back together — so
  * `<strong>hel</strong><strong>lo</strong>` has to compare equal to
  * `<strong>hello</strong>`. The two render the same and say the same. */
-function fieldSignature(html, dropIds) {
+function fieldSignature(html, dropId) {
   const path = [];       /* [{ name, sig, dropped }] */
   const out = [];
   const label = () => path.filter((p) => !p.dropped).map((p) => p.sig).join("");
@@ -852,7 +1092,7 @@ function fieldSignature(html, dropIds) {
     const sig = tk.name + (tk.attrs ? " " + normalizeAttrs(tk.attrs) : "");
     if (tk.kind === "open") {
       if (VOID_TAGS.has(tk.name) || tk.selfClosing) { out.push({ kind: "void", key: label(), sig }); continue; }
-      const dropped = tk.name === "span" && !!dropIds && dropIds.has(anchorIdOf(tk.attrs));
+      const dropped = tk.name === "span" && !!dropId && anchorIdOf(tk.attrs) === dropId;
       path.push({ name: tk.name, sig, dropped });
       continue;
     }
@@ -867,87 +1107,493 @@ function fieldSignature(html, dropIds) {
     .join("");
 }
 
-function reviewComments(storedList, incomingList) {
-  const stored = Array.isArray(storedList) ? storedList : [];
-  const incoming = Array.isArray(incomingList) ? incomingList : [];
-  const byId = new Map();
-  for (const c of incoming) {
-    if (!c || typeof c !== "object") return refuse("a comment is not an object");
-    const id = String(c.id == null ? "" : c.id);
-    if (!id || byId.has(id)) return refuse("every comment needs an id of its own");
-    byId.set(id, c);
+/* Where this comment's anchor goes.
+ *
+ * A mismatch is NOT a refusal. Somebody else may have rewritten that scene
+ * while the reviewer was typing, and in that case the anchor is stale but the
+ * comment is not: it still names its row, its field and the words it quoted,
+ * so it still lands and still opens the right scene. Losing a reviewer's
+ * paragraph because a word moved would be the worse answer by far. The
+ * response says which happened, in `anchored`.
+ *
+ * Returns "none" (nothing was asked for), "ok" (placed), "stale" (the scene
+ * has moved on) or "bad" (not an anchor at all — that one IS a refusal,
+ * because it is a client sending nonsense rather than a document changing).
+ */
+function placeAnchor(state, anchor, cmtId, author, now) {
+  if (anchor === undefined || anchor === null) return "none";
+  if (typeof anchor !== "object") return "bad";
+  const field = anchor.field;
+  if (field !== "visualText" && field !== "audioText") return "bad";
+  const rowId = commentIdOf(anchor.rowId);
+  const html = anchor.html;
+  if (!rowId || typeof html !== "string" || html.length > COMMENT_HTML_MAX) return "bad";
+  const rows = Array.isArray(state.rows) ? state.rows : [];
+  let row = null;
+  for (const r of rows) if (r && typeof r === "object" && r.id === rowId) { row = r; break; }
+  if (!row) return "stale";
+  if (fieldSignature(row[field], "") !== fieldSignature(html, cmtId)) return "stale";
+  row[field] = html;
+  /* Posting a comment stamps the scene it landed on, and nothing else. */
+  row.updatedAt = now;
+  row.updatedBy = author;
+  return "ok";
+}
+
+/* The document a comment write leaves behind. Built fresh from `id`, `state`
+   and the new rev exactly as PUT builds it, so both paths store the same
+   shape, and written through writeDoc() so the head line is regenerated from
+   the state that is actually going to disk and the fsync discipline is the
+   same one every other save gets (#74).
+
+   `lastEditedBy`/`lastEditedAt` move with it. A comment IS a save — a
+   reviewer's name there is true, not a forged edit — and it is what makes
+   the client's "opened the latest version, last edited by …" honest. The
+   state's own `rev` is left alone: that is the client's merge counter
+   (max-plus-one, 02-state.js), and the rev this API compares against is the
+   document's, which is bumped here. */
+async function writeCommentChange(id, doc, state, by, now) {
+  if (by) {
+    state.lastEditedBy = by;
+    state.lastEditedAt = now;
   }
-  for (const was of stored) {
-    const id = String(was && was.id != null ? was.id : "");
-    const now = byId.get(id);
-    if (!now) return refuse("a comment that was already there may not be removed");
-    byId.delete(id); /* what is left over at the end is what this request added */
-    const wasReplies = Array.isArray(was.replies) ? was.replies : [];
-    const nowReplies = Array.isArray(now.replies) ? now.replies : [];
-    if (nowReplies.length < wasReplies.length) return refuse("a reply may not be removed");
-    for (let i = 0; i < wasReplies.length; i++) {
-      if (!deepEqual(wasReplies[i], nowReplies[i])) return refuse("a reply that was already there may not be changed");
+  const next = {
+    id,
+    rev: (doc.rev || 0) + 1,
+    state,
+    updatedAt: now,
+    updatedBy: by || doc.updatedBy || null
+  };
+  await writeDoc(next);
+  return next;
+}
+
+/* The stored document, ready to be appended to, or a refusal to send back.
+   A document with no `comments` array is not an error and never was — one
+   saved before comments existed simply has none (#62's lesson: absence is
+   not disagreement). */
+async function openForComment(id) {
+  const doc = await readDoc(id);
+  if (!doc) return { error: { status: 404, body: { error: "not-found" } } };
+  const state = doc.state;
+  if (!state || typeof state !== "object") {
+    return { error: { status: 409, body: { error: "no-state" } } };
+  }
+  if (!Array.isArray(state.comments)) state.comments = [];
+  return { doc, state };
+}
+
+function findComment(state, cid) {
+  for (const c of state.comments) if (c && typeof c === "object" && c.id === cid) return c;
+  return null;
+}
+
+/* What every answer from this route looks like: the new rev, who it is now
+   attributed to, and the stored comment — so the client adopts the server's
+   copy (its bounded author, its server clock) instead of keeping its own. */
+function commentAnswer(id, doc, comment, extra) {
+  return Object.assign({
+    id,
+    rev: doc.rev || 0,
+    updatedAt: doc.updatedAt || null,
+    updatedBy: doc.updatedBy || null,
+    comment
+  }, extra || {});
+}
+
+/* ---------- images, as content-addressed blobs (#82) ----------
+ *
+ * An image is stored once, under the SHA-256 of its bytes, and a document
+ * names it by that hash instead of carrying it: `row.imageRef.sha256` for a
+ * scene's still, `<img data-blob="<sha>">` inside a comment, a reply or a
+ * scene's HTML. The bytes live at DATA_DIR/blobs/<first two hex>/<sha>, raw,
+ * written the same durable way a document is (temp in the same directory,
+ * fsync, rename, fsync the directory).
+ *
+ * Global and content-addressed (owner's decision): two documents holding the
+ * same screenshot hold one file. Nothing here ever deletes one (also the
+ * owner's decision, for this issue); a successful save touches the mtime of
+ * every blob it names, so a collector written later can tell what is in use.
+ *
+ * The rule every durable write keeps: NO DURABLE RECORD NAMES A BLOB ITS
+ * STORE DOES NOT ALREADY HOLD DURABLY. Here that is the 422 below — a save
+ * or a comment naming a blob this server does not have is refused, and the
+ * client uploads it and asks again. The one exception is explicit: a save
+ * may list a sha in `acceptMissing` when the client KNOWS the bytes are gone
+ * for good (a history snapshot restored after its image was lost), so a
+ * missing picture cannot make a script unsaveable.
+ *
+ * Legacy states that carry their images inline as base64 are accepted
+ * forever; nothing here looks at them.
+ */
+const BLOBS_DIR = path.join(DATA_DIR, "blobs");
+const SHA_RE = /^[0-9a-f]{64}$/;
+/* The one client version this server needs to know about (D7): 2 is the
+   first that keeps blob references. An older client does not know an
+   `imageRef` is an image, and a save from one would write back a script
+   whose stills it could not see — so it is refused where that matters. */
+const CLIENT_BLOBS = 2;
+/* 2000 hashes and the JSON around them. */
+const MISSING_BODY = 256 * 1024;
+const MISSING_MAX = 2000;
+
+function isSha(value) {
+  return typeof value === "string" && SHA_RE.test(value);
+}
+
+function blobPath(sha) {
+  return path.join(BLOBS_DIR, sha.slice(0, 2), sha);
+}
+
+/* PNG, JPEG, GIF or WebP, from the first bytes, or "" for anything else.
+   Never SVG: an SVG is a document that can carry script, and a blob is
+   served from this origin. */
+function sniffImageMime(buf) {
+  if (!buf || buf.length < 12) return "";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  const head = buf.toString("latin1", 0, 12);
+  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
+  if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
+  return "";
+}
+
+function sha256Of(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+/* Every sha a state names: an image record (`imageRef` on a row, or the
+   `imageValue` an image conflict card carries) and every `data-blob`
+   attribute on a tag in any string in it — comment and reply bodies and a
+   row's HTML fields included. Deliberately wider than any one client's
+   walker: for the 422 check a wider net only asks for more of what must be
+   there anyway, and for a review link it only lets it see images its own
+   document shows. Attributes are read through htmlTokens(), so words that
+   merely LOOK like one in a script's text do not count. */
+function refsIn(state) {
+  const out = new Set();
+  const walk = (value, key, depth) => {
+    if (depth > 64) return;
+    if (typeof value === "string") {
+      if (value.indexOf("data-blob") !== -1) blobAttrsIn(value, out);
+      return;
     }
-    const replied = nowReplies.length > wasReplies.length;
-    for (const key of unionKeys(was, now)) {
-      if (key === "replies") continue;
-      /* a thread's own timestamp moves when it is replied to, and only then */
-      if (key === "updatedAt" && replied) continue;
-      if (!sameOrBothBlank(was[key], now[key])) {
-        return refuse("a comment that was already there may not be changed (" + key + ")");
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, "", depth + 1);
+      return;
+    }
+    if ((key === "imageRef" || key === "imageValue") && isSha(value.sha256)) out.add(value.sha256);
+    for (const k of Object.keys(value)) walk(value[k], k, depth + 1);
+  };
+  walk(state, "", 0);
+  return out;
+}
+
+function blobAttrsIn(html, out) {
+  for (const tk of htmlTokens(html)) {
+    if (tk.kind !== "open" || tk.attrs.indexOf("data-blob") === -1) continue;
+    const sha = attrValue(tk.attrs, "data-blob");
+    if (isSha(sha)) out.add(sha);
+  }
+}
+
+/* The refs of a stored document, by id and rev. writeDoc() files them as it
+   writes, so the common case is a lookup; a document this process has not
+   written since it started is parsed once. Bounded like everything else in
+   memory here. */
+const refsCache = new Map();   /* docId -> { rev, refs:Set } */
+const REFS_CACHE_MAX = 200;
+
+function noteRefs(id, rev, refs) {
+  refsCache.delete(id);
+  if (refsCache.size >= REFS_CACHE_MAX) refsCache.delete(refsCache.keys().next().value);
+  refsCache.set(id, { rev, refs });
+}
+
+/* A Set, or null when there is no such document. */
+async function storedRefsOf(id) {
+  const meta = await readDocMeta(id);
+  if (!meta) return null;
+  const rev = meta.rev || 0;
+  const hit = refsCache.get(id);
+  if (hit && hit.rev === rev) return hit.refs;
+  const doc = await readDoc(id);
+  if (!doc) return null;
+  const refs = refsIn(doc.state);
+  noteRefs(id, doc.rev || 0, refs);
+  return refs;
+}
+
+async function hasBlob(sha) {
+  try {
+    return (await fsp.stat(blobPath(sha))).isFile();
+  } catch (err) {
+    return false;
+  }
+}
+
+/* The shas in `shas` this server does not hold. */
+async function blobsMissing(shas) {
+  const missing = [];
+  for (const sha of shas) if (!(await hasBlob(sha))) missing.push(sha);
+  return missing;
+}
+
+/* Best effort, never awaited by anything that answers: a blob in use is a
+   blob whose mtime is recent, and that is all a later collector would ask. */
+function touchBlobs(shas) {
+  const now = new Date();
+  for (const sha of shas) fsp.utimes(blobPath(sha), now, now).catch(() => {});
+}
+
+async function writeBlob(sha, buf) {
+  const dir = path.dirname(blobPath(sha));
+  /* mkdir -p returns the first directory it had to create, if any. A new
+     directory is a new name in its parent, and a name is durable only once
+     the parent is synced — the same reason writeFileDurable() syncs the
+     directory it renamed into. */
+  const created = await fsp.mkdir(dir, { recursive: true });
+  if (created) {
+    await syncDir(BLOBS_DIR);
+    await syncDir(DATA_DIR);
+  }
+  await writeFileDurable(blobPath(sha), buf);
+}
+
+/* What a PUT or POST names that the store does not hold, minus what the
+   stored document already names (a ref that was already dangling cannot be
+   fixed by refusing the next save) and minus what the client said it knows
+   is gone (`acceptMissing`). Empty means the write may go ahead.
+   `docId` names the stored document, or is "" for a new one; its refs are
+   only looked up when something is actually missing, which on a server
+   holding every image is never. */
+async function refusedRefs(incoming, docId, acceptMissing) {
+  if (!incoming.size) return [];
+  const missing = await blobsMissing(incoming);
+  if (!missing.length) return [];
+  const accept = new Set(Array.isArray(acceptMissing) ? acceptMissing.filter(isSha) : []);
+  const stored = docId ? await storedRefsOf(docId) : null;
+  return missing.filter((sha) => !accept.has(sha) && !(stored && stored.has(sha)));
+}
+
+/* The images a new comment or reply body names that it may not name: ones
+   this server does not hold (the same 422 a save gets, and the same excuse
+   for one its document already names), and — for a per-document review link
+   — ones it can neither see in its document nor has uploaded itself, which
+   are answered as missing whether or not they are here, so posting a comment
+   is not a way to ask what the rest of the library holds. */
+async function commentRefsRefused(req, role, docId, html) {
+  const refs = new Set();
+  if (typeof html === "string" && html.indexOf("data-blob") !== -1) blobAttrsIn(html, refs);
+  if (!refs.size) return { refs, missing: [] };
+  const visible = await blobVisibility(req, role);
+  let stored;
+  const missing = [];
+  for (const sha of refs) {
+    if (visible && !visible(sha)) { missing.push(sha); continue; }
+    if (await hasBlob(sha)) continue;
+    if (stored === undefined) stored = (await storedRefsOf(docId)) || new Set();
+    if (!stored.has(sha)) missing.push(sha);
+  }
+  return { refs, missing };
+}
+
+/* Does this request come from a client that knows what a blob ref is? */
+function clientKnowsBlobs(req) {
+  const v = parseInt(String(req.headers["x-splitpage-client"] || ""), 10);
+  return isFinite(v) && v >= CLIENT_BLOBS;
+}
+
+/* ---------- a reviewer's image budget ----------
+ *
+ * A reviewer may upload the screenshots they paste into comments (D6), up to
+ * REVIEW_BLOB_BUDGET bytes per token per rolling hour. The bytes are RESERVED
+ * before the body is read — the declared length, or the whole per-blob cap
+ * for a chunked upload — so ten uploads started at once cannot each find the
+ * budget empty; the reservation is settled to what was actually stored when
+ * the upload ends, and to nothing when it fails.
+ *
+ * The ledger also remembers which shas a token has uploaded. A per-document
+ * review link sees only the images its document names — and the images it
+ * has itself handed over, because it holds those bytes already. That is what
+ * lets a comment carrying a fresh screenshot pass the 422 check below without
+ * the check telling a link-holder whether some OTHER document on this server
+ * holds an image with that hash.
+ */
+const reviewLedgers = new Map();   /* token -> [{ at, bytes, sha }] */
+
+function reviewLedger(token, now) {
+  const list = (reviewLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
+  if (list.length) reviewLedgers.set(token, list); else reviewLedgers.delete(token);
+  return list;
+}
+
+/* A file costs at least a block on the disk, and a floor on the charge is
+   also a ceiling on how many entries a ledger can hold. */
+const BLOB_MIN_CHARGE = 4096;
+
+function blobCharge(bytes) {
+  return Math.max(BLOB_MIN_CHARGE, bytes);
+}
+
+function reviewBytesUsed(token, now) {
+  let used = 0;
+  for (const e of reviewLedger(token, now)) used += e.bytes;
+  return used;
+}
+
+function reviewUploaded(token, sha) {
+  return reviewLedger(token, Date.now()).some((e) => e.sha === sha);
+}
+
+/* Which shas this caller may learn anything about. Everything, for an editor
+   and for the library-wide review credential (either can read every document
+   there is). For a per-document review link: what its document names, plus
+   what it uploaded itself. */
+async function blobVisibility(req, role) {
+  if (role !== "review") return null;
+  const scope = reviewScopeOf(req);
+  if (!scope) return null;
+  const token = String(req.headers["x-splitpage-token"] || "");
+  const refs = (await storedRefsOf(scope)) || new Set();
+  return (sha) => refs.has(sha) || reviewUploaded(token, sha);
+}
+
+/* GET, PUT and POST /missing under /api/blobs. Called after the gate, with
+   the caller's role. */
+async function handleBlobs(req, res, parts, role) {
+  if (parts[2] === "missing" && parts.length === 3) {
+    if (req.method !== "POST") return sendJson(res, 405, { error: "method-not-allowed" });
+    const body = await readBody(req, MISSING_BODY);
+    const shas = body && body.shas;
+    if (!Array.isArray(shas) || shas.length > MISSING_MAX || !shas.every(isSha)) {
+      return sendJson(res, 400, { error: "bad-shas" });
+    }
+    const unique = Array.from(new Set(shas));
+    const visible = await blobVisibility(req, role);
+    /* A per-document link is told the truth about what it may see, and that
+       everything else is missing. "Missing" costs it one upload of bytes it
+       already holds; the truth would tell it what the rest of the library
+       contains. */
+    const missing = [];
+    for (const sha of unique) {
+      if (visible && !visible(sha)) missing.push(sha);
+      else if (!(await hasBlob(sha))) missing.push(sha);
+    }
+    return sendJson(res, 200, { missing });
+  }
+
+  if (parts.length !== 3) return sendJson(res, 404, { error: "not-found" });
+  const sha = parts[2];
+
+  if (req.method === "GET") {
+    if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
+    const visible = await blobVisibility(req, role);
+    /* Not "forbidden": a link that may not see a blob is told it is not
+       there, exactly as if it were not, so asking reveals nothing. */
+    if (visible && !visible(sha)) return sendJson(res, 404, { error: "not-found" });
+    let buf;
+    try {
+      buf = await fsp.readFile(blobPath(sha));
+    } catch (err) {
+      if (err && err.code === "ENOENT") return sendJson(res, 404, { error: "not-found" });
+      throw err;
+    }
+    const mime = sniffImageMime(buf);
+    /* A file that is not what its name says — a bad disk, a hand edit — is
+       not served as if it were. Not deleted either (D4): the next upload of
+       the real bytes replaces it. */
+    if (!mime || sha256Of(buf) !== sha) {
+      console.error("[splitpage] blob " + sha + " does not match its name; not serving it");
+      return sendJson(res, 404, { error: "not-found" });
+    }
+    const headers = Object.assign({
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "ETag": "\"" + sha + "\"",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox"
+    }, res.corsHeaders || {});
+    const inm = String(req.headers["if-none-match"] || "");
+    if (inm.split(",").some((t) => t.trim().replace(/^W\//, "") === "\"" + sha + "\"")) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    headers["Content-Type"] = mime;
+    headers["Content-Length"] = buf.length;
+    res.writeHead(200, headers);
+    res.end(buf);
+    return;
+  }
+
+  if (req.method === "PUT") {
+    /* Everything that can refuse this without the bytes does so before a
+       byte is read (#74): the library, the hash's shape, the declared size,
+       and a reviewer's budget. */
+    if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
+    const declared = req.headers["content-length"] !== undefined
+      ? Number(req.headers["content-length"]) : NaN;
+    if (isFinite(declared) && declared > MAX_BLOB_BYTES) {
+      return sendJson(res, 413, { error: "too-large" });
+    }
+    let entry = null;
+    const token = String(req.headers["x-splitpage-token"] || "");
+    if (role === "review") {
+      const now = Date.now();
+      const reserve = blobCharge(isFinite(declared) && declared >= 0 ? declared : MAX_BLOB_BYTES);
+      if (reviewBytesUsed(token, now) + reserve > REVIEW_BLOB_BUDGET) {
+        return sendJson(res, 429, { error: "review-budget" });
+      }
+      entry = { at: now, bytes: reserve, sha: "" };
+      const list = reviewLedger(token, now);
+      list.push(entry);
+      reviewLedgers.set(token, list);
+    }
+    try {
+      const buf = await readRawBody(req, MAX_BLOB_BYTES);
+      if (sha256Of(buf) !== sha) return sendJson(res, 400, { error: "hash-mismatch" });
+      if (!sniffImageMime(buf)) return sendJson(res, 415, { error: "unsupported-type" });
+      const visible = await blobVisibility(req, role);
+      const truthful = !visible || visible(sha);
+      let present = false;
+      if (await hasBlob(sha)) {
+        /* Present only if it is what it says: a damaged copy is replaced by
+           the good bytes just received, never kept in their place. */
+        present = sha256Of(await fsp.readFile(blobPath(sha)).catch(() => Buffer.alloc(0))) === sha;
+      }
+      if (present) touchBlobs([sha]);
+      else await writeBlob(sha, buf);
+      if (entry && !(present && truthful)) {
+        /* Charged for what it cost the disk — or, for a per-document link
+           that is told "stored" about a blob it could not have known was
+           here, charged as though it had, so the two answers cannot be told
+           apart by the budget either. A re-upload of something the caller
+           could see anyway costs nothing and needs no entry (the finally
+           below drops it). */
+        entry.sha = sha;
+        entry.bytes = blobCharge(buf.length);
+        entry = null;
+      }
+      /* A per-document link is only told the blob was already here when it
+         could have seen it anyway; otherwise the answer is the one a new
+         upload gets, and says nothing about what else the library holds. */
+      if (present && truthful) return sendJson(res, 200, { stored: false });
+      return sendJson(res, 201, { stored: true });
+    } finally {
+      /* Refused, failed, or free: nothing charged, and no entry left behind
+         for a caller to grow the ledger with. */
+      if (entry) {
+        const list = reviewLedgers.get(token);
+        const at = list ? list.indexOf(entry) : -1;
+        if (at !== -1) list.splice(at, 1);
       }
     }
   }
-  return { ok: true, addedIds: new Set(byId.keys()) };
-}
 
-function reviewRows(storedRows, incomingRows, addedIds) {
-  const stored = Array.isArray(storedRows) ? storedRows : [];
-  const incoming = Array.isArray(incomingRows) ? incomingRows : [];
-  if (stored.length !== incoming.length) return refuse("scenes may not be added or removed");
-  for (let i = 0; i < stored.length; i++) {
-    const was = stored[i];
-    const now = incoming[i];
-    if (!was || !now || typeof was !== "object" || typeof now !== "object") return refuse("a scene is not an object");
-    let anchored = false;
-    for (const key of unionKeys(was, now)) {
-      if (sameOrBothBlank(was[key], now[key])) continue;
-      if (key === "visualText" || key === "audioText") {
-        if (fieldSignature(was[key], null) !== fieldSignature(now[key], addedIds)) {
-          return refuse("the script may not be changed");
-        }
-        anchored = true;
-        continue;
-      }
-      if (key === "updatedAt" || key === "updatedBy") continue; /* judged below */
-      return refuse("a scene's " + key + " may not be changed");
-    }
-    /* Posting a comment stamps the scene it is on. Nothing else may. */
-    if (!anchored && (!sameOrBothBlank(was.updatedAt, now.updatedAt) ||
-                      !sameOrBothBlank(was.updatedBy, now.updatedBy))) {
-      return refuse("a scene may not be restamped without a comment landing on it");
-    }
-  }
-  return { ok: true };
-}
-
-/* rev/lastEditedBy/lastEditedAt are this document's save bookkeeping, and a
-   comment IS a save — a reviewer's name in lastEditedBy is true, not a
-   forged edit. */
-const REVIEW_BOOKKEEPING = new Set(["rev", "lastEditedBy", "lastEditedAt", "comments", "rows"]);
-
-function reviewWriteAllowed(stored, incoming) {
-  if (!stored || typeof stored !== "object") return refuse("there is nothing stored to compare against");
-  if (!incoming || typeof incoming !== "object") return refuse("bad state");
-  const comments = reviewComments(stored.comments, incoming.comments);
-  if (!comments.ok) return comments;
-  const rows = reviewRows(stored.rows, incoming.rows, comments.addedIds);
-  if (!rows.ok) return rows;
-  for (const key of unionKeys(stored, incoming)) {
-    if (REVIEW_BOOKKEEPING.has(key)) continue;
-    if (!sameOrBothBlank(stored[key], incoming[key])) return refuse(key + " may not be changed");
-  }
-  return { ok: true };
+  return sendJson(res, 405, { error: "method-not-allowed" });
 }
 
 /* ---------- API ---------- */
@@ -969,6 +1615,9 @@ async function handleApi(req, res, url) {
       /* whether a second, comment-only credential exists at all — not what
          it is. A client needs this to know a review link is worth offering */
       reviewAvailable: REVIEW_ACTIVE,
+      /* This server stores images as blobs under /api/blobs (#82). A client
+         keeps its images as references only against a server that says so. */
+      blobs: 1,
       version: VERSION
     });
   }
@@ -982,7 +1631,10 @@ async function handleApi(req, res, url) {
     if (recentFailures(ip).length >= PIN_MAX_FAILURES) {
       return sendJson(res, 429, { error: "too-many-attempts" });
     }
-    const body = await readBody(req);
+    /* A PIN and a link key are a few dozen bytes between them, and this is
+       the one route that anyone at all may call, so it reads a small body
+       rather than a document-sized one (#74). */
+    const body = await readBody(req, SMALL_BODY);
     /* The join PIN is checked first, so a review PIN set to the same digits
        by mistake can never take the host's own session down to read-only. */
     if (sameSecret(body && body.pin, JOIN_PIN)) {
@@ -1023,42 +1675,71 @@ async function handleApi(req, res, url) {
   /* Presence, before the gate only because it carries its own copy of it.
      One case forces that: the "I'm gone" beacon a closing tab sends.
      navigator.sendBeacon cannot set a header, so there the token arrives in
-     the body instead — the same credential in a different envelope, for the
-     one route that touches nothing but the in-memory map above. No token is
+     the body instead — the same credential in a different envelope, and it
+     is still gated on that credential whichever way it arrives. No token is
      still no presence, in either envelope.
 
      Both roles are here: a review viewer (#30) is someone else in the
-     document and shows up like anybody else. */
+     document and shows up like anybody else.
+
+     It reads one thing off the disk, added by #69: the document's rev, from
+     its head line, which is what makes this the pull channel as well as the
+     listing (presenceRev above). It still WRITES nothing but the in-memory
+     map, and presence is still never part of a document. */
   if (parts[1] === "presence" && req.method === "POST") {
-    const body = await readBody(req);
-    const role = JOIN_PIN
-      ? (roleOf(req) || roleOfToken(body && body.token))
-      : "edit";
+    /* The header first, before a byte of the body is read: a caller who
+       offered a token and got it wrong is refused here, not after 25 MB of
+       whatever they were uploading has been buffered and parsed (#74). The
+       beacon is why the body is still consulted at all, and a beacon sets no
+       header — so the body is read with the small cap, which a heartbeat has
+       never come close to. */
+    const given = String(req.headers["x-splitpage-token"] || "");
+    const headerRole = JOIN_PIN ? roleOfToken(given) : "edit";
+    if (JOIN_PIN && given && !headerRole) return sendJson(res, 401, { error: "pin-required" });
+    const body = await readBody(req, SMALL_BODY);
+    const role = headerRole || (JOIN_PIN ? roleOfToken(body && body.token) : "edit");
     if (!role) return sendJson(res, 401, { error: "pin-required" });
 
     const docId = body && body.docId;
     const me = presenceHandle(body && body.id);
     if (!isValidId(docId) || !me) return sendJson(res, 400, { error: "bad-presence" });
 
-    const now = Date.now();
-    sweepPresence(now);
-    let people = presenceByDoc.get(docId);
     if (body && body.gone) {
       /* A tab that is going away. Answering with the listing would be
-         pointless — it is not there to read it. */
-      if (people) {
-        people.delete(me);
-        if (!people.size) presenceByDoc.delete(docId);
+         pointless — it is not there to read it, and it has no use for a rev
+         either, so this one branch never touches the disk. */
+      sweepPresence(Date.now());
+      const leaving = presenceByDoc.get(docId);
+      if (leaving) {
+        leaving.delete(me);
+        if (!leaving.size) presenceByDoc.delete(docId);
       }
       return sendJson(res, 200, { ok: true });
     }
+
+    /* Before the map is touched rather than in the middle of it: this is the
+       one await in the route, and the sweep-then-mutate below has to stay
+       one uninterrupted run or another beat's sweep can drop the entry this
+       one is about to write into. */
+    const rev = await presenceRev(docId);
+    /* `docId` travels back with it so the other end can tell whether the
+       answer is about the document it still has open — the picker is never
+       disabled, so a beat sent for one document can land after another has
+       been opened. Both of the "presence is full" answers below carry it
+       too: being left out of the listing is no reason to lose the pull
+       channel as well. */
+    const answer = (here) => sendJson(res, 200, { docId, rev, here });
+
+    const now = Date.now();
+    sweepPresence(now);
+    let people = presenceByDoc.get(docId);
     if (!people) {
-      if (presenceByDoc.size >= PRESENCE_MAX_DOCS) return sendJson(res, 200, { here: [] });
+      if (presenceByDoc.size >= PRESENCE_MAX_DOCS) return answer([]);
       people = new Map();
       presenceByDoc.set(docId, people);
     }
     if (people.size >= PRESENCE_MAX_PER_DOC && !people.has(me)) {
-      return sendJson(res, 200, { here: [] });
+      return answer([]);
     }
     people.set(me, {
       name: presenceWord(body && body.name, 40),
@@ -1075,11 +1756,18 @@ async function handleApi(req, res, url) {
       if (id === me) continue;
       here.push({ id, name: who.name, rowId: who.rowId, field: who.field });
     }
-    return sendJson(res, 200, { here });
+    return answer(here);
   }
 
   /* The gate. Everything below needs the token once a PIN is set — including
      /api/me, which is a name and an email address.
+
+     It is here, above every route that reads a body, on purpose: a caller
+     with no token is refused before readBody() allocates anything, so an
+     unauthenticated 25 MB upload costs this process nothing but the headers
+     it arrived with (#74). Nothing below may read a body before the check it
+     is gated on. sendJson() ends the connection when the client is still
+     sending, so the refusal is a clean 401 rather than a socket reset.
 
      JSON, deliberately: the client treats a non-JSON answer as a lapsed
      Cloudflare Access session and reloads the page to sign in again, which
@@ -1121,6 +1809,9 @@ async function handleApi(req, res, url) {
     });
   }
 
+  /* Images (#82): after the gate, like everything that reads or writes. */
+  if (parts[1] === "blobs") return handleBlobs(req, res, parts, role);
+
   if (parts[1] !== "docs") return sendJson(res, 404, { error: "not-found" });
 
   const id = parts[2];
@@ -1131,8 +1822,8 @@ async function handleApi(req, res, url) {
        one document — not the library (#63). */
     const scope = role === "review" ? reviewScopeOf(req) : "";
     if (scope) {
-      const only = await readDoc(scope).catch(() => null);
-      return sendJson(res, 200, { docs: only ? [summarise(only)] : [] });
+      const only = await summaryOf(scope);
+      return sendJson(res, 200, { docs: only ? [only] : [] });
     }
     let names;
     try {
@@ -1146,8 +1837,11 @@ async function handleApi(req, res, url) {
       if (!name.endsWith(".json")) continue;
       const docId = name.slice(0, -5);
       if (!isValidId(docId)) continue; /* ignore anything we did not write */
-      const doc = await readDoc(docId).catch(() => null);
-      if (doc) docs.push(summarise(doc));
+      /* The head line, not the whole script: a picker listing twenty
+         documents used to parse twenty documents in full to print their
+         names (#74). */
+      const summary = await summaryOf(docId);
+      if (summary) docs.push(summary);
     }
     docs.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
     return sendJson(res, 200, { docs });
@@ -1160,6 +1854,13 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
+    }
+    /* Every image the new document names must already be here (#82) — a
+       new document has no stored refs to excuse a dangling one. */
+    const createRefs = refsIn(body.state);
+    const createMissing = await refusedRefs(createRefs, "", body.acceptMissing);
+    if (createMissing.length) {
+      return sendJson(res, 422, { error: "missing-blobs", missing: createMissing });
     }
     /* slugify()'s uniqueness rests on 24 bits of random suffix — unlikely
        per call, but not impossible over a long-running/shared library's
@@ -1181,11 +1882,12 @@ async function handleApi(req, res, url) {
           updatedAt: new Date().toISOString(),
           updatedBy: who.name || body.by || null
         };
-        await writeDoc(d);
+        await writeDoc(d, createRefs);
         return d;
       });
       if (wrote) { newId = candidate; doc = wrote; break; }
     }
+    if (doc) touchBlobs(createRefs);
     if (!doc) return sendJson(res, 500, { error: "id-collision" });
     return sendJson(res, 201, { id: newId, rev: doc.rev, updatedAt: doc.updatedAt });
   }
@@ -1201,6 +1903,161 @@ async function handleApi(req, res, url) {
     if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
   }
 
+  /* ---------- comments, on their own (#71) ----------
+   *
+   *   POST  /api/docs/:id/comments            a new comment, or a reply
+   *   PATCH /api/docs/:id/comments/:commentId resolve or unresolve one
+   *
+   * Above the read and save routes because `/api/docs/:id/comments` is a
+   * longer path than `/api/docs/:id` and would otherwise be answered as a
+   * GET of the document — the extra segment silently ignored.
+   *
+   * POST is open to both roles. An editor has PUT and does not need it, but
+   * there is nothing there an editor may not do, and a route that refuses the
+   * more privileged caller is a trap for whoever writes the client next.
+   *
+   * PATCH is an editor's only. Reviewers never resolve or unresolve a comment
+   * (the owner's decision): this server cannot tell who wrote a comment — an
+   * author is a name typed into a box, and every reviewer on a link shares
+   * the one token — so there is no "their own comment" a reviewer could be
+   * limited to, and a reviewer resolving anything would be resolving someone
+   * else's. The client already offers them no Resolve; this is the same rule
+   * held where a token alone cannot get round it.
+   */
+  if (parts[3] === "comments") {
+    /* Nothing hangs off a comment: a reply is a POST to the collection
+       carrying `replyTo`, not a path of its own. A deeper path is not a
+       method this route lacks, it is a route that is not here. */
+    if (parts.length > 5) return sendJson(res, 404, { error: "not-found" });
+    const hasCid = parts[4] !== undefined;
+    if (!((req.method === "POST" && !hasCid) || (req.method === "PATCH" && hasCid))) {
+      return sendJson(res, 405, { error: "method-not-allowed" });
+    }
+    const cid = hasCid ? commentIdOf(parts[4]) : "";
+    if (hasCid && !cid) return sendJson(res, 400, { error: "bad-comment-id" });
+    if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    /* Refused on the role alone, before the body or the document is looked
+       at: which comment, and which way, make no difference to the answer. */
+    if (req.method === "PATCH" && role === "review") {
+      return sendJson(res, 403, { error: "reviewers-cannot-resolve" });
+    }
+
+    /* Only now is a byte of the body read: the token was checked by the gate
+       above, the review link's scope by the check above that, and the method,
+       the path and the role by the lines above this one (#74). The cap is
+       this route's own — a comment, not a script. */
+    const body = await readBody(req, COMMENT_BODY);
+    const now = new Date().toISOString();
+    /* Cloudflare Access's word first, the client's claim second: the same
+       order PUT uses for `updatedBy`, and for the same reason — one is an
+       identity this process was handed and the other is a name in a box. */
+    const by = who.name || commentText(body && body.by, COMMENT_NAME_MAX);
+
+    if (req.method === "PATCH") {
+      if (!body || typeof body.resolved !== "boolean") {
+        return sendJson(res, 400, { error: "bad-resolve" });
+      }
+      const resolved = body.resolved;
+      return withDocLock(id, async () => {
+        const open = await openForComment(id);
+        if (open.error) return sendJson(res, open.error.status, open.error.body);
+        const comment = findComment(open.state, cid);
+        if (!comment) return sendJson(res, 404, { error: "no-such-comment" });
+        /* Already the way it is being asked for: answer with the document as
+           it stands rather than writing a new rev that changes nothing. Two
+           people clicking Resolve on the same card is one resolve. */
+        if (comment.resolved === resolved) {
+          return sendJson(res, 200, commentAnswer(id, open.doc, comment, { changed: false }));
+        }
+        comment.resolved = resolved;
+        comment.updatedAt = now;
+        /* Unresolving clears both fields, exactly as the client's
+           toggleResolve does — a resolver's name next to a comment that is
+           not resolved is worse than no name at all. */
+        comment.resolvedBy = resolved ? (by || "Anonymous") : null;
+        comment.resolvedAt = resolved ? now : null;
+        const next = await writeCommentChange(id, open.doc, open.state, by, now);
+        return sendJson(res, 200, commentAnswer(id, next, comment, { changed: true }));
+      });
+    }
+
+    /* A reply to a comment that is already there. Distinguished by carrying
+       `reply`, not by a route of its own: it is the same append, under the
+       same lock, to the same document, and one route is one place to get
+       that right. */
+    if (body && body.reply !== undefined) {
+      const parentId = commentIdOf(body.replyTo);
+      const reply = cleanReply(body.reply, now, by);
+      if (!parentId || !reply) return sendJson(res, 400, { error: "bad-comment" });
+      const replyRefs = await commentRefsRefused(req, role, id, reply.body);
+      if (replyRefs.missing.length) {
+        return sendJson(res, 422, { error: "missing-blobs", missing: replyRefs.missing });
+      }
+      return withDocLock(id, async () => {
+        const open = await openForComment(id);
+        if (open.error) return sendJson(res, open.error.status, open.error.body);
+        const parent = findComment(open.state, parentId);
+        if (!parent) return sendJson(res, 404, { error: "no-such-comment" });
+        if (!Array.isArray(parent.replies)) parent.replies = [];
+        for (const r of parent.replies) {
+          if (r && r.id === reply.id) {
+            return sendJson(res, 200, commentAnswer(id, open.doc, parent, { changed: false }));
+          }
+        }
+        if (parent.replies.length >= COMMENT_REPLIES_MAX) {
+          return sendJson(res, 409, { error: "too-many-replies" });
+        }
+        parent.replies.push(reply);
+        /* A thread's own timestamp moves when it is replied to, and only
+           then. */
+        parent.updatedAt = now;
+        const next = await writeCommentChange(id, open.doc, open.state, by, now);
+        touchBlobs(replyRefs.refs);
+        return sendJson(res, 200, commentAnswer(id, next, parent, { changed: true, reply }));
+      });
+    }
+
+    const comment = cleanComment(body && body.comment, now, by);
+    if (!comment) return sendJson(res, 400, { error: "bad-comment" });
+    /* Judged before the lock is taken: nonsense is nonsense whatever the
+       document says, and there is no reason to queue behind a save to find
+       out. Whether it is a REPEAT can only be judged inside. */
+    if (body.anchor !== undefined && body.anchor !== null && typeof body.anchor !== "object") {
+      return sendJson(res, 400, { error: "bad-anchor" });
+    }
+    /* The anchor's HTML needs no such check: placeAnchor() accepts it only
+       when it matches the stored field tag for tag, images included, so it
+       cannot bring a new ref in. */
+    const commentRefs = await commentRefsRefused(req, role, id, comment.body);
+    if (commentRefs.missing.length) {
+      return sendJson(res, 422, { error: "missing-blobs", missing: commentRefs.missing });
+    }
+    return withDocLock(id, async () => {
+      const open = await openForComment(id);
+      if (open.error) return sendJson(res, open.error.status, open.error.body);
+      const already = findComment(open.state, comment.id);
+      if (already) {
+        /* The same comment, posted twice: a client that never saw its
+           answer. Hand back the one that is stored and the rev it is at.
+           Not 409 — from where the client is standing this worked, and it
+           did. */
+        return sendJson(res, 200, commentAnswer(id, open.doc, already, { changed: false, anchored: false }));
+      }
+      if (open.state.comments.length >= DOC_COMMENTS_MAX) {
+        return sendJson(res, 409, { error: "too-many-comments" });
+      }
+      const placed = placeAnchor(open.state, body.anchor, comment.id, comment.author, now);
+      if (placed === "bad") return sendJson(res, 400, { error: "bad-anchor" });
+      open.state.comments.push(comment);
+      const next = await writeCommentChange(id, open.doc, open.state, by, now);
+      touchBlobs(commentRefs.refs);
+      return sendJson(res, 200, commentAnswer(id, next, comment, {
+        changed: true,
+        anchored: placed === "ok"
+      }));
+    });
+  }
+
   /* read */
   if (req.method === "GET") {
     const doc = await readDoc(id);
@@ -1214,21 +2071,49 @@ async function handleApi(req, res, url) {
   /* compare-and-set save */
   if (req.method === "PUT") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
+    /* A review token writes through the comment routes above and nowhere
+       else (#71). Refused outright rather than judged: there is no longer
+       any comparison here that could let one through, and refusing before
+       readBody() means a reviewer cannot make this process buffer a 25 MB
+       upload just to be told no (#74). */
+    if (role === "review") return sendJson(res, 403, { error: "review-only" });
+    /* D7 (#82): a client that predates blob references reads an `imageRef`
+       as a key it does not know and a `data-blob` image as nothing at all,
+       so its save of a document holding either would write back a script
+       with its pictures gone from under it. Refused before the body, with a
+       status that says what to do about it: reload. A document holding no
+       refs is one an old client can still save, as it always could — and
+       the rev compare-and-set below covers a document that gains refs
+       between this check and the write, because the old client's baseRev
+       is then stale and it gets a 409. */
+    if (!clientKnowsBlobs(req)) {
+      const held = await storedRefsOf(id);
+      if (held && held.size) return sendJson(res, 426, { error: "client-too-old" });
+    }
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
     }
+    const putRefs = refsIn(body.state);
     const baseRev = Number(body.baseRev);
     if (!isFinite(baseRev) || baseRev < 0) return sendJson(res, 400, { error: "bad-base-rev" });
 
     return withDocLock(id, async () => {
-      const current = await readDoc(id);
-      if (!current) return sendJson(res, 404, { error: "not-found" });
+      /* The rev this is compared against, from the head line — the usual
+         answer to a save is "yes, written", and answering it used to mean
+         parsing the stored script in full to read one number off the front
+         of it (#74). The whole file is still read for the one case that
+         genuinely needs the state: a conflict, which hands it back to be
+         merged. */
+      const meta = await readDocMeta(id);
+      if (!meta) return sendJson(res, 404, { error: "not-found" });
 
       /* Somebody else saved since this client loaded. Hand back their whole
          version so the client can three-way merge it against the base it
          still holds, rather than either side losing work. */
-      if ((current.rev || 0) !== baseRev) {
+      if ((meta.rev || 0) !== baseRev) {
+        const current = await readDoc(id);
+        if (!current) return sendJson(res, 404, { error: "not-found" });
         return sendJson(res, 409, {
           error: "conflict",
           rev: current.rev || 0,
@@ -1238,25 +2123,22 @@ async function handleApi(req, res, url) {
         });
       }
 
-      /* Inside the lock and after the rev check, so the version this is
-         compared against is the one that is about to be replaced — a review
-         client that hit a 409 first merges, retries, and is judged against
-         whatever it merged with rather than against a copy that has moved on. */
-      if (role === "review") {
-        const verdict = reviewWriteAllowed(current.state, body.state);
-        if (!verdict.ok) {
-          return sendJson(res, 403, { error: "review-only", detail: verdict.reason });
-        }
-      }
+      /* After the rev check — a stale client has to merge before anything
+         else it is told matters — and before a byte is written: an image
+         this save names that is new to this document and not on this
+         server is refused, and the client uploads it and asks again (#82). */
+      const missing = await refusedRefs(putRefs, id, body.acceptMissing);
+      if (missing.length) return sendJson(res, 422, { error: "missing-blobs", missing });
 
       const doc = {
         id,
-        rev: (current.rev || 0) + 1,
+        rev: (meta.rev || 0) + 1,
         state: body.state,
         updatedAt: new Date().toISOString(),
-        updatedBy: who.name || body.by || current.updatedBy || null
+        updatedBy: who.name || body.by || meta.updatedBy || null
       };
-      await writeDoc(doc);
+      await writeDoc(doc, putRefs);
+      touchBlobs(putRefs);
       return sendJson(res, 200, { id, rev: doc.rev, updatedAt: doc.updatedAt, updatedBy: doc.updatedBy });
     });
   }
@@ -1357,8 +2239,8 @@ async function handleStatic(req, res, url) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
   /* The launcher route is the one piece of API a static-only (NO_API) copy
-     still answers: it is what lets the app the launcher just opened offer to
-     add itself to the Start Menu. It is gated by the per-launch token and the
+     still answers: it is what lets the app the launcher just opened ask
+     where it was started from. It is gated by the per-launch token and the
      loopback bind, never by NO_API - see launcherAllowed(). */
   const isLauncher = url.pathname.startsWith("/api/launcher/");
   const isApi = (!NO_API || isLauncher) && url.pathname.startsWith("/api/");
@@ -1417,6 +2299,10 @@ async function start() {
     if (READ_ONLY) console.log("[splitpage] READ-ONLY mode");
     if (NO_API) console.log("[splitpage] static only — no document API");
     if (ALLOW_ORIGINS.length) console.log("[splitpage] cross-origin calls allowed from: " + ALLOW_ORIGINS.join(", "));
+    if (TRUST_PROXY) {
+      console.log("[splitpage] TRUST_PROXY=1 — the PIN rate limit counts X-Forwarded-For, so nothing " +
+                  "but your proxy may be able to reach this port");
+    }
     if (JOIN_PIN) {
       /* Never the PIN itself: this stream is inherited by the launcher and
          may end up in a log file. That it is set is all anyone needs here. */

@@ -10,6 +10,19 @@
  * Usage:
  *   node test/smoke.mjs                       # dev + both packaged unpacked exes (whichever exist)
  *   node test/smoke.mjs --exe <path to .exe>   # just that one target
+ *   node test/smoke.mjs --only-target dev      # the dev target alone
+ *
+ * On Linux there is no display, so the run needs one of its own:
+ *
+ *   xvfb-run -a node test/smoke.mjs --only-target dev
+ *
+ * The dev target runs on every platform (#89) — that is what exercises
+ * main.js and preload.js where they are actually being changed. The
+ * packaged targets are Windows-only, because dist/win-unpacked and
+ * dist/win-arm64-unpacked are the only packaged output anything builds.
+ * A handful of assertions probe Windows itself (MainWindowHandle); those
+ * are SKIPped by name off Windows and listed in the run summary, never
+ * silently dropped and never rewritten into something weaker.
  *
  * Every launch gets its own fresh temp SPLITPAGE_USER_DATA, its own free
  * --remote-debugging-port, and SPLITPAGE_NO_UPDATE_CHECK=1 unless the case
@@ -39,15 +52,42 @@ const DESKTOP_DIR = path.resolve(__dirname, "..");
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function parseCliArgs(argv) {
-  const out = { exe: null, onlyTarget: null };
+  const out = { exe: null, onlyTarget: null, onlyGroup: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--exe") out.exe = argv[++i];
     // Debugging-only, undocumented: restrict a default (no --exe) run to a
     // single named target (dev | packaged-x64 | packaged-arm64) without
     // having to comment code out. Not part of the public CLI contract.
     if (argv[i] === "--only-target") out.onlyTarget = argv[++i];
+    /* Same spirit, for one group out of ~60: a case-insensitive substring
+       of the group's REGISTERED name in runTargetSuite (not the tag each
+       check line prints). A filter matching no group exits 1.
+       A filtered run prints a loud banner and carries "GROUP FILTER" into
+       the summary, because a partial run that read like a full one is the
+       thing this file is not allowed to do. */
+    if (argv[i] === "--only-group") out.onlyGroup = argv[++i];
   }
   return out;
+}
+
+const IS_WINDOWS = process.platform === "win32";
+
+/* The dev Electron's executable is named differently on every platform —
+   electron.exe, a bare electron, or the binary buried in Electron.app. Its
+   own installer already records which one it unpacked, in
+   node_modules/electron/path.txt, so read that rather than keep a second
+   copy of the mapping here that could drift; the per-platform names below
+   are only the fallback for a tree whose path.txt is missing. */
+function devElectronExe() {
+  const pkgDir = path.join(DESKTOP_DIR, "node_modules", "electron");
+  const distDir = path.join(pkgDir, "dist");
+  try {
+    const recorded = fs.readFileSync(path.join(pkgDir, "path.txt"), "utf8").trim();
+    if (recorded) return path.join(distDir, recorded);
+  } catch { /* not installed, or installed by something that wrote no path.txt */ }
+  if (IS_WINDOWS) return path.join(distDir, "electron.exe");
+  if (process.platform === "darwin") return path.join(distDir, "Electron.app", "Contents", "MacOS", "Electron");
+  return path.join(distDir, "electron");
 }
 
 function resolveTargets(exeOverride) {
@@ -56,13 +96,48 @@ function resolveTargets(exeOverride) {
     return [{ name: "custom:" + path.basename(abs), kind: "packaged", exe: abs }];
   }
   const targets = [];
-  const devExe = path.join(DESKTOP_DIR, "node_modules", "electron", "dist", "electron.exe");
+  const devExe = devElectronExe();
   if (fs.existsSync(devExe)) targets.push({ name: "dev", kind: "dev", exe: devExe, appPath: DESKTOP_DIR });
-  const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
-  if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
-  const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
-  if (fs.existsSync(arm64Exe)) targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
+  /* Packaged discovery stays Windows-only on purpose: dist/*-unpacked/ holds
+     Splitpage.exe and nothing builds any other packaged shape. Looking for
+     them elsewhere would only ever find nothing. */
+  if (IS_WINDOWS) {
+    const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
+    if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
+    const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
+    /* An x64 host cannot start an arm64 exe at all — every group fails with
+       `spawn UNKNOWN` — while an arm64 host runs x64 under emulation, so
+       only that one direction is gated. The target is named as a skip rather
+       than dropped: a build sitting in dist/ that this run did not test must
+       show up in the summary (#89's rule). */
+    if (fs.existsSync(arm64Exe)) {
+      if (process.arch === "arm64") targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
+      else targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe,
+        cannotRun: "an arm64 build cannot start on this " + process.arch + " host — run it on the ARM machine" });
+    }
+  }
   return targets;
+}
+
+/* Extra Chromium switches a target needs on THIS platform, prepended to
+   every spawn of it (launchApp's own and the three raw second-instance
+   spawns alike).
+
+   --no-sandbox, on Linux, for the DEV target only. Chromium's Linux sandbox
+   needs either a setuid chrome-sandbox helper or unprivileged user
+   namespaces; a dev tree's node_modules/electron/dist/chrome-sandbox is not
+   setuid, and the containers this suite runs in (the cloud dev container and
+   the CI runner) provide neither. Without it Electron refuses to start at
+   all, so the choice is this switch or no Linux run.
+
+   It is deliberately scoped to the dev target so it can never reach a
+   packaged binary, and it is a test-harness launch argument only — nothing
+   in main.js, electron-builder.yml or the installer passes it, so how the
+   app SHIPS is untouched. It does weaken a real boundary in the process it
+   applies to, which is why it is not applied more widely than it has to be. */
+function platformFlagsFor(target) {
+  if (target.kind === "dev" && process.platform === "linux") return ["--no-sandbox"];
+  return [];
 }
 
 async function freePort() {
@@ -83,7 +158,7 @@ async function freePort() {
 async function fetchJson(url, opts, timeoutMs) {
   const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs || 8000) });
   const text = await res.text();
-  let body = null;
+  let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   return { status: res.status, ok: res.ok, headers: res.headers, body };
 }
@@ -358,7 +433,7 @@ function readDraftDirs(userDataDir) {
     if (!ent.isDirectory()) continue;
     if (ent.name === "corrupt" || ent.name.indexOf(".trash-") === 0 || ent.name.indexOf(".tmp-") === 0) continue;
     const tabDir = path.join(draftsRoot, ent.name);
-    let files = [];
+    let files;
     try { files = fs.readdirSync(tabDir); } catch { continue; }
     out[ent.name] = {
       dir: tabDir,
@@ -401,8 +476,19 @@ async function addMarkerRow(cdp, marker) {
   // supplements: '#rows > *'.length can stay unchanged across the very add
   // this is waiting for.
   const before = await evalPage(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length");
-  await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
-  await poll(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length > " + before, 10000);
+  /* Clicked again, up to three times, while no row has appeared: under load
+     a boot-time re-render can replace the button between the query and the
+     click, and a click on the detached node adds nothing — which failed a
+     full run twice (once with nothing of the case's own under test yet).
+     Only re-clicked while the count is still `before`, so it never adds two. */
+  const countExpr = "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
+    const added = await poll(cdp, countExpr + " > " + before, 4000).then(() => true, () => false);
+    if (added) break;
+    if ((await evalPage(cdp, countExpr)) > before) break;
+  }
+  await poll(cdp, countExpr + " > " + before, 2000);
   const expr = "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
     "var cell = cells[cells.length - 1]; if (!cell) return false; cell.textContent = " + JSON.stringify(marker) + "; " +
     "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()";
@@ -488,13 +574,13 @@ function dirContainsText(dir, needle) {
   let found = null;
   (function walk(d) {
     if (found) return;
-    let entries = [];
+    let entries;
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const ent of entries) {
       if (found) return;
       const p = path.join(d, ent.name);
       if (ent.isDirectory()) { walk(p); continue; }
-      let text = "";
+      let text;
       try { text = fs.readFileSync(p, "utf8"); } catch { continue; }
       if (text.indexOf(needle) !== -1) { found = p; return; }
     }
@@ -630,6 +716,19 @@ async function setupTwoDirtyWindows(target, opts) {
 // a docId before any document carrying it exists.
 function randDocId() { return "d" + crypto.randomBytes(16).toString("hex"); }
 
+/* DOC-CLAIMS' homeKey for a file-backed document, predicted Node-side so a
+   case can compute the replacement id the app is about to choose without
+   asking the app for it. It mirrors main.js's own rule exactly, INCLUDING
+   the part that is platform-dependent: the resolved path is lower-cased on
+   win32 only, because an NTFS path is case-insensitive and an ext4 one is
+   not (main.js: `process.platform === "win32" ? resolved.toLowerCase() :
+   resolved`). Hard-coding the lower-case half here made the prediction
+   silently wrong everywhere but Windows. */
+function fileHomeKey(p) {
+  const resolved = path.resolve(p);
+  return "file:" + (IS_WINDOWS ? resolved.toLowerCase() : resolved);
+}
+
 // HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/ — lowercase hex keeps
 // every generated id inside that shape without thinking about it further.
 function randSnapId(prefix) {
@@ -664,40 +763,136 @@ async function historyCallRejects(cdp, method, args) {
   try { await historyCall(cdp, method, args); return false; } catch { return true; }
 }
 
-// HISTORY-STORAGE's on-disk layout, read directly (never through IPC) so a
-// case can see what main actually wrote — the same reason readDraftDirs
-// reads DRAFT-STORE's files straight off disk instead of asking the app.
-function historyBucketDirOnDisk(userDataDir, bucket) {
-  return bucket === "_older"
-    ? path.join(userDataDir, "history", "older")
-    : path.join(userDataDir, "history", "docs", "d-" + bucket);
+// HISTORY-STORAGE's on-disk layout (#83: desktop/history-fs-backend.js),
+// read directly (never through IPC) so a case can see what main actually
+// wrote — the same reason readDraftDirs reads DRAFT-STORE's files straight
+// off disk instead of asking the app. history/index.json holds every
+// bucket; bodies live content-addressed under history/bodies/sha256/<aa>/.
+function historyDirOnDisk(userDataDir) { return path.join(userDataDir, "history"); }
+function historyShaHex(text) { return crypto.createHash("sha256").update(text, "utf8").digest("hex"); }
+function historyBodyPathOnDisk(userDataDir, sha) {
+  return path.join(historyDirOnDisk(userDataDir), "bodies", "sha256", sha.slice(0, 2), sha);
 }
-function historyIndexPathOnDisk(userDataDir, bucket) {
-  return path.join(historyBucketDirOnDisk(userDataDir, bucket), "index.json");
-}
-function historySnapPathOnDisk(userDataDir, bucket, snapId) {
-  return path.join(historyBucketDirOnDisk(userDataDir, bucket), "s-" + snapId + ".snap");
-}
-function readHistoryIndexOnDisk(userDataDir, bucket) {
-  try { return JSON.parse(fs.readFileSync(historyIndexPathOnDisk(userDataDir, bucket), "utf8")); }
+function readHistoryIndexOnDisk(userDataDir, name) {
+  try { return JSON.parse(fs.readFileSync(path.join(historyDirOnDisk(userDataDir), name || "index.json"), "utf8")); }
   catch { return null; }
 }
-// HISTORY-STORAGE's .snap format: "splitpage-snapshot 1", the meta JSON
-// (no document id in it — the folder is the document), then the state JSON
-// verbatim. Hand-written so a case can pre-seed a bucket before any launch
-// (caseHistoryCorruptIndex, caseHistoryNewerFormatReadOnly).
-function historySnapText(meta, stateJson) {
-  return "splitpage-snapshot 1\n" + JSON.stringify(meta) + "\n" + stateJson;
-}
-function writeHistorySnapOnDisk(userDataDir, bucket, meta, stateJson) {
-  var dir = historyBucketDirOnDisk(userDataDir, bucket);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(historySnapPathOnDisk(userDataDir, bucket, meta.id), historySnapText(meta, stateJson), "utf8");
+function historyBucketOnDisk(userDataDir, bucket) {
+  const idx = readHistoryIndexOnDisk(userDataDir);
+  return idx && idx.buckets ? idx.buckets[bucket] || null : null;
 }
 function writeHistoryFormatOnDisk(userDataDir, version) {
-  var dir = path.join(userDataDir, "history");
+  var dir = historyDirOnDisk(userDataDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "FORMAT"), String(version) + "\n", "utf8");
+}
+// A v2 folder written by hand, before any launch: every body under its sha,
+// and one index generation (`file`, default index.json) naming them. buckets
+// = {bucket: [{meta, body}]}, oldest first. Returns the index document.
+function seedHistoryV2OnDisk(userDataDir, buckets, opts) {
+  const o = opts || {};
+  const dir = historyDirOnDisk(userDataDir);
+  fs.mkdirSync(path.join(dir, "bodies", "sha256"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "bodies", "FORMAT"), "1\n", "utf8");
+  const doc = { formatVersion: 2, buckets: {}, trash: [] };
+  for (const bucket of Object.keys(buckets)) {
+    const snapshots = buckets[bucket].map(({ meta, body }) => {
+      const sha = historyShaHex(body);
+      const file = historyBodyPathOnDisk(userDataDir, sha);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, body, "utf8");
+      return Object.assign({}, meta, { sizeBytes: Buffer.byteLength(body, "utf8"), sha });
+    });
+    doc.buckets[bucket] = { title: snapshots[snapshots.length - 1].title || "", lastOpenedAt: Date.now(), snapshots };
+  }
+  fs.writeFileSync(path.join(dir, o.file || "index.json"), JSON.stringify(doc), "utf8");
+  writeHistoryFormatOnDisk(userDataDir, o.format || "2");
+  return doc;
+}
+
+// The v1 layout (desktop/main.js §8b before #83), for the migration cases:
+// per-bucket folders docs/d-<docId>/ and older/, each with an index.json
+// and one s-<id>.snap per snapshot — "splitpage-snapshot 1", the meta JSON
+// (no document id: the folder was the document), then the state JSON
+// verbatim. The same writer desktop/test/history-v1-migrate.test.mjs uses.
+function historyV1SnapText(meta, stateJson) {
+  return "splitpage-snapshot 1\n" + JSON.stringify(meta) + "\n" + stateJson;
+}
+function writeHistoryV1Snap(folder, meta, stateJson) {
+  const m = Object.assign({}, meta, { sizeBytes: Buffer.byteLength(stateJson, "utf8") });
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, "s-" + m.id + ".snap"), historyV1SnapText(m, stateJson), "utf8");
+  return m;
+}
+/* A real v1 tree with what years of v1 crashes leave behind: a healthy
+   document, one whose index.json is torn, one with an orphan .snap no index
+   lists, an index entry whose .snap is gone and a .snap truncated in its
+   body, and an Older bucket that was never stamped (expiresAt 0). Returns
+   the ids a correct migration must list, newest first, and every body. */
+function seedHistoryV1Tree(userDataDir) {
+  const root = historyDirOnDisk(userDataDir);
+  writeHistoryFormatOnDisk(userDataDir, 1);
+  const docA = randDocId(), docB = randDocId(), docC = randDocId();
+  const body = (tag) => JSON.stringify({ rows: [{ id: "r1", text: "ünïcödé " + tag }], title: tag });
+  const bodies = {};
+  const snap = (folder, id, atMs, extra) => {
+    bodies[id] = body(id);
+    return writeHistoryV1Snap(folder, historyMeta(Object.assign({ id, atMs, label: "L " + id, title: "" }, extra)), bodies[id]);
+  };
+  const v1Index = (folder, fields, listed) => fs.writeFileSync(path.join(folder, "index.json"), JSON.stringify(Object.assign(
+    { formatVersion: 1 }, fields, { bytes: listed.reduce((n, m) => n + m.sizeBytes, 0), snapshots: listed })), "utf8");
+
+  const a = path.join(root, "docs", "d-" + docA);
+  const aList = [snap(a, "a01", 1000, { title: "Alpha 1" }), snap(a, "a02", 2000, { title: "Alpha 2" }), snap(a, "a03", 3000, { title: "Alpha" })];
+  v1Index(a, { docId: docA, title: "Alpha", lastOpenedAt: 5000 }, aList);
+
+  const b = path.join(root, "docs", "d-" + docB);
+  snap(b, "b01", 1500);
+  snap(b, "b02", 2500, { title: "Beta" });
+  fs.writeFileSync(path.join(b, "index.json"), "{\"formatVersion\":1,\"docId\":\"" + docB + "\",\"tit", "utf8");
+
+  const c = path.join(root, "docs", "d-" + docC);
+  const c01 = snap(c, "c01", 100, { title: "Gamma" });
+  snap(c, "c02", 200, { title: "Gamma 2" });                        // orphan: no index lists it
+  const c03 = Object.assign(historyMeta({ id: "c03", atMs: 300 }), { sizeBytes: 10 });   // listed, no .snap
+  v1Index(c, { docId: docC, title: "Gamma", lastOpenedAt: 9000 }, [c01, c03]);
+  const c04 = historyMeta({ id: "c04", atMs: 400, sizeBytes: Buffer.byteLength(body("c04"), "utf8") });
+  fs.writeFileSync(path.join(c, "s-c04.snap"), historyV1SnapText(c04, body("c04")).slice(0, -7), "utf8");   // truncated
+
+  const older = path.join(root, "older");
+  const oList = [snap(older, "o01", 10, { kind: "legacy", legacyId: "k1" }), snap(older, "o02", 20, { kind: "legacy", legacyId: "k2" })];
+  v1Index(older, { migratedAt: 0, expiresAt: 0 }, oList);
+
+  return {
+    docA, docB, docC, bodies,
+    expect: { [docA]: ["a03", "a02", "a01"], [docB]: ["b02", "b01"], [docC]: ["c02", "c01"], older: ["o02", "o01"] }
+  };
+}
+// relpath -> sha256 of every file under `dir` (missing dir -> {}), to prove
+// the v1 files reached v1-backup/ unchanged.
+function historyTreeDigest(dir) {
+  const out = {};
+  (function walk(d) {
+    let names;
+    try { names = fs.readdirSync(d); } catch { return; }
+    for (const name of names) {
+      const p = path.join(d, name);
+      if (fs.statSync(p).isDirectory()) walk(p);
+      else out[path.relative(dir, p).split(path.sep).join("/")] = crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
+    }
+  })(dir);
+  return out;
+}
+function historyV1Digest(root) {
+  return JSON.stringify({ docs: historyTreeDigest(path.join(root, "docs")), older: historyTreeDigest(path.join(root, "older")) });
+}
+// Lists the ids of one bucket once the v1 migration has finished (history-
+// list answers {migrating:true} at once while it runs).
+async function historyListWhenMigrated(cdp, docId, timeoutMs) {
+  return pollNode(async () => {
+    const list = await historyCall(cdp, "historyList", [docId]);
+    return list && !list.migrating ? list : null;
+  }, timeoutMs || 20000);
 }
 
 // Second-instance send, scoped to one userDataDir — same technique
@@ -706,7 +901,7 @@ function writeHistoryFormatOnDisk(userDataDir, version) {
 // dedicated test-shell op for "open this path".
 async function sendSecondInstanceTo(target, userDataDir, filePath) {
   const port = await freePort();
-  const flags = [`--remote-debugging-port=${port}`];
+  const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
   const args = target.kind === "dev" ? [target.appPath, ...flags, filePath] : [...flags, filePath];
   const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
   const proc = spawn(target.exe, args, { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -740,7 +935,7 @@ async function spawnAttempt(target, opts, userDataDir, port) {
     env.SPLITPAGE_TEST_DIALOGS = dialogsPath;
   }
 
-  const flags = [`--remote-debugging-port=${port}`, ...(opts.flags || [])];
+  const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`, ...(opts.flags || [])];
   if (opts.dataDir) flags.push("--data", opts.dataDir);
   const fixtures = opts.fixtures || [];
 
@@ -812,7 +1007,7 @@ async function launchApp(target, opts) {
       killPid(proc.pid);
       await waitForExit(proc, 10000);
       if (attempt >= maxAttempts) {
-        throw new Error("launchApp: CDP never came up after " + attempt + " attempt(s) on " + target.name + ": " + (lastErr && lastErr.message || lastErr));
+        throw new Error("launchApp: CDP never came up after " + attempt + " attempt(s) on " + target.name + ": " + (lastErr && lastErr.message || lastErr), { cause: e });
       }
       // else: loop retries with a fresh freePort() and a fresh spawn.
     }
@@ -830,7 +1025,7 @@ function waitForExit(proc, timeoutMs) {
   });
 }
 
-function psProcessesMatching(substrings) {
+function win32ProcessesMatching(substrings) {
   // Case-insensitive CommandLine contains-any-of check via Get-CimInstance,
   // exactly per the harness design note. -EncodedCommand sidesteps quoting
   // headaches from backslash-heavy Windows temp paths.
@@ -848,8 +1043,85 @@ function psProcessesMatching(substrings) {
   }
 }
 
+/* The POSIX stand-in for Win32_Process: [{ pid, ppid, cmdline }] for every
+   process this user can see. /proc is preferred where it exists (Linux) —
+   no external command at all, so nothing to be missing from a minimal
+   container image — with `ps` as the fallback everywhere else (macOS).
+   `cmdline` is the same thing the Windows query matches on, which is what
+   makes "a process tagged with THIS launch's user-data dir" mean the same
+   on both: Chromium passes --user-data-dir=<dir> to every child it spawns. */
+function posixProcessTable() {
+  if (fs.existsSync("/proc")) {
+    const rows = [];
+    let entries;
+    try { entries = fs.readdirSync("/proc"); } catch { return rows; }
+    for (const entry of entries) {
+      if (!/^\d+$/.test(entry)) continue;
+      let cmdline;
+      try { cmdline = fs.readFileSync(`/proc/${entry}/cmdline`, "utf8"); } catch { continue; }
+      cmdline = cmdline.replace(/\0/g, " ").trim();
+      let ppid = 0;
+      try {
+        const stat = fs.readFileSync(`/proc/${entry}/stat`, "utf8");
+        /* field 2 is the comm, in parentheses, and may itself contain spaces
+           and parentheses — so split what follows the LAST ')': state, ppid. */
+        const after = stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/);
+        ppid = Number(after[1]) || 0;
+      } catch { /* exited between readdir and here */ }
+      rows.push({ pid: Number(entry), ppid, cmdline });
+    }
+    return rows;
+  }
+  try {
+    const out = execFileSync("ps", ["-A", "-o", "pid=,ppid=,args="], { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "ignore"] });
+    return out.split("\n").map((line) => {
+      const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+      return m ? { pid: Number(m[1]), ppid: Number(m[2]), cmdline: m[3] } : null;
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function psProcessesMatching(substrings) {
+  if (IS_WINDOWS) return win32ProcessesMatching(substrings);
+  const needles = substrings.map((s) => s.toLowerCase()).filter(Boolean);
+  if (!needles.length) return [];
+  return posixProcessTable()
+    .filter((p) => p.cmdline && needles.some((n) => p.cmdline.toLowerCase().includes(n)))
+    .map((p) => String(p.pid));
+}
+
+/* taskkill /T /F, and its POSIX equivalent. There is no single POSIX call
+   for "this process and its descendants": killing the process GROUP is the
+   usual stand-in, but these children are spawned without `detached`, so they
+   share this test runner's own group and a group kill would take the suite
+   down with them. So walk the tree from the process table and SIGKILL it
+   leaf-first, which is the order taskkill /T uses too. Scoped to one pid's
+   descendants exactly like the Windows path — never by image name, so a
+   concurrent run is never touched. */
 function killPid(pid) {
-  try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 10000 }); } catch {}
+  if (!pid || pid <= 1) return;
+  if (IS_WINDOWS) {
+    try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 10000 }); } catch {}
+    return;
+  }
+  const byParent = new Map();
+  for (const p of posixProcessTable()) {
+    if (!byParent.has(p.ppid)) byParent.set(p.ppid, []);
+    byParent.get(p.ppid).push(p.pid);
+  }
+  const tree = [];
+  const walk = (id) => {
+    for (const child of byParent.get(id) || []) {
+      if (child === id || tree.includes(child)) continue;
+      tree.push(child);
+      walk(child);
+    }
+  };
+  walk(pid);
+  for (const id of tree.reverse()) { try { process.kill(id, "SIGKILL"); } catch {} }
+  try { process.kill(pid, "SIGKILL"); } catch {}
 }
 
 // document.visibilityState reads "visible" even in TEST_MODE (backgroundThrottling:false
@@ -858,6 +1130,12 @@ function killPid(pid) {
 // window has MainWindowHandle 0. The BrowserWindow's native HWND belongs to Electron's
 // browser (main) process, not a renderer subprocess, so checking the pid we spawned is right
 // for both dev and packaged targets.
+//
+// Genuinely Windows-only, and with no honest equivalent elsewhere: the point
+// of the assertion is "nothing appeared on the developer's screen", which X11
+// cannot be asked in the same way (and under Xvfb the answer would be
+// meaningless anyway). Its one caller SKIPs it by name off Windows rather
+// than asserting something weaker that would read as the same coverage.
 function getMainWindowHandle(pid) {
   try {
     const out = execFileSync("powershell.exe", [
@@ -890,9 +1168,10 @@ async function closeBrowserGracefully(app) {
   } catch { return false; }
 }
 
-/* Always: CDP Browser.close first (the clean path), then taskkill /T /F
-   the tree as a fallback, then confirm via Win32_Process that nothing
-   naming this launch's user-data dir survives.
+/* Always: CDP Browser.close first (the clean path), then killPid's
+   force-kill of the tree as a fallback (taskkill /T /F on Windows, a
+   leaf-first SIGKILL walk on POSIX), then confirm from the process table
+   that nothing naming this launch's user-data dir survives.
 
    Also always records two checks under `tag` (case 15 in the harness
    design applies to EVERY case, so it lives here once instead of being
@@ -914,21 +1193,38 @@ async function waitForNoProcesses(userDataDir, timeoutMs) {
   return left;
 }
 
+/* opts.expectForceKill (a reason string): this launch is known to end in a
+   state where Browser.close cannot close it — a dirty tab whose unsaved-
+   changes prompt test mode answers Cancel, or a process the case already
+   crashed — so go straight to the kill instead of waiting 12 s for a close
+   that is not going to happen. The same launches were force-killed on
+   Linux AND on Windows (the first Windows run, at eb9904f), so this is how
+   those cases end everywhere, not a platform difference. Any OTHER teardown
+   that falls back to the kill is listed under FORCE-KILLED in the summary:
+   not a failure (nothing is orphaned), but a change worth seeing. */
+// The reason every expectForceKill call site in this file gives today.
+const ENDS_DIRTY = "the case ends with a dirty tab, and test mode answers the unsaved-changes prompt Cancel";
+
 async function teardown(app, tag, opts) {
   opts = opts || {};
   const notes = [];
   try { app.cdp && app.cdp.close(); } catch {}
-  if (app.cdp) await closeBrowserGracefully(app);
-  let exited = await waitForExit(app.proc, 12000);
+  const expected = !!opts.expectForceKill;
+  if (app.cdp && !expected) await closeBrowserGracefully(app);
+  let exited = await waitForExit(app.proc, expected ? 500 : 12000);
   if (!exited) {
-    notes.push("did not exit after Browser.close; force-killed via taskkill");
+    if (expected) notes.push("force-killed by design: " + opts.expectForceKill);
+    else {
+      notes.push("did not exit after Browser.close; force-killed via killPid");
+      unexpectedForceKills.push(tag || "(untagged teardown)");
+    }
     killPid(app.proc.pid);
     /* 30 s, not 10: taskkill /F is authoritative, but an x64 Electron tree
        under ARM64 emulation on a loaded machine (an installer build or the
        browser suite running alongside) can take well over 10 s to REPORT
        its exit — which once failed a case whose processes were all gone. */
     exited = await waitForExit(app.proc, 30000);
-    if (!exited) notes.push("process still reported alive after taskkill");
+    if (!exited) notes.push("process still reported alive after the force-kill");
   }
   // A packaged app's launcher exe can spawn a child renderer/utility process
   // tree under a different top pid than the one we spawned — search by the
@@ -956,6 +1252,15 @@ async function teardown(app, tag, opts) {
         app.proc.exitCode === opts.expectExitCode,
         "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
     }
+    /* The POSIX half of expectExitCode: a process that died from a real
+       signal has no exit code at all, so "how did it die" has to be asked
+       the other way round there. Same strength of assertion, named in the
+       platform's own terms — see caseHistoryKillAfterBody's call site. */
+    if (opts.expectSignal !== undefined) {
+      record(tag + ": killed by " + opts.expectSignal,
+        app.proc.signalCode === opts.expectSignal,
+        "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
+    }
   }
   return notes;
 }
@@ -980,7 +1285,17 @@ function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch
  * -------------------------------------------------------------------- */
 
 let totalChecks = 0, passedChecks = 0;
+// Groups that passed --only-group's filter, across every target. A filter
+// that matches nothing must fail the run, not print "ALL PASS - 0/0".
+let groupsRun = 0;
+// Every registered group name, so a filter that matched nothing can say
+// what it could have matched.
+const groupNames = new Set();
 const failureLines = [];
+const skippedLines = [];
+// Teardowns that fell back to the force-kill without expecting to (see
+// teardown()). Listed in the summary; not failures.
+const unexpectedForceKills = [];
 
 function record(name, ok, detail) {
   totalChecks++;
@@ -989,6 +1304,21 @@ function record(name, ok, detail) {
   console.log(line);
   if (!ok) failureLines.push(name + (detail ? " :: " + detail : ""));
 }
+
+/* A check or a whole group that CANNOT run here, recorded by name with the
+   reason (#89). Deliberately not counted as a pass and not counted in
+   totalChecks: a skip is absent coverage, and a run that printed the same
+   "ALL PASS - n/n" as a full one would be worse than no run at all. Every
+   skip is echoed again in the summary, so the tail of the output says what
+   this machine did not test even when nothing failed. */
+function skip(name, reason) {
+  skippedLines.push(name + " :: " + reason);
+  console.log("SKIP - " + name + " :: " + reason);
+}
+
+// The reason string every off-Windows skip in this file shares, so the
+// summary groups them at a glance.
+const WINDOWS_ONLY = "Windows-only probe (PowerShell/Win32), this run is on " + process.platform;
 
 async function guarded(name, fn) {
   try {
@@ -1027,7 +1357,7 @@ function writeFixture(dir, name, title, rowPairs) {
  *    profile per the "every launch is isolated" rule.
  * -------------------------------------------------------------------- */
 
-async function caseBootAndSecurity(target, fixturesDir) {
+async function caseBootAndSecurity(target) {
   const tag = target.name + " boot+security";
   let app = null;
   try {
@@ -1189,11 +1519,15 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
       record(tag + ": Save As file parses as a .splitpage document", !!parsed && Array.isArray(parsed.rows), parsed ? "" : "parse failed");
     }
 
-    const toastsBefore = await evalPage(cdp, "document.querySelectorAll('.toast').length");
+    /* Error and warning toasts only: the answered Save As just above shows an
+       "ok" toast of its own, and on a loaded machine it can land after this
+       count is taken — which once failed this check with nothing wrong. */
+    const problemToasts = "document.querySelectorAll('.toast.error, .toast.warn').length";
+    const toastsBefore = await evalPage(cdp, problemToasts);
     const seenBeforeSaveAs = await dialogsSeen(cdp);
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     await waitForDialogAnswered(cdp, seenBeforeSaveAs); // the cancelled dialog has been consumed
-    const toastsAfter = await evalPage(cdp, "document.querySelectorAll('.toast').length");
+    const toastsAfter = await evalPage(cdp, problemToasts);
     record(tag + ": cancelled Save As shows no error toast", toastsAfter === toastsBefore, `before=${toastsBefore} after=${toastsAfter}`);
 
     // --- case 6: export via test dialogs ---
@@ -1734,11 +2068,16 @@ async function caseUnsavedChangesClose(target) {
     record(tag + ": dirty close with NO pre-answered dialog stays open (test-mode default = Stay)",
       stillAlive2, "exitCode=" + app2.proc.exitCode);
 
-    const handle = getMainWindowHandle(app2.proc.pid);
-    record(tag + ": no visible top-level window appeared during the whole case (MainWindowHandle=0)", handle === 0, "handle=" + handle);
+    const checkName = tag + ": no visible top-level window appeared during the whole case (MainWindowHandle=0)";
+    if (IS_WINDOWS) {
+      const handle = getMainWindowHandle(app2.proc.pid);
+      record(checkName, handle === 0, "handle=" + handle);
+    } else {
+      skip(checkName, WINDOWS_ONLY + " — MainWindowHandle has no X11 equivalent, and under Xvfb there is no real screen to have appeared on");
+    }
   } finally {
     if (app2) {
-      await teardown(app2, tag + " (no pre-answered dialog)");
+      await teardown(app2, tag + " (no pre-answered dialog)", { expectForceKill: ENDS_DIRTY });
       rmrf(app2.userDataDir);
     }
   }
@@ -1989,7 +2328,7 @@ async function caseSecondInstanceRelativePath(target, fixturesDir) {
 
     const port = await freePort();
     const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
-    const flags = [`--remote-debugging-port=${port}`];
+    const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
     // Only the basename — the whole point is that this must resolve against
     // the SECOND process's cwd (fixturesDir, set below), not the first's.
     const args = target.kind === "dev" ? [target.appPath, ...flags, fixtureName] : [...flags, fixtureName];
@@ -2091,13 +2430,31 @@ async function caseTabstripOrigin(target) {
     const noReadFile = await evalPage(stripCdp, "typeof (window.splitpageTabStrip && window.splitpageTabStrip.readFile) === 'undefined'");
     record(tag + ": window.splitpageTabStrip.readFile is undefined", noReadFile === true, String(noReadFile));
 
-    const healthStatus = await evalPage(stripCdp, "fetch('splitpage://tabstrip/api/health').then(function(r){return r.status;}).catch(function(){return -1;})");
-    /* -1 is the fetch rejecting before any request is made: the strip origin's
-       CSP carries connect-src 'none' (#65, TABSTRIP_CSP in main.js), so the
-       proxy is refused by policy rather than answered 404. Either way there is
-       no /api on this origin; anything else (a 200, a redirect) is the bug. */
-    record(tag + ": fetch('splitpage://tabstrip/api/health') is refused (CSP) or 404",
-      healthStatus === 404 || healthStatus === -1, "status=" + healthStatus);
+    /* TABSTRIP-BRIDGE asked for a 404 here: /api/* is deliberately not
+       special-cased for the strip's host in registerProtocol(), so the
+       request falls through to "not found" and the strip has no proxy to the
+       document server. Since #65 the strip's own response headers also carry
+       connect-src 'none', so the request is refused one layer EARLIER — it
+       never leaves the page, and the fetch REJECTS instead of resolving with
+       a status. That is strictly more than the original check claimed, so it
+       is asserted as what it now is (the violated directive, read off the
+       page's own securitypolicyviolation event) rather than relaxed into
+       "didn't come back 200". Nothing had run this assertion since #65
+       landed the header — that is the gap #89 is about. */
+    const apiAttempt = await evalPage(stripCdp,
+      "new Promise(function(resolve){" +
+      "  var out = { outcome: null, violated: null, blocked: null };" +
+      "  document.addEventListener('securitypolicyviolation', function(e){" +
+      "    out.violated = e.violatedDirective; out.blocked = e.blockedURI;" +
+      "  }, { once: true });" +
+      "  fetch('splitpage://tabstrip/api/health').then(" +
+      "    function(r){ out.outcome = 'status:' + r.status; }," +
+      "    function(){ out.outcome = 'refused'; });" +
+      "  setTimeout(function(){ resolve(out); }, 2000);" +
+      "})");
+    record(tag + ": fetch('splitpage://tabstrip/api/health') never leaves the strip — refused by its own connect-src 'none' (#65)",
+      !!apiAttempt && apiAttempt.outcome === "refused" && apiAttempt.violated === "connect-src",
+      JSON.stringify(apiAttempt));
   } finally {
     if (stripCdp) { try { stripCdp.close(); } catch {} }
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
@@ -2149,7 +2506,7 @@ async function caseTabRoutingRules(target, fixturesDir) {
 
   async function sendSecondInstance(fixturePath) {
     const port = await freePort();
-    const flags = [`--remote-debugging-port=${port}`];
+    const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
     const args = target.kind === "dev" ? [target.appPath, ...flags, fixturePath] : [...flags, fixturePath];
     const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
     const proc = spawn(target.exe, args, { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -2219,7 +2576,7 @@ async function caseTabRoutingRules(target, fixturesDir) {
       !!ownerWindow && ownerWindow.windowId === newWindowId && ownerWindow.activeTabId === tabBId, JSON.stringify(ownerWindow));
   } finally {
     if (cdpB) { try { cdpB.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -2359,7 +2716,7 @@ async function caseQuitTwoWindowsDirty(target) {
   let ctx = null;
   try {
     ctx = await setupTwoDirtyWindows(target, { label: "quit-2-windows-dirty", dialogs: ["review", "confirm"] });
-    const { app, cdp1, cdp2, cdp3 } = ctx;
+    const { app, cdp1, cdp3 } = ctx;
 
     await dirtyTabForTest(cdp1); // window1
     await dirtyTabForTest(cdp3); // window2
@@ -2469,7 +2826,7 @@ async function caseTearOffPreservesState(target) {
     record(tag + ": the strip records the tab under its new window", !!w2 && w2.tabs.some((t) => t.tabId === tab2Id), JSON.stringify(w2));
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
   }
 }
 
@@ -2792,12 +3149,14 @@ async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
    file's creation time alone. NTFS is documented to carry the destination's
    creation time across such a rename (file tunnelling); on Windows 11 here
    it does not, and every save moves birthtime forward by the elapsed time.
-   The rule is therefore off (DUP_TRUST_BIRTHTIME), and this case no longer
-   asserts the filesystem behaves one way — it asserts the two AGREE:
-   whatever the filesystem does to birthtime, the real chooseDuplicateLoser
-   must not be fooled by it. It fails if a save starts re-dating files on a
-   machine where the rule was turned back on, or if the rule is turned back
-   on while saves still re-date files. */
+   The rule is therefore gone — #76 deleted the branch and the stat that fed
+   it, so shared/doc-id-policy.js's chooseDuplicateLoser decides on the seq
+   alone — and this case no longer asserts the filesystem behaves one way. It
+   asserts the two AGREE: whatever the filesystem does to birthtime, the real
+   verdict must not be fooled by it. That is the guard against a birthtime
+   rule being written back in on a machine where saves still re-date files.
+   The claims below still carry a birthtimeMs for exactly that reason: the
+   hook drops it, and a rule that started reading one again would fail here. */
 async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
   /* The function keeps step M's name for traceability; the reported tag says
      what it actually asserts now, so a PASS line never reads as a claim that
@@ -2814,7 +3173,7 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     // and the data block's row counts disagreeing, which pops the real
     // #md-rows-modal in-page confirm and would hang this case, invariant
     // #33's "never trigger one" included), then treat this tab exactly as
-    // "A.md is open": the tab's docFileHandle is bound to aPath from here on,
+    // "A.md is open": the tab's "file" home is bound to aPath from here on,
     // same as if the file had been opened from disk.
     await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     let saveAsOk = false;
@@ -2823,7 +3182,7 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     }
     record(tag + ": setup — Save As creates A.md", saveAsOk);
     if (!saveAsOk) return;
-    await sleep(300); // let the save fully settle (docFileHandle retargeted, clean)
+    await sleep(300); // let the save fully settle (file home retargeted, clean)
 
     const stBefore = fs.statSync(aPath);
     const birthtimeBefore = stBefore.birthtimeMs;
@@ -2901,11 +3260,11 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     const idA = await poll(app.cdp, "window.__splitpageFormats.docId()", 10000);
 
     // The 2.5 s gap used to matter because it put the copy's birthtime
-    // outside chooseDuplicateLoser's 2 s noise window. That rule is off now
-    // (DUP_TRUST_BIRTHTIME — see caseAtomicSaveKeepsBirthtime), so the seq
-    // tie-break names B either way; the gap is kept only so the two files
-    // are unambiguously distinguishable on disk to anything reading this
-    // fixture, and so Save As has fully settled before the copy is taken.
+    // outside chooseDuplicateLoser's 2 s noise window. That rule is gone
+    // (#76 — see caseAtomicSaveKeepsBirthtime), so the seq tie-break names B
+    // either way; the gap is kept only so the two files are unambiguously
+    // distinguishable on disk to anything reading this fixture, and so Save
+    // As has fully settled before the copy is taken.
     await sleep(2500);
     fs.copyFileSync(aPath, bPath);
     const aBytesOriginal = fs.readFileSync(aPath);
@@ -2928,9 +3287,11 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
 
     // The predicted replacement id (DOC-CLAIMS' Reassignment), computed
     // independently of the app: 'd' + sha256('splitpage-dup\n'+idA+'\n'+
-    // 'file:'+absB.toLowerCase()).slice(0,32) — byte-identical to both
-    // replacementDocId (main.js) and deriveDocId (02b-doc-id.js).
-    const homeKeyB = "file:" + path.resolve(bPath).toLowerCase();
+    // fileHomeKey(absB)).slice(0,32) — byte-identical to both
+    // replacementDocId (main.js) and deriveDocId (02b-doc-id.js). See
+    // fileHomeKey for the one part of that string that is platform-
+    // dependent.
+    const homeKeyB = fileHomeKey(bPath);
     const toId = "d" + crypto.createHash("sha256")
       .update("splitpage-dup\n" + idA + "\n" + homeKeyB, "utf8").digest("hex").slice(0, 32);
 
@@ -3000,9 +3361,21 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     if (reopenTarget) {
       cdpReopen = await connectTarget(reopenTarget);
       await waitForRows(cdpReopen, 20000);
-      const reopenedId = await poll(cdpReopen, "window.__splitpageFormats.docId()", 15000).catch(() => null);
+      /* Polled for the expected id, not read once — the same shape as the
+         first reassignment assertion above, and for a sharper reason here.
+         routeOpenPath creates the tab with a pendingPayload and the renderer
+         boots a blank seed document FIRST; the file is delivered after it
+         reports ready. waitForRows is therefore satisfied while the page is
+         still showing the seed, whose own random docId is what a single read
+         catches (measured: it did, on Linux, where nothing else in the case
+         was slow enough to hide the gap). A second reassignment — the thing
+         this assertion exists to catch — settles on some OTHER id, so the
+         poll still times out and still fails. */
+      const keptItsId = await poll(cdpReopen,
+        "window.__splitpageFormats.docId() === " + JSON.stringify(toId), 15000).catch(() => null);
+      const reopenedId = await evalPage(cdpReopen, "window.__splitpageFormats.docId()").catch(() => null);
       record(tag + ": reopening B.md keeps its (already reassigned) id — no further reassignment",
-        reopenedId === toId, "reopenedId=" + reopenedId + " toId=" + toId);
+        !!keptItsId, "reopenedId=" + reopenedId + " toId=" + toId);
       const reopenedEvents = await evalPage(cdpReopen, "window.__splitpageFormats.docIdEvents()").catch(() => null);
       record(tag + ": no new copy event fires on reopen (its id no longer collides with A's)",
         Array.isArray(reopenedEvents) && reopenedEvents.length === 0, JSON.stringify(reopenedEvents));
@@ -3015,17 +3388,74 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     // "quit and restore → no reassignment": a graceful teardown persists the
     // session (both tabs), then a fresh launch on the same userDataDir
     // restores it — B's id is already unique, so nothing re-fires.
+    /* Evidence for the restore assertion below, captured because it failed
+       once on CI's fast runner (A came back as an untitled pristine tab, B
+       came back fine) and could not be reproduced here in eight runs. Main's
+       own view of every tab just before the quit, and the session file the
+       quit actually wrote, are what tell a race in A's last document-state
+       report apart from a race in the write. Printed only on failure. */
+    const preQuitListing = await shell(app.cdp, "listTargets", {}).catch((e) => ({ error: String(e && e.message || e) }));
     await teardown(app, tag + " (pre-quit)");
     app = null;
+    let persistedAtQuit = null;
+    try { persistedAtQuit = JSON.parse(fs.readFileSync(path.join(userDataDir, "desktop-state.json"), "utf8")); }
+    catch (e) { persistedAtQuit = { error: String(e && e.message || e) }; }
 
     const appRestored = await launchApp(target, { label: "dup-doc-id-restore", userDataDir });
     try {
+      /* Main restored both tabs from desktop-state.json with their paths.
+         Each restored page then boots the starter document before its file
+         is handed to it, and a report of that starter used to reach main as
+         "this tab holds no document" and wipe the path it was created for —
+         briefly on a slow machine, and for as long as it took on CI's fast
+         runner to fail the single read below. Sampled from the moment main
+         answers, rather than read once, so the wipe is caught even here
+         where it closes before a one-off read lands: main's record must
+         never lose either path, not merely have them back by the time
+         someone looks. */
+      const pathLost = [];
+      const sampleUntil = Date.now() + 4000;
+      while (Date.now() < sampleUntil) {
+        const l = await shell(appRestored.cdp, "listTargets", {}).catch(() => null);
+        const tabs = (l && l.windows && l.windows[0] && l.windows[0].tabs) || [];
+        for (const t of tabs) {
+          if (!t.path && !pathLost.some((x) => x.tabId === t.tabId)) pathLost.push({ tabId: t.tabId, pristine: t.pristine, title: t.title });
+        }
+        await sleep(50);
+      }
+      record(tag + ": main never loses a restored tab's path while its page boots (invariant #42)",
+        pathLost.length === 0, JSON.stringify(pathLost));
       await waitForRows(appRestored.cdp, 20000);
       const listing = await shell(appRestored.cdp, "listTargets", {});
       const w = listing.windows[0];
       const restoredA = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(aPath).toLowerCase());
       const restoredB = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(bPath).toLowerCase());
-      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB, JSON.stringify(w));
+      /* What each restored PAGE believes, captured only on failure: its
+         home, the launch intent main gave it, and whether it counts itself
+         pristine. A.md and B.md were made by Save As from an untouched
+         starter, so their content IS the starter's — this separates "a
+         report of the starter wiped main's record" from "the opened file
+         itself reads as no document". */
+      let pageViews = null;
+      if (!(restoredA && restoredB) && w && Array.isArray(w.tabs)) {
+        pageViews = [];
+        for (const t of w.tabs) {
+          let c = null;
+          try {
+            c = await connectTab(appRestored, t.tabId);
+            pageViews.push({ tabId: t.tabId, page: await evalPage(c,
+              "JSON.stringify({home: window.__hostedTest && window.__hostedTest.home && window.__hostedTest.home(), " +
+              "intent: window.splitpageDesktop && window.splitpageDesktop.launchIntent || null, " +
+              "docId: window.__splitpageFormats && window.__splitpageFormats.docId()})") });
+          } catch (e) { pageViews.push({ tabId: t.tabId, error: String(e && e.message || e) }); }
+          finally { try { if (c) c.close(); } catch {} }
+        }
+      }
+      record(tag + ": quit + relaunch restores both A.md and B.md tabs", !!restoredA && !!restoredB,
+        JSON.stringify(w) + (restoredA && restoredB ? "" :
+          " || before quit, main held: " + JSON.stringify(preQuitListing) +
+          " || desktop-state.json after quit: " + JSON.stringify(persistedAtQuit) +
+          " || each restored page: " + JSON.stringify(pageViews)));
       if (restoredA && restoredB) {
         const cdpRA = await connectTab(appRestored, restoredA.tabId);
         const cdpRB = await connectTab(appRestored, restoredB.tabId);
@@ -3053,12 +3483,13 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
   }
 }
 
-/* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch/import-older/usage
-   against the real main process, the on-disk layout HISTORY-STORAGE
-   documents, and that all of it survives a relaunch (not just this
-   process's in-memory historyIndexes Map). */
+/* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch, a put into Older
+   ({older:true}, what history-import-older became in #83 step 4) and the
+   usage history-list now answers with, against the real main process, the on-disk layout HISTORY-STORAGE
+   documents (#83: one index.json, content-addressed bodies), and that all of
+   it survives a relaunch (not just this process's cached index). */
 async function caseHistoryRoundTripAndRelaunch(target) {
-  const tag = target.name + " history: put/list/get/copy/touch/import-older/usage + relaunch";
+  const tag = target.name + " history: put/list/get/copy/touch/Older put/usage + relaunch";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
   const docId2 = randDocId();
@@ -3071,8 +3502,9 @@ async function caseHistoryRoundTripAndRelaunch(target) {
     const bodyA = JSON.stringify({ rows: [{ id: "r1" }], title: "First" });
     const metaA = historyMeta({ label: "First", title: "First" });
     const putA = await historyCall(cdp, "historyPut", [docId, metaA, bodyA]);
-    record(tag + ": first put succeeds, not a duplicate",
-      putA && putA.ok === true && putA.duplicate === false, JSON.stringify(putA));
+    record(tag + ": first put succeeds, not a duplicate, sizeBytes is the body's UTF-8 length",
+      putA && putA.ok === true && putA.duplicate === false && putA.sizeBytes === Buffer.byteLength(bodyA, "utf8") &&
+      putA.evicted === 0 && putA.overCap === false, JSON.stringify(putA));
 
     const putADup = await historyCall(cdp, "historyPut", [docId, metaA, bodyA]);
     record(tag + ": putting the same snapshot id again is idempotent (duplicate:true)",
@@ -3089,10 +3521,12 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       list1.entries[0].id === metaB.id && list1.entries[1].id === metaA.id, JSON.stringify(list1));
     record(tag + ": a put stamped at/before the bucket's newest is bumped strictly after it (historyStampAfter)",
       list1.entries[0].atMs > list1.entries[1].atMs, JSON.stringify(list1.entries.map((e) => e.atMs)));
+    record(tag + ": listed metas carry no document id and no sha (HISTORY-IPC's shape)",
+      list1.entries.every((e) => !("docId" in e) && !("sha" in e)), JSON.stringify(list1.entries[0]));
 
     const got = await historyCall(cdp, "historyGet", [{ docId }, metaA.id]);
     record(tag + ": get returns the body verbatim",
-      !!got && got.stateJson === bodyA && got.meta.id === metaA.id, JSON.stringify(got && got.meta));
+      !!got && got.stateJson === bodyA && got.meta.id === metaA.id && !("docId" in got.meta), JSON.stringify(got && got.meta));
     const missingGet = await historyCall(cdp, "historyGet", [{ docId }, randSnapId()]);
     record(tag + ": get of an unknown snapshot id returns null", missingGet === null, JSON.stringify(missingGet));
 
@@ -3107,46 +3541,60 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       Array.isArray(list2.entries) && list2.entries.length === 2, JSON.stringify(list2));
 
     await historyCall(cdp, "historyTouch", [docId, "Touched Title"]);
-    const idxAfterTouch = readHistoryIndexOnDisk(userDataDir, docId);
-    record(tag + ": touch updates the on-disk index title",
-      !!idxAfterTouch && idxAfterTouch.title === "Touched Title", JSON.stringify(idxAfterTouch));
+    const recAfterTouch = historyBucketOnDisk(userDataDir, docId);
+    record(tag + ": touch updates the bucket's title in index.json",
+      !!recAfterTouch && recAfterTouch.title === "Touched Title", JSON.stringify(recAfterTouch && recAfterTouch.title));
     const untouchedDocId = randDocId();
     await historyCall(cdp, "historyTouch", [untouchedDocId, "Should not exist"]);
     record(tag + ": touch never creates a record for a document with no history",
-      readHistoryIndexOnDisk(userDataDir, untouchedDocId) === null, "");
+      historyBucketOnDisk(userDataDir, untouchedDocId) === null, "");
 
     const olderEntries = [
       { meta: historyMeta({ id: randSnapId("l"), label: "legacy1" }), stateJson: JSON.stringify({ rows: [] }) },
       { meta: historyMeta({ id: randSnapId("l"), label: "legacy2" }), stateJson: JSON.stringify({ rows: [] }) }
     ];
-    const imp = await historyCall(cdp, "historyImportOlder", [olderEntries]);
-    record(tag + ": import-older adds both entries", imp && imp.ok === true && imp.added === 2, JSON.stringify(imp));
+    const imp = [];
+    for (const e of olderEntries) imp.push(await historyCall(cdp, "historyPut", [null, e.meta, e.stateJson, { older: true }]));
+    record(tag + ": a put with {older:true} adds each entry into Older",
+      imp.every((r) => r && r.ok === true && r.duplicate === false), JSON.stringify(imp));
+    const impAgain = await historyCall(cdp, "historyPut", [null, olderEntries[0].meta, olderEntries[0].stateJson, { older: true }]);
+    record(tag + ": …put-if-absent: the same Older entry again is a duplicate",
+      impAgain && impAgain.ok === true && impAgain.duplicate === true, JSON.stringify(impAgain));
     const listOlder = await historyCall(cdp, "historyList", [null]);
     record(tag + ": list(null) reports the Older bucket",
       Array.isArray(listOlder.older) && listOlder.older.length === 2 && typeof listOlder.olderExpiresAt === "number",
       JSON.stringify(listOlder));
 
-    const usage = await historyCall(cdp, "historyUsage", []);
-    record(tag + ": usage reports non-zero totalBytes, docCount>=2, not read-only",
-      usage && usage.totalBytes > 0 && usage.docCount >= 2 && usage.readOnly === false, JSON.stringify(usage));
+    const usage = listOlder.usage;
+    record(tag + ": list's usage reports non-zero totalBytes, docCount>=2, not read-only",
+      usage && usage.totalBytes > 0 && usage.docCount >= 2 && usage.readOnly === false &&
+      usage.capBytes === 500 * 1024 * 1024 && usage.overCap === false, JSON.stringify(usage));
+    const docs = await historyCall(cdp, "historyListDocs", []);
+    const docRow = Array.isArray(docs) ? docs.find((d) => d.docId === docId) : null;
+    record(tag + ": list-docs names both documents with title and lastOpenedAt, not Older",
+      !!docRow && docRow.title === "Touched Title" && typeof docRow.lastOpenedAt === "number" &&
+      docs.some((d) => d.docId === docId2) && !docs.some((d) => d.docId === "_older"), JSON.stringify(docs));
 
-    // ---- on-disk layout (HISTORY-STORAGE) ----
-    const formatText = fs.readFileSync(path.join(userDataDir, "history", "FORMAT"), "utf8").trim();
-    record(tag + ": FORMAT is \"1\" on disk", formatText === "1", formatText);
-    const idxOnDisk = readHistoryIndexOnDisk(userDataDir, docId);
-    record(tag + ": index.json has the documented shape, snapshots oldest first",
-      !!idxOnDisk && idxOnDisk.formatVersion === 1 && idxOnDisk.docId === docId &&
-      Array.isArray(idxOnDisk.snapshots) && idxOnDisk.snapshots.length === 2 &&
-      idxOnDisk.snapshots[0].id === metaA.id && idxOnDisk.snapshots[1].id === metaB.id,
+    // ---- on-disk layout (HISTORY-STORAGE, #83) ----
+    const formatText = fs.readFileSync(path.join(historyDirOnDisk(userDataDir), "FORMAT"), "utf8").trim();
+    record(tag + ": FORMAT is \"2\" on disk", formatText === "2", formatText);
+    const idxOnDisk = readHistoryIndexOnDisk(userDataDir);
+    const recA = idxOnDisk && idxOnDisk.buckets && idxOnDisk.buckets[docId];
+    const shaA = historyShaHex(bodyA), shaB = historyShaHex(bodyB);
+    record(tag + ": index.json has the documented shape, snapshots oldest first, each naming its body's sha",
+      !!recA && idxOnDisk.formatVersion === 2 && Array.isArray(idxOnDisk.trash) &&
+      recA.snapshots.length === 2 && recA.snapshots[0].id === metaA.id && recA.snapshots[1].id === metaB.id &&
+      recA.snapshots[0].sha === shaA && recA.snapshots[1].sha === shaB && !("docId" in recA.snapshots[0]),
       JSON.stringify(idxOnDisk));
-    const snapText = fs.readFileSync(historySnapPathOnDisk(userDataDir, docId, metaA.id), "utf8");
-    const nl1 = snapText.indexOf("\n"), nl2 = snapText.indexOf("\n", nl1 + 1);
-    record(tag + ": a .snap file is the 3-line magic/meta/body format with the body verbatim",
-      snapText.slice(0, nl1) === "splitpage-snapshot 1" && snapText.slice(nl2 + 1) === bodyA, snapText.slice(0, nl1));
-    let metaOnDisk = null;
-    try { metaOnDisk = JSON.parse(snapText.slice(nl1 + 1, nl2)); } catch { /* recorded below */ }
-    record(tag + ": the .snap meta line carries no document id (the folder is the document)",
-      !!metaOnDisk && !("docId" in metaOnDisk), JSON.stringify(metaOnDisk));
+    let bodyOnDisk = null;
+    try { bodyOnDisk = fs.readFileSync(historyBodyPathOnDisk(userDataDir, shaA), "utf8"); } catch { /* recorded below */ }
+    record(tag + ": the body is stored verbatim under bodies/sha256/<aa>/<sha>", bodyOnDisk === bodyA, String(bodyOnDisk).slice(0, 80));
+    const recCopy = idxOnDisk && idxOnDisk.buckets && idxOnDisk.buckets[docId2];
+    record(tag + ": a copy is index-only — its entries name the same bodies",
+      !!recCopy && JSON.stringify(recCopy.snapshots.map((s) => s.sha).sort()) === JSON.stringify([shaA, shaB].sort()),
+      JSON.stringify(recCopy));
+    record(tag + ": the index is kept in two generations (index.prev.json beside index.json)",
+      !!readHistoryIndexOnDisk(userDataDir, "index.prev.json"), "");
 
     // ---- relaunch: everything above must be ON DISK, not just this process's memory ----
     await teardown(app, tag + " (pre-relaunch)");
@@ -3160,6 +3608,10 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       const gotAfterRelaunch = await historyCall(app2.cdp, "historyGet", [{ docId }, metaA.id]);
       record(tag + ": after a relaunch, get still returns the body verbatim",
         !!gotAfterRelaunch && gotAfterRelaunch.stateJson === bodyA, "");
+      const olderAfterRelaunch = await historyCall(app2.cdp, "historyList", [null]);
+      record(tag + ": after a relaunch, the Older bucket and its expiry are unchanged",
+        olderAfterRelaunch.older.length === 2 && olderAfterRelaunch.olderExpiresAt === listOlder.olderExpiresAt,
+        JSON.stringify(olderAfterRelaunch));
     } finally {
       await teardown(app2, tag + " (post-relaunch)");
       rmrf(app2.userDataDir);
@@ -3168,6 +3620,25 @@ async function caseHistoryRoundTripAndRelaunch(target) {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
+}
+
+// The file's bytes once they have stopped changing for quietMs (null if it
+// never appears), giving up after timeoutMs with the last bytes seen.
+async function waitForQuietFile(file, quietMs, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null, since = Date.now();
+  while (Date.now() < deadline) {
+    let cur = null;
+    try { cur = fs.readFileSync(file); } catch { /* not written yet */ }
+    if (cur && last && cur.equals(last)) {
+      if (Date.now() - since >= quietMs) return cur;
+    } else {
+      last = cur;
+      since = Date.now();
+    }
+    await sleep(100);
+  }
+  return last;
 }
 
 /* caseHistoryIdValidation. Every bad docId/snapshot id HISTORY-IPC's
@@ -3191,9 +3662,18 @@ async function caseHistoryIdValidation(target) {
     record(tag + ": positive control — a valid docId/meta put succeeds", putGood && putGood.ok === true, JSON.stringify(putGood));
     const getGoodRejects = await historyCallRejects(cdp, "historyGet", [{ docId: goodDocId }, goodMeta.id]);
     record(tag + ": positive control — get of that real snapshot does not reject", getGoodRejects === false, "");
+    const olderMeta = historyMeta({ label: "older control" });
+    const putOlderGood = await historyCall(cdp, "historyPut", [null, olderMeta, "{}", { older: true }]);
+    record(tag + ": positive control — a put into Older with (null, …, {older:true}) succeeds",
+      putOlderGood && putOlderGood.ok === true, JSON.stringify(putOlderGood));
 
+    /* The page's own document-state report and the debounced bounds write
+       legitimately rewrite desktop-state.json after boot (persistShellState),
+       and on a loaded machine that write can land after a first read. So the
+       "before" is taken once the file has stopped changing — the comparison
+       below stays byte-for-byte. */
     const stateFile = path.join(userDataDir, "desktop-state.json");
-    const stateBefore = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
+    const stateBefore = await waitForQuietFile(stateFile, 1000, 10000);
     const topLevelBefore = fs.readdirSync(userDataDir).sort();
 
     const badDocIds = ["../x", "..", "a/b", "a\\b", "CON", goodDocId.toUpperCase(),
@@ -3217,6 +3697,24 @@ async function caseHistoryIdValidation(target) {
     const olderBypassRejects = await historyCallRejects(cdp, "historyGet", [{ docId: "_older" }, goodMeta.id]);
     record(tag + ": historyGet with docId '_older' (bypassing the older:true query) rejects", olderBypassRejects, "");
 
+    /* The Older bucket is written only by the flag (#83 step 4 folded
+       history-import-older into history-put): the flag with a docId string
+       beside it — "_older" or a real one — rejects, and so does anything but
+       a literal true (the preload drops it, leaving a null docId with no
+       flag, which rejects). "_older" with no flag is in badDocIds above. */
+    for (const [label, args] of [
+      ["'_older' with {older:true}", ["_older", historyMeta(), "{}", { older: true }]],
+      ["a real docId with {older:true}", [goodDocId, historyMeta(), "{}", { older: true }]],
+      ["null with {older:'true'}", [null, historyMeta(), "{}", { older: "true" }]],
+      ["null with {older:1}", [null, historyMeta(), "{}", { older: 1 }]]
+    ]) {
+      const rejected = await historyCallRejects(cdp, "historyPut", args);
+      record(tag + ": historyPut(" + label + ", …) rejects", rejected, "");
+    }
+    const olderAfterRejects = await historyCall(cdp, "historyList", [null]);
+    record(tag + ": …and Older still holds only the positive control",
+      olderAfterRejects.older.length === 1 && olderAfterRejects.older[0].id === olderMeta.id, JSON.stringify(olderAfterRejects.older));
+
     const stateAfter = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
     const topLevelAfter = fs.readdirSync(userDataDir).sort();
     record(tag + ": desktop-state.json is byte-identical after every rejected call",
@@ -3227,7 +3725,7 @@ async function caseHistoryIdValidation(target) {
       JSON.stringify(topLevelBefore) + " vs " + JSON.stringify(topLevelAfter));
 
     const historyEntries = [];
-    const historyRoot = path.join(userDataDir, "history");
+    const historyRoot = historyDirOnDisk(userDataDir);
     if (fs.existsSync(historyRoot)) {
       (function walk(dir) {
         for (const name of fs.readdirSync(dir)) {
@@ -3237,28 +3735,38 @@ async function caseHistoryIdValidation(target) {
         }
       })(historyRoot);
     }
-    const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && e !== "FORMAT");
+    const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && path.basename(e) !== "FORMAT");
     record(tag + ": history/ contains nothing named after a rejected id", suspicious.length === 0, JSON.stringify(historyEntries));
+    const idx = readHistoryIndexOnDisk(userDataDir);
+    /* "_older" is there because the Older positive control put it there —
+       through the flag; its one entry is checked above. */
+    record(tag + ": index.json names the control document and no bucket that is not a document id (or Older)",
+      !!idx && !!idx.buckets[goodDocId] && Object.keys(idx.buckets).every((b) => /^d[0-9a-f]{32}$/.test(b) || b === "_older"),
+      JSON.stringify(idx && Object.keys(idx.buckets)));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
 
-/* caseHistoryCrashAfterBody. SPLITPAGE_TEST_HISTORY_FAULT=exit-after-body
-   kills the process between the body write and the index write — the exact
-   state a power cut mid-snapshot leaves (HISTORY-IPC / overrides §2b). A
-   relaunch's fsck must adopt the orphan. */
-async function caseHistoryCrashAfterBody(target) {
-  const tag = target.name + " history: exit-after-body fault — relaunch adopts the orphan";
+/* caseHistoryKillAfterBody. SPLITPAGE_TEST_HISTORY_FAULT=exit-after-body
+   SIGKILLs main between a snapshot's body and the index write that would
+   name it — a power cut mid-snapshot. The accepted loss (#83) is exactly
+   that newest snapshot: the relaunch shows the prior generation, with no
+   error, and the same snapshot can be stored again. */
+async function caseHistoryKillAfterBody(target) {
+  const tag = target.name + " history: exit-after-body fault — relaunch shows the prior generation, no error";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
-  const meta = historyMeta({ label: "orphan" });
-  const body = JSON.stringify({ rows: [{ id: "r1" }], title: "Orphan" });
+  const metaA = historyMeta({ label: "prior", atMs: 1000 });
+  const bodyA = JSON.stringify({ rows: [{ id: "r1" }], title: "Prior" });
+  seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: metaA, body: bodyA }] });
+  const meta = historyMeta({ label: "lost" });
+  const body = JSON.stringify({ rows: [{ id: "r1" }, { id: "r2" }], title: "Lost" });
   let app = null;
   try {
     app = await launchApp(target, {
-      label: "history-crash-after-body", userDataDir,
+      label: "history-kill-after-body", userDataDir,
       env: { SPLITPAGE_TEST_HISTORY_FAULT: "exit-after-body" }
     });
     await waitForRows(app.cdp, 20000);
@@ -3275,26 +3783,38 @@ async function caseHistoryCrashAfterBody(target) {
     // reports exit code 1 (no POSIX signals on Windows; libuv maps a
     // self-inflicted SIGKILL to TerminateProcess(1)) — not a code this
     // process chose, so it's pinned and explained rather than left to guess.
-    await teardown(app, tag + " (post-crash)", { expectExitCode: 1 });
+    // On POSIX the very same call in main.js is a real signal: no exit code
+    // at all, signalCode 'SIGKILL'. One event, two ways of reporting it, so
+    // the expectation is written in each platform's own terms rather than
+    // loosened to "died somehow" — which would stop noticing a main process
+    // that exited cleanly when the fault was supposed to kill it.
+    await teardown(app, tag + " (post-crash)", IS_WINDOWS ? { expectExitCode: 1 } : { expectSignal: "SIGKILL" });
     app = null;
 
-    const orphanPath = historySnapPathOnDisk(userDataDir, docId, meta.id);
-    record(tag + ": the snapshot body reached disk before the crash", fs.existsSync(orphanPath), orphanPath);
-    const idxBeforeRelaunch = readHistoryIndexOnDisk(userDataDir, docId);
-    const orphanIndexed = !!idxBeforeRelaunch && Array.isArray(idxBeforeRelaunch.snapshots) &&
-      idxBeforeRelaunch.snapshots.some((s) => s.id === meta.id);
-    record(tag + ": …but the index does not name it yet (crashed before that write)", !orphanIndexed, JSON.stringify(idxBeforeRelaunch));
+    const sha = historyShaHex(body);
+    record(tag + ": the snapshot body reached disk before the kill", fs.existsSync(historyBodyPathOnDisk(userDataDir, sha)), sha);
+    const recBefore = historyBucketOnDisk(userDataDir, docId);
+    record(tag + ": …but index.json is still the prior generation (A only, the new one unnamed)",
+      !!recBefore && recBefore.snapshots.length === 1 && recBefore.snapshots[0].id === metaA.id, JSON.stringify(recBefore));
 
-    // Relaunch WITHOUT the fault env — otherwise the next put would crash again.
-    const app2 = await launchApp(target, { label: "history-crash-after-body-relaunch", userDataDir });
+    // Relaunch WITHOUT the fault env — otherwise the next put would kill it again.
+    const app2 = await launchApp(target, { label: "history-kill-after-body-relaunch", userDataDir });
     try {
       await waitForRows(app2.cdp, 20000);
-      const list = await historyCall(app2.cdp, "historyList", [docId]);
-      record(tag + ": relaunch's fsck adopts the orphan — it is listed",
-        Array.isArray(list.entries) && list.entries.some((e) => e.id === meta.id), JSON.stringify(list));
-      const idxAfterRelaunch = readHistoryIndexOnDisk(userDataDir, docId);
-      record(tag + ": the on-disk index is rebuilt to name the adopted snapshot",
-        !!idxAfterRelaunch && idxAfterRelaunch.snapshots.some((s) => s.id === meta.id), JSON.stringify(idxAfterRelaunch));
+      let list = null, listErr = "";
+      try { list = await historyCall(app2.cdp, "historyList", [docId]); } catch (e) { listErr = String(e && e.message || e); }
+      record(tag + ": the relaunch lists the prior generation — no error, no half-written entry",
+        !!list && Array.isArray(list.entries) && list.entries.length === 1 && list.entries[0].id === metaA.id,
+        listErr || JSON.stringify(list));
+      const gotA = await historyCall(app2.cdp, "historyGet", [{ docId }, metaA.id]);
+      record(tag + ": the prior snapshot's body reads back verbatim", !!gotA && gotA.stateJson === bodyA, "");
+      const corrupt = fs.readdirSync(historyDirOnDisk(userDataDir)).filter((n) => n.includes(".corrupt-"));
+      record(tag + ": no index generation was set aside as corrupt", corrupt.length === 0, JSON.stringify(corrupt));
+      const again = await historyCall(app2.cdp, "historyPut", [docId, meta, body]);
+      record(tag + ": the lost snapshot can be stored again", again && again.ok === true && again.duplicate === false, JSON.stringify(again));
+      const list2 = await historyCall(app2.cdp, "historyList", [docId]);
+      record(tag + ": …and is then listed newest first",
+        list2.entries.length === 2 && list2.entries[0].id === meta.id, JSON.stringify(list2.entries.map((e) => e.id)));
     } finally {
       await teardown(app2, tag + " (post-relaunch)");
       rmrf(app2.userDataDir);
@@ -3305,51 +3825,44 @@ async function caseHistoryCrashAfterBody(target) {
   }
 }
 
-/* caseHistoryCorruptIndex. A pre-seeded '{broken' index.json alongside 3
-   readable .snap bodies and 1 truncated one — the fsck (ensureHistoryTable /
-   fsckHistoryBucket) must rebuild the index from the readable bodies,
-   quarantine the truncated one as *.corrupt (never adopt it, never silently
-   drop it), and preserve the broken index as index.json.corrupt. */
-async function caseHistoryCorruptIndex(target) {
-  const tag = target.name + " history: corrupt index.json is rebuilt from the bodies (fsck)";
+/* caseHistoryTornIndex. index.json torn mid-write (a disk that lied about the
+   flush) beside a good index.prev.json: the launch loads the previous
+   generation, sets the torn one aside as index.json.corrupt-<ts> (never
+   deleted), and the next write lands a valid index.json again. */
+async function caseHistoryTornIndex(target) {
+  const tag = target.name + " history: torn index.json falls back to index.prev.json";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
-  const validMetas = [
-    historyMeta({ label: "v1", atMs: 1000 }),
-    historyMeta({ label: "v2", atMs: 2000 }),
-    historyMeta({ label: "v3", atMs: 3000 })
-  ];
-  const truncatedId = randSnapId();
-
-  writeHistoryFormatOnDisk(userDataDir, 1);
-  for (const m of validMetas) {
-    writeHistorySnapOnDisk(userDataDir, docId, m, JSON.stringify({ rows: [], title: m.label }));
-  }
-  const dir = historyBucketDirOnDisk(userDataDir, docId);
-  // Truncated: the magic line only, no second newline at all — unreadable as
-  // a header (readHistorySnapHeader requires one), so the fsck must
-  // quarantine it rather than adopt or silently drop it.
-  fs.writeFileSync(path.join(dir, "s-" + truncatedId + ".snap"), "splitpage-snapshot 1\n", "utf8");
-  fs.writeFileSync(path.join(dir, "index.json"), "{broken", "utf8");
+  const metaA = historyMeta({ label: "v1", atMs: 1000 });
+  const metaB = historyMeta({ label: "v2", atMs: 2000 });
+  const bodyA = JSON.stringify({ rows: [], title: "v1" });
+  const bodyB = JSON.stringify({ rows: [{ id: "r1" }], title: "v2" });
+  seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: metaA, body: bodyA }] }, { file: "index.prev.json" });
+  const newer = seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: metaA, body: bodyA }, { meta: metaB, body: bodyB }] });
+  const text = JSON.stringify(newer);
+  fs.writeFileSync(path.join(historyDirOnDisk(userDataDir), "index.json"), text.slice(0, Math.floor(text.length / 2)), "utf8");
 
   let app = null;
   try {
-    app = await launchApp(target, { label: "history-corrupt-index", userDataDir });
+    app = await launchApp(target, { label: "history-torn-index", userDataDir });
     await waitForRows(app.cdp, 20000);
 
     const list = await historyCall(app.cdp, "historyList", [docId]);
-    const ids = (list.entries || []).map((e) => e.id).sort();
-    record(tag + ": the fsck adopts exactly the 3 valid snapshots",
-      ids.length === 3 && JSON.stringify(ids) === JSON.stringify(validMetas.map((m) => m.id).sort()), JSON.stringify(list));
+    const ids = (list.entries || []).map((e) => e.id);
+    record(tag + ": the previous generation is loaded (A only)",
+      ids.length === 1 && ids[0] === metaA.id, JSON.stringify(list));
+    const gotA = await historyCall(app.cdp, "historyGet", [{ docId }, metaA.id]);
+    record(tag + ": its body reads back verbatim", !!gotA && gotA.stateJson === bodyA, "");
+    const names = fs.readdirSync(historyDirOnDisk(userDataDir));
+    record(tag + ": the torn index.json is kept as index.json.corrupt-<ts>",
+      names.some((n) => /^index\.json\.corrupt-\d+/.test(n)), JSON.stringify(names));
 
-    const idxOnDisk = readHistoryIndexOnDisk(userDataDir, docId);
-    record(tag + ": index.json is rebuilt as valid JSON with all 3 snapshots",
-      !!idxOnDisk && idxOnDisk.formatVersion === 1 && idxOnDisk.snapshots.length === 3, JSON.stringify(idxOnDisk));
-    record(tag + ": the broken index.json is preserved as index.json.corrupt",
-      fs.existsSync(path.join(dir, "index.json.corrupt")));
-    record(tag + ": the truncated body is renamed *.corrupt, not adopted and not silently dropped",
-      fs.existsSync(path.join(dir, "s-" + truncatedId + ".snap.corrupt")) &&
-      !fs.existsSync(path.join(dir, "s-" + truncatedId + ".snap")));
+    const metaC = historyMeta({ label: "v3" });
+    const putC = await historyCall(app.cdp, "historyPut", [docId, metaC, JSON.stringify({ rows: [], title: "v3" })]);
+    record(tag + ": the next put succeeds", putC && putC.ok === true, JSON.stringify(putC));
+    const rec = historyBucketOnDisk(userDataDir, docId);
+    record(tag + ": …and writes a valid index.json naming A and the new snapshot",
+      !!rec && JSON.stringify(rec.snapshots.map((s) => s.id)) === JSON.stringify([metaA.id, metaC.id]), JSON.stringify(rec));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
@@ -3359,7 +3872,9 @@ async function caseHistoryCorruptIndex(target) {
 /* caseHistoryCapEviction. SPLITPAGE_TEST_HISTORY_CAP_BYTES lets a case reach
    the eviction planner's cap without writing hundreds of megabytes: the
    per-document 50-snapshot trim, and cap-driven eviction across documents by
-   lastOpenedAt ascending, a document's newest snapshot never deleted. */
+   lastOpenedAt ascending, a document's newest snapshot never deleted. An
+   evicted body is unlinked only once the NEXT generation is durable (the
+   previous index still names it), so it is gone after the next write. */
 async function caseHistoryCapEviction(target) {
   const tag = target.name + " history: cap-driven eviction + 50-per-document trim";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3391,36 +3906,48 @@ async function caseHistoryCapEviction(target) {
       trimIds.indexOf(firstSnapId) === -1 && trimIds.indexOf(lastSnapId) !== -1, "");
 
     // ---- cap-driven eviction across two documents ----
-    const bigBody = JSON.stringify({ blob: "x".repeat(900000) }); // ≈900 KB
+    // Four different ≈900 KB bodies, so an evicted entry's body is its own.
+    const bigBody = (n) => JSON.stringify({ blob: "x".repeat(900000), n });
     const docOld = randDocId(), docNew = randDocId();
     const oldSnap1 = historyMeta({ id: randSnapId("o"), atMs: 10000 });
     const oldSnap2 = historyMeta({ id: randSnapId("o"), atMs: 10001 });
-    await historyCall(cdp, "historyPut", [docOld, oldSnap1, bigBody]);
-    await historyCall(cdp, "historyPut", [docOld, oldSnap2, bigBody]);
+    await historyCall(cdp, "historyPut", [docOld, oldSnap1, bigBody(1)]);
+    await historyCall(cdp, "historyPut", [docOld, oldSnap2, bigBody(2)]);
     const newSnap1 = historyMeta({ id: randSnapId("n"), atMs: 20000 });
-    await historyCall(cdp, "historyPut", [docNew, newSnap1, bigBody]);
+    await historyCall(cdp, "historyPut", [docNew, newSnap1, bigBody(3)]);
     const newSnap2 = historyMeta({ id: randSnapId("n"), atMs: 20001 });
-    const lastCapPut = await historyCall(cdp, "historyPut", [docNew, newSnap2, bigBody]);
-
-    const usage = await historyCall(cdp, "historyUsage", []);
-    record(tag + ": usage stays at or under the TEST_MODE cap after eviction",
-      usage.totalBytes <= CAP, "totalBytes=" + usage.totalBytes + " cap=" + CAP);
-    record(tag + ": the put that crossed the cap reports it evicted something, and is no longer overCap",
-      lastCapPut.evicted > 0 && lastCapPut.overCap === false, JSON.stringify(lastCapPut));
+    const lastCapPut = await historyCall(cdp, "historyPut", [docNew, newSnap2, bigBody(4)]);
 
     const listOld = await historyCall(cdp, "historyList", [docOld]);
     const listNew = await historyCall(cdp, "historyList", [docNew]);
+    const usage = listOld.usage || {};
+    record(tag + ": list's usage stays at or under the TEST_MODE cap after eviction",
+      usage.totalBytes <= CAP && usage.capBytes === CAP, "totalBytes=" + usage.totalBytes + " cap=" + usage.capBytes);
+    record(tag + ": the put that crossed the cap reports it evicted something, and is no longer overCap",
+      lastCapPut.evicted > 0 && lastCapPut.overCap === false, JSON.stringify(lastCapPut));
+
     record(tag + ": the document touched EARLIER (docOld) loses its oldest snapshot first, keeps its newest",
       listOld.entries.length === 1 && listOld.entries[0].id === oldSnap2.id, JSON.stringify(listOld));
     record(tag + ": the document touched LATER (docNew) keeps both of its snapshots",
       listNew.entries.length === 2, JSON.stringify(listNew));
+
+    const evictedSha = historyShaHex(bigBody(1));
+    const evictedPath = historyBodyPathOnDisk(userDataDir, evictedSha);
+    const idx = readHistoryIndexOnDisk(userDataDir);
+    record(tag + ": the evicted body waits in index.json's trash while index.prev.json still names it",
+      !!idx && idx.trash.includes(evictedSha) && fs.existsSync(evictedPath), JSON.stringify(idx && idx.trash));
+    const nextPut = await historyCall(cdp, "historyPut", [randDocId(), historyMeta(), "{}"]);
+    record(tag + ": the next write succeeds", nextPut && nextPut.ok === true, JSON.stringify(nextPut));
+    record(tag + ": …and the evicted body is gone from disk after it", !fs.existsSync(evictedPath), evictedPath);
+    record(tag + ": the surviving snapshots' bodies are all still there",
+      [2, 3, 4].every((n) => fs.existsSync(historyBodyPathOnDisk(userDataDir, historyShaHex(bigBody(n))))), "");
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
 
-/* caseHistoryConcurrentPuts. historyExclusive is ONE promise chain across
+/* caseHistoryConcurrentPuts. The history backend's queue is ONE chain across
    every sender — 60+10 puts and a copy, fired without awaiting each one, and
    the same stress repeated from two different tabs (two different
    webContents) of the same launch, proves the queue serializes across pages
@@ -3507,7 +4034,7 @@ async function caseHistoryLegacyMigration(target) {
     }
 
     const list1 = await seedLegacyKeyAndReload();
-    record(tag + ": older/index.json has both legacy entries after migration", !!list1, JSON.stringify(list1));
+    record(tag + ": the Older bucket has both legacy entries after migration", !!list1, JSON.stringify(list1));
     const olderIds = list1 ? (list1.older || []).map((e) => e.id).sort() : [];
     record(tag + ": the migrated entries carry kind:'legacy' and the original ids",
       !!list1 && list1.older.every((e) => e.kind === "legacy") && JSON.stringify(olderIds) === JSON.stringify(["legacy-a", "legacy-b"]),
@@ -3527,81 +4054,24 @@ async function caseHistoryLegacyMigration(target) {
   }
 }
 
-/* caseHistoryPlannerTwin. desktop/main.js's planHistoryEviction is meant to
-   be a line-for-line copy of src/js/03a-history-store.js's (overrides §2b);
-   the only way to keep two copies honest is to run the same fixtures through
-   both and demand the same answer, every time either one changes. */
-async function caseHistoryPlannerTwin(target) {
-  const tag = target.name + " history: caseHistoryPlannerTwin — main's planHistoryEviction matches the renderer's";
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "history-planner-twin" });
-    await waitForRows(app.cdp, 20000);
-    const cdp = app.cdp;
-
-    const fixtures = [
-      // 1. nothing to do at all.
-      { docs: [], capBytes: 1000, nowMs: 1000, opts: {} },
-      // 2. one document, well under cap — nothing evicted.
-      { docs: [{ docId: "d" + "1".repeat(32), lastOpenedAt: 100, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 10 }] }],
-        capBytes: 1000, nowMs: 1000, opts: {} },
-      // 3. per-document trim: 3 snapshots, perDoc 2 — the oldest goes, the newest stays.
-      { docs: [{ docId: "d" + "2".repeat(32), lastOpenedAt: 100,
-          snapshots: [{ id: "s1", atMs: 10, sizeBytes: 5 }, { id: "s2", atMs: 20, sizeBytes: 5 }, { id: "s3", atMs: 30, sizeBytes: 5 }] }],
-        capBytes: 1000, nowMs: 1000, opts: { perDoc: 2 } },
-      // 4. cap eviction across two documents — the one with the OLDER lastOpenedAt goes first.
-      { docs: [
-          { docId: "d" + "3".repeat(32), lastOpenedAt: 100, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 60 }, { id: "s2", atMs: 20, sizeBytes: 60 }] },
-          { docId: "d" + "4".repeat(32), lastOpenedAt: 200, snapshots: [{ id: "s3", atMs: 30, sizeBytes: 60 }, { id: "s4", atMs: 40, sizeBytes: 60 }] }
-        ], capBytes: 150, nowMs: 1000, opts: {} },
-      // 5. an expired Older bucket goes as a whole, ahead of any document.
-      { docs: [
-          { docId: "_older", lastOpenedAt: 0, expiresAt: 500, snapshots: [{ id: "o1", atMs: 5, sizeBytes: 50 }, { id: "o2", atMs: 6, sizeBytes: 50 }] },
-          { docId: "d" + "5".repeat(32), lastOpenedAt: 900, snapshots: [{ id: "s1", atMs: 10, sizeBytes: 5 }] }
-        ], capBytes: 1000000, nowMs: 1000, opts: { olderKey: "_older" } },
-      // 6. a protected snapshot is never the one an eviction removes.
-      { docs: [{ docId: "d" + "6".repeat(32), lastOpenedAt: 100,
-          snapshots: [{ id: "s1", atMs: 10, sizeBytes: 60 }, { id: "s2", atMs: 20, sizeBytes: 60 }] }],
-        capBytes: 60, nowMs: 1000, opts: { protect: [{ docId: "d" + "6".repeat(32), id: "s1" }] } }
-    ];
-
-    for (let i = 0; i < fixtures.length; i++) {
-      const f = fixtures[i];
-      const rendererResult = await evalPage(cdp,
-        "window.__historyTest.planEviction(" + JSON.stringify(f.docs) + "," + JSON.stringify(f.capBytes) + "," +
-        JSON.stringify(f.nowMs) + "," + JSON.stringify(f.opts) + ")");
-      const mainResult = await evalPage(cdp, "window.splitpageDesktop.__testHistoryPlan(" + JSON.stringify(f) + ")");
-      record(tag + ": fixture " + (i + 1) + " — main's plan matches the renderer's byte for byte",
-        JSON.stringify(rendererResult) === JSON.stringify(mainResult),
-        "renderer=" + JSON.stringify(rendererResult) + " main=" + JSON.stringify(mainResult));
-    }
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-  }
-}
-
-/* caseHistoryNewerFormatReadOnly. A FORMAT number ahead of ours means a
-   newer build wrote this folder — history goes read-only rather than let
-   this build rewrite an index shape it does not understand (HISTORY-STORAGE). */
+/* caseHistoryNewerFormatReadOnly. A FORMAT number ahead of ours ("3" — this
+   build writes "2") means a newer build wrote this folder: history goes
+   read-only rather than let this build rewrite an index shape it does not
+   understand (HISTORY-STORAGE). */
 async function caseHistoryNewerFormatReadOnly(target) {
   const tag = target.name + " history: FORMAT ahead of ours goes read-only";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
   const seedMeta = historyMeta({ label: "pre-existing" });
   const seedBody = JSON.stringify({ rows: [], title: "Pre-existing" });
+  seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: seedMeta, body: seedBody }] }, { format: "3" });
 
-  writeHistorySnapOnDisk(userDataDir, docId, seedMeta, seedBody);
-  const dir = historyBucketDirOnDisk(userDataDir, docId);
-  fs.writeFileSync(path.join(dir, "index.json"), JSON.stringify({
-    formatVersion: 1, docId, title: "Pre-existing", lastOpenedAt: Date.now(),
-    bytes: Buffer.byteLength(seedBody, "utf8"), snapshots: [seedMeta]
-  }), "utf8");
-  writeHistoryFormatOnDisk(userDataDir, 2); // a newer build's format
-
-  const snapPath = historySnapPathOnDisk(userDataDir, docId, seedMeta.id);
-  const mtimeBefore = fs.statSync(snapPath).mtimeMs;
-  const formatPath = path.join(userDataDir, "history", "FORMAT");
+  const dir = historyDirOnDisk(userDataDir);
+  const bodyPath = historyBodyPathOnDisk(userDataDir, historyShaHex(seedBody));
+  const mtimeBefore = fs.statSync(bodyPath).mtimeMs;
+  const formatPath = path.join(dir, "FORMAT");
   const formatBytesBefore = fs.readFileSync(formatPath);
+  const indexBytesBefore = fs.readFileSync(path.join(dir, "index.json"));
 
   let app = null;
   try {
@@ -3612,18 +4082,252 @@ async function caseHistoryNewerFormatReadOnly(target) {
     const list = await historyCall(cdp, "historyList", [docId]);
     record(tag + ": list still works read-only — the pre-existing snapshot is there",
       Array.isArray(list.entries) && list.entries.length === 1 && list.entries[0].id === seedMeta.id, JSON.stringify(list));
+    const got = await historyCall(cdp, "historyGet", [{ docId }, seedMeta.id]);
+    record(tag + ": get still works read-only", !!got && got.stateJson === seedBody, "");
 
     const put = await historyCall(cdp, "historyPut", [docId, historyMeta({ label: "should not land" }), "{}"]);
     record(tag + ": put on a newer-FORMAT folder refuses with code 'read-only'",
       put && put.ok === false && put.code === "read-only", JSON.stringify(put));
 
-    const usage = await historyCall(cdp, "historyUsage", []);
-    record(tag + ": usage reports readOnly:true", usage && usage.readOnly === true, JSON.stringify(usage));
-    record(tag + ": the pre-existing .snap file's mtime is untouched", fs.statSync(snapPath).mtimeMs === mtimeBefore, "");
+    record(tag + ": list's usage reports readOnly:true", !!list.usage && list.usage.readOnly === true, JSON.stringify(list.usage));
+    const olderPut = await historyCall(cdp, "historyPut", [null, historyMeta({ label: "should not land either" }), "{}", { older: true }]);
+    record(tag + ": a put into Older refuses with code 'read-only' too",
+      olderPut && olderPut.ok === false && olderPut.code === "read-only", JSON.stringify(olderPut));
+    record(tag + ": the pre-existing body's mtime is untouched", fs.statSync(bodyPath).mtimeMs === mtimeBefore, "");
+    record(tag + ": index.json is byte-identical and no new generation was written",
+      fs.readFileSync(path.join(dir, "index.json")).equals(indexBytesBefore) && !fs.existsSync(path.join(dir, "index.prev.json")), "");
     record(tag + ": FORMAT itself is never rewritten back down to our own version",
       fs.readFileSync(formatPath).equals(formatBytesBefore), "");
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* The checks every finished v1 migration must pass, in the app: every
+   readable v1 snapshot listed through the real IPC (unreadable ones
+   skipped), bodies verbatim, the unstamped Older bucket given its 90 days,
+   and docs/ + older/ moved whole into v1-backup/. */
+async function checkHistoryV1Migrated(cdp, tag, userDataDir, seed, v1DigestBefore) {
+  const root = historyDirOnDisk(userDataDir);
+  for (const docId of [seed.docA, seed.docB, seed.docC]) {
+    const list = await historyListWhenMigrated(cdp, docId, 30000).catch(() => null);
+    const ids = list ? list.entries.map((e) => e.id) : null;
+    record(tag + ": " + docId.slice(0, 9) + "… lists exactly its readable v1 snapshots, newest first",
+      JSON.stringify(ids) === JSON.stringify(seed.expect[docId]), JSON.stringify(ids) + " vs " + JSON.stringify(seed.expect[docId]));
+  }
+  const gotA = await historyCall(cdp, "historyGet", [{ docId: seed.docA }, "a01"]);
+  record(tag + ": a migrated body reads back verbatim", !!gotA && gotA.stateJson === seed.bodies.a01, "");
+  const gotB = await historyCall(cdp, "historyGet", [{ docId: seed.docB }, "b02"]);
+  record(tag + ": …including one whose v1 index.json was torn", !!gotB && gotB.stateJson === seed.bodies.b02, "");
+  const older = await historyCall(cdp, "historyList", [null]);
+  record(tag + ": the Older bucket migrated, and the unstamped one now expires in the future",
+    JSON.stringify(older.older.map((e) => e.id)) === JSON.stringify(seed.expect.older) &&
+    older.older.every((e) => e.kind === "legacy") && typeof older.olderExpiresAt === "number" && older.olderExpiresAt > Date.now(),
+    JSON.stringify(older));
+  const idx = readHistoryIndexOnDisk(userDataDir);
+  record(tag + ": index.json records migratedFrom:1 and FORMAT is \"2\"",
+    !!idx && idx.migratedFrom === 1 && fs.readFileSync(path.join(root, "FORMAT"), "utf8").trim() === "2", JSON.stringify(idx && idx.migratedFrom));
+  record(tag + ": docs/ and older/ are gone from history/",
+    !fs.existsSync(path.join(root, "docs")) && !fs.existsSync(path.join(root, "older")), JSON.stringify(fs.readdirSync(root)));
+  record(tag + ": v1-backup/ holds docs/ and older/ byte-for-byte, the unreadable .snap included",
+    historyV1Digest(path.join(root, "v1-backup")) === v1DigestBefore, "");
+}
+
+/* caseHistoryV1Migration. A profile from a build before #83 — a real v1
+   tree — opened by this one: the migration runs as the first history job,
+   and everything readable is in the app afterwards. */
+async function caseHistoryV1Migration(target) {
+  const tag = target.name + " history: v1 folder tree migrates on first launch";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const seed = seedHistoryV1Tree(userDataDir);
+  const v1DigestBefore = historyV1Digest(historyDirOnDisk(userDataDir));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-v1-migration", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    await checkHistoryV1Migrated(app.cdp, tag, userDataDir, seed, v1DigestBefore);
+    const put = await historyCall(app.cdp, "historyPut", [seed.docA, historyMeta({ label: "after" }), "{}"]);
+    record(tag + ": a put after the migration succeeds", put && put.ok === true, JSON.stringify(put));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryV1MigrationKilled. SIGKILL mid-migration (after its 2nd body),
+   then again once its index.json is durable, then a clean launch: v1 stays
+   untouched until the index is durable, and the last launch finishes the
+   job with nothing lost. Both killed launches die in whenReady, before any
+   window, so they run without CDP. */
+async function caseHistoryV1MigrationKilled(target) {
+  const tag = target.name + " history: v1 migration killed mid-way, relaunch finishes";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const seed = seedHistoryV1Tree(userDataDir);
+  const root = historyDirOnDisk(userDataDir);
+  const v1DigestBefore = historyV1Digest(root);
+  const killedAs = IS_WINDOWS ? { expectExitCode: 1 } : { expectSignal: "SIGKILL" };
+  let app = null;
+  try {
+    for (const fault of ["exit-mid-migration", "exit-after-migration-index"]) {
+      app = await launchApp(target, {
+        label: "history-v1-" + fault, userDataDir, skipCdp: true,
+        env: { SPLITPAGE_TEST_HISTORY_FAULT: fault }
+      });
+      const exited = await waitForExit(app.proc, 30000);
+      record(tag + " (" + fault + "): the process dies where the fault says", exited);
+      await teardown(app, tag + " (" + fault + ")", killedAs);
+      app = null;
+      record(tag + " (" + fault + "): docs/ and older/ are still in place, unchanged",
+        historyV1Digest(root) === v1DigestBefore, "");
+      record(tag + " (" + fault + "): FORMAT is still \"1\"",
+        fs.readFileSync(path.join(root, "FORMAT"), "utf8").trim() === "1", "");
+      const idx = readHistoryIndexOnDisk(userDataDir);
+      if (fault === "exit-mid-migration") {
+        record(tag + " (" + fault + "): no index.json yet", idx === null, JSON.stringify(idx));
+      } else {
+        record(tag + " (" + fault + "): index.json is durable with migratedFrom:1",
+          !!idx && idx.migratedFrom === 1 && Object.keys(idx.buckets).length === 4, JSON.stringify(idx && Object.keys(idx.buckets)));
+      }
+    }
+    app = await launchApp(target, { label: "history-v1-migration-finish", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    await checkHistoryV1Migrated(app.cdp, tag, userDataDir, seed, v1DigestBefore);
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Issue #82: the content-addressed blob folder (desktop/blob-store.js,
+ * main.js § 8c), driven through the real bridge from the page.
+ * -------------------------------------------------------------------- */
+
+// A real PNG signature and a random tail: an image by its magic, and a sha
+// of its own every run.
+function blobPngBytes(n) {
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), crypto.randomBytes(n || 256)]);
+}
+function blobSha(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
+function blobBytesExpr(buf) { return "new Uint8Array(" + JSON.stringify([...buf]) + ")"; }
+
+// window.splitpageDesktop.<method>(...) in the page, where each argument is
+// already a page-side expression (blobBytesExpr for bytes, JSON otherwise).
+// A blobGet answer's bytes come back as a plain array, which is what
+// returnByValue can carry. Throws when the invoke rejects.
+async function blobCall(cdp, method, argExprs) {
+  return evalPage(cdp, "window.splitpageDesktop." + method + "(" + argExprs.join(",") + ")" +
+    ".then(function (r) { return r && r.bytes ? { mime: r.mime, isU8: r.bytes instanceof Uint8Array, bytes: Array.from(r.bytes) } : r; })");
+}
+async function blobCallRejects(cdp, method, argExprs) {
+  try { await blobCall(cdp, method, argExprs); return false; } catch { return true; }
+}
+function blobFilesOnDisk(userDataDir) {
+  const root = path.join(userDataDir, "blobs");
+  const out = [];
+  (function walk(d) {
+    let names;
+    try { names = fs.readdirSync(d); } catch { return; }
+    for (const n of names) {
+      const p = path.join(d, n);
+      if (fs.statSync(p).isDirectory()) walk(p);
+      else out.push(path.relative(root, p).split(path.sep).join("/"));
+    }
+  })(root);
+  return out.sort();
+}
+
+/* caseBlobRoundTripAndRelaunch. put/get/missing over the real bridge; the
+   on-disk layout is sha256/<aa>/<sha> with FORMAT "1"; a bad sha, a
+   mismatched body, an SVG and an oversized missing() are all refused and
+   write nothing; no answer carries a path (invariant #28); and after a
+   relaunch on the same profile the bytes are still there, byte for byte,
+   with a stray temp file from a "power cut" swept at launch. */
+async function caseBlobRoundTripAndRelaunch(target) {
+  const tag = target.name + " blobs: put/get/missing over the bridge + relaunch (#82)";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const bytes = blobPngBytes(512);
+  const sha = blobSha(bytes);
+  const absent = blobSha(blobPngBytes(16));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "blobs-roundtrip", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+
+    const bridgeHas = await evalPage(cdp, "['blobPut','blobGet','blobMissing'].every(function (k) { return typeof window.splitpageDesktop[k] === 'function'; })");
+    record(tag + ": the bridge exposes blobPut, blobGet and blobMissing", bridgeHas === true, String(bridgeHas));
+
+    const put1 = await blobCall(cdp, "blobPut", [JSON.stringify(sha), blobBytesExpr(bytes)]);
+    record(tag + ": first put stores it", put1 && put1.ok === true && put1.stored === true, JSON.stringify(put1));
+    const put2 = await blobCall(cdp, "blobPut", [JSON.stringify(sha), blobBytesExpr(bytes)]);
+    record(tag + ": a second put of the same blob is a no-op (stored:false)", put2 && put2.ok === true && put2.stored === false, JSON.stringify(put2));
+
+    const got = await blobCall(cdp, "blobGet", [JSON.stringify(sha)]);
+    record(tag + ": get returns the bytes exactly, as a Uint8Array, with the sniffed mime",
+      !!got && got.isU8 === true && got.mime === "image/png" && Buffer.from(got.bytes).equals(bytes),
+      got ? JSON.stringify({ mime: got.mime, isU8: got.isU8, len: got.bytes.length }) : "null");
+    const gotAbsent = await blobCall(cdp, "blobGet", [JSON.stringify(absent)]);
+    record(tag + ": get of a sha never stored is null", gotAbsent === null, JSON.stringify(gotAbsent));
+
+    const miss = await blobCall(cdp, "blobMissing", [JSON.stringify([sha, absent, absent])]);
+    record(tag + ": missing() names only the absent sha, once", JSON.stringify(miss) === JSON.stringify([absent]), JSON.stringify(miss));
+
+    const onDisk = blobFilesOnDisk(userDataDir);
+    record(tag + ": on disk: FORMAT and sha256/<aa>/<sha>, nothing else",
+      JSON.stringify(onDisk) === JSON.stringify(["FORMAT", "sha256/" + sha.slice(0, 2) + "/" + sha]), JSON.stringify(onDisk));
+    record(tag + ": FORMAT is \"1\"", fs.readFileSync(path.join(userDataDir, "blobs", "FORMAT"), "utf8").trim() === "1", "");
+    record(tag + ": the file is exactly the bytes",
+      fs.readFileSync(path.join(userDataDir, "blobs", "sha256", sha.slice(0, 2), sha)).equals(bytes), "");
+    const answers = JSON.stringify([put1, put2, miss]);
+    record(tag + ": no answer names a path (invariant #28)",
+      !answers.includes(userDataDir) && !answers.includes("blobs") && !answers.includes(path.sep + sha), answers);
+
+    // ---- refusals: shape (the table), content (the handler) ----
+    for (const bad of [sha.toUpperCase(), sha.slice(1), "../" + sha.slice(3), "..", path.join(userDataDir, "x"), ""]) {
+      const r1 = await blobCallRejects(cdp, "blobGet", [JSON.stringify(bad)]);
+      const r2 = await blobCallRejects(cdp, "blobPut", [JSON.stringify(bad), blobBytesExpr(bytes)]);
+      record(tag + ": a bad sha " + JSON.stringify(bad.length > 40 ? bad.slice(0, 40) + "…" : bad) + " is refused by get and put", r1 && r2, "get=" + r1 + " put=" + r2);
+    }
+    const mismatch = await blobCall(cdp, "blobPut", [JSON.stringify(absent), blobBytesExpr(bytes)]);
+    record(tag + ": a body that does not hash to its sha answers HASH_MISMATCH",
+      mismatch && mismatch.ok === false && mismatch.code === "HASH_MISMATCH", JSON.stringify(mismatch));
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const svgPut = await blobCall(cdp, "blobPut", [JSON.stringify(blobSha(svg)), blobBytesExpr(svg)]);
+    record(tag + ": an SVG, even hashed right, answers NOT_AN_IMAGE",
+      svgPut && svgPut.ok === false && svgPut.code === "NOT_AN_IMAGE", JSON.stringify(svgPut));
+    const gifText = "GIF89a-but-a-string";
+    const strPut = await blobCall(cdp, "blobPut", [JSON.stringify(blobSha(Buffer.from(gifText))), JSON.stringify(gifText)]);
+    record(tag + ": a string body answers BAD_BYTES", strPut && strPut.ok === false && strPut.code === "BAD_BYTES", JSON.stringify(strPut));
+    const tooMany = await blobCallRejects(cdp, "blobMissing", ["Array.from({length: 2001}, function () { return " + JSON.stringify(absent) + "; })"]);
+    record(tag + ": missing() with more than 2000 shas rejects", tooMany, "");
+    const notShas = await blobCallRejects(cdp, "blobMissing", [JSON.stringify([absent, "../escape"])]);
+    record(tag + ": missing() with a non-sha entry rejects", notShas, "");
+    const onDiskAfter = blobFilesOnDisk(userDataDir);
+    record(tag + ": every refusal wrote nothing", JSON.stringify(onDiskAfter) === JSON.stringify(onDisk), JSON.stringify(onDiskAfter));
+
+    // ---- relaunch on the same profile ----
+    await teardown(app, tag + " (pre-relaunch)");
+    app = null;
+    // What a power cut between a put's fsync and its rename leaves behind.
+    const strayTmp = path.join(userDataDir, "blobs", "sha256", absent.slice(0, 2), ".tmp-0123456789ab");
+    fs.mkdirSync(path.dirname(strayTmp), { recursive: true });
+    fs.writeFileSync(strayTmp, blobPngBytes(16));
+    const app2 = await launchApp(target, { label: "blobs-roundtrip-relaunch", userDataDir });
+    try {
+      await waitForRows(app2.cdp, 20000);
+      const again = await blobCall(app2.cdp, "blobGet", [JSON.stringify(sha)]);
+      record(tag + ": after a relaunch, get returns the same bytes",
+        !!again && again.mime === "image/png" && Buffer.from(again.bytes).equals(bytes), again ? String(again.bytes.length) : "null");
+      const missAgain = await blobCall(app2.cdp, "blobMissing", [JSON.stringify([sha])]);
+      record(tag + ": after a relaunch, missing() says it is held", JSON.stringify(missAgain) === "[]", JSON.stringify(missAgain));
+      record(tag + ": the launch swept the stray .tmp- file", !fs.existsSync(strayTmp), strayTmp);
+    } finally {
+      await teardown(app2, tag + " (post-relaunch)");
+    }
+  } finally {
+    if (app) await teardown(app, tag);
     rmrf(userDataDir);
   }
 }
@@ -3704,6 +4408,68 @@ async function caseDraftCrashUntitled(target) {
   }
 }
 
+/* caseDraftCrashWithImage (#82 P2b). A picture dropped onto a scene the way
+   a person drops one (a real DragEvent carrying a File), a marker row,
+   flush, crash, relaunch. The draft names the picture by imageRef — no
+   base64 in it — and the blob folder held the bytes BEFORE the draft was
+   written (invariant 52), so the restored document shows the picture,
+   read back out of <userData>/blobs through the bridge. */
+async function caseDraftCrashWithImage(target) {
+  const tag = target.name + " draft crash-recovery: a picture comes back from the blob folder";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const marker = "MARKER-IMAGE-" + Date.now();
+  let appA = null, appB = null;
+  try {
+    appA = await launchApp(target, { label: "draft-image-crash-a", userDataDir });
+    await waitForRows(appA.cdp, 20000);
+    const tabId = await tabIdOfTarget(appA.cdp);
+
+    await addMarkerRow(appA.cdp, marker);
+    const dropExpr = "(function(){ var c = document.createElement('canvas'); c.width = 90; c.height = 60; var g = c.getContext('2d'); " +
+      "g.fillStyle = '#c33'; g.fillRect(0, 0, 90, 60); g.fillStyle = '#39f'; g.fillRect(10, 10, 40, 25); " +
+      "var u = c.toDataURL('image/png'); var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); " +
+      "for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); var dt = new DataTransfer(); " +
+      "dt.items.add(new File([b], 'frame.png', { type: 'image/png' })); var media = document.querySelectorAll('#rows .visual-media'); " +
+      "media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()";
+    await evalPage(appA.cdp, dropExpr, { awaitPromise: false });
+    const refExpr = "(function(){ var s = window.__splitpageFormats.state(); var r = s.rows[s.rows.length - 1]; " +
+      "return r.imageRef && r.imageRef.sha256 ? r.imageRef.sha256 : null; })()";
+    const sha = await poll(appA.cdp, refExpr, 10000).catch(() => null);
+    record(tag + ": the dropped picture is an imageRef on the row", typeof sha === "string" && /^[0-9a-f]{64}$/.test(sha), String(sha));
+
+    const write = await flushDraft(appA.cdp);
+    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
+    const blobPath = sha ? "sha256/" + sha.slice(0, 2) + "/" + sha : null;
+    record(tag + ": the picture's bytes are in the blob folder", !!blobPath && blobFilesOnDisk(userDataDir).indexOf(blobPath) !== -1,
+      JSON.stringify(blobFilesOnDisk(userDataDir)));
+    const dirs = readDraftDirs(userDataDir);
+    const draftText = dirs[tabId] && dirs[tabId].current ? fs.readFileSync(path.join(dirs[tabId].dir, "current.draft"), "utf8") : "";
+    record(tag + ": the draft names the picture and carries no base64",
+      !!sha && draftText.indexOf(sha) !== -1 && draftText.indexOf("data:image") === -1, "draft " + draftText.length + " bytes");
+
+    const crashed = await crashApp(appA);
+    record(tag + ": crashApp actually kills the process", crashed === true);
+    appA = null;
+
+    appB = await launchApp(target, { label: "draft-image-crash-b", userDataDir });
+    await waitForRows(appB.cdp, 20000);
+    const cdp = appB.cdp;
+    const gotMarker = await waitForMarker(cdp, marker, 20000);
+    record(tag + ": the marker row is restored", !!gotMarker);
+    const restoredRef = await evalPage(cdp, "(function(){ var s = window.__splitpageFormats.state(); " +
+      "return s.rows.some(function(r){ return r.imageRef && r.imageRef.sha256 === " + JSON.stringify(sha) + "; }); })()");
+    record(tag + ": the restored document still names the picture", restoredRef === true);
+    const shown = await poll(cdp, "(function(){ var i = document.querySelector('#rows .visual-media img[data-blob=\"' + " + JSON.stringify(sha) + " + '\"]'); " +
+      "return !!(i && (i.getAttribute('src') || '').indexOf('blob:') === 0 && i.complete && i.naturalWidth === 90); })()", 15000).catch(() => false);
+    record(tag + ": the restored picture renders, read from the blob folder", shown === true);
+  } finally {
+    if (appA) await teardown(appA, tag + " (first launch)");
+    /* the restored document is dirty (nothing has saved it) */
+    if (appB) await teardown(appB, tag + " (second launch)", { expectForceKill: ENDS_DIRTY });
+    rmrf(userDataDir);
+  }
+}
+
 /* caseDraftCrashDirtyFile (F1F2-01). A RENDERER crash (not a whole-process
    one) of a dirty file tab: the reloaded tab still holds the unsaved edit,
    and splitpage:test-draft-status reports hasDraft:true. */
@@ -3740,7 +4506,7 @@ async function caseDraftCrashDirtyFile(target, fixturesDir) {
     record(tag + ": splitpage:test-draft-status reports hasDraft:true after the crash reload", !!status && status.hasDraft === true, JSON.stringify(status));
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
   }
 }
 
@@ -3787,7 +4553,7 @@ async function caseDraftFileChangedOnDisk(target, fixturesDir) {
     const fileUnchanged = fs.readFileSync(filePath, "utf8") === diskTextBeforeRelaunch;
     record(tag + ": the file on disk is untouched by the restore (invariant #41)", fileUnchanged);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -3822,7 +4588,7 @@ async function caseDraftFileDeleted(target, fixturesDir) {
     const toast = await toastContaining(cdp, "isn't where it was", 15000);
     record(tag + ": the toast says the file is gone and it's open as an unsaved copy", !!toast, String(toast));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -3946,7 +4712,7 @@ async function caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir) {
     record(tag + ": A's discarded work never comes back", !gotA);
   } finally {
     if (cdpB) { try { cdpB.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4006,7 +4772,7 @@ async function caseDraftCrashMidWrite(target) {
     const leftoverTmp = entries.filter((n) => n.indexOf(".tmp-") === 0);
     record(tag + ": no leftover .tmp-* file (init()'s own sweep)", leftoverTmp.length === 0, JSON.stringify(entries));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4068,7 +4834,7 @@ async function caseDraftCorrupt(target) {
         held.indexOf("current.draft") !== -1 && held.indexOf("previous.draft") !== -1, JSON.stringify(held));
     }
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4106,7 +4872,7 @@ async function caseDraftDiskFull(target) {
     const stickyGone = await poll(cdp, "document.querySelectorAll('.toast.warn.is-sticky').length === 0", 8000).catch(() => false);
     record(tag + ": the sticky paused toast is withdrawn once recovery resumes", !!stickyGone);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
   }
 }
 
@@ -4158,7 +4924,7 @@ async function caseDraftForgedFileId(target) {
     const dirtyAfter = await isDirty(cdp2);
     record(tag + ": the copy is dirty", !!dirtyAfter);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
@@ -4208,7 +4974,7 @@ async function caseDraftNoSecrets(target) {
     record(tag + ": header server.base (when present) carries no userinfo ('@')",
       base === undefined || base === null || String(base).indexOf("@") === -1, JSON.stringify(base));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dataDir);
   }
 }
@@ -4280,7 +5046,7 @@ async function caseDraftServerDocMerges(target) {
     const dirtyAfter = await isDirty(cdp2);
     record(tag + ": the merged tab stays dirty (btn-save is-dirty)", !!dirtyAfter);
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dataDir);
     rmrf(userDataDir);
   }
@@ -4329,7 +5095,7 @@ async function caseDraftServerGone(target) {
     const toast = await toastContaining(cdp2, "no longer on the server", 15000);
     record(tag + ": a toast says the document is no longer on the server", !!toast, String(toast));
   } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(dataDir);
     rmrf(userDataDir);
   }
@@ -4440,7 +5206,973 @@ async function caseTornOffDirtyTabCrashRestoresOnce(target) {
     }
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Issue #86: the teleprompter's "Open in browser".
+ *
+ * No test can watch a real default browser start, so TEST_MODE stubs
+ * shell.openExternal (main.js section 1) and records every URL it WOULD have
+ * opened; __testShell('externalOpens') reads them back. What IS real here:
+ * main choosing what to share from the tab's own record, the file read off
+ * disk, the loopback listener (desktop/prompter-share.js) answering over
+ * real HTTP, the save-first path, and the share going away with its tab.
+ * The browser page's own half (reading #script=, opening the prompter) is
+ * the browser suite 58-prompter-open-in-browser.txt.
+ * -------------------------------------------------------------------- */
+
+const PROMPTER_URL_RE = /^http:\/\/127\.0\.0\.1:(\d+)\/\?teleprompter=1#script=([0-9a-f]{64})$/;
+
+/* fetch() will not send a Host header of the caller's choosing, which is the
+   whole point of this probe — a DNS-rebinding page's request names the
+   attacker's host — so it goes over node:http instead. */
+function statusWithHost(port, pathname, hostHeader) {
+  return new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, path: pathname, method: "GET",
+      headers: { host: hostHeader, connection: "close" } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on("error", () => resolve(null));
+    req.setTimeout(8000, () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
+async function externalOpens(cdp) {
+  return (await shell(cdp, "externalOpens", {})) || [];
+}
+
+async function waitForExternalOpens(cdp, count, timeoutMs) {
+  return pollNode(async () => {
+    const list = await externalOpens(cdp);
+    return list.length >= count ? list : null;
+  }, timeoutMs || 15000).catch(() => null);
+}
+
+async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
+  const tag = target.name + " teleprompter: open in browser (file)";
+  const marker = "PROMPTER-MARKER-" + Date.now();
+  const fixturePath = writeFixture(fixturesDir, "prompter-open.splitpage", "Prompter — 🎬 Browser",
+    [["Wide shot", "The first line the reader says out loud."], ["Close up", "A second line — with an em dash."]]);
+  let app = null;
+  try {
+    /* No dialog answers at all: any native dialog this flow raised would be
+       answered Cancel, and counted by testDialogsSeen. */
+    app = await launchApp(target, { label: "prompter-open", fixtures: [fixturePath] });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — 🎬 Browser"), 20000);
+    const dialogsBefore = await dialogsSeen(cdp);
+
+    // --- the bridge takes no argument, and hands back no URL ------------
+    const bridgeArity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInBrowser === 'function' && window.splitpageDesktop.openPrompterInBrowser.length");
+    record(tag + ": the bridge has openPrompterInBrowser() and it takes no argument", bridgeArity === 0, "length=" + bridgeArity);
+
+    // --- A: a clean file tab, from the View menu ------------------------
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const opens1 = await waitForExternalOpens(cdp, 1);
+    record(tag + ": View ▸ Present in Browser asks the OS to open exactly one URL", !!opens1 && opens1.length === 1, JSON.stringify(opens1));
+    const m1 = opens1 && PROMPTER_URL_RE.exec(opens1[0]);
+    record(tag + ": the URL is main's own loopback listener, ?teleprompter=1, token in the fragment", !!m1, opens1 ? opens1[0] : "");
+    const toastOk = await toastContaining(cdp, "Opened in your browser", 10000);
+    record(tag + ": the page says it opened, and that this window stays open", !!toastOk && toastOk.indexOf("stays open") !== -1, String(toastOk));
+
+    let port1 = null, token1 = null;
+    if (m1) {
+      port1 = Number(m1[1]); token1 = m1[2];
+      const base = `http://127.0.0.1:${port1}`;
+      const page = await fetch(base + "/?teleprompter=1").then(async (r) => ({ status: r.status, text: await r.text() })).catch(() => null);
+      record(tag + ": the listener serves the app page the desktop runs", !!page && page.status === 200 && page.text.indexOf('id="prompter"') !== -1,
+        page ? "status=" + page.status : "no answer");
+      const sw = await fetch(base + "/sw.js").then((r) => r.status).catch(() => null);
+      record(tag + ": no service worker is offered on that origin", sw === 404, "status=" + sw);
+      const script = await fetchJson(base + "/prompter-script/" + token1).catch(() => null);
+      const onDisk = fs.readFileSync(fixturePath, "utf8");
+      record(tag + ": the shared script is the saved file, byte for byte, under its own name",
+        !!script && script.status === 200 && script.body && script.body.text === onDisk && script.body.name === "prompter-open.splitpage",
+        script ? "status=" + script.status + " name=" + (script.body && script.body.name) : "no answer");
+      record(tag + ": the shared script is served no-store", !!script && script.headers.get("cache-control") === "no-store",
+        script ? String(script.headers.get("cache-control")) : "");
+      const forged = await statusWithHost(port1, "/prompter-script/" + token1, "rebind.example:" + port1);
+      record(tag + ": a request naming another Host is refused", forged === 403, "status=" + forged);
+    }
+
+    // --- B: dirty, from the teleprompter's own button -------------------
+    await addMarkerRow(cdp, marker);
+    const dirtyNow = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()", 10000).catch(() => false);
+    record(tag + ": setup — the tab is dirty", !!dirtyNow);
+    await evalPage(cdp, "document.getElementById('btn-present').click(); true", { awaitPromise: false });
+    await poll(cdp, "!document.getElementById('prompter').hidden", 10000);
+    const btn = await evalPage(cdp, "(function(){ var b = document.getElementById('pp-voice'); return { text: b.textContent, disabled: b.disabled }; })()");
+    record(tag + ": on desktop the voice button reads 'Open in browser to use Follow My Voice' and is enabled",
+      !!btn && btn.text === "Open in browser to use Follow My Voice" && btn.disabled === false, JSON.stringify(btn));
+    await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
+    const opens2 = await waitForExternalOpens(cdp, 2);
+    record(tag + ": the button saves first, then opens the browser", !!opens2 && opens2.length === 2, JSON.stringify(opens2));
+    const onDisk2 = fs.readFileSync(fixturePath, "utf8");
+    record(tag + ": the save landed on disk before the browser was asked", onDisk2.indexOf(marker) !== -1);
+    record(tag + ": no native dialog was raised by any of it", (await dialogsSeen(cdp)) === dialogsBefore);
+    const m2 = opens2 && opens2[1] && PROMPTER_URL_RE.exec(opens2[1]);
+    if (m2) {
+      const base2 = `http://127.0.0.1:${m2[1]}`;
+      const script2 = await fetchJson(base2 + "/prompter-script/" + m2[2]).catch(() => null);
+      record(tag + ": the browser gets the text just saved", !!script2 && script2.status === 200 && script2.body.text === onDisk2 && script2.body.text.indexOf(marker) !== -1,
+        script2 ? "status=" + script2.status : "no answer");
+      record(tag + ": same stable origin both times", Number(m2[1]) === port1, "ports " + port1 + " / " + m2[1]);
+      const stale = await fetch(base2 + "/prompter-script/" + token1).then((r) => r.status).catch(() => null);
+      record(tag + ": the tab's previous share is gone — one copy per tab, not one per click", stale === 404, "status=" + stale);
+    } else {
+      record(tag + ": the second URL has the listener's shape", false, opens2 ? String(opens2[1]) : "none");
+    }
+    const voiceStatus = await poll(cdp, "(function(){ var t = document.getElementById('pp-voice-status').textContent; return t.indexOf('Opened in your browser') !== -1 ? t : null; })()", 10000).catch(() => null);
+    record(tag + ": the prompter's status line says so too", !!voiceStatus, String(voiceStatus));
+
+    // --- C: the share goes with its tab ---------------------------------
+    const tab1Id = await tabIdOfTarget(cdp);
+    const status1 = await shell(cdp, "prompterShareStatus", {});
+    record(tag + ": main holds exactly one share, for this tab", !!status1 && status1.listening === true &&
+      status1.shares.length === 1 && status1.shares[0] === tab1Id, JSON.stringify(status1));
+    const witnessId = await shell(cdp, "createTab", {});
+    const witness = await connectTab(app, witnessId);
+    await waitForRows(witness, 20000);
+    await fireShell(cdp, "closeTab", { tabId: tab1Id });
+    const closed = port1 ? await pollNode(() => portClosed(port1, "127.0.0.1"), 15000).catch(() => false) : false;
+    record(tag + ": closing the tab drops its share and the listener closes", closed === true, "port=" + port1);
+    const status2 = await shell(witness, "prompterShareStatus", {});
+    record(tag + ": main holds no share afterwards", !!status2 && status2.listening === false && status2.shares.length === 0, JSON.stringify(status2));
+
+    // --- D: a document with nowhere to live is not saved behind the back -
+    /* Through the page's own File drawer this time, the route Windows has:
+       its title bar is the tab strip, so the View menu is never drawn. */
+    const pristineBefore = await dialogsSeen(witness);
+    const inPage = await evalPage(witness, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-browser'); var shown = !!b && !b.hidden && !document.getElementById('file-menu').hidden; if (shown) b.click(); return shown; })()");
+    record(tag + ": File ▸ This document ▸ Present in browser is offered in the desktop app", inPage === true, String(inPage));
+    const saveFirst = await toastContaining(witness, "Save this script first", 10000);
+    record(tag + ": an unsaved new document is told to save first", !!saveFirst, String(saveFirst));
+    await sleep(500);
+    record(tag + ": ... and no Save dialog appears for it", (await dialogsSeen(witness)) === pristineBefore);
+    const opens3 = await externalOpens(witness);
+    record(tag + ": ... and nothing is opened in the browser", opens3.length === 2, JSON.stringify(opens3.length));
+    /* The first tab's connection died with it; teardown drives the witness. */
+    try { cdp.close(); } catch { /* already gone */ }
+    app.cdp = witness;
+  } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+}
+
+async function caseTeleprompterOpenInBrowserServer(target) {
+  const tag = target.name + " teleprompter: open in browser (--library server document)";
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  const marker = "PROMPTER-SERVER-" + Date.now();
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "prompter-server", flags: ["--library"], dataDir });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "fetch('/api/health').then(function(r){return r.status;})", 15000);
+    const created = await evalPage(cdp,
+      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
+      "body: JSON.stringify({ state: { title: 'Prompter Server Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
+    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
+    if (!created || !created.id) return;
+    await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
+    const opened = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Prompter Server Doc'", 15000).catch(() => false);
+    record(tag + ": setup — the tab shows the server document", !!opened);
+
+    await addMarkerRow(cdp, marker);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
+    const opens = await waitForExternalOpens(cdp, 1);
+    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
+    const expected = `http://127.0.0.1:${info && info.port}/?doc=${created.id}&teleprompter=1`;
+    record(tag + ": the URL is this app's own document server, ?doc=<id>&teleprompter=1", !!opens && opens[0] === expected,
+      JSON.stringify(opens) + " expected " + expected);
+    const doc = info && info.port ? await fetchJson(`http://127.0.0.1:${info.port}/api/docs/${created.id}`) : null;
+    const rows = doc && doc.body && doc.body.state && doc.body.state.rows || [];
+    record(tag + ": the unsaved edit was saved to the server before the browser was asked",
+      rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1), "rows=" + rows.length);
+    const status = await shell(cdp, "prompterShareStatus", {});
+    record(tag + ": a server document needs no loopback share at all", !!status && status.listening === false && status.shares.length === 0, JSON.stringify(status));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(dataDir);
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Issue #10: Google Drive through a loopback OAuth redirect.
+ *
+ * Main owns the whole flow (desktop/google-drive.js, main.js § 9c). Every
+ * Google endpoint is pointed at desktop/test/fake-google.mjs through
+ * SPLITPAGE_TEST_GOOGLE_BASE, which main honours only under SPLITPAGE_TEST=1.
+ * TEST_MODE already turns shell.openExternal into a recorder, so the
+ * consent URL main WOULD have opened in the browser is read back with
+ * __testShell('externalOpens'); this harness then plays the browser by
+ * asking the fake to approve that request and fetching the loopback
+ * callback it answers with. What is real: main's listener, PKCE, the state
+ * check, the code-for-token exchange, safeStorage, and every Drive request
+ * main makes. The modal's own half is the browser suite
+ * 64-desktop-drive.txt; the module on its own is google-drive.test.mjs.
+ *
+ * On a Linux runner with no keyring safeStorage's backend is "basic_text",
+ * which main counts as unavailable (a key compiled into Chromium is not
+ * encryption). SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1 lets the round-trip case
+ * exercise the stored-token path there anyway; the bad-state case runs
+ * without it and checks whichever behaviour this machine's backend calls for.
+ * -------------------------------------------------------------------- */
+
+function driveEnv(fake, extra) {
+  return Object.assign({
+    SPLITPAGE_TEST_GOOGLE_BASE: fake.base,
+    SPLITPAGE_GOOGLE_CLIENT_ID: fake.clientId,
+    SPLITPAGE_GOOGLE_CLIENT_SECRET: fake.clientSecret
+  }, extra || {});
+}
+
+/* A bridge call, with any bytes turned into text in the page — CDP's
+   returnByValue cannot carry a Uint8Array. */
+async function driveCall(cdp, expr) {
+  return evalPage(cdp, "(" + expr + ").then(function (r) { if (r && r.bytes) { r.bytesIsView = ArrayBuffer.isView(r.bytes); " +
+    "r.text = new TextDecoder().decode(r.bytes); delete r.bytes; } return r; }, function (e) { return { rejected: String(e && e.message || e) }; })");
+}
+
+/* Starts driveSignIn() in the page, waits for the consent URL main hands the
+   (recorded) browser, lets the fake approve it — with `override` to forge
+   the state or refuse — and fetches the loopback callback as the browser
+   would. */
+async function driveSignInThroughFake(cdp, fake, override) {
+  const before = (await externalOpens(cdp)).length;
+  await evalPage(cdp, "window.__driveSignIn = null; window.splitpageDesktop.driveSignIn().then(function (r) { window.__driveSignIn = r; }, " +
+    "function (e) { window.__driveSignIn = { ok: false, code: 'REJECTED', message: String(e) }; }); true");
+  const opens = await waitForExternalOpens(cdp, before + 1, 15000);
+  const authUrl = opens ? opens[opens.length - 1] : null;
+  if (!authUrl) return { authUrl: null, callback: null, result: null };
+  let back;
+  try { back = fake.approve(authUrl, override); } catch (e) { return { authUrl, callback: { status: null, text: String(e.message) }, result: null }; }
+  const callback = await fetch(back).then(async (r) => ({ status: r.status, text: await r.text() }))
+    .catch((e) => ({ status: null, text: String(e) }));
+  const result = await poll(cdp, "window.__driveSignIn", 15000).catch(() => null);
+  return { authUrl, back, callback, result };
+}
+
+function driveSecretOnDisk(dir, secrets) {
+  for (const s of secrets) {
+    const f = dirContainsText(dir, s);
+    if (f) return s.slice(0, 16) + "… in " + f;
+  }
+  return null;
+}
+
+/* Everything the page can see that a token could have landed in: both
+   storages, the whole document, and the bridge's own member names. */
+async function driveSecretsInPage(cdp, secrets) {
+  const blob = await evalPage(cdp, "JSON.stringify({ ls: Object.assign({}, localStorage), ss: Object.assign({}, sessionStorage), " +
+    "html: document.documentElement.outerHTML, keys: Object.keys(window.splitpageDesktop) })");
+  return secrets.filter((s) => String(blob).indexOf(s) !== -1).map((s) => s.slice(0, 16) + "…");
+}
+
+async function caseGoogleDriveNotConfigured(target) {
+  const tag = target.name + " google drive: not configured";
+  const { startFakeGoogle } = await import("./fake-google.mjs");
+  const fake = await startFakeGoogle();
+  let app = null;
+  try {
+    /* The endpoints point at the fake, but no client at all — an inherited
+       real client id in this shell's environment is blanked out. */
+    app = await launchApp(target, { label: "drive-unconfigured",
+      env: { SPLITPAGE_TEST_GOOGLE_BASE: fake.base, SPLITPAGE_GOOGLE_CLIENT_ID: "", SPLITPAGE_GOOGLE_CLIENT_SECRET: "" } });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const entry = await evalPage(cdp, "!document.getElementById('menu-drive-open').hidden");
+    record(tag + ": File ▸ Google Drive files… is offered on desktop", entry === true);
+    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    const expectedPath = path.join(app.userDataDir, "google-oauth-client.json");
+    record(tag + ": status says not configured, and names the exact file and the env vars",
+      !!st && st.ok === true && st.configured === false && st.signedIn === false && st.clientFilePath === expectedPath &&
+      JSON.stringify(st.envVars) === JSON.stringify(["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"]), JSON.stringify(st));
+    const si = await driveCall(cdp, "window.splitpageDesktop.driveSignIn()");
+    record(tag + ": sign-in answers NOT_CONFIGURED", !!si && si.ok === false && si.code === "NOT_CONFIGURED", JSON.stringify(si));
+    record(tag + ": ... and nothing was opened in the browser", (await externalOpens(cdp)).length === 0);
+    const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    record(tag + ": a Drive call before any sign-in answers SIGNED_OUT", !!list && list.ok === false && list.code === "SIGNED_OUT", JSON.stringify(list));
+
+    /* The file Google Cloud Console downloads, dropped in while the app
+       runs: picked up on the next call, no restart. */
+    fs.writeFileSync(expectedPath, JSON.stringify({ installed: { client_id: fake.clientId, client_secret: fake.clientSecret,
+      redirect_uris: ["http://localhost"] } }));
+    const st2 = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    record(tag + ": dropping Google's client JSON at that path configures it", !!st2 && st2.configured === true && st2.signedIn === false, JSON.stringify(st2));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await fake.close();
+  }
+}
+
+async function caseGoogleDriveRoundTrip(target) {
+  const tag = target.name + " google drive: round trip";
+  const { startFakeGoogle } = await import("./fake-google.mjs");
+  const fake = await startFakeGoogle();
+  const env = driveEnv(fake, { SPLITPAGE_TEST_DRIVE_BASIC_TEXT: "1" });
+  let app = null;
+  const answers = [];
+  try {
+    app = await launchApp(target, { label: "drive-round-trip", env });
+    let cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const userDataDir = app.userDataDir;
+    const tokenFile = path.join(userDataDir, "google-drive-token.bin");
+
+    const info = await shell(cdp, "driveInfo", {});
+    record(tag + ": main points Google's endpoints at the fake (test mode only)", !!info && info.tokenEndpoint === fake.base + "/token", JSON.stringify(info));
+
+    // --- what the page is given ------------------------------------------
+    const surface = await evalPage(cdp, "(function () { var d = window.splitpageDesktop; var keys = Object.keys(d); " +
+      "return { drive: keys.filter(function (k) { return /drive/i.test(k); }).sort(), " +
+      "suspicious: keys.filter(function (k) { return /token|oauth|secret|credential|google/i.test(k); }) }; })()");
+    /* contextBridge proxies report length 0 for every function, so which
+       calls take no argument is ipc-table.test.mjs's to prove (the table
+       refuses one); here it is the set the page is given. */
+    record(tag + ": the bridge has exactly the six drive calls",
+      !!surface && JSON.stringify(surface.drive) === JSON.stringify(["driveDownload", "driveList", "driveSignIn", "driveSignOut", "driveStatus", "driveUpload"]),
+      JSON.stringify(surface));
+    record(tag + ": no bridge member is named for a token or a credential", !!surface && surface.suspicious.length === 0, JSON.stringify(surface && surface.suspicious));
+
+    // --- sign in through the fake ------------------------------------------
+    const signIn = await driveSignInThroughFake(cdp, fake);
+    const auth = signIn.authUrl ? new URL(signIn.authUrl) : null;
+    const p = auth ? auth.searchParams : new URLSearchParams();
+    record(tag + ": the consent URL goes to the (fake) Google auth endpoint with PKCE S256, a state, offline access",
+      !!auth && auth.origin + auth.pathname === fake.base + "/o/oauth2/v2/auth" && p.get("code_challenge_method") === "S256" &&
+      /^[A-Za-z0-9_-]{43}$/.test(p.get("code_challenge") || "") && (p.get("state") || "").length >= 32 && p.get("access_type") === "offline" &&
+      p.get("client_id") === fake.clientId && p.get("scope") === "https://www.googleapis.com/auth/drive", signIn.authUrl || "no URL");
+    record(tag + ": the redirect is a loopback listener on an OS-picked port", /^http:\/\/127\.0\.0\.1:\d+$/.test(p.get("redirect_uri") || ""), p.get("redirect_uri"));
+    record(tag + ": the callback page tells the person to return to the app",
+      !!signIn.callback && signIn.callback.status === 200 && /return to Splitpage/.test(signIn.callback.text), JSON.stringify(signIn.callback).slice(0, 300));
+    const r = signIn.result;
+    answers.push(r);
+    record(tag + ": sign-in succeeds and says who", !!r && r.ok === true && r.signedIn === true && r.email === "writer@example.com", JSON.stringify(r));
+    record(tag + ": the sign-in is stored (safeStorage)", !!r && r.persisted === true && fs.existsSync(tokenFile), JSON.stringify({ persisted: r && r.persisted, file: fs.existsSync(tokenFile) }));
+    const closed = await fetch((p.get("redirect_uri") || "http://127.0.0.1:1") + "/?code=x&state=" + p.get("state")).then(() => false).catch(() => true);
+    record(tag + ": the loopback listener is gone after its one callback", closed);
+    record(tag + ": main exchanged the code with the verifier (the fake checks it)", fake.log.includes("POST /token"), JSON.stringify(fake.log));
+
+    // --- Drive through main --------------------------------------------------
+    const root = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    answers.push(root);
+    record(tag + ": list My Drive", !!root && root.ok === true && root.files.map((f) => f.name).join(",") === "Scripts", JSON.stringify(root));
+    const scripts = await driveCall(cdp, "window.splitpageDesktop.driveList('scriptsFolder01')");
+    answers.push(scripts);
+    record(tag + ": list a folder", !!scripts && scripts.ok === true && scripts.folder.name === "Scripts" &&
+      scripts.files.map((f) => f.name).join(",") === "Budget,Notes,Pilot.fountain", JSON.stringify(scripts));
+    const dl = await driveCall(cdp, "window.splitpageDesktop.driveDownload('pilotFile01')");
+    answers.push(dl);
+    record(tag + ": download hands the page the file's bytes", !!dl && dl.ok === true && dl.bytesIsView === true &&
+      dl.text === fake.files.get("pilotFile01").data.toString("utf8") && dl.file.name === "Pilot.fountain", JSON.stringify(dl).slice(0, 300));
+    const up = await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'scriptsFolder01', name: 'Smoke — 🎬.splitpage', " +
+      "bytes: new TextEncoder().encode('{\"rows\":[]}'), mimeType: 'application/json' })");
+    answers.push(up);
+    const created = up && up.file && fake.files.get(up.file.id);
+    record(tag + ": upload makes a new file in that folder", !!up && up.ok === true && !!created && created.name === "Smoke — 🎬.splitpage" &&
+      created.parents[0] === "scriptsFolder01" && created.data.toString("utf8") === "{\"rows\":[]}", JSON.stringify(up));
+    const upd = up && up.file ? await driveCall(cdp, "window.splitpageDesktop.driveUpload({ fileId: " + JSON.stringify(up.file.id) +
+      ", bytes: new TextEncoder().encode('{\"rows\":[1]}') })") : null;
+    answers.push(upd);
+    record(tag + ": upload with a fileId replaces that file's content", !!upd && upd.ok === true && !!created &&
+      created.data.toString("utf8") === "{\"rows\":[1]}" && created.name === "Smoke — 🎬.splitpage", JSON.stringify(upd));
+
+    // --- what main refuses ---------------------------------------------------
+    const requestsBefore = fake.log.length;
+    const refusals = {
+      urlAsFolder: await driveCall(cdp, "window.splitpageDesktop.driveList('https://www.googleapis.com/drive/v3/files')"),
+      pathAsFile: await driveCall(cdp, "window.splitpageDesktop.driveDownload('../google-drive-token.bin')"),
+      nameWithNewline: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'a\\nb', bytes: 'x' })"),
+      notBytes: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'a', bytes: { length: 3 } })"),
+      tooLarge: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'big', bytes: new Uint8Array(64 * 1024 * 1024 + 1) })")
+    };
+    record(tag + ": a URL, a path, a bad name or non-bytes are refused as BAD_ARGS, oversize as TOO_LARGE",
+      refusals.urlAsFolder.code === "BAD_ARGS" && refusals.pathAsFile.code === "BAD_ARGS" && refusals.nameWithNewline.code === "BAD_ARGS" &&
+      refusals.notBytes.code === "BAD_ARGS" && refusals.tooLarge.code === "TOO_LARGE", JSON.stringify(refusals));
+    record(tag + ": none of the refused calls reached Google", fake.log.length === requestsBefore, JSON.stringify(fake.log.slice(requestsBefore)));
+
+    // --- the token never reaches the page or disk in the clear --------------
+    const secrets = fake.secrets();
+    record(tag + ": setup — the fake issued a refresh and an access token", secrets.some((s) => s.startsWith("1//")) && secrets.some((s) => s.startsWith("ya29.")));
+    const inAnswers = secrets.filter((s) => JSON.stringify(answers).indexOf(s) !== -1);
+    record(tag + ": no bridge answer carried a token", inAnswers.length === 0, inAnswers.join(","));
+    const inPage = await driveSecretsInPage(cdp, secrets);
+    record(tag + ": no token anywhere the page can see (storage, document, bridge)", inPage.length === 0, inPage.join(","));
+    const onDisk = driveSecretOnDisk(userDataDir, secrets);
+    record(tag + ": no token in plain text in any file under the profile (the blob is encrypted)", !onDisk, onDisk || "");
+    const mentionsGoogle = dirContainsText(userDataDir, fake.base);
+    record(tag + ": nothing under the profile (desktop-state.json, drafts, history) even names the Google endpoint", !mentionsGoogle, String(mentionsGoogle || ""));
+
+    // --- next launch: the stored sign-in comes back ---------------------------
+    await teardown(app, tag + " (first launch)");
+    app = await launchApp(target, { label: "drive-relaunch", env, userDataDir });
+    cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    record(tag + ": after a relaunch, still signed in from the stored token", !!st && st.signedIn === true && st.persisted === true &&
+      st.email === "writer@example.com", JSON.stringify(st));
+    const tokenCallsBefore = fake.log.filter((l) => l === "POST /token").length;
+    const again = await driveCall(cdp, "window.splitpageDesktop.driveList('scriptsFolder01')");
+    record(tag + ": ... and Drive works, through a refresh-token exchange", !!again && again.ok === true &&
+      fake.log.filter((l) => l === "POST /token").length === tokenCallsBefore + 1, JSON.stringify(again && again.code));
+
+    // --- sign out --------------------------------------------------------------
+    const refreshToken = fake.secrets().find((s) => s.startsWith("1//"));
+    const out = await driveCall(cdp, "window.splitpageDesktop.driveSignOut()");
+    record(tag + ": sign-out answers signed out", !!out && out.ok === true && out.status && out.status.signedIn === false, JSON.stringify(out));
+    record(tag + ": sign-out deletes the stored token", !fs.existsSync(tokenFile));
+    record(tag + ": sign-out revokes it with Google", fake.isRevoked(refreshToken));
+    const after = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    record(tag + ": after sign-out Drive calls answer SIGNED_OUT", !!after && after.ok === false && after.code === "SIGNED_OUT", JSON.stringify(after));
+    const leftOnDisk = driveSecretOnDisk(userDataDir, fake.secrets());
+    record(tag + ": no token anywhere under the profile after sign-out", !leftOnDisk, leftOnDisk || "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await fake.close();
+  }
+}
+
+async function caseGoogleDriveBadState(target) {
+  const tag = target.name + " google drive: bad state refused";
+  const { startFakeGoogle } = await import("./fake-google.mjs");
+  const fake = await startFakeGoogle();
+  let app = null;
+  try {
+    /* No SPLITPAGE_TEST_DRIVE_BASIC_TEXT: this launch gets the real rule for
+       this machine's safeStorage backend. */
+    app = await launchApp(target, { label: "drive-bad-state", env: driveEnv(fake) });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    const tokenFile = path.join(app.userDataDir, "google-drive-token.bin");
+
+    const forged = await driveSignInThroughFake(cdp, fake, { state: "forged-by-another-page" });
+    record(tag + ": a callback with the wrong state is refused with a page saying so",
+      !!forged.callback && forged.callback.status === 400 && /refused/.test(forged.callback.text), JSON.stringify(forged.callback).slice(0, 300));
+    record(tag + ": sign-in answers STATE_MISMATCH", !!forged.result && forged.result.ok === false && forged.result.code === "STATE_MISMATCH", JSON.stringify(forged.result));
+    record(tag + ": the code was never exchanged", !fake.log.includes("POST /token"), JSON.stringify(fake.log));
+    const redirect = forged.authUrl ? new URL(forged.authUrl).searchParams.get("redirect_uri") : "http://127.0.0.1:1";
+    const closed = await fetch(redirect + "/").then(() => false).catch(() => true);
+    record(tag + ": the listener closed after that one callback", closed);
+    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
+    record(tag + ": still signed out, nothing stored", !!st && st.signedIn === false && !fs.existsSync(tokenFile), JSON.stringify(st));
+
+    const denied = await driveSignInThroughFake(cdp, fake, { error: "access_denied" });
+    record(tag + ": consent refused in the browser answers DENIED", !!denied.result && denied.result.code === "DENIED", JSON.stringify(denied.result));
+
+    /* A good sign-in on the same launch, with this machine's own storage
+       rule: basic_text (Linux, no keyring) keeps it for the session only and
+       writes nothing; a real backend (DPAPI, Keychain, libsecret) stores it. */
+    const info = await shell(cdp, "driveInfo", {});
+    const good = await driveSignInThroughFake(cdp, fake);
+    const sessionOnly = !info.encryptionAvailable || info.backend === "basic_text";
+    record(tag + ": a fresh sign-in after the refusal works", !!good.result && good.result.ok === true, JSON.stringify(good.result));
+    record(tag + ": storage follows the backend (" + info.backend + "): " + (sessionOnly ? "session only, nothing written" : "stored"),
+      !!good.result && (sessionOnly
+        ? good.result.persisted === false && good.result.canPersist === false && !fs.existsSync(tokenFile)
+        : good.result.persisted === true && fs.existsSync(tokenFile)), JSON.stringify({ result: good.result, file: fs.existsSync(tokenFile) }));
+    const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
+    record(tag + ": ... and Drive works", !!list && list.ok === true, JSON.stringify(list && list.code));
+    const onDisk = driveSecretOnDisk(app.userDataDir, fake.secrets());
+    record(tag + ": no token in plain text under the profile", !onDisk, onDisk || "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    await fake.close();
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * 5c. Per-tab server connections (#11).
+ *
+ *     Every case here runs against REAL document servers — server/server.js
+ *     forked by this harness on free loopback ports, each with its own PIN
+ *     and its own data folder, and ALLOW_ORIGINS=splitpage://app so the
+ *     desktop page may call them cross-origin exactly as it calls a
+ *     colleague's shared session. The app itself is launched with no
+ *     --library: none of these documents is on its own server.
+ *
+ *     Tabs are connected the way a person connects them — the Servers
+ *     dialog's own form, the File menu's own "Open from the server…" picker
+ *     — so the path under test is the real one, routeOpen and all.
+ * -------------------------------------------------------------------- */
+
+const SERVER_JS = path.join(DESKTOP_DIR, "..", "server", "server.js");
+
+/* opts.port/opts.dataDir restart a server where an earlier one was — the
+   same address and documents, a new session (and so a new token). */
+async function startDocServer(pin, opts) {
+  const o = opts || {};
+  const port = o.port || await freePort();
+  const dataDir = o.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-srv-"));
+  const env = {
+    ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir,
+    ALLOW_ORIGINS: "splitpage://app"
+  };
+  if (pin) env.JOIN_PIN = pin;
+  delete env.READ_ONLY; delete env.NO_API; delete env.REVIEW_PIN; delete env.LAUNCH_TOKEN;
+  const proc = spawn(process.execPath, [SERVER_JS], { env, stdio: ["ignore", "pipe", "pipe"] });
+  let err = "";
+  proc.stderr.on("data", (d) => { err += d; });
+  const url = `http://127.0.0.1:${port}/`;
+  const up = await pollNode(async () => {
+    const r = await fetchJson(url + "api/health", {}, 2000);
+    return r.ok;
+  }, 15000).catch(() => false);
+  if (!up) { killPid(proc.pid); throw new Error("document server never came up on " + port + ": " + err); }
+  return {
+    url, port, pin, dataDir, proc,
+    async stop() {
+      killPid(proc.pid);
+      await waitForExit(proc, 5000);
+    },
+    cleanup() { rmrf(dataDir); }
+  };
+}
+
+async function joinDocServer(srv) {
+  const r = await fetchJson(srv.url + "api/join", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin: srv.pin })
+  });
+  return r.body && r.body.token;
+}
+
+async function createServerDoc(srv, token, title) {
+  const r = await fetchJson(srv.url + "api/docs", {
+    method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
+    body: JSON.stringify({ state: { title, rows: [] } })
+  });
+  return r.body && r.body.id ? r.body : null;
+}
+
+async function readServerDoc(srv, token, id) {
+  const r = await fetchJson(srv.url + "api/docs/" + encodeURIComponent(id), { headers: { "x-splitpage-token": token } });
+  return r.status === 200 ? r.body : null;
+}
+
+function serverDocHas(doc, marker) {
+  const rows = (doc && doc.state && doc.state.rows) || [];
+  return rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1);
+}
+
+/* Who else the server says is in `docId`, asked as an observer of our own —
+   a presence beat with a made-up tab id, which the server answers with
+   everyone BUT that id. */
+async function presenceOthers(srv, token, docId) {
+  const r = await fetchJson(srv.url + "api/presence", {
+    method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
+    body: JSON.stringify({ docId, id: "smoke-observer", name: "Observer", rowId: "", field: "", gone: false })
+  });
+  return r.body && Array.isArray(r.body.here) ? r.body.here : null;
+}
+
+const connOf = (cdp) => evalPage(cdp, "window.__hostedTest.conn()");
+
+/* The Servers dialog's own "add a server" form, PIN and all — which joins,
+   saves the bookmark and points THIS tab there (20e-connect.js). ssh is
+   {userHost, remotePort, localPort} to fill in the SSH fields too. */
+async function connectTabViaDialog(cdp, srv, opts) {
+  const o = opts || {};
+  const js = "(function(){" +
+    "document.querySelector('#file-menu [data-file-action=\"servers\"]').click();" +
+    "document.getElementById('connect-name').value=" + JSON.stringify(o.name || ("Srv " + srv.port)) + ";" +
+    "document.getElementById('connect-url').value=" + JSON.stringify(srv.url) + ";" +
+    "document.getElementById('connect-pin').value=" + JSON.stringify(srv.pin || "") + ";" +
+    "document.getElementById('connect-remember').checked=" + (o.remember ? "true" : "false") + ";" +
+    (o.ssh
+      ? "var t=document.getElementById('connect-ssh-toggle');t.checked=true;t.dispatchEvent(new Event('change'));" +
+        "document.getElementById('connect-ssh-userhost').value=" + JSON.stringify(o.ssh.userHost) + ";" +
+        "document.getElementById('connect-ssh-remote').value=" + JSON.stringify(String(o.ssh.remotePort)) + ";" +
+        "document.getElementById('connect-ssh-local').value=" + JSON.stringify(String(o.ssh.localPort)) + ";"
+      : "") +
+    "document.querySelector('#connect-modal [data-connect-action=\"add\"]').click(); return true; })()";
+  await evalPage(cdp, js, { awaitPromise: false });
+  const ok = await poll(cdp, "(function(){ var c = window.__hostedTest.conn(); return c.serverUrl === " +
+    JSON.stringify(srv.url) + " && c.hasToken && !document.getElementById('menu-server-open').hidden; })()", 20000)
+    .catch(() => false);
+  await evalPage(cdp, "(function(){ var b = document.querySelector('#connect-modal [data-connect-action=\"close\"]'); if (b) b.click(); return true; })()", { awaitPromise: false });
+  return !!ok;
+}
+
+/* File ▸ Open from the server…, then that document's own row in the picker
+   — which routes through main (21-events.js) with this tab's connection. */
+async function openViaPicker(cdp, docId) {
+  await evalPage(cdp, "(function(){ document.getElementById('menu-server-open').click(); return true; })()", { awaitPromise: false });
+  const sel = "#server-modal [data-action=\"server-open\"][data-id=" + JSON.stringify(docId) + "]";
+  const listed = await poll(cdp, "!!document.querySelector(" + JSON.stringify(sel) + ")", 15000).catch(() => false);
+  if (!listed) return false;
+  await evalPage(cdp, "(function(){ document.querySelector(" + JSON.stringify(sel) + ").click(); return true; })()", { awaitPromise: false });
+  return true;
+}
+
+async function saveTabNow(cdp) {
+  await evalPage(cdp, "(function(){ document.getElementById('btn-save').click(); return true; })()", { awaitPromise: false });
+  return poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!b && b.textContent.indexOf('\\u2022') === -1 && !b.disabled; })()", 15000)
+    .catch(() => false);
+}
+
+const titleExpr = (t) => "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify(t);
+
+function tabRow(listing, tabId) {
+  for (const w of listing.windows) for (const t of w.tabs) if (t.tabId === tabId) return t;
+  return null;
+}
+
+/* Two tabs, two servers, one window: each tab keeps its own connection, the
+   same document id on both servers is two documents (not "already open"),
+   each server hears only its own tab, a save goes where its document is,
+   a crashed tab comes back on ITS server although the other tab picked a
+   server since, and closing one tab leaves the other connected. */
+async function caseTwoServersSideBySide(target) {
+  const tag = target.name + " per-tab connections: two servers side by side";
+  let srvX = null, srvY = null, app = null, cdp2 = null;
+  try {
+    srvX = await startDocServer("111111");
+    srvY = await startDocServer("222222");
+    const tokX = await joinDocServer(srvX);
+    const tokY = await joinDocServer(srvY);
+    const twin = await createServerDoc(srvX, tokX, "Twin On X");
+    record(tag + ": setup — a document on server X", !!twin, JSON.stringify(twin));
+    if (!twin) return;
+    /* The same id on server Y, holding a different script: the file is
+       copied across with only its title changed, so the two servers really
+       do hold one id each. */
+    const text = fs.readFileSync(path.join(srvX.dataDir, twin.id + ".json"), "utf8").split("Twin On X").join("Twin On Y");
+    fs.writeFileSync(path.join(srvY.dataDir, twin.id + ".json"), text, "utf8");
+    const onY = await readServerDoc(srvY, tokY, twin.id);
+    record(tag + ": setup — server Y holds the SAME id with its own script",
+      !!onY && onY.state && onY.state.title === "Twin On Y", JSON.stringify(onY && onY.state && onY.state.title));
+
+    app = await launchApp(target, { label: "two-servers" });
+    const cdp1 = app.cdp;
+    await waitForRows(cdp1, 20000);
+    const tab1Id = await tabIdOfTarget(cdp1);
+
+    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX));
+    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id));
+    record(tag + ": tab 1 shows X's script", !!(await poll(cdp1, titleExpr("Twin On X"), 15000).catch(() => false)));
+
+    const tab2Id = await shell(cdp1, "createTab", {});
+    cdp2 = await connectTab(app, tab2Id);
+    await waitForRows(cdp2, 20000);
+    const fresh2 = await connOf(cdp2);
+    record(tag + ": a new tab does not inherit tab 1's token", !!fresh2 && fresh2.hasToken === false, JSON.stringify(fresh2));
+
+    record(tag + ": tab 2 joins server Y through the Servers dialog", await connectTabViaDialog(cdp2, srvY));
+    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id));
+    record(tag + ": tab 2 shows Y's script, not a switch to tab 1",
+      !!(await poll(cdp2, titleExpr("Twin On Y"), 15000).catch(() => false)));
+
+    const listing = await shell(cdp1, "listTargets", {});
+    const all = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
+    const r1 = tabRow(listing, tab1Id), r2 = tabRow(listing, tab2Id);
+    record(tag + ": still exactly two tabs — the same id on another server is another document", all === 2, "tabs=" + all);
+    record(tag + ": main's source for tab 1 names server X and the document",
+      !!r1 && r1.isServerDoc && r1.serverUrl === srvX.url && r1.serverDocId === twin.id, JSON.stringify(r1));
+    record(tag + ": main's source for tab 2 names server Y and the same id",
+      !!r2 && r2.isServerDoc && r2.serverUrl === srvY.url && r2.serverDocId === twin.id, JSON.stringify(r2));
+    record(tag + ": tab 1 is still on X after tab 2 picked Y", (await connOf(cdp1)).serverUrl === srvX.url);
+    record(tag + ": main keeps no token for a tab that routed its own document", !!r1 && !!r2 && !r1.hasToken && !r2.hasToken, JSON.stringify([r1 && r1.hasToken, r2 && r2.hasToken]));
+    record(tag + ": each tab's review-role chip follows its own server (both editors here)",
+      r1 && r1.role === "edit" && r2 && r2.role === "edit", JSON.stringify([r1 && r1.role, r2 && r2.role]));
+
+    /* The heartbeat follows the document's connection: each server hears
+       from its own tab and no other.
+
+       Under SPLITPAGE_TEST=1 no window is ever shown (invariant #33), so
+       every tab page reports document.hidden === true, and a hidden page
+       deliberately sends no heartbeat (13a-presence.js; that rule has its
+       own browser suite, 44-presence). What this case is about is WHICH
+       server a beat goes to, so each page is told it is visible — a
+       page-local override of one getter, nothing in the app — and beats
+       once straight away. */
+    const beatNow = "(function(){ Object.defineProperty(document, 'hidden', { configurable: true, get: function(){ return false; } }); " +
+      "window.__presenceTest.beat(); return true; })()";
+    await evalPage(cdp1, beatNow);
+    await evalPage(cdp2, beatNow);
+    const hereX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length ? h : null; }, 15000).catch(() => null);
+    const hereY = await pollNode(async () => { const h = await presenceOthers(srvY, tokY, twin.id); return h && h.length ? h : null; }, 15000).catch(() => null);
+    await sleep(2500);
+    const settledX = await presenceOthers(srvX, tokX, twin.id);
+    const settledY = await presenceOthers(srvY, tokY, twin.id);
+    const beatX = await evalPage(cdp1, "JSON.stringify({wanted: window.__presenceTest.wanted(), sends: window.__presenceTest.sends(), hidden: document.hidden})");
+    const beatY = await evalPage(cdp2, "JSON.stringify({wanted: window.__presenceTest.wanted(), sends: window.__presenceTest.sends(), hidden: document.hidden})");
+    record(tag + ": server X hears exactly one tab (tab 1)", !!hereX && settledX && settledX.length === 1, JSON.stringify(settledX) + " tab1=" + beatX);
+    record(tag + ": server Y hears exactly one tab (tab 2)", !!hereY && settledY && settledY.length === 1, JSON.stringify(settledY) + " tab2=" + beatY);
+
+    /* A save goes where its document lives. */
+    const m1 = "ON-X-" + Date.now(), m2 = "ON-Y-" + Date.now();
+    await addMarkerRow(cdp1, m1);
+    record(tag + ": tab 1 saves", !!(await saveTabNow(cdp1)));
+    await addMarkerRow(cdp2, m2);
+    record(tag + ": tab 2 saves", !!(await saveTabNow(cdp2)));
+    const docX = await readServerDoc(srvX, tokX, twin.id), docY = await readServerDoc(srvY, tokY, twin.id);
+    record(tag + ": tab 1's edit is on server X and not on Y", serverDocHas(docX, m1) && !serverDocHas(docY, m1));
+    record(tag + ": tab 2's edit is on server Y and not on X", serverDocHas(docY, m2) && !serverDocHas(docX, m2));
+
+    /* Tab 2 picked Y last, so Y is where a FRESH page starts. Tab 1's page
+       dies and comes back: it must come back on X, with its document. */
+    const tokenFree = !JSON.stringify(await shell(cdp2, "listTargets", {})).includes(tokX);
+    record(tag + ": the test shell's listing never carries a token", tokenFree);
+    await crashRenderer(cdp1);
+    try { cdp1.close(); } catch {}
+    const back = await pollNode(async () => {
+      const c = await connectTab(app, tab1Id);
+      try {
+        const ok = await evalPage(c, titleExpr("Twin On X"));
+        const cn = ok ? await connOf(c) : null;
+        return ok ? { cn } : null;
+      } finally { c.close(); }
+    }, 30000).catch(() => null);
+    record(tag + ": a crashed tab reloads onto ITS server (X), not the last one picked (Y), with its document",
+      !!back && back.cn.serverUrl === srvX.url, JSON.stringify(back));
+
+    /* Closing tab 1 leaves tab 2 connected. */
+    await shell(cdp2, "closeTab", { tabId: tab1Id });
+    await pollShellState(cdp2, (l) => !tabRow(l, tab1Id), 15000).catch(() => null);
+    const goneX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length === 0 ? true : null; }, 25000).catch(() => false);
+    record(tag + ": closing tab 1 takes it off server X's presence", !!goneX);
+    const c2 = await connOf(cdp2);
+    record(tag + ": tab 2 is still on server Y with its token after tab 1 closed",
+      c2.serverUrl === srvY.url && c2.hasToken === true, JSON.stringify(c2));
+    const m3 = "STILL-Y-" + Date.now();
+    await addMarkerRow(cdp2, m3);
+    record(tag + ": tab 2 still saves", !!(await saveTabNow(cdp2)));
+    const docY2 = await readServerDoc(srvY, tokY, twin.id);
+    record(tag + ": tab 2's save after tab 1 closed reached server Y", serverDocHas(docY2, m3), "rev=" + (docY2 && docY2.rev));
+    const stillY = await presenceOthers(srvY, tokY, twin.id);
+    record(tag + ": server Y still hears tab 2", !!stillY && stillY.length === 1, JSON.stringify(stillY));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    for (const s of [srvX, srvY]) if (s) { await s.stop(); s.cleanup(); }
+  }
+}
+
+/* A server tab beside a local-file tab, and a document opened from a tab
+   that is NOT pristine: it goes to a new tab that boots on the right server
+   with the token handed over (no PIN asked twice), while the file tab keeps
+   its file. What reaches desktop-state.json is the server and the id,
+   never the token or the PIN. */
+async function caseServerTabBesideFileTab(target, fixturesDir) {
+  const tag = target.name + " per-tab connections: a server tab beside a file tab";
+  const fixture = writeFixture(fixturesDir, "case-conn-file.splitpage", "Local File Doc", [["local a", "local b"]]);
+  let srv = null, app = null, cdp2 = null;
+  try {
+    srv = await startDocServer("333333");
+    const tok = await joinDocServer(srv);
+    const doc = await createServerDoc(srv, tok, "Hosted Beside");
+    record(tag + ": setup — a document on the server", !!doc);
+    if (!doc) return;
+
+    app = await launchApp(target, { label: "file-beside-server", fixtures: [fixture] });
+    const cdp1 = app.cdp;
+    await waitForRows(cdp1, 20000);
+    record(tag + ": tab 1 opens the local file", !!(await poll(cdp1, titleExpr("Local File Doc"), 20000).catch(() => false)));
+    const tab1Id = await tabIdOfTarget(cdp1);
+    const c1 = await connOf(cdp1);
+    record(tag + ": a file tab starts on no remote server", c1.serverUrl === "" && !c1.hasToken, JSON.stringify(c1));
+
+    /* The file tab joins the server itself — its FILE stays its home — and
+       opens a document from it. Not pristine, so main opens a new tab. */
+    record(tag + ": the file tab joins the server", await connectTabViaDialog(cdp1, srv));
+    record(tag + ": joining leaves the file tab on its file", !!(await evalPage(cdp1, titleExpr("Local File Doc"))));
+    await openViaPicker(cdp1, doc.id);
+    const newId = await pollNode(async () => {
+      const l = await shell(cdp1, "listTargets", {});
+      for (const w of l.windows) for (const t of w.tabs) if (t.tabId !== tab1Id && t.isServerDoc) return t.tabId;
+      return null;
+    }, 20000).catch(() => null);
+    record(tag + ": the server document opens in a NEW tab", !!newId);
+    if (!newId) return;
+    cdp2 = await connectTab(app, newId);
+    const shown = await poll(cdp2, titleExpr("Hosted Beside"), 20000).catch(() => false);
+    record(tag + ": the new tab shows the server document", !!shown);
+    const pinUp = await evalPage(cdp2, "!document.getElementById('pin-modal').hidden");
+    record(tag + ": the new tab was handed the token — no PIN asked a second time", pinUp === false);
+    const c2 = await connOf(cdp2);
+    record(tag + ": the new tab booted on the file tab's server", c2.serverUrl === srv.url && c2.hasToken, JSON.stringify(c2));
+
+    const listing = await shell(cdp1, "listTargets", {});
+    const r1 = tabRow(listing, tab1Id), r2 = tabRow(listing, newId);
+    record(tag + ": main's source for tab 1 is still the file", !!r1 && !r1.isServerDoc && r1.path === fixture, JSON.stringify(r1));
+    record(tag + ": main's source for the new tab names the server",
+      !!r2 && r2.isServerDoc && r2.serverUrl === srv.url && r2.serverDocId === doc.id, JSON.stringify(r2));
+    record(tag + ": main dropped the token once it had handed it to the new page", !!r2 && r2.hasToken === false, JSON.stringify(r2));
+
+    const mFile = "FILE-" + Date.now(), mSrv = "SRV-" + Date.now();
+    await addMarkerRow(cdp1, mFile);
+    record(tag + ": the file tab saves", !!(await saveTabNow(cdp1)));
+    await addMarkerRow(cdp2, mSrv);
+    record(tag + ": the server tab saves", !!(await saveTabNow(cdp2)));
+    const onDisk = fs.readFileSync(fixture, "utf8");
+    const onSrv = await readServerDoc(srv, tok, doc.id);
+    record(tag + ": the file tab's edit is in the file and not on the server", onDisk.includes(mFile) && !serverDocHas(onSrv, mFile));
+    record(tag + ": the server tab's edit is on the server and not in the file", serverDocHas(onSrv, mSrv) && !onDisk.includes(mSrv));
+
+    const state = await pollNode(async () => {
+      const st = readDesktopStateFile(app.userDataDir);
+      const tabsOnDisk = st ? st.windows.reduce((a, w) => a.concat(w.tabs), []) : [];
+      return tabsOnDisk.find((t) => t.tabId === newId && t.source.kind === "server") ? { st, tabsOnDisk } : null;
+    }, 15000).catch(() => null);
+    const persisted = state && state.tabsOnDisk.find((t) => t.tabId === newId);
+    record(tag + ": desktop-state.json records the server tab's server and id",
+      !!persisted && persisted.source.serverUrl === srv.url && persisted.source.serverDocId === doc.id,
+      JSON.stringify(persisted));
+    record(tag + ": desktop-state.json's server source is exactly {kind, serverDocId, serverUrl, tunnel}",
+      !!persisted && Object.keys(persisted.source).sort().join(",") === "kind,serverDocId,serverUrl,tunnel",
+      JSON.stringify(persisted && persisted.source));
+    const raw = fs.readFileSync(path.join(app.userDataDir, "desktop-state.json"), "utf8");
+    record(tag + ": neither the token nor the PIN is anywhere in desktop-state.json (invariant #29)",
+      !raw.includes(tok) && !raw.includes(srv.pin));
+  } finally {
+    if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (srv) { await srv.stop(); srv.cleanup(); }
+  }
+}
+
+/* Session restore of server tabs on two servers. Nothing on disk holds a
+   token, so each restored tab comes back on its own server and: reconnects
+   silently where the reader chose "Remember on this device" for THAT
+   server, asks for the PIN where they did not. A token or a role planted in
+   desktop-state.json is not believed, an address that is not http(s) is
+   not restored at all, and a tunnel's host and ports come back with the tab
+   — so a tunnelled server that is down names the ssh command to start. */
+async function caseRestoreServerTabs(target) {
+  const tag = target.name + " per-tab connections: session restore of server tabs";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let srvX = null, srvY = null, app = null, cdpY = null, cdpX = null;
+  try {
+    srvX = await startDocServer("444444");
+    srvY = await startDocServer("555555");
+    const tokX = await joinDocServer(srvX), tokY = await joinDocServer(srvY);
+    const dX = await createServerDoc(srvX, tokX, "Restore On X");
+    const dY = await createServerDoc(srvY, tokY, "Restore On Y");
+    record(tag + ": setup — one document on each server", !!dX && !!dY);
+    if (!dX || !dY) return;
+    const ssh = { userHost: "me@studio.example.com", remotePort: 8791, localPort: srvY.port };
+
+    app = await launchApp(target, { label: "restore-servers-a", userDataDir });
+    const cdp1 = app.cdp;
+    await waitForRows(cdp1, 20000);
+    const tabXId = await tabIdOfTarget(cdp1);
+    record(tag + ": tab X joins X and asks to be remembered", await connectTabViaDialog(cdp1, srvX, { remember: true }));
+    await openViaPicker(cdp1, dX.id);
+    record(tag + ": tab X opens X's document", !!(await poll(cdp1, titleExpr("Restore On X"), 15000).catch(() => false)));
+    const tabYId = await shell(cdp1, "createTab", {});
+    const cdp2 = await connectTab(app, tabYId);
+    await waitForRows(cdp2, 20000);
+    record(tag + ": tab Y joins Y through an SSH bookmark, not remembered",
+      await connectTabViaDialog(cdp2, srvY, { remember: false, ssh }));
+    const cy = await connOf(cdp2);
+    record(tag + ": tab Y's connection carries the tunnel's host and ports", !!cy.tunnel && cy.tunnel.userHost === ssh.userHost && cy.tunnel.localPort === ssh.localPort, JSON.stringify(cy));
+    await openViaPicker(cdp2, dY.id);
+    record(tag + ": tab Y opens Y's document", !!(await poll(cdp2, titleExpr("Restore On Y"), 15000).catch(() => false)));
+    try { cdp2.close(); } catch {}
+
+    const st = await pollNode(async () => {
+      const s = readDesktopStateFile(userDataDir);
+      const all = s ? s.windows.reduce((a, w) => a.concat(w.tabs), []) : [];
+      const x = all.find((t) => t.tabId === tabXId), y = all.find((t) => t.tabId === tabYId);
+      return x && y && x.source.kind === "server" && y.source.kind === "server" ? { s, x, y } : null;
+    }, 15000).catch(() => null);
+    record(tag + ": both server tabs are in desktop-state.json with their servers",
+      !!st && st.x.source.serverUrl === srvX.url && st.y.source.serverUrl === srvY.url, JSON.stringify(st && [st.x.source, st.y.source]));
+    record(tag + ": the tunnel's host and ports are persisted with tab Y (never a credential)",
+      !!st && !!st.y.source.tunnel && st.y.source.tunnel.userHost === ssh.userHost &&
+      Object.keys(st.y.source.tunnel).sort().join(",") === "localPort,remotePort,userHost", JSON.stringify(st && st.y.source.tunnel));
+    await teardown(app, tag + " (first launch)");
+    app = null;
+
+    const raw1 = fs.readFileSync(path.join(userDataDir, "desktop-state.json"), "utf8");
+    record(tag + ": no token and no PIN in desktop-state.json after the quit (invariant #29)",
+      ![tokX, tokY, srvX.pin, srvY.pin].some((s) => raw1.includes(s)));
+    const draftsHit = dirContainsText(path.join(userDataDir, "drafts"), tokY) || dirContainsText(path.join(userDataDir, "drafts"), tokX);
+    record(tag + ": no token anywhere under drafts/", !draftsHit, String(draftsHit));
+
+    /* Plant what must not be believed: a token and a role on both server
+       sources, and a third tab whose address is not http(s). */
+    const planted = JSON.parse(raw1);
+    const PLANT = "f".repeat(64);
+    for (const w of planted.windows) for (const t of w.tabs) {
+      if (t.source.kind === "server") { t.source.token = PLANT; t.source.role = "edit"; }
+    }
+    const badTabId = newHexId();
+    planted.windows[0].tabs.push({ tabId: badTabId, source: { kind: "server", serverDocId: dX.id, serverUrl: "javascript:alert(1)//" }, lastKnownTitle: "Bad" });
+    writeDesktopStateFile(userDataDir, planted);
+
+    app = await launchApp(target, { label: "restore-servers-b", userDataDir });
+    cdpX = await connectTab(app, tabXId);
+    const xBack = await poll(cdpX, titleExpr("Restore On X"), 25000).catch(() => false);
+    const xPin = await evalPage(cdpX, "!document.getElementById('pin-modal').hidden");
+    record(tag + ": the remembered server's tab reconnects silently and reopens its document", !!xBack && xPin === false,
+      "pinUp=" + xPin);
+    const cx = await connOf(cdpX);
+    record(tag + ": the restored X tab is on X", cx.serverUrl === srvX.url, JSON.stringify(cx));
+
+    cdpY = await connectTab(app, tabYId);
+    const pinAsked = await poll(cdpY, "!document.getElementById('pin-modal').hidden && document.getElementById('pin-reason').textContent", 25000).catch(() => null);
+    record(tag + ": the not-remembered server's tab asks for ITS PIN, naming its server",
+      !!pinAsked && String(pinAsked).indexOf("127.0.0.1:" + srvY.port) !== -1, String(pinAsked));
+    const cY = await connOf(cdpY);
+    record(tag + ": the restored Y tab is on Y, with the tunnel it rode", cY.serverUrl === srvY.url && !!cY.tunnel && cY.tunnel.userHost === ssh.userHost, JSON.stringify(cY));
+    const listing = await shell(cdpX, "listTargets", {});
+    const rX = tabRow(listing, tabXId), rY = tabRow(listing, tabYId);
+    record(tag + ": a token planted in desktop-state.json is not believed", !!rX && !!rY && rX.hasToken === false && rY.hasToken === false,
+      JSON.stringify([rX, rY]));
+    record(tag + ": a server tab whose address is not http(s) is not restored", !tabRow(listing, badTabId));
+
+    await evalPage(cdpY, "(function(){ document.getElementById('pin-input').value=" + JSON.stringify(srvY.pin) +
+      "; document.querySelector('#pin-modal [data-connect-action=\"pin-submit\"]').click(); return true; })()", { awaitPromise: false });
+    record(tag + ": after the PIN, the Y tab reopens Y's document", !!(await poll(cdpY, titleExpr("Restore On Y"), 20000).catch(() => false)));
+    const after = readDesktopStateFile(userDataDir);
+    record(tag + ": the rewritten desktop-state.json holds no planted token", !!after && !JSON.stringify(after).includes(PLANT));
+
+    /* The tunnel rides along: with Y down, the restored tab's reload says
+       which ssh command it is waiting on. */
+    await srvY.stop();
+    await crashRenderer(cdpY);
+    try { cdpY.close(); } catch {}
+    cdpY = null;
+    const hint = await pollNode(async () => {
+      const c = await connectTab(app, tabYId);
+      try {
+        return await evalPage(c, "(function(){ var t=document.querySelectorAll('.toast'); for (var i=0;i<t.length;i++){ if (t[i].textContent.indexOf('SSH tunnel')!==-1) return t[i].textContent; } return null; })()");
+      } finally { c.close(); }
+    }, 30000).catch(() => null);
+    record(tag + ": a tunnelled server that is down names the ssh command to start",
+      !!hint && hint.indexOf("ssh -N -L " + ssh.localPort + ":localhost:" + ssh.remotePort + " " + ssh.userHost) !== -1, String(hint));
+
+    /* The host restarts their session: same address, same documents, a new
+       token. The X tab's token (remembered, and in its own session) is now
+       stale; its reload finds that out on the document request, asks for
+       the PIN, and opens the document once it is typed. */
+    await srvX.stop();
+    srvX = await startDocServer(srvX.pin, { port: srvX.port, dataDir: srvX.dataDir });
+    await crashRenderer(cdpX);
+    try { cdpX.close(); } catch {}
+    cdpX = null;
+    const stale = await pollNode(async () => {
+      const c = await connectTab(app, tabXId);
+      const up = await evalPage(c, "!document.getElementById('pin-modal').hidden").catch(() => false);
+      if (!up) { c.close(); return null; }
+      return c;
+    }, 30000).catch(() => null);
+    record(tag + ": a remembered token the restarted server no longer takes brings the PIN back", !!stale);
+    if (stale) {
+      cdpX = stale;
+      await evalPage(cdpX, "(function(){ document.getElementById('pin-input').value=" + JSON.stringify(srvX.pin) +
+        "; document.querySelector('#pin-modal [data-connect-action=\"pin-submit\"]').click(); return true; })()", { awaitPromise: false });
+      record(tag + ": after the new PIN the X tab reopens its document",
+        !!(await poll(cdpX, titleExpr("Restore On X"), 20000).catch(() => false)));
+    }
+  } finally {
+    for (const c of [cdpX, cdpY]) if (c) { try { c.close(); } catch {} }
+    if (app) { await teardown(app, tag); }
+    for (const s of [srvX, srvY]) if (s) { await s.stop(); s.cleanup(); }
     rmrf(userDataDir);
   }
 }
@@ -4448,7 +6180,7 @@ async function caseTornOffDirtyTabCrashRestoresOnce(target) {
 async function caseWindowCloseCanary() {
   const tag = "src/js window.close() canary";
   const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
-  let files = [];
+  let files;
   try {
     files = fs.readdirSync(srcDir).filter((f) => f.endsWith(".js"));
   } catch (e) {
@@ -4467,7 +6199,7 @@ async function caseWindowCloseCanary() {
  * 6. Runner.
  * -------------------------------------------------------------------- */
 
-async function runTargetSuite(target) {
+async function runTargetSuite(target, groupFilter) {
   console.log(`\n==== target: ${target.name} (${target.exe}) ====`);
   const fixturesDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-fixtures-"));
   // Each group gets its own top-level guard: one group crashing outright
@@ -4476,7 +6208,7 @@ async function runTargetSuite(target) {
   // target. Groups already tear down their own launches in their own
   // finally blocks; this only protects the group sequencing.
   const groups = [
-    ["open/boot/security", () => caseBootAndSecurity(target, fixturesDir)],
+    ["open/boot/security", () => caseBootAndSecurity(target)],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],
@@ -4510,17 +6242,21 @@ async function runTargetSuite(target) {
     // --- step M: document id + desktop history ---
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
-    ["history: round trip (put/list/get/copy/touch/import-older/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
+    ["history: round trip (put/list/get/copy/touch/Older put/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
     ["history: id validation", () => caseHistoryIdValidation(target)],
-    ["history: exit-after-body fault, relaunch adopts the orphan", () => caseHistoryCrashAfterBody(target)],
-    ["history: corrupt index.json rebuilt from bodies (fsck)", () => caseHistoryCorruptIndex(target)],
+    ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target)],
+    ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target)],
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target)],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target)],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target)],
-    ["history: caseHistoryPlannerTwin (main vs renderer planEviction)", () => caseHistoryPlannerTwin(target)],
     ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
+    ["history: v1 folder tree migrates on first launch", () => caseHistoryV1Migration(target)],
+    ["history: v1 migration killed mid-way, relaunch finishes", () => caseHistoryV1MigrationKilled(target)],
+    // --- issue #82: the content-addressed blob folder ---
+    ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target)],
     // --- step N: crash-safe drafts (single and multi tab) ---
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
+    ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],
     ["draft: file deleted while down (unsaved copy)", () => caseDraftFileDeleted(target, fixturesDir)],
@@ -4536,10 +6272,38 @@ async function runTargetSuite(target) {
     ["draft: renderer crash of a clean tab (J-1)", () => caseRendererCrashRestores(target)],
     ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target)],
     ["draft: a torn-off dirty tab crashes and restores exactly once", () => caseTornOffDirtyTabCrashRestoresOnce(target)],
+    // --- issue #86: the teleprompter in the browser ---
+    ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
+    ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
+    // --- issue #10: Google Drive through a loopback OAuth redirect ---
+    ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
+    ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],
+    ["google drive: bad state refused, storage follows the backend", () => caseGoogleDriveBadState(target)],
+    // --- issue #11: per-tab server and tunnel connections ---
+    ["per-tab connections: two servers side by side, close one", () => caseTwoServersSideBySide(target)],
+    ["per-tab connections: a server tab beside a file tab", () => caseServerTabBesideFileTab(target, fixturesDir)],
+    ["per-tab connections: session restore of server tabs", () => caseRestoreServerTabs(target)],
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {
-    for (const [name, fn] of groups) {
+    groups.forEach(([name]) => groupNames.add(name));
+    for (const [name, fn, opts] of groups) {
+      /* A group marked windowsOnly is named in the summary as a skip rather
+         than run and failed, or — worse — quietly dropped. Nothing in the
+         list carries the mark today: after #89 the only thing on this file
+         that Windows alone can answer is one assertion inside the
+         unsaved-changes case, which skips itself. The hook stays so the next
+         genuinely Windows-bound case is skipped loudly instead of tempting
+         somebody to weaken its assertion until it passes here. */
+      // The debugging filter first: a group this run never asked for is not
+      // "skipped because the platform cannot run it", and must not land in
+      // the summary's skip list claiming that it was.
+      if (groupFilter && !name.toLowerCase().includes(groupFilter)) continue;
+      groupsRun++;
+      if (opts && opts.windowsOnly && !IS_WINDOWS) {
+        skip(target.name + ": " + name + " (group)", WINDOWS_ONLY + " — " + opts.windowsOnly);
+        continue;
+      }
       try {
         await fn();
       } catch (e) {
@@ -4552,31 +6316,77 @@ async function runTargetSuite(target) {
 }
 
 async function main() {
-  const { exe, onlyTarget } = parseCliArgs(process.argv.slice(2));
+  const { exe, onlyTarget, onlyGroup } = parseCliArgs(process.argv.slice(2));
+  const groupFilter = onlyGroup ? onlyGroup.toLowerCase() : null;
   let targets = resolveTargets(exe);
   if (onlyTarget) targets = targets.filter((t) => t.name === onlyTarget);
-  if (!targets.length) {
-    console.error("No target found: no desktop/node_modules/electron and no packaged dist/*-unpacked/Splitpage.exe. Nothing to test.");
+  if (!targets.some((t) => !t.cannotRun)) {
+    targets.filter((t) => t.cannotRun).forEach((t) => console.error("SKIP - " + t.name + " :: " + t.cannotRun));
+    console.error(
+      "No target found. Nothing to test.\n" +
+      "  dev:      " + devElectronExe() + " (run `npm install` in desktop/)\n" +
+      (IS_WINDOWS
+        ? "  packaged: desktop/dist/win-unpacked/Splitpage.exe, desktop/dist/win-arm64-unpacked/Splitpage.exe\n"
+        : "  packaged: Windows only — not looked for on " + process.platform + "\n"));
     process.exit(1);
   }
   console.log("Targets: " + targets.map((t) => t.name).join(", "));
+  console.log("Platform: " + process.platform + "/" + process.arch +
+    (process.platform === "linux" ? " (needs a display — run under `xvfb-run -a`)" : ""));
+  if (groupFilter) {
+    console.log("");
+    console.log("!!! GROUP FILTER --only-group " + JSON.stringify(onlyGroup) + " — a DEBUGGING run.");
+    console.log("!!! Most groups will not run at all. Whatever this prints is not coverage.");
+  }
 
   for (const target of targets) {
+    if (target.cannotRun) {
+      skip(target.name + " (whole target)", target.cannotRun);
+      continue;
+    }
     try {
-      await runTargetSuite(target);
+      await runTargetSuite(target, groupFilter);
     } catch (e) {
       record(target.name + ": target suite", false, "uncaught exception: " + (e && e.stack || e));
     }
   }
 
+  if (groupFilter && groupsRun === 0) {
+    console.log("");
+    console.log("NO GROUP MATCHED --only-group " + JSON.stringify(onlyGroup) + ". It matches the registered group");
+    console.log("name (e.g. \"open/boot/security\"), not the tag printed on each check line (\"boot+security\").");
+    console.log("Registered groups:");
+    groupNames.forEach((n) => console.log("  " + n));
+    console.log("NOTHING RAN - 0 desktop checks — PARTIAL RUN matched nothing");
+    process.exit(1);
+  }
+
   console.log("");
+  /* The skip list prints BEFORE the pass/fail line and on every run, passing
+     or not: the whole point of #89 is that a thinner run must not read as a
+     full one. "ALL PASS" below always carries the skip count with it. */
+  if (skippedLines.length) {
+    console.log(`SKIPPED (${skippedLines.length}) — not run here, so not covered:`);
+    skippedLines.forEach((l) => console.log("  - " + l));
+    console.log("");
+  } else {
+    console.log("SKIPPED (0) — every check in this file ran.");
+    console.log("");
+  }
+  if (unexpectedForceKills.length) {
+    console.log(`FORCE-KILLED (${unexpectedForceKills.length}) — Browser.close did not close these, and they were not expected to need the kill:`);
+    unexpectedForceKills.forEach((l) => console.log("  - " + l));
+    console.log("");
+  }
+  const skipNote = (skippedLines.length ? `, ${skippedLines.length} skipped` : "") +
+    (groupFilter ? ` — PARTIAL RUN, --only-group ${JSON.stringify(onlyGroup)}` : "");
   if (passedChecks === totalChecks) {
-    console.log(`ALL PASS - ${passedChecks}/${totalChecks} desktop checks`);
+    console.log(`ALL PASS - ${passedChecks}/${totalChecks} desktop checks${skipNote}`);
     process.exit(0);
   } else {
     console.log(`FAILURES (${totalChecks - passedChecks}):`);
     failureLines.forEach((l) => console.log("  - " + l));
-    console.log(`${passedChecks}/${totalChecks} desktop checks passed`);
+    console.log(`${passedChecks}/${totalChecks} desktop checks passed${skipNote}`);
     process.exit(1);
   }
 }

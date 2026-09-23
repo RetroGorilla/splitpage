@@ -2,31 +2,26 @@
 /* Splitpage release packager.
  *
  *   node package.mjs              build dist/splitpage-<version>/ and the .zip
- *   node package.mjs --installer  ...and build SplitpageSetup-<version>.exe
- *                                 (DEPRECATED — see below)
- *
- * DEPRECATED: the --installer (IExpress) branch. 2.0.0 replaces it with the
- * Electron/electron-builder installers in desktop/ (SplitpageDesktopSetup-
- * <version>-<arch>.exe) — see DEPLOY.md's publishing section. This branch is
- * kept working, not deleted, because the zip it also produces (below) is
- * still required: the 1.0.x auto-updater hard-fails unless it finds an asset
- * matching /^splitpage-.*\.zip$/, so every release — including 2.0.0 — still
- * ships that zip so 1.0.x installs can update themselves in place.
- *
- * The installer needs NOTHING installed to build. It is a self-extracting
- * archive made by iexpress.exe, which ships with Windows, wrapping a zip
- * payload and installer/install.ps1. That payload carries its own node.exe,
- * so the person who runs it downloads one file and is finished — no second
- * trip for a runtime before they can host a shared session.
  *
  * The zip IS the portable app: unzip it anywhere and run start.bat (Windows)
- * or ./start.sh (macOS/Linux). Nothing is compiled and nothing is installed,
- * so this also serves as the "no build tools" path for people who do not want
- * installer/splitpage.iss and a real setup.exe.
+ * or ./start.sh (macOS/Linux). Nothing is compiled and nothing is installed.
+ *
+ * This used to have a second output behind --installer: SplitpageSetup-
+ * <version>-<arch>.exe, a self-extracting archive built by iexpress.exe with
+ * its own copy of node.exe, a PowerShell installer and a PowerShell
+ * uninstaller inside it. DEPLOY.md had already called it deprecated; it is
+ * deleted now (#75), along with the runtime fetcher that only fed it. The
+ * Windows installer is desktop/'s Electron one (SplitpageDesktopSetup-
+ * <version>-<arch>.exe) — see DEPLOY.md's publishing section.
  *
  * Deliberately excluded: src/ and build.mjs (a release ships the built page,
  * not the parts), and the hosting files (Dockerfile, DEPLOY.md), which are a
  * different job with a different audience.
+ *
+ * index.html is generated and not in the repository (#80), so the build below
+ * is not a convenience — it is the only way the file the zip needs comes to
+ * exist. Nothing here reads a checked-in copy, and a checkout that has never
+ * been built packages exactly as well as one that has.
  *
  * The zip is written here rather than shelled out to, because this has to
  * produce the same bytes on the Windows machine that cuts releases as on a
@@ -44,14 +39,26 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const VERSION = readFileSync(join(ROOT, "VERSION"), "utf8").trim();
-let releaseConfig = {};
-try {
-  releaseConfig = JSON.parse(readFileSync(join(ROOT, "release.json"), "utf8"));
-} catch {
-  // release.json is optional; updateApi defaults to current hard-coded value
-}
 
-/* ---------- build first ---------- */
+/* release.json's `updateApi` used to be copied into the release manifest
+   below, so a release could name the API the next update check would use.
+   #64 made update.mjs ignore that field — a release naming where the next
+   release comes from is a redirect nothing can revoke — and #75 removed the
+   self-update path that read it at all. Writing it now would put a field in
+   every release that nothing reads and that must never be read, so it is not
+   written. release.json is no longer an input to packaging. */
+
+/* ---------- build first ----------
+ *
+ * Unconditional, and before anything is staged: index.html and sw.js are both
+ * build outputs (#79, #80), and the whole point of packaging is to ship what
+ * the current source says, not whatever happens to be lying in the working
+ * tree. build.mjs is the same one CI runs, so the zip and the CI artifact are
+ * built by one code path.
+ *
+ * Shelled out rather than imported because build.mjs does its work at module
+ * top level and calls process.exit() on --check; a child process keeps that
+ * behaviour (and its exit code) out of this one. */
 
 const built = spawnSync(process.execPath, [join(ROOT, "build.mjs")], { cwd: ROOT, stdio: "inherit" });
 if (built.status !== 0) {
@@ -69,20 +76,22 @@ const FILES = [
   ["icon.svg", 0o644],
   ["sw.js", 0o644],
   ["server/server.js", 0o644],
+  /* server.js is CommonJS and the repo root's package.json says
+     "type": "module" for the build tooling. Node resolves the nearest
+     package.json, so server/package.json has to travel with it or `node
+     server/server.js` dies on the first require(). */
+  ["server/package.json", 0o644],
   ["start.mjs", 0o644],
   ["start.bat", 0o644],
-  ["start.ps1", 0o644],
   ["start.sh", 0o755],
-  ["uninstall.mjs", 0o644],
-  ["uninstall.bat", 0o644],
-  ["uninstall.sh", 0o755],
   ["update.mjs", 0o644],
-  /* Shipped in the portable zip so an unzipped copy can put itself in the
-     Start Menu without downloading the installer: the app's setup step calls
-     the launcher's loopback-only register endpoint, which runs this with
-     -InPlace. Nothing runs it at unzip time. */
-  ["installer/install.ps1", 0o644],
   ["README.md", 0o644],
+  /* The user guide, shipped beside the README the same way it sits beside it
+     in the repo: README.md is the repo-facing file and links to this one, and
+     this one is what an unzipped copy's reader actually wants. It is also the
+     source the in-app Help page inside index.html was rendered from, so the
+     two can never disagree about what the app does. */
+  ["docs/help.md", 0o644],
   ["VERSION", 0o644]
 ];
 
@@ -106,10 +115,9 @@ for (const [rel] of FILES) {
 
 /* ---------- release manifest ----------
  *
- * A record of exactly what this release consists of, shipped inside it. The
- * uninstaller removes the files listed here and nothing else, so it can never
- * take something the user put in the folder themselves; the updater compares
- * these hashes to spot files you have hand-edited before it overwrites them.
+ * A record of exactly what this release consists of, shipped inside it: what
+ * the release contained, and the hash of each file as shipped, so an unzipped
+ * copy can be told apart from one that has been edited or half-overwritten.
  */
 
 const MANIFEST_NAME = ".splitpage-release.json";
@@ -118,7 +126,6 @@ const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 const manifest = {
   name: "Splitpage",
   version: VERSION,
-  ...(releaseConfig.updateApi && { updateApi: releaseConfig.updateApi }),
   files: Object.fromEntries(
     FILES.map(([rel, mode]) => [rel, { sha256: sha256(readFileSync(join(STAGE, rel))), mode }])
   )
@@ -226,151 +233,5 @@ writeFileSync(zipPath, makeZip(NAME, ENTRIES, (rel) => readFileSync(join(STAGE, 
 const kb = (n) => (n / 1024).toFixed(0) + " KB";
 console.log(`\n  ${STAGE}`);
 console.log(`  ${zipPath}  (${kb(statSync(zipPath).size)})`);
-
-/* ---------- optional: the Windows installer ---------- */
-
-if (process.argv.includes("--installer")) {
-  const { fetchRuntime } = await import("./tools/fetch-runtime.mjs");
-
-  /* --arch x64 (default) | arm64 | both. "both" builds one setup per
-     architecture, each carrying only its own runtime: an x64 user should not
-     download an 87 MB ARM binary they can never run. */
-  const archIdx = process.argv.indexOf("--arch");
-  const archArg = archIdx === -1 ? "x64" : String(process.argv[archIdx + 1] || "");
-  if (!["x64", "arm64", "both"].includes(archArg)) {
-    console.error("--arch must be x64, arm64 or both");
-    process.exit(1);
-  }
-  const archs = archArg === "both" ? ["x64", "arm64"] : [archArg];
-
-  async function buildSetup(arch) {
-    /* The payload is the portable release plus the things only an installed
-       copy needs: the runtime(s), the icon the shortcuts point at, and the
-       uninstaller that Add/Remove Programs will call. */
-    const payloadEntries = [
-      ...ENTRIES,
-      [`runtime/node-${arch}.exe`, 0o755],
-      ["icon.ico", 0o644],
-      ["uninstall.ps1", 0o644]
-    ];
-    const extra = {};
-    {
-      const a = arch;
-      extra[`runtime/node-${a}.exe`] = await fetchRuntime({ arch: a, log: (m) => console.log(m) });
-    }
-    extra["icon.ico"] = join(ROOT, "installer", "icon.ico");
-    extra["uninstall.ps1"] = join(ROOT, "installer", "uninstall.ps1");
-
-    const payloadFile = (rel) => readFileSync(extra[rel] || join(STAGE, rel));
-
-    /* The manifest has to describe THIS release, not the portable one. */
-    const payloadManifest = Buffer.from(JSON.stringify({
-      name: "Splitpage",
-      version: VERSION,
-      ...(releaseConfig.updateApi && { updateApi: releaseConfig.updateApi }),
-      files: Object.fromEntries(
-        payloadEntries
-          .filter(([rel]) => rel !== MANIFEST_NAME)
-          .map(([rel, mode]) => [rel, { sha256: sha256(payloadFile(rel)), mode }])
-      )
-    }, null, 2) + "\n");
-
-    const payload = makeZip(NAME, payloadEntries, (rel) =>
-      rel === MANIFEST_NAME ? payloadManifest : payloadFile(rel));
-    const payloadPath = join(DIST, `splitpage-payload-${arch}.zip`);
-    writeFileSync(payloadPath, payload);
-    console.log(`  payload (${arch}): ${(payload.length / 1024 / 1024).toFixed(0)} MB`);
-
-    /* install.ps1 with the version stamped in */
-    /* Named install.ps1 because that is what AppLaunched and the quiet commands
-       run inside the extractor. Its content is the same for every arch. */
-    const installPs1 = join(DIST, "install.ps1");
-    writeFileSync(installPs1,
-      readFileSync(join(ROOT, "installer", "install.ps1"), "utf8").split("@VERSION@").join(VERSION));
-
-    const setupPath = join(DIST, `SplitpageSetup-${VERSION}-${arch}.exe`);
-
-    /* Build the SED for this architecture */
-    const win = (p) => p.split("/").join("\\");
-    const sed = [
-      "[Version]",
-      "Class=IEXPRESS",
-      "SEDVersion=3",
-      "[Options]",
-      "PackagePurpose=InstallApp",
-      "ShowInstallProgramWindow=1",
-      "HideExtractAnimation=1",
-      "UseLongFileName=1",
-      "InsideCompressed=0",
-      "CAB_FixedSize=0",
-      "CAB_ResvCodeSigning=0",
-      "RebootMode=N",
-      "InstallPrompt=%InstallPrompt%",
-      "DisplayLicense=%DisplayLicense%",
-      "FinishMessage=%FinishMessage%",
-      "TargetName=%TargetName%",
-      "FriendlyName=%FriendlyName%",
-      "AppLaunched=%AppLaunched%",
-      "PostInstallCmd=%PostInstallCmd%",
-      "AdminQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent -AllUsers",
-      "UserQuietInstCmd=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Silent",
-      "SourceFiles=SourceFiles",
-      "[Strings]",
-      "InstallPrompt=",
-      "DisplayLicense=",
-      "FinishMessage=",
-      `TargetName=${win(setupPath)}`,
-      "FriendlyName=Splitpage Setup",
-      "AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1",
-      "PostInstallCmd=<None>",
-      `FILE0=\"install.ps1\"`,
-      `FILE1=\"splitpage-payload-${arch}.zip\"`,
-      "[SourceFiles]",
-      "SourceFiles0=" + win(DIST),
-      "[SourceFiles0]",
-      "%FILE0%=",
-      "%FILE1%="
-    ].join("\r\n") + "\r\n";
-
-    const sedPath = join(DIST, `splitpage-${arch}.SED`);
-    writeFileSync(sedPath, sed);
-
-    const res = spawnSync("iexpress", ["/N", win(sedPath)], { cwd: DIST, stdio: "inherit" });
-    if (res.error && res.error.code === "ENOENT") {
-      console.error(`
-  iexpress was not found, so no setup.exe was built.
-
-  It ships with Windows — this is not something to install, it just means the
-  build is not running on Windows. Everything it needs is already in dist/:
-
-      dist/install.ps1
-      dist/splitpage-payload-${arch}.zip
-      dist/splitpage-${arch}.SED
-
-  On a Windows machine, run:  iexpress /N dist\\splitpage-${arch}.SED`);
-      process.exit(1);
-    }
-    if (res.status !== 0) {
-      console.error("\n  IExpress failed — see the output above.");
-      process.exit(1);
-    }
-    console.log(`  ${setupPath}`);
-    return setupPath;
-  }
-
-  /* Build setup for each architecture */
-  const setupPaths = [];
-  for (const arch of archs) {
-    setupPaths.push(await buildSetup(arch));
-  }
-
-  /* For x64, also create a copy without the arch suffix for backward compatibility */
-  if (archs.includes("x64")) {
-    const x64Path = setupPaths.find((p) => p.includes("-x64.exe"));
-    const noSuffixPath = join(DIST, `SplitpageSetup-${VERSION}.exe`);
-    cpSync(x64Path, noSuffixPath);
-    console.log(`  ${noSuffixPath} (copy of x64 for compatibility)`);
-  }
-}
 
 console.log(`\n  Unzip and run start.bat (Windows) or ./start.sh (macOS/Linux).\n`);

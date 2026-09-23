@@ -1,6 +1,127 @@
-(function () {
-  "use strict";
+import { S } from "./_state.js";
 
+/* Declared here, assigned in __init() below: these initialisers read the
+   DOM, read storage, or depend on another module's value, so they have to
+   run in fragment order rather than in whatever order the bundle lands in. */
+export var PAGE_SHELL;
+export var SpeechRecognitionCtor;
+
+S.state = null;
+/* Resolves once the boot state load in init() (21-events.js) has settled
+   `state` for the first time — the desktop-only race this exists for:
+   DESKTOP.onOpenFile() (20f-desktop.js) can fire as soon as it's
+   registered, which is well before loadInitialState()'s fetch resolves
+   when the app was launched by double-clicking a project file, and
+   without this, adoptProjectState() setting `state` to that file would
+   just get clobbered a moment later when the boot load finally resolves
+   and assigns the default/seed state over it. Stays null in the browser
+   build, where nothing reads it. */
+S.initialStateReady = null;
+export var SCHEMA_VERSION = 2;
+S.editSeq = 0;
+S.dirty = false;
+export var suppressUnloadWarning = false;
+/* Where the document lives — its project file, the foreign file it was
+   opened from, or the server — is `home` in _home.js (#73), which starts
+   out "none" without any module's __init() having to run. */
+S.deleteArmId = null;
+S.deleteArmTimer = null;
+
+/* ---- remembering the last project across launches ----
+   A FileSystemFileHandle can be structured-cloned straight into IndexedDB
+   (localStorage can't hold one) — that's what lets the app reopen the same
+   file on its own next time, not just re-show whatever was typed. Purely a
+   nicety: every call here is wrapped so a browser without IndexedDB, or one
+   that refuses it (some file:// contexts), just silently gets none of this. */
+var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
+
+function openHandleDb() {
+  return new Promise(function (resolve, reject) {
+    if (!("indexedDB" in window)) { reject(new Error("no-indexeddb")); return; }
+    var req = indexedDB.open(LAST_FILE_DB, 1);
+    req.onupgradeneeded = function () { req.result.createObjectStore(LAST_FILE_STORE); };
+    req.onsuccess = function () { resolve(req.result); };
+    req.onerror = function () { reject(req.error); };
+  });
+}
+
+export async function rememberLastFileHandle(handle) {
+  if (!handle) return;
+  /* Desktop persists what's open itself — the main process writes each
+     tab's document source into desktop-state.json on every source change
+     (splitpage:set-document-state) and restores whole sessions from it at
+     launch (TAB-BOOT-SYNC/DESKTOP-STATE-V2). There is nothing left for
+     this per-page, per-origin IndexedDB store to remember on desktop, and
+     (unlike splitpage://app, which is stable) it would be remembering the
+     wrong thing anyway: this file's real identity there is a path in
+     main's own registry, which this page is never handed (invariant #34). */
+  if (S.DESKTOP) return;
+  try {
+    var db = await openHandleDb();
+    await new Promise(function (resolve, reject) {
+      var tx = db.transaction(LAST_FILE_STORE, "readwrite");
+      tx.objectStore(LAST_FILE_STORE).put(handle, LAST_FILE_KEY);
+      tx.oncomplete = resolve;
+      tx.onerror = function () { reject(tx.error); };
+    });
+  } catch (e) { /* not fatal — remembering is a nicety, not a requirement */ }
+}
+
+export async function loadLastFileHandle() {
+  try {
+    var db = await openHandleDb();
+    return await new Promise(function (resolve, reject) {
+      var req = db.transaction(LAST_FILE_STORE, "readonly").objectStore(LAST_FILE_STORE).get(LAST_FILE_KEY);
+      req.onsuccess = function () { resolve(req.result || null); };
+      req.onerror = function () { reject(req.error); };
+    });
+  } catch (e) { return null; }
+}
+S.pendingImageRowId = null;
+S.savedRange = null;
+S.savedRangeCell = null;
+export var HIGHLIGHT_COLOR = "#FCE38A";
+
+S.prompterOpen = false;
+S.prompterPlaying = false;
+S.prompterSpeed = 42;
+S.prompterRAF = null;
+S.prompterLastTs = null;
+S.prompterSkipShot = false;
+S.recognition = null;
+S.voiceFollowActive = false;
+S.voiceStarting = false;
+S.promptWords = [];
+S.wordCursor = -1;
+/* Matching runs over the *speakable* words only. promptWords holds every
+   token on screen, including ones that normalise to nothing — an em-dash
+   between two clauses, a lone ellipsis. Those are never said out loud, so
+   leaving them in the sequence being matched breaks the run of consecutive
+   hits right where a speaker crosses one, and the prompter stalls. These
+   two arrays are the same list with those tokens dropped: speakable[i] is
+   the promptWords index of the i-th speakable word. */
+S.speakable = [];
+S.speakNorms = [];
+S.speakCursor = -1;
+S.voiceRestarts = 0;
+/* Bumped every time a listening session starts or stops. A queued restart
+   from a session that has since been stopped must not fire against the
+   recognizer belonging to the next one — that call would throw
+   InvalidStateError (it is already running) and kill a session the user
+   had only just restarted. */
+S.voiceSession = 0;
+/* One microphone stream, held open for as long as Follow My Voice is on.
+   Chrome ends a continuous recognition session by itself about once a
+   minute, and every restart after that is a fresh request for the
+   microphone — which re-prompts unless the page is already holding it.
+   Keeping this stream alive is what makes those restarts invisible. */
+S.voiceStream = null;
+S.finalTranscript = "";
+S.interimTranscript = "";
+
+/* Eval-time work for this module. _entry.js calls every module's __init()
+   in filename order — the order these statements used to run in. */
+export function __init() {
   /* The pristine served page, captured as literally the first thing this
      script does — before any render() call or state mutation touches the
      DOM. An inline classic <script> pauses the HTML parser while it runs,
@@ -12,7 +133,7 @@
      URL back (which even fails outright under file:// during testing) and
      never risks the "serialize the live DOM" trap the platform warns
      about, because this copy is taken before the DOM is live at all. */
-  var PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
+  PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
   /* The Google Fonts stylesheet ships as media="print" so a slow or
      unreachable fonts.googleapis.com cannot stop this script from running
@@ -43,128 +164,7 @@
      DESKTOP falls through to the exact same code the browser build always
      ran when it is null — that is the whole contract this branch exists to
      keep (see desktop/main.js and desktop/preload.js for the other half). */
-  var DESKTOP = window.splitpageDesktop || null;
+  S.DESKTOP = window.splitpageDesktop || null;
 
-  var state = null;
-  /* Resolves once the boot state load in init() (21-events.js) has settled
-     `state` for the first time — the desktop-only race this exists for:
-     DESKTOP.onOpenFile() (20f-desktop.js) can fire as soon as it's
-     registered, which is well before loadInitialState()'s fetch resolves
-     when the app was launched by double-clicking a project file, and
-     without this, adoptProjectState() setting `state` to that file would
-     just get clobbered a moment later when the boot load finally resolves
-     and assigns the default/seed state over it. Stays null in the browser
-     build, where nothing reads it. */
-  var initialStateReady = null;
-  var SCHEMA_VERSION = 2;
-  var editSeq = 0;
-  var dirty = false;
-  var suppressUnloadWarning = false;
-  /* The project file this document lives in: a File System Access API
-     handle, once the user has picked or created one via Save, plus which
-     format it is — "md" | "splitpage" | "html". The handle lets subsequent
-     saves write in place instead of prompting again; the kind decides which
-     serializer runs (14-export.js). `handle` stays null (and Save falls back
-     to a plain download) in browsers without the API, e.g. Firefox.
-     "html" only ever arrives by OPENING a legacy file — nothing writes it.
-     `lastModified` is the file's own timestamp as of the last time we read
-     or wrote it — the same on-disk-conflict guard the import re-save path
-     has always had (openedFile.lastModified, 18-local-files.js), applied
-     here to project saves too (checkFileConflict). */
-  var docFileHandle = { handle: null, kind: null, lastModified: null };
-  var deleteArmId = null;
-  var deleteArmTimer = null;
-
-  /* ---- remembering the last project across launches ----
-     A FileSystemFileHandle can be structured-cloned straight into IndexedDB
-     (localStorage can't hold one) — that's what lets the app reopen the same
-     file on its own next time, not just re-show whatever was typed. Purely a
-     nicety: every call here is wrapped so a browser without IndexedDB, or one
-     that refuses it (some file:// contexts), just silently gets none of this. */
-  var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
-
-  function openHandleDb() {
-    return new Promise(function (resolve, reject) {
-      if (!("indexedDB" in window)) { reject(new Error("no-indexeddb")); return; }
-      var req = indexedDB.open(LAST_FILE_DB, 1);
-      req.onupgradeneeded = function () { req.result.createObjectStore(LAST_FILE_STORE); };
-      req.onsuccess = function () { resolve(req.result); };
-      req.onerror = function () { reject(req.error); };
-    });
-  }
-
-  async function rememberLastFileHandle(handle) {
-    if (!handle) return;
-    /* Desktop persists what's open itself — the main process writes each
-       tab's document source into desktop-state.json on every source change
-       (splitpage:set-document-state) and restores whole sessions from it at
-       launch (TAB-BOOT-SYNC/DESKTOP-STATE-V2). There is nothing left for
-       this per-page, per-origin IndexedDB store to remember on desktop, and
-       (unlike splitpage://app, which is stable) it would be remembering the
-       wrong thing anyway: this file's real identity there is a path in
-       main's own registry, which this page is never handed (invariant #34). */
-    if (DESKTOP) return;
-    try {
-      var db = await openHandleDb();
-      await new Promise(function (resolve, reject) {
-        var tx = db.transaction(LAST_FILE_STORE, "readwrite");
-        tx.objectStore(LAST_FILE_STORE).put(handle, LAST_FILE_KEY);
-        tx.oncomplete = resolve;
-        tx.onerror = function () { reject(tx.error); };
-      });
-    } catch (e) { /* not fatal — remembering is a nicety, not a requirement */ }
-  }
-
-  async function loadLastFileHandle() {
-    try {
-      var db = await openHandleDb();
-      return await new Promise(function (resolve, reject) {
-        var req = db.transaction(LAST_FILE_STORE, "readonly").objectStore(LAST_FILE_STORE).get(LAST_FILE_KEY);
-        req.onsuccess = function () { resolve(req.result || null); };
-        req.onerror = function () { reject(req.error); };
-      });
-    } catch (e) { return null; }
-  }
-  var pendingImageRowId = null;
-  var savedRange = null;
-  var savedRangeCell = null;
-  var HIGHLIGHT_COLOR = "#FCE38A";
-
-  var prompterOpen = false;
-  var prompterPlaying = false;
-  var prompterSpeed = 42;
-  var prompterRAF = null;
-  var prompterLastTs = null;
-  var prompterSkipShot = false;
-
-  var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-  var recognition = null;
-  var voiceFollowActive = false;
-  var voiceStarting = false;
-  var promptWords = [];
-  var wordCursor = -1;
-  /* Matching runs over the *speakable* words only. promptWords holds every
-     token on screen, including ones that normalise to nothing — an em-dash
-     between two clauses, a lone ellipsis. Those are never said out loud, so
-     leaving them in the sequence being matched breaks the run of consecutive
-     hits right where a speaker crosses one, and the prompter stalls. These
-     two arrays are the same list with those tokens dropped: speakable[i] is
-     the promptWords index of the i-th speakable word. */
-  var speakable = [];
-  var speakNorms = [];
-  var speakCursor = -1;
-  var voiceRestarts = 0;
-  /* Bumped every time a listening session starts or stops. A queued restart
-     from a session that has since been stopped must not fire against the
-     recognizer belonging to the next one — that call would throw
-     InvalidStateError (it is already running) and kill a session the user
-     had only just restarted. */
-  var voiceSession = 0;
-  /* One microphone stream, held open for as long as Follow My Voice is on.
-     Chrome ends a continuous recognition session by itself about once a
-     minute, and every restart after that is a fresh request for the
-     microphone — which re-prompts unless the page is already holding it.
-     Keeping this stream alive is what makes those restarts invisible. */
-  var voiceStream = null;
-  var finalTranscript = "";
-  var interimTranscript = "";
+  SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}

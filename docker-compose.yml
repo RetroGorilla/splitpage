@@ -4,7 +4,12 @@
 # in front of your tunnel does that job, and does it better than anything I
 # would write here. Do NOT port-forward 8791 to the internet directly.
 #
-#   docker compose up -d --build
+#   node build.mjs && docker compose up -d --build
+#
+# The build.mjs is not optional in a repository checkout: index.html is
+# generated and is not committed (#80), and `build: .` here uses the checkout
+# as the image's build context. Deploying from CI's `splitpage-app` artifact
+# instead skips it — the artifact is already built.
 #
 # NOTE: stock Unraid does not ship `docker compose` — it comes with the
 # Compose Manager plugin. If you don't have it, DEPLOY.md §2 gives the
@@ -40,3 +45,16 @@ services:
       - READ_ONLY=0
       # Raise if you embed a lot of images in one script (bytes).
       - MAX_BODY_BYTES=26214400
+      # One image (blob) at most, in bytes (#82). Images live under
+      # DATA_DIR/blobs/ and are part of the same backup as the documents.
+      - MAX_BLOB_BYTES=8388608
+      # How many bytes of images one review link may upload per rolling hour
+      # (images in reviewers' comments). Editors are not metered.
+      - REVIEW_BLOB_BUDGET_BYTES=20971520
+      # Set to 1 only if nothing but the tunnel can reach this port. It makes
+      # the join-PIN rate limit count X-Forwarded-For instead of the socket,
+      # which behind a tunnel is one address for everybody — so one stranger's
+      # ten wrong guesses lock the whole house out. It is a request header like
+      # any other, though, so anything that CAN reach the port directly can
+      # write what it likes in it. DEPLOY.md §5 has the long version.
+      - TRUST_PROXY=0

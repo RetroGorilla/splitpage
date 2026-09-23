@@ -10,6 +10,14 @@ sleep 500
 click text*=PRESENT
 sleep 800
 expect !document.getElementById('prompter').hidden
+
+# the prompter covers the sticky topbar (#98). The topbar stays laid out
+# while presenting, so hit-test the middle of its band: whatever is on top
+# there must belong to the prompter. The height check keeps this honest — a
+# topbar that is not laid out at all would make the second line pass for the
+# wrong reason.
+expect document.querySelector('.topbar').getBoundingClientRect().height > 0
+expect (function(){var r=document.querySelector('.topbar').getBoundingClientRect();var el=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return !!(el&&el.closest('#prompter'));})()
 expect document.querySelectorAll('#prompter-content .prompter-line').length >= 2
 expect document.querySelectorAll('#prompter-content .w').length > 10
 

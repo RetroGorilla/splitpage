@@ -3,7 +3,7 @@
 # saveBackToFile() (the import re-save path) has always refused to overwrite
 # a file that changed on disk since it was opened. This extends the same
 # guard to saveDoc() (14-export.js) for a document opened from or saved to a
-# docFileHandle. No real file picker can run headless, so this drives
+# project file (a "file" home, _home.js). No real file picker can run headless, so this drives
 # window.__splitpageFormats' openFile()/save() hooks (20d-formats.js) with a
 # fake FileSystemFileHandle-shaped object — name, getFile(), createWritable()
 # — the same shape a real handle from showOpenFilePicker has.
@@ -61,5 +61,29 @@ click #file-conflict-overwrite
 wait window.__written === 2
 expect document.getElementById('file-conflict-modal').hidden
 wait F.docFile().lastModified === window.__t0 + 400000
+
+# --- a project with pictures (#82) -----------------------------------------
+# The page names pictures by imageRef; Save writes them inline, as the file
+# format always has. A picture whose bytes are nowhere (a version restored
+# after its image was lost) is written as its ref with no picture, and Save
+# says how many it could not include — the conflict guard is unchanged.
+eval (function(){ var c = document.createElement('canvas'); c.width = 30; c.height = 20; var g = c.getContext('2d'); g.fillStyle = '#c63'; g.fillRect(0, 0, 30, 20); window.__pic = window.__blobsTest.internDataUrl(c.toDataURL('image/png')); window.__ghost = { sha256: 'd'.repeat(64), width: 8, height: 8, mime: 'image/png' }; window.__pw = []; window.__ph = { name: 'pics.splitpage', _mtime: Date.now() - 50000, createWritable: async function(){ return { write: async function(d){ window.__pw.push(typeof d === 'string' ? d : await new Blob([d]).text()); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__pw[window.__pw.length - 1] || window.__phOpened], 'pics.splitpage', { lastModified: window.__ph._mtime }); } }; window.__phOpened = F.buildSplitpage(); return !!__pic; })()
+eval (function(){ return F.openFile(new File([__phOpened], 'pics.splitpage', { lastModified: __ph._mtime }), __ph).then(function(){ return true; }); })()
+wait F.docFile().name === 'pics.splitpage'
+eval (function(){ Array.prototype.forEach.call(document.querySelectorAll('#toast-host .toast'), function(t){ t.remove(); }); var r = F.state().rows; r[0].imageRef = __pic; r[1].imageRef = __ghost; F.save(); return true; })()
+wait window.__pw.length === 1
+eval (function(){ window.__pj = JSON.parse(__pw[0]); return JSON.stringify(Object.keys(__pj.rows[1])); })()
+expect __pj.rows[0].visualImage === window.__blobsTest.dataUrlForSync(__pic.sha256) && !('imageRef' in __pj.rows[0])
+expect __pj.rows[1].imageRef.sha256 === __ghost.sha256 && !('visualImage' in __pj.rows[1])
+wait Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent.indexOf('1 image could not be included in pics.splitpage') !== -1; })
+# the page itself still holds refs, and nothing was dropped
+expect F.state().rows[0].imageRef.sha256 === __pic.sha256 && F.state().rows[1].imageRef.sha256 === __ghost.sha256
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
+# the guard still guards: the file moved on disk, nothing is written
+eval (function(){ __ph._mtime = Date.now() + 100000; F.save(); return true; })()
+wait !document.getElementById('file-conflict-modal').hidden
+expect window.__pw.length === 1
+click #file-conflict-cancel
+wait document.getElementById('file-conflict-modal').hidden
 
 quit
