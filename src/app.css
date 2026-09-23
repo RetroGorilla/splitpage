@@ -53,6 +53,14 @@
     --tag-sound-tint: #E6EDF3;
     --tag-gear: #5B6B1E;          /* olive */
     --tag-gear-tint: #EEF1DE;
+
+    /* B-roll: the header's count badge, the script's "B-roll:" marker and
+       the B-roll panel. A leaf green, clear of the Visual teal and the Audio
+       orange and of every tag hue above (#142). Used as text, so
+       at least 4.5:1 on white and on --bg; --accent-contrast reads on it as
+       a fill (the badge) in both themes. Keep the dark value in step in the
+       two blocks below. */
+    --broll: #2D7738;
     --accent: #C1461C;
     --accent-contrast: #FFF8F1;
     --danger: #B3261E;
@@ -149,6 +157,7 @@
       --tag-sound-tint: #323536;
       --tag-gear: #8AA32E;
       --tag-gear-tint: #34361A;
+      --broll: #58A962;  /* 5.9:1 on --surface, 6.4:1 on --bg */
       --accent: #FF8552;
       --accent-contrast: #241004;
       --danger: #FF7A6E;
@@ -188,6 +197,7 @@
     --tag-sound-tint: #323536;
     --tag-gear: #8AA32E;
     --tag-gear-tint: #34361A;
+    --broll: #58A962;
     --accent: #FF8552;
     --accent-contrast: #241004;
     --danger: #FF7A6E;
@@ -3947,7 +3957,9 @@
     border-bottom: 1px solid color-mix(in srgb, var(--broll) 45%, transparent);
   }
   .broll-key:hover { color: var(--text); border-bottom-color: var(--broll); }
-  .broll-badge { background: var(--broll); }
+  /* .comments-badge's white text would sit on the light dark-theme green at
+     2.9:1; --accent-contrast is the page's near-white or near-black to match. */
+  .broll-badge { background: var(--broll); color: var(--accent-contrast); }
 
   /* ---------- the b-roll panel (08d-broll-panel.js, #148) ----------
 
