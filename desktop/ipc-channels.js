@@ -51,6 +51,8 @@
  *   tabId       32 hex — a tab or window id
  *   docId       /^d[0-9a-f]{32}$/ — a document id (invariant #35)
  *   snapshotId  a version-history snapshot id (invariant #38)
+ *   sha256      /^[0-9a-f]{64}$/ — a content-addressed blob's name (#82):
+ *               64 lowercase hex, so it can never be a path or a URL
  *
  * `any` is not laziness: it is what a channel that must answer a bad payload
  * with a CODE rather than a rejection needs. splitpage:draft-write returns
@@ -78,6 +80,7 @@ const BOTH = [APP_ORIGIN, TABSTRIP_ORIGIN];
 const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
 const DOC_ID_RE = /^d[0-9a-f]{32}$/;
 const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
 
 const TYPES = {
   any: () => true,
@@ -91,7 +94,8 @@ const TYPES = {
   bytes: (v) => typeof v === "string" || v instanceof ArrayBuffer || ArrayBuffer.isView(v),
   tabId: (v) => typeof v === "string" && TAB_OR_WINDOW_ID_RE.test(v),
   docId: (v) => typeof v === "string" && DOC_ID_RE.test(v),
-  snapshotId: (v) => typeof v === "string" && HISTORY_SNAP_ID_RE.test(v)
+  snapshotId: (v) => typeof v === "string" && HISTORY_SNAP_ID_RE.test(v),
+  sha256: (v) => typeof v === "string" && SHA256_RE.test(v)
 };
 
 const NONE = [];
@@ -148,6 +152,25 @@ const CHANNELS = [
      handler runs. */
   { name: "splitpage:prompter-open-in-browser", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
+  /* ---- Google Drive (issue #10, main.js § 9c) --------------------------
+     Main owns the whole OAuth flow: the loopback listener, PKCE, the token
+     exchange, the tokens themselves, and every request to Google. So the
+     three account calls take no argument at all, in the update bridge's
+     style (invariant #28): the page never names the URL the browser is sent
+     to, the redirect address or a client id. The three Drive calls take the
+     least the modal needs to say WHICH folder or file, and never a URL: a
+     Drive id (^[A-Za-z0-9_-]{1,200}$, checked in desktop/google-drive.js),
+     or for an upload {parentId | fileId, name, bytes, mimeType?}, the name
+     length-capped and the bytes size-capped there. Main builds every
+     request against Google's fixed hosts, and the answers carry names, ids
+     and bytes — never a token. */
+  { name: "splitpage:drive-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:drive-sign-in", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:drive-sign-out", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:drive-list", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:drive-download", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  { name: "splitpage:drive-upload", direction: "invoke", argsSchema: ["object"], allowedOrigins: APP },
+
   /* ---- document state and routing ------------------------------------
      Both payloads stay `object`: their fields are checked one by one in the
      handler, which is stricter than a descriptor here could be. Since #11 a
@@ -173,18 +196,38 @@ const CHANNELS = [
   { name: "splitpage:draft-flushed", direction: "send", argsSchema: ["number", "any"], allowedOrigins: APP },
 
   /* ---- version history (HISTORY-IPC, invariant #38) -------------------
-     A malformed id REJECTS rather than answering, which is why the ids are
-     typed here: the desktop backend in 03a-history-store.js turns any
-     rejection into code 'invalid' and drops the entry. main.js still runs
-     historyDocIdArg on every one of them — shape here, meaning there. */
-  { name: "splitpage:history-put", direction: "invoke", argsSchema: ["docId", "object", "string", "array"], allowedOrigins: APP },
+     Six channels since #83 step 4. A malformed id REJECTS rather than
+     answering, which is why the ids are typed here: the desktop backend in
+     03a-history-store.js turns any rejection into code 'invalid' and drops
+     the entry. main.js still runs historyDocIdArg on every one of them —
+     shape here, meaning there.
+
+     The page names a document by docId and a snapshot by its id, and the
+     Older bucket ONLY by an explicit flag — never by a string: history-put
+     writes into Older with (null, meta, body, {older:true}) and history-get
+     reads it with ({older:true}, id). "_older" is not a docId, so the table
+     refuses it as one before main does. history-put's last argument is the
+     store's own options bag, {protect?: [{docId, id}], older?: true}.
+     history-list answers the store's usage with the list (the panel always
+     wanted both), so there is no separate usage call. */
+  { name: "splitpage:history-put", direction: "invoke", argsSchema: ["docId|null", "object", "string", "object"], allowedOrigins: APP },
   { name: "splitpage:history-list", direction: "invoke", argsSchema: ["docId|null"], allowedOrigins: APP },
   { name: "splitpage:history-get", direction: "invoke", argsSchema: ["object", "snapshotId"], allowedOrigins: APP },
   { name: "splitpage:history-copy", direction: "invoke", argsSchema: ["docId", "docId"], allowedOrigins: APP },
   { name: "splitpage:history-touch", direction: "invoke", argsSchema: ["docId", "any"], allowedOrigins: APP },
-  { name: "splitpage:history-import-older", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
-  { name: "splitpage:history-usage", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:history-list-docs", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+
+  /* ---- content-addressed blobs (issue #82, main.js § 8c) ---------------
+     Images out of the document state: the page names a blob by the SHA-256
+     of its bytes and by nothing else — never a path, never a URL, never a
+     folder (invariant #28). The sha is typed here, so a string that could
+     be a path is refused before any handler runs; blob-put's bytes must
+     hash to it and be a PNG, JPEG, GIF or WebP of at most 16 MiB (checked
+     in the handler through desktop/blob-store.js's imageBlobRefusal), and
+     blob-missing's list is at most 2000 shas, each one checked there too. */
+  { name: "splitpage:blob-put", direction: "invoke", argsSchema: ["sha256", "bytes"], allowedOrigins: APP },
+  { name: "splitpage:blob-get", direction: "invoke", argsSchema: ["sha256"], allowedOrigins: APP },
+  { name: "splitpage:blob-missing", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
 
   /* ---- main -> the document page -------------------------------------- */
   { name: "splitpage:open-file", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },

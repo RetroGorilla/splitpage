@@ -95,8 +95,22 @@ jobs:
       - name: Desktop IPC channel table
         run: node desktop/test/ipc-table.test.mjs
 
+      - name: Desktop blob store unit tests
+        run: node desktop/test/blob-store.test.mjs
+
+      # Version history on disk (#83): the fs backend under the shared store,
+      # and the one-time v1 folder migration with its interruption points.
+      - name: Desktop history backend unit tests
+        run: node desktop/test/history-fs-backend.test.mjs
+
+      - name: Desktop history v1 migration unit tests
+        run: node desktop/test/history-v1-migrate.test.mjs
+
       - name: Desktop teleprompter share listener
         run: node desktop/test/prompter-share.test.mjs
+
+      - name: Desktop Google Drive client (loopback OAuth, fake Google)
+        run: node desktop/test/google-drive.test.mjs
 
       - name: Server tests
         run: node tools/test-server.mjs
@@ -169,8 +183,9 @@ jobs:
   # Its own job, not a step in `checks`: it launches ~60 real Electron
   # processes and takes far longer than everything above put together, and a
   # failure here should be readable as "the desktop shell broke", separately
-  # from lint or the browser suites. Budget an hour — a full dev-target run
-  # is ~55 minutes of mostly waiting (each case boots, drives and tears down
+  # from lint or the browser suites. Budget an hour: a full dev-target run
+  # took 6.3 minutes on a Windows 11 x64 machine but ~55 on a slow shared
+  # container — it is mostly waiting (each case boots, drives and tears down
   # a real app, and several deliberately crash one and relaunch). The
   # concurrency group above already cancels a superseded run, so a branch
   # being pushed to repeatedly does not stack these up.

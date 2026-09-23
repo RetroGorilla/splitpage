@@ -1,6 +1,8 @@
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
+import { blobImgHtml } from "./02c-blobs.js";
+import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   findRowIndex,
   getEditorName,
@@ -14,10 +16,9 @@ import {
   inertBody,
   plainText,
   safeId,
-  safeImageSrc,
   sanitizeHtml
 } from "./04-richtext.js";
-import { pad2, render } from "./05-render.js";
+import { editableCellHtml, pad2, render } from "./05-render.js";
 import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
@@ -347,12 +348,20 @@ function commentLastActivity(c) {
    can reproduce inline comment bubbles, so this keeps every export honest
    about what a comment thread actually said rather than silently
    dropping it. Always script order, regardless of how the panel itself is
-   currently sorted — a file's own appendix should read the same way twice. */
-export function commentEntries() {
+   currently sorted — a file's own appendix should read the same way twice.
+
+   `body` is plain text, and a picture in it is simply gone. A writer that
+   can draw pictures (the PDF, the .docx) passes {pieces:true} and gets,
+   beside the same `body`, each comment's and reply's `pieces`: the body in
+   order as {text} and {image: <sha>} — see bodyPieces. The text-only
+   writers (Markdown, CSV, .txt) ask too, for commentBodyText's "[image]"
+   placeholders; `body` itself is the same either way. */
+export function commentEntries(opts) {
+  var pieces = !!(opts && opts.pieces);
   var list = (S.state.comments || []).slice();
   list.sort(commentPositionCompare);
   return list.map(function (c) {
-    return {
+    var entry = {
       location: findAnchorLocationLabel(c.rowId, c.field),
       author: c.author || "Anonymous",
       body: htmlToPlainText(c.body),
@@ -362,14 +371,83 @@ export function commentEntries() {
       assignee: c.assignee || "",
       when: formatTimestampAbsolute(c.createdAt),
       replies: (c.replies || []).map(function (rp) {
-        return {
+        var reply = {
           author: rp.author || "Anonymous",
           body: htmlToPlainText(rp.body),
           when: formatTimestampAbsolute(rp.createdAt)
         };
+        if (pieces) reply.pieces = bodyPieces(rp.body);
+        return reply;
       })
     };
+    if (pieces) entry.pieces = commentBodyPieces(c);
+    return entry;
   });
+}
+
+/* A comment or reply body as the ordered pieces a picture-drawing writer
+   lays out: {text} runs between the pictures and {image: <sha>} for each
+   stored `<img data-blob>` (#82 P6), in document order — the sha alone,
+   since an image whose bytes this page has never seen is stored without
+   its size and type, and the writer reads both off the bytes anyway. Text is read the way
+   htmlToPlainText reads it — <br> a newline, every text node in order, a
+   no-break space a space — and trimmed per piece, since a picture is a
+   block of its own and the line breaks around it say nothing more. A body
+   with no picture is one {text} piece equal to `body` exactly, or none. */
+export function bodyPieces(html) {
+  var out = [];
+  if (!html) return out;
+  var root = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
+  if (!root.querySelector("img[data-blob]")) {
+    var only = htmlToPlainText(html);
+    if (only) out.push({ text: only });
+    return out;
+  }
+  var buf = "";
+  function flush() {
+    var t = buf.replace(/\u00A0/g, " ").trim();
+    if (t) out.push({ text: t });
+    buf = "";
+  }
+  (function walk(node) {
+    Array.prototype.forEach.call(node.childNodes, function (child) {
+      if (child.nodeType === 3) { buf += child.nodeValue || ""; return; }
+      if (child.nodeType !== 1) return;
+      if (child.tagName === "IMG") {
+        var sha = child.getAttribute("data-blob");
+        if (isSha256Hex(sha)) { flush(); out.push({ image: sha }); }
+        return;
+      }
+      walk(child);
+    });
+  })(root);
+  flush();
+  return out;
+}
+
+/* An image conflict card's picture is its `imageValue` (the record "Use
+   my version" puts back, and what the card draws — conflictBodyHtml), so
+   that is what prints, not the body that mirrors it. */
+function commentBodyPieces(c) {
+  if (c.kind === "conflict" && c.field === "visualImage") {
+    var ref = normalizeImageRef(c.imageValue);
+    return ref ? [{ image: ref.sha256 }] : [];
+  }
+  return bodyPieces(c.body);
+}
+
+/* A comment's or reply's body (from commentEntries({pieces:true})) for a
+   writer that can only write text — Markdown, CSV, .txt: `body` exactly,
+   when it holds no picture, and otherwise its pieces in reading order with
+   each picture a COMMENT_IMAGE_TEXT line of its own, so a picture-only
+   comment or an image conflict card no longer reads "(empty)". The
+   pictures themselves are not carried; "" still means an empty body. */
+export var COMMENT_IMAGE_TEXT = "[image]";
+
+export function commentBodyText(entry) {
+  var pieces = (entry && entry.pieces) || [];
+  if (!pieces.some(function (p) { return p.image; })) return entry.body;
+  return pieces.map(function (p) { return p.image ? COMMENT_IMAGE_TEXT : p.text; }).join("\n");
 }
 
 /* anchorLiveText's fallback for a row the "hide shot scenes" toggle
@@ -541,6 +619,9 @@ export function closeCommentsPanel() {
 }
 
 export function toggleResolve(id) {
+  /* Editors only (see commentCardHtml): the click guard already refuses
+     this in a review session, and this is the last door behind it. */
+  if (reviewMode()) return;
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   var c = S.state.comments[idx];
@@ -679,20 +760,14 @@ function replyComposerHtml(commentId) {
     '<div class="reply-composer" data-for="' + commentId + '">' +
       '<input type="text" class="reply-name-input" placeholder="Your name" value="' +
         escapeHtml(draft.name !== undefined ? draft.name : getSavedAuthorName()) + '" autocomplete="off">' +
-      '<div class="field-wrap" style="margin-top:6px;">' +
-        '<div class="mini-toolbar" role="toolbar" aria-label="Reply formatting">' +
-          '<button type="button" data-cmd="bold" title="Bold">B</button>' +
-          '<button type="button" data-cmd="italic" title="Italic"><i>I</i></button>' +
-          '<button type="button" data-cmd="underline" title="Underline"><u>U</u></button>' +
-          '<button type="button" data-cmd="link" title="Add link">Link</button>' +
-        '</div>' +
-        '<div class="cell-editable" contenteditable="true" data-placeholder="Write a reply…">' + (draft.body || "") + '</div>' +
-        '<div class="link-popover" hidden>' +
-          '<input type="url" placeholder="https://example.com" data-role="link-input">' +
-          '<button type="button" data-action="link-confirm">Add</button>' +
-          '<button type="button" data-action="link-cancel">Cancel</button>' +
-        '</div>' +
-      '</div>' +
+      /* The same cell builder as a script field (05-render.js) — which is
+         what gives a reply box the script's toolbar handling for free. */
+      editableCellHtml({
+        value: draft.body,
+        placeholder: "Write a reply…",
+        toolbar: "reply",
+        wrapStyle: "margin-top:6px;"
+      }) +
       '<div class="comment-actions">' +
         '<button type="button" data-action="reply-post" data-id="' + commentId + '">Post reply</button>' +
         '<button type="button" data-action="reply-cancel" data-id="' + commentId + '">Cancel</button>' +
@@ -767,14 +842,15 @@ function commentCardHtml(c) {
         '</select>' +
       '</div>' +
       '<div class="comment-actions">' +
-        /* A review session adds to a thread and does not delete one: a
-           review token's only writes are the comment routes (#71), and
-           there is no route for a delete. Resolving HAS one (PATCH
-           …/comments/:id), and saveToServer's review branch sends a resolve
-           this view holds, but the button is not offered here yet —
-           21-events.js's click guard (REVIEW_SAFE_ACTIONS) still refuses
-           toggle-resolve from a review session, and the two have to change
-           together. */
+        /* A review session adds to a thread and does not delete or
+           resolve one. Its only write is POSTing a comment or a reply
+           (#71). Resolving is an editor's alone, by the owner's decision:
+           nobody's authorship can be proved (an author is a typed name and
+           reviewers share one token), so a reviewer resolving anything
+           would be resolving someone else's comment. The server refuses a
+           reviewer's PATCH (403 reviewers-cannot-resolve), 21-events.js's
+           click guard (REVIEW_SAFE_ACTIONS) refuses toggle-resolve, and
+           toggleResolve() itself does nothing in a review session. */
         (reviewMode() ? '' :
           '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
             (c.resolved ? "Unresolve" : "Resolve") + '</button>') +
@@ -786,6 +862,20 @@ function commentCardHtml(c) {
       '</div>' +
     '</div>'
   );
+}
+
+/* An image conflict's picture is its `imageValue` record (#82), drawn as
+   an <img data-blob> the hydrator (02c-blobs.js) fills in. The stored body
+   names the same picture (<img data-blob>, P6) for anything that reads
+   bodies generically, but the record is the source of truth — it is what
+   "Use my version" puts back — so the card draws the record. Every other
+   body is drawn as stored; its <img data-blob>s are hydrated the same way. */
+function conflictBodyHtml(c) {
+  if (c.field === "visualImage") {
+    var ref = normalizeImageRef(c.imageValue);
+    return ref ? blobImgHtml(ref, "comment-img") : "";
+  }
+  return c.body;
 }
 
 /* A card holding one edit that could not be merged automatically —
@@ -801,7 +891,7 @@ function conflictCardHtml(c) {
       commentResolvedNoteHtml(c) +
       '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
       '<div class="comment-quote">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
-      '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : c.body) + '</div>' +
+      '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>' +
       '<div class="comment-actions">' +
         /* All three write the document: "Use my version" puts text back
            into a row, and the other two change a stored comment. */
@@ -836,10 +926,10 @@ export function restoreConflictValue(commentId) {
   if (ri === -1) { showToast("That row no longer exists.", "warn"); return; }
 
   pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
-  var container = inertBody(c.body);
   if (c.field === "visualImage") {
-    var img = container.querySelector("img");
-    S.state.rows[ri].visualImage = img ? safeImageSrc(img.getAttribute("src")) : null;
+    /* the picture is the card's record (#82), not anything in its body */
+    delete S.state.rows[ri].visualImage;
+    S.state.rows[ri].imageRef = c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null);
   } else {
     /* an empty original must come back empty, not as placeholder text */
     S.state.rows[ri][c.field] = c.emptyValue ? "" : sanitizeHtml(c.body);

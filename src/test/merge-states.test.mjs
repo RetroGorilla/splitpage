@@ -21,7 +21,9 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
-import { cloneState, mergeStates } from "../js/03-sync.js";
+import { acceptStash, cloneState, mergeStates, readStash, rowContentEqual, stashLocalWork } from "../js/03-sync.js";
+import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../js/02c-blobs.js";
+import { S } from "../js/_state.js";
 
 /* The fixture 51-merge-fields.txt used: one person, one prop, one b-roll
    shot, one row, a non-default reading speed. Rebuilt per call — mergeStates
@@ -296,3 +298,113 @@ test("rev is max of both sides plus one", () => {
   mine.rev = 4; theirs.rev = 7;
   assert.equal(mergeStates(base, mine, theirs).merged.rev, 8);
 });
+
+/* ---- pictures (#82): merged by the sha their imageRef names ---- */
+
+const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+/* a PNG header the registry accepts, one per (w, h) */
+function pic(w, h) {
+  return intern(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
+    ...be32(w), ...be32(h), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44]));
+}
+function imgDoc(ref) {
+  return rowDoc([{ id: "r1", audioText: "a", imageRef: ref }]);
+}
+
+test("pictures compare by sha: two records of the same bytes are the same picture", () => {
+  const a = pic(10, 10);
+  const x = imgDoc(a), y = imgDoc({ ...a });
+  assert.notEqual(x.rows[0].imageRef, y.rows[0].imageRef);
+  assert.ok(rowContentEqual(x.rows[0], y.rows[0]));
+  assert.ok(!rowContentEqual(x.rows[0], imgDoc(pic(11, 10)).rows[0]));
+  assert.ok(!rowContentEqual(x.rows[0], imgDoc(null).rows[0]));
+});
+
+test("a picture only one side changed: that side wins, with no conflict", () => {
+  const a = pic(20, 10), b = pic(21, 10);
+  const mineChanged = mergeStates(imgDoc(a), imgDoc(b), imgDoc(a));
+  assert.deepEqual(mineChanged.merged.rows[0].imageRef, b);
+  assert.equal(mineChanged.conflicts.length, 0);
+  assert.equal(mineChanged.stats.rowsFromMe, 1);
+  const theirsChanged = mergeStates(imgDoc(a), imgDoc(a), imgDoc(b));
+  assert.deepEqual(theirsChanged.merged.rows[0].imageRef, b);
+  assert.equal(theirsChanged.conflicts.length, 0);
+  const removedByMe = mergeStates(imgDoc(a), imgDoc(null), imgDoc(a));
+  assert.equal(removedByMe.merged.rows[0].imageRef, null);
+  /* the merged row's record is its own copy, not mine */
+  const mine = imgDoc(b);
+  assert.notEqual(mergeStates(imgDoc(a), mine, imgDoc(a)).merged.rows[0].imageRef, mine.rows[0].imageRef);
+});
+
+test("both sides changed the picture: theirs is live, mine is a card holding it as imageValue", () => {
+  const a = pic(30, 10), b = pic(31, 10), c = pic(32, 10);
+  const res = mergeStates(imgDoc(a), imgDoc(b), imgDoc(c));
+  assert.deepEqual(res.merged.rows[0].imageRef, c);
+  assert.equal(res.conflicts.length, 1);
+  const card = res.merged.comments.find((k) => k.kind === "conflict");
+  assert.equal(card.field, "visualImage", "the comment's field keeps its old name");
+  assert.equal(card.conflictField, "Visual image");
+  assert.deepEqual(card.imageValue, b);
+  /* the body shows the same picture in the stored HTML form (#82 P6) */
+  assert.equal(card.body, '<img class="comment-img" data-blob="' + b.sha256 + '" data-w="31" data-h="10" data-mime="image/png">');
+  assert.equal(card.emptyValue, false);
+  /* and it survives the one door, and a second merge, as it is */
+  const again = migrateRows(cloneState(res.merged));
+  assert.deepEqual(again.comments.find((k) => k.id === card.id).imageValue, b);
+  /* I removed it while they replaced it: the card says so */
+  const cleared = mergeStates(imgDoc(a), imgDoc(null), imgDoc(c)).merged.comments.find((k) => k.kind === "conflict");
+  assert.equal(cleared.imageValue, null);
+  assert.equal(cleared.body, "");
+  assert.equal(cleared.emptyValue, true);
+});
+
+test("a stash carries the pictures the store does not hold, and they come back", () => {
+  const b = pic(40, 10);
+  const url = "data:image/png;base64," + Buffer.from(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
+    ...be32(41), ...be32(10), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44])).toString("base64");
+  const stash = { mine: imgDoc(b), blobs: { ["0".repeat(64)]: url } };
+  acceptStash(stash, imgDoc(null));
+  /* interned under its REAL sha — the key it came under is not believed */
+  assert.equal(stash.mine.rows[0].imageRef.sha256, b.sha256);
+});
+
+test("stashLocalWork writes refs, plus the bytes of every picture not durably stored", () => {
+  setBackend(createMemoryBackend()); /* memory is never durable */
+  const b = pic(60, 10), c = pic(61, 10);
+  const was = { state: S.state, base: S.baseState };
+  S.state = imgDoc(b);
+  S.baseState = imgDoc(c);
+  try {
+    assert.equal(stashLocalWork(), true);
+    const st = readStash();
+    assert.deepEqual(st.mine.rows[0].imageRef, b);
+    assert.equal(JSON.stringify(st.mine).indexOf("data:image"), -1, "the document itself holds refs");
+    assert.deepEqual(Object.keys(st.blobs).sort(), [b.sha256, c.sha256].sort());
+    assert.equal(st.blobs[b.sha256], dataUrlForSync(b.sha256));
+    assert.equal(st.imagesStripped, undefined);
+  } finally {
+    S.state = was.state;
+    S.baseState = was.base;
+    sessionStorage.clear();
+  }
+});
+
+test("one release: an older stash's \"__IMAGE__\" sentinels take theirs' picture", () => {
+  const a = pic(50, 10), c = pic(51, 10);
+  const stash = {
+    imagesStripped: true,
+    base: { title: "R", schema: 2, rows: [{ id: "r1", audioText: "a", visualImage: "__IMAGE__" }] },
+    mine: { title: "R", schema: 2, rows: [{ id: "r1", audioText: "mine", visualImage: "__IMAGE__" }, { id: "r2", audioText: "new", visualImage: null }] }
+  };
+  const theirs = imgDoc(c);
+  acceptStash(stash, theirs);
+  assert.equal(stash.imagesStripped, undefined);
+  assert.deepEqual(stash.mine.rows[0].imageRef, c);
+  assert.equal("visualImage" in stash.mine.rows[0], false);
+  const res = mergeStates(migrateRows(stash.base), migrateRows(stash.mine), theirs);
+  assert.deepEqual(res.merged.rows[0].imageRef, c, "their picture is kept");
+  assert.equal(res.merged.rows[0].audioText, "mine", "and my text still merges");
+  assert.equal(res.conflicts.length, 0, "no empty card for a picture nobody can know about");
+  void a;
+});
+

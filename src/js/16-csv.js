@@ -8,7 +8,7 @@ import {
 } from "./01-scene-status.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { pad2 } from "./05-render.js";
-import { commentEntries } from "./10-comments.js";
+import { commentBodyText, commentEntries } from "./10-comments.js";
 import { htmlToPlainText } from "./14-export.js";
 
 /* ================= csv ================= */
@@ -32,7 +32,8 @@ export function buildCsv() {
   });
   lines.push(["", "", csvEscape(formatDuration(totalSeconds())), "", ""].join(","));
 
-  var comments = commentEntries();
+  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     lines.push("");
     lines.push(csvEscape("Comments"));
@@ -45,13 +46,13 @@ export function buildCsv() {
         csvEscape(c.author),
         csvEscape(c.when),
         csvEscape(c.quoted),
-        csvEscape(c.body)
+        csvEscape(commentBodyText(c))
       ].join(","));
       c.replies.forEach(function (rp) {
         lines.push([
           csvEscape(""), csvEscape(""), csvEscape(""),
           csvEscape("↳ " + rp.author), csvEscape(rp.when),
-          csvEscape(""), csvEscape(rp.body)
+          csvEscape(""), csvEscape(commentBodyText(rp))
         ].join(","));
       });
     });
@@ -135,7 +136,7 @@ export function csvToRows(text) {
     out.push({
       id: makeId(),
       visualText: escapeHtml(v).replace(/\n/g, "<br>"),
-      visualImage: null,
+      imageRef: null,
       audioText: escapeHtml(a).replace(/\n/g, "<br>")
     });
   }

@@ -45,6 +45,12 @@ services:
       - READ_ONLY=0
       # Raise if you embed a lot of images in one script (bytes).
       - MAX_BODY_BYTES=26214400
+      # One image (blob) at most, in bytes (#82). Images live under
+      # DATA_DIR/blobs/ and are part of the same backup as the documents.
+      - MAX_BLOB_BYTES=8388608
+      # How many bytes of images one review link may upload per rolling hour
+      # (images in reviewers' comments). Editors are not metered.
+      - REVIEW_BLOB_BUDGET_BYTES=20971520
       # Set to 1 only if nothing but the tunnel can reach this port. It makes
       # the join-PIN rate limit count X-Forwarded-For instead of the socket,
       # which behind a tunnel is one address for everybody — so one stranger's

@@ -1,4 +1,6 @@
 import { makeId } from "./02-state.js";
+import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
+import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import { tagCategory } from "./07-production-tags.js";
 import { BROLL_MARKER_RE } from "./08c-broll.js";
 
@@ -24,6 +26,92 @@ export function sanitizeHtml(html) {
 export function safeImageSrc(src) {
   if (typeof src !== "string") return null;
   return /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]*$/.test(src) ? src : null;
+}
+
+/* ---- images inside HTML (#82 P6) ----
+
+   An image in a comment, a reply or a pasted cell is stored the way a row's
+   picture is: by the SHA-256 of its bytes, which live in the image registry
+   (02c-blobs.js) and its durable store, never in the HTML. The one stored
+   form is
+
+     <img class="comment-img" data-blob="<sha>" data-w="<w>" data-h="<h>" data-mime="<type>">
+
+   with NO src. The src is added only in the live DOM, by the hydrator
+   (02c-blobs.js), which gives every <img data-blob> a blob: URL once it has
+   the bytes; storedHtmlFromDom() takes it (and the hydrator's other
+   attributes) back out wherever the app reads the DOM into state without
+   sanitising it.
+
+   The sanitiser decides what an <img> becomes, synchronously:
+     - a valid data-blob sha stays, with data-w/h/mime taken from the
+       registry's record when this page holds the bytes, else from the
+       element's own attributes when they form a valid record, else left
+       off. An unknown sha is kept: its bytes may be in the durable store or
+       on the server, and the hydrator asks both. Any src it carries — a
+       blob: URL from the live DOM, or anything else — is dropped.
+     - otherwise an inline data: image (png/jpeg/gif/webp, safeImageSrc) is
+       interned — hashed and measured by its bytes, never by what it
+       claims — and becomes the stored form, its bytes queued to be stored.
+     - anything else — an http src, an SVG, a data: URI that is not a
+       picture, an upper-case or short sha — is dropped, as before. */
+function imageRefOf(node) {
+  var sha = node.getAttribute("data-blob");
+  if (isSha256Hex(sha)) {
+    return recordFor(sha) || normalizeImageRef({
+      sha256: sha,
+      width: imageDimAttr(node.getAttribute("data-w")),
+      height: imageDimAttr(node.getAttribute("data-h")),
+      mime: node.getAttribute("data-mime")
+    }) || { sha256: sha };
+  }
+  var src = safeImageSrc(node.getAttribute("src") || "");
+  var rec = src ? internDataUrl(src) : null;
+  if (rec) queuePersist([rec.sha256]);
+  return rec;
+}
+
+function imageDimAttr(v) {
+  return typeof v === "string" && /^[1-9][0-9]{0,6}$/.test(v) ? parseInt(v, 10) : NaN;
+}
+
+function storedImageEl(ref) {
+  var img = document.createElement("img");
+  img.className = "comment-img";
+  img.setAttribute("data-blob", ref.sha256);
+  if (ref.width && ref.height && ref.mime) {
+    img.setAttribute("data-w", String(ref.width));
+    img.setAttribute("data-h", String(ref.height));
+    img.setAttribute("data-mime", ref.mime);
+  }
+  return img;
+}
+
+/* The stored form of an image record, as the sanitiser writes it — for
+   HTML built outside the sanitiser (an image conflict card's body). */
+export function storedImageHtml(ref) {
+  var clean = normalizeImageRef(ref);
+  if (!clean) return "";
+  return storedImageEl(clean).outerHTML;
+}
+
+/* HTML read out of the live DOM, with what the hydrator added to every
+   <img data-blob> taken back out, so it can go into state: everything on
+   such an image but its stored attributes. Only the images change;
+   anything else is left for the sanitiser, wherever it runs. */
+var STORED_IMG_ATTRS = { "class": true, "data-blob": true, "data-w": true, "data-h": true, "data-mime": true };
+
+export function storedHtmlFromDom(html) {
+  if (typeof html !== "string" || html.indexOf("data-blob") === -1) return html;
+  var body = inertBody(html);
+  var imgs = body.querySelectorAll("img[data-blob]");
+  if (!imgs.length) return html;
+  Array.prototype.forEach.call(imgs, function (img) {
+    Array.prototype.slice.call(img.attributes).forEach(function (a) {
+      if (!STORED_IMG_ATTRS[a.name]) img.removeAttribute(a.name);
+    });
+  });
+  return body.innerHTML;
 }
 
 export function safeHref(href) {
@@ -103,13 +191,8 @@ function walkSanitize(srcParent, destParent) {
     if (tag === "S" || tag === "STRIKE" || tag === "DEL") { var s = document.createElement("s"); walkSanitize(node, s); destParent.appendChild(s); return; }
     if (tag === "MARK") { var m = document.createElement("mark"); walkSanitize(node, m); destParent.appendChild(m); return; }
     if (tag === "IMG") {
-      var src = safeImageSrc(node.getAttribute("src") || "");
-      if (src) {
-        var img = document.createElement("img");
-        img.setAttribute("src", src);
-        img.className = "comment-img";
-        destParent.appendChild(img);
-      }
+      var ref = imageRefOf(node);
+      if (ref) destParent.appendChild(storedImageEl(ref));
       return;
     }
     if (tag === "A" && node.classList && node.classList.contains("video-embed-card")) {

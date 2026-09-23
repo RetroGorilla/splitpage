@@ -1,0 +1,128 @@
+# The image blob registry and its IndexedDB backend (src/js/02c-blobs.js,
+# issue #82 P1), mostly driven through window.__blobsTest: real encoder
+# output from a canvas (PNG, JPEG, WebP) measured and hashed, the data: URI decoder held to what
+# this browser itself decodes, then intern -> persist -> reload -> ensureBytes
+# against the real 'splitpage-blobs' database, and the bytes shown again
+# through a blob: URL under the page's own CSP.
+#
+# The pure halves have unit tests (src/test/blob-policy.test.mjs,
+# blob-store.test.mjs); what only a browser can say is here. Every `eval`
+# is one physical line.
+
+open
+
+# ---- a clean database, and proof that booting never opens one ----------
+eval (async function(){ await new Promise(function(r){ var q = indexedDB.deleteDatabase('splitpage-blobs'); q.onsuccess = q.onerror = r; q.onblocked = function(){ setTimeout(r, 1000); }; }); return true; })()
+goto /index.html
+expect typeof window.__blobsTest === 'object' && typeof window.__blobsTest.persist === 'function'
+expect (async function(){ var dbs = await indexedDB.databases(); return !dbs.some(function(d){ return d.name === 'splitpage-blobs'; }); })()
+
+# ---- helpers: canvas images, the browser's own verdict on a data: URI ---
+eval (function(){ window.B = window.__blobsTest; window.canvasUrl = function(type){ var c = document.createElement('canvas'); c.width = 37; c.height = 23; var g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 37, 23); g.fillStyle = '#39f'; g.fillRect(5, 4, 20, 9); return c.toDataURL(type, 0.9); }; window.loads = function(src){ return new Promise(function(r){ var i = new Image(); i.onload = function(){ r(i.naturalWidth + 'x' + i.naturalHeight); }; i.onerror = function(){ r(null); }; i.src = src; }); }; window.b64bytes = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var a = new Uint8Array(bin.length); for (var k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k); return a; }; window.subtleHex = async function(bytes){ var d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); return Array.prototype.map.call(d, function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }; return true; })()
+
+# ---- real encoder output: type sniffed, size measured, sha = subtle's ----
+eval (async function(){ window.recs = {}; for (var t of ['image/png', 'image/jpeg', 'image/webp']) { var u = canvasUrl(t); window.recs[t] = { url: u, rec: B.internDataUrl(u), subtle: await subtleHex(b64bytes(u)) }; } return JSON.stringify(Object.keys(recs).map(function(k){ return recs[k].rec; })); })()
+expect recs['image/png'].rec.mime === 'image/png' && recs['image/png'].rec.width === 37 && recs['image/png'].rec.height === 23
+expect recs['image/jpeg'].rec.mime === 'image/jpeg' && recs['image/jpeg'].rec.width === 37 && recs['image/jpeg'].rec.height === 23
+expect recs['image/webp'].rec.mime === 'image/webp' && recs['image/webp'].rec.width === 37 && recs['image/webp'].rec.height === 23
+expect recs['image/png'].rec.sha256 === recs['image/png'].subtle && recs['image/jpeg'].rec.sha256 === recs['image/jpeg'].subtle && recs['image/webp'].rec.sha256 === recs['image/webp'].subtle
+# the canonical inline form is what the canvas produced, byte for byte
+expect B.dataUrlForSync(recs['image/png'].rec.sha256) === recs['image/png'].url
+
+# ---- the decoder refuses exactly what this browser refuses to show ------
+# Each variant of one PNG: does internDataUrl give the original sha, and does
+# an <img> load it? The two answers must agree for every variant.
+eval (async function(){ var u = recs['image/png'].url, head = u.slice(0, u.indexOf(',') + 1), body = u.slice(head.length), sha = recs['image/png'].rec.sha256; var vs = { wrapped: head + body.replace(/(.{60})/g, '$1\n'), crlf: head + body.replace(/(.{40})/g, '$1\r\n'), spaced: head + body.replace(/(.{4})/g, '$1 '), tabs: head + '\t' + body + '\t', formfeed: head + body.slice(0, 16) + '\f' + body.slice(16), unpadded: head + body.replace(/=+$/, ''), trailingVT: head + body + '\u000b', jpgLabel: 'data:image/jpg;base64,' + body, innerNBSP: head + body.slice(0, 16) + '\u00a0' + body.slice(16), innerVT: head + body.slice(0, 16) + '\u000b' + body.slice(16), midPad: head + body.slice(0, 16) + '=' + body.slice(16) }; window.verdicts = {}; for (var k in vs) { var r = B.internDataUrl(vs[k]); window.verdicts[k] = { ours: r ? r.sha256 === sha : null, browser: (await loads(vs[k])) === '37x23' }; } return JSON.stringify(verdicts); })()
+expect Object.keys(verdicts).every(function(k){ return (verdicts[k].ours === true) === verdicts[k].browser; })
+expect Object.keys(verdicts).every(function(k){ return verdicts[k].ours !== false; })
+expect verdicts.wrapped.browser && verdicts.unpadded.browser && verdicts.trailingVT.browser
+expect !verdicts.innerNBSP.browser && !verdicts.innerVT.browser && !verdicts.midPad.browser
+
+# ---- persist writes through to IndexedDB, and says so only once it has --
+eval (async function(){ window.P = recs['image/png'].rec.sha256; window.W = recs['image/webp'].rec.sha256; window.persisted = await B.persist([P, W]); return JSON.stringify({ failed: persisted, backend: await B.backendInfo() }); })()
+expect Array.isArray(persisted) && persisted.length === 0
+expect (async function(){ var i = await B.backendInfo(); return i.name === 'idb' && i.persistent === true; })()
+expect B.isDurableSync(P) && B.isDurableSync(W)
+expect (async function(){ var r = await B.idbRecord(P); return r && r.mime === 'image/png' && r.isBlob === true && r.size === b64bytes(recs['image/png'].url).length && r.addedAt > 0 && r.usedAt === r.addedAt; })()
+# the JPEG was interned but never persisted: memory only
+expect (async function(){ return (await B.idbRecord(recs['image/jpeg'].rec.sha256)) === null && !B.isDurableSync(recs['image/jpeg'].rec.sha256); })()
+eval (function(){ sessionStorage.setItem('blobs65', JSON.stringify({ P: P, W: W, J: recs['image/jpeg'].rec.sha256 })); return true; })()
+
+# ---- a reload forgets memory; ensureBytes finds the blobs in IndexedDB --
+goto /index.html
+eval (function(){ window.B = window.__blobsTest; var s = JSON.parse(sessionStorage.getItem('blobs65')); window.P = s.P; window.W = s.W; window.J = s.J; return !B.has(P) && !B.has(W); })()
+expect !B.has(P) && !B.has(W) && !B.has(J)
+eval (async function(){ window.missing = await B.ensureBytes([P, W, J, 'f'.repeat(64)]); return JSON.stringify(missing); })()
+expect JSON.stringify(missing) === JSON.stringify([J, 'f'.repeat(64)])
+expect B.has(P) && B.has(W)
+expect JSON.stringify(B.recordFor(P)) === JSON.stringify({ sha256: P, width: 37, height: 23, mime: 'image/png' })
+expect B.recordFor(W).mime === 'image/webp' && B.recordFor(W).width === 37
+expect B.isDurableSync(P)
+
+# ---- and the bytes show again, through a blob: URL, under the page's CSP
+expect B.urlForSync(P).indexOf('blob:') === 0 && B.urlForSync(P) === B.urlForSync(P)
+expect (async function(){ var u = B.urlForSync(W); return new Promise(function(r){ var i = document.createElement('img'); i.onload = function(){ r(i.naturalWidth === 37 && i.naturalHeight === 23); i.remove(); }; i.onerror = function(){ r(false); }; i.src = u; document.body.appendChild(i); }); })()
+
+# ---- forgetting memory again: a second ensureBytes re-reads, re-hashes --
+expect B.forgetMemory() && !B.has(P)
+expect (async function(){ var m = await B.ensureBytes([P]); return m.length === 0 && B.has(P); })()
+# persisting a blob the database already holds writes nothing new
+expect (async function(){ var before = await B.idbRecord(P); var f = await B.persist([P]); var after = await B.idbRecord(P); return f.length === 0 && after.addedAt === before.addedAt && after.usedAt === before.usedAt; })()
+
+# ---- P2a: every reader of a row's picture goes through rowImage --------
+# Rows are given an imageRef by hand here (68-images.txt drops real
+# pictures) and re-rendered through __renderTest.render. Four rows: the
+# PNG whose bytes are in memory, the WebP whose bytes are only in
+# IndexedDB, a sha nobody has, and a legacy inline PNG.
+eval (function(){ window.F = window.__splitpageFormats; window.R = window.__renderTest; window.RP = B.recordFor(P); window.RW = { sha256: W, width: 37, height: 23, mime: 'image/webp' }; var c = document.createElement('canvas'); c.width = 29; c.height = 17; var g = c.getContext('2d'); g.fillStyle = '#3a3'; g.fillRect(0, 0, 29, 17); window.LEGACY = c.toDataURL('image/png'); var st = F.state(); while (st.rows.length < 4) st.rows.push({ id: 'img-row-' + st.rows.length, visualText: '', visualImage: null, audioText: 'filler', status: 'todo' }); window.IDS = st.rows.slice(0, 4).map(function(r){ return r.id; }); return !!(RP && RW && typeof R.render === 'function'); })()
+eval (function(){ window.imgOf = function(i){ return document.querySelector('#rows .row[data-id="' + IDS[i] + '"] .visual-media img'); }; B.forgetMemory(); window.__heldAfterForget = B.has(W) || B.has(P); return true; })()
+expect __heldAfterForget === false
+# P back in memory (ensureBytes), W left only in IndexedDB
+expect (async function(){ var m = await B.ensureBytes([P]); return m.length === 0 && B.has(P) && !B.has(W); })()
+# render is synchronous: straight after it, P's <img> already has its blob:
+# URL and W's has data-blob and no src (the hydrator has not run yet)
+eval (function(){ var rows = F.state().rows; rows[0].imageRef = RP; rows[1].imageRef = RW; rows[2].imageRef = { sha256: 'e'.repeat(64), width: 40, height: 30, mime: 'image/png' }; rows[3].visualImage = LEGACY; R.render(); var a = imgOf(0), b = imgOf(1), c = imgOf(2); window.sync0 = { blob: a && a.getAttribute('data-blob'), src: a && a.getAttribute('src'), w: a && a.getAttribute('width'), h: a && a.getAttribute('height') }; window.sync1 = { blob: b && b.getAttribute('data-blob'), src: b && b.getAttribute('src') }; window.sync2 = { blob: c && c.getAttribute('data-blob'), src: c && c.getAttribute('src') }; return JSON.stringify([sync0, sync1, sync2]); })()
+expect sync0.blob === P && sync0.src === B.urlForSync(P) && sync0.src.indexOf('blob:') === 0 && sync0.w === '37' && sync0.h === '23'
+expect sync1.blob === W && sync1.src === null
+expect sync2.blob === 'e'.repeat(64) && sync2.src === null
+expect B.rowImageUrl(F.state().rows[0]) === B.urlForSync(P) && B.rowImageUrl(F.state().rows[2]) === null && B.rowImageUrl(F.state().rows[3]) === LEGACY
+# the legacy row renders exactly as it always did
+expect document.querySelector('#rows .row[data-id="' + IDS[3] + '"] .image-thumb-wrap').innerHTML.indexOf('<img src="' + LEGACY + '" alt="">') === 0
+# the hydrator fetches W from IndexedDB and fills its src; P's shows
+wait (function(){ var b = imgOf(1); return b && (b.getAttribute('src') || '').indexOf('blob:') === 0 && b.complete && b.naturalWidth === 37; })()
+wait (function(){ var a = imgOf(0); return a && a.complete && a.naturalWidth === 37 && a.naturalHeight === 23; })()
+expect B.has(W)
+# nobody has the third: it stays an <img data-blob>, marked unavailable
+wait (function(){ var c = imgOf(2); return c && c.getAttribute('data-blob-state') === 'missing' && c.getAttribute('alt') === 'Image unavailable' && !c.getAttribute('src'); })()
+expect document.querySelector('#rows .row[data-id="' + IDS[2] + '"] .visual-media').className === 'visual-media'
+# a render that changes nothing leaves the placeholder alone; once W's
+# bytes are in memory a render paints its src straight into the markup
+expect (function(){ R.render(); var c = imgOf(2), b = imgOf(1); return c.getAttribute('data-blob-state') === 'missing' && b.getAttribute('src') === B.urlForSync(W); })()
+
+# ---- the exports read the same pictures --------------------------------
+# PDF: three pictures (the missing one left out), every one a JPEG stream —
+# the PNGs and the WebP converted, not written as DCTDecode garbage.
+eval (function(){ window.__blobs = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) return; return c.apply(this, arguments); }; window.lastOf = function(type){ for (var i = __blobs.length - 1; i >= 0; i--) if ((__blobs[i].type || '').indexOf(type) !== -1) return __blobs[i]; return null; }; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+wait !!lastOf('application/pdf')
+eval (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('application/pdf').arrayBuffer())); var re = /\/Subtype \/Image \/Width (\d+) \/Height (\d+)[^]*?stream\n([^]{2})/g, m; window.pdfImgs = []; while ((m = re.exec(t))) pdfImgs.push({ w: +m[1], h: +m[2], soi: m[3].charCodeAt(0) === 0xFF && m[3].charCodeAt(1) === 0xD8 }); return JSON.stringify(pdfImgs); })()
+expect pdfImgs.length === 3 && pdfImgs.every(function(i){ return i.soi; })
+expect pdfImgs[0].w === 37 && pdfImgs[0].h === 23 && pdfImgs[1].w === 37 && pdfImgs[2].w === 29 && pdfImgs[2].h === 17
+# Word: three pictures
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+wait !!lastOf('wordprocessingml')
+expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('wordprocessingml').arrayBuffer())); return t.indexOf('word/media/image1.png') !== -1 && t.indexOf('word/media/image2.webp') !== -1 && t.indexOf('word/media/image3.png') !== -1 && t.indexOf('word/media/image4.') === -1 && t.indexOf('<Default Extension="png" ContentType="image/png"/>') !== -1 && t.indexOf('<Default Extension="webp" ContentType="image/webp"/>') !== -1; })()
+# Markdown: a zip carrying the three it has, each named for what it is
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md"]
+wait !!lastOf('zip')
+expect (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await lastOf('zip').arrayBuffer())); return t.indexOf('images/scene-01.png') !== -1 && t.indexOf('images/scene-02.webp') !== -1 && t.indexOf('images/scene-04.png') !== -1 && t.indexOf('images/scene-03.') === -1; })()
+# the two-column table inlines them as data: URIs, the ref'd ones canonical
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md-table"]
+wait (function(){ var b = lastOf('markdown') || lastOf('text/'); return !!b; })()
+expect (async function(){ var b = lastOf('markdown') || lastOf('text/'); var t = await b.text(); return t.indexOf(B.dataUrlForSync(P)) !== -1 && t.indexOf(B.dataUrlForSync(W)) !== -1 && t.indexOf(LEGACY) !== -1; })()
+
+logs

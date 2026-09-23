@@ -210,8 +210,9 @@ function presenceBeatSoon() {
 /* ---- painting ----
 
    Rebuilt from scratch each time rather than diffed: eight badges is
-   nothing to build, and anything cleverer would have to track DOM that
-   render() throws away wholesale. */
+   nothing to build, and anything cleverer would have to track which gutter
+   or field-wrap a render or a renderRow() just repainted (05-render.js) —
+   a repainted part takes its mark with it. */
 export function paintPresence() {
   var bar = document.getElementById("presence-bar");
   var list = presenceHere.slice(0, PRESENCE_MAX_SHOWN);
@@ -337,7 +338,6 @@ export function __init() {
        over this. */
     setWhere: function (w) { presenceWhere = w || { rowId: null, field: null }; paintPresence(); },
     goIdle: function () { presenceLastActive = 0; },
-    initials: presenceInitials,
     color: presenceColor,
     id: presenceSelfId
   };

@@ -19,7 +19,9 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { legacyMdToHtml, migrateRows } from "../js/02-state.js";
+import { dataUrlForSync } from "../js/02c-blobs.js";
 import { DEFAULT_WPM } from "../js/01-scene-status.js";
 import { __init as initTags, collectTagsFromRows } from "../js/07-production-tags.js";
 
@@ -80,12 +82,78 @@ test("rows: script, iframe and event handlers never survive", () => {
   assert.ok(row.visualText.includes("<em>fine</em>"));
 });
 
-test("rows: only an inline data: image is accepted as a visual", () => {
-  assert.equal(doc({ rows: [{ id: "r1", visualImage: PNG }] }).rows[0].visualImage, PNG);
-  for (const bad of ["https://evil.test/x.png", "javascript:alert(1)", "data:text/html;base64,AAA", 42]) {
-    assert.equal(doc({ rows: [{ id: "r1", visualImage: bad }] }).rows[0].visualImage, null,
-      "rejected " + JSON.stringify(bad));
+const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");
+const PNG_SHA = createHash("sha256").update(PNG_BYTES).digest("hex");
+const PNG_REF = { sha256: PNG_SHA, width: 1, height: 1, mime: "image/png" };
+const STORED_PNG = '<img class="comment-img" data-blob="' + PNG_SHA + '" data-w="1" data-h="1" data-mime="image/png">';
+
+test("rows: a legacy inline image becomes an imageRef, content-addressed (#82)", () => {
+  const row = doc({ rows: [{ id: "r1", visualImage: PNG }] }).rows[0];
+  assert.deepEqual(row.imageRef, PNG_REF);
+  assert.equal("visualImage" in row, false, "the data: URI is gone from the row");
+  /* the bytes are in the page's registry, so everything that shows or
+     writes the picture still can */
+  assert.equal(dataUrlForSync(PNG_SHA), PNG);
+});
+
+test("rows: the migration is deterministic, and migrating twice changes nothing", () => {
+  const a = doc({ rows: [{ id: "r1", visualImage: PNG }] });
+  const b = doc({ rows: [{ id: "r1", visualImage: "data:image/png;base64," + PNG.slice(22).replace(/(.{20})/g, "$1\n") }] });
+  assert.deepEqual(a.rows[0].imageRef, b.rows[0].imageRef, "however the base64 was wrapped");
+  const again = migrateRows(JSON.parse(JSON.stringify(a)));
+  assert.deepEqual(again.rows[0], a.rows[0]);
+});
+
+test("rows: only an inline data: image or a valid imageRef is a visual", () => {
+  for (const bad of ["https://evil.test/x.png", "javascript:alert(1)", "data:text/html;base64,AAA", 42,
+    "data:image/png;base64,AAAA" /* passes safeImageSrc, but is not a picture */]) {
+    const row = doc({ rows: [{ id: "r1", visualImage: bad }] }).rows[0];
+    assert.equal(row.imageRef, null, "rejected " + JSON.stringify(bad));
+    assert.equal("visualImage" in row, false);
   }
+  for (const bad of [{ ...PNG_REF, sha256: PNG_SHA.toUpperCase() }, { ...PNG_REF, mime: "image/svg+xml" },
+    { ...PNG_REF, width: 0 }, "a string", [PNG_REF]]) {
+    assert.equal(doc({ rows: [{ id: "r1", imageRef: bad }] }).rows[0].imageRef, null, "rejected " + JSON.stringify(bad));
+  }
+  /* a valid ref is kept, normalised to its four fields */
+  assert.deepEqual(doc({ rows: [{ id: "r1", imageRef: { ...PNG_REF, extra: "x" } }] }).rows[0].imageRef, PNG_REF);
+  /* a valid inline picture wins over a ref the row also carries */
+  const other = { sha256: "a".repeat(64), width: 5, height: 5, mime: "image/jpeg" };
+  assert.deepEqual(doc({ rows: [{ id: "r1", visualImage: PNG, imageRef: other }] }).rows[0].imageRef, PNG_REF);
+  /* and an unreadable one does not wipe out a good ref */
+  assert.deepEqual(doc({ rows: [{ id: "r1", visualImage: "data:image/png;base64,AAAA", imageRef: other }] }).rows[0].imageRef, other);
+});
+
+test("comments: an image conflict card holds its picture as imageValue, its body the stored form", () => {
+  const legacy = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c1", rowId: "r1", field: "visualImage", kind: "conflict",
+    body: '<img class="comment-img" src="' + PNG + '">', conflictField: "Visual image"
+  }] }).comments[0];
+  assert.deepEqual(legacy.imageValue, PNG_REF);
+  assert.equal(legacy.body, STORED_PNG);
+  const kept = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c1", rowId: "r1", field: "visualImage", kind: "conflict", body: "", imageValue: { ...PNG_REF, x: 1 }
+  }] }).comments[0];
+  assert.deepEqual(kept.imageValue, PNG_REF);
+  assert.equal(kept.body, STORED_PNG, "a body drawn from the record");
+  /* a body naming a picture the record does not: the record wins unless
+     this page holds the body's bytes */
+  const ghost = "e".repeat(64);
+  const stale = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c1", rowId: "r1", field: "visualImage", kind: "conflict",
+    body: '<img class="comment-img" data-blob="' + ghost + '">', imageValue: PNG_REF
+  }] }).comments[0];
+  assert.deepEqual(stale.imageValue, PNG_REF);
+  assert.equal(stale.body, STORED_PNG);
+  const emptied = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c1", rowId: "r1", field: "visualImage", kind: "conflict", body: "", imageValue: null, emptyValue: true
+  }] }).comments[0];
+  assert.equal(emptied.imageValue, null);
+  assert.equal(emptied.body, "");
+  const ordinary = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c2", rowId: "r1", field: "audioText", body: "hi", imageValue: PNG_REF
+  }] }).comments[0];
+  assert.equal("imageValue" in ordinary, false, "only an image conflict card has one");
 });
 
 test("rows: an unknown status falls back to todo, a known one is kept", () => {
@@ -235,6 +303,26 @@ test("productionTags: a file saved before the registry existed is back-filled fr
     rows: [{ id: "r1", audioText: 'Bring the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span>.' }]
   });
   assert.ok(s.productionTags.some((t) => t.name === "gaffer tape"), JSON.stringify(s.productionTags));
+});
+
+test("productionTags: a live tag missing from an existing registry is healed in, once (#84)", () => {
+  /* The registry self-heal used to happen as a side effect of the first
+     read of the breakdown after a load; it is a migration step now, so a
+     document still looks the same the moment it is on screen. An orphaned
+     entry (no live tag) is kept, and a second migration adds nothing. */
+  const s = doc({
+    rows: [{ id: "r1", audioText: 'Bring the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span> and the <span class="tag-anchor" data-tag-cat="location" data-tag-name="Roof">Roof</span>.' }],
+    productionTags: [{ cat: "prop", name: "Kettle", owner: "", notes: "", status: "have" }, { cat: "location", name: "roof" }]
+  });
+  assert.deepEqual(s.productionTags.map((t) => t.cat + ":" + t.name), ["prop:Kettle", "location:roof", "prop:gaffer tape"]);
+  assert.deepEqual(s.productionTags[2], { cat: "prop", name: "gaffer tape", owner: "", notes: "", status: "needed" });
+  const twice = migrateRows(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(twice.productionTags, s.productionTags);
+});
+
+test("productionTags: an emptied registry stays empty when nothing is tagged live", () => {
+  const s = doc({ rows: [{ id: "r1", audioText: "No tags here." }], productionTags: [] });
+  assert.deepEqual(s.productionTags, []);
 });
 
 test("productionTags: the collector the back-fill was meant to use still reads the script", () => {

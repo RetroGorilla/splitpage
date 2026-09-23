@@ -2,14 +2,15 @@ import { S } from "./_state.js";
 import { conn, fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
+import { inlineStateJson, persist } from "./02c-blobs.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import {
   copyDocHistorySafe,
   mintDocId,
   normalizeDocId,
-  noteMergedDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { cloneState, pushSnapshot, reportMerge, updateIdentityChip } from "./03-sync.js";
+import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -244,7 +245,7 @@ function captureAndSendDraft() {
 
   var origin = draftOriginOf();
   var signature = draftOriginSignature(origin);
-  if (S.editSeq === draftSentEditSeq && S.baseState === draftSentBase && signature === draftSentSignature) {
+  if (S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
     draftChangePending = false;
     return Promise.resolve(null);
   }
@@ -275,8 +276,12 @@ function captureAndSendDraft() {
   var baseAtCapture = S.baseState;
   var sendBase = S.baseState !== draftSentBase;
   var baseTextCache = null;
+  var inlineFailed = null; /* shas the blob folder refused (below) */
   function baseTextFor() {
-    if (baseTextCache === null) baseTextCache = baseAtCapture ? JSON.stringify(baseAtCapture) : "null";
+    if (baseTextCache === null) {
+      baseTextCache = baseAtCapture ? JSON.stringify(baseAtCapture) : "null";
+      if (inlineFailed) baseTextCache = inlineStateJson(baseTextCache, inlineFailed);
+    }
     return baseTextCache;
   }
   var payload = {
@@ -297,8 +302,29 @@ function captureAndSendDraft() {
     baseJson: sendBase ? baseTextFor() : null
   };
 
+  /* The images this draft names are stored durably first (#82, invariant
+     52): a draft restored after a crash must find every picture it names
+     in the blob folder. Read now, with the capture (which stays
+     synchronous); a blob the folder refused travels inline in the draft
+     instead, when this page has its bytes. */
+  var draftRefs = refsIn(S.state);
+  if (sendBase && baseAtCapture) {
+    refsIn(baseAtCapture).forEach(function (sha) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
+  }
+
   draftChangePending = false;
-  draftInFlight = sendDraftPayload(payload, baseTextFor, false).then(function (r) {
+  var sent = draftRefs.length
+    ? persist(draftRefs).then(function (failed) {
+        if (failed.length) {
+          inlineFailed = failed;
+          payload.stateJson = inlineStateJson(payload.stateJson, failed);
+          if (baseTextCache !== null) baseTextCache = inlineStateJson(baseTextCache, failed);
+          if (payload.baseJson) payload.baseJson = baseTextCache;
+        }
+        return sendDraftPayload(payload, baseTextFor, false);
+      })
+    : sendDraftPayload(payload, baseTextFor, false);
+  draftInFlight = sent.then(function (r) {
     draftInFlight = null;
     if (r && r.ok) {
       draftStats.writes++;
@@ -577,7 +603,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   /* Never saved anywhere, so there is no ancestor: the next merge this
      document is in starts from nothing rather than from a version of some
      other file. */
-  S.baseState = null;
+  setBaseState(null, "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor");
   setHome("none");
   resetProductionPanelState();
   S.docIdWrittenOut = wasUntitled ? !!t.header.docIdWrittenOut : false;
@@ -784,7 +810,7 @@ async function restoreFileDraft(t, mine, base, origin) {
        version simply goes back on top of it — no merge, nothing to review,
        and nothing written until the user saves. */
     S.state = mine;
-    S.baseState = diskCopy;
+    setBaseState(diskCopy, "restoreFileDraft: the file, untouched since the draft's own base");
     render();
     updateIdentityChip();
     updateFileChip();
@@ -797,37 +823,37 @@ async function restoreFileDraft(t, mine, base, origin) {
 
   /* The file moved on while this app was down (a sync client, another
      editor, another copy of Splitpage). Three-way merge, the same one a save
-     conflict uses, with the draft's own base as the ancestor. */
-  var r = applyStashedWork(disk, { base: base, mine: mine });
-  if (r.snapshot && r.snapshot.done) {
+     conflict uses, with the draft's own base as the ancestor. applyMerge
+     (03-sync.js) adopts it, and makes the file on disk the new base. */
+  await applyStashedWork(disk, { base: base, mine: mine }, {
     /* The undo point has to be ON DISK before the merged version replaces
        what the user can see — the one place a snapshot is waited for
        (invariant #39). */
-    try { await r.snapshot.done; } catch (e) {}
-  }
-  /* And the recovered version itself, so "the draft" is a version in the
-     history rather than something that existed only during this function. */
-  pushSnapshot("Your unsaved changes, recovered", mine);
-
-  S.state = r.state;
-  S.baseState = diskCopy;
-  render();
-  updateIdentityChip();
-  updateFileChip();
+    awaitUndoPoint: true,
+    /* And the recovered version itself, so "the draft" is a version in the
+       history rather than something that existed only during this function. */
+    keepLabel: "Your unsaved changes, recovered",
+    newBase: diskCopy,
+    /* If the disk copy's id won the merge, the history written under the
+       draft's id follows the document to it. */
+    historyFrom: mine.docId,
+    chips: true,
+    /* invariant #41: a merge nobody has seen is never written on its own */
+    noAutoSave: true,
+    toast: {
+      text: (file.name || "That file") + " had changed since the last session — your recovered " +
+        "changes were merged into it. Nothing has been saved yet.",
+      tone: "warn",
+      sticky: true
+    }
+  });
   S.docIdWrittenOut = !!t.header.docIdWrittenOut;
-  if (r.report) reportMerge(r.report, { noAutoSave: true });
-  else markDirty();
-  /* If the disk copy's id won the merge, the history written under the
-     draft's id follows the document to it. */
-  noteMergedDocId(mine.docId);
-  showToast((file.name || "That file") + " had changed since the last session — your recovered " +
-    "changes were merged into it. Nothing has been saved yet.", "warn", true);
   return "merged";
 }
 
 function adoptUntitledDraft(t, mine, base) {
   S.state = mine;
-  S.baseState = base || null;
+  setBaseState(base || null, "adoptUntitledDraft: the draft's own base, if it had one");
   setHome("none");
   resetProductionPanelState();
   /* A never-saved document keeps exactly what it had: its id has been

@@ -2,16 +2,16 @@ import { S } from "./_state.js";
 import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
+import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import {
   HISTORY_OLDER_KEY,
-  HISTORY_OLDER_TTL_MS,
-  HISTORY_PER_DOC,
   HISTORY_SNAP_ID_RE,
-  historyStampAfter,
   historyUtf8Length,
   isPristineSeedDocument,
   sanitizeHistoryMeta
 } from "./03a-history-store.js";
+import { hashText as historyHashText } from "./03c-history-idb.js";
+import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
@@ -182,10 +182,11 @@ var DESKTOP_HEADER_BUTTONS = {
 };
 
 function runDesktopMenuCommand(cmd) {
-  /* View ▸ Present in Browser — not a button anywhere in #file-menu, and it
-     does not need one: the teleprompter's own Follow My Voice button runs
-     the same function on desktop (20-teleprompter.js). */
-  if (cmd === "prompter-open-in-browser") { openPrompterInBrowser(); return; }
+  /* View ▸ Present in Browser ("prompter-open-in-browser") needs nothing of
+     its own here: it is File ▸ This document ▸ Present in browser's button
+     (#menu-present-browser), clicked like any other item below. It had no
+     in-page twin at first, which left it unreachable on Windows — the
+     title bar is the tab strip, so there is no menu bar to open (#86). */
   var btnId = DESKTOP_HEADER_BUTTONS[cmd];
   if (btnId) {
     var btn = document.getElementById(btnId);
@@ -205,8 +206,9 @@ function runDesktopMenuCommand(cmd) {
 /* ---- the teleprompter in the browser (issue #86) ----
 
    Follow My Voice fails inside Electron (#8) and works in Chrome and Edge,
-   so on desktop the teleprompter's voice button and View ▸ Present in
-   Browser hand the script to the default browser instead. The bridge call
+   so on desktop the teleprompter's voice button, File ▸ Present in browser
+   and View ▸ Present in Browser (which clicks that File item) hand the
+   script to the default browser instead. The bridge call
    takes NO argument (invariant #28, desktop/main.js section 9b): this page
    never says which file, which server or which URL — main reads all of
    that off this tab's own record and opens the browser itself. What this
@@ -388,18 +390,25 @@ function wireReassignDocId() {
 export function initDesktop() {
   if (!S.DESKTOP) return;
 
-  /* Google Drive needs a real http/https origin for Google's own sign-in
-     to redirect back to (Google Cloud Console has no "custom scheme"
-     option for Authorized JavaScript origins) — splitpage://app cannot
-     ever satisfy that, so the entry is hidden rather than left to open a
-     modal whose Sign in button can only fail. openDriveModal()
-     (13-hosted.js) carries the same guard defensively, in case something
-     still reaches it directly. Google Doc import is different — it needs
-     no OAuth at all (11-import.js's confirmGdocImport() explains why) and
-     stays enabled, routed through DESKTOP.openExternal() instead of
-     window.open(). */
+  /* Images (#82): the registry's store is the main process's blob folder.
+     Normally already done by __init() below; repeated here for a bridge
+     swapped in after it, and harmless when it is the same one. */
+  wireDesktopBlobs(S.DESKTOP);
+
+  /* Google Drive (issue #10). The web build's sign-in (Google Identity
+     Services) needs an http/https origin and splitpage://app can never be
+     one, so on desktop the MAIN process signs in through a loopback
+     redirect and makes every Drive request (desktop/google-drive.js); the
+     modal talks to it through the bridge's drive* calls. The entry shows
+     whenever the bridge has them — even with no Google client configured
+     yet, because then the modal is where the person finds out how to set
+     one up. A bridge without them (a fake backend in a browser suite) keeps
+     it hidden, and openDriveModal() (13-hosted.js) carries the same guard.
+     Google Doc import is different — it needs no OAuth at all
+     (11-import.js's confirmGdocImport() explains why) and stays enabled,
+     routed through DESKTOP.openExternal() instead of window.open(). */
   var driveItem = document.getElementById("menu-drive-open");
-  if (driveItem) driveItem.hidden = true;
+  if (driveItem) driveItem.hidden = typeof S.DESKTOP.driveStatus !== "function";
 
   /* App data (X1/X2, 20h-appdata.js) now travels both ways on desktop:
      DESKTOP.historyListDocs() lets exportHistoryAll() enumerate the
@@ -583,6 +592,98 @@ function openPendingServerDocForTab(serverDocId) {
   }
 }
 
+/* ---- the desktop blob backend (issue #82) ----
+
+   The page's blob registry (02c-blobs.js) keeps image bytes by SHA-256 and
+   asks a backend to hold them durably: IndexedDB in the browser, and on the
+   desktop the main process's <userData>/blobs folder through the bridge
+   (desktop/blob-store.js, main.js section 8c). This is that desktop
+   backend, in the registry's interface:
+
+     get(sha)              -> Promise<{bytes: Uint8Array, mime} | null>
+     put(sha, bytes, mime) -> Promise<{stored}>, rejecting on refusal with
+                              err.code (HASH_MISMATCH, NOT_AN_IMAGE,
+                              TOO_LARGE, ENOSPC, READ_ONLY, UNAVAILABLE ...)
+     missing(shas)         -> Promise<string[]>
+
+   `mime` is accepted and not sent: main sniffs the bytes itself and serves
+   only PNG, JPEG, GIF and WebP, so a caller's label is never trusted.
+   Nothing names a path (invariant #28) — a sha is all that crosses.
+
+   get() never rejects: a blob that is not here, or a call main refused, is
+   null, and the registry then tries the next source (the server, or a
+   placeholder). missing() asks in slices of 2000, the most one
+   splitpage:blob-missing takes.
+
+   wireDesktopBlobs() below installs it as the registry's backend — at
+   module init, before anything can ask the registry for a store, so on
+   desktop no image ever lands in the renderer's IndexedDB instead. */
+var DESKTOP_BLOB_MISSING_SLICE = 2000;
+
+/* The bridge whose blob backend the registry is using, if any. */
+var wiredBlobBridge = null;
+
+/* Points the registry (02c-blobs.js) at `bridge`'s blob folder. A bridge
+   without the blob calls changes nothing, unless the registry is still on
+   an earlier bridge's — then it goes back to choosing its own store. */
+export function wireDesktopBlobs(bridge) {
+  if (bridge && bridge === wiredBlobBridge) return;
+  var backend = makeDesktopBlobBackend(bridge);
+  if (!backend && !wiredBlobBridge) return;
+  wiredBlobBridge = backend ? bridge : null;
+  setBlobBackend(backend);
+}
+
+export function makeDesktopBlobBackend(bridge) {
+  var b = bridge;
+  if (!b || typeof b.blobPut !== "function" || typeof b.blobGet !== "function" || typeof b.blobMissing !== "function") {
+    return null;
+  }
+  return {
+    /* name/persistent are what 02c-blobs.js's backend interface reads;
+       `kind` is kept for anything that already asked for it. */
+    name: "desktop",
+    kind: "desktop",
+    persistent: true,
+    get: function (sha) {
+      return Promise.resolve()
+        .then(function () { return b.blobGet(sha); })
+        .then(function (got) {
+          if (!got || !got.bytes || typeof got.mime !== "string") return null;
+          var bytes = got.bytes instanceof Uint8Array ? got.bytes : new Uint8Array(got.bytes);
+          return { bytes: bytes, mime: got.mime };
+        }, function () { return null; });
+    },
+    /* put(sha, bytes, mime): the third argument is the interface's and is
+       deliberately not read (see above). */
+    put: function (sha, bytes) {
+      return Promise.resolve()
+        .then(function () { return b.blobPut(sha, bytes); })
+        .then(function (res) {
+          if (res && res.ok === true) return { stored: res.stored === true };
+          var code = (res && typeof res.code === "string" && res.code) || "FAILED";
+          var err = new Error("blob-put refused: " + code);
+          err.code = code;
+          throw err;
+        });
+    },
+    missing: function (shas) {
+      var list = Array.isArray(shas) ? shas : [];
+      var slices = [];
+      for (var i = 0; i < list.length; i += DESKTOP_BLOB_MISSING_SLICE) {
+        slices.push(list.slice(i, i + DESKTOP_BLOB_MISSING_SLICE));
+      }
+      return slices.reduce(function (acc, slice) {
+        return acc.then(function (out) {
+          return Promise.resolve(b.blobMissing(slice)).then(function (m) {
+            return out.concat(Array.isArray(m) ? m : slice);
+          });
+        });
+      }, Promise.resolve([]));
+    }
+  };
+}
+
 /* ---- test hook ----
    There is no pre-load hook in the harness that can inject a real
    window.splitpageDesktop before this script runs — DESKTOP is captured
@@ -593,10 +694,12 @@ function openPendingServerDocForTab(serverDocId) {
    paths (saveDoc, deliverFile, openLocalFile, makeDesktopHandle) against
    it directly. Exists in both modes but does nothing unless a test calls
    it — same trick window.__splitpageFormats (20d-formats.js) plays. */
-/* opts.history === true gives the fake the seven HISTORY-IPC methods, kept
-   in memory, validating with the SAME regexes the real main process uses
-   (normalizeDocId and HISTORY_SNAP_ID_RE, both from 03a-history-store.js)
-   and applying the same "50 newest per document" trim. That is enough for
+/* opts.blobs === true adds the three blob-bridge members (issue #82) —
+   see addFakeDesktopBlobs below.
+   opts.history === true gives the fake the eight HISTORY-IPC methods over
+   the real shared/history-store.js on a memory backend (#83), validating
+   with the SAME regexes the real main process uses (normalizeDocId and
+   HISTORY_SNAP_ID_RE, both from 03a-history-store.js). That is enough for
    a browser suite to prove the desktop path is taken — a capture lands in
    the desktop store, never in IndexedDB and never in localStorage — without
    a real Electron shell. _historyDump() hands the whole store back for
@@ -608,14 +711,6 @@ function makeFakeDesktopBackend(opts) {
   var openHandler = null;
   var menuHandler = null;
   var openServerDocHandler = null;
-  /* Write-only, and deliberately kept. Every other registration slot in this
-     fake backend has a _fire* twin below that a browser suite calls;
-     onRestoreNotice is the one that does not, so nothing reads this back yet.
-     Removing the variable would mean removing onRestoreNotice() itself, and
-     20g-drafts.js calls that at boot against the real bridge — the fake has
-     to answer it. The gap belongs to the suites, not to this file. */
-  /* eslint-disable-next-line no-unused-vars -- holds the renderer's callback
-     until a _fireRestoreNotice() exists to call it; see above. */
   var restoreNoticeHandler = null;
   var reassignDocIdHandler = null;
   function newId() { return "fake" + (nextId++); }
@@ -807,181 +902,311 @@ function makeFakeDesktopBackend(opts) {
     },
     _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
     _fireOpenServerDoc: function (payload) { if (openServerDocHandler) openServerDocHandler(payload); },
+    /* Stands in for main's splitpage:restore-notice — the {skipped:[{name,
+       reason}]} a launch sends when it could not bring back one or more
+       remembered tabs, answered by initDesktop()'s onRestoreNotice. */
+    _fireRestoreNotice: function (notice) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
     /* Stands in for main's duplicate-id verdict (DOC-CLAIMS): a suite can
        hand the page the exact {fromId, toId, otherTitle} message a real
        main process would send, without two Electron tabs. */
     _fireReassignDocId: function (msg) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
   };
   if (opts && opts.history) addFakeDesktopHistory(backend);
+  if (opts && opts.drive) addFakeDesktopDrive(backend);
+  if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
   return backend;
 }
 
-/* The HISTORY-IPC surface, faked in memory. Deliberately the same SHAPES
-   desktop/main.js answers with ({ok:true, sizeBytes, duplicate?, evicted,
-   overCap} and friends), because the code under test is the translator in
-   03a-history-store.js's desktopHistoryBackend — a fake that answered a
-   tidier shape would prove nothing about it. Invalid arguments REJECT, the
-   way main's handlers do, so the 'invalid' path is reachable too. */
-function addFakeDesktopHistory(backend) {
-  var buckets = {};   /* bucket -> [{meta, stateJson}], oldest first */
-  var records = {};   /* bucket -> {title, lastOpenedAt, migratedAt, expiresAt} */
-
-  function listOf(bucket) { return buckets[bucket] || (buckets[bucket] = []); }
-  function recordOf(bucket) { return records[bucket] || (records[bucket] = { title: "", lastOpenedAt: 0 }); }
-  function bytesOf(bucket) {
-    return listOf(bucket).reduce(function (n, e) { return n + (e.meta.sizeBytes || 0); }, 0);
-  }
-  function findIn(bucket, id) {
-    var list = buckets[bucket] || [];
-    for (var i = 0; i < list.length; i++) if (list[i].meta.id === id) return list[i];
+/* The blob bridge (issue #82), faked in memory: blobPut/blobGet/blobMissing
+   with the real bridge's arities, answer shapes and refusals — a sha that is
+   not 64 lowercase hex REJECTS (the IPC table refuses it before main's
+   handler runs), a string or non-image body, an empty one or one over
+   16 MiB answers {ok:false, code}, and a missing list over 2000 rejects.
+   The fake cannot hash on its own without pulling a SHA-256 into this
+   module, so opts.blobHash (bytes -> hex, e.g. 02b-doc-id.js's byte hasher)
+   turns on the HASH_MISMATCH check; without it the fake trusts the sha.
+   _blobs is the store (sha -> {bytes, mime}), _blobCalls every call, and
+   _blobFailNext = {code} makes the next put answer that code. */
+function addFakeDesktopBlobs(backend, opts) {
+  var SHA_RE = /^[0-9a-f]{64}$/;
+  var MAX = 16 * 1024 * 1024;
+  var hash = typeof opts.blobHash === "function" ? opts.blobHash : null;
+  var store = {};
+  var calls = [];
+  function sniff(u) {
+    if (u.length >= 8 && u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4e && u[3] === 0x47) return "image/png";
+    if (u.length >= 3 && u[0] === 0xff && u[1] === 0xd8 && u[2] === 0xff) return "image/jpeg";
+    if (u.length >= 6 && u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x38) return "image/gif";
+    if (u.length >= 12 && u[0] === 0x52 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x46 &&
+        u[8] === 0x57 && u[9] === 0x45 && u[10] === 0x42 && u[11] === 0x50) return "image/webp";
     return null;
   }
-  function metasNewestFirst(bucket) {
-    return (buckets[bucket] || []).slice().reverse().map(function (e) { return sanitizeHistoryMeta(e.meta); });
+  function badSha() { return Promise.reject(new Error("splitpage:blob: argument 1 is not sha256")); }
+  backend.blobPut = function (sha, bytes) {
+    calls.push({ op: "put", sha: sha });
+    if (typeof sha !== "string" || !SHA_RE.test(sha)) return badSha();
+    if (typeof bytes === "string") return Promise.resolve({ ok: false, code: "BAD_BYTES" });
+    var u = bytes instanceof Uint8Array ? bytes : bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : null;
+    if (!u) return Promise.reject(new Error("splitpage:blob-put: argument 2 is not bytes"));
+    if (!u.length) return Promise.resolve({ ok: false, code: "EMPTY" });
+    if (u.length > MAX) return Promise.resolve({ ok: false, code: "TOO_LARGE" });
+    var mime = sniff(u);
+    if (!mime) return Promise.resolve({ ok: false, code: "NOT_AN_IMAGE" });
+    if (backend._blobFailNext) { var f = backend._blobFailNext; backend._blobFailNext = null; return Promise.resolve({ ok: false, code: f.code }); }
+    if (hash && hash(u) !== sha) return Promise.resolve({ ok: false, code: "HASH_MISMATCH" });
+    if (store[sha]) return Promise.resolve({ ok: true, stored: false });
+    store[sha] = { bytes: new Uint8Array(u), mime: mime };
+    return Promise.resolve({ ok: true, stored: true });
+  };
+  backend.blobGet = function (sha) {
+    calls.push({ op: "get", sha: sha });
+    if (typeof sha !== "string" || !SHA_RE.test(sha)) return badSha();
+    var e = store[sha];
+    return Promise.resolve(e ? { bytes: new Uint8Array(e.bytes), mime: e.mime } : null);
+  };
+  backend.blobMissing = function (shas) {
+    calls.push({ op: "missing", count: Array.isArray(shas) ? shas.length : -1 });
+    if (!Array.isArray(shas)) return Promise.reject(new Error("splitpage:blob-missing: argument 1 is not array"));
+    if (shas.length > 2000) return Promise.reject(new Error("blob-missing: at most 2000 shas per call"));
+    if (!shas.every(function (x) { return typeof x === "string" && SHA_RE.test(x); })) {
+      return Promise.reject(new Error("blob-missing: every entry must be a sha256"));
+    }
+    var seen = {};
+    return Promise.resolve(shas.filter(function (x) {
+      if (seen[x] || store[x]) return false;
+      seen[x] = true;
+      return true;
+    }));
+  };
+  backend._blobs = store;
+  backend._blobCalls = calls;
+  backend._blobFailNext = null;
+}
+
+/* The Google Drive bridge (issue #10), faked in memory: the six calls with
+   the real bridge's arities and answer SHAPES (desktop/google-drive.js) —
+   {ok, ...status} from the account calls, {ok, folder, files} /
+   {ok, file, bytes} / {ok, file} from the Drive ones, {ok:false, code}
+   otherwise — and the same Drive id rule main applies. What it cannot
+   fake is the OAuth flow itself, which is desktop/test/smoke.mjs's
+   (against a fake Google) and desktop/test/google-drive.test.mjs's.
+   _driveCalls records every call with its arguments, so a suite can prove
+   the page never passes a URL or a token; _drive exposes the switches. */
+function addFakeDesktopDrive(backend) {
+  var ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
+  var FOLDER = "application/vnd.google-apps.folder";
+  var nextFile = 1;
+  var drive = {
+    configured: true,
+    signedIn: false,
+    persisted: true,
+    email: "writer@example.com",
+    signInAnswer: null,     /* e.g. {ok:false, code:'DENIED'} for the next sign-in */
+    failNext: null,         /* e.g. {code:'SIGNED_OUT'} for the next Drive call */
+    files: {
+      root: { id: "root", name: "My Drive", mimeType: FOLDER, parent: null },
+      scriptsFolder01: { id: "scriptsFolder01", name: "Scripts", mimeType: FOLDER, parent: "root" },
+      pilotFile01: { id: "pilotFile01", name: "Pilot.fountain", mimeType: "text/plain", parent: "scriptsFolder01", text: "INT. KITCHEN - DAY\n" },
+      gdoc01: { id: "gdoc01", name: "Notes", mimeType: "application/vnd.google-apps.document", parent: "scriptsFolder01", text: "Notes as text.\n" },
+      sheet01: { id: "sheet01", name: "Budget", mimeType: "application/vnd.google-apps.spreadsheet", parent: "scriptsFolder01" }
+    }
+  };
+  var calls = [];
+  function status() {
+    return {
+      ok: true, configured: drive.configured, signedIn: drive.configured && drive.signedIn,
+      persisted: drive.signedIn && drive.persisted, canPersist: drive.persisted, signingIn: false,
+      email: drive.signedIn ? drive.email : "", name: "",
+      clientFilePath: "/fake/userData/google-oauth-client.json",
+      envVars: ["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"]
+    };
   }
-  function trim(bucket) {
-    /* A document keeps its 50 newest; the Older bucket is only ever emptied
-       as a whole, so it is never trimmed. */
-    if (bucket === HISTORY_OLDER_KEY) return 0;
-    var list = listOf(bucket), dropped = 0;
-    while (list.length > HISTORY_PER_DOC) { list.shift(); dropped++; }
-    return dropped;
+  function entry(f) {
+    return { id: f.id, name: f.name, mimeType: f.mimeType, size: f.text != null ? strBytes(f.text).length : null, modifiedTime: "2026-09-01T10:00:00.000Z" };
   }
+  function gate() {
+    if (drive.failNext) { var f = drive.failNext; drive.failNext = null; if (f.code === "SIGNED_OUT") drive.signedIn = false; return { ok: false, code: f.code }; }
+    if (!drive.signedIn) return { ok: false, code: "SIGNED_OUT" };
+    return null;
+  }
+  function bytesOf(v) {
+    if (typeof v === "string") return strBytes(v);
+    if (v instanceof Uint8Array) return v;
+    if (v instanceof ArrayBuffer) return new Uint8Array(v);
+    return null;
+  }
+  backend.driveStatus = function () { calls.push({ op: "status", args: [].slice.call(arguments) }); return Promise.resolve(status()); };
+  backend.driveSignIn = function () {
+    calls.push({ op: "signIn", args: [].slice.call(arguments) });
+    if (!drive.configured) return Promise.resolve({ ok: false, code: "NOT_CONFIGURED" });
+    if (drive.signInAnswer) { var a = drive.signInAnswer; drive.signInAnswer = null; return Promise.resolve(a); }
+    drive.signedIn = true;
+    return Promise.resolve(status());
+  };
+  backend.driveSignOut = function () {
+    calls.push({ op: "signOut", args: [].slice.call(arguments) });
+    drive.signedIn = false;
+    return Promise.resolve({ ok: true, status: status() });
+  };
+  backend.driveList = function (folderId) {
+    calls.push({ op: "list", args: [].slice.call(arguments) });
+    var g = gate(); if (g) return Promise.resolve(g);
+    if (typeof folderId !== "string" || !ID_RE.test(folderId)) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var folder = drive.files[folderId];
+    if (!folder) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
+    if (folder.mimeType !== FOLDER) return Promise.resolve({ ok: false, code: "NOT_A_FOLDER" });
+    var kids = Object.keys(drive.files).map(function (k) { return drive.files[k]; })
+      .filter(function (f) { return f.parent === folderId; })
+      .sort(function (a, b) { return ((b.mimeType === FOLDER) - (a.mimeType === FOLDER)) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    return Promise.resolve({ ok: true, folder: entry(folder), files: kids.map(entry) });
+  };
+  backend.driveDownload = function (fileId) {
+    calls.push({ op: "download", args: [].slice.call(arguments) });
+    var g = gate(); if (g) return Promise.resolve(g);
+    if (typeof fileId !== "string" || !ID_RE.test(fileId)) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var f = drive.files[fileId];
+    if (!f) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
+    if (f.mimeType === FOLDER) return Promise.resolve({ ok: false, code: "IS_A_FOLDER" });
+    if (f.text == null) return Promise.resolve({ ok: false, code: "UNSUPPORTED" });
+    return Promise.resolve({ ok: true, file: entry(f), bytes: strBytes(f.text) });
+  };
+  backend.driveUpload = function (req) {
+    calls.push({ op: "upload", args: [].slice.call(arguments) });
+    var g = gate(); if (g) return Promise.resolve(g);
+    var bytes = req && bytesOf(req.bytes);
+    if (!req || !bytes) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var text = new TextDecoder().decode(bytes);
+    if (req.fileId !== undefined) {
+      var f = drive.files[req.fileId];
+      if (!f) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
+      f.text = text;
+      f.revisions = (f.revisions || 1) + 1;
+      return Promise.resolve({ ok: true, file: entry(f) });
+    }
+    if (!ID_RE.test(String(req.parentId)) || typeof req.name !== "string" || !req.name) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
+    var id = "upload" + (nextFile++);
+    drive.files[id] = { id: id, name: req.name, mimeType: req.mimeType || "application/octet-stream", parent: req.parentId, text: text };
+    return Promise.resolve({ ok: true, file: entry(drive.files[id]) });
+  };
+  backend._drive = drive;
+  backend._driveCalls = calls;
+}
+
+/* The HISTORY-IPC surface, faked in memory — and since #83 over the REAL
+   store: shared/history-store.js on the shared memory backend, the same
+   store desktop/main.js runs over its folder backend. What is fake is only
+   the IPC edge, and it keeps main's SHAPES ({ok:true, sizeBytes,
+   duplicate?, evicted, overCap} and friends), because the code under test
+   is the translator in 03a-history-store.js's desktopHistoryBackend — a fake
+   that answered a tidier shape would prove nothing about it. Invalid
+   arguments REJECT, the way main's handlers do, so the 'invalid' path is
+   reachable too. The held snapshots a put or a get carries are remembered
+   per bridge, as main remembers them per tab, and unioned into every
+   eviction. No cap: main's is the disk's, and no suite fills one here. */
+function addFakeDesktopHistory(backend) {
+  var mem = createMemoryHistoryBackend({ name: "desktop-fake", persistent: true });
+  var held = [];
+  var store = createHistoryStore({
+    backend: mem,
+    now: Date.now,
+    hashText: historyHashText,
+    holds: function () { return held; }
+  });
+
   function bucketOf(query) {
     if (query && query.older === true) return HISTORY_OLDER_KEY;
     return normalizeDocId(query && query.docId) || null;
   }
+  function invalid(what) { return Promise.reject(new Error("history: " + what)); }
 
-  backend.historyPut = function (docId, meta, stateJson) {
-    var id = normalizeDocId(docId);
+  /* main's history-put: (docId | null, meta, stateJson, {protect?,
+     older?}). {older:true} — literally true — writes into Older and then
+     the docId must be null; without it the docId must be real. */
+  backend.historyPut = function (docId, meta, stateJson, opts) {
+    var o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
+    var older = o.older === true;
+    var id = older ? (docId === null ? HISTORY_OLDER_KEY : null) : normalizeDocId(docId);
     var m = sanitizeHistoryMeta(meta);
-    if (!id || !m || typeof stateJson !== "string") return Promise.reject(new Error("history: invalid put"));
-    var existing = findIn(id, m.id);
-    if (existing) return Promise.resolve({ ok: true, sizeBytes: existing.meta.sizeBytes, duplicate: true, evicted: 0, overCap: false });
-    var list = listOf(id), rec = recordOf(id);
-    m.sizeBytes = historyUtf8Length(stateJson);
-    historyStampAfter(m, list.length ? list[list.length - 1].meta.atMs : null);
-    list.push({ meta: m, stateJson: stateJson });
-    if (m.title) rec.title = m.title;
-    rec.lastOpenedAt = Date.now();
-    return Promise.resolve({ ok: true, sizeBytes: m.sizeBytes, duplicate: false, evicted: trim(id), overCap: false });
+    if (!id || !m || typeof stateJson !== "string") return invalid("invalid put");
+    if (Array.isArray(o.protect)) held = o.protect.slice();
+    return (older ? store.put(null, m, stateJson, { older: true }) : store.put(id, m, stateJson)).then(function (r) {
+      if (!r.stored) return { ok: false, code: r.code };
+      return { ok: true, sizeBytes: historyUtf8Length(stateJson), duplicate: !!r.duplicate, evicted: r.evicted || 0, overCap: !!r.overCap };
+    });
   };
 
   backend.historyList = function (docId) {
     var id = docId == null ? null : normalizeDocId(docId);
-    if (docId != null && !id) return Promise.reject(new Error("history: invalid document id"));
-    var older = records[HISTORY_OLDER_KEY];
-    return Promise.resolve({
-      entries: id ? metasNewestFirst(id) : [],
-      older: metasNewestFirst(HISTORY_OLDER_KEY),
-      olderExpiresAt: older && older.expiresAt != null ? older.expiresAt : null
+    if (docId != null && !id) return invalid("invalid document id");
+    return store.list(id).then(function (r) {
+      return store.usage().then(null, function () { return null; }).then(function (usage) {
+        /* main's metas carry no document id: on its side the bucket is the
+           document, and the renderer stamps it back on. The usage rides on
+           the list's answer, as main's does. */
+        return { entries: r.entries.map(sanitizeHistoryMeta), older: r.older.map(sanitizeHistoryMeta), olderExpiresAt: r.olderExpiresAt, usage: usage };
+      });
     });
   };
 
   backend.historyGet = function (query, snapshotId) {
     var bucket = bucketOf(query);
-    if (!bucket) return Promise.reject(new Error("history: invalid document id"));
-    if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) {
-      return Promise.reject(new Error("history: invalid snapshot id"));
-    }
-    var hit = findIn(bucket, snapshotId);
-    return Promise.resolve(hit ? { meta: sanitizeHistoryMeta(hit.meta), stateJson: hit.stateJson } : null);
+    if (!bucket) return invalid("invalid document id");
+    if (typeof snapshotId !== "string" || !HISTORY_SNAP_ID_RE.test(snapshotId)) return invalid("invalid snapshot id");
+    if (query && Array.isArray(query.protect)) held = query.protect.slice();
+    return store.get(bucket, snapshotId).then(function (hit) {
+      return hit ? { meta: sanitizeHistoryMeta(hit.meta), stateJson: hit.stateJson } : null;
+    });
   };
 
   backend.historyCopy = function (fromDocId, toDocId) {
     var from = normalizeDocId(fromDocId), to = normalizeDocId(toDocId);
-    if (!from || !to) return Promise.reject(new Error("history: invalid document id"));
-    if (from === to) return Promise.resolve({ ok: true, copied: 0 });
-    if (!buckets[from] && !buckets[to]) return Promise.resolve({ ok: true, copied: 0 });
-    var dst = listOf(to), copied = 0;
-    (buckets[from] || []).forEach(function (e) {
-      if (findIn(to, e.meta.id)) return;      /* ids are kept: a second copy is a no-op */
-      dst.push({ meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson });
-      copied++;
-    });
-    dst.sort(function (a, b) { return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : 1); });
-    recordOf(to).lastOpenedAt = Date.now();
-    trim(to);
-    return Promise.resolve({ ok: true, copied: copied });
+    if (!from || !to) return invalid("invalid document id");
+    return store.copy(from, to);
   };
 
   backend.historyTouch = function (docId, title) {
     var id = normalizeDocId(docId);
-    if (!id) return Promise.reject(new Error("history: invalid document id"));
-    /* Never creates a record, same as the real store. */
-    if (buckets[id] && buckets[id].length) {
-      var rec = recordOf(id);
-      rec.lastOpenedAt = Date.now();
-      var t = String(title == null ? "" : title).slice(0, 300);
-      if (t) rec.title = t;
-    }
-    return Promise.resolve();
+    if (!id) return invalid("invalid document id");
+    return store.touch(id, title);
   };
 
-  backend.historyImportOlder = function (entries) {
-    if (!Array.isArray(entries)) return Promise.reject(new Error("history: invalid import"));
-    var fresh = !records[HISTORY_OLDER_KEY];
-    var list = listOf(HISTORY_OLDER_KEY), rec = recordOf(HISTORY_OLDER_KEY), added = 0;
-    if (fresh) {
-      /* migratedAt/expiresAt only on creation: re-running an interrupted
-         migration must never extend the 90 days. */
-      rec.migratedAt = Date.now();
-      rec.expiresAt = rec.migratedAt + HISTORY_OLDER_TTL_MS;
-    }
-    entries.forEach(function (e) {
-      var m = sanitizeHistoryMeta(e && e.meta);
-      if (!m || typeof (e && e.stateJson) !== "string" || findIn(HISTORY_OLDER_KEY, m.id)) return;
-      m.sizeBytes = historyUtf8Length(e.stateJson);
-      list.push({ meta: m, stateJson: e.stateJson });
-      added++;
-    });
-    return Promise.resolve({ ok: true, count: list.length, added: added });
-  };
+  /* main's splitpage:history-list-docs: every document the store has a
+     record for, Older excluded — what desktopHistoryBackend.rawDocIds()/
+     rawDoc() (03a-history-store.js) read, which is what lets
+     exportHistoryAll() run against this fake the way it runs against the
+     real desktop store. */
+  backend.historyListDocs = function () { return store.listDocs(); };
 
-  backend.historyUsage = function () {
-    var total = 0, docCount = 0;
-    Object.keys(buckets).forEach(function (k) {
-      total += bytesOf(k);
-      if (k !== HISTORY_OLDER_KEY) docCount++;
-    });
-    return Promise.resolve({ totalBytes: total, capBytes: Infinity, overCap: false, docCount: docCount, readOnly: false });
-  };
-
-  /* The real bridge's splitpage:history-list-docs twin (desktop/main.js) —
-     every bucket that has ever had a put/touch against it, Older excluded,
-     exactly the documents historyPut()/historyTouch() above created a
-     record for. Backs desktopHistoryBackend.rawDocIds()/rawDoc()
-     (03a-history-store.js), which is what lets exportHistoryAll() run
-     against this fake the same way it runs against the real desktop store. */
-  backend.historyListDocs = function () {
-    var out = [];
-    Object.keys(records).forEach(function (bucket) {
-      if (bucket === HISTORY_OLDER_KEY) return;
-      var rec = records[bucket];
-      out.push({ docId: bucket, title: rec.title || "", lastOpenedAt: rec.lastOpenedAt || 0 });
-    });
-    return Promise.resolve(out);
-  };
-
-  /* The whole store: bucket -> [{meta, stateJson}], oldest first. */
+  /* The whole store, synchronously: bucket -> [{meta, stateJson}], oldest
+     first (bodies looked up by sha). */
   backend._historyDump = function () {
-    var out = {};
-    Object.keys(buckets).forEach(function (k) {
-      out[k] = buckets[k].map(function (e) {
-        return { meta: sanitizeHistoryMeta(e.meta), stateJson: e.stateJson };
+    var raw = mem.inspect(), out = {};
+    Object.keys(raw.index).forEach(function (bucket) {
+      out[bucket] = (raw.index[bucket].snapshots || []).map(function (s) {
+        return { meta: sanitizeHistoryMeta(s), stateJson: raw.bodies[s.sha] };
       });
     });
     return out;
   };
+  /* the store and its memory backend, for a suite that needs more */
+  backend._historyStore = store;
+  backend._historyBackend = mem;
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
+  /* As early as the bridge is known (00-prelude.js sets S.DESKTOP): the
+     registry picks its store on its first async call, and on desktop that
+     must be the blob folder, never this renderer's IndexedDB. */
+  if (S.DESKTOP) wireDesktopBlobs(S.DESKTOP);
   window.__desktopTest = {
     makeHandle: makeDesktopHandle,
     runMenuCommand: runDesktopMenuCommand,
     makeFakeBackend: makeFakeDesktopBackend,
+    /* The desktop blob backend over whatever bridge a suite hands it —
+       usually makeFakeBackend({blobs:true}) — for 02c-blobs.js's suites. */
+    makeBlobBackend: makeDesktopBlobBackend,
     /* The real boot-time wiring (init(), 21-events.js) only calls this
        against whatever DESKTOP already is at load — null in every browser
        suite. Exposed so a test can re-run it AFTER setBackend() swaps a fake
@@ -992,6 +1217,10 @@ export function __init() {
     initDesktop: initDesktop,
     setBackend: function (fake) {
       S.DESKTOP = fake;
+      /* A fake with the blob calls (makeFakeBackend({blobs:true})) becomes
+         the registry's store too, the way the real bridge is at boot; one
+         without them leaves the registry where it was. */
+      if (fake && typeof fake.blobPut === "function") wireDesktopBlobs(fake);
       /* initDesktop() ran at boot against the REAL bridge, which in a browser
          suite is null — so no DESKTOP callback was ever registered there.
          Swapping a fake in has to re-do the duplicate-id registration, or
@@ -999,7 +1228,10 @@ export function __init() {
          works when nothing is listening to it. */
       wireReassignDocId();
     },
-    restoreBackend: function () { S.DESKTOP = window.splitpageDesktop || null; },
+    restoreBackend: function () {
+      S.DESKTOP = window.splitpageDesktop || null;
+      wireDesktopBlobs(S.DESKTOP);
+    },
     /* Lets desktop/test/smoke.mjs (SMOKE-HARNESS's tabIdOfTarget/shell) read
        which tab a given page is, over CDP, without any DOM UI to click on. */
     get tabId() { return S.DESKTOP && S.DESKTOP.tabId; },

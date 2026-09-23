@@ -58,6 +58,52 @@ wait F.state().title === 'Borrowed Heading'
 expect F.state().docId !== window.__oldId
 expect F.state().comments.length == 0
 
+# --- what each foreign format's rows hold after File ▸ Open -----------------
+# Every reader behind loadFileIntoEditor hands back HTML already: a .txt or a
+# foreign .md has been through legacyMdToHtml once in normalizeImportedRows,
+# a .csv is escaped cell by cell, a .docx is built as markup (41-export-
+# polish.txt). The new document used to be built by migrateRows() with no
+# schema, which ran legacyMdToHtml over that HTML a second time: "&" became
+# a visible "&amp;", and Markdown's **bold** a visible "<strong>".
+# __frag parses a stored cell once, the way the editor renders it.
+eval (function(){ window.__frag = function(h){ var t = document.createElement('template'); t.innerHTML = h || ''; return t.content; }; return true; })()
+
+# a .txt: "&" and "<" are text, and stay one level of escaping deep
+eval (async function(){ await F.openFile(new File(['Tom & Jerry <cut> here.' + String.fromCharCode(10,10) + 'Second & last.'], 'ampersand.txt')); return F.state().rows.map(function(r){ return r.audioText; }).join(' | '); })()
+wait F.state().title === 'ampersand'
+expect F.state().rows.length == 2
+expect __frag(F.state().rows[0].audioText).textContent === 'Tom & Jerry <cut> here.'
+expect __frag(F.state().rows[0].audioText).querySelector('*') === null
+expect F.state().rows[0].audioText === 'Tom &amp; Jerry &lt;cut&gt; here.'
+expect document.querySelector('#rows .row .audio-cell .cell-editable').textContent === 'Tom & Jerry <cut> here.'
+
+# a foreign .md in prose: its Markdown becomes real formatting, once
+eval (async function(){ await F.openFile(new File(['# Marked Up' + String.fromCharCode(10,10) + 'Some **bold words** and *an aside* & [a link](https://example.com/x?a=1&b=2).'], 'marked.md')); return F.state().rows.map(function(r){ return r.audioText; }).join(' | '); })()
+wait F.state().title === 'Marked Up'
+eval (function(){ window.__mdRow = F.state().rows.filter(function(r){ return r.audioText.indexOf('bold') !== -1; })[0]; return window.__mdRow ? window.__mdRow.audioText : null; })()
+expect __mdRow.audioText.indexOf('<strong>bold words</strong>') !== -1
+expect __mdRow.audioText.indexOf('<em>an aside</em>') !== -1
+expect (function(){ var a = __frag(__mdRow.audioText).querySelector('a'); return !!a && a.getAttribute('href') === 'https://example.com/x?a=1&b=2'; })()
+expect __frag(__mdRow.audioText).textContent === 'Some bold words and an aside & a link.'
+
+# a foreign .md table: both columns, their Markdown formatted, once
+eval (async function(){ var nl = String.fromCharCode(10); await F.openFile(new File(['| Visual | Audio |' + nl + '| --- | --- |' + nl + '| **Wide** & far | Say *hello* <now> |' + nl + '| Close up | Plain & simple |' + nl], 'table.md')); return F.state().rows.map(function(r){ return r.visualText + ' / ' + r.audioText; }).join(' | '); })()
+wait F.state().title === 'table'
+expect F.state().rows.length == 2
+expect F.state().rows[0].visualText.indexOf('<strong>Wide</strong>') !== -1
+expect __frag(F.state().rows[0].visualText).textContent === 'Wide & far'
+expect F.state().rows[0].audioText.indexOf('<em>hello</em>') !== -1
+expect __frag(F.state().rows[0].audioText).textContent === 'Say hello <now>'
+expect __frag(F.state().rows[1].audioText).textContent === 'Plain & simple'
+
+# a .csv: every cell is text, markup-looking or not
+eval (async function(){ var nl = String.fromCharCode(10); await F.openFile(new File(['Visual,Audio' + nl + '"Wide & far","Say <b>this</b> literally"' + nl], 'sheet.csv')); return F.state().rows.map(function(r){ return r.visualText + ' / ' + r.audioText; }).join(' | '); })()
+wait F.state().title === 'sheet'
+expect F.state().rows.length == 1
+expect __frag(F.state().rows[0].visualText).textContent === 'Wide & far'
+expect __frag(F.state().rows[0].audioText).textContent === 'Say <b>this</b> literally'
+expect __frag(F.state().rows[0].audioText).querySelector('*') === null
+
 # --- Paste a script… is the other half: same document, everything kept ----
 # Back to the populated project first, so there is something to keep.
 eval (async function(){ await F.openFile(new File([window.__seeded], 'old-project.splitpage')); return true; })()

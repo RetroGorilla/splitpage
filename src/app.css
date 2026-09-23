@@ -553,7 +553,13 @@
     border-radius: var(--radius-sm);
   }
   .image-thumb-wrap { position: relative; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
-  .image-thumb-wrap img { display: block; width: 100%; max-height: 160px; object-fit: cover; }
+  .image-thumb-wrap img { display: block; width: 100%; height: auto; max-height: 160px; object-fit: cover; }
+  /* An image whose bytes are still being fetched (#82): the box its
+     width/height reserve, tinted, until the hydrator (02c-blobs.js) sets
+     its src — and, when nobody has the bytes, the "Image unavailable"
+     alt text in that box. Any <img data-blob>, wherever it sits. */
+  img[data-blob]:not([src]) { background: var(--surface-2); color: var(--text-dim); font-size: 12px; text-align: center; }
+  img[data-blob][data-blob-state="missing"] { min-height: 48px; border: 1px dashed var(--border); }
   .image-thumb-actions {
     position: absolute; top: 6px; right: 6px; display: flex; gap: 4px;
     opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard);
@@ -737,6 +743,11 @@
   .modal-panel.drive-panel { max-width: 640px; }
   .drive-setup-steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
   .drive-setup-steps li { margin-bottom: 4px; }
+  .drive-desktop-path { margin: 0 0 12px; }
+  .drive-desktop-path code {
+    display: block; padding: 8px 10px; border-radius: 6px; background: var(--surface-2);
+    font-size: 12.5px; overflow-wrap: anywhere; user-select: all;
+  }
   .drive-field { margin-bottom: 10px; }
   .drive-field label { display: block; font-family: var(--font-display); font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 4px; }
@@ -2187,13 +2198,33 @@
   /* Sized exactly as #prompter-scroll used to be (the flex:1 slice above the
      control bar) — .prompter-guide is positioned against this box instead of
      the scroller itself so Mirror/Flip transforming the scroller never
-     touches it. */
-  .prompter-viewport { position: relative; flex: 1; min-height: 0; }
+     touches it.
+
+     It is also the size container the scroller's vertical padding is
+     measured against (cqh below), and it clips: the scroller has to end
+     exactly where the bar begins. That padding used to be 46vh — a share of
+     the WINDOW, not of this box — so once the bar wrapped to two or three
+     rows the two paddings alone (92vh) outgrew the slice left above it; an
+     inset:0 box that cannot fit its padding simply grows downward, and the
+     scroller (positioned, so painted over the unpositioned bar) sat across
+     the bar's first row and swallowed every click on it. Its clientHeight
+     grew with it, which also moved the reading-line maths in
+     20-teleprompter.js (clientHeight / 2) off the guide at top:50% here. */
+  .prompter-viewport {
+    position: relative; flex: 1; min-height: 0;
+    container-type: size;
+    overflow: clip;
+  }
   .prompter-scroll {
     position: absolute; inset: 0;
     overflow-y: auto;
     scrollbar-width: none;
+    /* 46% of the slice above the bar, top and bottom — always under 100%,
+       so the box can never outgrow its slice — lets the first line start at
+       the reading line and the last one scroll up to it. The vh line is only
+       a fallback for an engine with no container units. */
     padding: 46vh 8vw;
+    padding-block: 46cqh;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
   }
@@ -2226,7 +2257,10 @@
     background: linear-gradient(to right, transparent, rgba(255,133,82,0.55), transparent);
     pointer-events: none;
   }
-  .prompter-empty { text-align: center; color: #8B8580; font-family: var(--font-display); padding-top: 40vh; }
+  /* No padding of its own: the scroller's top padding (46cqh) already puts
+     the first line on the reading line, and this message is that line. It
+     used to add 40vh on top of it, which sank it into the bottom fade. */
+  .prompter-empty { text-align: center; color: #8B8580; font-family: var(--font-display); }
 
   .prompter-bar {
     display: flex;
@@ -2657,7 +2691,10 @@
     .server-doc-delete, .tag-person-remove, .bulk-clear { padding: 6px 10px; font-size: 16px; }
 
     /* teleprompter: controls wrap into a compact grid; sliders get room */
-    .prompter-scroll { padding: 38vh 6vw; }
+    /* only the sides: the top/bottom padding is already a share of the
+       slice above the (now taller) bar, so it needs no phone value — a
+       38vh one overflowed that slice here the same way 46vh did above */
+    .prompter-scroll { padding-inline: 6vw; }
     .prompter-bar { gap: 8px 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
     .prompter-bar .grp { flex: 1 1 40%; }
     .prompter-bar input[type="range"] { flex: 1; width: auto; }

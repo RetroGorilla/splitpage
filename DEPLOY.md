@@ -143,6 +143,11 @@ docker rm -f splitpage && docker build -t splitpage /mnt/user/appdata/splitpage/
 
 Your documents live in the `data` volume, which this does not touch.
 
+Anyone with the app open while you update should reload it. A page older than
+the server can no longer save a document that has images in it: the server
+answers with "This page is out of date for this server", because an older page
+would drop the images it cannot see.
+
 ### Where your documents live
 
 One JSON file per script in `/mnt/user/appdata/splitpage/data`. That is the
@@ -266,14 +271,31 @@ same data folder on a different hostname with its own, broader Access policy.
 **Deleting is immediate.** The picker's × asks once, then the document is gone
 from the server. Your backup of the data folder is the undo.
 
-**Large scripts.** Embedded images make documents big; the cap is 25 MB per
-document (`MAX_BODY_BYTES`). Raise it if you hit it.
+**Large scripts.** The cap is 25 MB per document (`MAX_BODY_BYTES`). Raise it
+if you hit it.
 
 That cap is for saving a whole script. Posting a comment has its own, much
 smaller one — half a megabyte, fixed — because a comment is a comment, and a
 review session that can only comment should never be able to make the server
 buffer a script-sized upload. Raising `MAX_BODY_BYTES` does not raise it, and
 nothing a reviewer legitimately sends comes close to it.
+
+**Images.** Current versions of the app keep images out of the document:
+each image is uploaded once, on its own, and stored under
+`data/blobs/<2 characters>/<its SHA-256>`, so the documents themselves stay
+small. Back `blobs/` up with the rest of the folder — a document that names an
+image whose file is gone shows a placeholder in its place. Nothing deletes an
+image file today, even when no document uses it any more.
+
+One image is capped at 8 MiB (`MAX_BLOB_BYTES`), and only PNG, JPEG, GIF and
+WebP are accepted. Review sessions may upload the screenshots they paste into
+comments, up to 20 MiB per review token per hour
+(`REVIEW_BLOB_BUDGET_BYTES`); editors have no such limit. Everyone who uses the
+library-wide review PIN or key shares one token, and so one allowance.
+
+An older copy of the app cannot save over a document that holds images stored
+this way (it would drop them) — the server refuses with "client too old", and
+reloading the page fixes it.
 
 **`JOIN_PIN` is not a substitute for Access.** Setting `JOIN_PIN` in the
 container's environment makes every `/api/*` route except `/api/health` and
@@ -477,5 +499,7 @@ default in those two files and cut a release from it.
 | App loads, but no server items in the File menu | The app can't reach `/api/health` — it's being served as static files, not by this container. Check the tunnel points at the container's port. |
 | "Your sign-in expired" straight after signing in | Access is returning its login page to API calls. Usually the Access application covers a *path* rather than the whole hostname — it must cover `splitpage.yourdomain.com` entirely, `/api/` included. |
 | `EACCES` in the logs | Data volume permissions — see §2. |
-| Saves fail with 413 | Document over `MAX_BODY_BYTES`. Raise it and restart. |
+| Saves fail with 413 | Document over `MAX_BODY_BYTES`, or one image over `MAX_BLOB_BYTES`. Raise it and restart. |
+| "This page is out of date for this server" | The page was loaded before the server was updated, and the document holds images. Reload the page. |
+| Pictures show as "Image unavailable" | The image files under `data/blobs/` are missing — restored from a backup that did not include `blobs/`, or copied without it. Restore `blobs/` too. |
 | Everyone shows as the same person in comments | Access isn't passing an identity, so Splitpage falls back to asking for a name. Confirm the Access app is on and the tunnel isn't bypassing it. |

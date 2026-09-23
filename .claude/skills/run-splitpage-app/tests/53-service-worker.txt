@@ -25,9 +25,9 @@
 # cached /index.html is a real, whole app page, which is what that fallback
 # has to hand back. The offline reload is the by-hand check in issue #79.
 #
-# Also weaker than it looks: update-status.json and api/ answer 404 here (the
-# launcher writes the first at startup and the second needs server.js), and a
-# 404 was never cached even before #79. The query-string assertions carry the
+# Also weaker than it looks: api/ answers 404 here (it needs server.js), and
+# so does update-status.json unless a launcher run left one in the repo root
+# (it is gitignored; see below) — and a 404 was never cached even before #79. The query-string assertions carry the
 # weight instead — those run against a real 200, with release.json fetched
 # WITHOUT a query first, as the control proving an ordinary same-origin 200
 # does land in the cache.
@@ -129,12 +129,16 @@ expect window.__searchEntries == 0
 # ---- update-status.json and api/ ---------------------------------------
 #
 # The first is fetched with `cache: "no-store"`, which a service worker does
-# not see; the second is the hosted document and its revisions. Both 404 in
-# this harness, so all this can assert is that nothing appeared — see the
-# header.
+# not see; the second is the hosted document and its revisions. api/ 404s in
+# this harness. update-status.json usually does too, but it is gitignored and
+# the launcher writes it into the repo root (`node start.mjs`), and this
+# harness serves the repo root — so a checkout that has ever run the launcher
+# answers 200. That is not a failure: a real 200 that still never reaches the
+# cache is the stronger case. Its status is logged, not asserted; the leak
+# check below is the assertion either way.
 
-eval (async function(){ var a = await fetch('update-status.json', { cache: 'no-store' }); var b = await fetch('api/docs/sw-cache-probe'); window.__probeStatuses = a.status + '/' + b.status; return window.__probeStatuses; })()
-expect window.__probeStatuses == 404/404
+eval (async function(){ var a = await fetch('update-status.json', { cache: 'no-store' }); var b = await fetch('api/docs/sw-cache-probe'); window.__probeStatuses = a.status + '/' + b.status; window.__apiStatus = b.status; return window.__probeStatuses; })()
+expect window.__apiStatus == 404
 sleep 800
 
 eval (async function(){ var names = await caches.keys(); var c = await caches.open(names[0]); var k = await c.keys(); window.__swEntries = k.map(function(r){ var u = new URL(r.url); return u.pathname + u.search; }).sort(); window.__leaks = window.__swEntries.filter(function(e){ return e.indexOf('update-status') !== -1 || e.indexOf('/api/') !== -1; }).length; return window.__swEntries.join(' | '); })()

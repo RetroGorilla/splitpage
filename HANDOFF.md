@@ -116,13 +116,14 @@ only exits non-zero for a command that throws, so read its `RESULT:` line.
 
 **CI** (`.github/workflows/ci.yml`, #58) runs `npm run lint`, `node
 build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
-`desktop/test/ipc-table.test.mjs`, `tools/test-server.mjs`,
+`desktop/test/ipc-table.test.mjs`, `desktop/test/google-drive.test.mjs`, `tools/test-server.mjs`,
 `tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
 A second job, `desktop-smoke`, runs `desktop/test/smoke.mjs --only-target
 dev` against an Xvfb display (#89) — that is where `main.js` and `preload.js`
-are actually executed, ~487 checks of it. It is its own job because it
-launches ~60 real Electron processes and takes ~55 minutes, far longer than
-everything else together. It is not the
+are actually executed, ~600 checks of it. It is its own job because it
+launches ~60 real Electron processes — 6.3 minutes on a Windows 11 x64
+machine, far longer on a slow shared runner — which is more than everything
+else together. It is not the
 full regression run — that is still `run-tests.ps1` on Windows, or
 `driver.mjs` one suite at a time here, plus the packaged targets.
 
@@ -186,10 +187,16 @@ ships. Every check the platform cannot answer is printed as a `SKIP` line and
 listed again under `SKIPPED (n)` at the end of the run, above the pass line —
 so a thinner run never reads like a full one.
 
-A full dev-target run is ~55 minutes. `--only-group <text>` (debugging only,
-same spirit as `--only-target`) runs just the matching groups; it prints a
-banner and tags the summary `PARTIAL RUN`, so a one-case run can never be
-mistaken for the suite.
+A full dev-target run took 6.3 minutes on Windows 11 x64; the ~55 minutes
+first quoted here was the slow cloud container, not the suite.
+`--only-group <text>` (debugging only, same spirit as `--only-target`) runs
+just the groups whose registered name (`open/boot/security`, not the printed
+tag `boot+security`) contains the text; it prints a banner and tags the
+summary `PARTIAL RUN`, so a one-case run can never be mistaken for the suite,
+and a filter that matches nothing exits 1. Launches that end with a dirty
+tab are torn down with `expectForceKill` — the same 15 needed the kill on
+Windows as on Linux, so it is how those cases end, not a platform quirk;
+any other teardown that needs it is listed under `FORCE-KILLED (n)`.
 
 Dev Electron is pinned to native ARM64 (`desktop/.npmrc`, `arch=arm64`); a
 plain `npm install` in `desktop/` on the Windows machine fetches the right
@@ -276,11 +283,20 @@ the caret can't enter one and typing/backspace can't corrupt its
 
 Which scenes a tag appears in is read live (`collectTags()`). Which items
 are tracked at all is real storage, `state.productionTags`.
-`productionEntries()` merges registry + live mentions + owner/notes/status,
-and self-heals a live tag missing a registry entry without dirtying the
-document — so bulk delete must also call `removeTag()`, or the self-heal
-puts the item back. Selection state is UI-only, never serialised. Read the
-panel through `productionEntries()`, never `collectTags()`.
+`productionEntries()` merges registry + live mentions + owner/notes/status.
+It is a pure read since #84: one production index, derived lazily and kept
+until its inputs change — each row's id and two fields, each registry
+entry's five fields, compared rather than tracked (the `contentMemo()`
+reasoning: a key that is the input cannot go stale). The badges, both
+panels, the untagged scan and Tab completion all share it, so a render or an
+idle refresh derives it once. A live tag missing a registry entry still
+*shows*; giving it the entry is `healTagRegistry()`, an explicit step with
+no dirtying, run by `render()` and the idle refresh — and by `migrateRows()`
+(`missingRegistryTags()`) for every document that comes in, so a document
+looks after load exactly as it did when the read did the healing. Bulk
+delete must still also call `removeTag()`, or the heal puts the item back.
+Selection state is UI-only, never serialised. Read the panel through
+`productionEntries()`, never `collectTags()`.
 
 ### 3.5 Comment boxes share the script's event handlers
 
@@ -298,9 +314,14 @@ three-way-merges `(baseState, state, theirs)` and retries (3 rounds max).
 save path sets it to what it successfully sent, nothing else. Since #72 the
 merge paths do not write it themselves: `applyMerge()` (03-sync.js) is the
 one orchestration — snapshot, undo point, `baseState`, autosave, chips,
-toast — and the only writer of `baseState` on a merge. The sites that still
-assign it directly are all "adopt what the other side just confirmed" after
-a successful write or open. `reportMerge(result, {alreadySaved:true})`
+toast — and the only writer of `baseState` on a merge; since #96 that
+includes the boot stash and the crash-draft file merge, the latter through
+`awaitUndoPoint` (the undo point is on disk before the merge is on screen).
+Every other write is "adopt what the other side just confirmed" after a
+successful write or open (or `null`: no ancestor), and goes through
+`setBaseState(next, why)` next to it, each call with its reason — so
+`grep -rn "S\.baseState *=" src/js/` shows the declaration, `applyMerge` and
+`setBaseState`, and nothing else. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
 Since #69 the heartbeat is also a **pull** channel: `/api/presence` answers
@@ -316,7 +337,7 @@ stash when `splitpage-server-resume` is present.
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, ~600 lines. One JSON file
+`server/server.js` — plain Node, no dependencies, one file (~2,300 lines). One JSON file
 per document in `DATA_DIR`.
 
 - No identity of its own — Cloudflare Access decides who anybody is; the
@@ -341,9 +362,19 @@ per document in `DATA_DIR`.
   with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
   role is read from the token on every request (`roleOf`), so it survives a
   reconnect and cannot be asserted by a client. **A review session never
-  PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply,
-  and `PATCH /api/docs/:id/comments/:cid` one resolve. A review-role PUT is
-  a flat 403 `review-only`, refused before its body is read. The whole-state
+  PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply
+  from either role. **Reviewers never resolve or unresolve** (owner's
+  decision): `PATCH /api/docs/:id/comments/:cid` is editor-only, and a
+  review-role PATCH is a flat 403 `reviewers-cannot-resolve`, refused before
+  its body is read. Authorship cannot be established — an author is a typed
+  name and every reviewer on a link shares one token — so any resolve by a
+  reviewer would be a resolve of somebody else's comment. The review client
+  never sends a PATCH (a stray local resolve is put back to the server's,
+  `dropLocalResolves` in 13-hosted.js), offers no Resolve button, and the
+  click guard plus `toggleResolve()` itself refuse one. No client sends the
+  PATCH today: editors resolve through PUT like every other edit. A
+  review-role PUT is a flat 403 `review-only`, refused before its body is
+  read. The whole-state
   proof that used to decide whether a review PUT changed "only comments" —
   `reviewWriteAllowed`, a key-by-key `deepEqual`, and the rest — is gone.
   What survives is `htmlTokens`/`fieldSignature`, now scoped to ONE field:
@@ -364,7 +395,96 @@ per document in `DATA_DIR`.
   document and never touches one.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
-  `Cache-Control: no-store` on every response.
+  `Cache-Control: no-store` on every response except a blob's.
+- **Images are content-addressed blobs** (#82). Bytes live at
+  `DATA_DIR/blobs/<first 2 hex>/<sha256>`, written like a document (temp in
+  the same dir, fsync, rename, fsync the dir — `writeFileDurable`), global
+  across documents, never deleted (D4); a successful save or comment touches
+  the mtime of every blob it names. The list route skips `blobs/` (it only
+  reads `*.json`). `GET /api/health` carries `blobs: 1`. All three routes
+  sit behind the token gate:
+  - `GET /api/blobs/<sha>` (64 lowercase hex, else 400): raw bytes,
+    `Content-Type` sniffed (png/jpeg/gif/webp only), `Cache-Control:
+    private, max-age=31536000, immutable`, `ETag: "<sha>"` (304 on
+    `If-None-Match`), `nosniff`, `CSP: default-src 'none'; sandbox`. A file
+    whose bytes do not hash to its name is 404 and logged, not served.
+  - `PUT /api/blobs/<sha>`, raw body: READ_ONLY 403, bad sha 400, declared
+    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a reviewer over budget 429
+    `review-budget` — all four before the body is read (#74); then
+    `hash-mismatch` 400, not png/jpeg/gif/webp (SVG included) 415
+    `unsupported-type`, already stored 200 `{stored:false}`, else 201
+    `{stored:true}`.
+  - `POST /api/blobs/missing {shas:[≤2000]}` (256 KB body cap) →
+    `{missing:[…]}`, both roles, READ_ONLY too.
+  - **Who sees what.** Editors and the library-wide review token: every
+    blob. A per-document review link: the shas its document's stored state
+    names (`refsIn`, cached by doc id + rev) plus the shas it uploaded
+    itself; anything else is 404 on GET and "missing" on `/missing` whether
+    or not it exists, a PUT of such bytes is answered 201 `{stored:true}`
+    (and charged) even when they were already here, and a comment naming
+    one is 422. None of the four answers tells a link what the rest of the
+    library holds.
+  - **Reviewer budget.** Review tokens may PUT (screenshots in comments,
+    D6) up to `REVIEW_BLOB_BUDGET_BYTES` (20 MiB) per token per rolling
+    hour, each upload charged at least 4 KiB. The declared length is
+    reserved before the body and settled to what was stored; a re-send of
+    bytes the token could already see is free. The library-wide review
+    token is one budget shared by everyone holding it. Editors are
+    unmetered.
+  - `refsIn(state)` counts `imageRef.sha256` / `imageValue.sha256` anywhere
+    in the state and `data-blob="<sha>"` on any TAG in any string (comment
+    and reply bodies, row HTML) — read through `htmlTokens`, so the same
+    characters typed as words are not a ref.
+  - **422 `{error:"missing-blobs", missing}`**: a document POST or PUT whose
+    state names a sha that is not on disk, not already named by the stored
+    document, and not listed in the request's `acceptMissing` array (after
+    the token/role and the PUT's rev check, before anything is written); a
+    comment or reply POST whose body names one (no `acceptMissing` there).
+    The client uploads what is listed and retries. Legacy states carrying
+    base64 images are accepted forever; `MAX_BODY` stays 25 MB.
+  - **426 `{error:"client-too-old"}`** (D7): clients send
+    `x-splitpage-client: 2` on every API call (listed in the CORS allowed
+    headers). A document PUT without it, or with a lower number, is refused
+    before its body when the STORED document names any blob — an older
+    client cannot see those images and its save would drop them. A
+    document with no refs is still saveable by an old client; a document
+    that gains refs between the check and the write is caught by the rev
+    compare-and-set. The comments POST is NOT gated: an old client's
+    comment only appends, and its anchor HTML must match the stored field
+    tag for tag, images included, or it is dropped as stale.
+  - **The client's half** (13-hosted.js, #82 P5). `apiFetch` sends
+    `x-splitpage-client: 2` on every call (`fetchBlob` and `launcherFetch`
+    too; `joinServer` in 20e-connect.js and the presence `sendBeacon` do
+    not — neither route is gated and a beacon cannot carry headers).
+    `/api/health`'s answer is kept per connection (`capsOf(conn)`, a
+    WeakMap keyed by the `conn` record, so pointing the tab elsewhere
+    forgets it); `blobs: 1` is what lets refs go to the server
+    (`serverTakesBlobs`). A server on another origin that predates the
+    header refuses it in its preflight, which looks like "offline":
+    `probeHealth` asks once more without it and, if that answers without
+    `blobs`, leaves it off for that connection. Every write that can name a
+    blob — `saveToServer`'s PUT, `publishToServer`'s POST, a reviewer's
+    comment/reply POST (`sendReviewRequest`, body only) — goes through
+    `sendWithBlobs`: refs = `refsIn(state)`; none → the write as before; a
+    server without `blobs` → the images INLINE in the copy sent (row
+    `visualImage` data URIs, `<img src="data:…">`; the page keeps its
+    refs); otherwise `POST missing` → `PUT api/blobs/<sha>` per missing one
+    (raw bytes from the registry or the local store, `ensureBytes(…,
+    {remote:false})`) → the write. A 422 uploads what it lists and retries
+    ONCE, outside the 409 rounds; a sha with no bytes anywhere goes in
+    `acceptMissing` for a document write and is a permanent refusal for a
+    comment. `apiFetch` names the answers: `missing-blobs` (with
+    `payload.missing`), `client-too-old` (426), `review-budget` (429),
+    `blob-too-large` (413 on an upload, JSON or not), `blob-unsupported`
+    (415); `handleApiError` toasts each. 426 latches `clientTooOld` like a
+    lapsed sign-in — stash, one sticky "This page is out of date … Reload"
+    toast, no further saves — and is neither a conflict nor a sign-out.
+    Bytes come back through `fetchBlob(sha)` (its own `fetch`: a 200 is
+    raw bytes, which `apiFetch` would call signed out), re-hashed by the
+    registry's `intern` and refused on a mismatch; 13-hosted installs it
+    as 02c's remote source (`setRemoteSource`, asked by `ensureBytes` after
+    the local backend, only while a server document is open). Suite
+    `tests/66-hosted-blobs.txt`.
 
 ### 3.8 Untagged mentions are painted, never wrapped
 
@@ -494,15 +614,77 @@ tabs**.
   `splitpage:draft-restore-done` or an explicit user decision — never
   crash/kill/session-end/quit. `buildDraftHeader` (`main.js:807`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
-- Desktop version history lives under `<userData>/history/docs/d-<docId>/`,
-  mirroring the browser's IndexedDB store; ids validated in renderer and
-  main, resolved path stays inside the history root (#38).
-  `ensureHistoryTable()` (`main.js:1563`) fscks first in the write queue;
-  `planHistoryEviction()` is no longer duplicated: #76 moved it, the meta
-  sanitiser and the eviction constants into `shared/history-policy.js`,
-  which both builds load — the browser through `03a-history-store.js`'s
-  re-export, main through `APP_ROOT`. The smoke case that existed only to
-  detect drift between the two copies went with them.
+- **Desktop version history** (#83, `main.js` §8b): one
+  `shared/history-store.js` (the store the browser runs too; policy from
+  `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
+  made once in `whenReady` before `registerIpc`. `<userData>/history/`:
+  `FORMAT` `"2"` (higher → read-only), `index.json` + `index.prev.json`
+  (every bucket in one index, two durable generations; a torn current
+  falls back to prev and is kept as `.corrupt-<ts>`), `bodies/` (a
+  `createBlobStore` folder of its own, content-addressed, refcounted by
+  the index; a dropped body is unlinked only after the next generation is
+  durable). Body before index; no fsck — a missing body drops its entries
+  on read. Ids validated in renderer and main (#38); the renderer names
+  only `(docId, snapshot id)`. Per-tab holds (`historyHolds`, dropped in
+  `forgetTab`) join every eviction. **Channels** (six since #83 step 4,
+  all `invoke`, app origin, table in `desktop/ipc-channels.js`):
+  `history-put(docId|null, meta, stateJson, {protect?, older?})` →
+  `{ok, sizeBytes, duplicate, evicted, overCap}` or `{ok:false, code,
+  evicted?}` — `{older:true}` (literally `true`) with a **null** docId
+  writes into Older, put-if-absent with no stamp (what
+  `history-import-older` was; the renderer's `importOlder` is one such put
+  per entry); `history-list(docId|null)` → `{entries, older,
+  olderExpiresAt, usage}`, `usage` = `{totalBytes, capBytes, overCap,
+  docCount, readOnly}` or null (what `history-usage` was; the panel always
+  asked for both), `{…, usage:null, migrating:true}` at once while the
+  one-time `desktop/history-v1-migrate.js` moves the v1 tree
+  (`docs/d-<docId>/`, `older/`) in and then into `history/v1-backup/`;
+  `history-get({docId}|{older:true}, snapshotId)` (the query also carries
+  the page's holds as `protect`) → `{meta, stateJson}` or null; `history-copy(from, to)` → `{ok, copied, code?}`;
+  `history-touch(docId, title)` → nothing; `history-list-docs()` →
+  `[{docId, title, lastOpenedAt}]`, Older excluded. Wire metas carry no
+  docId (the renderer stamps it). A malformed call rejects (the renderer
+  reads that as `invalid` and drops the entry); everything a retry could
+  fix is a code. The migrator and `v1-backup/` go in the release after
+  (see §8, "Temporary code to delete"). Test-mode faults:
+  `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `exit-mid-migration`,
+  `exit-after-migration-index`, `enospc-once`/`-always`;
+  `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
+- **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
+  §8c). Images leave the document state and live in `<userData>/blobs`:
+  `FORMAT` (`"1"`) and `sha256/<aa>/<sha64>`, the raw bytes named by their
+  own SHA-256 (`<aa>` = its first two hex digits). Plain CommonJS, no
+  Electron, like `drafts.js`. A put checks the bytes hash to the sha, writes
+  `.tmp-<hex>` in the shard folder, fsyncs, renames (retrying a held target
+  on Windows), then fsyncs the folder best-effort (a no-op on NTFS); a sha
+  already there at the same size is `stored:false` and nothing is written.
+  A get re-hashes what it read and, on a mismatch, **deletes the file** and
+  answers null — the name is the checksum, so that file is provably not
+  anyone's bytes, and a document file still inlines every image (#82 D1) to
+  put it back. Per-sha operations are serialised, so a get that deletes a
+  damaged copy cannot race a put's good one. The launch sweeps leftover
+  `.tmp-*`; a `FORMAT` other than ours makes the store read-only (reads
+  still work, every file is checked against its own name). Nothing else
+  ever deletes (#82 D4: no GC); `list()`/`delete()` exist for a later
+  collector and no channel reaches them. The store is not image-specific —
+  #83 means to keep snapshot bodies there — so the image rule
+  (`imageBlobRefusal`: PNG/JPEG/GIF/WebP by magic, never SVG, ≤16 MiB) is
+  the **IPC door's**, exported from the same file only so main and the unit
+  test share one copy. **Channels** (all `invoke`, app origin, a new
+  `sha256` arg type in `ipc-channels.js` — 64 lowercase hex):
+  `blob-put(sha, bytes)` → `{ok, stored}` or `{ok:false, code}`
+  (`BAD_BYTES` for a string, `EMPTY`, `TOO_LARGE`, `NOT_AN_IMAGE`,
+  `HASH_MISMATCH`, `READ_ONLY`, `UNAVAILABLE`, or a write errno such as
+  `ENOSPC`); `blob-get(sha)` → `{bytes, mime}` (mime sniffed from the
+  bytes, never remembered from a put; a non-image answers null) or null;
+  `blob-missing(shas)` → the subset not held, ≤2000 shas per call, anything
+  else rejects. A store that could not be created leaves the app running:
+  puts answer `UNAVAILABLE`, gets null, every sha is missing. The renderer
+  side is `makeDesktopBlobBackend(bridge)` in `20f-desktop.js` (the page
+  registry's `get`/`put`/`missing` interface; `put` rejects with
+  `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
+  bridge calls for browser suites. The `--host` server keeps its own
+  `DATA_DIR/blobs` (#82 D9).
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -534,6 +716,44 @@ tabs**.
   answers `REMOTE_SERVER` for a tab on someone else's server. A `tunnel` is
   host and ports only — the SSH forward the reader runs; nothing starts
   ssh for a tab. `--tunnel` is still its own single non-tab window.
+- **Google Drive through a loopback OAuth redirect** (#10,
+  `desktop/google-drive.js`, `main.js` §9c). The web build's Google
+  Identity Services flow needs an http(s) origin; `splitpage://app` can
+  never be one. So main owns the whole flow: a one-shot listener on
+  `127.0.0.1:0`, PKCE S256 plus a random `state`, the consent URL handed to
+  `shell.openExternal`, the code-for-token exchange, and every Drive
+  request, to Google's fixed hosts only, no redirects followed. The first
+  request to the listener's `/` is the callback — wrong `state` →
+  `STATE_MISMATCH`, `error=` → `DENIED`, nothing in 5 minutes → `TIMEOUT`;
+  the listener closes after it either way. A wrong Host header gets 421 and
+  does not spend the callback. **Tokens:** the refresh token is written only
+  as a `safeStorage` blob, `<userData>/google-drive-token.bin`; Linux's
+  `basic_text` backend counts as unavailable, and then the token lives in
+  memory for the session and the modal says so. The access token never
+  leaves memory. Neither reaches the renderer, `desktop-state.json`, a
+  draft, or the app-data export (those are written by code that cannot see
+  this module's state). Sign-out revokes (5s, best effort) and deletes the
+  blob. **Config**, read on every call: `SPLITPAGE_GOOGLE_CLIENT_ID` /
+  `SPLITPAGE_GOOGLE_CLIENT_SECRET`, else `<userData>/google-oauth-client.json`
+  — `{"client_id","client_secret"}` or the `{"installed":{…}}` file Google
+  Cloud Console downloads, as is. A Desktop-type client's "secret" is not
+  confidential (Google says so); it is config, not a credential. No
+  in-modal client field, deliberately: it would be a renderer-supplied
+  string steering where main signs in. **Channels** (all `invoke`, app
+  origin): `drive-status`, `drive-sign-in`, `drive-sign-out` take nothing;
+  `drive-list` and `drive-download` take a Drive id
+  (`^[A-Za-z0-9_-]{1,200}$`, `root` = My Drive); `drive-upload` takes
+  `{parentId, name, bytes, mimeType?}` (new file) or `{fileId, bytes,
+  mimeType?}` (new revision), name ≤255 chars with no control characters,
+  bytes ≤64 MB. Answers are `{ok, …}` or `{ok:false, code}`, never a token
+  and never an exception's text. The modal (13-hosted.js) browses, downloads
+  (a Google Doc as `.txt`) and uploads — an upload whose name matches one
+  ordinary file in the folder replaces it; rename, delete and new folder
+  stay web-only. **Test mode:** `SPLITPAGE_TEST_GOOGLE_BASE` points every
+  endpoint at `desktop/test/fake-google.mjs`, honoured only under
+  `SPLITPAGE_TEST=1` and refused by the module itself without `testMode`;
+  `SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1` lets a keyring-less Linux run use
+  safeStorage's plain-text key so the stored-token path is exercised.
 - Test mode: `SPLITPAGE_TEST=1` — window never shown/taskbarred, an
   unanswered dialog resolves Cancel, an uncaught main-process error exits
   to stderr instead of a modal. `SPLITPAGE_USER_DATA` gives a temp profile;
@@ -545,7 +765,8 @@ tabs**.
 - `desktop/test/smoke.mjs`: Node built-ins only, drives real window(s) over
   CDP. Covers boot/security/save/export/update plus the tabs surface,
   route-open dedupe, one-dialog-per-quit, session restore, crash
-  reload/loop, duplicate-id reassignment, crash-safe drafts. Runs on
+  reload/loop, duplicate-id reassignment, crash-safe drafts, the blob
+  folder (#82). Runs on
   Windows and Linux since #89 — the dev target on both (under a virtual
   display on Linux), the packaged `.exe` targets on Windows only. macOS is
   written for but unrun. A check this platform cannot answer prints `SKIP`
@@ -578,8 +799,8 @@ use it. A transition declaration outranks `!important` in the cascade, so
 the global `[hidden] { display: none !important }` does not defeat it.
 
 **`render()` must stay synchronous.** `04a-row-motion.js` animates scene
-reorder/insert/delete/collapse with FLIP — measure, let render() do its
-innerHTML swap, measure again, put things back with a transform and animate
+reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
+`#rows` (§3.16), measure again, put things back with a transform and animate
 it away. It is FLIP and *not* the View Transitions API for one reason:
 `startViewTransition()` runs its callback asynchronously, and roughly 120
 assertions across `tests/` read the DOM immediately after a click with
@@ -589,7 +810,7 @@ once, synchronously, and defers only the pixels.
 Two traps it already works around:
 
 - **Measure in document space**, not viewport space (`rect.top + scrollY`).
-  `render()` refocuses the cell that had the caret, and focusing can scroll
+  `render()` can refocus the cell that had the caret, and focusing can scroll
   the page — measured in viewport space that scroll reads as every scene in
   the document having moved, and the whole script slides on a render that
   changed nothing.
@@ -643,6 +864,56 @@ the latch on its own way out, so the serialization is not held by the
 mechanism the comment describes. Anyone touching autosave or the save
 indicator should give the two their own names first.
 
+### 3.16 `render()` reconciles `#rows`; `renderRow()` repaints one row
+
+Until #84 every `render()` rebuilt all of `#rows` through `innerHTML`, so a
+structural change anywhere (add, delete, move, a comment posted, a tag
+applied) cost every row, and the focused cell came back with its caret at
+the end. Now:
+
+- **A row is five parts** — its class, gutter, visual media and two fields —
+  built by `rowParts()` in `05-render.js`. The part strings are the change
+  detection: each row element carries the parts it was last painted from
+  (an expando, never an attribute), and a part whose freshly built string is
+  identical is not touched. `rowHtml()` is those parts joined, byte for byte
+  what it always produced.
+- **`render()`** keys `#rows` by row id (a shot strip by the ids it covers —
+  `rowGroupItems()` in `01b-hide-shot.js`, the same key `04a-row-motion.js`
+  uses), reuses every element still wanted, repaints only changed parts,
+  creates new rows, drops gone ones, and moves the rest with a
+  longest-increasing-run pass that never moves the row holding focus (a
+  moved node loses focus). A focused field that was reused keeps its node,
+  its content and its caret, untouched; one whose text changed underneath it
+  is rebuilt and gets the caret at the end, as every render used to. A
+  row's own attributes and its column wrappers' classes are reset each time
+  (a drag's `draggable`/`is-dragging`, an image drag's `drag-over`), as a
+  rebuild did.
+- **`renderRow(rowId)`** is the same repaint for one row, and returns false
+  when the row is not on screen (folded into a strip) so the caller renders
+  instead. `cycleRowStatus()` uses it; `paintRowStatus()`, which mirrored
+  `rowHtml()` by hand, is gone.
+- **Typing keeps the signature current.** `syncFieldFromDom()` records that
+  the field now shows what state says (`noteFieldPainted()`), so the next
+  render leaves it alone. Only a `#rows` cell counts: the writer edits the
+  same row and the `#rows` copy is repainted when it next renders.
+- **One cell builder.** `editableCellHtml()` builds the script field, the
+  writer's paragraph and the reply box.
+- **One idle refresh.** `scheduleProductionRefresh()`, `scheduleUntaggedScan()`,
+  `scheduleBrollRefresh()` and `scheduleWriterStats()` only mark their job
+  pending on `scheduleIdleRefresh()` (`07-production-tags.js`): one 180ms
+  debounce, capped at 1s of unbroken typing, runs everything pending against
+  one production index (§3.4). They used to be four timers (180/200/220/400ms)
+  each deriving the breakdown for itself.
+
+What a rebuild used to give for free and a reconcile has to do on purpose:
+`render()` still re-applies `ensureTrailingCaretSpot()` to every field, puts
+the presence marks back (a repainted gutter or field-wrap took its mark with
+it), disarms an armed row delete, and drops a saved link-popover Range only
+if its cell is gone. `tests/67-render-perf.txt` holds the numbers: typing in a
+300-scene document renders nothing and derives the breakdown once per idle
+refresh; an insert elsewhere keeps the focused cell's node and caret and
+builds two fields.
+
 ---
 
 ## 4. State schema
@@ -657,12 +928,14 @@ indicator should give the two their own names first.
   "lastEditedBy": null, "lastEditedAt": null,
   "wordsPerMinute": 150,        // clamped 60–400
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
-    "visualImage": "data: URI or null", "status": "todo | ready | shot",
-    "updatedAt": "ISO", "updatedBy": "name" }],
+    "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
+                  "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
+    "status": "todo | ready | shot", "updatedAt": "ISO", "updatedBy": "name" }],
   "comments": [{ "id": "c1", "rowId": "r1", "field": "audioText | visualText | visualImage",
     "anchorId": "c1", "quotedText": "plain text", "author": "name", "body": "sanitised HTML",
     "resolved": false, "resolvedBy": "name or null", "resolvedAt": "ISO or null",
     "assignee": "name or ''", "kind": "anchor | conflict", "createdAt": "ISO", "updatedAt": "ISO",
+    "imageValue": { /* an imageRef, or null */ },  // image conflict cards only
     "replies": [{ "id": "rp1", "author": "name", "body": "HTML", "createdAt": "ISO" }] }],
   "people": [{ "id": "p…", "name": "Jordan" }],
   "productionTags": [{ "cat": "prop | location | cast | vfx | sound", "name": "Camera Rig",
@@ -671,9 +944,53 @@ indicator should give the two their own names first.
 }
 ```
 
-`ROW_FIELDS = ["visualText","visualImage","audioText"]` merges as content;
-`rows[].status` and `productionTags[].status` merge by rank (further-along
-wins); `owner`/`notes` merge "filled beats empty".
+`ROW_FIELDS = ["visualText","imageRef","audioText"]` merges as content
+(an `imageRef` compared by its sha); `rows[].status` and
+`productionTags[].status` merge by rank (further-along wins);
+`owner`/`notes` merge "filled beats empty".
+
+**Images are references, not bytes** (#82). The document state never holds
+image bytes; the bytes live once, content-addressed by SHA-256, in a blob
+store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
+server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
+- A row's picture is `imageRef`, a record gated by `normalizeImageRef()`
+  (`shared/blob-policy.js`): exactly those four fields, the type sniffed
+  from the bytes, never SVG. The old key `visualImage` (a `data:` URI) is
+  read, interned and deleted by `migrateRows()`; a valid one wins over an
+  `imageRef` on the same row. The comment `field` value `"visualImage"` keeps
+  its name (#82 D5).
+- An image inside HTML — comment and reply bodies, pasted cell HTML — is
+  `<img class="comment-img" data-blob="<sha>" data-w data-h data-mime>` with
+  **no stored `src`**. `sanitizeHtml()` interns an inline `data:` image into
+  that form, keeps a valid `data-blob` (attributes from the registry when it
+  holds the bytes), strips any `src`, and drops everything else.
+  `storedImageHtml(ref)` is the same string for HTML built outside it.
+- The hydrator (a MutationObserver in `02c-blobs.js`) gives every
+  `<img data-blob>` in the live DOM a `blob:` `src` once `ensureBytes()`
+  has the bytes (memory, then the backend, then the server); one nobody has
+  is marked `data-blob-state="missing"`, alt "Image unavailable". The mark
+  lives on the element only, so a re-render (the comments list rebuilds on
+  every change) makes a fresh `<img>` and asks again — the memory and the
+  backend, but not the server: the registry remembers the server's "not
+  here" per sha for five minutes (`REMOTE_MISS_MS`), and forgets it
+  whenever new server state arrives (`forgetRemoteMisses()`, called when a
+  document is opened or resumed, on a pull and on a 409's copy), since that
+  is when a collaborator's upload can have made it fetchable. So a picture
+  that turns up later still appears, without a request per re-render. Anything
+  that reads the DOM back into state without sanitising
+  (`syncFieldFromDom`) passes it through `storedHtmlFromDom()`, which strips
+  those attributes again.
+- An image conflict card (`kind:"conflict"`, `field:"visualImage"`) holds the
+  user's picture as `imageValue`; its `body` shows the same picture in the
+  stored form. `imageValue` is the source of truth: "Use my version" puts
+  it back, and the card draws it.
+- `refsIn(state)` (`shared/blob-policy.js`; the server keeps its own copy)
+  lists every sha a state names: `imageRef`, `imageValue`, and `data-blob`
+  on an `<img>` in any row, comment or reply HTML. Every writer that must
+  not name an unstored blob persists or uploads `refsIn` first (#52).
+- The crash/sign-in stash (`splitpage-conflict-stash`) names pictures by
+  ref too, and carries `blobs: {sha: data URI}` for any the durable store
+  does not hold yet; `acceptStash()` interns them on the way back in.
 
 **`docId`** (`src/js/02b-doc-id.js`, frozen `sha256Hex`/`deriveDocId`) is
 minted by `migrateRows()`, carried through `mergeStates()` via
@@ -682,13 +999,36 @@ Never in the seed, `#state-data`, or Standalone HTML export. Join key for
 per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 
 **Per-document version history**, capped 50 snapshots/document, keyed by
-`docId`: browser IndexedDB (`splitpage-history`, `03a-history-store.js`,
-memory fallback), desktop files (`<userData>/history/docs/d-<docId>/`,
-§3.13). Pre-tabs shared history migrated once into a synthetic "Older"
-document, expiring 90 days after that migration (`HISTORY_OLDER_TTL_MS`).
+`docId`. ONE store since #83, `shared/history-store.js` (put-if-absent by
+snapshot id, the stamp after the bucket's newest, the trim to 50, cap
+eviction, the quota retry, Older's creation and expiry, holds, index-only
+copy, which bodies may go), run over a backend per place: in the browser
+over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v2: an `index`
+store, one DocRecord `{bucket, title, lastOpenedAt, migratedAt?,
+expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
+`{sha, stateJson}`, one row per distinct content, shared by every entry
+naming it), or over the shared memory backend when IndexedDB will not open
+(for the rest of that page); on the desktop in main, over its folder
+backend (§3.13), with `03a-history-store.js`'s `desktopHistoryBackend` a
+thin IPC client. Totals are computed from the index (no stored counters);
+a body goes only in the commit that stops naming it, and is written before
+the commit that names it. Pre-tabs shared history migrated once into a
+synthetic "Older" document, expiring 90 days after that migration
+(`HISTORY_OLDER_TTL_MS`; an expiry ≤ 0 is "not stamped", never "expired").
 Eviction order: expired Older, trim every doc to 50, Older oldest-first,
 then docs by `lastOpenedAt` ascending — a doc's newest snapshot is never
 evicted.
+
+The browser's v1 layout (`docs` with byte/count counters, `snapMeta`
+`[docId, id]` + `byDocAt`, `snapBody` `[docId, id]`) is moved into v2 by
+03c's migrator, TEMPORARY until a v3 drops those stores: the backend's
+first job, one snapshot per transaction (body put if absent, meta + sha
+merged into the bucket's record, the v1 rows deleted), so it resumes from
+whatever is left. While it runs, the panel answers from the page with one
+line saying so; if it cannot finish (quota, io), reads merge the v2 index
+with a read-only view of the v1 rows and every write answers `io`, so
+captures stay pending in the page with ONE toast and one panel line (the
+same for a database a newer build wrote, served read-only).
 
 **Crash-safe drafts** (desktop only, §3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
@@ -698,11 +1038,20 @@ not a backup (§3.13).
 
 **The two file formats**, both through `20d-formats.js`, entering state
 only via `migrateRows()` (#2): **`.splitpage`** is
-`JSON.stringify(migrateRows(cloneState(state)), null, 2)`, no envelope,
-byte-for-byte what the server stores and `#state-data` holds at boot (#31).
+`JSON.stringify(inlineStateImages(migrateRows(cloneState(state))), null, 2)`,
+no envelope (#31). Files carry their pictures inline, as they always have
+(#82 D1): `inlineStateImages()` turns each `imageRef` back into
+`visualImage: "data:…"`, each `<img data-blob>` into
+`<img src="data:…" class="comment-img">`, and writes an image conflict
+card's picture into its body — what an older client wrote and reads. A
+picture whose bytes nobody has stays a ref and the save says "N images
+could not be included". Standalone HTML and a server without blob routes
+get the same inline form; the page and a blob server keep the refs.
 **`.md`** is `toMarkdownTableDoc()` (title, scene table, breakdown,
 comments) followed by a fenced `~~~~splitpage` block holding the exact
-`.splitpage` bytes, fence length computed per file so a quoted example
+`.splitpage` bytes (so its images are inline there too, and a row's picture
+also inline in its Visual cell, #82 D2; HTML images are only in the block —
+the table's text never showed them), fence length computed per file so a quoted example
 can't shadow the real block. Reading reconciles hand edits cell-by-cell
 against `mdSceneCellSource()`: equal keeps the block's HTML intact,
 different rebuilds via `legacyMdToHtml()` + `sanitizeHtml()` (comment
@@ -715,7 +1064,10 @@ lossy import (#32).
 not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 `splitpage-tagging-help-dismissed`, `splitpage-files` (IndexedDB,
 `FileSystemFileHandle` for resume-on-launch), `splitpage-history`
-(IndexedDB, per-document history).
+(IndexedDB v2, per-document history: `index` + `bodies`, plus the v1
+stores until the one-time move has emptied them — see above), `splitpage-blobs` (IndexedDB, store
+`blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
+bytes, #82 — nothing deletes them yet, D4).
 
 ---
 
@@ -730,11 +1082,14 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
    (§3.2).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
 6. **Don't run document-wide scans per keystroke.** Wire expensive refreshes
-   through `scheduleProductionRefresh()` (180ms debounce); `contentMemo()`
-   keys on the field's own HTML (never stale); one scan per render.
-7. **Repaint a row, don't re-render the document** for a single-field
-   change. `cycleRowStatus()` uses `paintRowStatus()`, focus-safe — mirrors
-   `rowHtml()`'s markup.
+   through the one idle refresh (`scheduleIdleRefresh()` and its four
+   `schedule*()` wrappers, 180ms debounce, §3.16); `contentMemo()` keys on
+   the field's own HTML (never stale); the production index is derived once
+   per change (§3.4).
+7. **Repaint a row, don't re-render the document** for a single-row
+   change: `renderRow(rowId)`, which repaints only the parts whose markup
+   changed and never a field whose text did not (§3.16). `cycleRowStatus()`
+   uses it.
 8. **Escape values going into CSS attribute selectors** with `cssAttr()` —
    stripping quotes isn't enough, a backslash reads as a CSS escape.
 9. **Markdown table cells need `mdCell()`**; a raw `|` shears the row.
@@ -800,6 +1155,43 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     from memory by `desktop/prompter-share.js` behind a 256-bit token in the
     URL fragment and a Host-header check; no temp file is ever written, so
     a crash leaves nothing on disk.
+    Google Drive (#10) is the third application of it. Signing in, signing
+    out and asking for status take no argument: the page never names the
+    consent URL, the redirect address or the client, so it cannot point the
+    browser anywhere or steer the code to a listener of its own. The Drive
+    calls take the least that says WHICH folder or file — a Drive id, or an
+    upload's name and bytes — validated in `desktop/google-drive.js`, and
+    main builds every request against Google's fixed hosts. No answer
+    carries a token. So a compromised page can at worst read and write the
+    signed-in person's Drive through main while it runs — what the Drive
+    modal does anyway — and can never take the credential out of the app.
+    The alternative, handing the page a short-lived access token so it
+    could call Drive itself, was rejected for exactly that last reason.
+    The blob folder (#82) is the fourth. The page names a blob by the
+    SHA-256 of its bytes and nothing else — `sha256` is a typed argument
+    (64 lowercase hex), so a path, a URL or a `..` is refused by the table
+    before a handler runs, and main builds `sha256/<aa>/<sha>` under its own
+    `userData`. Answers carry shas, bytes and a sniffed mime, never a path.
+    A put must hash to its sha and be a raster image, so a compromised page
+    can at worst add images to the folder (up to 16 MiB each) and read back
+    ones it already knows the sha of — it cannot name a file, read anything
+    outside the folder, or plant an SVG that a later page would render.
+    Version history (#83) is the fifth, and its six channels are the
+    fewest that say what a snapshot is. The page names a document by
+    `docId` and a snapshot by its id (both typed in the table and checked
+    again in main, invariant #38) and the Older bucket only by an explicit
+    `{older:true}` flag — `history-get`'s query, or `history-put` with a
+    null docId — never by a string: `"_older"` is not a docId, so it is
+    refused as one, flag or no flag. Main builds every path under its own
+    `userData/history`; answers carry metas, state JSON as text (never
+    parsed in main) and counts, never a path. #83 step 4 took the set from
+    eight to six by folding usage into `history-list`'s answer and
+    import-into-Older into `history-put`'s flag rather than keeping a
+    channel per store method. So a compromised page can at worst read,
+    write and copy the history of documents whose ids it knows, fill the
+    cap (which evicts oldest-first, never a document's newest snapshot),
+    and list which documents have history — it cannot name a file or reach
+    anything outside that folder.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -813,13 +1205,17 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     `build.mjs`, checked by `seedCheckPasses()`) plus
     `localStorage["splitpage-onboarding"]` plus checks that no document is
     already loading. File ▸ "Set up Splitpage…" bypasses this deliberately.
-31. **A `.splitpage` file is exactly `migrateRows(state)`** — nothing wraps,
-    renames, or adds fields on the way to disk (§3.1, §4).
+31. **A `.splitpage` file is exactly `inlineBlobs(migrateRows(state))`** —
+    `inlineStateImages()` puts every picture's bytes back inline (§4), and
+    nothing else wraps, renames, or adds fields on the way to disk (§3.1).
+    A reader gets refs back through `migrateRows()`.
 32. **The Markdown data block is authoritative for everything the table
     cannot show; the table is authoritative for scene text only, and only
     where it differs from the block.** Don't make the table authoritative
     for a column it renders but doesn't own (`Status`); don't let a
-    row-count difference pick a side silently.
+    row-count difference pick a side silently. Both halves carry images
+    inline (#82 D2): a row's picture as a `data:` URI at the head of its
+    Visual cell AND in the data block; HTML images in the data block.
 33. **Every automated launch of the desktop app sets `SPLITPAGE_TEST=1`,
     and nothing a test does may appear on screen** (§3.13). Doesn't cover a
     renderer `alert`/`confirm` (Help ▸ About); proof of invisibility needs
@@ -841,7 +1237,11 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     splitting history on the next open.
 38. **Version history is addressed only by `(docId, snapshot id)`**,
     validated in renderer and main; the resolved path must stay inside the
-    history folder. The Older bucket is reachable only via `{older: true}`.
+    history folder. The Older bucket is reachable only via `{older: true}`
+    (on the desktop wire: `history-get`'s query, and `history-put` with a
+    null docId — a docId beside the flag rejects).
+    The shared store (`shared/history-store.js`) refuses every other bucket
+    itself, in the browser and in main alike.
 39. **`pushSnapshot()` captures synchronously, and no save ever waits on
     history.** A restore overwrites the document only after its "Before
     restoring" backup is stored or an explicit second confirm.
@@ -869,9 +1269,27 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 48. **An exported bundle contains no key matching
     `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, asserted
     before any byte is written; an import carrying one is refused.**
+    The bundle (`20h-appdata.js`) is `{format:"splitpage-app-data",
+    version:1, exportedAt, appVersion, snapshots, history:{docs:[{docId,
+    title, lastOpenedAt, snapshots:[{meta, stateJson}]}], older, truncated},
+    blobs:{"<sha256 hex>":{mime, b64}}, missingBlobs:["<sha256 hex>"],
+    bookmarks, prefs}`. `blobs` (#82) holds every image an exported
+    snapshot names (`refsIn`) whose bytes the page could get, once each;
+    `missingBlobs` the ones it could not, which the export names in a
+    warning. Blob bytes count toward `HISTORY_EXPORT_CAP_BYTES` (200 MB)
+    with the snapshot bodies. Hex keys and `mime`/`b64` cannot match the
+    regex (hex has no t/o/k/s/p/l; values are never walked).
 49. **Import merges through the history store's public write path and
     never deletes; existing preferences are never overwritten; bookmarks
-    union by URL with local winning.**
+    union by URL with local winning.** Images first: `importHistoryBundle`
+    verifies each `blobs` entry (key is a sha, strict base64, at most
+    16 MiB, sniffed PNG/JPEG/GIF/WebP with a readable size, hashes to its
+    key) and awaits the blob registry's `persist()` for the ones that pass
+    BEFORE the first history put — no imported snapshot is stored naming an
+    image the store does not already hold durably. A blob that fails is
+    dropped and reported; its snapshots still import (placeholder). A blob
+    no snapshot in the file names is ignored. A bundle without `blobs`
+    (every pre-#82 export) imports exactly as before.
 50. **The 1.0.x removal in the installer waits for the old folder to
     disappear before writing** — the old uninstaller's detached `rmdir`
     runs ~2s after it exits, into the same folder. `installer/uninstall.ps1`
@@ -879,19 +1297,38 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
     installed 1.0.x, which is exactly who this macro runs for:
     `desktop/build/installer.nsh` keeps it.
 51. **Autosave writes only where the user has already sent this document,
-    and only work they have seen.** `autoSaveTarget()` (14-export.js) is the
+    only work they have seen, and only while it is on.** With autosave off,
+    neither path writes — not typing (`scheduleAutoSave`) and not a discrete
+    action (`queueAutoSave`); both check the preference first. `autoSaveTarget()` (14-export.js) is the
     single gate: a file handle the user picked, or the server — never a
     picker, never a download. Anything that puts work on screen the user has
     not reviewed (a crash-draft restore's merge, `reportMerge`'s
     `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
     the automatic writes again (#41). A failed or conflicted automatic save
     halts too, rather than repeating a toast or a modal every two seconds.
+52. **No durable record names a blob its store does not already hold
+    durably** (#82). An image is uploaded (and fsynced) before anything
+    that refers to it by sha is written; the list of what a record names
+    is always `refsIn()`.
+    - **Server half:** the 422 `missing-blobs` check on document POST/PUT
+      and on the comments POST (§3.7); `acceptMissing` is the one
+      deliberate exception, for a sha the client knows is lost for good, so
+      a missing picture can never make a script unsaveable (a comment may
+      not use it). The 426 `client-too-old` gate keeps a pre-#82 client from
+      saving over a document that names blobs, since it would drop them.
+    - **Client half:** the hosted client uploads what the server lacks
+      before the PUT, POST or comment POST (`sendWithBlobs`); the history
+      job and the desktop drafts await `persist(refsIn(state))` before they
+      write, and inline (`inlineStateJson`) any blob the store refused; the
+      stash carries non-durable blobs as `data:` URIs; app-data import
+      stores blobs before snapshots (#49); file writers inline everything
+      (#31, #32). Capture stays synchronous (#39) — only the job awaits.
 
 ---
 
 ## 6. Map of the source
 
-`src/js/` (41 modules; filenames say where things live, and still set
+`src/js/` (42 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
@@ -902,13 +1339,15 @@ evaluation order via `_entry.js`):
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
-| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId`, `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
+| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
+| `02c-blobs.js` | image blob registry (#82): `intern`/`internDataUrl` (sync hash, sniff, measure), `recordFor`/`urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`/`queuePersist`, a row's picture (`rowImage`, `rowImageUrl`, `rowImageBytes`, `blobImgHtml`), the file writers' `inlineStateImages`/`inlineStateJson`, the document-wide hydrator for `img[data-blob]` ("Image unavailable" when nobody has it), IndexedDB `splitpage-blobs` + memory backends (`setBackend` for the desktop folder), `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
-| `03a-history-store.js` | per-document version history, IndexedDB store, Older-bucket migration, `planHistoryEviction`, import/export |
-| `04-richtext.js` | `walkSanitize`, html→markdown, video link cards |
-| `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s innerHTML swap, measures before and after in document space, animates what moved (§3.14) |
+| `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
+| `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v2: `index` + `bodies`, one strict transaction per job), `hashText`, and — TEMPORARY until v3 — the v1 → v2 migrator, its read-only v1 reader and `seedV1HistoryDb` (tests) |
+| `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown, video link cards |
+| `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
-| `05-render.js` | `rowHtml`, `render`, field sync, rich-text commands |
+| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
@@ -916,7 +1355,7 @@ evaluation order via `_entry.js`):
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19) |
+| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
@@ -931,8 +1370,8 @@ evaluation order via `_entry.js`):
 | `20c-help.js` | in-app Help modal, coach-mark tour |
 | `20d-formats.js` | the two document formats, hand-edit reconcile |
 | `20e-connect.js` | join-PIN dialog, server bookmarks, SSH helper |
-| `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49) |
-| `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher |
+| `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
+| `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `21-events.js` | all event wiring, `init()` |
@@ -941,11 +1380,20 @@ evaluation order via `_entry.js`):
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, history storage + fsck (policy from `shared/history-policy.js`), draft headers, file dialogs, server launcher, native menus, test mode |
+| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, server launcher, native menus, test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
+| `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
+| `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
+| `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
+| `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
+| `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency |
+| `desktop/history-v1-migrate.js` | one-time move of the pre-#83 folder tree into it, then into `history/v1-backup/`; temporary (§3.13) |
+| `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
+| `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |
 | `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`) |
@@ -954,6 +1402,9 @@ evaluation order via `_entry.js`):
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
+| `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
+| `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks) |
+| `desktop/test/history-v1-migrate.test.mjs` | unit suite for `desktop/history-v1-migrate.js` over a real v1 fixture (broken index, orphan and truncated `.snap`, unstamped Older; kills at every step, rerun ends identical) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
@@ -1018,8 +1469,22 @@ tracked in the plan file, not here:
 desktop is paused pending a fresh look (parked files under
 `.cache/voice-parked/`, plan companion `breezy-booping-toucan-VL.md` for an
 opt-in local model, not yet approved). Google Drive via loopback OAuth is
-pitched but unbuilt. Per-tab server/tunnel connections are built (#11,
+built (#10, §3.13) and tested against a fake Google; it has never signed in
+to the real one, because that needs a Desktop-type OAuth client ID from a
+Google Cloud project only Adam can create — the by-hand check is in
+`docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
+
+**Temporary code to delete (#83) — tracked in #100.** Each item has to
+ship in one release first, so an upgrading user skips nothing. When the
+release after the one that ships #83 is being cut, delete all four
+together: `desktop/history-v1-migrate.js` and
+its call in `main.js`'s `initHistoryStore` (plus its unit suite and the
+smoke v1-migration cases); `<userData>/history/v1-backup/` (delete it at
+launch, once, from main); 03c's v1 → v2 migrator and its read-only v1
+reader (and `seedV1HistoryDb`, suite 70); and an IndexedDB v3 upgrade of
+`splitpage-history` that drops the v1 stores (`docs`, `snapMeta`,
+`snapBody`, `meta`). #100 has the full list and how to verify it.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)

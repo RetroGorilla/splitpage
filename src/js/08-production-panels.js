@@ -14,6 +14,7 @@ import {
   deleteProductionTagEntry,
   disarmBulkDelete,
   findOrAddPerson,
+  healTagRegistry,
   nextTagStatus,
   normalizeTagName,
   personById,
@@ -139,7 +140,7 @@ function fillGearQuickAdd() {
    registerProductionTag), and a name taken back OUT is untracked again —
    but only if nothing in the script still tags it. An item that's live in
    the script can't actually be lost this way: it comes straight back the
-   next render via productionEntries()'s own self-heal, so this never
+   next render via the registry self-heal (healTagRegistry), so this never
    silently drops anything the script itself is still pointing at — it
    only ever forgets the entries that lived here and nowhere else. */
 export function applyGearQuickAdd() {
@@ -524,6 +525,16 @@ function renderProductionList(entries) {
   }).join("");
 }
 
+/* The registry record a write to `item` lands on. A live tag the registry
+   has not caught up with yet — pasted in a moment ago, before the idle
+   refresh's heal ran — shows in the panel like any other item, so a click
+   on it must not fall through to nothing: heal first. Quiet, like every
+   heal; the write that follows is what dirties the document. */
+function trackedEntry(item) {
+  healTagRegistry();
+  return registryEntry(item.cat.id, item.name);
+}
+
 function findTagByKey(key) {
   var all = productionEntries();
   for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i];
@@ -709,7 +720,7 @@ export function bulkSetOwner(personId) {
   var owner = personById(personId) ? personId : "";
   var n = 0;
   items.forEach(function (item) {
-    var entry = registryEntry(item.cat.id, item.name);
+    var entry = trackedEntry(item);
     if (!entry || entry.owner === owner) return;
     entry.owner = owner;
     n++;
@@ -729,7 +740,7 @@ export function bulkSetStatus(statusId) {
   var want = (tagStatus(statusId) || TAG_STATUSES[0]);
   var n = 0;
   items.forEach(function (item) {
-    var entry = registryEntry(item.cat.id, item.name);
+    var entry = trackedEntry(item);
     if (!entry || entry.status === want.id) return;
     entry.status = want.id;
     n++;
@@ -753,7 +764,7 @@ export function bulkAddPerson() {
 /* One Delete rather than the card's two-step Remove label / Delete from
    list, because in bulk the two-step is the wrong shape: a selection is
    usually a mix of live and orphaned items, and removing only the registry
-   entry of a live one is a no-op — productionEntries() self-heals it
+   entry of a live one is a no-op — healTagRegistry() self-heals it
    straight back from the script. So this strips the labels too, and the
    armed button says how many of the script's labels are about to go. */
 export function bulkDeleteSelected() {
@@ -846,7 +857,7 @@ function renderBulkBar(entries) {
 export function setTagStatus(key, statusId) {
   var item = findTagByKey(key);
   if (!item) return;
-  var entry = registryEntry(item.cat.id, item.name);
+  var entry = trackedEntry(item);
   if (!entry) return;
   var want = statusId === null
     ? nextTagStatus(entry.status)
@@ -861,7 +872,7 @@ export function setTagStatus(key, statusId) {
 export function setTagOwner(key, personId) {
   var item = findTagByKey(key);
   if (!item) return;
-  var entry = registryEntry(item.cat.id, item.name);
+  var entry = trackedEntry(item);
   if (!entry) return;
   entry.owner = personById(personId) ? personId : "";
   markDirty();
@@ -875,7 +886,7 @@ export function setTagOwner(key, personId) {
 export function setTagNotes(key, text) {
   var item = findTagByKey(key);
   if (!item) return;
-  var entry = registryEntry(item.cat.id, item.name);
+  var entry = trackedEntry(item);
   if (!entry) return;
   var clean = plainText(text).slice(0, 2000);
   if (entry.notes === clean) return;
@@ -890,7 +901,7 @@ export function addPersonForTag(key) {
   S.tagAddingPersonFor = null;
   if (!id) { renderProduction(); return; }
   var item = findTagByKey(key);
-  var entry = item && registryEntry(item.cat.id, item.name);
+  var entry = item && trackedEntry(item);
   if (entry) entry.owner = id;
   markDirty();
   renderProduction();

@@ -2,6 +2,8 @@ import { S } from "./_state.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
+import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
+import { isSha256Hex, normalizeImageRef, refsIn } from "../../shared/blob-policy.js";
 import {
   adoptRestoredState,
   mergedDocId,
@@ -20,7 +22,7 @@ import {
   applySidePanelWidth,
   readSidePanelWidth
 } from "./03b-side-panels.js";
-import { safeId, safeImageSrc } from "./04-richtext.js";
+import { safeId, storedImageHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
   TAG_STATUSES,
@@ -99,7 +101,8 @@ export function readLegacySnapshotsRaw() {
                        reloadFileFromDisk
    None of them awaits ticket.done: a failed history write must never
    become a failed open, import or save. Only restoreSnapshot, undoMerge
-   (through it) and draft restore wait for the write.
+   (through it) and the crash-draft file merge (applyMerge's
+   awaitUndoPoint) wait for the write.
 
    With no explicit snapshotState, the untouched demo document is skipped
    (isPristineSeedDocument): opening a file into a fresh page would
@@ -139,7 +142,20 @@ var RESTORE_BACKUP_ATTEMPTS = 3;
    whole call: the backup's own write may have to evict, the Older bucket
    goes first, and without the hold a restore from Older under a full quota
    could delete the very snapshot it is restoring — leaving nothing for the
-   "restore anyway" click to find. */
+   "restore anyway" click to find.
+
+   `opts.restoredText` replaces the "Restored the version from …" toast,
+   for a caller that knows better what just happened (undoMerge after a
+   save conflict, whose next save has something specific to do).
+
+   `opts.local` leaves the restored version on screen and dirty instead of
+   writing it straight away — markDirty() still arms the ordinary idle
+   autosave, so the autosave preference decides when it goes, not this
+   call. (With autosave on, queueAutoSave() writes at once; with it off,
+   neither path writes until the user saves.) undoMerge
+   passes it after a save conflict: there the version being replaced is
+   already safe on the server, and the write this would force is the one
+   that takes a collaborator's work back out of it for everybody. */
 async function restoreSnapshot(id, opts) {
   opts = opts || {};
   if (restoreInFlight) return "busy";
@@ -184,8 +200,8 @@ async function restoreSnapshot(id, opts) {
     markDirty();
     render();
     closeHistoryPanel();
-    showToast("Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
-    queueAutoSave();
+    showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
+    if (!opts.local) queueAutoSave();
     return "restored";
   } finally {
     releaseHold();
@@ -263,11 +279,23 @@ export function byId(list) {
   return map;
 }
 
-export var ROW_FIELDS = ["visualText", "visualImage", "audioText"];
+export var ROW_FIELDS = ["visualText", "imageRef", "audioText"];
+
+/* What a row field is compared by. Text by its HTML; the picture by the
+   sha its imageRef names (#82) — two records for the same bytes are the
+   same picture, and a record is an object, which === would never equate. */
+export function rowFieldKey(row, f) {
+  if (!row) return null;
+  if (f === "imageRef") {
+    var r = row.imageRef;
+    return r && typeof r === "object" && typeof r.sha256 === "string" ? r.sha256 : null;
+  }
+  return row[f] || null;
+}
 
 export function rowContentEqual(a, b) {
   if (!a || !b) return false;
-  return ROW_FIELDS.every(function (f) { return (a[f] || null) === (b[f] || null); });
+  return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); });
 }
 
 /* The comment-level equivalent of rowContentEqual, used the same way: to
@@ -284,16 +312,8 @@ function commentContentEqual(a, b) {
 }
 
 /* Merge `mine` and `theirs`, both descended from `base`.
-   Anything that cannot be reconciled is preserved, never dropped.
-
-   imagesStripped: true when `mine`/`base` came from stashLocalWork()'s
-   oversized-document fallback, which replaces every visualImage with a
-   sentinel that migrateRows() (correctly — safeImageSrc only ever allows a
-   real data: URI through) turns back into null. That null is indistinguishable
-   from "no image", so the normal equality-based fast paths below would
-   silently conclude "unchanged" for a row that may well have had a real
-   image swapped in locally right before the stash — see mergeRow(). */
-export function mergeStates(base, mine, theirs, imagesStripped) {
+   Anything that cannot be reconciled is preserved, never dropped. */
+export function mergeStates(base, mine, theirs) {
   var conflicts = [];
   var stats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
@@ -302,28 +322,21 @@ export function mergeStates(base, mine, theirs, imagesStripped) {
   var placed = {};
 
   function mergeRow(b, m, t) {
-    /* present on both sides — reconcile field by field */
+    /* present on both sides — reconcile field by field, each compared by
+       rowFieldKey (the picture by its sha) and taken whole from its side */
     var out = JSON.parse(JSON.stringify(t));
     var tookMine = false;
     ROW_FIELDS.forEach(function (f) {
-      var mv = m[f] || null, tv = t[f] || null, bv = b ? (b[f] || null) : null;
-      /* A stripped-and-restored visualImage is null whether or not it
-         really had an image — mv/bv equality here would be comparing two
-         unknowns, not two agreements. Skip straight to "can't reconcile"
-         whenever there's something on their side worth not silently
-         losing; if theirs is empty too, there is nothing to protect
-         either way, so let it fall through as an ordinary non-conflict. */
-      if (f === "visualImage" && imagesStripped && tv) {
-        out[f] = tv;
-        conflicts.push({ rowId: t.id, field: f, mine: null, theirs: tv });
+      var mv = rowFieldKey(m, f), tv = rowFieldKey(t, f), bv = b ? rowFieldKey(b, f) : null;
+      if (mv === tv) return;
+      if (b && mv === bv) return;                                   /* only they changed it */
+      if (b && tv === bv) {                                         /* only I changed it */
+        out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
+        tookMine = true;
         return;
       }
-      if (mv === tv) return;
-      if (b && mv === bv) { out[f] = tv; return; }          /* only they changed it */
-      if (b && tv === bv) { out[f] = mv; tookMine = true; return; }  /* only I changed it */
       /* both changed the same field: keep theirs live, keep mine intact */
-      out[f] = tv;
-      conflicts.push({ rowId: t.id, field: f, mine: mv, theirs: tv });
+      conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
     });
     /* Status isn't text to reconcile, it's progress to accumulate: if
        either of us has marked a scene shot, it has been shot. Taking the
@@ -452,19 +465,25 @@ export function mergeStates(base, mine, theirs, imagesStripped) {
     if (mine.title) conflicts.push({ rowId: null, field: "title", mine: mine.title, theirs: theirs.title });
   }
 
-  /* every unreconcilable field becomes a comment holding my version */
+  /* every unreconcilable field becomes a comment holding my version. A
+     picture is held as `imageValue`, the record itself — what "Use my
+     version" puts back — and the body shows it in the stored HTML form,
+     <img data-blob> (#82 P6); a file writes it into the body inline for
+     older clients (inlineStateImages, 02c-blobs.js). The comment's field
+     keeps the old name "visualImage" (#82 D5). */
   conflicts.forEach(function (c) {
+    var image = c.field === "imageRef";
     var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
       c.field === "title" ? "Title" : "Visual image";
     var isEmpty = !c.mine;
-    var bodyHtml = c.field === "visualImage"
-      ? (safeImageSrc(c.mine) ? '<img class="comment-img" src="' + escapeHtml(c.mine) + '">' : "")
+    var bodyHtml = image ? storedImageHtml(c.mine)
       : c.field === "title" ? escapeHtml(c.mine || "")
       : (c.mine || "");
     mergedComments.push({
       id: makeId("c"),
       rowId: c.rowId,
-      field: c.field,
+      field: image ? "visualImage" : c.field,
+      imageValue: image ? (normalizeImageRef(c.mine) || null) : undefined,
       anchorId: null,
       quotedText: "",
       author: getEditorName(),
@@ -665,32 +684,70 @@ function mergeChangedSideWins(f, base, mine, theirs) {
   return t || m || fallback;
 }
 
-/* ---- conflict stash (survives the reload the shell forces on us) ---- */
+/* ---- conflict stash (survives the reload the shell forces on us) ----
 
-function stripImages(doc) {
-  if (!doc) return doc;
-  var copy = cloneState(doc);
-  copy.rows.forEach(function (r) { r.visualImage = r.visualImage ? "__IMAGE__" : null; });
-  return copy;
+   The stash names its pictures the way the document does, by imageRef
+   (#82). What the durable blob store does not hold yet travels with it as
+   `blobs: {sha: data URI}`, so the reload cannot lose a picture this page
+   only had in memory; what the store holds needs no copy. There is no
+   image-stripping fallback any more: a stash too big for sessionStorage is
+   not written, and the caller does not reload (it never could throw the
+   work away). */
+function stashBlobsFor(docs) {
+  var blobs = {}, any = false;
+  docs.forEach(function (d) {
+    refsIn(d).forEach(function (sha) {
+      if (blobs[sha] || isDurableSync(sha)) return;
+      var url = dataUrlForSync(sha);
+      if (url) { blobs[sha] = url; any = true; }
+    });
+  });
+  return any ? blobs : null;
 }
 
 /* Returns true only if the work is genuinely persisted. The caller MUST NOT
    force a reload on false — that would throw the work away. */
 export function stashLocalWork() {
   if (!S.state) return false;
-  function attempt(payload) {
-    try {
-      sessionStorage.setItem(STASH_KEY, JSON.stringify(payload));
-      return true;
-    } catch (e) { return false; }
+  var payload = { at: nowIso(), by: getEditorName(), base: S.baseState, mine: S.state };
+  var blobs = stashBlobsFor([S.state, S.baseState]);
+  if (blobs) payload.blobs = blobs;
+  try {
+    sessionStorage.setItem(STASH_KEY, JSON.stringify(payload));
+    return true;
+  } catch (e) { return false; }
+}
+
+/* Makes a stash (or a crash draft handed over as one) ready to merge:
+   its carried `blobs` interned — each re-hashed, so a copy that is not
+   what its key says is simply not the picture — and, for ONE RELEASE, the
+   stash an older build wrote when the document was too big: every image
+   replaced by the sentinel "__IMAGE__" with `imagesStripped` set. Whether
+   such a row's picture changed cannot be known, so it takes `theirs`'s
+   picture for that row (the old merge raised an empty conflict card and
+   kept theirs; the card had nothing in it to restore). Changes the stash
+   in place and returns it. */
+export function acceptStash(stash, theirs) {
+  if (!stash || typeof stash !== "object") return stash;
+  if (stash.blobs && typeof stash.blobs === "object") {
+    Object.keys(stash.blobs).forEach(function (sha) {
+      if (isSha256Hex(sha) && typeof stash.blobs[sha] === "string") internDataUrl(stash.blobs[sha]);
+    });
   }
-  var meta = { at: nowIso(), by: getEditorName() };
-  if (attempt({ at: meta.at, by: meta.by, base: S.baseState, mine: S.state })) return true;
-  /* too big for sessionStorage — drop the images, which are the bulk, and
-     keep the text. Image fields then merge as "unknown" rather than being lost. */
-  if (attempt({ at: meta.at, by: meta.by, base: stripImages(S.baseState),
-                mine: stripImages(S.state), imagesStripped: true })) return true;
-  return false;
+  if (stash.imagesStripped) {
+    var theirRows = byId(theirs && Array.isArray(theirs.rows) ? theirs.rows : []);
+    [stash.mine, stash.base].forEach(function (doc) {
+      if (!doc || !Array.isArray(doc.rows)) return;
+      doc.rows.forEach(function (r) {
+        if (!r || r.visualImage !== "__IMAGE__") return;
+        var t = theirRows[r.id];
+        delete r.visualImage;
+        r.imageRef = t && t.imageRef ? JSON.parse(JSON.stringify(t.imageRef)) : null;
+      });
+    });
+    delete stash.imagesStripped;
+  }
+  return stash;
 }
 
 export function clearStash() {
@@ -914,7 +971,14 @@ export async function renderHistory() {
   if (subtitle) subtitle.textContent = HISTORY_SUBTITLES[data.backend] || HISTORY_SUBTITLE_DEFAULT;
 
   var entries = Array.isArray(data.entries) ? data.entries : [];
-  if (!entries.length) {
+  /* One line while the store is moving to its new format, could not finish
+     that, or is read-only (#83, listDocHistory): in place of "No snapshots"
+     when the list is empty — which it may only look — else in place of the
+     usage line. */
+  var notice = typeof data.notice === "string" ? data.notice : "";
+  if (!entries.length && notice) {
+    listEl.innerHTML = '<div class="comments-empty history-notice">' + escapeHtml(notice) + '</div>';
+  } else if (!entries.length) {
     listEl.innerHTML = '<div class="comments-empty">No snapshots of this document yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</div>';
   } else {
     listEl.innerHTML = entries.map(function (m) { return historyCardHtml(m, "doc"); }).join("");
@@ -936,7 +1000,7 @@ export async function renderHistory() {
 
   var usageEl = document.getElementById("history-usage");
   if (usageEl) {
-    var usageText = historyUsageText(data.backend, data.usage);
+    var usageText = notice ? (entries.length ? notice : "") : historyUsageText(data.backend, data.usage);
     usageEl.textContent = usageText;
     usageEl.hidden = !usageText;
   }
@@ -944,10 +1008,11 @@ export async function renderHistory() {
 
 /* ---- merge reporting ---- */
 
-/* {id, docId} of the "Before merging your unsaved changes" snapshot, or
-   null. The docId is kept because history is per document: after another
-   document is opened, "Undo merge" must not pull the merged-away version
-   of the first one into it. */
+/* {id, docId, source} of the undo point the last merge filed ("Before
+   merging …"), or null. The docId is kept because history is per document:
+   after another document is opened, "Undo merge" must not pull the
+   merged-away version of the first one into it. `source` is applyMerge's,
+   and says which version the snapshot holds — see undoMerge. */
 S.lastMergeUndo = null;
 var undoArmed = false;
 var undoArmTimer = null;
@@ -966,7 +1031,31 @@ var undoMergeForceFor = null;
    restore (20g-drafts.js) passes it: Splitpage never writes the user's file
    on its own (invariant #41), least of all with a merge the user has not
    seen yet, done against a file they did not open. Their next Save writes
-   it, as it would any other unsaved change. */
+   it, as it would any other unsaved change.
+
+   `opts.undo` is what the banner's "Undo merge" may promise, because the
+   merges it reports are not all the same kind (#97):
+     undefined  the button as it always was: go back to the version that
+                was live before the merge
+     "saved"    saveToServer's 409. The undo point is the version the user
+                was SAVING, and the merge is already on the server, so
+                undoing is local: it puts their version back on screen,
+                dirty, and the next save — judged against the rev the
+                merge's own save came back with, and measured from the
+                merged base — writes it over the merged copy. The banner
+                says so.
+     false      no button. The pull channel (#69) files no undo point on
+                purpose, and undoing a pull would mean throwing away a
+                collaborator's saved work, which is not what the button
+                promises.
+   Whatever `undo` says, there is no button while nothing is armed: a
+   button that can only answer "No merge snapshot to undo." is the bug
+   this replaced. */
+var UNDO_SAVED_NOTE = "Undo merge puts your version back here; the next save replaces the merged copy on the server.";
+var UNDO_SAVED_TITLE = "Go back to the version you were saving, before someone else's changes were merged into it. " +
+  "It stays unsaved until the next save, which replaces the merged copy on the server. Recoverable from Version history.";
+var undoTitleDefault = null;
+
 export function reportMerge(result, opts) {
   opts = opts || {};
   var s = result.stats;
@@ -987,6 +1076,13 @@ export function reportMerge(result, opts) {
     summary += " " + result.conflicts.length + " edit" + (result.conflicts.length === 1 ? " was" : "s were") +
       " changed on both sides — your version is saved as a comment.";
   }
+
+  var undoBtn = document.getElementById("merge-undo");
+  if (undoTitleDefault === null) undoTitleDefault = undoBtn.title;
+  var offerUndo = opts.undo !== false && !!S.lastMergeUndo;
+  undoBtn.hidden = !offerUndo;
+  undoBtn.title = opts.undo === "saved" ? UNDO_SAVED_TITLE : undoTitleDefault;
+  if (offerUndo && opts.undo === "saved") summary += " " + UNDO_SAVED_NOTE;
 
   document.getElementById("merge-summary").textContent = " " + summary;
   document.getElementById("merge-review").hidden = !result.conflicts.length;
@@ -1029,26 +1125,29 @@ function noteMergeAutoSave(opts) {
    out five times — saveToServer's 409 and two of resumeServerDoc's merges
    (13-hosted.js), applyStashedWork (14-export.js) and, through it,
    confirmFileMerge (18a-local-merge.js) — which is five chances for one
-   copy to drift from the others, and one already had: the 409 path files
-   an undo snapshot and never arms the button that would use it. That
-   divergence is now an option with a name (`armUndo`) rather than a line
-   that is simply missing from one copy of five.
+   copy to drift from the others, and one already had: the 409 path filed
+   an undo snapshot and never armed the button that would use it. #72 gave
+   that divergence a name (`armUndo:false`); #97 removed it, so an undo
+   point asked for is an undo point armed, on every path.
 
    THE ONE WRITER OF `baseState` on the merge paths. The base a merge
    measures against has to be exactly what the other side last confirmed
    (HANDOFF §3.6); it stopped being that because six places assigned it.
+   Since #96 that includes the boot stash (21-events.js) and the crash-draft
+   file merge (20g-drafts.js), which used to adopt applyStashedWork's result
+   by hand. Every write of it that is NOT a merge goes through setBaseState()
+   below, with its reason, so a grep for assignments to it lists the declaration,
+   this function and that one — and nothing else.
 
    What varies between callers is options, never code:
 
      base, mine, theirs   the three documents; normalised here, so a caller
                           hands over whatever it is holding
-     imagesStripped       the stash dropped its images to fit (stashLocalWork)
      source               which merge this is — names the undo point's label
      undoPoint            the state the undo snapshot captures: the version
                           the merge REPLACES, which is `theirs` at load time
                           and `mine` in the middle of a save. Omitted files
                           no snapshot and leaves "Undo merge" as it was.
-     armUndo              false files the snapshot without arming Undo merge
      keepLabel            a second snapshot, of `mine`, so a version that was
                           recovered from somewhere is a version in the history
                           rather than something that only existed in a function
@@ -1058,19 +1157,34 @@ function noteMergeAutoSave(opts) {
      mergeOnly            merge and file the undo point, hand the result back,
                           and change nothing on screen — applyStashedWork's
                           three callers each do something different next
-     newBase              what `baseState` becomes; omitted leaves it alone
+     awaitUndoPoint       adopt nothing until the undo point's write has
+                          settled (invariant #39: the undo point is ON DISK
+                          before the merged version replaces what the user
+                          can see). The crash-draft file merge asks for it
+                          (20g-drafts.js); boot and the other paths do not
+                          wait. With it the answer is a Promise, always —
+                          even when no snapshot was filed.
+     newBase              what `baseState` becomes; omitted leaves it alone.
+                          A function is called at that moment instead, for
+                          a base that is not final until the merge has begun
+                          (boot: applyStashedWork gives `loaded` the stash's
+                          id first).
      historyFrom          the id this view wrote history under before the
                           merge, for noteMergedDocId
      chips                refresh the identity and file chips as well
-     report               false hands the merge back unreported — the 409
-                          path reports only once the merged version is
+     report               false hands the merge back unreported — no banner,
+                          and no dirty mark when nothing merged either. The
+                          409 path reports only once the merged version is
                           actually stored, so the banner can never describe
-                          a merge that failed to save
+                          a merge that failed to save; boot reports after
+                          its chips and menus, and adopting a stash that
+                          matched what the page loaded leaves it clean.
      noAutoSave           reportMerge's: mark dirty, write nothing
      toast                {text, tone, sticky}; `text` may be a function,
                           called once the merged document is on screen
 
-   → {state, result, snapshot}. `result` is null when nothing differed. */
+   → {state, result, snapshot} (a Promise of it with awaitUndoPoint).
+   `result` is null when nothing differed. */
 var UNDO_LABELS = {
   "server-conflict": "Before merging in someone else's changes",
   "server-resume": "Before merging your recovered changes",
@@ -1090,8 +1204,7 @@ export function applyMerge(opts) {
     result = mergeStates(
       opts.base ? migrateRows(cloneState(opts.base)) : null,
       migrateRows(cloneState(opts.mine)),
-      opts.theirs,
-      !!opts.imagesStripped
+      opts.theirs
     );
   }
   var next = result ? result.merged : opts.theirs;
@@ -1101,8 +1214,8 @@ export function applyMerge(opts) {
      some EARLIER merge of this same document, which is a version from
      before work this one has nothing to do with. */
   function armUndoPoint(docId) {
-    if (!opts.undoPoint || opts.armUndo === false) return;
-    S.lastMergeUndo = snap ? { id: snap.id, docId: docId } : null;
+    if (!opts.undoPoint) return;
+    S.lastMergeUndo = snap ? { id: snap.id, docId: docId, source: opts.source } : null;
   }
 
   if (opts.mergeOnly) {
@@ -1112,35 +1225,99 @@ export function applyMerge(opts) {
     return { state: next, result: result, snapshot: snap };
   }
 
-  S.state = next;
-  /* Before the undo point is armed: noteMergedDocId may have just moved
-     this document's history to the merged id, and undoMerge compares what
-     it holds against state.docId before restoring. */
-  if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
-  armUndoPoint(S.state.docId);
-  if (opts.newBase !== undefined) S.baseState = opts.newBase;
-  render();
-  if (opts.chips) { updateIdentityChip(); updateFileChip(); }
-  if (result) {
-    if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
-  } else {
-    /* Nothing merged, but `theirs` still replaced what was on screen and
-       is not what is on disk or on the server. */
-    markDirty();
+  function adopt() {
+    S.state = next;
+    /* Before the undo point is armed: noteMergedDocId may have just moved
+       this document's history to the merged id, and undoMerge compares what
+       it holds against state.docId before restoring. */
+    if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
+    armUndoPoint(S.state.docId);
+    if (opts.newBase !== undefined) {
+      baseStateWhy = "merge: " + (opts.source || "");
+      S.baseState = typeof opts.newBase === "function" ? opts.newBase() : opts.newBase;
+    }
+    render();
+    if (opts.chips) { updateIdentityChip(); updateFileChip(); }
+    if (result) {
+      if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
+    } else if (opts.report !== false) {
+      /* Nothing merged, but `theirs` still replaced what was on screen and
+         is not what is on disk or on the server. */
+      markDirty();
+    }
+    if (opts.toast) {
+      /* `text` may be a function, called here rather than by the caller: the
+         sentence usually names the document, and its title is the MERGED
+         one — which does not exist until the lines above have run. */
+      var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
+      if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
+    }
+    return { state: next, result: result, snapshot: snap };
   }
-  if (opts.toast) {
-    /* `text` may be a function, called here rather than by the caller: the
-       sentence usually names the document, and its title is the MERGED
-       one — which does not exist until the lines above have run. */
-    var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
-    if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
-  }
-  return { state: next, result: result, snapshot: snap };
+
+  if (!opts.awaitUndoPoint) return adopt();
+  /* The one place a merge waits for its snapshot (invariant #39). A write
+     that failed still settles — enqueueHistory answers {stored:false} —
+     and a failed history write must never become a failed merge. */
+  var written = snap && snap.done ? snap.done : null;
+  return Promise.resolve(written).then(null, function () {}).then(adopt);
 }
 
-/* Reverts to the version that was live before the merge — i.e. discards the
-   work the merge just rescued. Destructive enough to need a confirm, and
-   recoverable afterwards because restoreSnapshot snapshots first. */
+/* ---- the base, when it is not a merge (#96) ----
+
+   `baseState` is the ancestor every three-way merge measures against, and
+   it has to be exactly what the other side last confirmed (HANDOFF §3.6).
+   applyMerge above sets it on a merge path. Every other write is "adopt
+   exactly what was just confirmed" after a successful save, publish or
+   open — or `null`, "there is no ancestor" — and comes through here, so
+   the whole list is one grep and each entry says why it is there.
+
+   `why` is that reason, a few words at the call site. It is kept only as
+   the last one (baseStateReason, for a unit test or a console), never
+   logged or stored. `next` is taken as it is: a caller that still holds
+   the object it passes clones it first, as every one of them always has. */
+var baseStateWhy = "";
+
+export function setBaseState(next, why) {
+  baseStateWhy = String(why || "");
+  S.baseState = next;
+  return next;
+}
+
+/* Why `baseState` last changed: setBaseState's `why`, or "merge: <source>"
+   when applyMerge set it. */
+export function baseStateReason() {
+  return baseStateWhy;
+}
+
+/* Reverts to the undo point the merge filed. Destructive enough to need a
+   confirm, and recoverable afterwards because restoreSnapshot snapshots
+   first. What it discards depends on which version that undo point is:
+
+     most merges      the version that was live before the merge (`theirs`
+                      at load time), so undoing discards the work the merge
+                      just rescued — "Discard my edits?"
+     server-conflict  saveToServer's 409, whose undo point is the version
+                      the user was SAVING. Undoing puts that back and
+                      discards what the merge brought in from the other
+                      side — "Drop their changes?". The merged copy is
+                      already on the server; what is restored here stays
+                      local and dirty (restoreSnapshot's `local`: the
+                      autosave preference decides when it is written, and
+                      nothing forces a write), and the next save — Save,
+                      or autosave's idle timer when that is on — carries
+                      `baseRev` = the rev that merged save came back with,
+                      so it is accepted and replaces the merged copy. If
+                      somebody saved in the meantime, the merge that brings
+                      their save in (that save's 409, or a pull) measures
+                      against the merged base, so it counts the undone
+                      changes as this side's edits and keeps them undone. */
+var UNDO_CONFIRM = { "server-conflict": "Drop their changes?" };
+var UNDO_LOCAL = { "server-conflict": true };
+var UNDO_RESTORED = {
+  "server-conflict": "Your version is back, unsaved. The next save replaces the merged copy on the server."
+};
+
 export function undoMerge(btn) {
   if (!S.lastMergeUndo) { showToast("No merge snapshot to undo.", "warn"); return; }
   if (!S.state || S.lastMergeUndo.docId !== S.state.docId) {
@@ -1155,7 +1332,11 @@ export function undoMerge(btn) {
     var undo = S.lastMergeUndo;
     var force = undoMergeForceFor === undo;
     undoMergeForceFor = null;
-    restoreSnapshot(undo.id, { force: force }).then(function (r) {
+    restoreSnapshot(undo.id, {
+      force: force,
+      local: !!UNDO_LOCAL[undo.source],
+      restoredText: UNDO_RESTORED[undo.source]
+    }).then(function (r) {
       if (r === "no-backup") {
         undoMergeForceFor = undo;
         showToast("Couldn't keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
@@ -1170,7 +1351,7 @@ export function undoMerge(btn) {
     return;
   }
   undoArmed = true;
-  btn.textContent = "Discard my edits?";
+  btn.textContent = UNDO_CONFIRM[S.lastMergeUndo.source] || "Discard my edits?";
   btn.classList.add("armed");
   clearTimeout(undoArmTimer);
   undoArmTimer = setTimeout(function () {

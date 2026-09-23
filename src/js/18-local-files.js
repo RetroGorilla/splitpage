@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { fileHome, home, importHome, setHome } from "./_home.js";
-import { loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
+import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import { toggleHideShotScenes } from "./01b-hide-shot.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -9,10 +9,13 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
+import { ensureBytes, missingInlineImages } from "./02c-blobs.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
   openHistoryPanel,
   pushSnapshot,
+  setBaseState,
   stampRow,
   updateIdentityChip
 } from "./03-sync.js";
@@ -25,7 +28,7 @@ import {
 } from "./07-production-tags.js";
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
 import { openFindBar } from "./09-find-replace.js";
-import { commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
+import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
@@ -51,6 +54,7 @@ import {
   toMarkdownDoc,
   toMarkdownTableDoc,
   toggleAutoSave,
+  warnImagesLeftOut,
   zipWrite
 } from "./14-export.js";
 import {
@@ -61,7 +65,7 @@ import {
   narrationRows
 } from "./15-docx.js";
 import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildPackingListPdf, buildPdf } from "./17-pdf.js";
+import { buildPackingListPdf, buildPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { showAbout } from "./20a-update.js";
 import {
@@ -69,7 +73,9 @@ import {
   parseMarkdownProject,
   parseSplitpageFile
 } from "./20d-formats.js";
-import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import {
+  canOpenPrompterInBrowser, makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser
+} from "./20f-desktop.js";
 import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 
@@ -174,10 +180,15 @@ function updateHeaderFileChip() {
    and extension are already fixed and must stay a text file in place. */
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
+  /* Every builder below is synchronous and reads pictures through
+     rowImageBytes/rowImageDataUrl (02c-blobs.js), which only answer for
+     bytes already in memory — so fetch any the document names first (#82). A
+     document with no refs asks for nothing and opens no store. */
+  await ensureBytes(refsIn(S.state));
   if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
   if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
-  if (kind === "pdf") return { data: buildPdf(), filename: baseName + ".pdf" };
+  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: baseName + ".pdf" };
   if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };
@@ -193,7 +204,11 @@ export async function buildFileData(kind, baseName, opts) {
   /* standaloneHtmlFor (02b-doc-id.js) leaves the document id out: this
      export is a copy handed to someone else, and carrying the id would make
      it a duplicate of this document the moment both are open. */
-  if (kind === "html") return { data: standaloneHtmlFor(S.state), filename: baseName + ".html" };
+  if (kind === "html") {
+    /* inline, like a .splitpage (#82): say so if a picture could not be */
+    warnImagesLeftOut(missingInlineImages(S.state).length, baseName + ".html");
+    return { data: standaloneHtmlFor(S.state), filename: baseName + ".html" };
+  }
   if (kind === "md" && opts.allowImageBundle) {
     /* A script with no pictures stays a single plain-text .md, same as
        always. One with pictures ships as a small zip instead — the .md
@@ -247,7 +262,8 @@ function htmlToPlainScript() {
     lines.push("");
   }
 
-  var comments = commentEntries();
+  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
+  var comments = commentEntries({ pieces: true });
   if (comments.length) {
     lines.push("COMMENTS");
     lines.push("========");
@@ -258,11 +274,11 @@ function htmlToPlainScript() {
       if (c.quoted) {
         c.quoted.split(/\r\n|\r|\n/).forEach(function (l) { lines.push('  "' + l + '"'); });
       }
-      (c.body || "(empty)").split(/\r\n|\r|\n/).forEach(function (l) { lines.push("  " + l); });
+      (commentBodyText(c) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l) { lines.push("  " + l); });
       c.replies.forEach(function (rp) {
         lines.push("");
         var prefix = "  > " + rp.author + (rp.when ? ", " + rp.when : "") + ": ";
-        (rp.body || "(empty)").split(/\r\n|\r|\n/).forEach(function (l, i) {
+        (commentBodyText(rp) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l, i) {
           lines.push((i === 0 ? prefix : "    ") + l);
         });
       });
@@ -392,7 +408,7 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   S.state = newState;
-  S.baseState = cloneState(S.state);
+  setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
   /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
      there is no handle to ask — a plain <input type=file> open.
      `diskBase` is the document exactly as this file last said it was: the
@@ -567,7 +583,17 @@ async function loadFileIntoEditor(file, handle, opts) {
      "Draft 2 of the same script" is still a real workflow and is still
      supported; it is the Paste/Import modal (openImportModal,
      11-import.js), which keeps the breakdown, the people, the b-roll and
-     the comments and now takes a file as well as pasted text. */
+     the comments and now takes a file as well as pasted text.
+
+     `schema: SCHEMA_VERSION` because every reader above already hands back
+     HTML, not legacy Markdown: docxToRows builds escaped text plus
+     <strong>/<em>/<a>, normalizeImportedRows (.txt, a foreign .md, a Word
+     file with no table) has already run legacyMdToHtml once, and csvToRows
+     escapes each cell. Without it migrateRows reads the rows as
+     pre-rich-text and runs legacyMdToHtml a second time, which escapes the
+     markup into visible "<strong>" and every "&" into "&amp;" — and every
+     further export and reopen escaped it again. migrateRows still
+     sanitizes them either way. */
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
   if (opts.reload) {
     /* Not an open: the same document, re-read from the same file. Only
@@ -577,8 +603,8 @@ async function loadFileIntoEditor(file, handle, opts) {
     S.state.rows = newRows;
     S.state.title = openedTitle;
   } else {
-    S.state = migrateRows({ title: openedTitle, rows: newRows });
-    S.baseState = cloneState(S.state);
+    S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
+    setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
     /* The two homes of the Save button (§3.1) — the project file and the
        hosted document — both belonged to whatever was on screen a moment
        ago, and saving into either would overwrite an unrelated script.
@@ -957,6 +983,13 @@ export function toggleFileMenu(force) {
   if (backdrop) backdrop.hidden = !open;
   btn.setAttribute("aria-expanded", open ? "true" : "false");
   if (open) {
+    /* Desktop only, and only a bridge that can do it (issue #86): decided
+       each time the drawer opens rather than once at boot, the same way the
+       teleprompter's own voice button decides when it opens — a browser
+       suite swaps a fake bridge in after boot, and an older bridge without
+       the call has nothing to offer. */
+    var presentBrowser = document.getElementById("menu-present-browser");
+    if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
     /* the drawer is tall and scrolls; a reopen should start at the top
        rather than wherever the last visit left it */
     var body = menu.querySelector(".menu-body");
@@ -1053,6 +1086,7 @@ export function handleFileMenuAction(action) {
   else if (action === "server-publish") publishToServer();
   else if (action === "share-link") publishAndCopyShareLink();
   else if (action === "find") openFindBar();
+  else if (action === "prompter-open-in-browser") openPrompterInBrowser();
   else if (action === "export-app-data") exportAppData();
   else if (action === "import-app-data") openImportAppData();
   else if (action === "tagging-help") showTaggingHelp();

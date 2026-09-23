@@ -1,11 +1,8 @@
 import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { cssAttr } from "./04-richtext.js";
-import { pad2, render } from "./05-render.js";
+import { pad2, render, renderRow } from "./05-render.js";
 import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
-import { formatTimestamp } from "./10-comments.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { htmlToPlainText, queueAutoSave } from "./14-export.js";
 
@@ -81,47 +78,6 @@ export function updateScriptStats() {
   text.textContent = shot + "/" + S.state.rows.length + " shot";
 }
 
-/* Repaint just the parts of one row that a status change touches, rather
-   than re-rendering every row in the document to move one dot — that cost
-   a whole frame (13 ms at 120 scenes) per click, and clicking down a
-   shoot list is exactly when you do it repeatedly.
-   Kept deliberately narrow and focus-safe: no editable is replaced, so a
-   caret mid-sentence survives. Everything here mirrors the status markup
-   in rowHtml() — change one, change the other. */
-function paintRowStatus(row) {
-  var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(row.id) + '"]');
-  if (!rowEl) return false;
-  var st = rowStatus(row.status) || ROW_STATUSES[0];
-
-  rowEl.classList.toggle("is-shot", row.status === "shot");
-
-  var btn = rowEl.querySelector(".status-btn");
-  if (btn) {
-    btn.title = st.label + " — click to change";
-    btn.setAttribute("aria-label", "Scene status: " + st.label);
-  }
-  var dot = rowEl.querySelector(".status-dot");
-  if (dot) {
-    dot.className = "status-dot " + st.cls;
-    dot.style.setProperty("--st", st.color);
-  }
-
-  /* stampRow() just changed who touched it and when */
-  var gutter = rowEl.querySelector(".gutter");
-  var meta = rowEl.querySelector(".row-meta");
-  if (row.updatedBy && gutter) {
-    if (!meta) {
-      meta = document.createElement("div");
-      meta.className = "row-meta";
-      gutter.appendChild(meta);
-    }
-    meta.title = "Last edited by " + row.updatedBy;
-    meta.innerHTML = escapeHtml(String(row.updatedBy).split(/\s+/)[0]) +
-      "<br>" + escapeHtml(formatTimestamp(row.updatedAt));
-  }
-  return true;
-}
-
 export function cycleRowStatus(rowId) {
   var idx = findRowIndex(rowId);
   if (idx === -1) return;
@@ -138,8 +94,14 @@ export function cycleRowStatus(rowId) {
     if (!wasShot && row.status === "shot") armShotHideGrace(row.id);
     else if (wasShot && row.status !== "shot") clearShotHideGrace(row.id);
   }
-  /* full render only if the row isn't on screen to patch (it always is) */
-  if (!paintRowStatus(row)) render();
+  /* Repaint just this row rather than every row in the document to move
+     one dot — that cost a whole frame (13 ms at 120 scenes) per click, and
+     clicking down a shoot list is exactly when you do it repeatedly.
+     renderRow() (05-render.js) replaces only the parts whose markup
+     changed — the gutter and the row's class here — so no editable is
+     touched and a caret mid-sentence survives. A full render only if the
+     row isn't on screen to repaint (folded into a shot strip). */
+  if (!renderRow(row.id)) render();
   updateScriptStats();          /* the shot counter in the header */
   scheduleProductionRefresh();  /* the Shoot view counts shot scenes */
   queueAutoSave();

@@ -11,10 +11,10 @@ import {
 } from "./04-richtext.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { updateBrollBadge } from "./08c-broll.js";
+import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { queueAutoSave } from "./14-export.js";
-import { writerOpen } from "./19-writer.js";
+import { updateWriterStats, writerOpen } from "./19-writer.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -144,9 +144,11 @@ export function isInsideTagOrLink(el) {
    forget to invalidate — the failure mode of a version counter, and the one
    that would quietly show the wrong breakdown. Cleared wholesale when it
    grows past a bound, since editing mints a new key per keystroke. */
-/* Budgeted by CHARACTERS, not by entry count. A field can carry a pasted
-   image as a data: URI (walkSanitize allows <img>), so one entry can be
-   megabytes — and typing in such a field mints a new key per keystroke.
+/* Budgeted by CHARACTERS, not by entry count. A field used to carry a
+   pasted image as a data: URI, so one entry could be megabytes — and
+   typing in such a field mints a new key per keystroke. Since #82 an image
+   in a field is a short <img data-blob> reference (walkSanitize), but the
+   budget costs nothing and does not depend on that staying true.
    Capping at "1200 entries" would have been a memory leak measured in
    gigabytes; capping at ~2M characters is a few MB whatever the mix.
    Keys are the very strings state already holds, so a live entry costs a
@@ -293,19 +295,93 @@ export function deleteProductionTagEntry(cat, name) {
   return before !== S.state.productionTags.length;
 }
 
-/* Every tracked item, merged with its current live mentions if it has
+/* ---- the production index ----
+
+   Every tracked item, merged with its current live mentions if it has
    any. `orphaned` items are ones the registry remembers but that no
-   longer appear anywhere in the script. Also self-heals the reverse case
-   (a live tag somehow missing its registry entry) rather than just
-   silently dropping it — quietly, without marking the document dirty,
-   since nothing the user did actually changed. */
-export function productionEntries() {
+   longer appear anywhere in the script. A live tag somehow missing its
+   registry entry still shows — as an item with nothing set on it — but
+   READING the breakdown no longer writes that entry (#84): that is
+   healTagRegistry()'s job below, run as an explicit step.
+
+   Derived lazily and kept until its inputs change: the rows' ids, in
+   order, the tags each field holds (tagsInField, per field) and each
+   registry entry's five fields. They are compared rather than tracked, the
+   same reasoning as contentMemo above — a key that is the input itself
+   cannot go stale, and there is no mutation site anyone can forget to
+   invalidate. A field whose HTML is the same string as last time is one
+   pointer check; one that changed is re-read through the tagsInField memo
+   (one parse, which deriving would have paid for that field anyway), and
+   only a change to the TAGS in it — not to the words around them — counts.
+   So typing prose derives nothing at all, and the badge, the gear count,
+   the panel, the untagged scan and the Tab completion read one index per
+   real change instead of one each per keystroke. */
+var prodIndex = null;
+var prodIndexDerived = 0;
+
+function registrySignature(tags) {
+  var sig = [];
+  tags.forEach(function (t) {
+    if (!t) { sig.push(null, null, null, null, null); return; }
+    sig.push(t.cat, t.name, t.owner, t.notes, t.status);
+  });
+  return sig;
+}
+
+function sameFieldTags(a, b) {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].catId !== b[i].catId || a[i].name !== b[i].name || a[i].text !== b[i].text) return false;
+  }
+  return true;
+}
+
+/* Row signature, five slots per row: id, visualText, audioText, and the
+   tag list each of those two fields held. A field whose text moved on but
+   whose tags did not has its slots brought up to date, so the next check of
+   it is a pointer compare again. */
+var ROW_SIG_SLOTS = 5;
+
+function prodIndexFresh(ix) {
+  var rows = S.state.rows, tags = S.state.productionTags;
+  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 5) return false;
+  var rs = ix.rowSig;
+  for (var i = 0, j = 0; i < rows.length; i++, j += ROW_SIG_SLOTS) {
+    var r = rows[i];
+    if (rs[j] !== r.id) return false;
+    if (rs[j + 1] !== r.visualText) {
+      var vTags = tagsInField(r.visualText);
+      if (!sameFieldTags(rs[j + 3], vTags)) return false;
+      rs[j + 1] = r.visualText;
+      rs[j + 3] = vTags;
+    }
+    if (rs[j + 2] !== r.audioText) {
+      var aTags = tagsInField(r.audioText);
+      if (!sameFieldTags(rs[j + 4], aTags)) return false;
+      rs[j + 2] = r.audioText;
+      rs[j + 4] = aTags;
+    }
+  }
+  var ts = ix.tagSig;
+  for (i = 0, j = 0; i < tags.length; i++, j += 5) {
+    var t = tags[i];
+    if (!t) { if (ts[j] !== null) return false; continue; }
+    if (ts[j] !== t.cat || ts[j + 1] !== t.name || ts[j + 2] !== t.owner ||
+        ts[j + 3] !== t.notes || ts[j + 4] !== t.status) return false;
+  }
+  return true;
+}
+
+function deriveProductionIndex() {
+  var rows = S.state.rows;
   var live = collectTags();
   var liveByKey = {};
   live.forEach(function (t) { liveByKey[registryKey(t.cat.id, t.name)] = t; });
 
-  var seen = {}, out = [];
+  var seen = {}, out = [], unregistered = [];
   S.state.productionTags.forEach(function (t) {
+    if (!t) return;
     var cat = tagCategory(t.cat);
     if (!cat) return;
     var key = registryKey(cat.id, t.name);
@@ -327,11 +403,96 @@ export function productionEntries() {
     var key = registryKey(t.cat.id, t.name);
     if (seen[key]) return;
     seen[key] = true;
-    registerProductionTag(t.cat.id, t.name);
+    unregistered.push(t);
     out.push({ key: key, cat: t.cat, name: t.name, mentions: t.mentions,
                orphaned: false, owner: "", notes: "", status: TAG_STATUSES[0].id });
   });
+
+  var rowSig = new Array(rows.length * ROW_SIG_SLOTS);
+  rows.forEach(function (r, i) {
+    var j = i * ROW_SIG_SLOTS;
+    rowSig[j] = r.id;
+    rowSig[j + 1] = r.visualText;
+    rowSig[j + 2] = r.audioText;
+    /* the same memoised arrays collectTags() just read */
+    rowSig[j + 3] = tagsInField(r.visualText);
+    rowSig[j + 4] = tagsInField(r.audioText);
+  });
+  return {
+    entries: out,
+    unregistered: unregistered,
+    rowCount: rows.length,
+    rowSig: rowSig,
+    tagSig: registrySignature(S.state.productionTags)
+  };
+}
+
+function productionIndex() {
+  if (prodIndex && prodIndex.state === S.state && prodIndexFresh(prodIndex)) return prodIndex;
+  prodIndexDerived++;
+  prodIndex = deriveProductionIndex();
+  prodIndex.state = S.state;
+  return prodIndex;
+}
+
+/* A pure read. The array is the caller's own (a copy of the index's), so
+   sorting or filtering it in place can never reach the next caller; the
+   entry objects inside it are shared and are read, never written. */
+export function productionEntries() {
+  return productionIndex().entries.slice();
+}
+
+/* The registry self-heal, as an explicit step instead of a side effect of
+   reading: give every live tag that has no registry entry one, quietly —
+   without marking the document dirty, since nothing the user did changed.
+   migrateRows (02-state.js) does the same for every document that comes
+   in through the one door (missingRegistryTags below), so a document looks
+   the same after load as it always did; at runtime render() and the idle
+   refresh run this, which is where the old read-time heal effectively ran
+   (a pasted-in tag, a merge). Bulk delete still has to strip the script's
+   labels too (removeTag), or this puts the item straight back.
+
+   Registering a live tag does not change what productionEntries() says
+   about it — a registry entry with nothing set reads exactly like the
+   unregistered live item did, in the same place in the list — so the index
+   is kept, with only its registry signature brought up to date. */
+export function healTagRegistry() {
+  if (!S.state) return 0;
+  var ix = productionIndex();
+  if (!ix.unregistered.length) return 0;
+  var n = ix.unregistered.length;
+  ix.unregistered.forEach(function (t) { registerProductionTag(t.cat.id, t.name); });
+  ix.unregistered = [];
+  ix.tagSig = registrySignature(S.state.productionTags);
+  return n;
+}
+
+/* migrateRows' half of the heal: the registry entries a document's script
+   needs and its registry lacks, in the shape registerProductionTag() gives
+   them. Names are normalised the way migrateRows normalises a registry
+   name, so a second migration finds them and adds nothing. */
+export function missingRegistryTags(rows, registry) {
+  var have = Object.create(null);
+  (registry || []).forEach(function (t) { if (t && t.name) have[registryKey(t.cat, t.name)] = true; });
+  var out = [];
+  collectTagsFromRows(rows).forEach(function (t) {
+    var name = plainText(t.name).trim().slice(0, 80);
+    if (!name) return;
+    var key = registryKey(t.cat.id, name);
+    if (have[key]) return;
+    have[key] = true;
+    out.push({ cat: t.cat.id, name: name, owner: "", notes: "", status: TAG_STATUSES[0].id });
+  });
   return out;
+}
+
+export function productionIndexStats() {
+  return { derived: prodIndexDerived, flushes: idleFlushes };
+}
+
+export function resetProductionIndexStats() {
+  prodIndexDerived = 0;
+  idleFlushes = 0;
 }
 
 export function tagsByCategory(all) {
@@ -347,27 +508,63 @@ export function tagsByCategory(all) {
   }).filter(function (g) { return g.items.length; });
 }
 
-/* Both the badge and the panel re-read the whole script to work out what's
-   tagged. That is cheap to do once and wasteful to do on every keystroke,
-   so typing coalesces them into one pass shortly after you stop. */
-var productionRefreshTimer = null;
+/* ---- the idle refresh ----
 
+   Everything that re-reads the whole document after an edit — the
+   breakdown badges and panel, the runtime estimate, the untagged-mention
+   scan, the b-roll list, the writer's word count — is cheap once and
+   wasteful per keystroke. They used to run off four timers of their own
+   (180, 200, 220 and 400ms), each re-deriving the breakdown for itself.
+   Now there is one: every schedule*() below only marks its job pending,
+   and one debounce runs everything pending once typing pauses, all of it
+   reading one production index. MAX_MS keeps the counts moving through
+   long unbroken typing. */
+var IDLE_REFRESH_MS = 180;
+var IDLE_REFRESH_MAX_MS = 1000;
+var idlePending = { production: false, writerStats: false, untagged: false, broll: false };
+var idleTimer = null;
+var idleSince = 0;
+var idleFlushes = 0;
+
+export function scheduleIdleRefresh(job) {
+  idlePending[job] = true;
+  var now = Date.now();
+  if (idleTimer) clearTimeout(idleTimer);
+  else idleSince = now;
+  var wait = Math.max(0, Math.min(IDLE_REFRESH_MS, idleSince + IDLE_REFRESH_MAX_MS - now));
+  idleTimer = setTimeout(runIdleRefresh, wait);
+}
+
+function runIdleRefresh() {
+  idleTimer = null;
+  var p = idlePending;
+  idlePending = { production: false, writerStats: false, untagged: false, broll: false };
+  if (!S.state) return;
+  idleFlushes++;
+  if (p.production) refreshProductionNow();
+  if (p.writerStats) updateWriterStats();
+  if (p.untagged) scanUntaggedMentions();
+  if (p.broll) runBrollRefresh();
+}
+
+function refreshProductionNow() {
+  healTagRegistry();
+  /* renderProduction() updates both badges from the index it already
+     reads; only pay for a separate count when neither panel showing
+     those items is open. The two can never both be open at once (see
+     openSidePanel), but which one is is not worth branching on
+     separately. */
+  var panel = document.getElementById("production-panel");
+  var gearPanel = document.getElementById("gear-panel");
+  if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();
+  else updateTagBadges();
+  updateScriptStats(); /* the runtime estimate moves with every word typed */
+}
+
+/* Both the badge and the panel re-read the whole script to work out what's
+   tagged — see the idle refresh above. */
 export function scheduleProductionRefresh() {
-  if (productionRefreshTimer) return;
-  productionRefreshTimer = setTimeout(function () {
-    productionRefreshTimer = null;
-    if (!S.state) return;
-    /* renderProduction() updates both badges from the scan it already
-       does; only pay for a separate count when neither panel showing
-       those items is open and there is no render to piggyback on. The
-       two can never both be open at once (see openSidePanel), but which
-       one is is not worth branching on separately. */
-    var panel = document.getElementById("production-panel");
-    var gearPanel = document.getElementById("gear-panel");
-    if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();
-    else updateTagBadges();
-    updateScriptStats(); /* the runtime estimate moves with every word typed */
-  }, 180);
+  scheduleIdleRefresh("production");
 }
 
 export function updateProductionBadge(n) {
@@ -632,7 +829,6 @@ export function acceptTagGhost() {
 var UNTAGGED_HL = "splitpage-untagged";
 var untaggedList = [];          /* [{ cellEl, range, entry, text }] in document order */
 export var untaggedSuggestion = null;  /* the one the prompt is currently offering */
-var untaggedScanTimer = null;
 S.untaggedMutedFor = null;    /* a cell Escape dismissed the prompt in */
 
 function highlightApiOk() {
@@ -772,11 +968,7 @@ function scanUntaggedMentions(entries) {
 /* Same reasoning as scheduleProductionRefresh(): re-reading every visual
    cell is fine once and wasteful once per keystroke. */
 export function scheduleUntaggedScan() {
-  if (untaggedScanTimer) return;
-  untaggedScanTimer = setTimeout(function () {
-    untaggedScanTimer = null;
-    scanUntaggedMentions();
-  }, 220);
+  scheduleIdleRefresh("untagged");
 }
 
 export function hideUntaggedPrompt() {
