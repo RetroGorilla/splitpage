@@ -15,7 +15,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
-import { cellOf, projection } from "../js/04c-doc-model.js";
+import { cellOf, projection, tagNameOf, toHtml } from "../js/04c-doc-model.js";
 import {
   normalizeTagName, removeTag, renameTag, tagFieldOccurrences, tagOccurrences, tagsInField
 } from "../js/07-production-tags.js";
@@ -271,8 +271,8 @@ function withRows(cells, fn) {
   return fn();
 }
 
-test("rename and remove leave every stored cell reading as the old code left it, and count the same spans", () => {
-  let renamed = 0;
+test("rename and remove leave every stored cell reading as the old code left it, and count its mentions", () => {
+  let renamed = 0, joined = 0;
   for (const html of CELLS) {
     const names = [...new Set(tagsInField(html).map((t) => t.catId + "\u0000" + t.name))];
     for (const key of names) {
@@ -286,12 +286,18 @@ test("rename and remove leave every stored cell reading as the old code left it,
       const gone = oldRemove(html, cat, name);
       let count = 0;
       const m = withRows([html], () => { count = removeTag(cat, name); return S.state.rows[0].visualText; });
-      assert.equal(count, gone.changed, html);
+      /* the count is the tag's mentions, as the panel shows them: stretches
+         of it in the model, which is the old code's count of spans except
+         where two spans of it sat side by side */
+      assert.equal(count, modelMentions(html, cat, name), html);
+      assert.ok(count <= gone.changed, html);
+      if (count < gone.changed) joined++;
       assert.deepEqual(cellOf(m), cellOf(gone.html), JSON.stringify({ html, name }));
       renamed++;
     }
   }
   assert.ok(renamed > 100, "enough tagged cells: " + renamed);
+  assert.ok(joined > 0, "the cells do exercise two spans of one tag side by side");
 });
 
 test("rename: other tags keep their exact spelling; a cell without the tag is not touched", () => {
@@ -309,10 +315,10 @@ test("rename: other tags keep their exact spelling; a cell without the tag is no
   });
 });
 
-test("rename and remove: two spans of one tag side by side still count as two", () => {
+test("rename and remove: two spans of one tag side by side are one mention, as the panel counts them", () => {
   const html = tagSpan("prop", "Mug", "a") + tagSpan("prop", "Mug", "b");
   withRows([html], () => {
-    assert.equal(removeTag("prop", "mug"), 2);
+    assert.equal(removeTag("prop", "mug"), 1);
     assert.equal(S.state.rows[0].visualText, "ab");
   });
 });
@@ -329,37 +335,68 @@ test("rename and remove in a cell still holding a video card keep the card", () 
   });
 });
 
-/* ---- the production index's reader stays on the HTML ----
+/* ---- the production index reads the model ----
 
-   tagsInField counts tag SPANS: one mention each. Read from the model it
-   would count runs of one tag, and on these stored shapes the two differ —
-   which is why it still parses the HTML (see its comment). */
-function mentionsFromModel(html) {
-  const out = [];
-  let last = null;
+   tagsInField used to count tag SPANS in the HTML, one mention each. It
+   counts stretches of one tag in the cell's model now: what the editor
+   shows as one tagged phrase. On the shapes below, which older copies of
+   the app stored, the two differ — and the span count was the one that
+   moved: every one of these cells is written in the model's shape the
+   first time anything edits it, after which the spans agree with the
+   model. The model's count is the one a cell keeps. */
+
+/* the tag's stretches in the model, found here without tagsInField */
+function modelMentions(html, cat, name) {
+  const want = normalizeTagName(name);
+  let n = 0, last = null;
   for (const r of cellOf(html)) {
-    const tag = !r.atom && r.marks.tag;
-    if (tag && last && last.id === tag) { last.text += r.text; continue; }
-    last = tag ? { id: tag, text: r.text } : null;
-    if (last) out.push(last);
+    const id = r.atom ? null : r.marks.tag || null;
+    if (id && id !== last) {
+      const t = tagNameOf(id);
+      if (t && t.cat === cat && normalizeTagName(t.name) === want) n++;
+    }
+    last = id;
   }
-  return out.length;
+  return n;
 }
 
-test("tagsInField: the shapes where the model would count mentions differently", () => {
+/* the old reader's count: one per tag span with a category and a name */
+function spanCount(html) {
+  return [...inertBody(html).querySelectorAll(".tag-anchor")]
+    .filter((el) => el.getAttribute("data-tag-cat") && (el.getAttribute("data-tag-name") || "").trim()).length;
+}
+
+test("tagsInField: on the shapes where spans and the model disagree, it counts what the cell keeps", () => {
+  const broll = '<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span>';
   const cases = [
-    /* "[mug][mug]" typed, before the model wrote cells */
-    [tagSpan("prop", "Mug", "mug") + tagSpan("prop", "Mug", "mug"), 2, 1],
-    /* a tag nested in a tag */
-    [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, 3],
-    /* an empty tag span */
-    ["x" + tagSpan("prop", "Mug", "") + "y", 1, 0],
-    /* a b-roll key inside a tag */
-    [tagSpan("prop", "Mug", 'a<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span>b'), 1, 2]
+    /* "[mug][mug]" typed, before the model wrote cells: one phrase now */
+    [tagSpan("prop", "Mug", "mug") + tagSpan("prop", "Mug", "mug"), 2, [["Mug", "mugmug"]]],
+    /* a tag nested in a tag: the inner one, the outer either side of it */
+    [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, [["Mug", "a"], ["Cup", "b"], ["Mug", "c"]]],
+    /* an empty tag span shows nothing, and is nothing */
+    ["x" + tagSpan("prop", "Mug", "") + "y", 1, []],
+    /* a b-roll key inside a tag: the tag either side of it */
+    [tagSpan("prop", "Mug", "a" + broll + "b"), 1, [["Mug", "a"], ["Mug", "b"]]]
   ];
-  for (const [raw, spans, runs] of cases) {
+  for (const [raw, spans, mentions] of cases) {
     const html = sanitizeHtml(raw);
-    assert.equal(tagsInField(html).length, spans, html);
-    assert.equal(mentionsFromModel(html), runs, html);
+    assert.equal(spanCount(html), spans, html);
+    assert.deepEqual(tagsInField(html).map((t) => [t.name, t.text]), mentions, html);
+    /* written once through the model, the cell's spans say the same */
+    const written = toHtml(cellOf(html));
+    assert.equal(spanCount(written), mentions.length, written);
+    assert.deepEqual(tagsInField(written), tagsInField(html), written);
   }
+});
+
+test("tagsInField: a mention is one stretch of one tag, whatever formatting or comments cross it", () => {
+  const html = sanitizeHtml(
+    tagSpan("prop", "Mug", "the <strong>red</strong> mug") + " and " +
+    '<span class="cmt-anchor" data-cmt="c1">' + tagSpan("cast", "Ann", "Ann") + "</span>" +
+    tagSpan("prop", "Mug", "mug") + "<br>" + tagSpan("prop", "  ", "no name"));
+  assert.deepEqual(tagsInField(html), [
+    { catId: "prop", name: "Mug", text: "the red mug" },
+    { catId: "cast", name: "Ann", text: "Ann" },
+    { catId: "prop", name: "Mug", text: "mug" }
+  ]);
 });
