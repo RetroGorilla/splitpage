@@ -30,6 +30,7 @@ import {
 } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
+import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { htmlToPlainText, queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
@@ -132,6 +133,34 @@ var groupMenuOpen = false;
 var selection = Object.create(null);
 var selectionAnchor = null;
 var bulkInput = null;       /* "person" | "location": the bar's one text box */
+
+/* ---- a review session (#30): the list to read, not to change ----
+
+   A reviewer (13-hosted.js reviewMode) can open a shot, filter, group, go
+   to its scene and take the CSV or the printed list away, and nothing
+   else: the server keeps none of a reviewer's edits to the list, so an
+   edit made here would look as if it had worked and then be lost. The
+   controls that change a shot are not drawn, or drawn disabled where the
+   value is what a reader wants (the tick, the assignee, the note), and
+   the handlers below refuse them anyway, as the script's click guard does
+   (21-events.js REVIEW_SAFE_ACTIONS). An allow-list for the same reason
+   as that one: an action added to the panel or the page has to be
+   thought about here before a reviewer can reach it. */
+var BROLL_REVIEW_SAFE_ACTIONS = {
+  "broll-expand": 1, "broll-jump": 1, "broll-filter": 1, "broll-group-menu": 1, "broll-group": 1,
+  "broll-bulk-clear": 1, "broll-open-page": 1, "broll-page-close": 1, "broll-page-jump": 1,
+  "broll-page-csv": 1, "broll-page-print": 1
+};
+
+/* Whatever was half open when the role arrived — a rename, a location
+   box, a menu, a selection and its bar — goes, rather than being drawn
+   for somebody who cannot finish it. */
+function dropEditingForReview() {
+  if (!reviewMode()) return;
+  renamingId = null; addingPersonFor = null; editingLocFor = null; editingRefFor = null;
+  menuFor = null;
+  clearSelection();
+}
 
 /* ---- small pieces of markup ---- */
 
@@ -250,12 +279,14 @@ function propListTitle(e) {
   }).join(", ");
 }
 
-function propsEditHtml(e) {
+function propsEditHtml(e, readOnly) {
   var id = escapeHtml(e.id);
+  if (readOnly && !e.props.length) return '<span class="broll-muted">None</span>';
   return '<div class="broll-props" style="--prop:' + catColor("prop") + '">' +
-      e.props.map(function (p) { return propChipHtml(e, p, true); }).join("") +
-      '<input type="text" class="broll-prop-input" data-id="' + id + '" list="broll-prop-options" ' +
-        'maxlength="80" placeholder="Add prop" aria-label="Add a prop this shot needs">' +
+      e.props.map(function (p) { return propChipHtml(e, p, !readOnly); }).join("") +
+      (readOnly ? '' :
+        '<input type="text" class="broll-prop-input" data-id="' + id + '" list="broll-prop-options" ' +
+          'maxlength="80" placeholder="Add prop" aria-label="Add a prop this shot needs">') +
     '</div>';
 }
 
@@ -433,9 +464,11 @@ function rowStateIconsHtml(e) {
 
 function checkHtml(e) {
   var shot = e.status === "shot";
+  var ro = reviewMode();
   return '<button type="button" class="broll-check" role="checkbox" aria-checked="' + (shot ? 'true' : 'false') +
-    '" data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
-    escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' + (shot ? 'Shot — click to mark To shoot' : 'To shoot — click to mark Shot') +
+    '"' + (ro ? ' disabled' : '') + ' data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
+    escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
+    (ro ? (shot ? 'Shot' : 'To shoot') : shot ? 'Shot — click to mark To shoot' : 'To shoot — click to mark Shot') +
     '"><span class="broll-check-box">' + brollIcon("check", 14) + '</span></button>';
 }
 
@@ -470,17 +503,20 @@ function field(label, valueHtml, extraCls, inline) {
 
 function cardHtml(e) {
   var id = escapeHtml(e.id);
+  var ro = reviewMode();
+  var off = ro ? ' disabled' : '';
   var renaming = renamingId === e.id;
   var statusSeg = '<div class="broll-seg" role="radiogroup" aria-label="Status">' +
     [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }].map(function (s) {
       var on = s.id === e.status;
       return '<button type="button" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" class="' +
-        (on ? 'is-active' : '') + '" data-action="broll-status-set" data-id="' + id + '" data-status="' + s.id + '">' +
+        (on ? 'is-active' : '') + '"' + off + ' data-action="broll-status-set" data-id="' + id + '" data-status="' + s.id + '">' +
         escapeHtml(s.label) + '</button>';
     }).join("") + '</div>' +
-    '<button type="button" class="broll-flag-btn' + (e.reshoot ? ' is-active' : '') + '" data-action="broll-reshoot-toggle" ' +
+    '<button type="button" class="broll-flag-btn' + (e.reshoot ? ' is-active' : '') + '"' + off + ' data-action="broll-reshoot-toggle" ' +
       'data-id="' + id + '" aria-pressed="' + (e.reshoot ? 'true' : 'false') + '" title="' +
-      (e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
+      (ro ? (e.reshoot ? 'Flagged' : 'Not flagged')
+          : e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
       brollIcon("flag", 14) + (e.reshoot ? 'Flagged' : 'Flag') + '</button>';
 
   var scene = e.rowId
@@ -490,7 +526,10 @@ function cardHtml(e) {
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
       : '<span class="broll-muted">Added here</span>';
 
-  var location = editingLocFor === e.id
+  var location = ro
+    ? '<span class="broll-static"><span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' + brollIcon("pin", 13) + '</span>' +
+        (e.location ? escapeHtml(e.location) : '<span class="broll-muted">No location</span>') + '</span>'
+    : editingLocFor === e.id
     ? '<input type="text" class="broll-loc-input" data-id="' + id + '" list="broll-loc-options" maxlength="80" ' +
         'placeholder="Where it gets shot" aria-label="Location" value="' + escapeHtml(e.location) + '">'
     : '<button type="button" class="broll-picker" data-action="broll-loc-edit" data-id="' + id + '">' +
@@ -499,15 +538,16 @@ function cardHtml(e) {
         brollIcon("chevron", 13, "broll-picker-caret") + '</button>';
 
   var assigned = '<div class="broll-owner-row">' +
-      '<select class="broll-owner-select" data-id="' + id + '" aria-label="Assigned to">' +
+      '<select class="broll-owner-select" data-id="' + id + '" aria-label="Assigned to"' + off + '>' +
         '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
         S.state.people.map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
             escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select>' +
-      '<button type="button" class="broll-small-btn" data-action="broll-person-new" data-id="' + id +
-        '" title="Add someone to the crew list">+ Person</button>' +
+      (ro ? '' :
+        '<button type="button" class="broll-small-btn" data-action="broll-person-new" data-id="' + id +
+          '" title="Add someone to the crew list">+ Person</button>') +
     '</div>' +
     (addingPersonFor === e.id
       ? '<div class="broll-owner-row">' +
@@ -524,8 +564,9 @@ function cardHtml(e) {
         (e.audioRef
           ? '<blockquote class="broll-quote">' + escapeHtml(e.audioRef) + '</blockquote>'
           : '<span class="broll-muted">No line yet</span>') +
-        '<button type="button" class="broll-icon-btn" data-action="broll-ref-edit" data-id="' + id +
-          '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 14) + '</button>' +
+        (ro ? '' :
+          '<button type="button" class="broll-icon-btn" data-action="broll-ref-edit" data-id="' + id +
+            '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 14) + '</button>') +
       '</div>';
 
   return '<div class="broll-card" data-id="' + id + '">' +
@@ -536,6 +577,7 @@ function cardHtml(e) {
             '<button type="button" class="broll-small-btn" data-action="broll-rename-save" data-id="' + id + '">Save</button>' +
             '<button type="button" class="broll-small-btn" data-action="broll-rename-cancel">Cancel</button>'
           : '<span class="broll-card-desc">' + (e.desc ? escapeHtml(e.desc) : '') + '</span>' +
+            (ro ? '' :
             '<div class="broll-more-wrap">' +
               '<button type="button" class="broll-icon-btn" data-action="broll-menu" data-id="' + id +
                 '" aria-haspopup="true" aria-expanded="' + (menuFor === e.id ? 'true' : 'false') + '" aria-label="More">' +
@@ -548,16 +590,17 @@ function cardHtml(e) {
                       '">Delete from list</button>' +
                   '</div>'
                 : '') +
-            '</div>') +
+            '</div>')) +
       '</div>' +
       field("Status", statusSeg, "broll-field-status") +
       field("Scene", scene, "", true) +
       field("Location", location) +
       field("Assigned", assigned) +
-      field("Props", propsEditHtml(e)) +
+      field("Props", propsEditHtml(e, ro)) +
       field("Cuts against", cuts) +
       field("Note", '<textarea class="broll-notes-input" data-id="' + id + '" rows="2" aria-label="Note" ' +
-        'placeholder="Why it is flagged, a reference link, where the footage lives…">' + escapeHtml(e.notes) + '</textarea>') +
+        (ro ? 'readonly placeholder="No note">'
+            : 'placeholder="Why it is flagged, a reference link, where the footage lives…">') + escapeHtml(e.notes) + '</textarea>') +
     '</div>';
 }
 
@@ -568,6 +611,7 @@ function selectedIds(entries) {
 }
 
 function bulkBarHtml(entries) {
+  if (reviewMode()) return "";
   var chosen = entries.filter(function (e) { return selection[e.id]; });
   if (!chosen.length) return "";
   var allShot = chosen.every(function (e) { return e.status === "shot"; });
@@ -665,6 +709,7 @@ export function renderBroll() {
   updateBrollBadge();
   var panel = document.getElementById("broll-panel");
   if (!panel || panel.hidden || !S.state) return;
+  dropEditingForReview();
   var entries = brollEntries();
   pruneSelection(entries);
   var controls = document.getElementById("broll-controls");
@@ -843,6 +888,7 @@ function shownOrder(container) {
 }
 
 function addBrollFromPanel() {
+  if (reviewBlocked()) return;
   var input = document.getElementById("broll-add-input");
   if (!input) return;
   var name = plainText(input.value).trim().slice(0, BROLL_NAME_MAX);
@@ -936,6 +982,10 @@ function onBrollClick(e, root) {
   var action = btn.getAttribute("data-action");
   var id = btn.getAttribute("data-id");
 
+  if (reviewMode() && !BROLL_REVIEW_SAFE_ACTIONS[action]) {
+    reviewBlocked();
+    return;
+  }
   if (action !== "broll-group-menu" && action !== "broll-group") groupMenuOpen = false;
   if (action !== "broll-menu" && action !== "broll-rename" && action !== "broll-delete") menuFor = null;
 
@@ -943,7 +993,8 @@ function onBrollClick(e, root) {
     e.stopPropagation();
     toggleBrollShot(id);
   } else if (action === "broll-expand") {
-    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+    /* a selection is only ever for the bulk bar, which a reviewer has none of */
+    if ((e.shiftKey || e.ctrlKey || e.metaKey) && !reviewMode()) {
       e.preventDefault();
       selectWithModifier(e, id, shownOrder(root));
       renderBrollViews();
@@ -1057,6 +1108,15 @@ function onBrollClick(e, root) {
 
 function onBrollChange(e) {
   var t = e.target;
+  if (reviewMode()) {
+    /* a select a reviewer should never have had enabled: say so, and draw
+       it back as it was */
+    if (t.classList.contains("broll-owner-select") || t.id === "broll-bulk-owner" || t.id === "broll-bulk-location") {
+      reviewBlocked();
+      renderBrollViews();
+    }
+    return;
+  }
   if (t.classList.contains("broll-owner-select")) {
     updateRecord(t.getAttribute("data-id"), { owner: personById(t.value) ? t.value : "" });
   } else if (t.id === "broll-bulk-owner") {
@@ -1076,6 +1136,7 @@ function focusBulkInput() {
 /* Typed fields commit on the way out rather than per keystroke: a redraw
    on every character would take the caret with it. */
 function onBrollFocusOut(e) {
+  if (reviewMode()) return;
   var el = e.target;
   var id = el.getAttribute && el.getAttribute("data-id");
   if (!id) return;
@@ -1123,6 +1184,12 @@ function onBrollKeydown(e, root) {
     return;
   }
   if (e.key !== "Enter") return;
+  /* Every box Enter would commit writes a shot; in a review session the
+     only one left in the page is Add a shot's, hidden by app.css. */
+  if (reviewMode()) {
+    if (t.tagName === "INPUT" && !t.readOnly) { e.preventDefault(); reviewBlocked(); }
+    return;
+  }
   if (t.id === "broll-add-input") { e.preventDefault(); addBrollFromPanel(); }
   else if (t.classList.contains("broll-prop-input")) { e.preventDefault(); commitPropInput(t); }
   else if (t.classList.contains("broll-loc-input")) { e.preventDefault(); commitLocation(t); }
@@ -1141,6 +1208,7 @@ function onBrollKeydown(e, root) {
 }
 
 function onBrollInput(e) {
+  if (reviewMode()) return;
   var box = e.target;
   /* A name picked from the Add prop box's list is a choice made, not
      typing on the way to one: it goes in at once. */
@@ -1320,6 +1388,7 @@ function pageGroupHeadHtml(g) {
 
 function pageRowHtml(e) {
   var id = escapeHtml(e.id);
+  var ro = reviewMode();
   var props = e.props.map(function (p) { return p.name; }).join(", ");
   return '<tr class="broll-page-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
       '" data-id="' + id + '">' +
@@ -1335,7 +1404,7 @@ function pageRowHtml(e) {
     '<td class="broll-page-c-cuts" data-label="Cuts against">' +
       (e.audioRef ? '<span class="broll-page-ellipsis broll-page-cuts" title="' + escapeHtml(e.audioRef) + '">' + escapeHtml(e.audioRef) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
     '<td class="broll-page-c-owner" data-label="Assigned">' +
-      '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '">' +
+      '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '"' + (ro ? ' disabled' : '') + '>' +
         '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
         S.state.people.map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
@@ -1343,7 +1412,8 @@ function pageRowHtml(e) {
       '</select></td>' +
     '<td class="broll-page-c-note" data-label="Note">' +
       (e.reshoot ? '<span class="broll-flag-ico" title="Flagged" aria-label="Flagged">' + brollIcon("flag", 14) + '</span>' : '') +
-      '<input type="text" class="broll-notes-input broll-page-note" data-id="' + id + '" maxlength="2000" placeholder="Add a note" ' +
+      '<input type="text" class="broll-notes-input broll-page-note" data-id="' + id + '" maxlength="2000" ' +
+        (ro ? 'readonly ' : 'placeholder="Add a note" ') +
         'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '" value="' + escapeHtml(e.notes) + '"></td>' +
   '</tr>';
 }
@@ -1351,6 +1421,7 @@ function pageRowHtml(e) {
 export function renderBrollPage() {
   var page = brollPageEl();
   if (!page || page.hidden || !S.state) return;
+  dropEditingForReview();
   var entries = brollEntries();
   var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
   keepingFocus(page, function () {
