@@ -33,6 +33,7 @@ import {
 import { brollShotsByProp } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
+import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 
@@ -95,6 +96,7 @@ export function updateGearCount() {
 export function renderGearList() {
   var panel = document.getElementById("gear-panel");
   if (!panel || panel.hidden || !S.state) return;
+  dropEditingForReview();
   var listEl = document.getElementById("gear-list");
   var entries = gearEntries();
   updateGearBadge(entries.length);
@@ -146,6 +148,8 @@ function fillGearQuickAdd() {
    silently drops anything the script itself is still pointing at — it
    only ever forgets the entries that lived here and nowhere else. */
 export function applyGearQuickAdd() {
+  /* hidden in review by app.css; refused here as well */
+  if (reviewBlocked()) return;
   var raw = document.getElementById("gear-quickadd-input").value || "";
   var wanted = {}, order = [];
   raw.split(/\r\n|\r|\n/).forEach(function (line) {
@@ -201,6 +205,30 @@ function sceneChipsHtml(item) {
   }).join("");
 }
 
+/* ---- a review session (#30): the breakdown to read, not to change ----
+
+   A reviewer (13-hosted.js reviewMode) can open a card, switch the
+   grouping and jump to a scene, and nothing else: the server keeps none of
+   a reviewer's edits, so a change made here would look as if it had worked
+   and then be lost. The open card's status and owner are drawn disabled and
+   its notes read-only, so the values stay readable; + Person, Rename and
+   Remove/Delete are not drawn; and there is no selection, because the only
+   thing a selection is for is the bulk bar. Clicks are refused by the click
+   guard (21-events.js REVIEW_SAFE_ACTIONS); the change and input handlers
+   (20-teleprompter.js wireTagEntityContainer, 21-events.js) refuse their
+   own. The same rule as the b-roll panel (08d-broll-panel.js). */
+
+/* Whatever was half open when the role arrived — a rename, an add-person
+   box, a selection and its bar — goes, rather than being drawn for
+   somebody who cannot finish it. */
+function dropEditingForReview() {
+  if (!reviewMode()) return;
+  S.tagRenaming = null;
+  S.tagAddingPersonFor = null;
+  if (selectedKeys().length) clearProductionSelection();
+  if (bulkDeleteArmed) disarmBulkDelete();
+}
+
 /* The owner picker, notes box and the destructive actions all live behind
    a click on the card — the list stays scannable when you're reading it as
    a breakdown, and the editing controls are there when you're working on
@@ -208,27 +236,30 @@ function sceneChipsHtml(item) {
 function tagEntityDetailHtml(item, renaming) {
   var k = escapeHtml(item.key);
   var stId = (tagStatus(item.status) || TAG_STATUSES[0]).id;
+  var ro = reviewMode();
+  var off = ro ? ' disabled' : '';
   return '<div class="tag-entity-detail">' +
     '<div class="tag-detail-label">Status</div>' +
     '<div class="tag-status-seg">' +
       TAG_STATUSES.map(function (s) {
         return '<button type="button" data-action="tag-status-set" data-key="' + k +
-          '" data-status="' + escapeHtml(s.id) + '" style="--st:' + s.color + '"' +
+          '" data-status="' + escapeHtml(s.id) + '" style="--st:' + s.color + '"' + off +
           (s.id === stId ? ' class="is-active" aria-checked="true"' : ' aria-checked="false"') +
           ' role="radio">' + escapeHtml(s.label) + '</button>';
       }).join("") +
     '</div>' +
     '<div class="tag-detail-label">Assigned to</div>' +
     '<div class="tag-owner-row">' +
-      '<select class="tag-owner-select" data-key="' + k + '">' +
+      '<select class="tag-owner-select" data-key="' + k + '" aria-label="Assigned to"' + off + '>' +
         '<option value=""' + (item.owner ? '' : ' selected') + '>Unassigned</option>' +
         S.state.people.map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' +
             (p.id === item.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select>' +
-      '<button type="button" class="tag-person-add" data-action="tag-person-new" data-key="' + k +
-        '" title="Add someone to the crew list">+ Person</button>' +
+      (ro ? '' :
+        '<button type="button" class="tag-person-add" data-action="tag-person-new" data-key="' + k +
+          '" title="Add someone to the crew list">+ Person</button>') +
     '</div>' +
     (S.tagAddingPersonFor === item.key
       ? '<div class="tag-owner-row">' +
@@ -239,9 +270,11 @@ function tagEntityDetailHtml(item, renaming) {
         '</div>'
       : '') +
     '<div class="tag-detail-label">Notes &amp; links</div>' +
-    '<textarea class="tag-notes-input" data-key="' + k + '" rows="3" ' +
-      'placeholder="Reference link, file path, spec, where it&#39;s coming from…">' +
+    '<textarea class="tag-notes-input" data-key="' + k + '" rows="3" aria-label="Notes and links" ' +
+      (ro ? 'readonly placeholder="No notes">'
+          : 'placeholder="Reference link, file path, spec, where it&#39;s coming from…">') +
       escapeHtml(item.notes) + '</textarea>' +
+    (ro ? '' :
     '<div class="tag-entity-actions">' +
       (renaming
         ? '<button type="button" data-action="tag-rename-save" data-key="' + k + '">Save</button>' +
@@ -250,7 +283,7 @@ function tagEntityDetailHtml(item, renaming) {
           (item.orphaned
             ? '<button type="button" class="danger" data-action="tag-delete" data-key="' + k + '">Delete from list</button>'
             : '<button type="button" class="danger" data-action="tag-remove" data-key="' + k + '">Remove label</button>')) +
-    '</div>' +
+    '</div>') +
   '</div>';
 }
 
@@ -267,7 +300,7 @@ function tagEntityHtml(item, showSelection) {
      function is shared by both panels; without gating on showSelection,
      an item selected via Production still rendered "selected" when
      later viewed in Gear, with no way to make sense of or clear it. */
-  var selected = showSelection && productionSelection[item.key];
+  var selected = showSelection && !reviewMode() && productionSelection[item.key];
   var meta = (owner ? '<span class="tag-owner-chip">' + escapeHtml(owner.name) + '</span>' : '') +
     (item.notes ? '<span class="tag-note-flag" title="Has notes">Notes</span>' : '');
   return '<div class="tag-entity' + (item.orphaned ? ' is-orphaned' : '') +
@@ -279,11 +312,15 @@ function tagEntityHtml(item, showSelection) {
       '<span class="tag-entity-name">' + escapeHtml(item.name) + '</span>' +
       '<span class="tag-entity-head-right">' +
         /* nested inside the expander, so its own handler has to be checked
-           first in the click delegation — see the tag-status-cycle branch */
-        '<button type="button" class="tag-status-pill" data-action="tag-status-cycle" ' +
-          'data-key="' + k + '" style="--st:' + st.color + '" title="' +
-          escapeHtml(st.label + " — click for " + nextSt.label) + '">' +
-          escapeHtml(st.label) + '</button>' +
+           first in the click delegation — see the tag-status-cycle branch.
+           A reviewer gets the status as a label, and a click on it opens
+           the card like the rest of the head. */
+        (reviewMode()
+          ? '<span class="tag-status-pill is-static" style="--st:' + st.color + '">' + escapeHtml(st.label) + '</span>'
+          : '<button type="button" class="tag-status-pill" data-action="tag-status-cycle" ' +
+              'data-key="' + k + '" style="--st:' + st.color + '" title="' +
+              escapeHtml(st.label + " — click for " + nextSt.label) + '">' +
+              escapeHtml(st.label) + '</button>') +
         (item.orphaned
           ? '<span class="tag-orphan-badge">Not in script</span>'
           : '<span class="tag-entity-count">' + item.mentions.length + ' mention' +
@@ -346,7 +383,7 @@ function renderProductionByPerson(all) {
     return '<div class="tag-group-head tag-person-head">' +
         '<span class="tag-person-name">' + escapeHtml(g.label) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
-        (id ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
+        (id && !reviewMode() ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
                 'data-person="' + escapeHtml(id) + '" title="Remove from the crew list">×</button>' : '') +
       '</div>' +
       (g.items.length
@@ -461,6 +498,7 @@ export function renderProduction() {
 function renderProductionPanel() {
   var panel = document.getElementById("production-panel");
   if (!panel || panel.hidden || !S.state) return;
+  dropEditingForReview();
   var entries = productionEntries();
   if (selectedKeys().length) pruneProductionSelection(entries);
   renderProductionList(entries);
@@ -620,6 +658,7 @@ export function armDeleteTag(btn, key) {
 }
 
 export function toggleCardSelection(key) {
+  if (reviewMode()) return;
   if (productionSelection[key]) delete productionSelection[key];
   else productionSelection[key] = true;
   S.selectionAnchorKey = key;
@@ -640,7 +679,9 @@ export function wireTouchSelection() {
   if (!list) return;
 
   list.addEventListener("pointerdown", function (e) {
-    if (e.pointerType === "mouse") return;
+    /* a reviewer has no bulk bar, so nothing to select for: a long-press
+       is left to the browser */
+    if (e.pointerType === "mouse" || reviewMode()) return;
     var card = e.target.closest(".tag-entity");
     if (!card) return;
     /* not from inside the open card's own inputs — a long-press in the
@@ -685,6 +726,9 @@ export function wireTouchSelection() {
 /* Consumes a modifier-click on a card. Returns true if it handled it, so
    the caller knows not to fall through to expanding the card. */
 export function handleSelectionClick(e, card) {
+  /* not handled: a reviewer's Ctrl/Shift+click opens the card like a
+     plain click, and selects nothing */
+  if (reviewMode()) return false;
   var key = card.getAttribute("data-key");
   if (!key) return false;
   /* visual order, read live — it is the order the range runs along, and it
@@ -808,7 +852,7 @@ function renderBulkBar(entries) {
   if (!bar) return;
   var items = selectedEntries(entries);
   var cardView = S.productionGroupBy === "cat" || S.productionGroupBy === "person";
-  if (!items.length || !cardView) { bar.hidden = true; bar.innerHTML = ""; return; }
+  if (!items.length || !cardView || reviewMode()) { bar.hidden = true; bar.innerHTML = ""; return; }
 
   var n = items.length;
   var liveMentions = bulkCountsLabel(items);

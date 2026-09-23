@@ -1606,7 +1606,8 @@ function init() {
   document.getElementById("production-panel").addEventListener("keydown", function (e) {
     if (!e.target.classList) return;
     if (e.target.id === "bulk-person-input") {
-      if (e.key === "Enter") { e.preventDefault(); bulkAddPerson(); }
+      if (e.key === "Enter" && reviewMode()) { e.preventDefault(); reviewBlocked(); renderProduction(); }
+      else if (e.key === "Enter") { e.preventDefault(); bulkAddPerson(); }
       else if (e.key === "Escape") { e.preventDefault(); S.tagAddingPersonFor = null; renderProduction(); }
       return;
     }
@@ -1628,6 +1629,12 @@ function init() {
     }
   });
   document.getElementById("production-panel").addEventListener("change", function (e) {
+    /* a reviewer has no bulk bar (08-production-panels.js renderBulkBar);
+       one forced back into the page is refused here, and redrawn away */
+    if (reviewMode()) {
+      if (e.target.id === "bulk-owner" || e.target.id === "bulk-status") { reviewBlocked(); renderProduction(); }
+      return;
+    }
     /* the bulk dropdowns are commands, not fields: "__none__" is the label
        sitting in the closed select ("Assign to…"), never a value to apply */
     if (e.target.id === "bulk-owner") {
