@@ -240,6 +240,21 @@ function markdownVisualCellChanged(cellText, was) {
   return text.slice(m[0].length).trim() !== was.visualText;
 }
 
+/* Which of a scene's two table cells were edited outside Splitpage. A cell
+   is unchanged if it says what this copy writes for the block's row
+   (mdSceneCellSource) or what the document model's toMarkdown() would —
+   the second so that a later copy can write that instead without this one
+   rebuilding its cells (see mdSceneCellSource, 14-export.js). The second
+   is only worked out for a cell the first does not match. */
+function sceneCellEdits(row, i, cells) {
+  var was = mdSceneCellSource(row, i), model = null;
+  function modelWas() { return model || (model = mdSceneCellSource(row, i, true)); }
+  return {
+    visual: markdownVisualCellChanged(cells.visualText, was) && markdownVisualCellChanged(cells.visualText, modelWas()),
+    audio: markdownCellChanged(cells.audioText, was.audio) && markdownCellChanged(cells.audioText, modelWas().audio)
+  };
+}
+
 /* Same row count on both sides: the block is authoritative except where
    the table disagrees, cell by cell. An untouched cell keeps the block's
    HTML exactly — tags, anchors, links, formatting — because rebuilding it
@@ -249,12 +264,12 @@ function reconcileMarkdownRows(s, table) {
   s.rows.forEach(function (row, i) {
     var cells = table[i];
     if (!cells) return;
-    var was = mdSceneCellSource(row, i);
-    if (markdownVisualCellChanged(cells.visualText, was)) {
+    var edits = sceneCellEdits(row, i, cells);
+    if (edits.visual) {
       applyMarkdownVisualCell(s, row, cells.visualText);
       changed++;
     }
-    if (markdownCellChanged(cells.audioText, was.audio)) {
+    if (edits.audio) {
       row.audioText = markdownCellToHtml(s, cells.audioText);
       changed++;
     }
@@ -269,11 +284,11 @@ function rowsFromMarkdownTable(s, table) {
   return table.map(function (cells, i) {
     var old = s.rows[i] || null;
     var row = old || { id: makeId(), status: "todo", imageRef: null, updatedAt: "", updatedBy: null };
-    var was = old ? mdSceneCellSource(old, i) : { visual: "", visualText: "", image: null, audio: "" };
-    if (!old || markdownVisualCellChanged(cells.visualText, was)) {
+    var edits = old ? sceneCellEdits(old, i, cells) : { visual: true, audio: true };
+    if (edits.visual) {
       applyMarkdownVisualCell(s, row, cells.visualText);
     }
-    if (!old || markdownCellChanged(cells.audioText, was.audio)) {
+    if (edits.audio) {
       row.audioText = markdownCellToHtml(s, cells.audioText);
     }
     return row;
