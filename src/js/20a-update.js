@@ -310,12 +310,19 @@ export function renderDesktopAppNotice() {
     textEl.textContent = "The Splitpage desktop app is available — its own window, " +
       "and a version history that never runs out of browser storage.";
   }
-  var url = (updateStatus && updateStatus.desktopAppUrl) || RELEASES_URL;
+  var url = desktopAppUrl();
   var actionBtn = document.getElementById("desktop-app-bar-action");
   if (actionBtn) {
     actionBtn.onclick = function () { window.open(url, "_blank", "noopener"); };
   }
   bar.hidden = false;
+}
+
+/* Where "get the desktop app" goes — this notice's button, and the New Tab
+   page's footer link (20j-newtab.js), which is the same pitch in the one
+   place a new browser visitor is sure to look. */
+export function desktopAppUrl() {
+  return (updateStatus && updateStatus.desktopAppUrl) || RELEASES_URL;
 }
 
 export function dismissDesktopAppNotice() {

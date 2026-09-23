@@ -1,0 +1,49 @@
+# The New Tab page's start screen on a phone (issue #144): one column, the
+# card's picture beside its name, the bar's two actions on short labels, and
+# nothing wider than the screen — then the same page with the desktop-only
+# Recent column, which a narrow desktop window folds under the grid.
+#
+# Its own suite because a viewport has to be set once, at the top, before
+# anything else (see the driver gotchas in SKILL.md), and 30/36 run at the
+# default desktop size. ?newtab=1 is the opt-in, as in 30-new-tab.txt.
+
+open
+viewport 375 812 mobile
+goto /index.html?newtab=1
+wait document.getElementById('newtab-page').hidden == false
+sleep 300
+expect innerWidth == 375
+
+# --- nothing overflows sideways -------------------------------------------
+expect document.documentElement.scrollWidth <= innerWidth
+expect document.getElementById('newtab-page').scrollWidth <= document.getElementById('newtab-page').clientWidth
+expect Array.from(document.querySelectorAll('#newtab-page .newtab-card, #newtab-page .newtab-bar-btn, #newtab-drop, .newtab-foot > *, .newtab-title')).every(function (el) { var r = el.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth + 0.5; })
+
+# --- one column, each card a row ------------------------------------------
+expect getComputedStyle(document.getElementById('newtab-cards')).gridTemplateColumns.split(' ').length == 1
+expect document.querySelectorAll('#newtab-cards .newtab-card').length == 4
+expect (function () { var c = document.querySelector('[data-starter="to-camera"]'); var p = c.querySelector('.newtab-preview').getBoundingClientRect(); var n = c.querySelector('.newtab-card-name').getBoundingClientRect(); return n.left > p.right; })()
+# the bar keeps both actions, on their short labels, on one line
+expect getComputedStyle(document.querySelector('.newtab-long')).display == none
+expect Math.abs(document.querySelector('[data-newtab-action="join"]').getBoundingClientRect().top - document.querySelector('.newtab-bar [data-newtab-action="open"]').getBoundingClientRect().top) < 1
+expect document.querySelector('.newtab-bar [data-newtab-action="open"]').getAttribute('aria-label') == Open a file
+# 16px side gutter
+expect Math.round(document.querySelector('#newtab-cards').getBoundingClientRect().left) == 16
+
+# --- a narrow desktop window with the Recent column: under the grid -------
+eval (function(){ var D = window.__desktopTest; window.fake = D.makeFakeBackend(); D.setBackend(window.fake); var id = window.fake._addFile('a-rather-long-file-name-for-a-phone.md', '# A title long enough to be cut short on a phone screen' + String.fromCharCode(10,10) + 'Words.'); window.fake._addRecent(id, 'a-rather-long-file-name-for-a-phone.md', 'A title long enough to be cut short on a phone screen', Date.now()); return true; })()
+eval (async function(){ await window.__newTab.refreshRecents(); return true; })()
+wait document.getElementById('newtab-recents').hidden == false
+expect document.getElementById('newtab-recents').getBoundingClientRect().top >= document.getElementById('newtab-cards').getBoundingClientRect().bottom
+expect document.documentElement.scrollWidth <= innerWidth
+expect document.getElementById('newtab-page').scrollWidth <= document.getElementById('newtab-page').clientWidth
+expect document.querySelector('.newtab-recent-forget').getBoundingClientRect().right <= innerWidth - 16
+eval window.__desktopTest.restoreBackend()
+
+# --- a starter, tapped ----------------------------------------------------
+click [data-starter="interview"]
+wait document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length == 6
+expect document.documentElement.scrollWidth <= innerWidth
+
+quit
