@@ -1,0 +1,91 @@
+# Follow My Voice relayed from the desktop app (issue #122), the browser end.
+#
+# When the desktop app opens Present in Browser and has a listener of its own
+# (Windows' recogniser), the address it opens carries `voice=<port>-<hex>` in
+# the fragment beside `script=`. The page then follows through the desktop
+# app — an EventSource on http://127.0.0.1:<port>/prompter-voice/<hex>
+# (desktop/prompter-share.js) — instead of the browser's Web Speech, so any
+# browser will do, and it never asks the browser for the microphone.
+#
+# No desktop listener answers here, so window.EventSource is replaced by a
+# fake that records the URL and lets the suite play the desktop helper's
+# events into it. The desktop half (the stream starting and stopping the
+# real listener process) is desktop/test/smoke.mjs's "voice relay" group and
+# desktop/test/prompter-share.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+# --- the address: voice= read, taken out of the bar, kept for a reload -----
+open /index.html?teleprompter=1#script=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff&voice=8771-abababababababababababababababababababababababababababababababab
+wait document.querySelectorAll('#rows .row').length > 0
+wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('teleprompter link has expired') !== -1) return true; return false; })()
+expect location.hash === ''
+expect location.href.indexOf('voice=') === -1
+expect sessionStorage.getItem('splitpage-prompter-voice') == 8771-abababababababababababababababababababababababababababababababab
+
+# --- a reload of the same tab still follows through the desktop app --------
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.P = window.__prompterTest; window.__realFetch = window.fetch; window.__scriptText = JSON.stringify({ title: 'Relay Read', rows: [{ visualText: 'Wide', audioText: 'Alpha bravo charlie delta echo foxtrot.' }, { visualText: 'Close', audioText: 'Golf hotel india juliet.' }] }); window.fetch = function (u, o) { if (String(u).indexOf('prompter-script/') === 0) return Promise.resolve(new Response(JSON.stringify({ name: 'Relay.splitpage', text: window.__scriptText }), { status: 200, headers: { 'content-type': 'application/json' } })); return window.__realFetch.apply(this, arguments); }; return true; })()
+# the fake relay: every EventSource the page opens, with a way to play events into it
+eval (function(){ window.__sources = []; window.EventSource = function (url) { this.url = String(url); this.closed = false; this.onmessage = null; this.onerror = null; window.__sources.push(this); }; window.EventSource.prototype.close = function () { this.closed = true; }; window.__emit = function (ev) { var s = window.__sources[window.__sources.length - 1]; if (s && !s.closed && s.onmessage) s.onmessage({ data: JSON.stringify(ev) }); return !!s; }; window.__gum = 0; if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = function () { window.__gum++; return Promise.reject(new Error('should not be asked')); }; return true; })()
+eval P.launchFromScript('cd'.repeat(32)).then(function (r) { window.__launched = r; return r; })
+expect window.__launched === true
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-voice').disabled === false
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+
+# --- Follow My Voice: the relay, not the browser's microphone --------------
+jsclick #pp-voice
+wait window.__sources.length === 1
+expect window.__sources[0].url === 'http://127.0.0.1:8771/prompter-voice/' + 'ab'.repeat(32)
+expect window.__gum === 0
+wait document.getElementById('pp-voice-status').textContent.indexOf('desktop app') !== -1
+eval window.__emit({ type: 'start', session: 1, lang: 'en-US' })
+wait document.getElementById('pp-voice').textContent === 'Stop Following'
+expect document.getElementById('pp-voice').classList.contains('is-active')
+eval window.__emit({ type: 'interim', session: 1, text: 'alpha bravo' })
+eval window.__emit({ type: 'final', session: 1, text: 'alpha bravo charlie delta' })
+wait document.querySelectorAll('#prompter .w.spoken').length >= 3
+# a warning reads as the desktop tab's own does
+eval window.__emit({ type: 'warning', session: 1, code: 'too-quiet' })
+wait document.getElementById('pp-voice-status').textContent.indexOf('Speak up') !== -1
+# an event type this page does not know yet is passed on, not an error
+eval window.__emit({ type: 'device', session: 1, name: 'USB <b>mic</b>' })
+expect document.getElementById('pp-voice').classList.contains('is-active')
+expect document.getElementById('pp-voice-status').innerHTML.indexOf('<b>') === -1
+
+# --- Stop Following closes the stream (which stops the desktop listener) ---
+jsclick #pp-voice
+wait window.__sources[0].closed === true
+expect document.getElementById('pp-voice').textContent == Follow My Voice
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- the desktop app going away: said once, no reconnect loop --------------
+jsclick #pp-voice
+wait window.__sources.length === 2
+eval window.__emit({ type: 'start', session: 2 })
+wait document.getElementById('pp-voice').classList.contains('is-active')
+eval (function(){ var s = window.__sources[1]; s.onerror && s.onerror({}); return true; })()
+wait document.getElementById('pp-voice-status').textContent.indexOf('Lost the Splitpage desktop app') !== -1
+expect window.__sources[1].closed === true
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+sleep 2500
+expect window.__sources.length === 2
+
+# --- another tab (or the desktop tab) taking the microphone over -----------
+jsclick #pp-voice
+wait window.__sources.length === 3
+eval window.__emit({ type: 'start', session: 3 })
+wait document.getElementById('pp-voice').classList.contains('is-active')
+eval window.__emit({ type: 'end', session: 3, reason: 'restarted' })
+wait document.getElementById('pp-voice-status').textContent.indexOf('Another tab') !== -1
+expect !document.getElementById('pp-voice').classList.contains('is-active')
+sleep 2500
+expect window.__sources.length === 3
+
+# --- a launch without voice= (Present in Chromium, #123) forgets the relay -
+goto /index.html?teleprompter=1#script=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+wait document.querySelectorAll('#rows .row').length > 0
+expect sessionStorage.getItem('splitpage-prompter-voice') === null
+expect location.hash === ''

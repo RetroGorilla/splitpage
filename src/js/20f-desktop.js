@@ -288,8 +288,11 @@ export async function openPrompterInBrowser() {
     try { answer = await S.DESKTOP.openPrompterInBrowser(); }
     catch (e) { answer = { ok: false, code: "OPEN_FAILED" }; }
     if (answer && answer.ok) {
-      return prompterBrowserResult(true,
-        "Opened in your browser. Follow My Voice needs Chrome or Edge — this window stays open for editing.");
+      /* "relay": this app listens for the browser's Follow My Voice (#122),
+         so any browser will do. */
+      return prompterBrowserResult(true, answer.voice === "relay"
+        ? "Opened in your browser. Follow My Voice there listens through this app — this window stays open for editing."
+        : "Opened in your browser. Follow My Voice needs Chrome or Edge — this window stays open for editing.");
     }
     var code = answer && answer.code;
     return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES[code] || PROMPTER_BROWSER_MESSAGES.OPEN_FAILED);

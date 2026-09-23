@@ -122,7 +122,10 @@ microphone is released. When Chrome asks, choosing **Allow on every visit**
 In the **Windows desktop app**, Follow My Voice uses Windows' own speech
 recognition instead (System.Speech, run through the system's PowerShell by
 `desktop/voice/listen.ps1`): offline, nothing to install, and no browser
-involved. Elsewhere the desktop teleprompter offers **Present in Browser**.
+involved. Its **Present in Browser** hands the script to your default
+browser, and there too Follow My Voice listens through the desktop app, so it
+works in Firefox as well. Elsewhere the desktop teleprompter offers **Present
+in Browser** for Chrome or Edge's own recognition.
 
 **Firefox / Safari note:** these don't support the File System Access API
 (`showSaveFilePicker`), so **Save** falls back to downloading a fresh

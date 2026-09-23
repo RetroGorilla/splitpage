@@ -2356,6 +2356,14 @@ function runUpdateInstaller() {
  *     document the user already has open — nothing it names, nothing
  *     off-box, no file of its choosing.
  *
+ *     FOLLOW MY VOICE THERE (#122). Wherever main can listen (section 9d)
+ *     the URL also carries a voice relay (#…voice=<port>-<token>), served
+ *     by prompter-share.js: the page's Follow My Voice streams what
+ *     Windows' recogniser hears from this process instead of using the
+ *     browser's Web Speech, so it works in any browser, Firefox included.
+ *     Nothing new is exposed: the stream only starts and stops the same
+ *     argument-free listener the tab's own button does, for that tab.
+ *
  *     UNSAVED WORK IS REFUSED, not guessed at. The browser reads what is on
  *     disk (or on the server), so a tab main knows to be dirty answers
  *     UNSAVED_CHANGES and a tab with nowhere to live answers NOT_SAVED. The
@@ -2381,10 +2389,37 @@ function prompterShareInstance() {
         if (!absPath.startsWith(APP_ROOT)) return Promise.reject(new Error("outside APP_ROOT"));
         return fsp.readFile(absPath);
       },
-      cspHeader: readAppCsp
+      cspHeader: readAppCsp,
+      /* Follow My Voice in the browser (#122): the page's relay stream
+         starting and stopping Windows' listener (section 9d) for the tab
+         that shared it, under a key of its own so the tab's own teleprompter
+         and its browser copy take the one microphone over from each other
+         the way two tabs do. Stop names the session, so a stream closing
+         late never stops the one that replaced it. */
+      voice: {
+        start: (ownerId) => voiceHelperInstance().start(VOICE_RELAY_PREFIX + ownerId),
+        stop: (ownerId, session) => {
+          const helper = voiceHelperInstance();
+          const st = helper.status();
+          if (st.tabId === VOICE_RELAY_PREFIX + ownerId && st.session === session) helper.stop(VOICE_RELAY_PREFIX + ownerId);
+        }
+      },
+      /* A server tab's browser copy is served by the document server, so the
+         relay is another origin to it. */
+      corsOrigins: () => documentServerPort
+        ? [`http://127.0.0.1:${documentServerPort}`, `http://localhost:${documentServerPort}`]
+        : []
     });
   }
   return prompterShare;
+}
+
+/* Whether Present in Browser relays this app's listener to the page (#122):
+   wherever main can listen (section 9d), so Follow My Voice works in any
+   browser, Firefox included. Elsewhere the page falls back on the browser's
+   own Web Speech, which only Chromium browsers have. */
+function prompterRelaysVoice() {
+  return voiceHelperInstance().available();
 }
 
 async function openPrompterInBrowser(tab) {
@@ -2392,6 +2427,7 @@ async function openPrompterInBrowser(tab) {
   if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
   const source = tab.source || { kind: "blank" };
   let url;
+  let relay = prompterRelaysVoice();
   if (source.kind === "server") {
     /* A document on somebody else's server (#11) has no loopback URL here,
        and this channel never opens one the page named. The page copies its
@@ -2401,6 +2437,15 @@ async function openPrompterInBrowser(tab) {
     if (!SERVER_DOC_ID_RE.test(id)) return { ok: false, code: "NOT_SAVED" };
     if (!documentServerPort) return { ok: false, code: "NO_SERVER" };
     url = `http://127.0.0.1:${documentServerPort}/?doc=${encodeURIComponent(id)}&teleprompter=1`;
+    if (relay) {
+      try {
+        url += "#" + await prompterShareInstance().publishVoice(tab.id);
+      } catch (err) {
+        if (TEST_MODE) process.stderr.write(`[splitpage] prompter voice relay failed: ${err && err.stack || err}\n`);
+        relay = false;
+      }
+      if (!tabs.has(tab.id)) { if (prompterShare) prompterShare.revoke(tab.id); return { ok: false, code: "NO_TAB" }; }
+    }
   } else if (source.kind === "file") {
     const absPath = source.absPath;
     if (!isShareableName(absPath)) return { ok: false, code: "NOT_A_PROJECT" };
@@ -2419,7 +2464,7 @@ async function openPrompterInBrowser(tab) {
     if (!tabs.has(tab.id)) return { ok: false, code: "NO_TAB" };
     if (tab.dirty) return { ok: false, code: "UNSAVED_CHANGES" };
     try {
-      url = await prompterShareInstance().publish(tab.id, path.basename(absPath), text);
+      url = await prompterShareInstance().publish(tab.id, path.basename(absPath), text, { voice: relay });
     } catch (err) {
       if (TEST_MODE) process.stderr.write(`[splitpage] prompter share failed: ${err && err.stack || err}\n`);
       return { ok: false, code: "SERVE_FAILED" };
@@ -2432,7 +2477,7 @@ async function openPrompterInBrowser(tab) {
   } catch {
     return { ok: false, code: "OPEN_FAILED" };
   }
-  return { ok: true, kind: source.kind };
+  return { ok: true, kind: source.kind, voice: relay ? "relay" : "browser" };
 }
 
 /* ---------------------------------------------------------------------
@@ -2567,12 +2612,20 @@ function voiceCommand() {
   };
 }
 
+/* The voice helper's owner key for a tab's browser copy (#122, section 9b):
+   events for it go down that copy's relay stream, not to the tab. */
+const VOICE_RELAY_PREFIX = "relay:";
+
 let voiceHelper = null;
 function voiceHelperInstance() {
   if (!voiceHelper) {
     voiceHelper = createVoiceHelper({
       command: voiceCommand,
       onEvent: (tabId, event) => {
+        if (tabId.startsWith(VOICE_RELAY_PREFIX)) {
+          if (prompterShare) prompterShare.pushVoice(tabId.slice(VOICE_RELAY_PREFIX.length), event);
+          return;
+        }
         const tab = tabs.get(tabId);
         if (!tab || !tab.view || tab.view.webContents.isDestroyed()) return;
         try { tab.view.webContents.send("splitpage:voice-event", event); } catch { /* going away */ }
@@ -3106,8 +3159,9 @@ function forgetTab(tabId) {
   tabs.delete(tabId);
   /* A tab's browser copy of its script (section 9b) goes with the tab. */
   if (prompterShare) prompterShare.revoke(tabId);
-  /* So does its microphone listener (section 9d), if it had one. */
-  if (voiceHelper) voiceHelper.forget(tabId);
+  /* So does its microphone listener (section 9d), if it had one — its own,
+     or the one relayed to its browser copy (#122). */
+  if (voiceHelper) { voiceHelper.forget(tabId); voiceHelper.forget(VOICE_RELAY_PREFIX + tabId); }
   const w = windowsById.get(tab.windowId);
   if (w) {
     const i = w.tabIds.indexOf(tabId);
