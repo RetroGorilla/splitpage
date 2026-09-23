@@ -1,0 +1,118 @@
+# The tag composer and the production panel's tag operations through the
+# document model (#85; 07-production-tags.js tagFieldOccurrences /
+# renameTag / removeTag): labelling every mention of a phrase, renaming an
+# item and removing its label are each ONE undo entry, however many cells
+# they touch, and one Ctrl+Z puts back both the script and the registry.
+# Also: "every mention" now finds a phrase across formatting ("red
+# <strong>mug</strong>"), the words keep their casing and formatting, and a
+# single mention tags exactly the occurrence that was selected.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.st = function (i, col) { return F.state().rows[i][col + 'Text']; }; window.snap = function () { var s = F.state(); return JSON.stringify({ rows: s.rows.map(function (r) { return [r.visualText, r.audioText]; }), reg: s.productionTags.map(function (t) { return [t.id, t.cat, t.name, t.owner, t.notes, t.status]; }) }); }; window.spans = function (name) { return F.state().rows.reduce(function (n, r) { var d = document.createElement('div'); d.innerHTML = r.visualText + r.audioText; return n + d.querySelectorAll('.tag-anchor[data-tag-name="' + name + '"]').length; }, 0); }; window.reg = function (name) { return F.state().productionTags.some(function (t) { return t.name === name; }); }; return true; })()
+
+# --- a document with a phrase in three places and one tracked item ---------
+eval (function(){ var s = JSON.parse(F.buildSplitpage()); var tag = function (cat, name, text) { return '<span class="tag-anchor" data-tag-cat="' + cat + '" data-tag-name="' + name + '" contenteditable="false">' + text + '</span>'; }; s.title = 'Tag panel'; s.rows = [ { id: 'r1', status: 'todo', visualText: tag('prop', 'Kettle', 'The kettle') + ' boils.', audioText: 'Grab the Red Mug. The red <strong>mug</strong> again, and the ' + tag('prop', 'Kettle', 'kettle') + '.' }, { id: 'r2', status: 'todo', visualText: 'Close on the ' + tag('prop', 'Kettle', 'kettle') + '.', audioText: 'One more red mug here, not a redmug.' } ]; s.productionTags = [ { cat: 'prop', name: 'Kettle', owner: '', notes: 'chrome', status: 'needed' } ]; s.comments = []; s.brollShots = []; F.openFile(new File([JSON.stringify(s)], 'tags.splitpage')); return true; })()
+wait F.state().title === 'Tag panel' && document.querySelectorAll('#rows .row').length === 2
+sleep 400
+eval (function(){ U.flush(); window.__before = snap(); window.__n = U.sizes().undo; return window.__n; })()
+expect spans('Kettle') === 3
+
+# --- label every mention: one entry, and Ctrl+Z takes it all back ----------
+eval (function(){ var c = document.querySelectorAll('#rows .row')[1].querySelector('.audio-cell .cell-editable'); c.focus(); var t = c.firstChild; var i = t.nodeValue.indexOf('red mug'); var r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 7); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); })()
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar button[data-cmd="tag"]
+wait !document.getElementById('tag-modal').hidden
+expect document.getElementById('tag-quote').textContent == red mug
+# three mentions: "Red Mug", "red <strong>mug</strong>" (across the bold) and
+# this one; "redmug" is not a whole word
+expect document.getElementById('tag-hint').textContent.indexOf('3 times') !== -1
+expect document.getElementById('tag-all').disabled === false
+eval (function(){ document.getElementById('tag-name').value = 'Red mug'; document.getElementById('tag-all').checked = true; return true; })()
+jsclick #tag-apply
+sleep 500
+expect document.getElementById('tag-modal').hidden
+expect spans('Red mug') === 3
+expect reg('Red mug')
+# the words keep their casing and their bold, under the one tag
+expect st(0, 'audio').indexOf('data-tag-name="Red mug" contenteditable="false">Red Mug</span>') !== -1
+expect st(0, 'audio').indexOf('data-tag-name="Red mug" contenteditable="false">red <strong>mug</strong></span>') !== -1
+expect st(1, 'audio').indexOf('redmug') !== -1
+expect U.sizes().undo === window.__n + 1
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+expect spans('Red mug') === 0
+expect !reg('Red mug')
+# and redo puts all three back, with the entry
+key ctrl+shift KeyZ
+sleep 400
+expect spans('Red mug') === 3
+expect reg('Red mug')
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+
+# --- one mention: exactly the one selected ---------------------------------
+eval (function(){ U.flush(); window.__n = U.sizes().undo; var c = document.querySelectorAll('#rows .row')[0].querySelector('.audio-cell .cell-editable'); c.focus(); var w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT); var t; while ((t = w.nextNode())) { if (t.nodeValue.indexOf('The red ') !== -1) break; } var i = t.nodeValue.indexOf('red '); var r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 3); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); })()
+jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar button[data-cmd="tag"]
+wait !document.getElementById('tag-modal').hidden
+eval (function(){ document.getElementById('tag-name').value = 'Red'; document.getElementById('tag-all').checked = false; return true; })()
+jsclick #tag-apply
+sleep 500
+# "Red Mug" comes first in the cell; the second "red" was the one selected
+expect spans('Red') === 1
+expect st(0, 'audio').indexOf('The <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Red" contenteditable="false">red</span> <strong>mug</strong>') !== -1
+expect U.sizes().undo === window.__n + 1
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+
+# --- rename through the panel: one entry, script and registry both back ----
+# The undo put the caret back in the cell it changed. A real click on the
+# panel would blur it; jsclick does not, and a render replacing a focused
+# cell reads its old contents back on focusout (the skill's jsclick note).
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden
+eval (function(){ U.flush(); window.__n = U.sizes().undo; var c = Array.from(document.querySelectorAll('#production-list .tag-entity')).find(function (e) { return e.querySelector('.tag-entity-name').textContent === 'Kettle'; }); if (!c.classList.contains('is-expanded')) c.querySelector('[data-action="tag-expand"]').click(); return true; })()
+sleep 300
+eval (function(){ document.querySelector('#production-list [data-action="tag-rename"]').click(); return true; })()
+sleep 300
+eval (function(){ document.querySelector('#production-list .tag-rename-input').value = 'Steel kettle'; return true; })()
+jsclick #production-list [data-action="tag-rename-save"]
+sleep 500
+expect spans('Steel kettle') === 3
+expect spans('Kettle') === 0
+expect reg('Steel kettle') && !reg('Kettle')
+# the words in the script are left as written; the entry keeps its id and notes
+expect st(1, 'visual').indexOf('data-tag-name="Steel kettle" contenteditable="false">kettle</span>') !== -1
+expect F.state().productionTags.find(function (t) { return t.name === 'Steel kettle'; }).notes == chrome
+expect U.sizes().undo === window.__n + 1
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+expect spans('Kettle') === 3
+expect Array.from(document.querySelectorAll('#production-list .tag-entity-name')).some(function (e) { return e.textContent === 'Kettle'; })
+
+# --- remove label: one entry, every span back ------------------------------
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+eval (function(){ U.flush(); window.__n = U.sizes().undo; var c = Array.from(document.querySelectorAll('#production-list .tag-entity')).find(function (e) { return e.querySelector('.tag-entity-name').textContent === 'Kettle'; }); if (!c.classList.contains('is-expanded')) c.querySelector('[data-action="tag-expand"]').click(); return true; })()
+sleep 300
+jsclick #production-list [data-action="tag-remove"]
+sleep 300
+jsclick #production-list [data-action="tag-remove"]
+sleep 500
+expect spans('Kettle') === 0
+expect st(0, 'visual').indexOf('The kettle boils.') === 0
+expect Array.from(document.querySelectorAll('.toast')).some(function (t) { return t.textContent === 'Removed Kettle from 3 mentions'; })
+# the item stays tracked, as before
+expect reg('Kettle')
+expect U.sizes().undo === window.__n + 1
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+expect spans('Kettle') === 3

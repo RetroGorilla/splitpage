@@ -8,7 +8,15 @@ import {
   plainText,
   sanitizeHtml
 } from "./04-richtext.js";
-import { projection, replaceWithBrollKey } from "./04c-doc-model.js";
+import {
+  cellOf,
+  deleteRange,
+  insertBrollKey,
+  insertText,
+  projection,
+  replaceWithBrollKey,
+  toHtml
+} from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { focusRowField } from "./06-rows.js";
@@ -72,12 +80,132 @@ var BROLL_TEXT_MAX = 2000;
 
 /* ---- reading the markers back out of the script ----
 
-   A sanitized field is a flat run of inline nodes separated by <br>, so a
-   "line" is what sits between two of them. A marker line opens an item;
-   every line after it belongs to that item until the next marker or the
-   end of the cell. The first line is the item's name — what the list and
-   the printed sheet show — and the rest is its description. */
-function brollFieldLines(body) {
+   A line is what sits between two line breaks. A marker line opens an
+   item; every line after it belongs to that item until the next marker or
+   the end of the cell. The first line is the item's name — what the list
+   and the printed sheet show — and the rest is its description.
+
+   Read from the cell's model (cellOf, 04c-doc-model.js, #85 step 3), never
+   by parsing the HTML: the cell's parse is cached by its HTML and shared
+   with every other reader of it. A line is a list of pieces — {text,
+   marks} and the b-roll key's atom {atom, text, marks} — each with `pos`,
+   its offset in the cell's projection, and the line has `start` and `end`
+   (its own line break not included), for the edits below.
+
+   What the model reads differently from the HTML walk this replaced, on
+   purpose and like every other reader of it (readers.test.mjs): a line
+   feed inside a text node is the space it shows as, and a zero-width space
+   is nothing. And on two shapes no version of the app writes — a key
+   inside a tag span, or after an empty formatting element — the key is
+   read as the key it is rather than as a marker to match by name
+   (broll-model.test.mjs has the comparison). */
+function brollCellLines(cell) {
+  var lines = [{ start: 0, end: 0, items: [] }];
+  var pos = 0;
+  cell.forEach(function (r) {
+    if (r.atom) {
+      lines[lines.length - 1].items.push({ atom: r, text: r.text, marks: r.marks, pos: pos });
+      pos++;
+      return;
+    }
+    r.text.split("\n").forEach(function (part, i) {
+      if (i > 0) {
+        lines[lines.length - 1].end = pos;
+        pos++;
+        lines.push({ start: pos, end: pos, items: [] });
+      }
+      if (part) {
+        lines[lines.length - 1].items.push({ text: part, marks: r.marks, pos: pos });
+        pos += part.length;
+      }
+    });
+  });
+  lines[lines.length - 1].end = pos;
+  return lines;
+}
+
+function brollLineText(items) {
+  return items.map(function (it) { return it.text; }).join("");
+}
+
+function hasNoMarks(marks) {
+  return !marks || !Object.keys(marks).length;
+}
+
+/* Is this line a marker, and if so what opens it? Returns the key when
+   the marker has already been made one (and therefore carries an id), or
+   a plain text match when it hasn't — a line written before this
+   existed, pasted in, or round-tripped through Markdown, which drops the
+   span and leaves the words behind. Those still count: they are matched
+   back to their record by name until an edit gives them an id.
+
+   A key counts only where it starts its line with nothing around it —
+   only blank, unformatted text before it, and no formatting, link or
+   comment of its own. That is the shape typing and the anchoring pass
+   both give one; a key inside <strong> or a comment is read by its words,
+   as a marker to match by name, and the anchoring pass then puts a key of
+   the right shape in its place. */
+function brollLineMarker(items) {
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (!it.atom && hasNoMarks(it.marks) && !it.text.trim()) continue;
+    if (it.atom && hasNoMarks(it.marks)) return { id: it.atom.id || "", key: it, rest: items.slice(i + 1) };
+    break;
+  }
+  var m = BROLL_MARKER_RE.exec(brollLineText(items));
+  return m ? { id: "", key: null, rest: null, strip: m[0].length } : null;
+}
+
+/* Every marker in one cell, in order, as {id, name, desc}. Pure, and
+   exported for the tests: the app reads it through brollInField, cached
+   by the field's HTML. */
+export function brollInCell(cell) {
+  var out = [], open = null;
+  brollCellLines(cell).forEach(function (line) {
+    var marker = brollLineMarker(line.items);
+    if (marker) {
+      var name = marker.rest
+        ? brollLineText(marker.rest)
+        : brollLineText(line.items).slice(marker.strip);
+      open = { id: marker.id, name: name.trim().slice(0, BROLL_NAME_MAX), desc: [] };
+      out.push(open);
+      return;
+    }
+    if (open) open.desc.push(brollLineText(line.items));
+  });
+  out.forEach(function (item) {
+    item.desc = item.desc.join("\n").replace(/\s+$/, "").slice(0, BROLL_TEXT_MAX);
+  });
+  return out;
+}
+
+/* The marker lines of a cell, in order: the line (its index among all of
+   the cell's lines too) and its marker. An item's ordinal is its place in
+   this list, which is how the rename and the anchoring pass below find the
+   line an item was read from. */
+function brollMarkerLines(cell) {
+  var out = [];
+  brollCellLines(cell).forEach(function (line, index) {
+    var marker = brollLineMarker(line.items);
+    if (marker) out.push({ line: line, index: index, marker: marker });
+  });
+  return out;
+}
+
+/* A cell still holding a picture or a video card (pasted before design D7
+   kept them out of script text; the load-time move empties them) is not
+   written through the model, which has no place for either — writing it
+   back would delete them. The rename and the anchoring pass edit such a
+   cell's HTML instead, on the same line the model found: a <br> is a line
+   break to both, so the model's nth line is the nth line of the HTML once
+   every <br> is a child of the field itself. */
+function holdsMedia(html) {
+  return /<img[\s>]|video-embed-card/i.test(html || "");
+}
+
+/* The field's lines as the HTML has them, for that exception only:
+   {nodes, br} — the field's own children between two <br>s. */
+function brollHtmlLines(body) {
   hoistNestedBrs(body);
   var kids = Array.prototype.slice.call(body.childNodes);
   var lines = [], start = 0;
@@ -91,18 +219,13 @@ function brollFieldLines(body) {
   return lines;
 }
 
-/* "Flat run of inline nodes separated by <br>" is a claim about the
-   FIELD, not about execCommand: a real Enter pressed while the caret is
-   still inside a run of bold (or italic, underline…) leaves the browser's
-   own <br> a CHILD of that formatting element, not of the field — brollAtLineStart()
-   rightly treats that as a line start (see its own comment), but this
-   function only ever looked at the field's own direct children, so a
-   marker on that second line was invisible to it: not merely markerless,
-   gone, as if the line never existed. Splitting the formatting element in
-   two around the <br> — the same shape a plain Enter with no formatting
-   active already produces — restores the invariant instead of asking
-   every caller to know about the exception. Runs on the disposable body
-   inertBody() just parsed, so mutating it in place costs nothing and
+/* A <br> is not always a child of the field: a real Enter pressed while
+   the caret is still inside a run of bold (or italic, underline…) leaves
+   the browser's own <br> a CHILD of that formatting element. Splitting the
+   formatting element in two around the <br> — the same shape a plain Enter
+   with no formatting active already produces — makes every <br> a child
+   of the field, so its children split into lines. Runs on the disposable
+   body inertBody() just parsed, so mutating it in place costs nothing and
    touches nothing live. */
 function hoistNestedBrs(body) {
   var guard = 0;
@@ -125,27 +248,8 @@ function hoistNestedBrs(body) {
   }
 }
 
-function brollLineText(nodes) {
+function brollHtmlLineText(nodes) {
   return nodes.map(function (n) { return n.textContent || ""; }).join("");
-}
-
-/* Is this line a marker, and if so what opens it? Returns the key span
-   when the marker has already been wrapped (and therefore carries an id),
-   or a plain text match when it hasn't — a line written before this
-   existed, pasted in, or round-tripped through Markdown, which drops the
-   span and leaves the words behind. Those still count: they are matched
-   back to their record by name until an edit gives them an id. */
-function brollLineMarker(nodes) {
-  for (var i = 0; i < nodes.length; i++) {
-    var n = nodes[i];
-    if (n.nodeType === 3 && !(n.nodeValue || "").trim()) continue;
-    if (n.nodeType === 1 && n.classList && n.classList.contains("broll-key")) {
-      return { id: n.getAttribute("data-broll-id") || "", el: n, rest: nodes.slice(i + 1) };
-    }
-    break;
-  }
-  var m = BROLL_MARKER_RE.exec(brollLineText(nodes));
-  return m ? { id: "", el: null, rest: null, strip: m[0].length } : null;
 }
 
 /* Visual cells only — the audio column is what gets read aloud, and a
@@ -435,12 +539,50 @@ function brollKeyHtml(id, text) {
    name match breaks: the status, notes, owner and audio reference are
    left behind on an orphan and the line comes back as a new, unshot item.
 
-   This pass gives those lines the same span a typed one gets. One id per
+   This pass gives those lines the same key a typed one gets. One id per
    LINE, never per name — two identical B-roll lines are two shots to go
    and get (see the note at the top of this file) — and it adds, removes
    and reorders nothing, so renameBrollInScript() still counts the same
-   marker lines in the same order. */
+   marker lines in the same order.
 
+   An edit of the cell's model (#85, docs/DOCUMENT-MODEL.md §4), like the
+   typed key's: the marker's words go and the key goes in their place,
+   through replaceWithBrollKey, and the cell is written with toHtml(). */
+
+/* Swaps the marker's words for the key and one space at the start of the
+   line. Those words can be spread over several pieces — a line can open
+   "<strong>B-roll:</strong> the gulls", or with a key that sits inside
+   formatting and so reads as words — so they are measured along the
+   line's text, a key by its letters. Any indentation in front of them goes
+   with them, exactly as it does when the marker is typed (maybeCaptureBroll
+   takes the caret's text node from its start, leading whitespace
+   included). The key and its space carry no marks: that is the shape
+   brollLineMarker knows as a key. Returns the new cell, or null if the
+   words end inside a key (they never do: a key's letters are a whole
+   marker of their own). */
+function brollAnchorLine(cell, line, id) {
+  var m = BROLL_MARKER_RE.exec(brollLineText(line.items));
+  if (!m) return null;
+  var left = m[0].length, to = line.start;
+  for (var i = 0; i < line.items.length && left > 0; i++) {
+    var it = line.items[i];
+    if (it.atom) {
+      if (it.text.length > left) return null;
+      left -= it.text.length;
+      to = it.pos + 1;
+    } else {
+      var take = Math.min(left, it.text.length);
+      left -= take;
+      to = it.pos + take;
+    }
+  }
+  var r = replaceWithBrollKey(cell, line.start, to, id, m[1] + m[2]);
+  return insertText(r.cell, r.end, " ", {});
+}
+
+/* The same in a cell's HTML, for a cell the model cannot write
+   (holdsMedia): the marker's words are consumed along the line's text
+   nodes, and the key goes in front of whatever of the line survived. */
 function brollLineTextNodes(nodes) {
   var out = [];
   (function walk(list) {
@@ -463,15 +605,8 @@ function brollPruneEmpty(el, body) {
   }
 }
 
-/* Swaps the marker's words for the atomic span the typing path inserts,
-   in place. Those words can be spread over several nodes — a line can
-   open "<strong>B-roll:</strong> the gulls" — so they are consumed by
-   walking the line's text rather than by assuming one text node. Any
-   indentation in front of them goes with them, exactly as it does when
-   the marker is typed (maybeCaptureBroll wraps from the start of the
-   caret's text node, leading whitespace included). */
-function brollWrapLineMarker(body, line, id) {
-  var m = BROLL_MARKER_RE.exec(brollLineText(line.nodes));
+function brollWrapHtmlLine(body, line, id) {
+  var m = BROLL_MARKER_RE.exec(brollHtmlLineText(line.nodes));
   if (!m) return false;
   var left = m[0].length;
   brollLineTextNodes(line.nodes).forEach(function (t) {
@@ -544,25 +679,40 @@ export function declineBrollAnchoring(rows) {
    document, so a line brought into a script that already tracks a shot of
    the same name cannot walk off with that shot's record. Callers that
    anchor a subset (the import scan, 11-import.js) put those rows into
-   state.rows first for that reason. Returns how many lines were anchored. */
+   state.rows first for that reason. Returns how many lines were anchored.
+   A row with nothing to anchor is not written at all. */
 export function anchorBrollInRows(rows) {
   if (!S.state || !rows || !rows.length) return 0;
   var plan = brollAnchorPlan();
   var total = 0;
   rows.forEach(function (row) {
     if (brollAnchorDeclined[row.id]) return;
-    var body = inertBody(row.visualText);
-    var ordinal = -1, n = 0;
-    brollFieldLines(body).forEach(function (line) {
-      var marker = brollLineMarker(line.nodes);
-      if (!marker) return;
-      ordinal++;
-      if (marker.el) return;
+    var html = row.visualText;
+    var cell = cellOf(html);
+    var todo = [];
+    brollMarkerLines(cell).forEach(function (found, ordinal) {
+      if (found.marker.key) return;
       var id = plan[brollLineKey(row.id, ordinal)];
-      if (id && brollWrapLineMarker(body, line, id)) n++;
+      if (id) todo.push({ found: found, id: id });
     });
-    if (!n) return;
-    row.visualText = sanitizeHtml(body.innerHTML);
+    if (!todo.length) return;
+    var n = 0;
+    if (holdsMedia(html)) {
+      var body = inertBody(html);
+      var htmlLines = brollHtmlLines(body);
+      todo.forEach(function (t) {
+        var line = htmlLines[t.found.index];
+        if (line && brollWrapHtmlLine(body, line, t.id)) n++;
+      });
+      if (n) row.visualText = sanitizeHtml(body.innerHTML);
+    } else {
+      /* last line first, so every earlier line is still where it was */
+      for (var i = todo.length - 1; i >= 0; i--) {
+        var next = brollAnchorLine(cell, todo[i].found.line, todo[i].id);
+        if (next) { cell = next; n++; }
+      }
+      if (n) row.visualText = toHtml(cell);
+    }
     total += n;
   });
   return total;
@@ -613,34 +763,38 @@ export function anchorBrollInLeftCell(cellEl) {
    The list is not a second document. Renaming a shot there rewrites its
    marker line, so there is one set of words and they live where they were
    written. An item whose marker never carried an id gets one here, which
-   is also how a pasted or round-tripped line rejoins its record for good. */
-function renameBrollInScript(entry, newName) {
+   is also how a pasted or round-tripped line rejoins its record for good.
+
+   The whole line goes — everything between the previous line break and
+   its own — and the key, a space and the new name take its place, none of
+   them formatted: an edit of the cell's model, written with toHtml(). */
+export function renameBrollInScript(entry, newName) {
   var row = brollRow(entry.rowId);
   if (!row) return false;
-  var body = inertBody(row.visualText);
-  var lines = brollFieldLines(body);
-  var ordinal = -1, target = null;
-  for (var i = 0; i < lines.length && !target; i++) {
-    if (!brollLineMarker(lines[i].nodes)) continue;
-    ordinal++;
-    if (ordinal === entry.ordinal) target = lines[i];
-  }
+  var html = row.visualText;
+  var target = entry.ordinal >= 0 ? brollMarkerLines(cellOf(html))[entry.ordinal] : null;
   if (!target) return false;
+  var keyText = target.marker.key ? (target.marker.key.text || "B-roll:") : "B-roll:";
 
-  var marker = brollLineMarker(target.nodes);
-  var keyText = marker.el ? (marker.el.textContent || "B-roll:") : "B-roll:";
-  var holder = document.createElement("div");
-  holder.innerHTML = brollKeyHtml(entry.id, keyText) + " " + escapeHtml(newName);
+  if (holdsMedia(html)) {
+    var body = inertBody(html);
+    var line = brollHtmlLines(body)[target.index];
+    if (!line) return false;
+    var holder = document.createElement("div");
+    holder.innerHTML = brollKeyHtml(entry.id, keyText) + " " + escapeHtml(newName);
+    line.nodes.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
+      body.insertBefore(n, line.br);
+    });
+    row.visualText = sanitizeHtml(body.innerHTML);
+    return true;
+  }
 
-  /* Replace the whole line in place: everything between the previous <br>
-     and this line's own <br> goes, the rebuilt marker takes its position. */
-  var anchor = target.br;
-  target.nodes.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
-  Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
-    body.insertBefore(n, anchor);
-  });
-
-  row.visualText = sanitizeHtml(body.innerHTML);
+  var at = target.line.start;
+  var cell = deleteRange(cellOf(html), at, target.line.end);
+  cell = insertBrollKey(cell, at, entry.id, keyText, {});
+  cell = insertText(cell, at + 1, " " + newName, {});
+  row.visualText = toHtml(cell);
   return true;
 }
 
@@ -1065,25 +1219,11 @@ export function wireBrollPanel() {
    in filename order — the order these statements used to run in. */
 export function __init() {
   /* SHARED with every other caller for the same field content — read it,
-     never mutate it. Same contract, and the same reason, as tagsInField. */
+     never mutate it. Same contract, and the same reason, as tagsInField.
+     Keyed on the field's HTML, so typing in one field re-reads only that
+     one, and its parse is cellOf's, shared with the other readers. */
   brollInField = contentMemo(function (html) {
-    var out = [], open = null;
-    brollFieldLines(inertBody(html)).forEach(function (line) {
-      var marker = brollLineMarker(line.nodes);
-      if (marker) {
-        var name = marker.rest
-          ? brollLineText(marker.rest)
-          : brollLineText(line.nodes).slice(marker.strip);
-        open = { id: marker.id, name: name.trim().slice(0, BROLL_NAME_MAX), desc: [] };
-        out.push(open);
-        return;
-      }
-      if (open) open.desc.push(brollLineText(line.nodes));
-    });
-    out.forEach(function (item) {
-      item.desc = item.desc.join("\n").replace(/\s+$/, "").slice(0, BROLL_TEXT_MAX);
-    });
-    return out;
+    return brollInCell(cellOf(html));
   });
 
   /* Rows an import was asked NOT to scan (11-import.js). Browser state, never
