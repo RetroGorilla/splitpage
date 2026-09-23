@@ -17,7 +17,7 @@ import {
   replaceWithBrollKey,
   toHtml
 } from "./04c-doc-model.js";
-import { render, syncFieldFromDom } from "./05-render.js";
+import { render } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { focusRowField } from "./06-rows.js";
 import {
@@ -521,7 +521,6 @@ export function maybeCaptureBroll(e, cellEl) {
      refuses to take it). The model has to read the same words there, or it
      is not used. */
   var id = makeId("bs"), keyText = m[1] + m[2];
-  var taken = false;
   editCell(cellEl, function (cell) {
     var from = domToPos(cellEl, node, 0), to = domToPos(cellEl, node, offset);
     if (from === null || to === null) return null;
@@ -535,38 +534,13 @@ export function maybeCaptureBroll(e, cellEl) {
        line's, filled in by that same read. */
     var row = brollRow(cellEl.getAttribute("data-id"));
     newBrollRecord({ id: id, audioRef: brollSeedRef(row), location: brollSeedLocation(row) });
-    taken = true;
     return { cell: r.cell, sel: { from: r.end, to: r.end } };
   });
-  if (!taken) {
-    /* the model could not take it (a picture or a video card in the cell,
-       see editCell): the key straight into the DOM, as before */
-    execInsertBrollKey(node, offset, id, keyText);
-    syncFieldFromDom(cellEl);
-  }
+  /* Not taken: the model did not read the same words there, and the line
+     stays plain words. Nothing goes into the DOM behind the model's back
+     (a cell holding a picture, which editCell declines, no longer exists:
+     design D7). */
   scheduleBrollRefresh();
-}
-
-function execInsertBrollKey(node, offset, id, keyText) {
-  var sel = window.getSelection();
-  var wrapRange = document.createRange();
-  wrapRange.setStart(node, 0);
-  wrapRange.setEnd(node, offset);
-  sel.removeAllRanges();
-  sel.addRange(wrapRange);
-  document.execCommand("insertHTML", false, brollKeyHtml(id, keyText) + " ");
-  /* The browser leaves the caret INSIDE the span it just inserted: put it
-     after. */
-  var afterSel = window.getSelection();
-  if (!afterSel.rangeCount) return;
-  var landed = afterSel.getRangeAt(0).startContainer;
-  var keyEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".broll-key");
-  if (!keyEl) return;
-  var out = document.createRange();
-  out.setStartAfter(keyEl);
-  out.collapse(true);
-  afterSel.removeAllRanges();
-  afterSel.addRange(out);
 }
 
 /* contenteditable="false" for the same reason a tag is atomic: the caret

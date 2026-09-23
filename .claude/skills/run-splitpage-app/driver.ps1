@@ -421,6 +421,8 @@ $KeyMap = @{
   KeyU      = @{ key = 'u';         code = 'KeyU';      vk = 85 }
   # Ctrl/Cmd+Alt+H: hide-shot-scenes toggle (issue #25)
   KeyH      = @{ key = 'h';         code = 'KeyH';      vk = 72 }
+  # Ctrl+Y: redo, the other spelling of Ctrl+Shift+Z
+  KeyY      = @{ key = 'y';         code = 'KeyY';      vk = 89 }
 }
 function Press-Key([string]$Name, [string]$Mods = '') {
   if (-not $KeyMap.ContainsKey($Name)) { throw "unknown key '$Name' (have: $($KeyMap.Keys -join ', '))" }

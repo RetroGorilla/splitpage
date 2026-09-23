@@ -3,7 +3,6 @@ import { updateScriptStats } from "./01-scene-status.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import {
-  ensureTrailingCaretSpot,
   inertBody,
   plainText,
   safeId,
@@ -797,47 +796,18 @@ export function maybeAutoTagShortcut(e, cellEl) {
    own stored name. A tag at the very end of the cell leaves nothing after
    it to put the caret at; the repaint's ensureTrailingCaretSpot sees to it. */
 function tagTextRange(cellEl, node, a, b, text, cat, name) {
-  var taken = false;
   editCell(cellEl, function (cell) {
     var from = domToPos(cellEl, node, a), to = domToPos(cellEl, node, b);
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== node.data.slice(a, b).replace(/\u200B/g, "")) return null;
     var r = replaceWithTag(cell, from, to, text, namedTagId(cat, name));
     registerProductionTag(cat, name);
-    taken = true;
     return { cell: r.cell, sel: { from: r.end, to: r.end } };
   });
-  if (taken) return;
-  /* The model could not take it — the cell still holds a picture or a video
-     card (see editCell) — so the old way: the span straight into the DOM. */
-  execInsertTag(node, a, b, text, cat, name);
-  registerProductionTag(cat, name);
-  syncFieldFromDom(cellEl);
-}
-
-function execInsertTag(node, a, b, text, cat, name) {
-  var sel = window.getSelection();
-  var wrapRange = document.createRange();
-  wrapRange.setStart(node, a);
-  wrapRange.setEnd(node, b);
-  sel.removeAllRanges();
-  sel.addRange(wrapRange);
-  var html = '<span class="tag-anchor" data-tag-cat="' + escapeHtml(cat) + '" data-tag-name="' +
-    escapeHtml(name) + '" contenteditable="false">' + escapeHtml(text) + '</span>';
-  document.execCommand("insertHTML", false, html);
-  /* land the caret explicitly right after the tag rather than trusting
-     whatever the browser defaulted to */
-  var afterSel = window.getSelection();
-  if (!afterSel.rangeCount) return;
-  var landed = afterSel.getRangeAt(0).startContainer;
-  var tagEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".tag-anchor");
-  if (!tagEl) return;
-  ensureTrailingCaretSpot(tagEl.parentNode);
-  var out = document.createRange();
-  out.setStartAfter(tagEl);
-  out.collapse(true);
-  afterSel.removeAllRanges();
-  afterSel.addRange(out);
+  /* Not taken: the model did not read the same words there. Nothing is
+     done — the typed words stay as they are — rather than a span put into
+     the DOM behind the model's back. (A cell holding a picture, which
+     editCell declines, no longer exists: design D7.) */
 }
 
 /* ---- Tab-to-autocomplete an existing tag name, Obsidian-style ----

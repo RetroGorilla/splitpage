@@ -256,10 +256,14 @@ is special. **It is the only atom.**
     quote and a line saying where it came from; its id is
     `mediaCommentId(rowId, field, "img:"+sha | "video:"+href)`. Like every
     loaded comment without an `anchorId`, it gets its own id there, which
-    no span carries: it is not anchored to any words. The places that
-    still handle a cell holding a picture (`syncFieldFromDom`, `editCell`,
-    `mergeTextField`) only matter now for a document an older copy of the
-    app wrote after this one read it.
+    no span carries: it is not anchored to any words. Every way a document
+    arrives goes through `migrateRows` (a file, a server copy, a merge, a
+    restore, a crash draft, an import), and nothing in the app puts a
+    picture into a cell, so no cell holds one. `editCell` still declines
+    one as a guard, and since §10 step 7 nothing else edits it; the HTML
+    paths that read one without editing at the selection
+    (`syncFieldFromDom`, `mergeTextField`, split and join, retag, the
+    b-roll list's rename) are guards of the same kind.
 
 ## 4. Operations
 
@@ -352,11 +356,11 @@ selection kept:
   the next `insertText` there is cancelled in `beforeinput` and inserted
   through the model with it, then run through the usual input handling
   (tag shortcuts, b-roll capture). Moving the caret forgets it.
-- Still `execCommand`: the comment composer and reply boxes (not document
-  cells), and a script cell still holding a picture or video card
-  (`editCell` declines it until D7's load-time move exists). The page-wide
-  `styleWithCSS` is gone; `applyHighlight`'s fallback turns it on for
-  itself.
+- The comment composer and reply boxes, which are not document cells and
+  may hold pictures and video cards, go through the same model functions
+  by way of `editDraft` (`05d-draft-edit.js`, §10 step 7), with an undo
+  history of each box's own. No edit anywhere uses `execCommand`; the
+  page-wide `styleWithCSS` and `applyHighlight` are gone.
 
 **Rejected alternatives**
 
@@ -625,14 +629,50 @@ until step 4.
    the model and the registry ids. The on-disk merge review switched with
    it. §8 lists what building it settled. Tests: the "a word at a time"
    section of `src/test/merge-states.test.mjs`.
-7. **Delete what is left. Partly done.** `lastSplitUndo` and the move undo
-   are gone; HANDOFF invariants #2, #3, #10 and #18 are rewritten for the
-   model and #53 added. `execCommand` is left only where there is no model
-   behind the text (the comment composer and reply boxes) and as the
-   fallback for a script cell still holding a picture (which the load-time
-   move of D7 empties). `repointCommentsForRows` is gone: split and join
-   move runs, and `syncCommentAnchors` (§3.2) is the one place a comment's
-   `rowId`/`field` is derived from its mark.
+7. **Delete what is left. Done.** `lastSplitUndo` and the move undo are
+   gone; HANDOFF invariants #2, #3, #10 and #18 are rewritten for the
+   model and #53, #54 and #55 added. `repointCommentsForRows` is gone: split and
+   join move runs, and `syncCommentAnchors` (§3.2) is the one place a
+   comment's `rowId`/`field` is derived from its mark. And no edit uses
+   `execCommand` any more:
+   - **The comment composer and reply boxes** edit through the model
+     (`editDraft`, `05d-draft-edit.js`), though no model stands behind
+     them and they may hold pictures and video cards: each one is lifted
+     out as a private-use placeholder character (U+E000–U+F8FF, never one
+     the box or a paste already holds), which the model treats as a
+     letter, and put back as itself when the box is written. A picture or
+     card never carries formatting or a link (a card is an `<a>`), never
+     counts toward "bold throughout", and `walkCell` counts it as one
+     position so the selection lines up. B/I/U/S, highlight, a pending
+     mark, a link, Enter, a paste, a drop from elsewhere, and the Image
+     and Video buttons are all draft edits.
+   - **Undo in a draft** was the browser's, which only worked because
+     `execCommand` recorded into it; it cannot follow edits it did not
+     make, so it never runs there now. Each box has its own history
+     (snapshots of its stored HTML and its selection as model positions,
+     200 deep): a structural edit is one entry; typing stays the
+     browser's and is recorded after the fact, a burst closed by an 800 ms
+     pause, by switching between typing and deleting, by the caret
+     jumping, or by the next edit, undo or redo; nothing is recorded during
+     an IME composition, and Ctrl+Z is the IME's while one is open.
+     Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y and `beforeinput`'s `historyUndo` /
+     `historyRedo` answer from it, and are taken even with nothing left to
+     undo. The composer's history is dropped when it opens, is cancelled
+     or posts; a reply box's goes with the element. The document's own
+     undo (§7) never sees a draft (D5 is about sent comments). Tests:
+     `draft-edit.test.mjs`, browser suite 80.
+   - **The fallback for a script cell still holding a picture is
+     deleted** (the browser's format, highlight, link, line break, paste
+     and drop commands, and the tag and b-roll key put straight into the
+     DOM): §3.3 says why no cell holds one. `editCell` still declines one,
+     and nothing edits it instead. The tag and b-roll shortcuts, which
+     also fell back when the model did not read the same words at the
+     caret, now leave the typed words as they are.
+   - Left: `execCommand("copy")`, the clipboard fallback of three copy
+     buttons (13-hosted, 20b-onboarding, 20e-connect) — not an edit.
+   IME and spellcheck in a draft stay the browser's, as in a script cell
+   (§5), and the by-hand check list's Japanese-IME and spellcheck lines
+   (§11) cover the comment composer and a reply box too.
 
 Steps 1–3 are about a week of agent sessions. Steps 4–6 are the bulk and
 the risk. Step 4 touches every editing path, and a regression there loses
@@ -649,7 +689,8 @@ words.
   implementation used by every re-render.
 - **IME and spellcheck.** These are left to the browser (§5) exactly because
   they are the risk. The by-hand check list gets a Japanese-IME and a
-  spellcheck-replacement line.
+  spellcheck-replacement line, in a script cell and in a comment or reply
+  draft.
 - **Performance.** The memo is keyed on the cell string, so an unchanged row
   costs a map lookup. The typing hot path parses one cell.
 
