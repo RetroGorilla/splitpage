@@ -10,6 +10,7 @@ import {
   tagStatus
 } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
+import { brollShotsByProp } from "./08c-broll.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, latin1Bytes } from "./14-export.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
@@ -800,10 +801,15 @@ export function buildPackingListPdf(catId) {
      straight off the page's right edge (unwrapped, untruncated, simply
      invisible past x=612) instead of wrapping to a second line. */
   var ITEM_TEXT_W = PW - M * 2 - 18;
+  /* a prop a b-roll shot needs says which (#149): the packer then knows
+     it has to go out with the second unit too */
+  var shotsFor = brollShotsByProp();
   items.forEach(function (item) {
     var owner = personById(item.owner);
     var st = tagStatus(item.status) || TAG_STATUSES[0];
-    var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "");
+    var shots = shotsFor[item.key] || [];
+    var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "") +
+      (shots.length ? "  ·  B-roll: " + shots.join(", ") : "");
     var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
     var need = wrapped.length * LEAD;
     if (y - need < M) { newPage(); header(); }

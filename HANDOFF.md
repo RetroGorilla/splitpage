@@ -959,7 +959,12 @@ builds two fields.
   "people": [{ "id": "p…", "name": "Jordan" }],
   "productionTags": [{ "cat": "prop | location | cast | vfx | sound", "name": "Camera Rig",
     "owner": "p… or ''", "notes": "plain text ≤2000",
-    "status": "needed | sourcing | have | returned" }]
+    "status": "needed | sourcing | have | returned" }],
+  "brollShots": [{ "id": "bs…", "name": "the line's words", "desc": "plain text",
+    "status": "unshot | shot", "reshoot": false, "notes": "plain text ≤2000",
+    "owner": "p… or ''", "audioRef": "plain text", "location": "plain text ≤80",
+    "origin": "script | list",
+    "props": [{ "id": "t_… (a productionTags id) or ''", "name": "≤80" }] }]  // ≤40, hand-added only (#149)
 }
 ```
 
@@ -1446,6 +1451,26 @@ bytes, #82 — nothing deletes them yet, D4).
     survive every edit; `mediaTable` lifts and restores them, and a new
     kind of object in a comment body needs a place there and in
     `walkCell`'s atoms.
+56. **A b-roll shot stores only the props added to it by hand, and names
+    each by its registry id** (#149, 08c-broll.js). The props tagged on its
+    own lines are read off the script every time (`brollPropsInCell`) and
+    never copied onto the record. `props` is `[{id, name}]`: `id` is the
+    `productionTags` entry's id, which a rename keeps, so a rename carries
+    through with nothing to do; `name` is the fallback for an entry the
+    breakdown no longer has, refreshed from the entry by `migrateRows`
+    (`normalizeBrollProps`: garbage tolerated, an unknown name kept, a
+    name-only one given the id of the prop of that name, capped at 40).
+    The one rename that drops an id — folding onto another entry's name —
+    re-points them (`brollPropsRenamed`, called from `renameTag` in the
+    same edit). The merge is a base-aware set per shot (`mergeBrollProps`,
+    03-sync.js): both sides' additions kept, a removal kept unless the
+    other side still has it and did not have it in the base. A pasted copy
+    of a shot's line gets none of them (`recordPastedBroll` makes a fresh
+    record), exactly as it gets none of the status, notes or owner. A new
+    field on a shot record needs `migrateRows`, `mergeBrollShots` (which
+    clones a shot whole and folds the other side in field by field) and
+    `newBrollRecord`; `state-fields.test.mjs` checks the record's keys
+    survive a merge and a save.
 ---
 
 ## 6. Map of the source
