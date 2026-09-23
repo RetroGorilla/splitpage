@@ -1,0 +1,72 @@
+# Follow My Voice on desktop: a microphone warning giving way (issue #117).
+#
+# desktop/voice/listen.ps1 holds no-signal and too-quiet back for a grace
+# period and, once one is shown, sends {"type":"warning","code":"clear"} when
+# audio (or words) arrive. The grace period itself is C# in the listener and
+# is desktop/test/voice-grace.test.mjs; this is the page's half, under the
+# fake desktop backend as in tests/72-desktop-voice.txt: a clear puts
+# "Listening…" back over a no-signal or too-quiet warning, and over nothing
+# else.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.D = window.__desktopTest; window.fakeV = D.makeFakeBackend({ voice: true }); D.setBackend(window.fakeV); window.st = function () { return document.getElementById('pp-voice-status').textContent; }; return true; })()
+
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+wait document.getElementById('pp-voice').disabled === false
+jsclick #pp-voice
+wait fakeV._voiceCalls.start === 1
+eval (function(){ fakeV._voiceEmit({ type: 'start', lang: 'en-US' }); return true; })()
+wait document.getElementById('pp-voice').classList.contains('is-active')
+expect st() == Listening…
+
+# --- a clear with no warning showing changes nothing -------------------------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening…
+
+# --- no-signal, then the microphone is heard: back to listening --------------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); return true; })()
+expect st().indexOf("Windows isn't hearing the microphone") !== -1
+expect document.getElementById('pp-voice-status').classList.contains('error')
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening…
+expect document.getElementById('pp-voice-status').classList.contains('listening')
+expect !document.getElementById('pp-voice-status').classList.contains('error')
+expect document.getElementById('pp-voice').classList.contains('is-active')
+
+# --- too-quiet gives way the same way ----------------------------------------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'too-quiet' }); return true; })()
+expect st().indexOf('Speak up a little') !== -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == Listening…
+
+# --- too-noisy is not one the listener clears --------------------------------
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'too-noisy' }); return true; })()
+expect st().indexOf("It's noisy here") !== -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st().indexOf("It's noisy here") !== -1
+
+# --- words since the warning: a late clear leaves what they said -------------
+eval (function(){ window.__w = Array.prototype.map.call(document.querySelectorAll('#prompter .w'), function (e) { return e.textContent; }).filter(function (t) { return /[a-z0-9]/i.test(t); }); return window.__w.length; })()
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'no-signal' }); fakeV._voiceEmit({ type: 'final', text: window.__w.slice(0, 5).join(' ') }); return true; })()
+wait document.querySelectorAll('#prompter .w.spoken').length >= 4
+eval window.__after = st()
+expect window.__after.indexOf("isn't hearing") === -1
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() === window.__after
+
+# --- a clear after Stop Following changes nothing ----------------------------
+jsclick #pp-voice
+wait fakeV._voiceCalls.stop === 1
+eval (function(){ document.getElementById('pp-voice-status').textContent = "x"; return true; })()
+eval (function(){ fakeV._voiceEmit({ type: 'warning', code: 'clear' }); return true; })()
+expect st() == x
+
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+quit

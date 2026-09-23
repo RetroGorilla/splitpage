@@ -21,7 +21,8 @@
     "test:prompter-share": "node test/prompter-share.test.mjs",
     "test:google-drive": "node test/google-drive.test.mjs",
     "test:tabstrip-width": "node test/tabstrip-width.mjs",
-    "test:verify-dist-payload": "node test/verify-dist-payload.test.mjs"
+    "test:verify-dist-payload": "node test/verify-dist-payload.test.mjs",
+    "test:voice-grace": "node test/voice-grace.test.mjs"
   },
   "devDependencies": {
     "electron": "^44.3.0",
