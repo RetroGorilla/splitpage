@@ -3483,12 +3483,13 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
   }
 }
 
-/* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch/import-older/usage
-   against the real main process, the on-disk layout HISTORY-STORAGE
+/* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch, a put into Older
+   ({older:true}, what history-import-older became in #83 step 4) and the
+   usage history-list now answers with, against the real main process, the on-disk layout HISTORY-STORAGE
    documents (#83: one index.json, content-addressed bodies), and that all of
    it survives a relaunch (not just this process's cached index). */
 async function caseHistoryRoundTripAndRelaunch(target) {
-  const tag = target.name + " history: put/list/get/copy/touch/import-older/usage + relaunch";
+  const tag = target.name + " history: put/list/get/copy/touch/Older put/usage + relaunch";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
   const docId2 = randDocId();
@@ -3552,15 +3553,20 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       { meta: historyMeta({ id: randSnapId("l"), label: "legacy1" }), stateJson: JSON.stringify({ rows: [] }) },
       { meta: historyMeta({ id: randSnapId("l"), label: "legacy2" }), stateJson: JSON.stringify({ rows: [] }) }
     ];
-    const imp = await historyCall(cdp, "historyImportOlder", [olderEntries]);
-    record(tag + ": import-older adds both entries", imp && imp.ok === true && imp.added === 2, JSON.stringify(imp));
+    const imp = [];
+    for (const e of olderEntries) imp.push(await historyCall(cdp, "historyPut", [null, e.meta, e.stateJson, { older: true }]));
+    record(tag + ": a put with {older:true} adds each entry into Older",
+      imp.every((r) => r && r.ok === true && r.duplicate === false), JSON.stringify(imp));
+    const impAgain = await historyCall(cdp, "historyPut", [null, olderEntries[0].meta, olderEntries[0].stateJson, { older: true }]);
+    record(tag + ": …put-if-absent: the same Older entry again is a duplicate",
+      impAgain && impAgain.ok === true && impAgain.duplicate === true, JSON.stringify(impAgain));
     const listOlder = await historyCall(cdp, "historyList", [null]);
     record(tag + ": list(null) reports the Older bucket",
       Array.isArray(listOlder.older) && listOlder.older.length === 2 && typeof listOlder.olderExpiresAt === "number",
       JSON.stringify(listOlder));
 
-    const usage = await historyCall(cdp, "historyUsage", []);
-    record(tag + ": usage reports non-zero totalBytes, docCount>=2, not read-only",
+    const usage = listOlder.usage;
+    record(tag + ": list's usage reports non-zero totalBytes, docCount>=2, not read-only",
       usage && usage.totalBytes > 0 && usage.docCount >= 2 && usage.readOnly === false &&
       usage.capBytes === 500 * 1024 * 1024 && usage.overCap === false, JSON.stringify(usage));
     const docs = await historyCall(cdp, "historyListDocs", []);
@@ -3656,6 +3662,10 @@ async function caseHistoryIdValidation(target) {
     record(tag + ": positive control — a valid docId/meta put succeeds", putGood && putGood.ok === true, JSON.stringify(putGood));
     const getGoodRejects = await historyCallRejects(cdp, "historyGet", [{ docId: goodDocId }, goodMeta.id]);
     record(tag + ": positive control — get of that real snapshot does not reject", getGoodRejects === false, "");
+    const olderMeta = historyMeta({ label: "older control" });
+    const putOlderGood = await historyCall(cdp, "historyPut", [null, olderMeta, "{}", { older: true }]);
+    record(tag + ": positive control — a put into Older with (null, …, {older:true}) succeeds",
+      putOlderGood && putOlderGood.ok === true, JSON.stringify(putOlderGood));
 
     /* The page's own document-state report and the debounced bounds write
        legitimately rewrite desktop-state.json after boot (persistShellState),
@@ -3687,6 +3697,24 @@ async function caseHistoryIdValidation(target) {
     const olderBypassRejects = await historyCallRejects(cdp, "historyGet", [{ docId: "_older" }, goodMeta.id]);
     record(tag + ": historyGet with docId '_older' (bypassing the older:true query) rejects", olderBypassRejects, "");
 
+    /* The Older bucket is written only by the flag (#83 step 4 folded
+       history-import-older into history-put): the flag with a docId string
+       beside it — "_older" or a real one — rejects, and so does anything but
+       a literal true (the preload drops it, leaving a null docId with no
+       flag, which rejects). "_older" with no flag is in badDocIds above. */
+    for (const [label, args] of [
+      ["'_older' with {older:true}", ["_older", historyMeta(), "{}", { older: true }]],
+      ["a real docId with {older:true}", [goodDocId, historyMeta(), "{}", { older: true }]],
+      ["null with {older:'true'}", [null, historyMeta(), "{}", { older: "true" }]],
+      ["null with {older:1}", [null, historyMeta(), "{}", { older: 1 }]]
+    ]) {
+      const rejected = await historyCallRejects(cdp, "historyPut", args);
+      record(tag + ": historyPut(" + label + ", …) rejects", rejected, "");
+    }
+    const olderAfterRejects = await historyCall(cdp, "historyList", [null]);
+    record(tag + ": …and Older still holds only the positive control",
+      olderAfterRejects.older.length === 1 && olderAfterRejects.older[0].id === olderMeta.id, JSON.stringify(olderAfterRejects.older));
+
     const stateAfter = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
     const topLevelAfter = fs.readdirSync(userDataDir).sort();
     record(tag + ": desktop-state.json is byte-identical after every rejected call",
@@ -3710,8 +3738,10 @@ async function caseHistoryIdValidation(target) {
     const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && path.basename(e) !== "FORMAT");
     record(tag + ": history/ contains nothing named after a rejected id", suspicious.length === 0, JSON.stringify(historyEntries));
     const idx = readHistoryIndexOnDisk(userDataDir);
-    record(tag + ": index.json names the control document and no bucket that is not a document id",
-      !!idx && !!idx.buckets[goodDocId] && Object.keys(idx.buckets).every((b) => /^d[0-9a-f]{32}$/.test(b)),
+    /* "_older" is there because the Older positive control put it there —
+       through the flag; its one entry is checked above. */
+    record(tag + ": index.json names the control document and no bucket that is not a document id (or Older)",
+      !!idx && !!idx.buckets[goodDocId] && Object.keys(idx.buckets).every((b) => /^d[0-9a-f]{32}$/.test(b) || b === "_older"),
       JSON.stringify(idx && Object.keys(idx.buckets)));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
@@ -3888,14 +3918,14 @@ async function caseHistoryCapEviction(target) {
     const newSnap2 = historyMeta({ id: randSnapId("n"), atMs: 20001 });
     const lastCapPut = await historyCall(cdp, "historyPut", [docNew, newSnap2, bigBody(4)]);
 
-    const usage = await historyCall(cdp, "historyUsage", []);
-    record(tag + ": usage stays at or under the TEST_MODE cap after eviction",
+    const listOld = await historyCall(cdp, "historyList", [docOld]);
+    const listNew = await historyCall(cdp, "historyList", [docNew]);
+    const usage = listOld.usage || {};
+    record(tag + ": list's usage stays at or under the TEST_MODE cap after eviction",
       usage.totalBytes <= CAP && usage.capBytes === CAP, "totalBytes=" + usage.totalBytes + " cap=" + usage.capBytes);
     record(tag + ": the put that crossed the cap reports it evicted something, and is no longer overCap",
       lastCapPut.evicted > 0 && lastCapPut.overCap === false, JSON.stringify(lastCapPut));
 
-    const listOld = await historyCall(cdp, "historyList", [docOld]);
-    const listNew = await historyCall(cdp, "historyList", [docNew]);
     record(tag + ": the document touched EARLIER (docOld) loses its oldest snapshot first, keeps its newest",
       listOld.entries.length === 1 && listOld.entries[0].id === oldSnap2.id, JSON.stringify(listOld));
     record(tag + ": the document touched LATER (docNew) keeps both of its snapshots",
@@ -4059,8 +4089,10 @@ async function caseHistoryNewerFormatReadOnly(target) {
     record(tag + ": put on a newer-FORMAT folder refuses with code 'read-only'",
       put && put.ok === false && put.code === "read-only", JSON.stringify(put));
 
-    const usage = await historyCall(cdp, "historyUsage", []);
-    record(tag + ": usage reports readOnly:true", usage && usage.readOnly === true, JSON.stringify(usage));
+    record(tag + ": list's usage reports readOnly:true", !!list.usage && list.usage.readOnly === true, JSON.stringify(list.usage));
+    const olderPut = await historyCall(cdp, "historyPut", [null, historyMeta({ label: "should not land either" }), "{}", { older: true }]);
+    record(tag + ": a put into Older refuses with code 'read-only' too",
+      olderPut && olderPut.ok === false && olderPut.code === "read-only", JSON.stringify(olderPut));
     record(tag + ": the pre-existing body's mtime is untouched", fs.statSync(bodyPath).mtimeMs === mtimeBefore, "");
     record(tag + ": index.json is byte-identical and no new generation was written",
       fs.readFileSync(path.join(dir, "index.json")).equals(indexBytesBefore) && !fs.existsSync(path.join(dir, "index.prev.json")), "");
@@ -6207,7 +6239,7 @@ async function runTargetSuite(target, groupFilter) {
     // --- step M: document id + desktop history ---
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
-    ["history: round trip (put/list/get/copy/touch/import-older/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
+    ["history: round trip (put/list/get/copy/touch/Older put/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
     ["history: id validation", () => caseHistoryIdValidation(target)],
     ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target)],
     ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target)],

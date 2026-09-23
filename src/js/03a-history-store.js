@@ -335,9 +335,10 @@ export function protectHistorySnapshot(q) {
    One store per backend per page: over 03c's IndexedDB backend once it has
    opened, over the memory backend otherwise. historyStoreAdapter() gives
    either one the call shape desktopHistoryBackend has (put/list/get/copy/
-   touch/importOlder/usage/evict, plus the export's raw reads), so nothing
-   below the backend choice knows which it is talking to — and adds the
-   test gates, which belong to this page, not to the store. */
+   touch/importOlder/evict, plus the export's raw reads; list's answer
+   carries the store's usage), so nothing below the backend choice knows
+   which it is talking to — and adds the test gates, which belong to this
+   page, not to the store. */
 function historyMakeStore(backend, capBytes) {
   return createHistoryStore({
     backend: backend,
@@ -388,8 +389,15 @@ function historyStoreAdapter(store) {
       });
     },
     /* rejects when the backend cannot be read — importHistoryBundle's
-       strict read needs to tell that from "no history" (invariant #49) */
-    list: function (docId) { return store.list(docId || null); },
+       strict read needs to tell that from "no history" (invariant #49).
+       The answer carries the store's usage (null when that read failed),
+       the way main's history-list does: the panel is the one reader of
+       usage, and it always wants the list too. */
+    list: function (docId) {
+      return store.list(docId || null).then(function (r) {
+        return store.usage().then(function (u) { r.usage = u; return r; }, function () { r.usage = null; return r; });
+      });
+    },
     get: function (bucket, id) { return store.get(bucket, id); },
     copy: function (from, to) { return store.copy(from, to); },
     touch: function (docId, title) { return store.touch(docId, title); },
@@ -401,7 +409,6 @@ function historyStoreAdapter(store) {
         return store.importOlder(entries);
       });
     },
-    usage: function () { return store.usage(); },
     evict: function (cap) { return store.evict(cap); },
     /* the export's reads (exportHistoryAll) and the test hook's */
     rawDocIds: function () {
@@ -513,6 +520,20 @@ var HISTORY_DESKTOP_TIMEOUT_MS = 30000;
 /* test hook setDesktopTimeout(): a suite cannot wait 30 s for each case */
 var historyDesktopTimeoutOverride = null;
 
+/* Main's usage, as it rides on a history-list answer: {totalBytes,
+   capBytes, overCap, docCount, readOnly}, or null when main could not read
+   it (or the list was answered while the v1 migration held the store). */
+function historyDesktopUsage(u) {
+  if (!u || typeof u !== "object") return null;
+  return {
+    totalBytes: Number(u.totalBytes) || 0,
+    capBytes: Number(u.capBytes) || 0,
+    overCap: !!u.overCap,
+    docCount: Number(u.docCount) || 0,
+    readOnly: !!u.readOnly
+  };
+}
+
 function historyDesktopCall(run, onTimeout, onReject) {
   return new Promise(function (resolve) {
     var settled = false;
@@ -554,7 +575,7 @@ var desktopHistoryBackend = {
       return Promise.resolve({ stored: false, code: "invalid" });
     }
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyPut(docId, clean, stateJson, historyProtectedList());
+      return S.DESKTOP.historyPut(docId, clean, stateJson, { protect: historyProtectedList() });
     }, { stored: false, code: "timeout" }, { stored: false, code: "invalid" }).then(function (r) {
       if (!r || typeof r !== "object") return { stored: false, code: "io" };
       if (r.stored === false) return r;           /* our own timeout/invalid answer */
@@ -592,7 +613,8 @@ var desktopHistoryBackend = {
       var out = {
         entries: entries,
         older: older,
-        olderExpiresAt: r.olderExpiresAt == null ? null : Number(r.olderExpiresAt)
+        olderExpiresAt: r.olderExpiresAt == null ? null : Number(r.olderExpiresAt),
+        usage: historyDesktopUsage(r.usage)
       };
       if (r.migrating) out.migrating = true;
       return out;
@@ -637,30 +659,37 @@ var desktopHistoryBackend = {
     }, null, null);
   },
 
+  /* There is no batch channel for Older (#83 step 4): each entry is a
+     history-put with {older:true} and a null docId — put-if-absent, no
+     stamp, the store's importOlder rules one entry at a time. In order,
+     stopping at the first refusal: both callers count what landed
+     (`added`) and a retry re-puts the rest cheaply. An entry the store
+     would skip (no valid meta or body, or over the body limit) is skipped
+     here too. The answer keeps importOlder's shape, except that `count`
+     is how many of THESE entries Older now holds (added + already there)
+     rather than the bucket's size — no caller reads it. */
   importOlder: function (entries) {
-    return historyDesktopCall(function () {
-      return S.DESKTOP.historyImportOlder(entries);
-    }, { ok: false, count: 0, added: 0, code: "timeout" }, { ok: false, count: 0, added: 0, code: "invalid" })
-      .then(function (r) {
-        if (!r || typeof r !== "object") return { ok: false, count: 0, added: 0, code: "io" };
-        return { ok: !!r.ok, count: Number(r.count) || 0, added: Number(r.added) || 0, code: r.code };
+    if (!Array.isArray(entries)) return Promise.resolve({ ok: false, count: 0, added: 0, code: "invalid" });
+    var added = 0, count = 0, i = 0;
+    function next() {
+      if (i >= entries.length) return Promise.resolve({ ok: true, count: count, added: added });
+      var e = entries[i++];
+      var meta = e && typeof e === "object" ? sanitizeHistoryMeta(e.meta) : null;
+      if (!meta || typeof e.stateJson !== "string") return next();
+      return historyDesktopCall(function () {
+        return S.DESKTOP.historyPut(null, meta, e.stateJson, { protect: historyProtectedList(), older: true });
+      }, { ok: false, code: "timeout" }, { ok: false, code: "invalid" }).then(function (r) {
+        if (!r || typeof r !== "object") r = { ok: false, code: "io" };
+        if (r.ok) {
+          count++;
+          if (!r.duplicate) added++;
+          return next();
+        }
+        if (r.code === "too-large") return next();
+        return { ok: false, count: count, added: added, code: typeof r.code === "string" ? r.code : "io" };
       });
-  },
-
-  usage: function () {
-    var unknown = { totalBytes: 0, capBytes: Infinity, overCap: false, docCount: 0, readOnly: false };
-    return historyDesktopCall(function () {
-      return S.DESKTOP.historyUsage();
-    }, unknown, unknown).then(function (r) {
-      if (!r || typeof r !== "object") return unknown;
-      return {
-        totalBytes: Number(r.totalBytes) || 0,
-        capBytes: Number(r.capBytes) || 0,
-        overCap: !!r.overCap,
-        docCount: Number(r.docCount) || 0,
-        readOnly: !!r.readOnly
-      };
-    });
+    }
+    return next();
   },
 
   /* Main evicts as part of every write it accepts, including the expired
@@ -998,11 +1027,11 @@ export function listDocHistory(docId) {
      snapshot from this render. */
   var localBefore = docId ? historyLocalEntries(docId) : [];
   return resolveHistoryBackend().then(function (backend) {
-    return Promise.all([
-      backend.list(docId || null).then(null, function () { return { entries: [], older: [], olderExpiresAt: null }; }),
-      backend.usage().then(null, function () { return null; })
-    ]).then(function (res) {
-      var listed = res[0] || { entries: [], older: [], olderExpiresAt: null };
+    /* the usage line rides on the list's answer (#83 step 4) */
+    return backend.list(docId || null).then(null, function () {
+      return { entries: [], older: [], olderExpiresAt: null, usage: null };
+    }).then(function (listed) {
+      listed = listed || { entries: [], older: [], olderExpiresAt: null, usage: null };
       var seen = {}, entries = [];
       (listed.entries || []).forEach(function (m) {
         seen[m.id] = true;
@@ -1024,7 +1053,7 @@ export function listDocHistory(docId) {
         olderExpiresAt: listed.olderExpiresAt == null ? null : listed.olderExpiresAt,
         backend: backend.name,
         persistent: !!backend.persistent,
-        usage: res[1],
+        usage: listed.usage || null,
         notice: notice
       };
     });
