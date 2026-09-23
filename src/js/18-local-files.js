@@ -69,6 +69,7 @@ import { buildCsv, csvToRows } from "./16-csv.js";
 import { buildPackingListPdf, buildPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
+import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
 import { showAbout } from "./20a-update.js";
 import {
   applyMarkdownProject,
@@ -183,6 +184,32 @@ function updateHeaderFileChip() {
    branch below) — on for the actual Export menu, off for saveBackToFile's
    reuse of this same function, which writes back into a file whose name
    and extension are already fixed and must stay a text file in place. */
+/* The name buildFileData() gives an export of `kind`, without building it —
+   what the Export dialog shows under its preview (18c-export-dialog.js).
+   buildFileData names every file through this, so the two cannot drift.
+   opts.imageBundle: a plain Markdown export that carries pictures ships as a
+   zip (see the "md" branch below). */
+export function exportFileName(kind, baseName, opts) {
+  opts = opts || {};
+  if (kind === "breakdown") return baseName + " - breakdown.csv";
+  if (kind === "narration-docx") return baseName + " - narration.docx";
+  if (kind === "narration-txt") return baseName + " - narration.txt";
+  if (kind.indexOf("packing-") === 0) {
+    var packCatId = kind.slice("packing-".length);
+    var packCat = tagCategory(packCatId);
+    return baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf";
+  }
+  if (kind === "md-table") return baseName + " - two column.md";
+  if (kind === "md" && opts.imageBundle) return baseName + " (with images).zip";
+  return baseName + "." + kind;
+}
+
+/* What an export is called before its format's suffix: the foreign file it
+   was opened from, or the script's title. */
+export function exportBaseName() {
+  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+}
+
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
   /* Every builder below is synchronous and reads pictures through
@@ -190,19 +217,16 @@ export async function buildFileData(kind, baseName, opts) {
      bytes already in memory — so fetch any the document names first (#82). A
      document with no refs asks for nothing and opens no store. */
   await ensureBytes(refsIn(S.state));
-  if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
-  if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
-  if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
-  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: baseName + ".pdf" };
-  if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
-  if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
-  if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };
-  if (kind.indexOf("packing-") === 0) {
-    var packCatId = kind.slice("packing-".length);
-    var packCat = tagCategory(packCatId);
-    return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
-  }
-  if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: baseName + " - two column.md" };
+  var filename = exportFileName(kind, baseName);
+  if (kind === "docx") return { data: buildDocx(), filename: filename };
+  if (kind === "csv") return { data: buildCsv(), filename: filename };
+  if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
+  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: filename };
+  if (kind === "txt") return { data: htmlToPlainScript(), filename: filename };
+  if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
+  if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
+  if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
+  if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: filename };
   /* The old save format, kept as an export only: one file that opens in
      any browser with nothing installed. PAGE_SHELL and buildPublishHtml
      exist for this and for nothing else now (HANDOFF §3.1). */
@@ -212,7 +236,7 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "html") {
     /* inline, like a .splitpage (#82): say so if a picture could not be */
     warnImagesLeftOut(missingInlineImages(S.state).length, baseName + ".html");
-    return { data: standaloneHtmlFor(S.state), filename: baseName + ".html" };
+    return { data: standaloneHtmlFor(S.state), filename: filename };
   }
   if (kind === "md" && opts.allowImageBundle) {
     /* A script with no pictures stays a single plain-text .md, same as
@@ -227,10 +251,10 @@ export async function buildFileData(kind, baseName, opts) {
     if (images.length) {
       var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
       images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
-      return { data: zipWrite(entries), filename: baseName + " (with images).zip" };
+      return { data: zipWrite(entries), filename: exportFileName(kind, baseName, { imageBundle: true }) };
     }
   }
-  return { data: toMarkdownDoc(), filename: baseName + ".md" };
+  return { data: toMarkdownDoc(), filename: filename };
 }
 
 function htmlToPlainScript() {
@@ -944,7 +968,7 @@ export async function reloadProjectFromDisk() {
    the top bar (04b-busy.js) only if the build actually takes long enough
    to need it, which on a short script means nothing appears at all. */
 export async function exportAs(kind) {
-  var base = importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+  var base = exportBaseName();
   var built;
   try {
     built = await withBusyBar("Building the " + kind.toUpperCase() + " file…", function () {
@@ -983,12 +1007,17 @@ export function handleFileMenuAction(action) {
   /* The two switches (#145) leave the menu open, so the switch is seen to
      move; everything else is somewhere to go, and closes it. */
   if (action !== "autosave" && action !== "toggle-hide-shot") toggleFileMenu(false);
+  /* Which format was exported last, for the dialog to start on and for
+     "Export again as …" — a per-device preference, never the document's. */
+  if (isExportAction(action)) rememberExport(action);
   if (!S.state && action !== "history" && action !== "tagging-help"
       && action !== "drive-open" && action !== "about") {
     showToast("Still loading…", "warn"); return;
   }
   if (action === "save-as") saveDoc({ saveAs: true });
   else if (action === "new") startNewScript();
+  else if (action === "export") openExportDialog();
+  else if (action === "export-again") exportAgain();
   else if (action === "open") openLocalFile();
   else if (action === "paste") openImportModal();
   else if (action === "gdoc-import") openGdocModal();

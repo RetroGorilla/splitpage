@@ -1038,6 +1038,245 @@
   .import-scan-hint { grid-column: 2; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
   .modal-footer-actions { display: flex; gap: 8px; }
 
+  /* ---------- the Export dialog (issue #146) ----------
+     Formats on the left as radio cards in two groups, what the chosen one
+     will make on the right: a small page, one line of what is in it, the
+     options that format has, and the file name. */
+  .modal-panel.export-panel {
+    max-width: 940px;
+    height: min(720px, calc(100vh - 48px));
+    max-height: none;
+    border-radius: 18px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .export-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 12px 26px;
+  }
+  .export-head h2 { font-family: var(--font-body); font-size: 19px; font-weight: 700; margin: 0; color: var(--text); }
+  .export-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .export-formats {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6px 22px 20px 26px;
+  }
+  .export-group-head {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin: 14px 0 8px;
+  }
+  .export-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .export-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 2px 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+                background var(--dur-fast) var(--ease-standard);
+  }
+  .export-card:hover { border-color: var(--text-faint); }
+  /* the radio is the card: it stays in the tab order and the arrow keys,
+     and the card draws its state */
+  .export-card input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+  }
+  .export-card:has(input:checked) {
+    border-color: var(--visual);
+    background: color-mix(in srgb, var(--visual) 7%, var(--surface));
+    box-shadow: 0 0 0 1px var(--visual);
+  }
+  .export-card:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .export-card-icon {
+    grid-row: span 2;
+    width: 30px;
+    height: 30px;
+    padding: 6px;
+    border-radius: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .export-card:has(input:checked) .export-card-icon { color: var(--visual); }
+  .export-card-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .export-card-ext {
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    padding-top: 1px;
+  }
+  .export-card-purpose { grid-column: 2 / 4; font-size: 12.5px; line-height: 1.35; color: var(--text-dim); }
+  .export-card.is-unavailable .export-card-name,
+  .export-card.is-unavailable .export-card-icon { color: var(--text-faint); }
+
+  .export-side {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px 26px 20px 22px;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .export-preview-tray { display: flex; justify-content: center; padding: 4px 0 2px; }
+  /* A sketch of the first page, not a render of it: the real title and the
+     first scenes' words in the layout the format gives them. */
+  .export-preview {
+    width: 200px;
+    height: 258px;
+    overflow: hidden;
+    padding: 16px 14px;
+    background: #FFFFFF;
+    color: #221F1A;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(30, 25, 15, 0.08), 0 10px 24px -14px rgba(30, 25, 15, 0.35);
+    font-family: var(--font-body);
+    font-size: 6.5px;
+    line-height: 1.4;
+    position: relative;
+  }
+  .export-preview::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 40px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), #FFFFFF);
+  }
+  .pv-title { font-size: 10px; font-weight: 700; margin-bottom: 6px; }
+  .pv-sub { font-size: 7px; font-weight: 600; margin: 6px 0 3px; }
+  .pv-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .pv-table th { text-align: left; font-weight: 700; border-bottom: 0.5px solid #9B9484; padding: 1px 2px; }
+  .pv-table td { vertical-align: top; border-bottom: 0.5px solid #DCD5C4; padding: 2px; overflow: hidden; word-wrap: break-word; }
+  .pv-table .pv-no { width: 14px; color: #6E6858; }
+  .pv-img { display: block; height: 16px; margin-bottom: 1px; background: #E3F1EC; border-radius: 1px; }
+  .pv-mono { font-family: var(--font-display); font-size: 5.8px; white-space: pre-wrap; word-break: break-word; }
+  .pv-para { margin: 0 0 5px; }
+  .pv-grid td { font-family: var(--font-display); font-size: 5.5px; border: 0.5px solid #DCD5C4; }
+  .pv-app { margin: -16px -14px; }
+  .pv-app-bar { height: 14px; background: #F6F4EC; border-bottom: 0.5px solid #DCD5C4; padding: 3px 8px; font-weight: 700; font-size: 6px; }
+  .pv-app .pv-table { margin: 8px; width: calc(100% - 16px); }
+  .pv-app td:first-child { background: #F0F6F4; }
+  .pv-app td:last-child { background: #FBF3EE; }
+  .pv-check { display: flex; gap: 4px; align-items: baseline; margin-bottom: 3px; }
+  .pv-check::before { content: ""; flex: none; width: 5px; height: 5px; border: 0.6px solid #221F1A; border-radius: 1px; }
+
+  .export-summary { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); text-align: center; }
+  .export-options { display: flex; flex-direction: column; gap: 10px; }
+  .export-option-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 5px; }
+  .export-seg {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    padding: 2px;
+    gap: 2px;
+  }
+  .export-seg label {
+    flex: 1 1 0;
+    position: relative;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 6px 8px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .export-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+  .export-seg label:has(input:checked) { background: var(--visual-soft); color: var(--text); font-weight: 600; }
+  .export-seg label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .export-field { display: flex; flex-direction: column; gap: 4px; }
+  .export-field-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .export-filename {
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    overflow-wrap: anywhere;
+  }
+  .export-why {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--danger);
+    background: var(--danger-soft);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .export-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 22px 16px 26px;
+  }
+  .export-note { flex: 1 1 auto; margin: 0; font-size: 13px; color: var(--text-dim); line-height: 1.4; }
+  .export-note-link {
+    font: inherit;
+    color: var(--visual);
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .export-note-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+  @media (max-width: 760px) {
+    .modal-panel.export-panel { display: block; height: auto; max-height: calc(100vh - 20px); overflow-y: auto; padding: 0; }
+    .export-body { display: block; border-bottom: none; }
+    .export-formats { overflow: visible; padding: 4px 16px 16px; }
+    .export-cards { grid-template-columns: minmax(0, 1fr); }
+    .export-side { overflow: visible; border-left: none; border-top: 1px solid var(--border); padding: 16px; }
+    .export-head { padding: 14px 12px 10px 16px; }
+    /* the choice and Export stay in reach while the cards scroll under */
+    .export-foot {
+      position: sticky;
+      bottom: 0;
+      flex-wrap: wrap;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .export-foot .modal-footer-actions { margin-left: auto; }
+  }
+
   /* ---------- production tags ---------- */
   .tag-anchor {
     border-radius: 3px;

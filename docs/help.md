@@ -57,6 +57,9 @@ beta copy is offered it like any other update.
   every item has its shortcut beside it, and one that cannot work right now
   says why. Save, Save a copy and Open now have their usual shortcuts in the
   browser too.
+- **One Export dialog** (Ctrl+E) for every format, with a sketch of the page
+  and the file name before you export, and **Export again** for the format
+  you used last.
 - **Resizable side panels**, and smoother header and panel transitions.
 - Fixes: a PDF scene with a picture and no text is no longer drawn over by
   the next scene; *Undo merge* after a save conflict puts your version back;
@@ -559,8 +562,8 @@ Other things worth knowing:
   labels out of the script — the words stay, only the labels go. It asks once
   first and tells you how many labels are about to go with them.
 - Group the breakdown by **category, person or scene**, and export the
-  whole thing as CSV (the **CSV** button in the panel, or File ▸ Export ▸
-  Breakdown only). One sheet with a Category column, so it filters down to
+  whole thing as CSV (the **CSV** button in the panel, or File ▸ Export… ▸
+  Breakdown). One sheet with a Category column, so it filters down to
   a props list, a graphics list, or one person's pull list. The Word,
   PDF, Markdown and plain-text exports carry the breakdown too, including
   who each item is assigned to and what state it's in.
@@ -592,8 +595,8 @@ else), and it merges the same way — a status can't be walked backwards, an
 item can't be silently dropped. The Gear screen itself has a lighter version
 of the same grouping: **List**, or **Scene** to see what's needed where.
 
-**Packing list** (on the Gear screen, and Props too from File ▸ Packing
-lists) exports a plain checklist — a box, the name, who's got it — meant to
+**Packing list** (on the Gear screen, and Props too from File ▸ Export… ▸
+Packing list) exports a plain checklist — a box, the name, who's got it — meant to
 be printed and ticked off before you leave, not the six-column breakdown
 sheet trying to double as one.
 
@@ -634,7 +637,7 @@ time update as you type. Joining two scenes that *both* have a visual is the
 one thing it won't do on a keystroke — one of the two shot descriptions would
 have to be thrown away, so it sends you to the split view to pick.
 
-**Getting the narration back out.** File ▸ **Narration only** exports the
+**Getting the narration back out.** File ▸ Export… ▸ **Narration only** exports the
 Audio column as an ordinary document — `.docx` to hand to a voice artist or
 carry into Word, `.txt` for anything else. One paragraph per scene, no visual
 column, no breakdown, no comments. That's the same shape **Paste a script…**
@@ -923,13 +926,14 @@ everything else is exactly the same.
 
 ## Two shapes of Markdown export
 
-**File ▸ Export** has two Markdown options. **Markdown (.md)** reads
+**File ▸ Export…** has two shapes of Markdown: choose **Markdown**, then
+**Stacked** or **Two columns**. **Stacked** reads
 like a script rather than a filled-in form: a `### Scene 01` heading, then
 the visual direction as an italic lead-in ahead of whatever's spoken, with
 nothing printed for a field that has nothing to say. A picture is referenced
 from a sibling `images/` folder instead of pasted inline as base64 — once a
 script has any pictures, this export becomes a small `.zip` so the folder
-actually travels with the `.md`. **Markdown, two columns (.md)** lays the
+actually travels with the `.md`. **Two columns** lays the
 same script out as a table instead, one row per scene with a Visual column
 next to an Audio column — the way the split view itself looks, and the way a
 GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side
@@ -940,7 +944,7 @@ it keeps embedding pictures inline so the single `.md` file stays complete
 on its own.
 Both carry the production breakdown and comments the same way.
 
-**File ▸ Export ▸ Word (.docx)** carries the same polish: named
+**File ▸ Export… ▸ Word** carries the same polish: named
 paragraph, character and table styles, a document theme font, scene numbers
 in their own column, page numbers in the footer, and a production-breakdown
 table whose columns size themselves to what's actually in them instead of a
@@ -986,7 +990,8 @@ Below it, four groups:
   desktop app, and **Import** for pasting a script, a Google Doc link or
   Google Drive.
 - **Share** — **Publish & copy a link**, and **Servers…**.
-- **Export** — every export format.
+- **Export** — **Export…** (<kbd>Ctrl</kbd>+<kbd>E</kbd>), and once you have
+  exported something, **Export again as** that format, in one click.
 - **This document** — Version history, Find & replace, Hide shot scenes, and
   in the desktop app Present in browser and Use Chromium Speech Recognition.
 
@@ -1013,11 +1018,39 @@ work in the app you are using. On a Mac, read <kbd>Cmd</kbd> for
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save a copy… |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open… |
+| <kbd>Ctrl</kbd>+<kbd>E</kbd> | Export… |
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find & replace |
 | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> | Hide shot scenes |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
 | <kbd>F1</kbd> | Help (desktop app) |
 | <kbd>Ctrl</kbd>+<kbd>T</kbd> | New tab (desktop app) |
+
+## Exporting
+
+**File ▸ Export…** (<kbd>Ctrl</kbd>+<kbd>E</kbd>) opens one dialog for every
+format. Pick a card on the left:
+
+- **The whole script** — **PDF** to print or send for reading, **Word** to
+  keep writing in Word or Google Docs, **Markdown** (stacked, or two columns
+  side by side), a **Spreadsheet** with a row per scene, or a **Standalone
+  page** that opens in any browser with nothing installed.
+- **Part of it** — **Narration only** (the Audio column, as `.docx` or
+  `.txt`), the **Breakdown** as a spreadsheet, or a **Packing list** of your
+  gear or your props to print and tick off.
+
+The right-hand side shows a sketch of the first page, what the file will
+hold (how many scenes, whether pictures come with it), the options that
+format has, and the file name it will get. A format with nothing to put in
+it — a packing list with nothing tagged — says so, and cannot be exported
+until there is.
+
+Exports are copies: nothing you change in one comes back to the script. To
+share one live document that everyone edits, use **Publish & copy a link**
+instead — the dialog links to it.
+
+The dialog remembers the last format you exported on this computer and opens
+on it next time, and the File menu offers **Export again as** that format.
+The choice is kept by the app, never in the script itself.
 
 ## Saving your script
 
@@ -1107,7 +1140,7 @@ a comment flagged **Unmerged edit**, exactly as on a server. The merged script s
 
 ### Sending it to someone who has nothing installed
 
-**File ▸ Export ▸ Standalone HTML (.html)** writes one self-contained
+**File ▸ Export… ▸ Standalone page** writes one self-contained
 page: your script with a copy of Splitpage wrapped around it. They
 double-click it and the script is there, editable, with nothing to install
 and no account. It is a far bigger file than a `.md`, so it is for sending,

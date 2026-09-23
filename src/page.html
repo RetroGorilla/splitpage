@@ -224,21 +224,30 @@
               <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
 
+            <!-- One Export… (issue #146) where there were thirteen items: the
+                 dialog picks the format (18c-export-dialog.js). "Export again
+                 as …" appears once something has been exported on this
+                 device and repeats it in one click. -->
             <div class="menu-group" role="group" aria-labelledby="fm-g-export" data-menu-group="export">
               <div class="menu-group-head" id="fm-g-export">Export</div>
-              <button type="button" role="menuitem" class="mi mi-parent" data-submenu="export" id="menu-export" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-export"><svg class="mi-icon" aria-hidden="true"><use href="#i-export"/></svg><span class="mi-text"><span class="mi-label">Export</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
-              <div class="menu-sub" id="menu-sub-export" role="menu" aria-label="Export" hidden>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-pdf"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">PDF (.pdf)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-docx"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Word (.docx)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-md"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Markdown (.md)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-md-table"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Markdown, two columns (.md)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-csv"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Spreadsheet (.csv)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-html"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Standalone page (.html)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-narration-docx"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Narration only (.docx)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-narration-txt"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Narration only (.txt)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-breakdown"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Breakdown (.csv)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-packing-gear"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Gear packing list (.pdf)</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="export-packing-prop"><svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="mi-text"><span class="mi-label">Props packing list (.pdf)</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="export" id="menu-export" data-keys="mod+e" title="PDF, Word, Markdown, a spreadsheet, a standalone page, or part of the script"><svg class="mi-icon" aria-hidden="true"><use href="#i-export"/></svg><span class="mi-text"><span class="mi-label">Export…</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="export-again" id="menu-export-again" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-repeat"/></svg><span class="mi-text"><span class="mi-label">Export again</span><span class="mi-why" hidden></span></span></button>
+              <!-- Every format's own action, as it always was: what the
+                   dialog's Export button, "Export again", the command menu
+                   and the desktop native menu's Export submenu all click.
+                   Never shown — the dialog is how a person picks one. -->
+              <div class="menu-hidden-actions" hidden>
+                <button type="button" data-file-action="export-pdf">PDF (.pdf)</button>
+                <button type="button" data-file-action="export-docx">Word (.docx)</button>
+                <button type="button" data-file-action="export-md">Markdown (.md)</button>
+                <button type="button" data-file-action="export-md-table">Markdown, two columns (.md)</button>
+                <button type="button" data-file-action="export-csv">Spreadsheet (.csv)</button>
+                <button type="button" data-file-action="export-html">Standalone page (.html)</button>
+                <button type="button" data-file-action="export-narration-docx">Narration only (.docx)</button>
+                <button type="button" data-file-action="export-narration-txt">Narration only (.txt)</button>
+                <button type="button" data-file-action="export-breakdown">Breakdown (.csv)</button>
+                <button type="button" data-file-action="export-packing-gear">Gear packing list (.pdf)</button>
+                <button type="button" data-file-action="export-packing-prop">Props packing list (.pdf)</button>
               </div>
             </div>
 
@@ -457,6 +466,44 @@
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="import-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="import-confirm">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- File ▸ Export… (issue #146): one dialog in place of thirteen menu items.
+     The format cards and the options are built by 18c-export-dialog.js from
+     its EXPORT_FORMATS table; what the Export button runs is the matching
+     hidden <button data-file-action="export-…"> in #file-menu, so the
+     dialog, the desktop native menu and the command menu all reach one code
+     path. -->
+<div class="modal-backdrop" id="export-modal" hidden>
+  <div class="modal-panel export-panel" role="dialog" aria-modal="true" aria-labelledby="export-title">
+    <div class="export-head">
+      <h2 id="export-title">Export</h2>
+      <button type="button" class="modal-close" id="export-close" aria-label="Close">×</button>
+    </div>
+    <div class="export-body">
+      <div class="export-formats" id="export-formats" role="radiogroup" aria-labelledby="export-title"></div>
+      <div class="export-side">
+        <div class="export-preview-tray">
+          <div class="export-preview" id="export-preview" aria-hidden="true"></div>
+        </div>
+        <p class="export-summary" id="export-summary"></p>
+        <div class="export-options" id="export-options"></div>
+        <div class="export-field">
+          <span class="export-field-label">File name</span>
+          <code class="export-filename" id="export-filename"></code>
+        </div>
+        <p class="export-why" id="export-why" role="status" hidden></p>
+      </div>
+    </div>
+    <div class="export-foot">
+      <p class="export-note">Exports are copies. To share one live document, use
+        <button type="button" class="export-note-link" id="export-share-link">Publish &amp; copy a link</button>.</p>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" id="export-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" id="export-go">Export</button>
       </div>
     </div>
   </div>
