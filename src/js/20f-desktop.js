@@ -205,10 +205,11 @@ function runDesktopMenuCommand(cmd) {
 
 /* ---- the teleprompter in the browser (issue #86) ----
 
-   Follow My Voice fails inside Electron (#8) and works in Chrome and Edge,
-   so on desktop the teleprompter's voice button, File ▸ Present in browser
-   and View ▸ Present in Browser (which clicks that File item) hand the
-   script to the default browser instead. The bridge call
+   Web Speech fails inside Electron and works in Chrome and Edge, so File ▸
+   Present in browser and View ▸ Present in Browser (which clicks that File
+   item) hand the script to the default browser — and so does the
+   teleprompter's voice button where this desktop cannot listen for itself
+   (no Windows recogniser, below). The bridge call
    takes NO argument (invariant #28, desktop/main.js section 9b): this page
    never says which file, which server or which URL — main reads all of
    that off this tab's own record and opens the browser itself. What this
@@ -295,6 +296,159 @@ export async function openPrompterInBrowser() {
   } finally {
     prompterBrowserBusy = false;
   }
+}
+
+/* ---- Follow My Voice on desktop (issue #8) ----
+
+   The Web Speech API fails inside Electron, so on Windows the main process
+   runs a listener of its own (Windows' built-in recogniser, desktop/voice/
+   listen.ps1, main.js section 9d) and forwards what it hears to this tab.
+   createDesktopRecognition() wraps that in the same shape as a Web Speech
+   recognizer — start(), stop(), onstart/onresult/onerror/onend — so the
+   teleprompter's following code (20-teleprompter.js) runs unchanged on top
+   of either one.
+
+   The bridge calls take no argument (invariant #45). Every event carries
+   the session number main gave voiceStart's answer; an event from any
+   other session (a stopped one still shutting down, one another tab took
+   over) is dropped here. */
+var desktopVoice = null;        /* null until asked; then {available} */
+var desktopVoiceAsking = null;
+var activeDesktopRecognition = null;
+var voiceEventBridge = null;    /* the bridge onVoiceEvent was registered on */
+
+export function desktopVoiceKnown() {
+  return desktopVoice !== null;
+}
+
+export function desktopVoiceAvailable() {
+  return !!(desktopVoice && desktopVoice.available);
+}
+
+/* Asks main once whether this machine can listen; resolves when known. A
+   bridge without the voice calls (an older shell, a fake backend without
+   them) is "not available", and the teleprompter keeps Present in Browser. */
+export function loadDesktopVoice() {
+  if (desktopVoice) return Promise.resolve(desktopVoice);
+  if (desktopVoiceAsking) return desktopVoiceAsking;
+  var bridge = S.DESKTOP;
+  if (!bridge || typeof bridge.voiceStatus !== "function" || typeof bridge.voiceStart !== "function") {
+    desktopVoice = { available: false };
+    return Promise.resolve(desktopVoice);
+  }
+  desktopVoiceAsking = Promise.resolve()
+    .then(function () { return bridge.voiceStatus(); })
+    .then(function (answer) { return { available: !!(answer && answer.available) }; },
+          function () { return { available: false }; })
+    .then(function (known) {
+      desktopVoiceAsking = null;
+      if (S.DESKTOP === bridge) desktopVoice = known;
+      return known;
+    });
+  return desktopVoiceAsking;
+}
+
+function forgetDesktopVoice() {
+  desktopVoice = null;
+  desktopVoiceAsking = null;
+  activeDesktopRecognition = null;
+}
+
+function dispatchVoiceEvent(event) {
+  var rec = activeDesktopRecognition;
+  if (!rec || !event || typeof event !== "object") return;
+  if (rec._session === null) { rec._early.push(event); return; }
+  if (event.session === rec._session) rec._handle(event);
+}
+
+function wireVoiceEvents(bridge) {
+  if (voiceEventBridge === bridge || typeof bridge.onVoiceEvent !== "function") return;
+  bridge.onVoiceEvent(dispatchVoiceEvent);
+  voiceEventBridge = bridge;
+}
+
+/* What main's refusals mean to the teleprompter's onerror. */
+var VOICE_START_ERRORS = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed", NO_TAB: "helper-failed" };
+
+export function createDesktopRecognition() {
+  var bridge = S.DESKTOP;
+  wireVoiceEvents(bridge);
+  var rec = {
+    continuous: true,
+    interimResults: true,
+    lang: "",
+    onstart: null,
+    onresult: null,
+    onerror: null,
+    onend: null,
+    onwarning: null,
+    _running: false,
+    _session: null,
+    _early: [],
+    _fire: function (name, arg) {
+      var fn = rec[name];
+      if (typeof fn === "function") fn.call(rec, arg);
+    },
+    _finish: function () {
+      if (!rec._running) return;
+      rec._running = false;
+      rec._session = null;
+      if (activeDesktopRecognition === rec) activeDesktopRecognition = null;
+      rec._fire("onend");
+    },
+    _handle: function (event) {
+      if (!rec._running) return;
+      if (event.type === "start") {
+        rec._fire("onstart");
+      } else if (event.type === "interim" || event.type === "final") {
+        if (typeof event.text !== "string") return;
+        var result = { isFinal: event.type === "final", length: 1, 0: { transcript: event.text } };
+        rec._fire("onresult", { resultIndex: 0, results: [result] });
+      } else if (event.type === "warning") {
+        rec._fire("onwarning", { warning: event.code });
+      } else if (event.type === "error") {
+        rec._fire("onerror", { error: event.code });
+      } else if (event.type === "end") {
+        /* Another tab started listening: this one is not coming back, and
+           restarting would only take the microphone back from it. */
+        if (event.reason === "taken") rec._fire("onerror", { error: "taken" });
+        rec._finish();
+      }
+    },
+    start: function () {
+      if (rec._running) throw new Error("recognition has already started");
+      rec._running = true;
+      rec._session = null;
+      rec._early = [];
+      activeDesktopRecognition = rec;
+      Promise.resolve()
+        .then(function () { return bridge.voiceStart(); })
+        .catch(function () { return { ok: false, code: "SPAWN_FAILED" }; })
+        .then(function (answer) {
+          if (!rec._running || activeDesktopRecognition !== rec) {
+            /* stopped while main was starting it */
+            if (answer && answer.ok) bridge.voiceStop();
+            return;
+          }
+          if (!answer || !answer.ok || typeof answer.session !== "number") {
+            rec._fire("onerror", { error: VOICE_START_ERRORS[answer && answer.code] || "helper-failed" });
+            rec._finish();
+            return;
+          }
+          rec._session = answer.session;
+          var early = rec._early;
+          rec._early = [];
+          early.forEach(function (event) { if (event.session === answer.session) rec._handle(event); });
+        });
+    },
+    stop: function () {
+      if (!rec._running) return;
+      Promise.resolve().then(function () { return bridge.voiceStop(); }).catch(function () {});
+      rec._finish();
+    }
+  };
+  rec.abort = rec.stop;
+  return rec;
 }
 
 /* ---- Servers dialog: "you are sharing this session" ----
@@ -914,6 +1068,7 @@ function makeFakeDesktopBackend(opts) {
   if (opts && opts.history) addFakeDesktopHistory(backend);
   if (opts && opts.drive) addFakeDesktopDrive(backend);
   if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
+  if (opts && opts.voice) addFakeDesktopVoice(backend);
   return backend;
 }
 
@@ -927,6 +1082,42 @@ function makeFakeDesktopBackend(opts) {
    turns on the HASH_MISMATCH check; without it the fake trusts the sha.
    _blobs is the store (sha -> {bytes, mime}), _blobCalls every call, and
    _blobFailNext = {code} makes the next put answer that code. */
+/* Follow My Voice (issue #8), opt-in: makeFakeBackend({voice:true}). Stands
+   in for main's listener (main.js section 9d) without a microphone.
+   voiceStart answers a fresh session, or _voiceStartAnswer if a test armed
+   one; _voiceEmit(event) plays an event into this page the way main would,
+   with the current session filled in unless the event names one;
+   _voiceCalls counts what the page asked for. _voiceAvailable (default
+   true) is what voiceStatus reports. */
+function addFakeDesktopVoice(backend) {
+  var handler = null;
+  backend._voiceCalls = { status: 0, start: 0, stop: 0 };
+  backend._voiceAvailable = true;
+  backend._voiceSession = 0;
+  backend._voiceRunning = false;
+  backend.voiceStatus = function () {
+    backend._voiceCalls.status++;
+    return Promise.resolve({ available: backend._voiceAvailable });
+  };
+  backend.voiceStart = function () {
+    backend._voiceCalls.start++;
+    if (backend._voiceStartAnswer) return Promise.resolve(backend._voiceStartAnswer);
+    backend._voiceSession++;
+    backend._voiceRunning = true;
+    return Promise.resolve({ ok: true, session: backend._voiceSession });
+  };
+  backend.voiceStop = function () {
+    backend._voiceCalls.stop++;
+    backend._voiceRunning = false;
+    return Promise.resolve({ ok: true });
+  };
+  backend.onVoiceEvent = function (cb) { handler = cb; };
+  backend._voiceEmit = function (event) {
+    var e = Object.assign({ session: backend._voiceSession }, event);
+    if (handler) handler(e);
+  };
+}
+
 function addFakeDesktopBlobs(backend, opts) {
   var SHA_RE = /^[0-9a-f]{64}$/;
   var MAX = 16 * 1024 * 1024;
@@ -1217,6 +1408,9 @@ export function __init() {
     initDesktop: initDesktop,
     setBackend: function (fake) {
       S.DESKTOP = fake;
+      /* Whether this machine can listen (issue #8) is the bridge's answer,
+         so a new bridge is asked again. */
+      forgetDesktopVoice();
       /* A fake with the blob calls (makeFakeBackend({blobs:true})) becomes
          the registry's store too, the way the real bridge is at boot; one
          without them leaves the registry where it was. */
@@ -1230,6 +1424,7 @@ export function __init() {
     },
     restoreBackend: function () {
       S.DESKTOP = window.splitpageDesktop || null;
+      forgetDesktopVoice();
       wireDesktopBlobs(S.DESKTOP);
     },
     /* Lets desktop/test/smoke.mjs (SMOKE-HARNESS's tabIdOfTarget/shell) read

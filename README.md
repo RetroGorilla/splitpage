@@ -119,6 +119,11 @@ That means the browser's recording indicator stays lit until you press
 microphone is released. When Chrome asks, choosing **Allow on every visit**
 (rather than "Allow this time") saves you the prompt on future launches.
 
+In the **Windows desktop app**, Follow My Voice uses Windows' own speech
+recognition instead (System.Speech, run through the system's PowerShell by
+`desktop/voice/listen.ps1`): offline, nothing to install, and no browser
+involved. Elsewhere the desktop teleprompter offers **Present in Browser**.
+
 **Firefox / Safari note:** these don't support the File System Access API
 (`showSaveFilePicker`), so **Save** falls back to downloading a fresh
 `.html` copy each time, same as Export — open the newest one next session.

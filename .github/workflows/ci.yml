@@ -109,6 +109,9 @@ jobs:
       - name: Desktop teleprompter share listener
         run: node desktop/test/prompter-share.test.mjs
 
+      - name: Desktop Follow My Voice listener (fake helper)
+        run: node desktop/test/voice-helper.test.mjs
+
       - name: Desktop Google Drive client (loopback OAuth, fake Google)
         run: node desktop/test/google-drive.test.mjs
 
