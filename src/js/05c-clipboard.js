@@ -1,9 +1,11 @@
 import { S } from "./_state.js";
+import { makeId } from "./02-state.js";
 import { randomHexBytes } from "./02b-doc-id.js";
 import { findRowIndex } from "./03-sync.js";
 import { inertBody, storedHtmlFromDom } from "./04-richtext.js";
 import {
   cellLength,
+  cellOf,
   commentIds,
   deleteRange,
   fromHtml,
@@ -16,6 +18,7 @@ import {
   toHtml
 } from "./04c-doc-model.js";
 import { cellSelection, editCell } from "./05b-cell-edit.js";
+import { recordPastedBroll } from "./08c-broll.js";
 
 /* ================= copy, cut, paste and drop in a script cell (#85, design §5) =================
 
@@ -42,6 +45,9 @@ import { cellSelection, editCell } from "./05b-cell-edit.js";
      (editCell): one undo entry, the caret after what was pasted. Pictures
      and video cards are dropped (D7): a script cell holds words, and a
      comment or the scene picture is where a picture goes.
+   - A pasted B-ROLL KEY gets an id of its own whenever the document
+     already knows its id; only a cut moving it keeps it (freshBrollIds,
+     below).
 
    The pure half (what goes on the clipboard, what comes off it) is
    exported for src/test/clipboard.test.mjs; the DOM half is called from
@@ -140,6 +146,81 @@ export function cellFromClipboard(html, text, opts) {
   return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, fromCut: false, comments: [] };
 }
 
+/* ---- b-roll keys: one id, one line ----
+
+   A b-roll key carries the id its shot's record is found by (08c-broll.js),
+   and a copy of it carries the same id — so a pasted key would be a
+   second line claiming the first one's shot. A pasted key keeps its id
+   only when nothing in the document has it; otherwise it gets a new one
+   (makeId("bs"), as a typed key does):
+
+   - A COPY (and a drop, and a second paste of the same cut) is a new line
+     to shoot. Its key's id is taken if any key in the document has it, or
+     any record in the b-roll list does — a shot whose line was deleted
+     since the copy keeps its status, notes and owner to itself rather than
+     handing them to the copy. The new id's record is made fresh, seeded
+     from the scene the copy landed in as a typed key's is
+     (recordPastedBroll); nothing of the copied shot's own record — shot
+     or not, notes, owner, location — comes with it: two identical lines
+     are two shots to go and get, and the second one has not been shot.
+   - A CUT then its PASTE in this tab (the live cut nonce, design D6) is a
+     MOVE: the cut took the key out of the document, so its id is free
+     again, and its record — still in the list, orphaned for the moment —
+     is found by it once more, status and all. Only another key having the
+     id (the cut undone before the paste, say) makes it a new one.
+
+   Several keys in one paste are several lines: a repeat within the paste
+   gets a new id too. */
+
+/* The ids a pasted key may not keep, as {id: true}: every key in `state`'s
+   script (both columns; the cell being pasted into as `rest`, the cell
+   without the selection the paste replaces), and — unless the paste is
+   this tab's live cut — every record in the b-roll list. */
+export function brollIdsTaken(state, rowId, field, rest, fromCut) {
+  var taken = Object.create(null);
+  function keysOf(cell) {
+    cell.forEach(function (r) { if (r.atom && r.id) taken[r.id] = true; });
+  }
+  (state.rows || []).forEach(function (row) {
+    ["visualText", "audioText"].forEach(function (f) {
+      if (row.id === rowId && f === field && rest) keysOf(rest);
+      else keysOf(cellOf(row[f] || ""));
+    });
+  });
+  if (!fromCut) {
+    (state.brollShots || []).forEach(function (rec) { if (rec && rec.id) taken[rec.id] = true; });
+  }
+  return taken;
+}
+
+/* `cell` with every b-roll key whose id is in `taken`, or repeats an
+   earlier key's, given a new one from mint() (makeId("bs") by default).
+   Returns {cell, minted}: minted lists the new ids. */
+export function freshBrollIds(cell, taken, mint) {
+  mint = mint || function () { return makeId("bs"); };
+  var used = Object.create(null);
+  var minted = [];
+  var out = cell.map(function (r) {
+    if (!r.atom) return r;
+    var id = r.id;
+    if (!id || taken[id] || used[id]) {
+      var guard = 0;
+      do { id = mint(); } while ((taken[id] || used[id]) && ++guard < 100);
+      minted.push(id);
+    }
+    used[id] = true;
+    return id === r.id ? r : Object.assign({}, r, { id: id });
+  });
+  return { cell: out, minted: minted };
+}
+
+/* The ids of the b-roll keys in a cell, in order. */
+function brollKeyIds(cell) {
+  var ids = [];
+  cell.forEach(function (r) { if (r.atom && r.id) ids.push(r.id); });
+  return ids;
+}
+
 /* ---- the DOM half ---- */
 
 /* This tab's live cut: set by a cut, spent by the paste that uses it. */
@@ -195,21 +276,27 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
 
 /* A paste or a drop into a script cell, replacing the selection (or at the
    end of the cell when the selection is elsewhere). Returns
-     {done, cellEl, media, movedComments, fallback}
-   done false means the cell still holds a picture or a video card, which
-   editCell does not edit (05b-cell-edit.js): the caller inserts
-   `fallback` — {html} or {text}, already sanitised and with no comment —
-   the way it used to. */
+     {done, cellEl, media, movedComments}
+   done false means nothing went in: the cell holds a picture or a video
+   card, which editCell does not edit (05b-cell-edit.js) and which no cell
+   does since design D7. */
 export function pasteIntoCell(cellEl, html, text) {
   var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs });
-  var result = { done: true, cellEl: cellEl, media: got.media, movedComments: false, fallback: null };
+  var result = { done: true, cellEl: cellEl, media: got.media, movedComments: false };
   if (!cellLength(got.cell)) return result;
+  var rowId = cellEl.getAttribute("data-id");
+  var field = cellEl.getAttribute("data-field");
   var fresh = editCell(cellEl, function (cell, sel) {
     var from = sel ? sel.from : cellLength(cell);
     var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
+    /* a pasted b-roll key is a line of its own, with an id of its own
+       unless this is a cut moving it (see freshBrollIds) */
+    var piece = got.text !== null ? got.cell
+      : freshBrollIds(got.cell, brollIdsTaken(S.state, rowId, field, rest, got.fromCut)).cell;
     var next = got.text !== null
       ? insertText(rest, from, got.text)
-      : joinCells(joinCells(sliceCell(rest, 0, from), got.cell), sliceCell(rest, from));
+      : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));
+    if (field === "visualText") recordPastedBroll(rowId, next, brollKeyIds(piece));
     var at = from + cellLength(next) - cellLength(rest);
     /* The comment moving is part of the same paste, so it goes in with the
        cell as one undo entry (editCell's also, run once the pasted cell is
@@ -228,7 +315,6 @@ export function pasteIntoCell(cellEl, html, text) {
   });
   if (!fresh) {
     result.done = false;
-    result.fallback = got.text !== null ? { text: got.text } : { html: toHtml(stripComments(got.cell)) };
     return result;
   }
   result.cellEl = fresh;

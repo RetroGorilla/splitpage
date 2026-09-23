@@ -9,6 +9,10 @@
  * and markers inside formatting, comments and links. The reader must give
  * exactly what it gave; the edits must leave the cell reading exactly as
  * the old ones left it.
+ *
+ * And one thing the old pass never did: a key repeating an id an earlier
+ * line holds (a copy pasted before a paste gave keys ids of their own) is
+ * given one of its own; and the record a paste makes for its keys.
  */
 import "./_dom.mjs";
 import test from "node:test";
@@ -18,7 +22,7 @@ import { escapeHtml } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, normalizeCell } from "../js/04c-doc-model.js";
 import {
-  BROLL_MARKER_RE, __init as brollInit, anchorBrollInRows, brollInCell, renameBrollInScript
+  BROLL_MARKER_RE, __init as brollInit, anchorBrollInRows, brollInCell, recordPastedBroll, renameBrollInScript
 } from "../js/08c-broll.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
@@ -286,6 +290,9 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
     if (!before.some((b) => !b.id)) continue;
+    /* a key repeating an earlier key's id is re-keyed too, which the old
+       pass never did: those cells are the next test's */
+    if (repeatsAnId(before)) continue;
     const after = withRow(html, (row) => {
       const n = anchorBrollInRows([row]);
       assert.equal(n, before.filter((b) => !b.id).length, html);
@@ -302,6 +309,100 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
     anchored++;
   }
   assert.ok(anchored > 300, "anchored " + anchored);
+});
+
+function repeatsAnId(read) {
+  const ids = read.filter((b) => b.id).map((b) => b.id);
+  return new Set(ids).size !== ids.length;
+}
+
+/* The cell with the ids of the keys at these positions blanked, to compare
+   two cells that differ only there. */
+function idsBlanked(cell, at) {
+  let pos = 0;
+  return cell.map((r) => {
+    const here = pos;
+    pos += r.atom ? 1 : r.text.length;
+    return r.atom && at.includes(here) ? Object.assign({}, r, { id: "" }) : r;
+  });
+}
+
+test("anchoring: a key repeating an id an earlier line holds gets an id of its own, and nothing else changes", () => {
+  let healed = 0;
+  for (const html of STORED.concat(BROLL_CELLS)) {
+    const before = brollInCell(cellOf(html));
+    if (!repeatsAnId(before)) continue;
+    const seen = new Set();
+    const repeats = [];
+    before.forEach((b, k) => {
+      if (b.id && seen.has(b.id)) repeats.push(k);
+      if (b.id) seen.add(b.id);
+    });
+    const after = withRow(html, (row) => {
+      assert.equal(anchorBrollInRows([row]), repeats.length + before.filter((b) => !b.id).length, html);
+      return row.visualText;
+    });
+    const read = brollInCell(cellOf(after));
+    assert.deepEqual(read.map((b) => [b.name, b.desc]), before.map((b) => [b.name, b.desc]), html);
+    assert.ok(read.every((b) => b.id), "every line has a key: " + after);
+    assert.equal(new Set(read.map((b) => b.id)).size, read.length, "every id once: " + after);
+    before.forEach((b, k) => {
+      if (b.id && !repeats.includes(k)) assert.equal(read[k].id, b.id, "the first line keeps its id: " + html);
+    });
+    /* a cell with only keyed lines changes nowhere but the repeated keys' ids */
+    if (before.every((b) => b.id)) {
+      const cellBefore = cellOf(html), cellAfter = cellOf(after);
+      const at = [];
+      let pos = 0;
+      cellAfter.forEach((r, i) => {
+        if (r.atom && r.id !== cellBefore[i].id) at.push(pos);
+        pos += r.atom ? 1 : r.text.length;
+      });
+      assert.equal(at.length, repeats.length, html);
+      assert.deepEqual(idsBlanked(cellAfter, at), idsBlanked(cellBefore, at), html);
+    }
+    assert.equal(sanitizeHtml(after), after, "written canonical");
+    healed++;
+  }
+  assert.ok(healed > 10, "healed " + healed);
+
+  /* across scenes: the first in document order keeps it */
+  S.state = {
+    rows: [
+      { id: "r0", visualText: KEY("bsA") + " the gulls", audioText: "" },
+      { id: "r1", visualText: "intro<br>" + KEY("bsA") + " the gulls", audioText: "" }
+    ],
+    brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
+    productionTags: []
+  };
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  const ids = S.state.rows.map((r) => brollInCell(cellOf(r.visualText))[0].id);
+  assert.equal(ids[0], "bsA");
+  assert.ok(ids[1] && ids[1] !== "bsA");
+  assert.equal(S.state.rows[1].visualText, "intro<br>" + KEY(ids[1]) + " the gulls");
+  /* and in a cell the model does not write (a video card in it) */
+  const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
+  S.state.rows[1].visualText = sanitizeHtml(card + "<br>" + KEY("bsA") + " the gulls");
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.match(S.state.rows[1].visualText, /video-embed-card/);
+  const moved = brollInCell(cellOf(S.state.rows[1].visualText));
+  assert.deepEqual(moved.map((b) => b.name), ["the gulls"]);
+  assert.ok(moved[0].id && moved[0].id !== "bsA");
+});
+
+test("anchoring: an unanchored line never takes the record a keyed line further down holds", () => {
+  S.state = {
+    rows: [
+      { id: "r0", visualText: "B-roll: the gulls", audioText: "" },
+      { id: "r1", visualText: KEY("bsA") + " the gulls", audioText: "" }
+    ],
+    brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
+    productionTags: []
+  };
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  const id = brollInCell(cellOf(S.state.rows[0].visualText))[0].id;
+  assert.ok(id && id !== "bsA", "a new id, not the keyed line's: " + id);
+  assert.equal(S.state.rows[1].visualText, KEY("bsA") + " the gulls");
 });
 
 test("renaming: the line becomes the key and the new name, as the old rename wrote it", () => {
@@ -341,4 +442,31 @@ test("anchoring and renaming in a cell still holding a video card keep the card"
     assert.match(row.visualText, /video-embed-card/);
     assert.deepEqual(brollInCell(cellOf(row.visualText)).map((b) => [b.id, b.name]), [[read[0].id, "the gulls"], ["b9", "high drone"]]);
   });
+});
+
+test("a pasted key's record is a new shot seeded from its scene; a moved one keeps the record it had", () => {
+  const moved = { id: "bsMoved", name: "old name", desc: "", status: "shot", reshoot: false, notes: "got it", owner: "", audioRef: "", location: "", origin: "script" };
+  S.state = {
+    rows: [{
+      id: "r0",
+      visualText: KEY("bsNew") + " the gulls<br>over the pier<br>" + KEY("bsMoved") + " drone<br>mid-line " + KEY("bsLoose"),
+      audioText: "Waves on the " + tagSpan("location", "Pier", "pier")
+    }],
+    brollShots: [moved],
+    productionTags: []
+  };
+  recordPastedBroll("r0", cellOf(S.state.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"]);
+  /* the key mid-line is not a marker the list reads: no record for it */
+  assert.deepEqual(S.state.brollShots.map((r) => r.id), ["bsMoved", "bsNew"]);
+  assert.equal(S.state.brollShots[0], moved);
+  assert.equal(moved.status, "shot");
+  assert.equal(moved.notes, "got it");
+  const rec = S.state.brollShots[1];
+  assert.equal(rec.name, "the gulls");
+  assert.equal(rec.desc, "over the pier");
+  assert.equal(rec.status, "unshot");
+  assert.equal(rec.notes, "");
+  assert.equal(rec.origin, "script");
+  assert.equal(rec.audioRef, "Waves on the pier");
+  assert.equal(rec.location, "Pier");
 });

@@ -376,27 +376,231 @@ export function toPlainText(cell) {
   return out.replace(/\u00a0/g, " ").trim();
 }
 
-export function toMarkdown(cell, opts) {
-  var t = buildTree(cell, opts);
-  function md(node) {
-    var out = "";
-    node.kids.forEach(function (n) {
-      if (n.text !== undefined) { out += n.text; return; }
-      if (n.br) { out += "\n"; return; }
-      if (n.atom) { out += n.atom.text; return; }
-      var inner = md(n);
-      var k = n.el.k;
-      if (k === "b") out += "**" + inner + "**";
-      else if (k === "i") out += "*" + inner + "*";
-      else if (k === "u") out += "<u>" + inner + "</u>";
-      else if (k === "s") out += "~~" + inner + "~~";
-      else if (k === "hl") out += "<mark>" + inner + "</mark>";
-      else if (k === "href") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + n.el.v + ")";
-      else out += inner;
-    });
-    return out;
+/* ---- Markdown ----
+
+   The same notation htmlToMarkdown() (04-richtext.js) writes — **bold**,
+   *italic*, ~~strike~~, <u>underline</u>, <mark>highlight</mark>,
+   [text](href), a line break as "\n", tags and comments as their words —
+   but laid out for what a Markdown reader will make of it, not copied from
+   an element tree. HTML nests however it likes; Markdown's delimiters only
+   work where CommonMark's flanking rules let them open and close, and the
+   HTML walker wrote "**a **b" (a delimiter after a space closes nothing),
+   "**a****b**" (two bold elements side by side) and, over the model's one
+   fixed nesting, "*x ****y***" for italic "x " then bold-italic "y". So:
+
+   - Only the marks Markdown shows count: a tag or comment boundary never
+     splits emphasis.
+   - No mark starts or ends on white space (it moves outside, where it
+     looks the same; a delimiter next to a space does nothing, and an
+     element alone on a paragraph's first line starts an HTML block), and
+     no mark spans a blank line, which ends a Markdown paragraph.
+   - Where several marks open at once, the one that runs longest opens
+     first (outermost), so a mark is closed and reopened only where two
+     really cross; ties put the link, highlight and underline outside.
+   - A delimiter that still could not do its job where it stands (inside a
+     word next to punctuation, in one run of asterisks with a delimiter
+     closing there, or kept from its partner by the rule of 3) is written
+     as the HTML element instead — <strong>, <em>, <s> — which every
+     Markdown renderer that reads the <u> and <mark> this already writes
+     also reads (mdSettle).
+
+   Text is written as it is, as htmlToMarkdown() writes it: an asterisk
+   typed into a cell is not escaped. */
+
+var MD_MARKS = ["href", "hl", "u", "b", "i", "s"];      /* ties: outermost first */
+var MD_DELIM = { b: "**", i: "*", s: "~~" };
+var MD_HTML = { b: "strong", i: "em", s: "s", u: "u", hl: "mark" };
+var MD_WS = /[\s\u00a0]/;
+var MD_PUNCT = /[\p{P}\p{S}]/u;
+
+function mdChars(cell) {
+  var chars = [];
+  normalizeCell(cell).forEach(function (r) {
+    var m = {};
+    MD_MARKS.forEach(function (k) { if (r.marks[k]) m[k] = r.marks[k]; });
+    Array.from(r.text).forEach(function (ch) { chars.push({ ch: ch, m: Object.assign({}, m) }); });
+  });
+  var n = chars.length, i, j;
+  /* a blank line ends a paragraph, and everything open with it */
+  for (i = 0; i < n; i++) {
+    if (chars[i].ch !== "\n") continue;
+    j = i + 1;
+    while (j < n && (chars[j].ch === " " || chars[j].ch === "\t")) j++;
+    if (j < n && chars[j].ch === "\n") {
+      for (var k = i; k <= j; k++) chars[k].m = {};
+    }
   }
-  return md(t.root).replace(/\n{3,}/g, "\n\n").trim();
+  /* no mark opens or closes on white space */
+  MD_MARKS.forEach(function (key) {
+    for (i = 0; i < n;) {
+      if (!chars[i].m[key]) { i++; continue; }
+      j = i;
+      while (j < n && chars[j].m[key]) j++;
+      var a = i, z = j - 1;
+      while (a <= z && MD_WS.test(chars[a].ch)) delete chars[a++].m[key];
+      while (z >= a && MD_WS.test(chars[z].ch)) delete chars[z--].m[key];
+      i = j;
+    }
+  });
+  return chars;
+}
+
+function sameMdMarks(a, b) {
+  for (var i = 0; i < MD_MARKS.length; i++) if ((a[MD_MARKS[i]] || null) !== (b[MD_MARKS[i]] || null)) return false;
+  return true;
+}
+
+/* The cell as tokens, {open: key, v, pair}, {close: key, v, pair} and
+   {text}, the marks properly nested: where a mark ends under one that goes
+   on, the one that goes on is closed and opened again. */
+function mdTokens(cell) {
+  var pieces = [];
+  mdChars(cell).forEach(function (c) {
+    var last = pieces[pieces.length - 1];
+    if (last && sameMdMarks(last.m, c.m)) last.text += c.ch;
+    else pieces.push({ text: c.ch, m: c.m });
+  });
+  /* how far each mark runs on from each piece, in characters */
+  for (var p = pieces.length - 1; p >= 0; p--) {
+    var next = pieces[p + 1];
+    pieces[p].ext = {};
+    for (var q = 0; q < MD_MARKS.length; q++) {
+      var k = MD_MARKS[q];
+      if (!pieces[p].m[k]) continue;
+      pieces[p].ext[k] = pieces[p].text.length + (next && next.m[k] === pieces[p].m[k] ? next.ext[k] : 0);
+    }
+  }
+  var tokens = [], stack = [], pairs = 0;
+  pieces.forEach(function (piece) {
+    var cut = 0;
+    while (cut < stack.length && piece.m[stack[cut].k] === stack[cut].v) cut++;
+    while (stack.length > cut) tokens.push(mdClose(stack.pop()));
+    var open = MD_MARKS.filter(function (k) {
+      if (!piece.m[k]) return false;
+      for (var s = 0; s < stack.length; s++) if (stack[s].k === k) return false;
+      return true;
+    });
+    open.sort(function (a, b) { return (piece.ext[b] - piece.ext[a]) || (MD_MARKS.indexOf(a) - MD_MARKS.indexOf(b)); });
+    open.forEach(function (k) {
+      var pair = pairs++;
+      tokens.push({ open: k, v: piece.m[k], pair: pair });
+      stack.push({ k: k, v: piece.m[k], pair: pair });
+    });
+    tokens.push({ text: piece.text });
+  });
+  while (stack.length) tokens.push(mdClose(stack.pop()));
+  return tokens;
+}
+
+function mdClose(open) {
+  return { close: open.k, v: open.v, pair: open.pair };
+}
+
+function mdRender(tokens, asHtml) {
+  var linkDepth = 0;
+  return tokens.map(function (t) {
+    if (t.text !== undefined) return linkDepth ? t.text.replace(/([[\]()])/g, "\\$1") : t.text;
+    var k = t.open || t.close;
+    if (k === "href") {
+      if (t.open) { linkDepth++; return "["; }
+      linkDepth--;
+      return "](" + t.v + ")";
+    }
+    if (MD_DELIM[k] && !asHtml[t.pair]) return MD_DELIM[k];
+    return t.open ? "<" + MD_HTML[k] + ">" : "</" + MD_HTML[k] + ">";
+  });
+}
+
+/* Whether a delimiter run can open and close where it stands, by
+   CommonMark's flanking rules; null is the edge of the cell, which counts
+   as white space. */
+function mdFlank(prev, next) {
+  var wsPrev = prev === null || MD_WS.test(prev), wsNext = next === null || MD_WS.test(next);
+  var pPrev = !wsPrev && MD_PUNCT.test(prev), pNext = !wsNext && MD_PUNCT.test(next);
+  return { left: !wsNext && (!pNext || wsPrev || pPrev), right: !wsPrev && (!pPrev || wsNext || pNext) };
+}
+
+/* The delimiter runs of one rendering: consecutive delimiters of one
+   character with nothing between them. A line break is white space in the
+   plain export and "<br>" (punctuation) in a table cell, so a run has to
+   work both ways. */
+function mdRuns(tokens, strs, asHtml) {
+  var runOf = [];
+  for (var i = 0; i < tokens.length;) {
+    var k = tokens[i].open || tokens[i].close;
+    if (!MD_DELIM[k] || asHtml[tokens[i].pair]) { i++; continue; }
+    var ch = MD_DELIM[k].charAt(0), j = i, len = 0, closes = false;
+    while (j < tokens.length) {
+      var u = tokens[j], uk = u.open || u.close;
+      if (!MD_DELIM[uk] || asHtml[u.pair] || MD_DELIM[uk].charAt(0) !== ch) break;
+      len += MD_DELIM[uk].length;
+      if (u.close) closes = true;
+      j++;
+    }
+    /* every token writes something, so the neighbours are the tokens
+       either side */
+    var prev = i > 0 ? /[\s\S]$/u.exec(strs[i - 1])[0] : null;
+    var next = j < strs.length ? /^[\s\S]/u.exec(strs[j])[0] : null;
+    var asText = mdFlank(prev, next);
+    var asBr = mdFlank(prev === "\n" ? ">" : prev, next === "\n" ? "<" : next);
+    var run = {
+      ch: ch, len: len, closes: closes,
+      left: asText.left && asBr.left,
+      right: asText.right && asBr.right,
+      both: (asText.left && asText.right) || (asBr.left && asBr.right)
+    };
+    for (var c = i; c < j; c++) runOf[c] = run;
+    i = j;
+  }
+  return runOf;
+}
+
+/* CommonMark's "rule of 3": a run that can both open and close does not
+   pair with one whose length makes the sum a multiple of 3, unless both
+   lengths are. */
+function mdRuleOf3(a, b) {
+  return (a.both || b.both) && (a.len + b.len) % 3 === 0 && !(a.len % 3 === 0 && b.len % 3 === 0);
+}
+
+/* A delimiter that cannot do its job where it stands goes over to HTML:
+   one that cannot open or close there, an opener in the same run as a
+   closer, an opener that could also close and would pair with a delimiter
+   of the same character still open outside it, and a pair the rule of 3
+   keeps apart. Switching one changes the runs after it, so they are
+   judged again: one switch per round, the first in the cell, until none
+   is needed. Every switch is for good, so it always settles. */
+function mdSettle(tokens) {
+  var asHtml = {};
+  for (;;) {
+    var strs = mdRender(tokens, asHtml);
+    var runOf = mdRuns(tokens, strs, asHtml);
+    var openRun = {}, outer = { "*": [], "~": [] };
+    /* where it stands first, how it pairs second: a run that is about to
+       change must not get a pair switched for its sake */
+    var bad = null, badPairing = null;
+    for (var i = 0; i < tokens.length && bad === null; i++) {
+      var t = tokens[i], run = runOf[i];
+      if (!run) continue;
+      if (t.open) {
+        var out = outer[run.ch][outer[run.ch].length - 1];
+        if (!run.left || run.closes) bad = t.pair;
+        else if (badPairing === null && run.both && out && !mdRuleOf3(run, out)) badPairing = t.pair;
+        openRun[t.pair] = run;
+        outer[run.ch].push(run);
+      } else {
+        outer[run.ch].pop();
+        if (!run.right) bad = t.pair;
+        else if (badPairing === null && mdRuleOf3(openRun[t.pair], run)) badPairing = t.pair;
+      }
+    }
+    if (bad === null) bad = badPairing;
+    if (bad === null) return strs.join("");
+    asHtml[bad] = true;
+  }
+}
+
+export function toMarkdown(cell) {
+  return mdSettle(mdTokens(cell)).replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /* [{text, b, i, u, s, mark, href}], a line break as its own {text:"\n"}. */
@@ -877,7 +1081,11 @@ export function touchedCells(steps) {
    2. Tokens neither side changed keep their characters, and each
       character's marks are merged one mark at a time: whichever side
       changed a mark wins; both changed it differently -> theirs, reported
-      in markConflicts.
+      in markConflicts. Only a link or a tag can be set differently (one
+      per character); formatting is on or off, so it never counts. The
+      document merge (mergeTextField, 03-sync.js) treats a count above
+      zero as a conflict: this cell stays live, my whole cell goes on a
+      card.
    3. A stretch only one side changed takes that side. Both changed it the
       same way: that. Differently: theirs, and conflict is true — the
       caller keeps theirs live and puts my whole cell on a conflict card

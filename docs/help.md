@@ -27,10 +27,12 @@ like any other update.
   a comment until it is sent, a scene's status and picture, the production
   panel and the title — see [Undo and redo](#writing-and-planning).
 - **Merging works a word at a time.** When two people edit the same scene,
-  their changes combine unless both changed the same words; only then is it a
-  conflict.
+  their changes combine unless both changed the same words, or linked or
+  tagged the same words differently; only then is it a conflict.
 - **Find and replace** finds a phrase even when part of it is bold, a link or
   a tag.
+- **Markdown export** writes bold, italic and strikethrough that other
+  Markdown readers show correctly, even where they overlap.
 - **Pictures stay out of script text.** Pasting into a script cell keeps the
   words and leaves pictures out; a picture already in a cell moves into a
   comment on that scene. Cutting text moves its comment with it.
@@ -778,7 +780,10 @@ things appear:
 from. If someone saved while you were typing, Splitpage takes their version and
 merges yours into it — edits to different scenes merge silently, and if you
 both changed the *same* line, theirs stays in the script and yours is kept as a
-comment flagged **Unmerged edit**. Nothing is ever silently dropped.
+comment flagged **Unmerged edit**. The same goes for a word you both linked, or
+tagged, differently: their link or tag stays in the script, everything else
+you both changed is combined, and yours is kept on the comment. Nothing is ever
+silently dropped.
 
 If your sign-in expires while you are working, Splitpage notices, keeps your
 unsaved edits, and asks you to reload; signing back in reopens the document and
@@ -1022,9 +1027,9 @@ scene text, statuses, breakdown items, crew and b-roll. Nothing is written to
 the file and nothing changes on screen until you press **Merge them** again at
 the bottom of it — Cancel puts you back to the other choices, having changed
 nothing. Confirming keeps both sides' edits where they touched different
-things; where you both changed the same line, the file's version goes into the
-script and yours is kept as a comment flagged **Unmerged edit**, exactly as on
-a server. The merged script sits on screen, unsaved, until you press Save.
+things; where you both changed the same line, or linked or tagged the same
+word differently, the file's version goes into the script and yours is kept as
+a comment flagged **Unmerged edit**, exactly as on a server. The merged script sits on screen, unsaved, until you press Save.
 
 ### Sending it to someone who has nothing installed
 

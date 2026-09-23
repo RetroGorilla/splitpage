@@ -17,7 +17,7 @@ import {
   replaceWithBrollKey,
   toHtml
 } from "./04c-doc-model.js";
-import { render, syncFieldFromDom } from "./05-render.js";
+import { render } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { focusRowField } from "./06-rows.js";
 import {
@@ -253,13 +253,24 @@ function brollHtmlLineText(nodes) {
 }
 
 /* Visual cells only — the audio column is what gets read aloud, and a
-   shot list has no business in it. */
+   shot list has no business in it.
+
+   A key is one shot, so its id is one line's. A second key carrying an id
+   an earlier line (in document order) already has — a copy pasted by a
+   version of the app from before a paste gave it an id of its own
+   (05c-clipboard.js), or two copies of a document merged into one — is
+   read as the unanchored marker it has in effect become: matched by name,
+   never walking off with the first line's record, and given an id of its
+   own by the anchoring pass below. */
 function collectBrollFromRows(rows) {
   var out = [];
+  var seen = Object.create(null);
   (rows || []).forEach(function (row, rowIndex) {
     brollInField(row.visualText).forEach(function (found, ordinal) {
+      var id = found.id && !seen[found.id] ? found.id : "";
+      if (id) seen[id] = true;
       out.push({
-        id: found.id, name: found.name, desc: found.desc,
+        id: id, name: found.name, desc: found.desc,
         rowId: row.id, rowIndex: rowIndex, ordinal: ordinal
       });
     });
@@ -325,6 +336,31 @@ function newBrollRecord(fields) {
   return rec;
 }
 
+/* The records for the keys a paste or a drop has just put into a visual
+   cell (05c-clipboard.js), made inside the paste's own edit — for the
+   reason maybeCaptureBroll makes a typed key's there: made by the next
+   read of the list, a record would be an undo entry of its own, and the
+   first Ctrl+Z would take back a record nobody can see instead of the
+   paste. `cell` is the cell as the paste leaves it and `ids` the pasted
+   keys' ids; only a key that starts its line (a marker the list reads)
+   gets one, and only when no record has its id already — a cut moved
+   here keeps the record it had.
+
+   A new record is a new shot, seeded from the scene it landed in exactly
+   as a typed one is, and none of the copied line's own status, notes,
+   owner or location: see freshBrollIds (05c-clipboard.js). */
+export function recordPastedBroll(rowId, cell, ids) {
+  if (!S.state || !ids || !ids.length) return;
+  var row = brollRow(rowId);
+  brollInCell(cell).forEach(function (found) {
+    if (!found.id || ids.indexOf(found.id) === -1 || brollRecord(found.id)) return;
+    newBrollRecord({
+      id: found.id, name: found.name, desc: found.desc,
+      audioRef: brollSeedRef(row), location: brollSeedLocation(row)
+    });
+  });
+}
+
 function deleteBrollRecord(id) {
   var before = S.state.brollShots.length;
   S.state.brollShots = S.state.brollShots.filter(function (r) { return r.id !== id; });
@@ -341,29 +377,40 @@ function deleteBrollRecord(id) {
 /* The id-then-name question asked of one marker, pulled out so the
    anchoring pass below can ask it in exactly the same order and get
    exactly the same answer. `claimed` is the caller's running note of
-   which records are already spoken for; this only reads it. */
-function brollMatchRecord(found, claimed, byId) {
+   which records are already spoken for; this only reads it. `held` is
+   every id a key in the script carries (brollHeldIds): a name match never
+   takes a record some line further down still holds by its key, or that
+   line would find its own record gone and mint a second one with the
+   same id. */
+function brollMatchRecord(found, claimed, byId, held) {
   var rec = found.id ? byId[found.id] : null;
   if (rec && !claimed[rec.id]) return rec;
   var norm = normalizeTagName(found.name);
   for (var i = 0; i < S.state.brollShots.length && norm; i++) {
     var cand = S.state.brollShots[i];
-    if (claimed[cand.id]) continue;
+    if (claimed[cand.id] || held[cand.id]) continue;
     if (normalizeTagName(cand.name) !== norm) continue;
     return cand;
   }
   return null;
 }
 
+function brollHeldIds(live) {
+  var held = Object.create(null);
+  live.forEach(function (found) { if (found.id) held[found.id] = true; });
+  return held;
+}
+
 function brollEntries() {
   var live = collectBrollFromRows(S.state.rows);
   var claimed = Object.create(null);
   var byId = Object.create(null);
+  var held = brollHeldIds(live);
   S.state.brollShots.forEach(function (r) { byId[r.id] = r; });
   var out = [];
 
   live.forEach(function (found) {
-    var rec = brollMatchRecord(found, claimed, byId);
+    var rec = brollMatchRecord(found, claimed, byId, held);
     if (!rec) {
       var row = brollRow(found.rowId);
       rec = newBrollRecord({
@@ -474,7 +521,6 @@ export function maybeCaptureBroll(e, cellEl) {
      refuses to take it). The model has to read the same words there, or it
      is not used. */
   var id = makeId("bs"), keyText = m[1] + m[2];
-  var taken = false;
   editCell(cellEl, function (cell) {
     var from = domToPos(cellEl, node, 0), to = domToPos(cellEl, node, offset);
     if (from === null || to === null) return null;
@@ -488,38 +534,13 @@ export function maybeCaptureBroll(e, cellEl) {
        line's, filled in by that same read. */
     var row = brollRow(cellEl.getAttribute("data-id"));
     newBrollRecord({ id: id, audioRef: brollSeedRef(row), location: brollSeedLocation(row) });
-    taken = true;
     return { cell: r.cell, sel: { from: r.end, to: r.end } };
   });
-  if (!taken) {
-    /* the model could not take it (a picture or a video card in the cell,
-       see editCell): the key straight into the DOM, as before */
-    execInsertBrollKey(node, offset, id, keyText);
-    syncFieldFromDom(cellEl);
-  }
+  /* Not taken: the model did not read the same words there, and the line
+     stays plain words. Nothing goes into the DOM behind the model's back
+     (a cell holding a picture, which editCell declines, no longer exists:
+     design D7). */
   scheduleBrollRefresh();
-}
-
-function execInsertBrollKey(node, offset, id, keyText) {
-  var sel = window.getSelection();
-  var wrapRange = document.createRange();
-  wrapRange.setStart(node, 0);
-  wrapRange.setEnd(node, offset);
-  sel.removeAllRanges();
-  sel.addRange(wrapRange);
-  document.execCommand("insertHTML", false, brollKeyHtml(id, keyText) + " ");
-  /* The browser leaves the caret INSIDE the span it just inserted: put it
-     after. */
-  var afterSel = window.getSelection();
-  if (!afterSel.rangeCount) return;
-  var landed = afterSel.getRangeAt(0).startContainer;
-  var keyEl = (landed.nodeType === 3 ? landed.parentNode : landed).closest(".broll-key");
-  if (!keyEl) return;
-  var out = document.createRange();
-  out.setStartAfter(keyEl);
-  out.collapse(true);
-  afterSel.removeAllRanges();
-  afterSel.addRange(out);
 }
 
 /* contenteditable="false" for the same reason a tag is atomic: the caret
@@ -637,6 +658,26 @@ function brollWrapHtmlLine(body, line, id) {
   return true;
 }
 
+/* A line whose key repeats an id an earlier line holds: the same key, the
+   planned id. Nothing else on the line moves. */
+function brollRekeyLine(cell, key, id) {
+  var next = deleteRange(cell, key.pos, key.pos + 1);
+  return insertBrollKey(next, key.pos, id, key.text, {});
+}
+
+/* The same in a cell's HTML (holdsMedia): the line's first key — the one
+   the model read as its marker, since that key has no formatting round
+   it — gets the planned id. */
+function brollRekeyHtmlLine(line, id) {
+  for (var i = 0; i < line.nodes.length; i++) {
+    var n = line.nodes[i];
+    if (n.nodeType !== 1) continue;
+    var key = n.classList.contains("broll-key") ? n : n.querySelector(".broll-key");
+    if (key) { key.setAttribute("data-broll-id", id); return true; }
+  }
+  return false;
+}
+
 /* Which id each unanchored line should be given.
 
    brollEntries() has already decided which record every marker belongs
@@ -647,14 +688,18 @@ function brollWrapHtmlLine(body, line, id) {
    writes the answer into the script: a line already matched to a record
    takes that record's id, and only a line with no record of its own gets
    a new one. Keyed by row and ordinal, because that is what identifies a
-   line rather than a name. */
+   line rather than a name. A line whose key repeats an id an earlier line
+   holds is in the plan too (collectBrollFromRows reads it as unanchored),
+   and gets its key's id swapped for the one planned. */
 function brollAnchorPlan() {
   var claimed = Object.create(null);
   var byId = Object.create(null);
   S.state.brollShots.forEach(function (r) { byId[r.id] = r; });
   var plan = Object.create(null);
-  collectBrollFromRows(S.state.rows).forEach(function (found) {
-    var rec = brollMatchRecord(found, claimed, byId);
+  var live = collectBrollFromRows(S.state.rows);
+  var held = brollHeldIds(live);
+  live.forEach(function (found) {
+    var rec = brollMatchRecord(found, claimed, byId, held);
     if (rec) claimed[rec.id] = true;
     if (!found.id) plan[brollLineKey(found.rowId, found.ordinal)] = rec ? rec.id : makeId("bs");
   });
@@ -690,8 +735,8 @@ export function anchorBrollInRows(rows) {
     var html = row.visualText;
     var cell = cellOf(html);
     var todo = [];
+    /* in the plan: a line with no key, or one whose key repeats an id */
     brollMarkerLines(cell).forEach(function (found, ordinal) {
-      if (found.marker.key) return;
       var id = plan[brollLineKey(row.id, ordinal)];
       if (id) todo.push({ found: found, id: id });
     });
@@ -702,13 +747,17 @@ export function anchorBrollInRows(rows) {
       var htmlLines = brollHtmlLines(body);
       todo.forEach(function (t) {
         var line = htmlLines[t.found.index];
-        if (line && brollWrapHtmlLine(body, line, t.id)) n++;
+        if (!line) return;
+        if (t.found.marker.key ? brollRekeyHtmlLine(line, t.id) : brollWrapHtmlLine(body, line, t.id)) n++;
       });
       if (n) row.visualText = sanitizeHtml(body.innerHTML);
     } else {
       /* last line first, so every earlier line is still where it was */
       for (var i = todo.length - 1; i >= 0; i--) {
-        var next = brollAnchorLine(cell, todo[i].found.line, todo[i].id);
+        var t = todo[i];
+        var next = t.found.marker.key
+          ? brollRekeyLine(cell, t.found.marker.key, t.id)
+          : brollAnchorLine(cell, t.found.line, t.id);
         if (next) { cell = next; n++; }
       }
       if (n) row.visualText = toHtml(cell);

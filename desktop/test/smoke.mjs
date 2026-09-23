@@ -475,18 +475,34 @@ async function addMarkerRow(cdp, marker) {
   // empty-state placeholder child, which addRow() REPLACES rather than
   // supplements: '#rows > *'.length can stay unchanged across the very add
   // this is waiting for.
-  const before = await evalPage(cdp, "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length");
+  const countExpr = "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length";
+  /* waitForRows only proves SOMETHING is in #rows. Under load the opened
+     file can still be arriving — the rows on screen then are whatever was
+     there before it — and a count read then is one the file never gets
+     back to: the add lands, the count ends below `before + 1`, and the case
+     times out (CI, "file changed on disk while down"). So wait for the
+     count to hold still for a moment first. */
+  let before = await evalPage(cdp, countExpr);
+  for (let settle = Date.now() + 10000; Date.now() < settle;) {
+    await new Promise((r) => setTimeout(r, 600));
+    const now = await evalPage(cdp, countExpr);
+    if (now === before) break;
+    before = now;
+  }
   /* Clicked again, up to three times, while no row has appeared: under load
      a boot-time re-render can replace the button between the query and the
      click, and a click on the detached node adds nothing — which failed a
      full run twice (once with nothing of the case's own under test yet).
-     Only re-clicked while the count is still `before`, so it never adds two. */
-  const countExpr = "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length";
+     Only re-clicked while the count is still `before`, so it never adds two.
+     A count that FELL meanwhile is a document still arriving after all:
+     that is the count to beat. */
   for (let attempt = 0; attempt < 3; attempt++) {
     await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
     const added = await poll(cdp, countExpr + " > " + before, 4000).then(() => true, () => false);
     if (added) break;
-    if ((await evalPage(cdp, countExpr)) > before) break;
+    const now = await evalPage(cdp, countExpr);
+    if (now > before) break;
+    if (now < before) before = now;
   }
   await poll(cdp, countExpr + " > " + before, 2000);
   const expr = "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
