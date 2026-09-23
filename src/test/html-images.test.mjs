@@ -1,5 +1,6 @@
-/* Images inside HTML (#82 P6): comment and reply bodies and pasted cell
- * HTML name a picture by its SHA-256, as
+/* Images inside HTML (#82 P6): comment and reply bodies (and the script
+ * cells of a document from before #85 D7 moved their pictures into
+ * comments) name a picture by its SHA-256, as
  *   <img class="comment-img" data-blob="<sha>" data-w data-h data-mime>
  * with no stored src. The sanitiser (04-richtext.js) is the one door: it
  * interns an inline data: image into that form, keeps a valid data-blob,
@@ -137,7 +138,10 @@ test("an old document's inline comment, reply and cell images open content-addre
       replies: [{ id: "rp1", body: 'and <img src="' + dataUrl(c) + '">', author: "B" }] }]
   });
   assert.equal(JSON.stringify(doc).indexOf("data:image"), -1);
-  assert.equal(doc.rows[0].visualText, "pasted " + stored(sha(a), 81, 13, "image/png"));
+  /* a picture in a script cell moves into a comment on it (#85 D7) */
+  assert.equal(doc.rows[0].visualText, "pasted ");
+  assert.equal(doc.comments.length, 2);
+  assert.ok(doc.comments[1].body.endsWith("<br>" + stored(sha(a), 81, 13, "image/png")));
   assert.equal(doc.comments[0].body, "look " + stored(sha(b), 82, 13, "image/png"));
   assert.equal(doc.comments[0].replies[0].body, "and " + stored(sha(c), 83, 13, "image/png"));
   /* refsIn — what history, drafts, the stash and the hosted upload all
@@ -154,21 +158,30 @@ test("a file carries HTML images inline, and reading it back gives the stored fo
     comments: [{ id: "c1", rowId: "r1", field: "audioText", body: '<img src="' + dataUrl(b) + '">',
       replies: [{ id: "rp1", body: 'r <img src="' + dataUrl(c) + '">', author: "B" }] }]
   });
+  /* the cell's two pictures are two comments of their own now (#85 D7) */
+  assert.equal(doc.rows[0].visualText.indexOf("<img"), -1);
+  assert.equal(doc.comments.length, 3);
   const file = JSON.parse(JSON.stringify(doc));
   const missing = inlineStateImages(file);
   assert.deepEqual(missing, [ghost], "what nobody holds is reported and stays a ref");
-  assert.equal(file.rows[0].visualText, 'v <img src="' + dataUrlForSync(sha(a)) + '" class="comment-img"> ' + stored(ghost));
+  assert.ok(file.comments[1].body.endsWith('<br><img src="' + dataUrlForSync(sha(a)) + '" class="comment-img">'));
+  assert.ok(file.comments[2].body.endsWith("<br>" + stored(ghost)));
   assert.equal(file.comments[0].body, '<img src="' + dataUrlForSync(sha(b)) + '" class="comment-img">');
   assert.equal(file.comments[0].replies[0].body, 'r <img src="' + dataUrlForSync(sha(c)) + '" class="comment-img">');
   const back = migrateRows(file);
   assert.equal(back.rows[0].visualText, doc.rows[0].visualText);
-  assert.equal(back.comments[0].body, doc.comments[0].body);
+  assert.deepEqual(back.comments.map((x) => x.body), doc.comments.map((x) => x.body));
   assert.equal(back.comments[0].replies[0].body, doc.comments[0].replies[0].body);
   /* `only` inlines just the listed blobs — what the history job and the
      drafts do for the ones the store refused */
   const some = JSON.parse(JSON.stringify(doc));
   assert.deepEqual(inlineStateImages(some, [sha(b)]), []);
-  assert.equal(some.rows[0].visualText, doc.rows[0].visualText);
+  assert.equal(some.comments[1].body, doc.comments[1].body);
   assert.equal(some.comments[0].body, '<img src="' + dataUrlForSync(sha(b)) + '" class="comment-img">');
   assert.equal(some.comments[0].replies[0].body, doc.comments[0].replies[0].body);
+  /* a row cell an older copy of the app still wrote a picture into is
+     carried inline too: inlineStateImages reads cells as well */
+  const raw = { rows: [{ id: "r9", visualText: "v " + stored(sha(a), 91, 13, "image/png"), audioText: "" }], comments: [] };
+  assert.deepEqual(inlineStateImages(raw), []);
+  assert.equal(raw.rows[0].visualText, 'v <img src="' + dataUrlForSync(sha(a)) + '" class="comment-img">');
 });

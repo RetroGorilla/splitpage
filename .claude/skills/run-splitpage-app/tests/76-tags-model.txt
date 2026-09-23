@@ -1,0 +1,121 @@
+# Tags and b-roll keys made through the document model (#85, design §5).
+#
+# The typed routes to a tag — a closing shortcut, Tab on the completion
+# ghost, Tab on an untagged mention — and typing "B-roll:" used to put their
+# span in with execCommand("insertHTML"), which only the browser's own undo
+# stack knew about. They are edits of the cell's model now (editCell,
+# 05b-cell-edit.js): each is ONE undo entry of its own, after the typing's,
+# so one Ctrl+Z gives back exactly what was typed, and the caret lands just
+# after the new tag or key, outside it.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.cell = function (i, col) { return document.querySelectorAll('#rows .row')[i].querySelector('.' + col + '-cell .cell-editable'); }; window.st = function (i, col) { return F.state().rows[i][col + 'Text']; }; window.reg = function (name) { return F.state().productionTags.some(function (t) { return t.name === name; }); }; return true; })()
+
+# --- a typed [shortcut]: one entry, and Ctrl+Z gives back the typed text -----
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+press  a [zebra lamp
+sleep 200
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+press ]
+sleep 300
+expect cell(0, 'audio').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
+expect cell(0, 'audio').querySelector('.tag-anchor[data-tag-name="zebra lamp"]').getAttribute('data-tag-cat') == prop
+expect st(0, 'audio').indexOf('[zebra lamp]') === -1
+expect reg('zebra lamp')
+# the "]" joined the word it closed; the tag is the one entry after it
+expect U.sizes().undo === window.__n + 1
+# the caret is just after the tag, outside it — so typing carries on as plain text
+expect (function(){ var s = getSelection(); var n = s.anchorNode; var el = n.nodeType === 3 ? n.parentNode : n; return s.isCollapsed && !el.closest('.tag-anchor') && cell(0, 'audio').contains(n); })()
+press  on the desk
+sleep 300
+expect cell(0, 'audio').querySelector('.tag-anchor[data-tag-name="zebra lamp"]').textContent == zebra lamp
+expect /zebra lamp<\/span>(\s|&nbsp;)on the desk$/.test(st(0, 'audio'))
+# undo the typing after it, then the tag: the typed "[zebra lamp]" is back,
+# and the registry entry the tag made goes with it
+eval (function(){ var n = 0; while (U.sizes().undo > window.__n + 1 && n++ < 20) { var c = cell(0, 'audio'); c.dispatchEvent(new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true })); } return U.sizes().undo; })()
+expect st(0, 'audio').indexOf('on the desk') === -1
+expect cell(0, 'audio').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
+key ctrl KeyZ
+sleep 300
+expect cell(0, 'audio').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 0
+expect /a \[zebra lamp\]$/.test(st(0, 'audio').replace(/&nbsp;/g, ' '))
+expect !reg('zebra lamp')
+# and redo puts the tag back, with its registry entry
+key ctrl+shift KeyZ
+sleep 300
+expect cell(0, 'audio').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
+expect reg('zebra lamp')
+
+# --- Tab completion: one entry, Ctrl+Z gives back the half-typed name -------
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+press  then [zeb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+key Tab
+sleep 300
+expect cell(1, 'audio').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
+expect cell(1, 'audio').querySelector('.tag-anchor[data-tag-name="zebra lamp"]').textContent == zebra lamp
+expect !document.getElementById('tag-ghost').classList.contains('is-visible')
+expect U.sizes().undo === window.__n + 1
+expect (function(){ var s = getSelection(); var n = s.anchorNode; var el = n.nodeType === 3 ? n.parentNode : n; return s.isCollapsed && !el.closest('.tag-anchor') && cell(1, 'audio').contains(n); })()
+press  again
+sleep 300
+expect /zebra lamp<\/span>(\s|&nbsp;)again$/.test(st(1, 'audio'))
+eval (function(){ var n = 0; while (U.sizes().undo > window.__n + 1 && n++ < 20) { cell(1, 'audio').dispatchEvent(new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true })); } return U.sizes().undo; })()
+key ctrl KeyZ
+sleep 300
+expect cell(1, 'audio').querySelectorAll('.tag-anchor').length == 0
+expect /\[zeb$/.test(st(1, 'audio'))
+
+# --- an untagged mention taken with Tab: one entry, Ctrl+Z gives back the words
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+press  Beside the Zebra Lamp there.
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+key Tab
+sleep 500
+# the words keep the casing they were written in; the name is the registry's
+expect cell(1, 'visual').querySelector('.tag-anchor[data-tag-name="zebra lamp"]').textContent == Zebra Lamp
+expect U.sizes().undo === window.__n + 1
+key ctrl KeyZ
+sleep 300
+expect cell(1, 'visual').querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 0
+expect st(1, 'visual').indexOf('Beside the Zebra Lamp there.') !== -1
+
+# --- a b-roll key: typed, then undone ---------------------------------------
+caret #rows .row:nth-child(1) .visual-cell .cell-editable
+eval (function(){ var c = cell(0, 'visual'); var r = document.createRange(); r.selectNodeContents(c); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); return c.innerHTML; })()
+press B-roll
+sleep 200
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+press :
+sleep 300
+expect cell(0, 'visual').querySelectorAll('.broll-key').length == 1
+expect cell(0, 'visual').querySelector('.broll-key').textContent == B-roll:
+expect !!cell(0, 'visual').querySelector('.broll-key').getAttribute('data-broll-id')
+expect U.sizes().undo === window.__n + 1
+expect (function(){ var s = getSelection(); var n = s.anchorNode; var el = n.nodeType === 3 ? n.parentNode : n; return s.isCollapsed && !el.closest('.broll-key') && cell(0, 'visual').contains(n); })()
+key ctrl KeyZ
+sleep 300
+expect cell(0, 'visual').querySelectorAll('.broll-key').length == 0
+expect st(0, 'visual') == B-roll:
+# and redo puts the key back: what the undo's own repaint healed (the b-roll
+# list's record for the plain "B-roll:" line) is not an edit, so it neither
+# lands on the stack nor empties redo (12a-undo.js settleAfterApply)
+expect U.sizes().redo >= 1
+key ctrl+shift KeyZ
+sleep 300
+expect cell(0, 'visual').querySelectorAll('.broll-key').length == 1
+
+# typing after a key goes after it, not into it
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+key Enter
+press B-roll: gulls over the pier
+sleep 600
+expect cell(1, 'visual').querySelector('.broll-key').textContent == B-roll:
+expect /contenteditable="false">B-roll:<\/span>(\s|&nbsp;)gulls over the pier$/.test(st(1, 'visual'))
+quit

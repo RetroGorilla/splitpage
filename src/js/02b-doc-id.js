@@ -50,7 +50,7 @@ var PAGE_NONCE;
    re-exported at the top of this file (#76): the main process validates the
    same shape before it builds a history folder name out of an id. */
 
-function randomHexBytes(n) {
+export function randomHexBytes(n) {
   var bytes = new Uint8Array(n), i;
   var c = window.crypto || window.msCrypto;
   if (c && typeof c.getRandomValues === "function") {
