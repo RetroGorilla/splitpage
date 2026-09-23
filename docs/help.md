@@ -516,7 +516,11 @@ the tag and leaves the plain text:
 | `<wireless lav>` | Gear |
 
 **Cast** and **Music/SFX** have no shortcut (nothing else is safe to type
-in normal prose) — select the words and press **Tag**. Once a tag of any
+in normal prose) — select the words and press **Tag**. A tag shows in the
+script as a light tint with a coloured line under it, one colour per
+category: blue for props, violet for locations, plum for cast, ochre for
+VFX, slate for music and sound effects, olive for gear. The same colours
+mark each category in the Production and Gear panels. Once a tag of any
 category exists, typing a bracket and the first few letters offers to
 complete it: press **Tab** to accept. The completion keeps that tag's own
 category, so you never end up with the same thing filed twice.
@@ -691,8 +695,11 @@ lose your place in the script, so Splitpage keeps the scene you're actually
 in front of you rather than leaving the page static.
 
 **Comments.** Select some text and click **💬 Comment** to leave one; it
-stays anchored to that exact phrase. The card in the **Comments** panel
-*is* the "jump to this text" control — click anywhere on it (not a link, not
+stays anchored to that exact phrase, which gets an orange dotted underline
+(grey once the thread is resolved). That keeps it apart from the other
+marks a script can carry: a highlight is a yellow fill, a link a solid teal
+underline, a tag a tint in its category's colour. The card in the
+**Comments** panel *is* the "jump to this text" control — click anywhere on it (not a link, not
 while you're selecting its text to copy) and the script scrolls to the
 phrase, without closing the panel, so you can read the two side by side.
 **Sort** at the top of the panel defaults to **Script order** — a comment
