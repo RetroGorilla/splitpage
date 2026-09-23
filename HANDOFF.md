@@ -1500,7 +1500,8 @@ evaluation order via `_entry.js`):
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
-| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |
+| `20j-newtab.js` | the New Tab page, a start screen since #144: its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
+| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed |
 | `21-events.js` | all event wiring, `init()` |
 
 **Desktop files** (optional; the web app runs without them):
