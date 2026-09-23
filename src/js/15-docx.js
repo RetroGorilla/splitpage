@@ -3,6 +3,7 @@ import { escapeHtml, makeId } from "./02-state.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import { safeHref } from "./04-richtext.js";
+import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
@@ -498,7 +499,7 @@ function packDocx(body, links, media) {
    other export already is that. */
 
 export function narrationRows() {
-  return S.state.rows.filter(function (row) { return htmlToPlainText(row.audioText); });
+  return S.state.rows.filter(function (row) { return toPlainText(cellOf(row.audioText)); });
 }
 
 export function buildNarrationText() {
@@ -509,7 +510,7 @@ export function buildNarrationText() {
        round trip this format exists for, quietly broken by a scene whose
        narration happened to contain two line breaks in a row. Runs of
        blank lines collapse to a single break; the scene stays one scene. */
-    out.push(htmlToPlainText(row.audioText).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
+    out.push(toPlainText(cellOf(row.audioText)).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
   });
   return out.join("\n");
