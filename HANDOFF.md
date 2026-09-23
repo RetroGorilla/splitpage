@@ -970,8 +970,13 @@ server `DATA_DIR/blobs`), and `02c-blobs.js` is the page's registry of them.
   has the bytes (memory, then the backend, then the server); one nobody has
   is marked `data-blob-state="missing"`, alt "Image unavailable". The mark
   lives on the element only, so a re-render (the comments list rebuilds on
-  every change) makes a fresh `<img>` and asks again, a server included —
-  by design since P5: a picture that turns up later simply appears. Anything
+  every change) makes a fresh `<img>` and asks again — the memory and the
+  backend, but not the server: the registry remembers the server's "not
+  here" per sha for five minutes (`REMOTE_MISS_MS`), and forgets it
+  whenever new server state arrives (`forgetRemoteMisses()`, called when a
+  document is opened or resumed, on a pull and on a 409's copy), since that
+  is when a collaborator's upload can have made it fetchable. So a picture
+  that turns up later still appears, without a request per re-render. Anything
   that reads the DOM back into state without sanitising
   (`syncFieldFromDom`) passes it through `storedHtmlFromDom()`, which strips
   those attributes again.

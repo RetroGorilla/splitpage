@@ -679,9 +679,10 @@ including in an older copy of Splitpage. If a picture can't be found (a
 version restored after its picture was lost, say), it shows as
 **Image unavailable** and the rest of the script is untouched; a save then
 tells you how many images it could not include. Splitpage looks for a
-missing picture again whenever it redraws the spot — including asking the
-server again, on a hosted script, each time the comments list is redrawn —
-so one that turns up later simply appears.
+missing picture again whenever it redraws the spot, so one that turns up
+later simply appears. On a hosted script it asks the server again only
+when someone's newer version of the script arrives, or after a few
+minutes — not every time the screen redraws.
 
 **Reordering.** Drag a scene by the grip beside its number (the dots to the
 left — they brighten as you move over the row). The ↑ / ↓ buttons still work

@@ -94,6 +94,15 @@ var blobLoading = {};
    order and must not reach up into the hosted client (#66). */
 var blobRemote = null;
 var blobFetching = {};
+/* sha → when the remote source last came back without it. A picture nobody
+   has would otherwise be asked for again on every re-render — the comments
+   list rebuilds on every change — each time a request to the server that
+   answers the same 404. Remembered for REMOTE_MISS_MS, and forgotten
+   sooner whenever new server state arrives (forgetRemoteMisses), because
+   that is exactly when a collaborator's upload can have made it
+   fetchable. Only the remote is skipped: the local backend is still read. */
+var blobRemoteMissAt = {};
+var REMOTE_MISS_MS = 5 * 60 * 1000;
 
 var blobBackend = null;         /* the backend in use, once chosen */
 var blobBackendPromise = null;  /* the choice, while it is being made */
@@ -681,13 +690,32 @@ export function ensureBytes(shas, opts) {
 export function setRemoteSource(fn) {
   blobRemote = typeof fn === "function" ? fn : null;
   blobFetching = {};
+  blobRemoteMissAt = {};
+}
+
+/* New state came from the server (a document opened or resumed, a pull, a
+   409's copy): whatever it names may be there now, so ask again. */
+export function forgetRemoteMisses() {
+  blobRemoteMissAt = {};
+}
+
+function remoteMissFresh(sha) {
+  var at = blobRemoteMissAt[sha];
+  if (!at) return false;
+  if (Date.now() - at < REMOTE_MISS_MS) return true;
+  delete blobRemoteMissAt[sha];
+  return false;
 }
 
 function fetchRemoteBlob(sha) {
   if (blobFetching[sha]) return blobFetching[sha];
+  if (remoteMissFresh(sha)) return Promise.resolve();
   var source = blobRemote;
   var p = Promise.resolve().then(function () { return source ? source(sha) : null; }).then(function (bytes) {
-    if (blobEntries[sha] || !bytes) return;
+    if (blobEntries[sha]) return;
+    /* Recorded only for the source this call asked, and only when it is
+       still the installed one: a source swapped mid-request starts clean. */
+    if (!bytes) { if (source && source === blobRemote) blobRemoteMissAt[sha] = Date.now(); return; }
     var rec = intern(bytes);
     if (rec && rec.sha256 !== sha && window.console) {
       console.warn("Image store: the server's blob " + sha + " failed its hash check");
@@ -950,6 +978,14 @@ export function __init() {
     },
     /* forgets every blob held in memory (NOT the backend's), so a test can
        prove ensureBytes() really reads the backend */
+    remoteMisses: function () { return Object.keys(blobRemoteMissAt); },
+    forgetRemoteMisses: forgetRemoteMisses,
+    /* ages every remembered miss past REMOTE_MISS_MS, so a suite can prove
+       the memory expires without waiting five minutes */
+    ageRemoteMisses: function () {
+      Object.keys(blobRemoteMissAt).forEach(function (sha) { blobRemoteMissAt[sha] -= REMOTE_MISS_MS; });
+      return true;
+    },
     forgetMemory: function () {
       revokeObjectUrls();
       blobEntries = {};

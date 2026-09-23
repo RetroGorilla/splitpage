@@ -30,6 +30,9 @@
 #   * the blob fetch helper re-hashes what the server sends and refuses a
 #     body that is not the image asked for, and the registry's ensureBytes()
 #     reaches the server through it once its own store has nothing;
+#   * a picture nobody has is asked for once, not on every re-render: the
+#     server's "not here" is remembered for five minutes, and forgotten as
+#     soon as new server state (a pull) arrives;
 #   * 426 client-too-old is "reload this page", once, with no retry loop.
 # Every `eval` is one physical line.
 
@@ -164,6 +167,37 @@ expect __seq().split(' | ').filter(function(x){ return x.indexOf('GET ') !== 0; 
 expect JSON.stringify(__srv.calls.filter(function(c){ return c.path === 'api/blobs/missing'; })[0].shas) === JSON.stringify([MSHA])
 expect (function(){ var b = __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-b/comments'; })[0].body.comment.body; return b.indexOf('data-blob="' + MSHA + '"') !== -1 && b.indexOf('data:') === -1 && b.indexOf('src=') === -1; })()
 expect H.base().comments.some(function(c){ return c.body.indexOf('COMPOSEDREVIEW') !== -1; })
+
+# ---- 6b. a picture nobody has is asked for once, not on every re-render
+# The registry remembers the server's "not here" for five minutes, and
+# forgets it the moment new server state arrives — a pull, an open, a 409's
+# copy — since that is when a collaborator's upload can have made it
+# fetchable. Q is a real PNG the page does not hold and the server does not
+# have yet; Y is another one nobody ever has.
+eval (function(){ __srv.role = 'edit'; H.setSession({ docId: 'doc-b', rev: 20, blobs: true }); var mk = function(color){ var c = document.createElement('canvas'); c.width = 13; c.height = 7; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 13, 7); return c.toDataURL('image/png'); }; window.__qUrl = mk('#963'); window.Q = B.internDataUrl(__qUrl).sha256; window.Y = B.internDataUrl(mk('#369')).sha256; __name[Q] = 'Q'; __name[Y] = 'Y'; B.forgetMemory(); B.forgetRemoteMisses(); __srv.calls = []; window.__gets = function(sha){ return __srv.calls.filter(function(c){ return c.m === 'GET' && c.path === 'api/blobs/' + sha; }).length; }; return !B.has(Q) && !B.has(Y); })()
+expect (async function(){ var m = await B.ensureBytes([Q]); return JSON.stringify(m) === JSON.stringify([Q]); })()
+expect __gets(Q) === 1 && B.remoteMisses().indexOf(Q) !== -1
+# asked again — what every re-render does: remembered, no second request
+expect (async function(){ var m = await B.ensureBytes([Q]); return JSON.stringify(m) === JSON.stringify([Q]); })()
+expect __gets(Q) === 1
+# a fresh <img data-blob> for it goes straight to the placeholder, still no request
+eval (function(){ var i = document.createElement('img'); i.id = 'qimg'; i.setAttribute('data-blob', Q); document.body.appendChild(i); return true; })()
+wait document.getElementById('qimg').getAttribute('data-blob-state') === 'missing'
+expect __gets(Q) === 1
+# new server state forgets it: a collaborator's save uploaded Q, and the
+# presence beat says the document moved — the pull that follows clears the
+# memory, and the next ask fetches Q
+eval (function(){ __srv.serve[Q] = __b64bytes(__qUrl); __srv.blobs[Q] = true; var inner = window.fetch; window.__fetchBefore6b = inner; window.fetch = async function(url, opts){ var u = String(url); var m = (opts && opts.method) || 'GET'; if (m === 'GET' && /api\/docs\/doc-b$/.test(u)) { var h = (opts && opts.headers) || {}; var call = { m: 'GET', path: 'api/docs/doc-b', origin: u.slice(0, u.indexOf('api/')), client: h['x-splitpage-client'] || null, status: 200 }; __srv.all.push(call); __srv.calls.push(call); return __ans(200, { id: 'doc-b', rev: 21, updatedAt: new Date().toISOString(), updatedBy: 'Other', state: JSON.parse(JSON.stringify(H.base())) }); } return inner(url, opts); }; H.noteRev({ docId: 'doc-b', rev: 21 }); return true; })()
+wait B.remoteMisses().length === 0
+expect __srv.calls.some(function(c){ return c.m === 'GET' && c.path === 'api/docs/doc-b'; })
+expect (async function(){ var m = await B.ensureBytes([Q]); return m.length === 0 && B.has(Q); })()
+expect __gets(Q) === 2
+# and the memory expires by itself: Y missed, aged past five minutes, asked again
+expect (async function(){ var m = await B.ensureBytes([Y]); return JSON.stringify(m) === JSON.stringify([Y]); })()
+expect (async function(){ await B.ensureBytes([Y]); return __gets(Y) === 1; })()
+eval (function(){ return B.ageRemoteMisses(); })()
+expect (async function(){ await B.ensureBytes([Y]); return __gets(Y) === 2; })()
+eval (function(){ window.fetch = window.__fetchBefore6b; var i = document.getElementById('qimg'); if (i) i.remove(); return true; })()
 
 # ---- 7. an older server on another origin: its preflight refuses the header
 eval (async function(){ __srv.role = 'edit'; H.pointTabAt('http://old.example/'); __srv.corsOld = 'http://old.example/'; __srv.health = { ok: true, version: 'old' }; __srv.calls = []; await H.detect(); return JSON.stringify(__srv.calls.map(function(c){ return c.path + ':' + c.client + ':' + c.status; })); })()
