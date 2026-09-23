@@ -2,19 +2,36 @@ import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
+import { cellOf, projection, replaceText, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
+import { registryTagHooks } from "./07-production-tags.js";
+import { BROLL_MARKER_RE } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 
 /* ================= find & replace =================
 
-   Matching and replacing both happen in TEXT NODES ONLY, never on the HTML
-   string. Running a regex over the markup would happily rewrite the inside
-   of an attribute — a tag's stored name, a link's href, a comment anchor's
-   id — and corrupt the document in ways that only show up much later.
-   Walking text nodes means formatting, links, tags and anchors all survive
-   a replace untouched. */
+   Matching happens on a cell's TEXT as the document model reads it
+   (cellOf, 04c-doc-model.js, #85) — its projection, the plain text with a
+   b-roll key as one character — never on the HTML string. Running a regex
+   over the markup would happily rewrite the inside of an attribute — a
+   tag's stored name, a link's href, a comment anchor's id — and corrupt the
+   document in ways that only show up much later. Replacing is the model's
+   replaceText(), so formatting, links, tags and anchors all survive a
+   replace, and the cell is written back as toHtml() of the result.
+
+   Because the text is the projection rather than one text node at a time,
+   a match may run across a formatting boundary ("wid<strong>get</strong>")
+   or into and out of a comment. It may NOT touch a tagged word or a b-roll
+   key: those are atomic everywhere else in the app (you cannot type inside
+   one — see the contenteditable="false" note), and rewriting a tag's words
+   here would leave the visible text saying one thing while the tag still
+   tracked another. Renaming a tag is the Production panel's job, which
+   changes both halves together. Words inside a comment ARE replaceable:
+   the comment card compares its quote with the anchor's live text and says
+   "Text changed — was …" (10-comments.js), so the panel never shows a
+   quote as current when it is not. */
 
 export var findOpen = false;
 S.findMatchCase = false;
@@ -46,9 +63,9 @@ function escapeRegExpLiteral(s) {
    transformed copy ever exists), so match indices are always correct
    positions in `text`, and a literal pattern's match is always exactly
    needle.length characters long. */
-function findAllMatches(text, needle) {
+function findAllMatches(text, needle, matchCase) {
   if (!needle) return [];
-  var re = new RegExp(escapeRegExpLiteral(needle), S.findMatchCase ? "g" : "gi");
+  var re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
   var out = [], m;
   while ((m = re.exec(text))) {
     out.push({ start: m.index, end: m.index + m[0].length });
@@ -57,58 +74,178 @@ function findAllMatches(text, needle) {
   return out;
 }
 
-/* Text a search is allowed to touch. Anything inside a .tag-anchor is
-   skipped: those spans are atomic everywhere else in the app (you cannot
-   type inside one — see the contenteditable="false" note), and rewriting
-   their words here would leave the visible text saying one thing while the
-   tag still tracked another. Renaming a tag is the Production panel's job,
-   which changes both halves together.
+/* A cell cut into what a search may and may not touch, each piece with its
+   offset into the cell's projection: `free` is every stretch of text with
+   no tag on it, running across formatting and comments; `tagged` is each
+   tag's own words, one piece per tag. A b-roll key belongs to neither and
+   ends the stretch it sits in, so no match can reach across it. */
+function searchablePieces(cell) {
+  var free = [], tagged = [];
+  var pos = 0, cur = null, curTag = null;
+  cell.forEach(function (r) {
+    if (r.atom) { cur = null; curTag = null; pos += 1; return; }
+    var tag = r.marks.tag;
+    if (tag) {
+      cur = null;
+      if (curTag && curTag.tag === tag) curTag.text += r.text;
+      else tagged.push(curTag = { tag: tag, start: pos, text: r.text });
+    } else {
+      curTag = null;
+      if (cur) cur.text += r.text;
+      else free.push(cur = { start: pos, text: r.text });
+    }
+    pos += r.text.length;
+  });
+  return { free: free, tagged: tagged };
+}
 
-   .cmt-anchor gets the same exclusion, for the same reason: it isn't
-   atomic (a comment's quoted phrase stays plain editable text, unlike a
-   tag), but a comment's cached quotedText is only ever set once, at
-   creation — there is no equivalent "rename this quote" step that keeps
-   it in sync afterward. A global replace rewriting the words inside an
-   anchor used to leave the panel showing a quote that no longer exists
-   anywhere in the script, with the comment never flagged orphaned since
-   the span itself survives untouched. */
-function editableTextNodes(root) {
-  var doc = root.ownerDocument || document;
-  var out = [], walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  var n;
-  while ((n = walker.nextNode())) {
-    var p = n.parentNode;
-    if (p && p.closest && (p.closest(".tag-anchor") || p.closest(".cmt-anchor"))) continue;
-    out.push(n);
-  }
+/* Every match in a cell, as {from, to} offsets into its projection, in
+   order. */
+export function findInCell(cell, needle, matchCase) {
+  var out = [];
+  if (!needle) return out;
+  searchablePieces(cell).free.forEach(function (p) {
+    findAllMatches(p.text, needle, matchCase).forEach(function (m) {
+      out.push({ from: p.start + m.start, to: p.start + m.end });
+    });
+  });
   return out;
 }
 
-/* Counted per text node, the same way navigating and replacing walk them,
-   so the number shown is always the number you can actually reach. (A
-   match split across a formatting boundary — "wid<strong>get</strong>" —
-   is therefore not found, consistently, rather than counted but
-   unreachable.) */
-function countMatchesInHtml(html, needle) {
+/* How many occurrences sit inside tags and so cannot be replaced — used
+   only to explain the difference rather than leave it mysterious. */
+export function countInTags(cell, needle, matchCase) {
   if (!needle) return 0;
-  var body = inertBody(html || "");
-  var count = 0;
-  editableTextNodes(body).forEach(function (node) {
-    count += findAllMatches(node.nodeValue || "", needle).length;
-  });
-  return count;
+  return searchablePieces(cell).tagged.reduce(function (n, p) {
+    return n + findAllMatches(p.text, needle, matchCase).length;
+  }, 0);
 }
 
-/* How many occurrences are sitting inside tags and so cannot be replaced —
-   used only to explain the difference rather than leave it mysterious. */
-function countMatchesInsideTags(html, needle) {
-  if (!needle) return 0;
-  var body = inertBody(html || "");
-  var count = 0;
-  Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-    count += findAllMatches(el.textContent || "", needle).length;
-  });
-  return count;
+/* ---- the projection in a DOM ----
+
+   Where each character of a cell's projection lives in a DOM holding the
+   cell's HTML — the live cell on screen, or an inert parse of the stored
+   string. This walks the DOM the way fromHtml() reads it, so the offsets
+   find works in land on the characters they were found in:
+     - text is one character per character, except that a run of line
+       feeds / carriage returns is ONE (it shows as one space), and a
+       zero-width space (ensureTrailingCaretSpot's caret spot), the other C0
+       controls and U+FFFC are none;
+     - <br> is one ("\n"), and so is the end of a <div>/<p> (the sanitiser
+       turns each into a line break, and a blank one into just that);
+     - a b-roll key is one, the atom;
+     - a picture or a video card is none (design D7).
+   Each entry is {text, sc, so, ec, eo}: the character, and where it
+   starts and ends as DOM boundary points. */
+export function domProjection(root) {
+  var out = [];
+  function at(node, index) { return { sc: node, so: index, ec: node, eo: index + 1 }; }
+  function push(ch, pos) { pos.text = ch; out.push(pos); }
+  (function walk(parent) {
+    for (var i = 0; i < parent.childNodes.length; i++) {
+      var child = parent.childNodes[i];
+      if (child.nodeType === 3) {
+        var v = child.nodeValue || "";
+        for (var k = 0; k < v.length; k++) {
+          var c = v[k];
+          if (c === "\n" || c === "\r") {
+            var e = k + 1;
+            while (e < v.length && (v[e] === "\n" || v[e] === "\r")) e++;
+            push(" ", { sc: child, so: k, ec: child, eo: e });
+            k = e - 1;
+          } else if (!DROPPED_CHAR_RE.test(c)) {
+            push(c, at(child, k));
+          }
+        }
+        continue;
+      }
+      if (child.nodeType !== 1) continue;
+      var tag = child.tagName;
+      var cls = child.classList;
+      if (tag === "BR") { push("\n", at(parent, i)); continue; }
+      if (tag === "IMG") continue;
+      if (tag === "A" && cls && cls.contains("video-embed-card")) continue;
+      if (tag === "SPAN" && cls && cls.contains("broll-key") &&
+          BROLL_MARKER_RE.test((child.textContent || "").replace(DROPPED_CHARS_RE, "").trim())) {
+        push(OBJ, at(parent, i));
+        continue;
+      }
+      if (tag === "DIV" || tag === "P") {
+        var blank = child.childNodes.length === 1 && child.firstChild.nodeType === 1 && child.firstChild.tagName === "BR";
+        if (!blank) walk(child);
+        push("\n", { sc: parent, so: i + 1, ec: parent, eo: i + 1 });
+        continue;
+      }
+      walk(child);
+    }
+  })(root);
+  return out;
+}
+
+/* eslint-disable-next-line no-control-regex -- the characters cleanText() (04c-doc-model.js) drops. */
+var DROPPED_CHAR_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/;
+/* eslint-disable-next-line no-control-regex -- the same set, for a whole string. */
+var DROPPED_CHARS_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g;
+var OBJ = "\uFFFC";
+
+/* A DOM Range over projection offsets [from, to) of a cell whose DOM is
+   `root`, or null when the DOM does not hold the text `expect` says it
+   should (the cell on screen is not the stored one) — a range over the
+   wrong words is worse than none. */
+export function domRangeFor(root, from, to, expect) {
+  var chars = domProjection(root);
+  var text = chars.map(function (c) { return c.text; }).join("");
+  if (text !== expect || from >= to || to > chars.length) return null;
+  var range = (root.ownerDocument || document).createRange();
+  range.setStart(chars[from].sc, chars[from].so);
+  range.setEnd(chars[to - 1].ec, chars[to - 1].eo);
+  return range;
+}
+
+/* Replace the nth match in one field (nth === -1 means every one),
+   returning the new HTML and how many were changed. `hooks` is
+   registryTagHooks() of the registry, for writing tags back.
+
+   The replacement takes the marks of the first character it replaces
+   (replaceText), so a word replaced in bold stays bold and one inside a
+   comment stays inside it. The cell is then written as toHtml(): one
+   canonical nesting, so a replaced cell's HTML can differ from before in
+   how its elements nest — never in what they say.
+
+   The one exception is a cell holding a pasted picture or video card
+   (reachable only by pasting HTML): the model has no place for either
+   (design D7) and writing it back would silently delete them, so that
+   cell is edited in place instead — the same offsets, mapped onto an inert
+   parse of its HTML, the replacement typed where the first replaced
+   character was — and sanitised as before. */
+export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) {
+  var cell = cellOf(html);
+  var matches = findInCell(cell, needle, matchCase);
+  if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
+  if (!matches.length) return { html: html, changed: 0 };
+  var text = replacement == null ? "" : String(replacement);
+  /* last first, so every earlier offset still points where it did */
+  var todo = matches.slice().reverse();
+  if (/<img[\s>]|video-embed-card/i.test(html || "")) {
+    var body = inertBody(html);
+    var expect = projection(cell);
+    for (var i = 0; i < todo.length; i++) {
+      var range = domRangeFor(body, todo[i].from, todo[i].to, expect);
+      if (!range) return { html: html, changed: 0 };
+      range.deleteContents();
+      if (text) range.insertNode(body.ownerDocument.createTextNode(text));
+      expect = expect.slice(0, todo[i].from) + text + expect.slice(todo[i].to);
+    }
+    /* a match that ended inside an element leaves that element empty (the
+       range keeps what it only partly covered); the model writes no empty
+       elements, so neither does this */
+    Array.prototype.forEach.call(body.querySelectorAll("strong, em, u, s, mark, a, span.cmt-anchor"), function (el) {
+      if (el.parentNode && !el.textContent && !el.querySelector("img, br")) el.parentNode.removeChild(el);
+    });
+    return { html: sanitizeHtml(body.innerHTML), changed: matches.length };
+  }
+  todo.forEach(function (m) { cell = replaceText(cell, m.from, m.to, text); });
+  return { html: toHtml(cell, hooks), changed: matches.length };
 }
 
 export function refreshFindMatches(keepIndex) {
@@ -117,7 +254,7 @@ export function refreshFindMatches(keepIndex) {
   if (needle && S.state) {
     S.state.rows.forEach(function (row) {
       ["visualText", "audioText"].forEach(function (field) {
-        var n = countMatchesInHtml(row[field], needle);
+        var n = findInCell(cellOf(row[field]), needle, S.findMatchCase).length;
         for (var i = 0; i < n; i++) findMatches.push({ rowId: row.id, field: field, nth: i });
       });
     });
@@ -140,35 +277,30 @@ function updateFindCount() {
 
 /* Select the match in the live DOM rather than marking it up: the browser's
    own selection highlight costs no document changes, and it leaves the
-   caret exactly where Replace needs to act. */
+   caret exactly where Replace needs to act. The match's offsets are found
+   in the stored cell and mapped onto the cell on screen, which is that
+   same HTML rendered (plus, perhaps, a zero-width caret spot the mapping
+   skips); a selection may start in one element and end in another. */
 function revealFindMatch() {
   if (findIndex < 0 || !findMatches[findIndex]) return;
   var m = findMatches[findIndex];
   revealRow(m.rowId);
   var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
   if (!cell) return;
-  var needle = findNeedle();
-  var nodes = editableTextNodes(cell);
-  var seen = 0;
-  for (var i = 0; i < nodes.length; i++) {
-    var raw = nodes[i].nodeValue || "";
-    var matches = findAllMatches(raw, needle);
-    for (var j = 0; j < matches.length; j++) {
-      if (seen === m.nth) {
-        var range = document.createRange();
-        range.setStart(nodes[i], matches[j].start);
-        range.setEnd(nodes[i], matches[j].end);
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        cell.focus();
-        var row = cell.closest(".row");
-        if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
-      }
-      seen++;
-    }
+  var idx = findRowIndex(m.rowId);
+  if (idx === -1) return;
+  var model = cellOf(S.state.rows[idx][m.field]);
+  var hit = findInCell(model, findNeedle(), S.findMatchCase)[m.nth];
+  if (!hit) return;
+  var range = domRangeFor(cell, hit.from, hit.to, projection(model));
+  if (range) {
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
+  cell.focus();
+  var row = cell.closest(".row");
+  if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 export function stepFind(dir) {
@@ -176,38 +308,6 @@ export function stepFind(dir) {
   findIndex = (findIndex + dir + findMatches.length) % findMatches.length;
   updateFindCount();
   revealFindMatch();
-}
-
-/* Replace the nth occurrence in one field (nth === -1 means every one),
-   returning the new HTML and how many were changed. */
-function replaceInHtml(html, needle, replacement, nth) {
-  var body = inertBody(html || "");
-  var nodes = editableTextNodes(body);
-  var seen = 0, changed = 0;
-  for (var i = 0; i < nodes.length; i++) {
-    var node = nodes[i];
-    var raw = node.nodeValue || "";
-    var matches = findAllMatches(raw, needle);
-    if (!matches.length) continue;
-    var out = "", cursor = 0, nodeChanged = false;
-    for (var j = 0; j < matches.length; j++) {
-      var mm = matches[j];
-      var take = (nth === -1 || seen === nth);
-      if (take) {
-        out += raw.slice(cursor, mm.start) + replacement;
-        cursor = mm.end;
-        changed++;
-        nodeChanged = true;
-      }
-      seen++;
-      if (nth !== -1 && changed) break;
-    }
-    if (nodeChanged) {
-      node.nodeValue = out + raw.slice(cursor);
-      if (nth !== -1) break;
-    }
-  }
-  return { html: body.innerHTML, changed: changed };
 }
 
 export function replaceCurrent() {
@@ -218,9 +318,10 @@ export function replaceCurrent() {
   var idx = findRowIndex(m.rowId);
   if (idx === -1) return;
   var replacement = document.getElementById("replace-input").value || "";
-  var res = replaceInHtml(S.state.rows[idx][m.field], needle, replacement, m.nth);
+  var res = replaceInHtml(S.state.rows[idx][m.field], needle, replacement, m.nth, S.findMatchCase,
+    registryTagHooks(S.state.productionTags));
   if (!res.changed) return;
-  S.state.rows[idx][m.field] = sanitizeHtml(res.html);
+  S.state.rows[idx][m.field] = res.html;
   stampRow(S.state.rows[idx]);
   markDirty();
   render();
@@ -234,19 +335,20 @@ export function replaceAll() {
   var needle = findNeedle();
   if (!needle) return;
   var replacement = document.getElementById("replace-input").value || "";
+  var hooks = registryTagHooks(S.state.productionTags);
   var total = 0;
   S.state.rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
-      var res = replaceInHtml(row[field], needle, replacement, -1);
+      var res = replaceInHtml(row[field], needle, replacement, -1, S.findMatchCase, hooks);
       if (!res.changed) return;
       total += res.changed;
-      row[field] = sanitizeHtml(res.html);
+      row[field] = res.html;
       stampRow(row);
     });
   });
   var inTags = S.state.rows.reduce(function (n, row) {
-    return n + countMatchesInsideTags(row.visualText, needle) +
-               countMatchesInsideTags(row.audioText, needle);
+    return n + countInTags(cellOf(row.visualText), needle, S.findMatchCase) +
+               countInTags(cellOf(row.audioText), needle, S.findMatchCase);
   }, 0);
   var tagNote = inTags
     ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production"

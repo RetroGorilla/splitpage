@@ -762,7 +762,16 @@ export function markdownExportImages() {
    images/ folder (buildFileData, 18-local-files.js, bundles both into a
    zip when there is at least one) rather than pasted inline as base64 —
    the embedded 2 MB a phone photo becomes made this file unreadable as
-   text and enormous for what it is. */
+   text and enormous for what it is.
+
+   The cells stay on htmlToMarkdown() rather than the document model's
+   toMarkdown() (#85 step 3 moved the other exports). Markdown's emphasis
+   follows the nesting of the elements, and the model writes one fixed
+   nesting (bold outside italic) where the stored cell keeps whatever the
+   editor made: italic "x " then bold-italic "y" is "*x **y***" from the
+   stored <em>x <strong>y</strong></em>, but "*x ****y***" — whose first
+   "*" no longer closes — from the model. Until the model picks its
+   nesting per stretch, the HTML here gives the better file. */
 export function toMarkdownDoc() {
   var lines = [];
   lines.push("# " + (S.state.title || "Untitled Script"));

@@ -46,8 +46,8 @@ import {
   publishToServer,
   serverSessionExpired
 } from "./13-hosted.js";
+import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
-  htmlToPlainText,
   markdownExportImages,
   saveDoc,
   slugify,
@@ -232,8 +232,8 @@ export async function buildFileData(kind, baseName, opts) {
 function htmlToPlainScript() {
   var lines = [S.state.title || "Untitled Script", ""];
   S.state.rows.forEach(function (row, i) {
-    lines.push("[" + pad2(i + 1) + "] VISUAL: " + htmlToPlainText(row.visualText));
-    lines.push("      AUDIO: " + htmlToPlainText(row.audioText));
+    lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(cellOf(row.visualText)));
+    lines.push("      AUDIO: " + toPlainText(cellOf(row.audioText)));
     lines.push("");
   });
 
