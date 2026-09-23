@@ -763,40 +763,136 @@ async function historyCallRejects(cdp, method, args) {
   try { await historyCall(cdp, method, args); return false; } catch { return true; }
 }
 
-// HISTORY-STORAGE's on-disk layout, read directly (never through IPC) so a
-// case can see what main actually wrote — the same reason readDraftDirs
-// reads DRAFT-STORE's files straight off disk instead of asking the app.
-function historyBucketDirOnDisk(userDataDir, bucket) {
-  return bucket === "_older"
-    ? path.join(userDataDir, "history", "older")
-    : path.join(userDataDir, "history", "docs", "d-" + bucket);
+// HISTORY-STORAGE's on-disk layout (#83: desktop/history-fs-backend.js),
+// read directly (never through IPC) so a case can see what main actually
+// wrote — the same reason readDraftDirs reads DRAFT-STORE's files straight
+// off disk instead of asking the app. history/index.json holds every
+// bucket; bodies live content-addressed under history/bodies/sha256/<aa>/.
+function historyDirOnDisk(userDataDir) { return path.join(userDataDir, "history"); }
+function historyShaHex(text) { return crypto.createHash("sha256").update(text, "utf8").digest("hex"); }
+function historyBodyPathOnDisk(userDataDir, sha) {
+  return path.join(historyDirOnDisk(userDataDir), "bodies", "sha256", sha.slice(0, 2), sha);
 }
-function historyIndexPathOnDisk(userDataDir, bucket) {
-  return path.join(historyBucketDirOnDisk(userDataDir, bucket), "index.json");
-}
-function historySnapPathOnDisk(userDataDir, bucket, snapId) {
-  return path.join(historyBucketDirOnDisk(userDataDir, bucket), "s-" + snapId + ".snap");
-}
-function readHistoryIndexOnDisk(userDataDir, bucket) {
-  try { return JSON.parse(fs.readFileSync(historyIndexPathOnDisk(userDataDir, bucket), "utf8")); }
+function readHistoryIndexOnDisk(userDataDir, name) {
+  try { return JSON.parse(fs.readFileSync(path.join(historyDirOnDisk(userDataDir), name || "index.json"), "utf8")); }
   catch { return null; }
 }
-// HISTORY-STORAGE's .snap format: "splitpage-snapshot 1", the meta JSON
-// (no document id in it — the folder is the document), then the state JSON
-// verbatim. Hand-written so a case can pre-seed a bucket before any launch
-// (caseHistoryCorruptIndex, caseHistoryNewerFormatReadOnly).
-function historySnapText(meta, stateJson) {
-  return "splitpage-snapshot 1\n" + JSON.stringify(meta) + "\n" + stateJson;
-}
-function writeHistorySnapOnDisk(userDataDir, bucket, meta, stateJson) {
-  var dir = historyBucketDirOnDisk(userDataDir, bucket);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(historySnapPathOnDisk(userDataDir, bucket, meta.id), historySnapText(meta, stateJson), "utf8");
+function historyBucketOnDisk(userDataDir, bucket) {
+  const idx = readHistoryIndexOnDisk(userDataDir);
+  return idx && idx.buckets ? idx.buckets[bucket] || null : null;
 }
 function writeHistoryFormatOnDisk(userDataDir, version) {
-  var dir = path.join(userDataDir, "history");
+  var dir = historyDirOnDisk(userDataDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "FORMAT"), String(version) + "\n", "utf8");
+}
+// A v2 folder written by hand, before any launch: every body under its sha,
+// and one index generation (`file`, default index.json) naming them. buckets
+// = {bucket: [{meta, body}]}, oldest first. Returns the index document.
+function seedHistoryV2OnDisk(userDataDir, buckets, opts) {
+  const o = opts || {};
+  const dir = historyDirOnDisk(userDataDir);
+  fs.mkdirSync(path.join(dir, "bodies", "sha256"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "bodies", "FORMAT"), "1\n", "utf8");
+  const doc = { formatVersion: 2, buckets: {}, trash: [] };
+  for (const bucket of Object.keys(buckets)) {
+    const snapshots = buckets[bucket].map(({ meta, body }) => {
+      const sha = historyShaHex(body);
+      const file = historyBodyPathOnDisk(userDataDir, sha);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, body, "utf8");
+      return Object.assign({}, meta, { sizeBytes: Buffer.byteLength(body, "utf8"), sha });
+    });
+    doc.buckets[bucket] = { title: snapshots[snapshots.length - 1].title || "", lastOpenedAt: Date.now(), snapshots };
+  }
+  fs.writeFileSync(path.join(dir, o.file || "index.json"), JSON.stringify(doc), "utf8");
+  writeHistoryFormatOnDisk(userDataDir, o.format || "2");
+  return doc;
+}
+
+// The v1 layout (desktop/main.js §8b before #83), for the migration cases:
+// per-bucket folders docs/d-<docId>/ and older/, each with an index.json
+// and one s-<id>.snap per snapshot — "splitpage-snapshot 1", the meta JSON
+// (no document id: the folder was the document), then the state JSON
+// verbatim. The same writer desktop/test/history-v1-migrate.test.mjs uses.
+function historyV1SnapText(meta, stateJson) {
+  return "splitpage-snapshot 1\n" + JSON.stringify(meta) + "\n" + stateJson;
+}
+function writeHistoryV1Snap(folder, meta, stateJson) {
+  const m = Object.assign({}, meta, { sizeBytes: Buffer.byteLength(stateJson, "utf8") });
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, "s-" + m.id + ".snap"), historyV1SnapText(m, stateJson), "utf8");
+  return m;
+}
+/* A real v1 tree with what years of v1 crashes leave behind: a healthy
+   document, one whose index.json is torn, one with an orphan .snap no index
+   lists, an index entry whose .snap is gone and a .snap truncated in its
+   body, and an Older bucket that was never stamped (expiresAt 0). Returns
+   the ids a correct migration must list, newest first, and every body. */
+function seedHistoryV1Tree(userDataDir) {
+  const root = historyDirOnDisk(userDataDir);
+  writeHistoryFormatOnDisk(userDataDir, 1);
+  const docA = randDocId(), docB = randDocId(), docC = randDocId();
+  const body = (tag) => JSON.stringify({ rows: [{ id: "r1", text: "ünïcödé " + tag }], title: tag });
+  const bodies = {};
+  const snap = (folder, id, atMs, extra) => {
+    bodies[id] = body(id);
+    return writeHistoryV1Snap(folder, historyMeta(Object.assign({ id, atMs, label: "L " + id, title: "" }, extra)), bodies[id]);
+  };
+  const v1Index = (folder, fields, listed) => fs.writeFileSync(path.join(folder, "index.json"), JSON.stringify(Object.assign(
+    { formatVersion: 1 }, fields, { bytes: listed.reduce((n, m) => n + m.sizeBytes, 0), snapshots: listed })), "utf8");
+
+  const a = path.join(root, "docs", "d-" + docA);
+  const aList = [snap(a, "a01", 1000, { title: "Alpha 1" }), snap(a, "a02", 2000, { title: "Alpha 2" }), snap(a, "a03", 3000, { title: "Alpha" })];
+  v1Index(a, { docId: docA, title: "Alpha", lastOpenedAt: 5000 }, aList);
+
+  const b = path.join(root, "docs", "d-" + docB);
+  snap(b, "b01", 1500);
+  snap(b, "b02", 2500, { title: "Beta" });
+  fs.writeFileSync(path.join(b, "index.json"), "{\"formatVersion\":1,\"docId\":\"" + docB + "\",\"tit", "utf8");
+
+  const c = path.join(root, "docs", "d-" + docC);
+  const c01 = snap(c, "c01", 100, { title: "Gamma" });
+  snap(c, "c02", 200, { title: "Gamma 2" });                        // orphan: no index lists it
+  const c03 = Object.assign(historyMeta({ id: "c03", atMs: 300 }), { sizeBytes: 10 });   // listed, no .snap
+  v1Index(c, { docId: docC, title: "Gamma", lastOpenedAt: 9000 }, [c01, c03]);
+  const c04 = historyMeta({ id: "c04", atMs: 400, sizeBytes: Buffer.byteLength(body("c04"), "utf8") });
+  fs.writeFileSync(path.join(c, "s-c04.snap"), historyV1SnapText(c04, body("c04")).slice(0, -7), "utf8");   // truncated
+
+  const older = path.join(root, "older");
+  const oList = [snap(older, "o01", 10, { kind: "legacy", legacyId: "k1" }), snap(older, "o02", 20, { kind: "legacy", legacyId: "k2" })];
+  v1Index(older, { migratedAt: 0, expiresAt: 0 }, oList);
+
+  return {
+    docA, docB, docC, bodies,
+    expect: { [docA]: ["a03", "a02", "a01"], [docB]: ["b02", "b01"], [docC]: ["c02", "c01"], older: ["o02", "o01"] }
+  };
+}
+// relpath -> sha256 of every file under `dir` (missing dir -> {}), to prove
+// the v1 files reached v1-backup/ unchanged.
+function historyTreeDigest(dir) {
+  const out = {};
+  (function walk(d) {
+    let names;
+    try { names = fs.readdirSync(d); } catch { return; }
+    for (const name of names) {
+      const p = path.join(d, name);
+      if (fs.statSync(p).isDirectory()) walk(p);
+      else out[path.relative(dir, p).split(path.sep).join("/")] = crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
+    }
+  })(dir);
+  return out;
+}
+function historyV1Digest(root) {
+  return JSON.stringify({ docs: historyTreeDigest(path.join(root, "docs")), older: historyTreeDigest(path.join(root, "older")) });
+}
+// Lists the ids of one bucket once the v1 migration has finished (history-
+// list answers {migrating:true} at once while it runs).
+async function historyListWhenMigrated(cdp, docId, timeoutMs) {
+  return pollNode(async () => {
+    const list = await historyCall(cdp, "historyList", [docId]);
+    return list && !list.migrating ? list : null;
+  }, timeoutMs || 20000);
 }
 
 // Second-instance send, scoped to one userDataDir — same technique
@@ -1159,7 +1255,7 @@ async function teardown(app, tag, opts) {
     /* The POSIX half of expectExitCode: a process that died from a real
        signal has no exit code at all, so "how did it die" has to be asked
        the other way round there. Same strength of assertion, named in the
-       platform's own terms — see caseHistoryCrashAfterBody's call site. */
+       platform's own terms — see caseHistoryKillAfterBody's call site. */
     if (opts.expectSignal !== undefined) {
       record(tag + ": killed by " + opts.expectSignal,
         app.proc.signalCode === opts.expectSignal,
@@ -3389,8 +3485,8 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
 
 /* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch/import-older/usage
    against the real main process, the on-disk layout HISTORY-STORAGE
-   documents, and that all of it survives a relaunch (not just this
-   process's in-memory historyIndexes Map). */
+   documents (#83: one index.json, content-addressed bodies), and that all of
+   it survives a relaunch (not just this process's cached index). */
 async function caseHistoryRoundTripAndRelaunch(target) {
   const tag = target.name + " history: put/list/get/copy/touch/import-older/usage + relaunch";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3405,8 +3501,9 @@ async function caseHistoryRoundTripAndRelaunch(target) {
     const bodyA = JSON.stringify({ rows: [{ id: "r1" }], title: "First" });
     const metaA = historyMeta({ label: "First", title: "First" });
     const putA = await historyCall(cdp, "historyPut", [docId, metaA, bodyA]);
-    record(tag + ": first put succeeds, not a duplicate",
-      putA && putA.ok === true && putA.duplicate === false, JSON.stringify(putA));
+    record(tag + ": first put succeeds, not a duplicate, sizeBytes is the body's UTF-8 length",
+      putA && putA.ok === true && putA.duplicate === false && putA.sizeBytes === Buffer.byteLength(bodyA, "utf8") &&
+      putA.evicted === 0 && putA.overCap === false, JSON.stringify(putA));
 
     const putADup = await historyCall(cdp, "historyPut", [docId, metaA, bodyA]);
     record(tag + ": putting the same snapshot id again is idempotent (duplicate:true)",
@@ -3423,10 +3520,12 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       list1.entries[0].id === metaB.id && list1.entries[1].id === metaA.id, JSON.stringify(list1));
     record(tag + ": a put stamped at/before the bucket's newest is bumped strictly after it (historyStampAfter)",
       list1.entries[0].atMs > list1.entries[1].atMs, JSON.stringify(list1.entries.map((e) => e.atMs)));
+    record(tag + ": listed metas carry no document id and no sha (HISTORY-IPC's shape)",
+      list1.entries.every((e) => !("docId" in e) && !("sha" in e)), JSON.stringify(list1.entries[0]));
 
     const got = await historyCall(cdp, "historyGet", [{ docId }, metaA.id]);
     record(tag + ": get returns the body verbatim",
-      !!got && got.stateJson === bodyA && got.meta.id === metaA.id, JSON.stringify(got && got.meta));
+      !!got && got.stateJson === bodyA && got.meta.id === metaA.id && !("docId" in got.meta), JSON.stringify(got && got.meta));
     const missingGet = await historyCall(cdp, "historyGet", [{ docId }, randSnapId()]);
     record(tag + ": get of an unknown snapshot id returns null", missingGet === null, JSON.stringify(missingGet));
 
@@ -3441,13 +3540,13 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       Array.isArray(list2.entries) && list2.entries.length === 2, JSON.stringify(list2));
 
     await historyCall(cdp, "historyTouch", [docId, "Touched Title"]);
-    const idxAfterTouch = readHistoryIndexOnDisk(userDataDir, docId);
-    record(tag + ": touch updates the on-disk index title",
-      !!idxAfterTouch && idxAfterTouch.title === "Touched Title", JSON.stringify(idxAfterTouch));
+    const recAfterTouch = historyBucketOnDisk(userDataDir, docId);
+    record(tag + ": touch updates the bucket's title in index.json",
+      !!recAfterTouch && recAfterTouch.title === "Touched Title", JSON.stringify(recAfterTouch && recAfterTouch.title));
     const untouchedDocId = randDocId();
     await historyCall(cdp, "historyTouch", [untouchedDocId, "Should not exist"]);
     record(tag + ": touch never creates a record for a document with no history",
-      readHistoryIndexOnDisk(userDataDir, untouchedDocId) === null, "");
+      historyBucketOnDisk(userDataDir, untouchedDocId) === null, "");
 
     const olderEntries = [
       { meta: historyMeta({ id: randSnapId("l"), label: "legacy1" }), stateJson: JSON.stringify({ rows: [] }) },
@@ -3462,25 +3561,34 @@ async function caseHistoryRoundTripAndRelaunch(target) {
 
     const usage = await historyCall(cdp, "historyUsage", []);
     record(tag + ": usage reports non-zero totalBytes, docCount>=2, not read-only",
-      usage && usage.totalBytes > 0 && usage.docCount >= 2 && usage.readOnly === false, JSON.stringify(usage));
+      usage && usage.totalBytes > 0 && usage.docCount >= 2 && usage.readOnly === false &&
+      usage.capBytes === 500 * 1024 * 1024 && usage.overCap === false, JSON.stringify(usage));
+    const docs = await historyCall(cdp, "historyListDocs", []);
+    const docRow = Array.isArray(docs) ? docs.find((d) => d.docId === docId) : null;
+    record(tag + ": list-docs names both documents with title and lastOpenedAt, not Older",
+      !!docRow && docRow.title === "Touched Title" && typeof docRow.lastOpenedAt === "number" &&
+      docs.some((d) => d.docId === docId2) && !docs.some((d) => d.docId === "_older"), JSON.stringify(docs));
 
-    // ---- on-disk layout (HISTORY-STORAGE) ----
-    const formatText = fs.readFileSync(path.join(userDataDir, "history", "FORMAT"), "utf8").trim();
-    record(tag + ": FORMAT is \"1\" on disk", formatText === "1", formatText);
-    const idxOnDisk = readHistoryIndexOnDisk(userDataDir, docId);
-    record(tag + ": index.json has the documented shape, snapshots oldest first",
-      !!idxOnDisk && idxOnDisk.formatVersion === 1 && idxOnDisk.docId === docId &&
-      Array.isArray(idxOnDisk.snapshots) && idxOnDisk.snapshots.length === 2 &&
-      idxOnDisk.snapshots[0].id === metaA.id && idxOnDisk.snapshots[1].id === metaB.id,
+    // ---- on-disk layout (HISTORY-STORAGE, #83) ----
+    const formatText = fs.readFileSync(path.join(historyDirOnDisk(userDataDir), "FORMAT"), "utf8").trim();
+    record(tag + ": FORMAT is \"2\" on disk", formatText === "2", formatText);
+    const idxOnDisk = readHistoryIndexOnDisk(userDataDir);
+    const recA = idxOnDisk && idxOnDisk.buckets && idxOnDisk.buckets[docId];
+    const shaA = historyShaHex(bodyA), shaB = historyShaHex(bodyB);
+    record(tag + ": index.json has the documented shape, snapshots oldest first, each naming its body's sha",
+      !!recA && idxOnDisk.formatVersion === 2 && Array.isArray(idxOnDisk.trash) &&
+      recA.snapshots.length === 2 && recA.snapshots[0].id === metaA.id && recA.snapshots[1].id === metaB.id &&
+      recA.snapshots[0].sha === shaA && recA.snapshots[1].sha === shaB && !("docId" in recA.snapshots[0]),
       JSON.stringify(idxOnDisk));
-    const snapText = fs.readFileSync(historySnapPathOnDisk(userDataDir, docId, metaA.id), "utf8");
-    const nl1 = snapText.indexOf("\n"), nl2 = snapText.indexOf("\n", nl1 + 1);
-    record(tag + ": a .snap file is the 3-line magic/meta/body format with the body verbatim",
-      snapText.slice(0, nl1) === "splitpage-snapshot 1" && snapText.slice(nl2 + 1) === bodyA, snapText.slice(0, nl1));
-    let metaOnDisk = null;
-    try { metaOnDisk = JSON.parse(snapText.slice(nl1 + 1, nl2)); } catch { /* recorded below */ }
-    record(tag + ": the .snap meta line carries no document id (the folder is the document)",
-      !!metaOnDisk && !("docId" in metaOnDisk), JSON.stringify(metaOnDisk));
+    let bodyOnDisk = null;
+    try { bodyOnDisk = fs.readFileSync(historyBodyPathOnDisk(userDataDir, shaA), "utf8"); } catch { /* recorded below */ }
+    record(tag + ": the body is stored verbatim under bodies/sha256/<aa>/<sha>", bodyOnDisk === bodyA, String(bodyOnDisk).slice(0, 80));
+    const recCopy = idxOnDisk && idxOnDisk.buckets && idxOnDisk.buckets[docId2];
+    record(tag + ": a copy is index-only — its entries name the same bodies",
+      !!recCopy && JSON.stringify(recCopy.snapshots.map((s) => s.sha).sort()) === JSON.stringify([shaA, shaB].sort()),
+      JSON.stringify(recCopy));
+    record(tag + ": the index is kept in two generations (index.prev.json beside index.json)",
+      !!readHistoryIndexOnDisk(userDataDir, "index.prev.json"), "");
 
     // ---- relaunch: everything above must be ON DISK, not just this process's memory ----
     await teardown(app, tag + " (pre-relaunch)");
@@ -3494,6 +3602,10 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       const gotAfterRelaunch = await historyCall(app2.cdp, "historyGet", [{ docId }, metaA.id]);
       record(tag + ": after a relaunch, get still returns the body verbatim",
         !!gotAfterRelaunch && gotAfterRelaunch.stateJson === bodyA, "");
+      const olderAfterRelaunch = await historyCall(app2.cdp, "historyList", [null]);
+      record(tag + ": after a relaunch, the Older bucket and its expiry are unchanged",
+        olderAfterRelaunch.older.length === 2 && olderAfterRelaunch.olderExpiresAt === listOlder.olderExpiresAt,
+        JSON.stringify(olderAfterRelaunch));
     } finally {
       await teardown(app2, tag + " (post-relaunch)");
       rmrf(app2.userDataDir);
@@ -3502,6 +3614,25 @@ async function caseHistoryRoundTripAndRelaunch(target) {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
+}
+
+// The file's bytes once they have stopped changing for quietMs (null if it
+// never appears), giving up after timeoutMs with the last bytes seen.
+async function waitForQuietFile(file, quietMs, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null, since = Date.now();
+  while (Date.now() < deadline) {
+    let cur = null;
+    try { cur = fs.readFileSync(file); } catch { /* not written yet */ }
+    if (cur && last && cur.equals(last)) {
+      if (Date.now() - since >= quietMs) return cur;
+    } else {
+      last = cur;
+      since = Date.now();
+    }
+    await sleep(100);
+  }
+  return last;
 }
 
 /* caseHistoryIdValidation. Every bad docId/snapshot id HISTORY-IPC's
@@ -3526,8 +3657,13 @@ async function caseHistoryIdValidation(target) {
     const getGoodRejects = await historyCallRejects(cdp, "historyGet", [{ docId: goodDocId }, goodMeta.id]);
     record(tag + ": positive control — get of that real snapshot does not reject", getGoodRejects === false, "");
 
+    /* The page's own document-state report and the debounced bounds write
+       legitimately rewrite desktop-state.json after boot (persistShellState),
+       and on a loaded machine that write can land after a first read. So the
+       "before" is taken once the file has stopped changing — the comparison
+       below stays byte-for-byte. */
     const stateFile = path.join(userDataDir, "desktop-state.json");
-    const stateBefore = fs.existsSync(stateFile) ? fs.readFileSync(stateFile) : null;
+    const stateBefore = await waitForQuietFile(stateFile, 1000, 10000);
     const topLevelBefore = fs.readdirSync(userDataDir).sort();
 
     const badDocIds = ["../x", "..", "a/b", "a\\b", "CON", goodDocId.toUpperCase(),
@@ -3561,7 +3697,7 @@ async function caseHistoryIdValidation(target) {
       JSON.stringify(topLevelBefore) + " vs " + JSON.stringify(topLevelAfter));
 
     const historyEntries = [];
-    const historyRoot = path.join(userDataDir, "history");
+    const historyRoot = historyDirOnDisk(userDataDir);
     if (fs.existsSync(historyRoot)) {
       (function walk(dir) {
         for (const name of fs.readdirSync(dir)) {
@@ -3571,28 +3707,36 @@ async function caseHistoryIdValidation(target) {
         }
       })(historyRoot);
     }
-    const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && e !== "FORMAT");
+    const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && path.basename(e) !== "FORMAT");
     record(tag + ": history/ contains nothing named after a rejected id", suspicious.length === 0, JSON.stringify(historyEntries));
+    const idx = readHistoryIndexOnDisk(userDataDir);
+    record(tag + ": index.json names the control document and no bucket that is not a document id",
+      !!idx && !!idx.buckets[goodDocId] && Object.keys(idx.buckets).every((b) => /^d[0-9a-f]{32}$/.test(b)),
+      JSON.stringify(idx && Object.keys(idx.buckets)));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
 
-/* caseHistoryCrashAfterBody. SPLITPAGE_TEST_HISTORY_FAULT=exit-after-body
-   kills the process between the body write and the index write — the exact
-   state a power cut mid-snapshot leaves (HISTORY-IPC / overrides §2b). A
-   relaunch's fsck must adopt the orphan. */
-async function caseHistoryCrashAfterBody(target) {
-  const tag = target.name + " history: exit-after-body fault — relaunch adopts the orphan";
+/* caseHistoryKillAfterBody. SPLITPAGE_TEST_HISTORY_FAULT=exit-after-body
+   SIGKILLs main between a snapshot's body and the index write that would
+   name it — a power cut mid-snapshot. The accepted loss (#83) is exactly
+   that newest snapshot: the relaunch shows the prior generation, with no
+   error, and the same snapshot can be stored again. */
+async function caseHistoryKillAfterBody(target) {
+  const tag = target.name + " history: exit-after-body fault — relaunch shows the prior generation, no error";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
-  const meta = historyMeta({ label: "orphan" });
-  const body = JSON.stringify({ rows: [{ id: "r1" }], title: "Orphan" });
+  const metaA = historyMeta({ label: "prior", atMs: 1000 });
+  const bodyA = JSON.stringify({ rows: [{ id: "r1" }], title: "Prior" });
+  seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: metaA, body: bodyA }] });
+  const meta = historyMeta({ label: "lost" });
+  const body = JSON.stringify({ rows: [{ id: "r1" }, { id: "r2" }], title: "Lost" });
   let app = null;
   try {
     app = await launchApp(target, {
-      label: "history-crash-after-body", userDataDir,
+      label: "history-kill-after-body", userDataDir,
       env: { SPLITPAGE_TEST_HISTORY_FAULT: "exit-after-body" }
     });
     await waitForRows(app.cdp, 20000);
@@ -3617,23 +3761,30 @@ async function caseHistoryCrashAfterBody(target) {
     await teardown(app, tag + " (post-crash)", IS_WINDOWS ? { expectExitCode: 1 } : { expectSignal: "SIGKILL" });
     app = null;
 
-    const orphanPath = historySnapPathOnDisk(userDataDir, docId, meta.id);
-    record(tag + ": the snapshot body reached disk before the crash", fs.existsSync(orphanPath), orphanPath);
-    const idxBeforeRelaunch = readHistoryIndexOnDisk(userDataDir, docId);
-    const orphanIndexed = !!idxBeforeRelaunch && Array.isArray(idxBeforeRelaunch.snapshots) &&
-      idxBeforeRelaunch.snapshots.some((s) => s.id === meta.id);
-    record(tag + ": …but the index does not name it yet (crashed before that write)", !orphanIndexed, JSON.stringify(idxBeforeRelaunch));
+    const sha = historyShaHex(body);
+    record(tag + ": the snapshot body reached disk before the kill", fs.existsSync(historyBodyPathOnDisk(userDataDir, sha)), sha);
+    const recBefore = historyBucketOnDisk(userDataDir, docId);
+    record(tag + ": …but index.json is still the prior generation (A only, the new one unnamed)",
+      !!recBefore && recBefore.snapshots.length === 1 && recBefore.snapshots[0].id === metaA.id, JSON.stringify(recBefore));
 
-    // Relaunch WITHOUT the fault env — otherwise the next put would crash again.
-    const app2 = await launchApp(target, { label: "history-crash-after-body-relaunch", userDataDir });
+    // Relaunch WITHOUT the fault env — otherwise the next put would kill it again.
+    const app2 = await launchApp(target, { label: "history-kill-after-body-relaunch", userDataDir });
     try {
       await waitForRows(app2.cdp, 20000);
-      const list = await historyCall(app2.cdp, "historyList", [docId]);
-      record(tag + ": relaunch's fsck adopts the orphan — it is listed",
-        Array.isArray(list.entries) && list.entries.some((e) => e.id === meta.id), JSON.stringify(list));
-      const idxAfterRelaunch = readHistoryIndexOnDisk(userDataDir, docId);
-      record(tag + ": the on-disk index is rebuilt to name the adopted snapshot",
-        !!idxAfterRelaunch && idxAfterRelaunch.snapshots.some((s) => s.id === meta.id), JSON.stringify(idxAfterRelaunch));
+      let list = null, listErr = "";
+      try { list = await historyCall(app2.cdp, "historyList", [docId]); } catch (e) { listErr = String(e && e.message || e); }
+      record(tag + ": the relaunch lists the prior generation — no error, no half-written entry",
+        !!list && Array.isArray(list.entries) && list.entries.length === 1 && list.entries[0].id === metaA.id,
+        listErr || JSON.stringify(list));
+      const gotA = await historyCall(app2.cdp, "historyGet", [{ docId }, metaA.id]);
+      record(tag + ": the prior snapshot's body reads back verbatim", !!gotA && gotA.stateJson === bodyA, "");
+      const corrupt = fs.readdirSync(historyDirOnDisk(userDataDir)).filter((n) => n.includes(".corrupt-"));
+      record(tag + ": no index generation was set aside as corrupt", corrupt.length === 0, JSON.stringify(corrupt));
+      const again = await historyCall(app2.cdp, "historyPut", [docId, meta, body]);
+      record(tag + ": the lost snapshot can be stored again", again && again.ok === true && again.duplicate === false, JSON.stringify(again));
+      const list2 = await historyCall(app2.cdp, "historyList", [docId]);
+      record(tag + ": …and is then listed newest first",
+        list2.entries.length === 2 && list2.entries[0].id === meta.id, JSON.stringify(list2.entries.map((e) => e.id)));
     } finally {
       await teardown(app2, tag + " (post-relaunch)");
       rmrf(app2.userDataDir);
@@ -3644,51 +3795,44 @@ async function caseHistoryCrashAfterBody(target) {
   }
 }
 
-/* caseHistoryCorruptIndex. A pre-seeded '{broken' index.json alongside 3
-   readable .snap bodies and 1 truncated one — the fsck (ensureHistoryTable /
-   fsckHistoryBucket) must rebuild the index from the readable bodies,
-   quarantine the truncated one as *.corrupt (never adopt it, never silently
-   drop it), and preserve the broken index as index.json.corrupt. */
-async function caseHistoryCorruptIndex(target) {
-  const tag = target.name + " history: corrupt index.json is rebuilt from the bodies (fsck)";
+/* caseHistoryTornIndex. index.json torn mid-write (a disk that lied about the
+   flush) beside a good index.prev.json: the launch loads the previous
+   generation, sets the torn one aside as index.json.corrupt-<ts> (never
+   deleted), and the next write lands a valid index.json again. */
+async function caseHistoryTornIndex(target) {
+  const tag = target.name + " history: torn index.json falls back to index.prev.json";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
-  const validMetas = [
-    historyMeta({ label: "v1", atMs: 1000 }),
-    historyMeta({ label: "v2", atMs: 2000 }),
-    historyMeta({ label: "v3", atMs: 3000 })
-  ];
-  const truncatedId = randSnapId();
-
-  writeHistoryFormatOnDisk(userDataDir, 1);
-  for (const m of validMetas) {
-    writeHistorySnapOnDisk(userDataDir, docId, m, JSON.stringify({ rows: [], title: m.label }));
-  }
-  const dir = historyBucketDirOnDisk(userDataDir, docId);
-  // Truncated: the magic line only, no second newline at all — unreadable as
-  // a header (readHistorySnapHeader requires one), so the fsck must
-  // quarantine it rather than adopt or silently drop it.
-  fs.writeFileSync(path.join(dir, "s-" + truncatedId + ".snap"), "splitpage-snapshot 1\n", "utf8");
-  fs.writeFileSync(path.join(dir, "index.json"), "{broken", "utf8");
+  const metaA = historyMeta({ label: "v1", atMs: 1000 });
+  const metaB = historyMeta({ label: "v2", atMs: 2000 });
+  const bodyA = JSON.stringify({ rows: [], title: "v1" });
+  const bodyB = JSON.stringify({ rows: [{ id: "r1" }], title: "v2" });
+  seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: metaA, body: bodyA }] }, { file: "index.prev.json" });
+  const newer = seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: metaA, body: bodyA }, { meta: metaB, body: bodyB }] });
+  const text = JSON.stringify(newer);
+  fs.writeFileSync(path.join(historyDirOnDisk(userDataDir), "index.json"), text.slice(0, Math.floor(text.length / 2)), "utf8");
 
   let app = null;
   try {
-    app = await launchApp(target, { label: "history-corrupt-index", userDataDir });
+    app = await launchApp(target, { label: "history-torn-index", userDataDir });
     await waitForRows(app.cdp, 20000);
 
     const list = await historyCall(app.cdp, "historyList", [docId]);
-    const ids = (list.entries || []).map((e) => e.id).sort();
-    record(tag + ": the fsck adopts exactly the 3 valid snapshots",
-      ids.length === 3 && JSON.stringify(ids) === JSON.stringify(validMetas.map((m) => m.id).sort()), JSON.stringify(list));
+    const ids = (list.entries || []).map((e) => e.id);
+    record(tag + ": the previous generation is loaded (A only)",
+      ids.length === 1 && ids[0] === metaA.id, JSON.stringify(list));
+    const gotA = await historyCall(app.cdp, "historyGet", [{ docId }, metaA.id]);
+    record(tag + ": its body reads back verbatim", !!gotA && gotA.stateJson === bodyA, "");
+    const names = fs.readdirSync(historyDirOnDisk(userDataDir));
+    record(tag + ": the torn index.json is kept as index.json.corrupt-<ts>",
+      names.some((n) => /^index\.json\.corrupt-\d+/.test(n)), JSON.stringify(names));
 
-    const idxOnDisk = readHistoryIndexOnDisk(userDataDir, docId);
-    record(tag + ": index.json is rebuilt as valid JSON with all 3 snapshots",
-      !!idxOnDisk && idxOnDisk.formatVersion === 1 && idxOnDisk.snapshots.length === 3, JSON.stringify(idxOnDisk));
-    record(tag + ": the broken index.json is preserved as index.json.corrupt",
-      fs.existsSync(path.join(dir, "index.json.corrupt")));
-    record(tag + ": the truncated body is renamed *.corrupt, not adopted and not silently dropped",
-      fs.existsSync(path.join(dir, "s-" + truncatedId + ".snap.corrupt")) &&
-      !fs.existsSync(path.join(dir, "s-" + truncatedId + ".snap")));
+    const metaC = historyMeta({ label: "v3" });
+    const putC = await historyCall(app.cdp, "historyPut", [docId, metaC, JSON.stringify({ rows: [], title: "v3" })]);
+    record(tag + ": the next put succeeds", putC && putC.ok === true, JSON.stringify(putC));
+    const rec = historyBucketOnDisk(userDataDir, docId);
+    record(tag + ": …and writes a valid index.json naming A and the new snapshot",
+      !!rec && JSON.stringify(rec.snapshots.map((s) => s.id)) === JSON.stringify([metaA.id, metaC.id]), JSON.stringify(rec));
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
@@ -3698,7 +3842,9 @@ async function caseHistoryCorruptIndex(target) {
 /* caseHistoryCapEviction. SPLITPAGE_TEST_HISTORY_CAP_BYTES lets a case reach
    the eviction planner's cap without writing hundreds of megabytes: the
    per-document 50-snapshot trim, and cap-driven eviction across documents by
-   lastOpenedAt ascending, a document's newest snapshot never deleted. */
+   lastOpenedAt ascending, a document's newest snapshot never deleted. An
+   evicted body is unlinked only once the NEXT generation is durable (the
+   previous index still names it), so it is gone after the next write. */
 async function caseHistoryCapEviction(target) {
   const tag = target.name + " history: cap-driven eviction + 50-per-document trim";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3730,20 +3876,21 @@ async function caseHistoryCapEviction(target) {
       trimIds.indexOf(firstSnapId) === -1 && trimIds.indexOf(lastSnapId) !== -1, "");
 
     // ---- cap-driven eviction across two documents ----
-    const bigBody = JSON.stringify({ blob: "x".repeat(900000) }); // ≈900 KB
+    // Four different ≈900 KB bodies, so an evicted entry's body is its own.
+    const bigBody = (n) => JSON.stringify({ blob: "x".repeat(900000), n });
     const docOld = randDocId(), docNew = randDocId();
     const oldSnap1 = historyMeta({ id: randSnapId("o"), atMs: 10000 });
     const oldSnap2 = historyMeta({ id: randSnapId("o"), atMs: 10001 });
-    await historyCall(cdp, "historyPut", [docOld, oldSnap1, bigBody]);
-    await historyCall(cdp, "historyPut", [docOld, oldSnap2, bigBody]);
+    await historyCall(cdp, "historyPut", [docOld, oldSnap1, bigBody(1)]);
+    await historyCall(cdp, "historyPut", [docOld, oldSnap2, bigBody(2)]);
     const newSnap1 = historyMeta({ id: randSnapId("n"), atMs: 20000 });
-    await historyCall(cdp, "historyPut", [docNew, newSnap1, bigBody]);
+    await historyCall(cdp, "historyPut", [docNew, newSnap1, bigBody(3)]);
     const newSnap2 = historyMeta({ id: randSnapId("n"), atMs: 20001 });
-    const lastCapPut = await historyCall(cdp, "historyPut", [docNew, newSnap2, bigBody]);
+    const lastCapPut = await historyCall(cdp, "historyPut", [docNew, newSnap2, bigBody(4)]);
 
     const usage = await historyCall(cdp, "historyUsage", []);
     record(tag + ": usage stays at or under the TEST_MODE cap after eviction",
-      usage.totalBytes <= CAP, "totalBytes=" + usage.totalBytes + " cap=" + CAP);
+      usage.totalBytes <= CAP && usage.capBytes === CAP, "totalBytes=" + usage.totalBytes + " cap=" + usage.capBytes);
     record(tag + ": the put that crossed the cap reports it evicted something, and is no longer overCap",
       lastCapPut.evicted > 0 && lastCapPut.overCap === false, JSON.stringify(lastCapPut));
 
@@ -3753,13 +3900,24 @@ async function caseHistoryCapEviction(target) {
       listOld.entries.length === 1 && listOld.entries[0].id === oldSnap2.id, JSON.stringify(listOld));
     record(tag + ": the document touched LATER (docNew) keeps both of its snapshots",
       listNew.entries.length === 2, JSON.stringify(listNew));
+
+    const evictedSha = historyShaHex(bigBody(1));
+    const evictedPath = historyBodyPathOnDisk(userDataDir, evictedSha);
+    const idx = readHistoryIndexOnDisk(userDataDir);
+    record(tag + ": the evicted body waits in index.json's trash while index.prev.json still names it",
+      !!idx && idx.trash.includes(evictedSha) && fs.existsSync(evictedPath), JSON.stringify(idx && idx.trash));
+    const nextPut = await historyCall(cdp, "historyPut", [randDocId(), historyMeta(), "{}"]);
+    record(tag + ": the next write succeeds", nextPut && nextPut.ok === true, JSON.stringify(nextPut));
+    record(tag + ": …and the evicted body is gone from disk after it", !fs.existsSync(evictedPath), evictedPath);
+    record(tag + ": the surviving snapshots' bodies are all still there",
+      [2, 3, 4].every((n) => fs.existsSync(historyBodyPathOnDisk(userDataDir, historyShaHex(bigBody(n))))), "");
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }
 
-/* caseHistoryConcurrentPuts. historyExclusive is ONE promise chain across
+/* caseHistoryConcurrentPuts. The history backend's queue is ONE chain across
    every sender — 60+10 puts and a copy, fired without awaiting each one, and
    the same stress repeated from two different tabs (two different
    webContents) of the same launch, proves the queue serializes across pages
@@ -3846,7 +4004,7 @@ async function caseHistoryLegacyMigration(target) {
     }
 
     const list1 = await seedLegacyKeyAndReload();
-    record(tag + ": older/index.json has both legacy entries after migration", !!list1, JSON.stringify(list1));
+    record(tag + ": the Older bucket has both legacy entries after migration", !!list1, JSON.stringify(list1));
     const olderIds = list1 ? (list1.older || []).map((e) => e.id).sort() : [];
     record(tag + ": the migrated entries carry kind:'legacy' and the original ids",
       !!list1 && list1.older.every((e) => e.kind === "legacy") && JSON.stringify(olderIds) === JSON.stringify(["legacy-a", "legacy-b"]),
@@ -3866,28 +4024,24 @@ async function caseHistoryLegacyMigration(target) {
   }
 }
 
-/* caseHistoryNewerFormatReadOnly. A FORMAT number ahead of ours means a
-   newer build wrote this folder — history goes read-only rather than let
-   this build rewrite an index shape it does not understand (HISTORY-STORAGE). */
+/* caseHistoryNewerFormatReadOnly. A FORMAT number ahead of ours ("3" — this
+   build writes "2") means a newer build wrote this folder: history goes
+   read-only rather than let this build rewrite an index shape it does not
+   understand (HISTORY-STORAGE). */
 async function caseHistoryNewerFormatReadOnly(target) {
   const tag = target.name + " history: FORMAT ahead of ours goes read-only";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const docId = randDocId();
   const seedMeta = historyMeta({ label: "pre-existing" });
   const seedBody = JSON.stringify({ rows: [], title: "Pre-existing" });
+  seedHistoryV2OnDisk(userDataDir, { [docId]: [{ meta: seedMeta, body: seedBody }] }, { format: "3" });
 
-  writeHistorySnapOnDisk(userDataDir, docId, seedMeta, seedBody);
-  const dir = historyBucketDirOnDisk(userDataDir, docId);
-  fs.writeFileSync(path.join(dir, "index.json"), JSON.stringify({
-    formatVersion: 1, docId, title: "Pre-existing", lastOpenedAt: Date.now(),
-    bytes: Buffer.byteLength(seedBody, "utf8"), snapshots: [seedMeta]
-  }), "utf8");
-  writeHistoryFormatOnDisk(userDataDir, 2); // a newer build's format
-
-  const snapPath = historySnapPathOnDisk(userDataDir, docId, seedMeta.id);
-  const mtimeBefore = fs.statSync(snapPath).mtimeMs;
-  const formatPath = path.join(userDataDir, "history", "FORMAT");
+  const dir = historyDirOnDisk(userDataDir);
+  const bodyPath = historyBodyPathOnDisk(userDataDir, historyShaHex(seedBody));
+  const mtimeBefore = fs.statSync(bodyPath).mtimeMs;
+  const formatPath = path.join(dir, "FORMAT");
   const formatBytesBefore = fs.readFileSync(formatPath);
+  const indexBytesBefore = fs.readFileSync(path.join(dir, "index.json"));
 
   let app = null;
   try {
@@ -3898,6 +4052,8 @@ async function caseHistoryNewerFormatReadOnly(target) {
     const list = await historyCall(cdp, "historyList", [docId]);
     record(tag + ": list still works read-only — the pre-existing snapshot is there",
       Array.isArray(list.entries) && list.entries.length === 1 && list.entries[0].id === seedMeta.id, JSON.stringify(list));
+    const got = await historyCall(cdp, "historyGet", [{ docId }, seedMeta.id]);
+    record(tag + ": get still works read-only", !!got && got.stateJson === seedBody, "");
 
     const put = await historyCall(cdp, "historyPut", [docId, historyMeta({ label: "should not land" }), "{}"]);
     record(tag + ": put on a newer-FORMAT folder refuses with code 'read-only'",
@@ -3905,9 +4061,106 @@ async function caseHistoryNewerFormatReadOnly(target) {
 
     const usage = await historyCall(cdp, "historyUsage", []);
     record(tag + ": usage reports readOnly:true", usage && usage.readOnly === true, JSON.stringify(usage));
-    record(tag + ": the pre-existing .snap file's mtime is untouched", fs.statSync(snapPath).mtimeMs === mtimeBefore, "");
+    record(tag + ": the pre-existing body's mtime is untouched", fs.statSync(bodyPath).mtimeMs === mtimeBefore, "");
+    record(tag + ": index.json is byte-identical and no new generation was written",
+      fs.readFileSync(path.join(dir, "index.json")).equals(indexBytesBefore) && !fs.existsSync(path.join(dir, "index.prev.json")), "");
     record(tag + ": FORMAT itself is never rewritten back down to our own version",
       fs.readFileSync(formatPath).equals(formatBytesBefore), "");
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* The checks every finished v1 migration must pass, in the app: every
+   readable v1 snapshot listed through the real IPC (unreadable ones
+   skipped), bodies verbatim, the unstamped Older bucket given its 90 days,
+   and docs/ + older/ moved whole into v1-backup/. */
+async function checkHistoryV1Migrated(cdp, tag, userDataDir, seed, v1DigestBefore) {
+  const root = historyDirOnDisk(userDataDir);
+  for (const docId of [seed.docA, seed.docB, seed.docC]) {
+    const list = await historyListWhenMigrated(cdp, docId, 30000).catch(() => null);
+    const ids = list ? list.entries.map((e) => e.id) : null;
+    record(tag + ": " + docId.slice(0, 9) + "… lists exactly its readable v1 snapshots, newest first",
+      JSON.stringify(ids) === JSON.stringify(seed.expect[docId]), JSON.stringify(ids) + " vs " + JSON.stringify(seed.expect[docId]));
+  }
+  const gotA = await historyCall(cdp, "historyGet", [{ docId: seed.docA }, "a01"]);
+  record(tag + ": a migrated body reads back verbatim", !!gotA && gotA.stateJson === seed.bodies.a01, "");
+  const gotB = await historyCall(cdp, "historyGet", [{ docId: seed.docB }, "b02"]);
+  record(tag + ": …including one whose v1 index.json was torn", !!gotB && gotB.stateJson === seed.bodies.b02, "");
+  const older = await historyCall(cdp, "historyList", [null]);
+  record(tag + ": the Older bucket migrated, and the unstamped one now expires in the future",
+    JSON.stringify(older.older.map((e) => e.id)) === JSON.stringify(seed.expect.older) &&
+    older.older.every((e) => e.kind === "legacy") && typeof older.olderExpiresAt === "number" && older.olderExpiresAt > Date.now(),
+    JSON.stringify(older));
+  const idx = readHistoryIndexOnDisk(userDataDir);
+  record(tag + ": index.json records migratedFrom:1 and FORMAT is \"2\"",
+    !!idx && idx.migratedFrom === 1 && fs.readFileSync(path.join(root, "FORMAT"), "utf8").trim() === "2", JSON.stringify(idx && idx.migratedFrom));
+  record(tag + ": docs/ and older/ are gone from history/",
+    !fs.existsSync(path.join(root, "docs")) && !fs.existsSync(path.join(root, "older")), JSON.stringify(fs.readdirSync(root)));
+  record(tag + ": v1-backup/ holds docs/ and older/ byte-for-byte, the unreadable .snap included",
+    historyV1Digest(path.join(root, "v1-backup")) === v1DigestBefore, "");
+}
+
+/* caseHistoryV1Migration. A profile from a build before #83 — a real v1
+   tree — opened by this one: the migration runs as the first history job,
+   and everything readable is in the app afterwards. */
+async function caseHistoryV1Migration(target) {
+  const tag = target.name + " history: v1 folder tree migrates on first launch";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const seed = seedHistoryV1Tree(userDataDir);
+  const v1DigestBefore = historyV1Digest(historyDirOnDisk(userDataDir));
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "history-v1-migration", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    await checkHistoryV1Migrated(app.cdp, tag, userDataDir, seed, v1DigestBefore);
+    const put = await historyCall(app.cdp, "historyPut", [seed.docA, historyMeta({ label: "after" }), "{}"]);
+    record(tag + ": a put after the migration succeeds", put && put.ok === true, JSON.stringify(put));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+/* caseHistoryV1MigrationKilled. SIGKILL mid-migration (after its 2nd body),
+   then again once its index.json is durable, then a clean launch: v1 stays
+   untouched until the index is durable, and the last launch finishes the
+   job with nothing lost. Both killed launches die in whenReady, before any
+   window, so they run without CDP. */
+async function caseHistoryV1MigrationKilled(target) {
+  const tag = target.name + " history: v1 migration killed mid-way, relaunch finishes";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const seed = seedHistoryV1Tree(userDataDir);
+  const root = historyDirOnDisk(userDataDir);
+  const v1DigestBefore = historyV1Digest(root);
+  const killedAs = IS_WINDOWS ? { expectExitCode: 1 } : { expectSignal: "SIGKILL" };
+  let app = null;
+  try {
+    for (const fault of ["exit-mid-migration", "exit-after-migration-index"]) {
+      app = await launchApp(target, {
+        label: "history-v1-" + fault, userDataDir, skipCdp: true,
+        env: { SPLITPAGE_TEST_HISTORY_FAULT: fault }
+      });
+      const exited = await waitForExit(app.proc, 30000);
+      record(tag + " (" + fault + "): the process dies where the fault says", exited);
+      await teardown(app, tag + " (" + fault + ")", killedAs);
+      app = null;
+      record(tag + " (" + fault + "): docs/ and older/ are still in place, unchanged",
+        historyV1Digest(root) === v1DigestBefore, "");
+      record(tag + " (" + fault + "): FORMAT is still \"1\"",
+        fs.readFileSync(path.join(root, "FORMAT"), "utf8").trim() === "1", "");
+      const idx = readHistoryIndexOnDisk(userDataDir);
+      if (fault === "exit-mid-migration") {
+        record(tag + " (" + fault + "): no index.json yet", idx === null, JSON.stringify(idx));
+      } else {
+        record(tag + " (" + fault + "): index.json is durable with migratedFrom:1",
+          !!idx && idx.migratedFrom === 1 && Object.keys(idx.buckets).length === 4, JSON.stringify(idx && Object.keys(idx.buckets)));
+      }
+    }
+    app = await launchApp(target, { label: "history-v1-migration-finish", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    await checkHistoryV1Migrated(app.cdp, tag, userDataDir, seed, v1DigestBefore);
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
@@ -5956,12 +6209,14 @@ async function runTargetSuite(target, groupFilter) {
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
     ["history: round trip (put/list/get/copy/touch/import-older/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
     ["history: id validation", () => caseHistoryIdValidation(target)],
-    ["history: exit-after-body fault, relaunch adopts the orphan", () => caseHistoryCrashAfterBody(target)],
-    ["history: corrupt index.json rebuilt from bodies (fsck)", () => caseHistoryCorruptIndex(target)],
+    ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target)],
+    ["history: torn index.json falls back to index.prev.json", () => caseHistoryTornIndex(target)],
     ["history: cap-driven eviction + 50-per-document trim", () => caseHistoryCapEviction(target)],
     ["history: concurrent puts + a copy, one queue, two tabs", () => caseHistoryConcurrentPuts(target)],
     ["history: legacy localStorage migration into Older", () => caseHistoryLegacyMigration(target)],
     ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
+    ["history: v1 folder tree migrates on first launch", () => caseHistoryV1Migration(target)],
+    ["history: v1 migration killed mid-way, relaunch finishes", () => caseHistoryV1MigrationKilled(target)],
     // --- issue #82: the content-addressed blob folder ---
     ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target)],
     // --- step N: crash-safe drafts (single and multi tab) ---
