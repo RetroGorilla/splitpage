@@ -1,0 +1,177 @@
+# File ▸ Export… (issue #146): one dialog in place of thirteen export menu
+# items. Formats as radio cards in two groups (Whole script: PDF, Word,
+# Markdown, Spreadsheet, Standalone page; Part of it: Narration only,
+# Breakdown, Packing list), each with a name, a purpose and its extension;
+# the right side a page sketch, a summary line, the file name and the
+# options the exporter already has (Markdown's shape, narration's .docx or
+# .txt, gear or props). Export runs the format's own File-menu button — the
+# one code path, so every card is checked here to make exactly what the old
+# menu action made. The last format is remembered per device (localStorage,
+# never the document), the dialog opens on it, and File offers "Export again
+# as …". 18c-export-dialog.js.
+#
+# Downloads don't happen headless, so every file is caught where every
+# export funnels through (deliverFile's URL.createObjectURL), with the name
+# the <a download> was given; the click itself is stubbed out.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.__files=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__files.push({blob:b,name:null});return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download){var f=window.__files[window.__files.length-1];if(f&&!f.name)f.name=this.download;return;}return c.apply(this,arguments);};window.D=window.__desktopTest;window.X=window.__exportTest;window.__lastFile=function(){return window.__files[window.__files.length-1];};return !!(D&&X);})()
+expect true
+expect localStorage.getItem('splitpage-last-export') === null
+
+# --- File ▸ Export… opens it, on PDF the first time ---------------------------
+click #btn-file
+sleep 200
+# one item where there were thirteen; the formats' own buttons are still
+# there, hidden, for the dialog, the command menu and the desktop menu
+expect Array.prototype.filter.call(document.querySelectorAll('#file-menu [data-menu-group="export"] .mi'), function(b){return b.getClientRects().length > 0;}).length === 1
+expect document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action^="export-"]').length === 11
+expect document.querySelector('#file-menu .menu-hidden-actions').getBoundingClientRect().height == 0
+expect document.getElementById('menu-export-again').hidden
+click #menu-export
+sleep 400
+expect !document.getElementById('export-modal').hidden
+expect document.getElementById('file-menu').hidden
+expect document.querySelector('#export-modal .export-panel').getAttribute('role') == dialog
+expect Math.round(document.querySelector('#export-modal .export-panel').getBoundingClientRect().width) == 940
+expect getComputedStyle(document.querySelector('#export-modal .export-panel')).borderTopLeftRadius == 18px
+expect document.querySelector('input[name="export-format"]:checked').value == pdf
+expect document.activeElement === document.querySelector('input[name="export-format"]:checked')
+expect document.getElementById('export-go').textContent == Export PDF
+
+# --- the cards: two groups, a name, a purpose and an extension each ---------
+expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-group-head'), function(h){return h.textContent;}).join('|') === 'Whole script|Part of it'
+expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.getAttribute('data-format');}).join(',') === 'pdf,docx,md,csv,html,narration,breakdown,packing'
+expect Array.prototype.every.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.querySelector('.export-card-name').textContent && c.querySelector('.export-card-purpose').textContent && /^\./.test(c.querySelector('.export-card-ext').textContent) && c.querySelector('input[type="radio"]');})
+expect getComputedStyle(document.querySelector('.export-card-ext')).fontFamily.indexOf('Mono') !== -1
+# the right-hand side for PDF: a sketch with the real title, a summary, the name
+expect document.getElementById('export-preview').textContent.indexOf('Untitled Script') !== -1
+expect document.getElementById('export-summary').textContent.indexOf('2 scenes') === 0
+expect document.getElementById('export-filename').textContent == untitled-script.pdf
+expect document.getElementById('export-options').hidden
+# the footer's note, and its link to the live alternative
+expect document.querySelector('#export-modal .export-note').textContent.indexOf('Exports are copies.') === 0
+expect document.getElementById('export-share-link').textContent == Publish & copy a link
+shot 90-export-dialog
+
+# --- a format with nothing to export says so, and cannot be pressed --------
+jsclick .export-card[data-format="packing"]
+sleep 200
+expect document.querySelector('input[name="export-format"]:checked').value == packing
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'Gear|Props'
+expect !document.getElementById('export-why').hidden
+expect document.getElementById('export-why').textContent == Nothing tagged Gear yet — nothing to pack
+expect document.getElementById('export-go').disabled === true
+expect X.reason('export-packing-gear') !== ''
+
+# --- Esc closes it and hands the focus back ---------------------------------
+key Escape
+sleep 300
+expect document.getElementById('export-modal').hidden
+expect document.activeElement.id == btn-file
+# nothing was exported, so nothing is remembered
+expect localStorage.getItem('splitpage-last-export') === null
+expect window.__files.length === 0
+
+# --- something to export in every format -------------------------------------
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] and the <tripod> to the {kitchen}.
+sleep 500
+eval document.activeElement.blur()
+expect document.querySelectorAll('#rows .tag-anchor').length >= 3
+expect X.reason('export-packing-gear') === '' && X.reason('export-packing-prop') === ''
+
+# --- every card makes exactly what the old action made -----------------------
+# For each format: the old button, then the dialog with that card (and
+# option) chosen, then both files compared — same name, same type, same
+# size, and the same bytes — every format, binary ones included. A zip
+# (Word) stamps each entry with the time it was written, two seconds at a
+# time, so those two fields are zeroed on both sides before comparing.
+eval (function(){window.__pairs=[['pdf',null,'export-pdf'],['docx',null,'export-docx'],['md','stacked','export-md'],['md','table','export-md-table'],['csv',null,'export-csv'],['html',null,'export-html'],['narration','docx','export-narration-docx'],['narration','txt','export-narration-txt'],['breakdown',null,'export-breakdown'],['packing','gear','export-packing-gear'],['packing','prop','export-packing-prop']];window.__results=[];window.__runPair=async function(p){var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};var waitFile=async function(n){for(var i=0;i<80&&window.__files.length<n;i++)await sleep(50);return window.__files[n-1];};var n0=window.__files.length;document.querySelector('#file-menu [data-file-action="'+p[2]+'"]').click();var a=await waitFile(n0+1);document.querySelector('#file-menu [data-file-action="export"]').click();await sleep(50);var card=document.querySelector('.export-card[data-format="'+p[0]+'"] input');card.click();if(p[1]){document.querySelector('input[name="export-choice"][value="'+p[1]+'"]').click();}var fileName=document.getElementById('export-filename').textContent;var label=document.getElementById('export-go').textContent;document.getElementById('export-go').click();var b=await waitFile(n0+2);var norm=function(u){var dv=new DataView(u.buffer);for(var k=0;k+16<=u.length;k++){var sig=dv.getUint32(k,true);if(sig===0x04034b50){u[k+10]=u[k+11]=u[k+12]=u[k+13]=0;}else if(sig===0x02014b50){u[k+12]=u[k+13]=u[k+14]=u[k+15]=0;}}return u;};var ba=norm(new Uint8Array(await a.blob.arrayBuffer())),bb=norm(new Uint8Array(await b.blob.arrayBuffer()));var same=ba.length===bb.length;var diff=-1;for(var i=0;same&&i<ba.length;i++){if(ba[i]!==bb[i]){same=false;diff=i;}}var r={action:p[2],oldName:a.name,newName:b.name,shown:fileName,label:label,type:a.blob.type===b.blob.type,size:ba.length,sameBytes:same,diff:diff,closed:document.getElementById('export-modal').hidden,remembered:localStorage.getItem('splitpage-last-export')};window.__results.push(r);return r;};return true;})()
+eval (async function(){ for (var i = 0; i < window.__pairs.length; i++) await window.__runPair(window.__pairs[i]); return JSON.stringify(window.__results.map(function(r){return r.action+':'+r.sameBytes+(r.diff>=0?'@'+r.diff:'')+':'+r.newName;})); })()
+expect window.__results.length === 11
+expect window.__results.every(function(r){return r.oldName && r.oldName === r.newName;})
+expect window.__results.every(function(r){return r.shown === r.newName;})
+expect window.__results.every(function(r){return r.type && r.size > 0;})
+expect window.__results.every(function(r){return r.sameBytes;})
+expect window.__results.every(function(r){return r.closed;})
+expect window.__results.every(function(r){return r.remembered === r.action;})
+expect window.__results.map(function(r){return r.label;}).join('|') === 'Export PDF|Export Word|Export Markdown|Export Markdown, two columns|Export Spreadsheet|Export Standalone page|Export Narration (.docx)|Export Narration (.txt)|Export Breakdown|Export Gear packing list|Export Props packing list'
+expect window.__results.map(function(r){return r.newName;}).join('|') === 'untitled-script.pdf|untitled-script.docx|untitled-script.md|untitled-script - two column.md|untitled-script.csv|untitled-script.html|untitled-script - narration.docx|untitled-script - narration.txt|untitled-script - breakdown.csv|untitled-script - Gear packing list.pdf|untitled-script - Prop packing list.pdf'
+
+# --- the remembered choice ---------------------------------------------------
+# Kept per device, never in the document; the dialog opens on it with its
+# option, and the File menu offers it again.
+eval (function(){document.querySelector('#file-menu [data-file-action="export-md-table"]').click();return true;})()
+wait localStorage.getItem('splitpage-last-export') === 'export-md-table'
+expect JSON.stringify(window.__splitpageFormats.state()).indexOf('last-export') === -1
+jsclick #btn-file
+sleep 200
+expect !document.getElementById('menu-export-again').hidden
+expect document.querySelector('#menu-export-again .mi-label').textContent == Export again as Markdown, two columns
+eval (function(){window.__n=window.__files.length;return true;})()
+jsclick #menu-export-again
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script - two column.md
+expect document.getElementById('export-modal').hidden
+key ctrl KeyE
+sleep 400
+expect !document.getElementById('export-modal').hidden
+expect document.querySelector('input[name="export-format"]:checked').value == md
+expect document.querySelector('input[name="export-choice"]:checked').value == table
+expect document.getElementById('export-go').textContent == Export Markdown, two columns
+expect document.getElementById('export-filename').textContent == untitled-script - two column.md
+
+# --- the keyboard: arrows move between cards, Enter exports ------------------
+key ArrowDown
+sleep 150
+expect document.querySelector('input[name="export-format"]:checked').value == csv
+expect document.getElementById('export-go').textContent == Export Spreadsheet
+eval (function(){window.__n=window.__files.length;return true;})()
+key Enter
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script.csv
+expect document.getElementById('export-modal').hidden
+expect localStorage.getItem('splitpage-last-export') === 'export-csv'
+
+# --- the footer's link is Publish & copy a link ------------------------------
+# With no server, that opens Servers… to set one up — the dialog gets out of
+# the way first.
+key ctrl KeyE
+sleep 400
+jsclick #export-share-link
+sleep 400
+expect document.getElementById('export-modal').hidden
+expect !document.getElementById('connect-modal').hidden
+key Escape
+sleep 300
+
+# --- not over another dialog, the teleprompter or the writer ----------------
+jsclick #btn-present
+sleep 500
+key ctrl KeyE
+sleep 300
+expect document.getElementById('export-modal').hidden
+key Escape
+sleep 400
+
+# --- the desktop native menu still reaches the same buttons ------------------
+eval (function(){window.__n=window.__files.length;D.runMenuCommand('export-breakdown');return true;})()
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script - breakdown.csv
+eval D.runMenuCommand('export')
+sleep 400
+expect !document.getElementById('export-modal').hidden
+expect document.querySelector('input[name="export-format"]:checked').value == breakdown
+jsclick #export-cancel
+sleep 300
+expect document.getElementById('export-modal').hidden
+
+# --- none of it is an edit of the document -----------------------------------
+eval (function(){var rows=window.__splitpageFormats.state().rows.length;return rows;})()
+expect window.__splitpageFormats.state().rows.length === 2
+
+quit
