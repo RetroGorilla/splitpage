@@ -423,6 +423,13 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:prompter-open-in-browser");
     },
 
+    /* The same, in an installed Chromium browser rather than the default
+       one (issue #123). Answers {ok:true, kind, browser} or {ok:false,
+       code} — NO_CHROMIUM when none is installed. */
+    openPrompterInChromium() {
+      return invoke("splitpage:prompter-open-in-chromium");
+    },
+
     /* ---- Follow My Voice (main.js section 9d, issue #8) -----------------
        Argument-free (invariant #45): whether this machine can listen
        ({available}), start listening for this tab ({ok, session} or

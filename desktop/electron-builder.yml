@@ -45,6 +45,10 @@ files:
   # PowerShell script it runs cannot be read from inside the asar, so that
   # goes through stage.mjs into resources/splitpage/voice instead.
   - voice-helper.js
+  # Finding an installed Chromium browser for "Use Chromium Speech
+  # Recognition" (issue #123). main.js requires it at startup, so it has to
+  # ship for the same reason drafts.js does.
+  - chromium-browsers.js
   # Version history on disk (issue #83): the fs backend the shared store runs
   # over in main, and the one-time v1 migration it runs first. Listed before
   # main.js requires them (step 3a) so that switch-over cannot ship without

@@ -125,7 +125,9 @@ recognition instead (System.Speech, run through the system's PowerShell by
 involved. Its **Present in Browser** hands the script to your default
 browser, and there too Follow My Voice listens through the desktop app, so it
 works in Firefox as well. Elsewhere the desktop teleprompter offers **Present
-in Browser** for Chrome or Edge's own recognition.
+in Browser** for Chrome or Edge's own recognition. **Use Chromium Speech
+Recognition** opens the same copy in an installed Chromium browser (Edge,
+Chrome, Brave…) instead of the default one, to use its own recognition.
 
 **Firefox / Safari note:** these don't support the File System Access API
 (`showSaveFilePicker`), so **Save** falls back to downloading a fresh

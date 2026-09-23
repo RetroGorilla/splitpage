@@ -231,6 +231,14 @@ export function canOpenPrompterInBrowser() {
   return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInBrowser === "function");
 }
 
+/* "Use Chromium Speech Recognition" (issue #123): the same hand-off, into an
+   installed Chromium browser (Edge, Chrome, Brave…) that main finds, rather
+   than the default browser — where the page follows with that browser's own
+   speech recognition instead of this app's (#122). Same saving rules. */
+export function canOpenPrompterInChromium() {
+  return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInChromium === "function");
+}
+
 var PROMPTER_BROWSER_MESSAGES = {
   NOT_SAVED: "Save this script first (Ctrl+S), then try again — the browser reads the saved copy.",
   SAVE_FAILED: "The save didn't go through, so the browser would show an older version. Save, then try again.",
@@ -242,7 +250,8 @@ var PROMPTER_BROWSER_MESSAGES = {
   REMOTE_SERVER: "This script is on another server — use Share to get its link, then open that in Chrome or Edge.",
   SERVE_FAILED: "Couldn't open the script in your browser.",
   OPEN_FAILED: "Couldn't open your browser.",
-  NO_TAB: "Couldn't open the script in your browser."
+  NO_TAB: "Couldn't open the script in your browser.",
+  NO_CHROMIUM: "No Chromium browser (Edge, Chrome, Brave…) was found on this computer. Use Present in browser instead."
 };
 
 function prompterBrowserResult(ok, message, kind) {
@@ -266,8 +275,16 @@ async function copyPrompterLinkForRemoteServer(id) {
     copied ? "ok" : "warn");
 }
 
-export async function openPrompterInBrowser() {
-  if (!canOpenPrompterInBrowser()) return { ok: false, message: "" };
+export function openPrompterInBrowser() {
+  return openPrompterElsewhere(false);
+}
+
+export function openPrompterInChromium() {
+  return openPrompterElsewhere(true);
+}
+
+async function openPrompterElsewhere(chromium) {
+  if (!(chromium ? canOpenPrompterInChromium() : canOpenPrompterInBrowser())) return { ok: false, message: "" };
   if (prompterBrowserBusy) return { ok: false, message: "" };
   prompterBrowserBusy = true;
   try {
@@ -285,8 +302,13 @@ export async function openPrompterInBrowser() {
       if (S.dirty) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
     }
     var answer;
-    try { answer = await S.DESKTOP.openPrompterInBrowser(); }
+    try { answer = await (chromium ? S.DESKTOP.openPrompterInChromium() : S.DESKTOP.openPrompterInBrowser()); }
     catch (e) { answer = { ok: false, code: "OPEN_FAILED" }; }
+    if (answer && answer.ok && chromium) {
+      var browserName = typeof answer.browser === "string" && answer.browser ? answer.browser : "a Chromium browser";
+      return prompterBrowserResult(true, "Opened in " + browserName +
+        ". Follow My Voice there uses the browser's own speech recognition — this window stays open for editing.");
+    }
     if (answer && answer.ok) {
       /* "relay": this app listens for the browser's Follow My Voice (#122),
          so any browser will do. */
@@ -992,6 +1014,12 @@ function makeFakeDesktopBackend(opts) {
       this._prompterCalls = (this._prompterCalls || 0) + 1;
       this._prompterDocState = this._lastDocState || null;
       return Promise.resolve(this._prompterAnswer || { ok: true, kind: "file" });
+    },
+    /* Present in Chromium (issue #123), the same way. */
+    openPrompterInChromium: function () {
+      this._chromiumCalls = (this._chromiumCalls || 0) + 1;
+      this._chromiumDocState = this._lastDocState || null;
+      return Promise.resolve(this._chromiumAnswer || { ok: true, kind: "file", voice: "browser", browser: "Microsoft Edge" });
     },
 
     /* ---- crash drafts (DRAFT-IPC-AND-SHAPES bridge members) ---- */

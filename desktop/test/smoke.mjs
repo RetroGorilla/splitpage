@@ -5557,6 +5557,79 @@ async function caseTeleprompterVoiceRelay(target, fixturesDir) {
   }
 }
 
+/* "Use Chromium Speech Recognition" (issue #123, main.js section 9b): the same
+   share, started in an installed Chromium browser instead of handed to the
+   default one, and with no voice relay even where main could listen — that
+   page uses the browser's own Web Speech. SPLITPAGE_TEST_CHROMIUM stands in
+   for what is installed; main records the launch instead of making it. */
+async function chromiumLaunches(cdp) {
+  return (await shell(cdp, "chromiumLaunches", {})) || [];
+}
+
+async function caseTeleprompterPresentInChromium(target, fixturesDir) {
+  const tag = target.name + " teleprompter: present in chromium";
+  const fixturePath = writeFixture(fixturesDir, "prompter-chromium.splitpage", "Prompter — chromium",
+    [["Wide shot", "The first line the reader says out loud."]]);
+  let app = null;
+  try {
+    app = await launchApp(target, {
+      label: "prompter-chromium",
+      fixtures: [fixturePath],
+      env: {
+        SPLITPAGE_TEST_CHROMIUM: "edge",
+        SPLITPAGE_TEST_VOICE_HELPER: path.join(__dirname, "fake-voice-helper.mjs")
+      }
+    });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — chromium"), 20000);
+    const arity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInChromium === 'function' && window.splitpageDesktop.openPrompterInChromium.length");
+    record(tag + ": the bridge has openPrompterInChromium() and it takes no argument", arity === 0, "length=" + arity);
+
+    // --- from the page's own File drawer (Windows draws no menu bar) -----
+    const inPage = await evalPage(cdp, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-chromium'); var shown = !!b && !b.hidden && b.textContent === 'Use Chromium Speech Recognition'; if (shown) b.click(); return shown; })()");
+    record(tag + ": File ▸ This document ▸ Use Chromium Speech Recognition is offered", inPage === true, String(inPage));
+    const launched = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length ? l : null; }, 15000).catch(() => null);
+    record(tag + ": main starts the Chromium browser it found, once", !!launched && launched.length === 1 && launched[0].browser === "edge", JSON.stringify(launched));
+    const m = launched && PROMPTER_URL_RE.exec(launched[0].url);
+    record(tag + ": on the same loopback prompter URL, with no voice relay", !!m, launched ? launched[0].url : "");
+    if (m) {
+      const script = await fetchJson(`http://127.0.0.1:${m[1]}/prompter-script/${m[2]}`).catch(() => null);
+      record(tag + ": the script is served for it", !!script && script.status === 200 && script.body.text === fs.readFileSync(fixturePath, "utf8"),
+        script ? "status=" + script.status : "no answer");
+    }
+    const opens = await externalOpens(cdp);
+    record(tag + ": the default browser is not asked", opens.length === 0, JSON.stringify(opens));
+    const toast = await toastContaining(cdp, "Opened in Microsoft Edge", 10000);
+    record(tag + ": the page names the browser and its own speech recognition", !!toast && toast.indexOf("own speech recognition") !== -1, String(toast));
+
+    // --- the native menu item reaches the same thing --------------------
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
+    const twice = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length >= 2 ? l : null; }, 15000).catch(() => null);
+    record(tag + ": View ▸ Use Chromium Speech Recognition does the same", !!twice && twice.length === 2 && PROMPTER_URL_RE.test(twice[1].url), JSON.stringify(twice));
+  } finally {
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+  }
+
+  // --- no Chromium browser: said plainly, nothing shared, nothing opened --
+  app = null;
+  try {
+    app = await launchApp(target, { label: "prompter-chromium-none", fixtures: [fixturePath], env: { SPLITPAGE_TEST_CHROMIUM: "none" } });
+    const cdp = app.cdp;
+    await waitForRows(cdp, 20000);
+    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — chromium"), 20000);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
+    const none = await toastContaining(cdp, "No Chromium browser", 10000);
+    record(tag + ": with none installed the page says so and points at Present in browser", !!none && none.indexOf("Present in browser") !== -1, String(none));
+    record(tag + ": ... nothing is started", (await chromiumLaunches(cdp)).length === 0);
+    record(tag + ": ... nor handed to the default browser", (await externalOpens(cdp)).length === 0);
+    const status = await shell(cdp, "prompterShareStatus", {});
+    record(tag + ": ... and nothing is shared", !!status && status.listening === false && status.shares.length === 0, JSON.stringify(status));
+  } finally {
+    if (app) { await teardown(app, tag + " (none)"); rmrf(app.userDataDir); }
+  }
+}
+
 /* Without a listener (every automated run that does not name the fake, and
    any machine that is not Windows) the button keeps Present in Browser. */
 async function caseTeleprompterOpenInBrowserServer(target) {
@@ -6474,6 +6547,7 @@ async function runTargetSuite(target, groupFilter) {
     ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
     ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
     ["teleprompter: voice relay to Present in Browser (fake listener)", () => caseTeleprompterVoiceRelay(target, fixturesDir)],
+    ["teleprompter: present in chromium (Use Chromium Speech Recognition)", () => caseTeleprompterPresentInChromium(target, fixturesDir)],
     // --- issue #10: Google Drive through a loopback OAuth redirect ---
     ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
     ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],
