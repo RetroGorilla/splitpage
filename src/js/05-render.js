@@ -11,7 +11,7 @@ import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml, rowImage } from "./02c-blobs.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot } from "./04-richtext.js";
+import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, storedHtmlFromDom } from "./04-richtext.js";
 import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
 import {
   healTagRegistry,
@@ -629,6 +629,9 @@ export function syncFieldFromDom(cellEl) {
        appended after a trailing tag/b-roll span — it exists only to give
        the DOM a place to put the caret and must never reach stored text. */
     var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
+    /* ...and so is the src the hydrator (02c-blobs.js) gave every
+       <img data-blob> on screen: state names a picture by its sha only (#82). */
+    html = storedHtmlFromDom(html);
     if (S.state.rows[idx][field] !== html) {
       S.state.rows[idx][field] = html;
       stampRow(S.state.rows[idx]);

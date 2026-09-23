@@ -36,6 +36,7 @@ initTags();
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");
 const PNG_REF = { sha256: createHash("sha256").update(PNG_BYTES).digest("hex"), width: 1, height: 1, mime: "image/png" };
+const STORED_PNG = '<img class="comment-img" data-blob="' + PNG_REF.sha256 + '" data-w="1" data-h="1" data-mime="image/png">';
 const TAG = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span>';
 const ANCHOR = '<span class="cmt-anchor" data-cmt="ctest1">Anchored</span>';
 
@@ -324,7 +325,7 @@ test("an image conflict card goes into the file with its picture in the body", (
   assert.ok(card.body.includes('src="' + PNG + '"'), card.body);
   const back = migrateRows(parsed).comments.find((c) => c.id === "cimg");
   assert.deepEqual(back.imageValue, PNG_REF);
-  assert.equal(back.body, "");
+  assert.equal(back.body, STORED_PNG, "back to the stored form, no data: in it");
 });
 
 test(".md: a cell an older client wrote with the picture spelled differently is unchanged", () => {

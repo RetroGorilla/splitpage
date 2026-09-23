@@ -85,6 +85,7 @@ test("rows: script, iframe and event handlers never survive", () => {
 const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");
 const PNG_SHA = createHash("sha256").update(PNG_BYTES).digest("hex");
 const PNG_REF = { sha256: PNG_SHA, width: 1, height: 1, mime: "image/png" };
+const STORED_PNG = '<img class="comment-img" data-blob="' + PNG_SHA + '" data-w="1" data-h="1" data-mime="image/png">';
 
 test("rows: a legacy inline image becomes an imageRef, content-addressed (#82)", () => {
   const row = doc({ rows: [{ id: "r1", visualImage: PNG }] }).rows[0];
@@ -123,17 +124,32 @@ test("rows: only an inline data: image or a valid imageRef is a visual", () => {
   assert.deepEqual(doc({ rows: [{ id: "r1", visualImage: "data:image/png;base64,AAAA", imageRef: other }] }).rows[0].imageRef, other);
 });
 
-test("comments: an image conflict card holds its picture as imageValue, not in its body", () => {
+test("comments: an image conflict card holds its picture as imageValue, its body the stored form", () => {
   const legacy = doc({ rows: [{ id: "r1" }], comments: [{
     id: "c1", rowId: "r1", field: "visualImage", kind: "conflict",
     body: '<img class="comment-img" src="' + PNG + '">', conflictField: "Visual image"
   }] }).comments[0];
   assert.deepEqual(legacy.imageValue, PNG_REF);
-  assert.equal(legacy.body, "");
+  assert.equal(legacy.body, STORED_PNG);
   const kept = doc({ rows: [{ id: "r1" }], comments: [{
     id: "c1", rowId: "r1", field: "visualImage", kind: "conflict", body: "", imageValue: { ...PNG_REF, x: 1 }
   }] }).comments[0];
   assert.deepEqual(kept.imageValue, PNG_REF);
+  assert.equal(kept.body, STORED_PNG, "a body drawn from the record");
+  /* a body naming a picture the record does not: the record wins unless
+     this page holds the body's bytes */
+  const ghost = "e".repeat(64);
+  const stale = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c1", rowId: "r1", field: "visualImage", kind: "conflict",
+    body: '<img class="comment-img" data-blob="' + ghost + '">', imageValue: PNG_REF
+  }] }).comments[0];
+  assert.deepEqual(stale.imageValue, PNG_REF);
+  assert.equal(stale.body, STORED_PNG);
+  const emptied = doc({ rows: [{ id: "r1" }], comments: [{
+    id: "c1", rowId: "r1", field: "visualImage", kind: "conflict", body: "", imageValue: null, emptyValue: true
+  }] }).comments[0];
+  assert.equal(emptied.imageValue, null);
+  assert.equal(emptied.body, "");
   const ordinary = doc({ rows: [{ id: "r1" }], comments: [{
     id: "c2", rowId: "r1", field: "audioText", body: "hi", imageValue: PNG_REF
   }] }).comments[0];

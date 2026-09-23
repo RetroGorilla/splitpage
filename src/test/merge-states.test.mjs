@@ -345,7 +345,8 @@ test("both sides changed the picture: theirs is live, mine is a card holding it 
   assert.equal(card.field, "visualImage", "the comment's field keeps its old name");
   assert.equal(card.conflictField, "Visual image");
   assert.deepEqual(card.imageValue, b);
-  assert.equal(card.body, "");
+  /* the body shows the same picture in the stored HTML form (#82 P6) */
+  assert.equal(card.body, '<img class="comment-img" data-blob="' + b.sha256 + '" data-w="31" data-h="10" data-mime="image/png">');
   assert.equal(card.emptyValue, false);
   /* and it survives the one door, and a second merge, as it is */
   const again = migrateRows(cloneState(res.merged));
@@ -353,6 +354,7 @@ test("both sides changed the picture: theirs is live, mine is a card holding it 
   /* I removed it while they replaced it: the card says so */
   const cleared = mergeStates(imgDoc(a), imgDoc(null), imgDoc(c)).merged.comments.find((k) => k.kind === "conflict");
   assert.equal(cleared.imageValue, null);
+  assert.equal(cleared.body, "");
   assert.equal(cleared.emptyValue, true);
 });
 

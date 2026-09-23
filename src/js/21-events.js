@@ -10,6 +10,7 @@ import {
 } from "./01b-hide-shot.js";
 import { loadInitialState } from "./02-state.js";
 import { initDocIdentityChannel, syncDocIdentity } from "./02b-doc-id.js";
+import { internDataUrl, persist } from "./02c-blobs.js";
 import {
   SNAPSHOT_KEY,
   cloneState,
@@ -25,7 +26,7 @@ import {
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
-import { cssAttr, sanitizeHtml } from "./04-richtext.js";
+import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
   cancelLink,
   cancelVideo,
@@ -644,7 +645,10 @@ function onRootFocusOut(e) {
   var related = e.relatedTarget;
   if (wrap && related && wrap.contains(related)) return; /* focus moved within the same field (e.g. the link popover) — defer sanitizing */
   var clean = sanitizeHtml(cellEl.innerHTML);
-  if (clean !== cellEl.innerHTML) cellEl.innerHTML = clean;
+  /* compared without the src the hydrator gave each <img data-blob> — the
+     sanitised form never has one, and repainting the cell for that alone
+     would re-decode every picture in it on every blur */
+  if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
   syncFieldFromDom(cellEl);
   /* Leaving a field is the safe moment to anchor a B-roll marker that got
      into it without being typed — a paste, or the closing character
@@ -1477,13 +1481,18 @@ function init() {
     var file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
+    /* The picture goes into the image registry and is stored at once
+       (#82): the comment body names it by its sha, and the hydrator gives
+       the <img> its src on screen. */
     compressImageFile(file, 700, 0.72).then(function (dataUrl) {
+      var rec = internDataUrl(dataUrl);
+      if (!rec) throw new Error("not a picture the registry takes");
+      persist([rec.sha256]);
       var cellEl = document.getElementById("comment-body-editable");
-      var img = document.createElement("img");
-      img.className = "comment-img";
-      img.src = dataUrl;
+      var holder = document.createElement("div");
+      holder.innerHTML = storedImageHtml(rec);
       cellEl.appendChild(document.createElement("br"));
-      cellEl.appendChild(img);
+      cellEl.appendChild(holder.firstChild);
       cellEl.appendChild(document.createElement("br"));
     }).catch(function () { showToast("Could not use that image.", "error"); });
   });

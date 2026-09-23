@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
-import { internDataUrl, queuePersist } from "./02c-blobs.js";
+import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
@@ -11,7 +11,8 @@ import {
   safeHref,
   safeId,
   safeImageSrc,
-  sanitizeHtml
+  sanitizeHtml,
+  storedImageHtml
 } from "./04-richtext.js";
 import {
   TAG_CATEGORIES,
@@ -249,17 +250,19 @@ export function migrateRows(s) {
     if (!c.updatedAt) c.updatedAt = c.createdAt || null;
     if (c.kind !== "conflict") c.kind = "anchor";
     /* An image conflict card (mergeStates) holds the user's picture as
-       `imageValue`, a record like a row's imageRef, and an empty body;
-       the card draws the picture from the record. An older one — and a
-       file, which writes the picture back into the body for older clients
-       (inlineStateImages) — has it as an inline <img> in the body: interned
-       here the way a row's visualImage is, and taken out of the body. */
+       `imageValue`, a record like a row's imageRef — the one "Use my
+       version" puts back — and its body is that picture in the stored HTML
+       form, <img data-blob> (#82 P6). An older card, and a file (which
+       writes the picture back into the body inline, for older clients:
+       inlineStateImages), has it as an <img src="data:…"> in the body,
+       which sanitizeHtml above has just interned into the stored form; a
+       picture in the body the registry now holds wins over the record, as
+       it did when the body was the only place it could be. */
     if (c.kind === "conflict" && c.field === "visualImage") {
-      var bodyImg = /<img\b[^>]*\ssrc="([^"]*)"/i.exec(c.body);
-      var bodyRec = bodyImg ? internDataUrl(bodyImg[1]) : null;
-      if (bodyRec) queuePersist([bodyRec.sha256]);
+      var bodyImg = /<img\b[^>]*\sdata-blob="([0-9a-f]{64})"/.exec(c.body);
+      var bodyRec = bodyImg ? recordFor(bodyImg[1]) : null;
       c.imageValue = bodyRec || normalizeImageRef(c.imageValue) || null;
-      c.body = "";
+      c.body = c.imageValue ? storedImageHtml(c.imageValue) : "";
     } else if ("imageValue" in c) {
       delete c.imageValue;
     }

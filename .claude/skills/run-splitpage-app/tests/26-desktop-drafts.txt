@@ -304,6 +304,21 @@ expect JSON.parse(fakeImg._drafts.current.stateJson).rows[0].visualImage === B.d
 eval (async function(){ window.__imgTaken = { header: { docIdWrittenOut: true, origin: { kind: 'untitled' } }, stateJson: fakeImg._drafts.current.stateJson, baseJson: null }; window.__imgOutcome = await D.drafts.applyForTest(window.__imgTaken); return true; })()
 expect __imgOutcome === 'applied'
 expect F.state().rows[0].imageRef.sha256 === __imgRec2.sha256 && !('visualImage' in F.state().rows[0])
+# the same for a picture inside a comment's HTML (#82 P6): refsIn names its
+# data-blob, so the folder gets it before the draft names it, and one the
+# folder refuses travels inline in the body and comes back as the ref
+eval (async function(){ __imgOrder = []; window.__imgRec3 = B.internDataUrl(canvasPng('#6c3')); window.__cmtImg3 = '<img class="comment-img" data-blob="' + __imgRec3.sha256 + '" data-w="24" data-h="18" data-mime="image/png">'; var st = F.state(); st.comments.push({ id: 'cimg26a', rowId: st.rows[0].id, field: 'audioText', anchorId: 'cimg26a', quotedText: '', author: 'T', body: 'pic ' + __cmtImg3, resolved: false, kind: 'anchor', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), replies: [] }); window.__imgRec = __imgRec3; D.markDirtyForTest(); window.__imgW3 = await D.drafts.flushNow(); return JSON.stringify(__imgOrder); })()
+expect __imgW3 && __imgW3.ok === true
+expect __imgOrder[0] === 'blob' && __imgOrder.indexOf('draft:held') !== -1 && __imgOrder.indexOf('draft:absent') === -1 && !!fakeImg._blobs[__imgRec3.sha256]
+expect JSON.parse(fakeImg._drafts.current.stateJson).comments.filter(function(c){ return c.id === 'cimg26a'; })[0].body === 'pic ' + __cmtImg3
+eval (async function(){ window.__imgRec4 = B.internDataUrl(canvasPng('#93c')); window.__cmtImg4 = '<img class="comment-img" data-blob="' + __imgRec4.sha256 + '" data-w="24" data-h="18" data-mime="image/png">'; F.state().comments.filter(function(c){ return c.id === 'cimg26a'; })[0].replies.push({ id: 'rimg26b', author: 'T', body: 'reply ' + __cmtImg4, createdAt: new Date().toISOString() }); fakeImg._blobFailNext = {code: 'ENOSPC'}; D.markDirtyForTest(); window.__imgW4 = await D.drafts.flushNow(); return true; })()
+expect __imgW4 && __imgW4.ok === true
+expect !fakeImg._blobs[__imgRec4.sha256]
+expect JSON.parse(fakeImg._drafts.current.stateJson).comments.filter(function(c){ return c.id === 'cimg26a'; })[0].replies[0].body === 'reply <img src="' + B.dataUrlForSync(__imgRec4.sha256) + '" class="comment-img">'
+eval (async function(){ window.__imgTaken4 = { header: { docIdWrittenOut: true, origin: { kind: 'untitled' } }, stateJson: fakeImg._drafts.current.stateJson, baseJson: null }; window.__imgOutcome4 = await D.drafts.applyForTest(window.__imgTaken4); return true; })()
+expect __imgOutcome4 === 'applied'
+expect F.state().comments.filter(function(c){ return c.id === 'cimg26a'; })[0].replies[0].body === 'reply ' + __cmtImg4
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
 
 # =============================================================================
 # browser inertness: once the real (null) backend is back, nothing here does

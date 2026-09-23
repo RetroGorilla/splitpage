@@ -8,7 +8,8 @@ import {
   cssAttr,
   ensureTrailingCaretSpot,
   inertBody,
-  sanitizeHtml
+  sanitizeHtml,
+  storedHtmlFromDom
 } from "./04-richtext.js";
 import {
   applyHighlight,
@@ -509,7 +510,7 @@ export function closeWriter() {
   var active = document.activeElement;
   if (active && active.classList && active.classList.contains("wr-para")) {
     var clean = sanitizeHtml(active.innerHTML);
-    if (clean !== active.innerHTML) active.innerHTML = clean;
+    if (clean !== storedHtmlFromDom(active.innerHTML)) active.innerHTML = clean;
     syncFieldFromDom(active);
   }
   el.hidden = true;

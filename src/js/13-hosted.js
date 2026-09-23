@@ -31,7 +31,6 @@ import {
   updateIdentityChip
 } from "./03-sync.js";
 import {
-  dataUrlForSync,
   ensureBytes,
   inlineStateImages,
   intern as internBlob,
@@ -1420,21 +1419,6 @@ async function uploadBlobs(shas, known) {
   return absent;
 }
 
-/* An <img> tag's data-blob, the way refsIn reads it. */
-var IMG_TAG_RE = /<img\b[^>]*>/gi;
-var IMG_BLOB_ATTR_RE = /\sdata-blob\s*=\s*(?:"([0-9a-f]{64})"|'([0-9a-f]{64})'|([0-9a-f]{64})(?=[\s/>]))/i;
-var IMG_SRC_ATTR_RE = /\ssrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
-
-function inlineHtmlBlobs(html) {
-  if (typeof html !== "string" || html.indexOf("data-blob") === -1) return html;
-  return html.replace(IMG_TAG_RE, function (tag) {
-    var m = IMG_BLOB_ATTR_RE.exec(tag);
-    var url = m ? dataUrlForSync(m[1] || m[2] || m[3]) : null;
-    if (!url) return tag;
-    return tag.replace(IMG_SRC_ATTR_RE, "").replace(m[0], ' src="' + url + '"');
-  });
-}
-
 /* The copy of `state` a server without blob routes is sent: every image
    this page can find the bytes for put back inline. An image whose bytes
    are nowhere keeps its reference — dropping it would lose the record of
@@ -1443,19 +1427,10 @@ async function inlineBlobsForServer(state, refs) {
   if (!refs.length) return state;
   await ensureBytes(refs);
   var out = cloneState(state);
-  /* rows' imageRef and image-conflict cards' imageValue, the way a
-     .splitpage file carries them (02c-blobs.js) */
+  /* rows' imageRef, image-conflict cards' imageValue and every
+     <img data-blob> in the HTML, the way a .splitpage file carries them
+     (02c-blobs.js) */
   inlineStateImages(out);
-  (out.rows || []).forEach(function (r) {
-    if (!r || typeof r !== "object") return;
-    r.visualText = inlineHtmlBlobs(r.visualText);
-    r.audioText = inlineHtmlBlobs(r.audioText);
-  });
-  (out.comments || []).forEach(function (c) {
-    if (!c || typeof c !== "object") return;
-    c.body = inlineHtmlBlobs(c.body);
-    (c.replies || []).forEach(function (rep) { if (rep) rep.body = inlineHtmlBlobs(rep.body); });
-  });
   return out;
 }
 
