@@ -3,6 +3,7 @@ import { SCHEMA_VERSION } from "./00-prelude.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
+import { galleryFieldKey, mergeGalleryField } from "./02d-gallery.js";
 import { noteRemoteChange } from "./12a-undo.js";
 import { isSha256Hex, normalizeImageRef, refsIn } from "../../shared/blob-policy.js";
 import {
@@ -284,13 +285,19 @@ export function byId(list) {
   return map;
 }
 
-export var ROW_FIELDS = ["visualText", "imageRef", "audioText"];
+export var ROW_FIELDS = ["visualText", "imageRef", "audioText", "imageLinks", "moreImages"];
+
+/* The row fields holding the rest of a scene's gallery (#135): merged as
+   sets (mergeGalleryField, 02d-gallery.js), never a conflict. */
+export var GALLERY_FIELDS = { imageLinks: true, moreImages: true };
 
 /* What a row field is compared by. Text by its HTML; the picture by the
    sha its imageRef names (#82) — two records for the same bytes are the
-   same picture, and a record is an object, which === would never equate. */
+   same picture, and a record is an object, which === would never equate;
+   the gallery's lists by what they name (galleryFieldKey). */
 export function rowFieldKey(row, f) {
   if (!row) return null;
+  if (GALLERY_FIELDS[f]) return galleryFieldKey(row, f);
   if (f === "imageRef") {
     var r = row.imageRef;
     return r && typeof r === "object" && typeof r.sha256 === "string" ? r.sha256 : null;
@@ -483,6 +490,21 @@ export function mergeStates(base, mine, theirs) {
     var out = JSON.parse(JSON.stringify(t));
     var tookMine = false, tookTheirs = false;
     ROW_FIELDS.forEach(function (f) {
+      if (GALLERY_FIELDS[f]) {
+        /* the scene's further pictures and captions (#135): what either
+           side added stays, what either removed goes */
+        if (galleryFieldKey(m, f) === galleryFieldKey(t, f)) return;
+        var g = mergeGalleryField(f, b, m, t);
+        var probe = {};
+        probe[f] = g;
+        var gk = galleryFieldKey(probe, f);
+        if (gk !== galleryFieldKey(t, f)) {
+          if (g) out[f] = g; else delete out[f];
+          tookMine = true;
+        }
+        if (gk !== galleryFieldKey(m, f)) tookTheirs = true;
+        return;
+      }
       if (f !== "imageRef") {
         var r = mergeTextField(b ? (b[f] == null ? "" : b[f]) : undefined, m[f], t[f], textCtx);
         if (r.html !== (t[f] == null ? "" : String(t[f]))) out[f] = r.html;
@@ -499,6 +521,8 @@ export function mergeStates(base, mine, theirs) {
       if (b && mv === bv) { tookTheirs = true; return; }            /* only they changed it */
       if (b && tv === bv) {                                         /* only I changed it */
         out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
+        /* the picture's file name goes with it (#135) */
+        if (m.imageName) out.imageName = m.imageName; else delete out.imageName;
         tookMine = true;
         return;
       }

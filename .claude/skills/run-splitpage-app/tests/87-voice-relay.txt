@@ -50,6 +50,9 @@ wait document.querySelectorAll('#prompter .w.spoken').length >= 3
 # a warning reads as the desktop tab's own does
 eval window.__emit({ type: 'warning', session: 1, code: 'too-quiet' })
 wait document.getElementById('pp-voice-status').textContent.indexOf('Speak up') !== -1
+# a blocked warning (#134) relays the same way, with no special-casing needed
+eval window.__emit({ type: 'warning', session: 1, code: 'blocked-desktop' })
+wait document.getElementById('pp-voice-status').textContent.indexOf('blocking desktop apps') !== -1
 # an event type this page does not know yet is passed on, not an error
 eval window.__emit({ type: 'device', session: 1, name: 'USB <b>mic</b>' })
 expect document.getElementById('pp-voice').classList.contains('is-active')

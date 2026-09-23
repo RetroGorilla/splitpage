@@ -1,0 +1,195 @@
+# A scene's Image section is a gallery (#135; 02d-gallery.js for the
+# model, rowGalleryHtml in 05-render.js for the cell, 05e-gallery-overlay.js
+# for its dialog), drawn as Adam's chosen design:
+#   * in the cell, a capped mosaic: 1 item is the picture as before; 3 and 4
+#     are a cover spanning three rows with the rest beside it; 5 and 10 show
+#     the cover, items 2 and 3 and a "+N" button tile holding the 4th
+#     item's picture; a video's tile has a play badge (big on the cover,
+#     with its length);
+#   * under it one line per video — host, then the link — at most three,
+#     then "+N more videos"; a line opens the video (window.open in the
+#     browser, the bridge's openExternal on desktop);
+#   * any tile opens the dialog at that item: "Scene N · Visual", the
+#     counts, a preview with ‹ › and "n / m", Open / Make cover / Remove, a
+#     numbered grid with "behind +N" after item 3 and a "+" tile; "+N more
+#     videos" opens it on the videos alone;
+#   * Make cover, Remove (Delete), a move (Shift+→, or a drag) and an add
+#     are each one undo step with a toast whose Undo takes it back; ← / →
+#     pick; Esc closes;
+#   * a .splitpage save carries every picture inline and reopens the same.
+# The model, merge and exports are src/test/gallery.test.mjs; pastes and
+# drops are 92-paste-into-gallery.txt. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- helpers, and a document with galleries of 1, 3, 4, 5 and 10 ------------
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.D = window.__desktopTest; window.png = function(w, h, color){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL('image/png'); }; window.bytesOf = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }; window.row = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.gal = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .scene-gallery'); }; window.tiles = function(id){ return Array.prototype.slice.call(gal(id).querySelectorAll('.scene-gallery-tile')); }; window.lines = function(id){ return Array.prototype.map.call(document.querySelectorAll('#rows .row[data-id="' + id + '"] .scene-gallery-caption .scene-gallery-line'), function(l){ return l.querySelector('.scene-gallery-host').textContent + ' ' + l.querySelector('.scene-gallery-link').textContent; }); }; window.shas = function(id){ var r = row(id); return [r.imageRef ? r.imageRef.sha256 : null].concat((r.moreImages || []).map(function(m){ return m.imageRef.sha256; })); }; window.M = function(){ return document.getElementById('gallery-modal'); }; window.grid = function(){ return Array.prototype.slice.call(M().querySelectorAll('.scene-gallery-grid-tile[data-gact="pick"]')); }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast:not(.is-leaving)'), function(t){ return t.textContent; }); }; window.clearToasts = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; return true; })()
+eval (function(){ var colors = ['#c33', '#36c', '#3a3', '#fa0', '#a3a', '#3aa', '#999', '#630', '#06c', '#c60', '#0a6', '#60c']; window.P = colors.map(function(c, i){ return png(40 + i, 30, c); }); function more(from, to, links){ var out = []; for (var i = from; i < to; i++) out.push({ visualImage: P[i], name: 'shot ' + (i + 1) + '.png', links: (links && links[i]) || undefined }); return out; } var doc = { schema: 2, title: 'Gallery', comments: [], rows: [ { id: 'r1', visualText: 'one', audioText: 'A', status: 'todo', visualImage: P[0], imageName: 'wide.png' }, { id: 'r3', visualText: 'three', audioText: 'B', status: 'todo', visualImage: P[0], moreImages: more(1, 3) }, { id: 'r4', visualText: 'four', audioText: 'C', status: 'todo', visualImage: P[0], moreImages: more(1, 4) }, { id: 'r5', visualText: 'five', audioText: 'D', status: 'todo', visualImage: P[0], moreImages: more(1, 5, { 3: [{ href: 'https://vimeo.com/4', poster: true }] }) }, { id: 'r10', visualText: 'ten', audioText: 'E', status: 'todo', visualImage: P[0], imageLinks: [{ name: 'take one.mp4', size: 99, duration: 42, poster: true }], moreImages: more(1, 10, { 2: [{ href: 'https://youtu.be/two' }, { href: 'https://www.loom.com/share/three' }], 5: [{ href: 'https://vimeo.com/five', poster: true }], 7: [{ href: 'https://example.com/clip.mp4' }] }) }, { id: 'r0', visualText: 'none', audioText: 'F', status: 'todo' } ] }; F.openFile(new File([JSON.stringify(doc)], 'gallery.splitpage')); return true; })()
+wait F.state().title === 'Gallery' && gal('r10')
+expect JSON.stringify(F.state()).indexOf('data:image') === -1
+expect shas('r10').length === 10 && new Set(shas('r10')).size === 10
+
+# ---- 1. the cell: 1, 3, 4, 5 and 10 items ----------------------------------------
+expect gal('r1').classList.contains('is-single') && tiles('r1').length === 1
+expect tiles('r1')[0].getAttribute('aria-label') === 'Picture 1 of 1: wide.png'
+expect !!gal('r1').querySelector('[data-action="image-replace"]') && !!gal('r1').querySelector('[data-action="image-add-more"]')
+expect gal('r3').classList.contains('is-mosaic') && tiles('r3').length === 3 && tiles('r3')[0].classList.contains('is-cover')
+expect tiles('r4').length === 4 && !gal('r4').querySelector('.is-more')
+expect tiles('r5').length === 4 && tiles('r5')[3].classList.contains('is-more')
+expect tiles('r5')[3].textContent === '+2' && tiles('r5')[3].getAttribute('aria-label') === 'Show all 5 pictures and videos'
+# the "+N" tile holds the 4th item's own picture, and its badge when a video
+expect tiles('r5')[3].querySelector('img').getAttribute('data-blob') === shas('r5')[3]
+expect !!tiles('r5')[3].querySelector('.scene-gallery-play')
+expect tiles('r10').length === 4 && tiles('r10')[3].textContent === '+7'
+# the mosaic's height does not change with how many there are
+wait (function(){ var h = [gal('r3'), gal('r4'), gal('r5'), gal('r10')].map(function(g){ return Math.round(g.getBoundingClientRect().height); }); return h.every(function(x){ return x === h[0] && x >= 130 && x <= 145; }); })()
+# a video cover: the big badge and its length
+expect tiles('r10')[0].classList.contains('is-video') && !!tiles('r10')[0].querySelector('.scene-gallery-play.is-big')
+expect tiles('r10')[0].querySelector('.scene-gallery-length').textContent === '0:42'
+expect !tiles('r10')[1].querySelector('.scene-gallery-play')
+expect !gal('r0') && !!document.querySelector('#rows .row[data-id="r0"] [data-action="image-add"]')
+wait (function(){ var i = tiles('r10')[1].querySelector('img'); return i && (i.getAttribute('src') || '').indexOf('blob:') === 0 && i.complete && i.naturalWidth === 41; })()
+shot 91-mosaic
+
+# ---- 2. the caption: one line per video, three at most -------------------------
+expect JSON.stringify(lines('r10')) === JSON.stringify(['File take one.mp4', 'YouTube youtu.be/two', 'Loom loom.com/share/three'])
+expect document.querySelector('#rows .row[data-id="r10"] .scene-gallery-more-videos').textContent === '+2 more videos'
+expect document.querySelector('#rows .row[data-id="r10"] .scene-gallery-caption a.scene-gallery-link').getAttribute('title') === 'https://youtu.be/two'
+# pictures get no caption line
+expect lines('r4').length === 0 && lines('r5').length === 1
+# a line opens its video: a new tab in the browser, the bridge on desktop
+eval (function(){ window.__opened = []; window.__realOpen = window.open; window.open = function(u){ window.__opened.push(u); return null; }; return true; })()
+eval document.querySelector('#rows .row[data-id="r10"] .scene-gallery-caption a.scene-gallery-link').click()
+expect __opened.join() === 'https://youtu.be/two'
+eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); return true; })()
+eval document.querySelector('#rows .row[data-id="r10"] .scene-gallery-caption a.scene-gallery-link').click()
+expect (fake._externalOpens || []).join() === 'https://youtu.be/two' && __opened.length === 1
+eval (function(){ D.setBackend(null); window.open = window.__realOpen; return true; })()
+
+# ---- 3. the dialog --------------------------------------------------------------
+eval tiles('r10')[3].click()
+wait !M().hidden
+expect document.getElementById('gallery-title').textContent === 'Scene 5 · Visual'
+expect document.getElementById('gallery-summary').textContent === '8 pictures · 5 videos'
+expect grid().length === 10 && grid()[3].classList.contains('is-selected')
+expect M().querySelector('.scene-gallery-position').textContent === '4 / 10'
+# the dashed "behind +7" line after item 3, and a "+" tile
+expect (function(){ var li = M().querySelectorAll('.scene-gallery-grid > li'); return li[3].classList.contains('scene-gallery-divider') && li[3].textContent === 'behind +7'; })()
+expect !!M().querySelector('.scene-gallery-grid-tile.is-add')
+expect grid().map(function(t){ return t.querySelector('.scene-gallery-num').textContent; }).join() === '1,2,3,4,5,6,7,8,9,10'
+expect document.activeElement === grid()[3]
+# a picture's caption is its file name
+expect M().querySelector('.scene-gallery-preview-caption').textContent === 'shot 4.png'
+shot 91-dialog
+# ‹ › and ← → pick
+eval M().querySelector('[data-gact="next"]').click()
+wait M().querySelector('.scene-gallery-position').textContent === '5 / 10'
+key ArrowRight
+wait M().querySelector('.scene-gallery-position').textContent === '6 / 10'
+expect M().querySelector('.scene-gallery-preview-caption').textContent === 'Vimeovimeo.com/five'
+expect !!M().querySelector('.scene-gallery-actions [data-gact="open"]')
+key ArrowLeft
+wait M().querySelector('.scene-gallery-position').textContent === '5 / 10'
+expect !M().querySelector('.scene-gallery-actions [data-gact="open"]')
+# picking and stepping is a view, not an edit
+eval U.flush()
+eval (function(){ window.__u0 = U.sizes().undo; return __u0; })()
+
+# ---- 4. Make cover: one undo step, a toast with Undo ------------------------------
+eval (function(){ window.__before = shas('r10').join(); window.__five = shas('r10')[4]; clearToasts(); return true; })()
+eval M().querySelector('[data-gact="cover"]').click()
+wait shas('r10')[0] === __five
+wait tiles('r10')[0].querySelector('img').getAttribute('data-blob') === __five
+expect M().querySelector('.scene-gallery-position').textContent === '1 / 10' && grid()[0].classList.contains('is-selected')
+expect M().querySelector('[data-gact="cover"]').disabled === true
+wait toasts().indexOf('Made the coverUndo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+jsclick #toast-host .toast-action
+wait shas('r10').join() === __before
+# the dialog follows the undo
+wait grid()[0].querySelector('img').getAttribute('data-blob') === shas('r10')[0]
+
+# ---- 5. Remove, with Delete; Ctrl+Z brings it back ----------------------------------
+eval grid()[2].click()
+wait grid()[2].classList.contains('is-selected')
+eval (function(){ window.__third = shas('r10')[2]; clearToasts(); grid()[2].focus(); return true; })()
+key Delete
+wait shas('r10').length === 9 && shas('r10').indexOf(__third) === -1
+wait grid().length === 9
+wait toasts().some(function(t){ return t.indexOf('Picture removed') === 0; })
+# its two video links went with it; the caption moves up
+expect lines('r10').length === 3 && lines('r10')[1] === 'Vimeo vimeo.com/five'
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+key ctrl KeyZ
+wait shas('r10').join() === __before
+wait grid().length === 10
+
+# ---- 6. moves: Shift+→ on the picked one, and a drag ---------------------------------
+eval grid()[1].click()
+eval (function(){ window.__second = shas('r10')[1]; grid()[1].focus(); return true; })()
+key shift ArrowRight
+wait shas('r10')[2] === __second
+expect grid()[2].classList.contains('is-selected')
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+eval (function(){ window.__eighth = shas('r10')[7]; var from = grid()[7], to = grid()[1]; var dt = new DataTransfer(); from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt })); to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); to.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()
+wait shas('r10')[1] === __eighth
+eval U.flush()
+expect U.sizes().undo === __u0 + 2
+key ctrl KeyZ
+wait shas('r10')[7] === __eighth
+key ctrl KeyZ
+wait shas('r10').join() === __before
+
+# ---- 7. "+" adds a picture beside the others ------------------------------------------
+eval clearToasts()
+eval M().querySelector('.scene-gallery-grid-tile.is-add').click()
+eval (function(){ var inp = document.getElementById('file-input'); var dt = new DataTransfer(); dt.items.add(new File([bytesOf(P[11])], 'extra.png', { type: 'image/png' })); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait shas('r10').length === 11
+wait grid().length === 11
+expect row('r10').moreImages[9].name === 'extra.png'
+wait toasts().indexOf('Picture added to scene 5Undo') !== -1
+expect tiles('r10')[3].textContent === '+8'
+jsclick #toast-host .toast-action
+wait shas('r10').length === 10
+
+# ---- 8. Esc closes, and the focus goes back to the tile ------------------------------
+eval grid()[0].focus()
+key Escape
+wait M().hidden
+expect document.activeElement && document.activeElement.closest('.scene-gallery') === gal('r10')
+
+# ---- 9. "+N more videos" opens the dialog on the videos alone --------------------------
+eval document.querySelector('#rows .row[data-id="r10"] .scene-gallery-more-videos').click()
+wait !M().hidden
+expect grid().map(function(t){ return t.querySelector('.scene-gallery-num').textContent; }).join() === '1,3,6,8'
+expect !M().querySelector('.scene-gallery-divider') && !M().querySelector('.is-add')
+expect document.getElementById('gallery-summary').textContent.indexOf('videos only') !== -1
+eval M().querySelector('[data-gact="all"]').click()
+wait grid().length === 10
+jsclick #gallery-close
+wait M().hidden
+
+# ---- 10. a single picture keeps Replace and Remove in the cell ---------------------------
+eval clearToasts()
+eval gal('r1').querySelector('[data-action="image-remove"]').click()
+wait !row('r1').imageRef
+wait toasts().some(function(t){ return t.indexOf('Picture removed') === 0; })
+jsclick #toast-host .toast-action
+wait !!row('r1').imageRef && row('r1').imageName === 'wide.png'
+
+# ---- 11. a .splitpage save carries every picture inline, and reopens the same ------------
+eval (function(){ window.__saved = []; window.__h = { name: 'gallery.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ return { write: async function(d){ window.__saved.push(typeof d === 'string' ? d : await new Blob([d]).text()); }, close: async function(){} }; }, getFile: async function(){ return new File([window.__saved[window.__saved.length - 1] || F.buildSplitpage()], 'gallery.splitpage', { lastModified: window.__h._mtime }); } }; window.__keep = JSON.stringify(F.state().rows.map(function(r){ return [r.imageRef, r.imageName, r.imageLinks, r.moreImages]; })); return F.openFile(new File([F.buildSplitpage()], 'gallery.splitpage', { lastModified: window.__h._mtime }), window.__h).then(function(){ return true; }); })()
+wait F.docFile().kind === 'splitpage'
+eval (function(){ row('r0').audioText = 'saved'; F.save(); return true; })()
+wait window.__saved.length === 1
+expect (function(){ var r = JSON.parse(__saved[0]).rows[4]; return r.visualImage.indexOf('data:image/') === 0 && r.moreImages.length === 9 && r.moreImages.every(function(m){ return m.visualImage.indexOf('data:image/') === 0 && !m.imageRef; }); })()
+eval (function(){ return F.openFile(new File([__saved[0]], 'again.splitpage')).then(function(){ return true; }); })()
+wait JSON.stringify(F.state().rows.map(function(r){ return [r.imageRef, r.imageName, r.imageLinks, r.moreImages]; })) === __keep
+wait tiles('r10').length === 4
+expect (function(){ var j = JSON.stringify(F.state()); return j.indexOf('data:image') === -1 && j.indexOf('blob:') === -1; })()
+
+logs

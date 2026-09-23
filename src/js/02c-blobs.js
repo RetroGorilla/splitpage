@@ -426,6 +426,14 @@ export function inlineStateImages(s, only) {
   if (!s || typeof s !== "object") return missing;
   (Array.isArray(s.rows) ? s.rows : []).forEach(function (r) {
     if (!r || typeof r !== "object") return;
+    /* the scene's further pictures (#135) go inline the same way, as
+       `visualImage` on each item; migrateGallery (02d-gallery.js) reads
+       them back */
+    (Array.isArray(r.moreImages) ? r.moreImages : []).forEach(function (it) {
+      if (!it || typeof it !== "object" || !it.imageRef) return;
+      var u = pick(it.imageRef);
+      if (u) { it.visualImage = u; delete it.imageRef; }
+    });
     if (!r.imageRef) {
       /* no picture: the file says so the way it always did */
       if (!only && "imageRef" in r) { delete r.imageRef; r.visualImage = null; }

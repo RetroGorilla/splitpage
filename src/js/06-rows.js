@@ -1,10 +1,14 @@
 import { S } from "./_state.js";
 import { makeId } from "./02-state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
+import {
+  addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
+} from "./02d-gallery.js";
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
-import { safeId, sanitizeHtml } from "./04-richtext.js";
+import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
+import { galleryEdit } from "./05e-gallery-overlay.js";
 import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -355,30 +359,151 @@ export function compressImageFile(file, maxDim, quality) {
 /* The picture goes into the image registry (02c-blobs.js, #82) and the
    row names it by its record: state holds a few dozen bytes per image, not
    the image. Storing the bytes durably starts at once; nothing waits on
-   it — the writers that must not name an unstored blob persist first. */
-export function handleImageFile(rowId, file) {
+   it — the writers that must not name an unstored blob persist first.
+
+   Since #135 the Image section is a gallery (02d-gallery.js). `slot`:
+   a number replaces that slot's picture (Replace), keeping its caption;
+   absent, the picture is added — into an empty first slot, or after the
+   others (the paperclip, Add, and a file dropped on the visual column).
+   The gallery then shows the picture just placed. */
+export function handleImageFile(rowId, file, slot) {
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
     var rec = internDataUrl(dataUrl);
     if (!rec) throw new Error("not a picture the registry takes");
     persist([rec.sha256]);
-    delete S.state.rows[idx].visualImage;
-    S.state.rows[idx].imageRef = rec;
-    stampRow(S.state.rows[idx]);
-    markDirty();
-    render();
+    var replacing = typeof slot === "number";
+    galleryEdit(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
+      if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
+      if (!replacing) addGalleryPicture(row, rec, file.name);
+      return true;
+    });
   }).catch(function () { showToast("Could not use that image.", "error"); });
 }
 
-export function removeImage(rowId) {
+/* Takes one slot of the gallery away — its picture and its caption. */
+export function removeImage(rowId, slot) {
+  galleryEdit(rowId, "Picture removed", function (row) {
+    return removeGallerySlot(row, slot || 0);
+  });
+}
+
+/* Takes one video link off a slot's caption (the × beside it). */
+export function removeImageLink(rowId, slot, key) {
+  galleryEdit(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
+}
+
+/* ---- video files in a scene's gallery (#135) ----
+
+   A video file dropped or pasted into a scene is named in its caption,
+   never carried: its bytes are far too big to be the document's, and
+   where it sits on this computer is nobody else's business. So the
+   document keeps {name, size}, and THIS SESSION keeps the rest: on the
+   desktop, the bridge's grantVideoFile(file) asks main to remember the
+   file's path (main reads it off the File itself, through
+   webUtils.getPathForFile, so a page cannot name a path of its choosing)
+   and answers a token; the caption's link opens the file with its own app
+   through openVideoFile(token), which main honours only for a path it was
+   given that way. The browser has no path to keep. */
+var videoFileTokens = {};
+
+export function grantVideoFile(file, link) {
+  if (!S.DESKTOP || typeof S.DESKTOP.grantVideoFile !== "function") return;
+  /* keyed as the caption will hold it: its name made safe */
+  var key = videoLinkKey(normalizeVideoLink(link) || link);
+  Promise.resolve(S.DESKTOP.grantVideoFile(file)).then(function (token) {
+    if (typeof token === "string" && token) videoFileTokens[key] = token;
+  }, function () {});
+}
+
+export function openVideoFile(link) {
+  var name = link.name || "that video";
+  if (!S.DESKTOP || typeof S.DESKTOP.openVideoFile !== "function") {
+    showToast("“" + name + "” is a video file on the computer it was added from — only its name is kept here. " +
+      "Open it from there, or in the Splitpage desktop app.", "warn", true);
+    return;
+  }
+  var token = videoFileTokens[videoLinkKey(link)];
+  if (!token) {
+    showToast("Splitpage only opens a video file you dropped or pasted in since it started — " +
+      "drop “" + name + "” onto this scene again to open it from here.", "warn", true);
+    return;
+  }
+  Promise.resolve(S.DESKTOP.openVideoFile(token)).then(function (res) {
+    if (res && res.ok) return;
+    showToast("Could not open “" + name + "”" + (res && res.code === "GONE" ? " — it is no longer where it was." : "."), "error");
+  }, function () { showToast("Could not open “" + name + "”.", "error"); });
+}
+
+/* A caption's video, opened: a web address in the browser — the desktop
+   app hands it to the system's (the bridge's openExternal, which takes
+   http(s) only) — and a video file from this session's drop or paste
+   through the desktop bridge, which opens it with its own app only if
+   main granted it (openVideoFile). Everything goes through safeHref. */
+export function openGalleryLink(rowId, slot, key) {
   var idx = findRowIndex(rowId);
   if (idx === -1) return;
-  delete S.state.rows[idx].visualImage;
-  S.state.rows[idx].imageRef = null;
-  stampRow(S.state.rows[idx]);
-  markDirty();
-  render();
+  var s = rowSlots(S.state.rows[idx])[slot];
+  var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
+  if (!link) return;
+  if (link.href) {
+    var href = safeHref(link.href);
+    if (!href || !/^https?:\/\//i.test(href)) return;
+    if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(href); return; }
+    var win = window.open(href, "_blank", "noopener");
+    if (win) win.opener = null;
+    return;
+  }
+  openVideoFile(link);
+}
+
+/* A video file's first frame, as a JPEG data: URI no bigger than a scene
+   picture, and its length in seconds: {dataUrl, duration}, or null when
+   this browser cannot decode it (the gallery shows a placeholder then).
+   Read through a blob: URL in a <video> — the page's
+   policy allows media from blob: and nothing else (build.mjs's CSP) — and
+   given up on after a few seconds. */
+export function videoFirstFrame(file) {
+  return new Promise(function (resolve) {
+    var url, v, timer, settled = false;
+    function done(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { v.removeAttribute("src"); v.load(); } catch (e) {}
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      resolve(result);
+    }
+    try {
+      url = URL.createObjectURL(file);
+      v = document.createElement("video");
+    } catch (e) { resolve(null); return; }
+    v.muted = true;
+    v.preload = "auto";
+    v.playsInline = true;
+    timer = setTimeout(function () { done(null); }, 4000);
+    v.onerror = function () { done(null); };
+    v.onloadeddata = function () {
+      /* a moment in: the very first frame of a clip is often black */
+      var t = isFinite(v.duration) && v.duration > 0 ? Math.min(0.5, v.duration / 3) : 0;
+      if (t > 0 && Math.abs(v.currentTime - t) > 0.01) { v.onseeked = grab; v.currentTime = t; }
+      else grab();
+    };
+    function grab() {
+      try {
+        var w = v.videoWidth, h = v.videoHeight;
+        if (!w || !h) { done(null); return; }
+        var scale = Math.min(1, 1000 / Math.max(w, h));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
+        done({ dataUrl: canvas.toDataURL("image/jpeg", 0.78), duration: isFinite(v.duration) && v.duration > 0 ? v.duration : 0 });
+      } catch (e) { done(null); }
+    }
+    v.src = url;
+  });
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

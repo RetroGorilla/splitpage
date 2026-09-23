@@ -12,7 +12,7 @@
 
 "use strict";
 
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 if (location.origin === "splitpage://app") {
   /* THE CHANNEL TABLE (desktop/ipc-channels.js) is the one list of channels
@@ -386,6 +386,22 @@ if (location.origin === "splitpage://app") {
 
     openExternal(url) {
       send("splitpage:open-external", url);
+    },
+
+    /* ---- video files in a scene's gallery (#135) ----
+       grantVideoFile takes the File a drop or a paste gave the page — never
+       a path: the path is read here, off the File, and a File the page
+       built itself has none — and answers main's token for it, or null.
+       openVideoFile opens the file a token names with its own app. */
+    grantVideoFile(file) {
+      let filePath;
+      try { filePath = webUtils.getPathForFile(file) || ""; } catch { filePath = ""; }
+      if (!filePath) return Promise.resolve(null);
+      return invoke("splitpage:video-file-grant", filePath).then((t) => (typeof t === "string" ? t : null), () => null);
+    },
+
+    openVideoFile(token) {
+      return invoke("splitpage:video-file-open", String(token || ""));
     },
 
     /* ---- updates (see main.js section 9) --------------------------------

@@ -38,12 +38,14 @@ import {
   insertLineBreak,
   isScriptCell,
   render,
+  renderRow,
   syncFieldFromDom,
   toggleCellFormat,
   typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
+import { openGalleryOverlay } from "./05e-gallery-overlay.js";
 import {
   appendDraftMedia,
   draftRedo,
@@ -61,15 +63,19 @@ import {
   armDelete,
   clearDropMarkers,
   compressImageFile,
+  grantVideoFile,
   focusRowField,
   handleImageFile,
   moveRow,
   moveRowTo,
+  openGalleryLink,
   removeImage,
+  removeImageLink,
   setDropMarkerForRow,
   splitCellField,
   swapAdjacentRows,
-  updateDragScroll
+  updateDragScroll,
+  videoFirstFrame
 } from "./06-rows.js";
 import {
   acceptTagGhost,
@@ -151,8 +157,7 @@ import {
   setCommentSortMode,
   syncAnchorResolvedClasses,
   toggleReplyComposer,
-  toggleResolve,
-  updateCommentsCount
+  toggleResolve
 } from "./10-comments.js";
 import {
   clearPendingFileRows,
@@ -514,16 +519,48 @@ export function onRootClick(e) {
   var del = e.target.closest('[data-action="delete-row"]');
   if (del) { armDelete(del, del.getAttribute("data-id")); return; }
 
-  var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-replace"]');
+  var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-add-more"], [data-action="image-replace"]');
   if (imgAdd) {
     S.pendingImageRowId = imgAdd.getAttribute("data-id");
+    /* Replace names its slot (a single picture); the paperclip and Add add (#135) */
+    pendingImageSlot = imgAdd.getAttribute("data-action") === "image-replace"
+      ? Number(imgAdd.getAttribute("data-slot")) || 0 : undefined;
     document.getElementById("file-input").click();
     return;
   }
 
   var imgRemove = e.target.closest('[data-action="image-remove"]');
-  if (imgRemove) { removeImage(imgRemove.getAttribute("data-id")); return; }
+  if (imgRemove) { removeImage(imgRemove.getAttribute("data-id"), Number(imgRemove.getAttribute("data-slot")) || 0); return; }
+
+  /* the scene's gallery (#135): a tile opens its dialog (05e-gallery-
+     overlay.js) at that item, "+N more videos" at its videos; a caption
+     line opens its video; × takes a link off */
+  var tile = e.target.closest('[data-action="gallery-open"], [data-action="gallery-open-videos"]');
+  if (tile) {
+    openGalleryOverlay(tile.getAttribute("data-id"), Number(tile.getAttribute("data-slot")) || 0,
+      tile.getAttribute("data-action") === "gallery-open-videos");
+    return;
+  }
+
+  var linkOff = e.target.closest('[data-action="gallery-link-remove"]');
+  if (linkOff) {
+    removeImageLink(linkOff.getAttribute("data-id"), Number(linkOff.getAttribute("data-slot")) || 0, linkOff.getAttribute("data-key"));
+    return;
+  }
+
+  var videoLinkEl = e.target.closest('[data-action="gallery-link"]');
+  if (videoLinkEl) {
+    e.preventDefault();
+    openGalleryLink(videoLinkEl.getAttribute("data-id"), Number(videoLinkEl.getAttribute("data-slot")) || 0, videoLinkEl.getAttribute("data-key"));
+    return;
+  }
 }
+
+/* The slot the file picker's picture goes to: a number for Replace,
+   undefined to add one (#135). */
+var pendingImageSlot;
+
+
 
 function onRootMouseDown(e) {
   hideTagGhost();
@@ -885,14 +922,15 @@ function onRootFocusOut(e) {
    from another scene stays a live tag, anything foreign is sanitised away
    — and put in place of the selection as one undoable edit. A picture, a
    video card, a video link or a video file never goes in the cell (design
-   D7): it is attached to the scene as a comment, in that same edit (#124).
-   Files are read first — a picture is made small and hashed — so a paste
-   carrying one goes in a moment later. */
+   D7): it goes into the scene's gallery, its Image section, in that same
+   edit (#135; #124 made a comment of it). Files are read first — a
+   picture is made small and hashed, a video file's first frame taken —
+   so a paste carrying one goes in a moment later. */
 function insertIntoScriptCell(cellEl, html, text, files) {
   if (hasMediaFiles(files)) {
     var rowId = cellEl.getAttribute("data-id");
     var field = cellEl.getAttribute("data-field");
-    readClipboardFiles(files, compressImageFile).then(function (extra) {
+    readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: grantVideoFile }).then(function (extra) {
       /* the same cell, unless a repaint replaced it meanwhile */
       var live = cellEl.isConnected ? cellEl
         : document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
@@ -908,8 +946,12 @@ function insertIntoScriptCellNow(cellEl, html, text, extra) {
   var res = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
   var lost = res.lost + (extra ? extra.lost : 0);
-  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be attached — only a link to it was copied. Save it, then paste or drop the file.", "warn");
-  if (res.attached.length) announceAttached(res, before);
+  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
+  if (res.attached) {
+    /* the Image section shows what just went in */
+    renderRow(cellEl.getAttribute("data-id"));
+    announceAttached(res, before);
+  }
   if (res.movedComments) {
     /* a cut comment's card follows its words to the new scene */
     syncAnchorResolvedClasses();
@@ -923,23 +965,16 @@ function insertIntoScriptCellNow(cellEl, html, text, extra) {
    (05c-clipboard.js): a copy never carries a comment; a cut does, to the
    paste in this tab that moves it (design D6). A selection that is not
    inside one script cell is left to the browser. */
-/* "Picture attached to scene 4", with Undo: the paste's own undo entry —
-   the words and what was attached — taken back, so long as it is still the
-   last thing done; after anything else, Ctrl+Z is the way back. */
+/* "Picture added to scene 4", with Undo: the paste's own undo entry —
+   the words and what went into the gallery — taken back, so long as it is
+   still the last thing done; after anything else, Ctrl+Z is the way back. */
 function announceAttached(res, before) {
-  var pics = 0, vids = 0;
-  res.attached.forEach(function (c) { if (/<img/.test(c.body)) pics++; else vids++; });
+  var pics = res.attached.pictures, vids = res.attached.videos;
   function n(count, one) { return count === 1 ? one : count + " " + one + "s"; }
   var what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
     : pics ? n(pics, "picture") : n(vids, "video");
-  var msg = what.charAt(0).toUpperCase() + what.slice(1) + " attached to scene " + (res.rowIndex + 1);
-  updateCommentsCount();
-  if (!document.getElementById("comments-panel").hidden) {
-    captureReplyDrafts();
-    renderComments();
-  }
+  var msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (res.rowIndex + 1);
   var entry = lastUndoEntry();
-  /* a server document's comments are sent, not undone (design D5) */
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
   showActionToast(msg, "ok", "Undo", function () {
     if (lastUndoEntry() === entry) undo();
@@ -1188,18 +1223,26 @@ function onRootDragLeave(e) {
 
 function onRootDrop(e) {
   var drop = imageDropTarget(e);
-  /* A video file is no scene picture: dropped on the visual column it is
-     attached to the scene from that column's cell, like one dropped on
-     the words (#124). */
+  /* Pictures and video files dropped anywhere on the visual column go into
+     the scene's gallery (#135) the way a paste's do — added beside the
+     pictures there, a video as its link — through the column's cell, so
+     it is one undo entry with a toast. Dropped on the words, the words
+     that came with them go in too; anywhere else in the column only the
+     files count. */
   var dropFiles = e.dataTransfer && e.dataTransfer.files;
-  var videoOnly = drop && hasMediaFiles(dropFiles) &&
-    !Array.prototype.some.call(dropFiles, function (f) { return /^image\//.test(f.type || ""); });
-  if (drop && !videoOnly) {
+  var mediaDrop = drop && hasMediaFiles(dropFiles);
+  if (drop) drop.closest(".visual-cell").classList.remove("drag-over");
+  if (drop && !mediaDrop) {
+    /* some other file: not a picture, and not for the browser to open */
     e.preventDefault();
-    var cell = drop.closest(".visual-cell");
-    if (cell) cell.classList.remove("drag-over");
-    var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) handleImageFile(drop.getAttribute("data-id"), file);
+    if (dropFiles && dropFiles.length) showToast("Only pictures and video files go in a scene's Image section.", "warn");
+    return;
+  }
+  if (mediaDrop && !(e.target.closest && e.target.closest(".cell-editable"))) {
+    e.preventDefault();
+    if (reviewMode()) return;
+    var visualCell = drop.closest(".visual-cell").querySelector(".cell-editable");
+    if (visualCell) insertIntoScriptCell(visualCell, "", "", dropFiles);
     return;
   }
   if (S.dragRowId) {
@@ -1221,8 +1264,7 @@ function onRootDrop(e) {
      the way a paste does (insertIntoScriptCell), at the drop point. A drag
      carries no cut nonce, so a comment on dragged words stays where it was
      (design D6). */
-  var cellEl = (e.target.closest && e.target.closest(".cell-editable")) ||
-    (videoOnly ? drop.closest(".visual-cell").querySelector(".cell-editable") : null);
+  var cellEl = e.target.closest && e.target.closest(".cell-editable");
   if (cellEl) {
     e.preventDefault();
     var dt = e.dataTransfer;
@@ -1532,6 +1574,22 @@ function init() {
 
   document.getElementById("history-close").addEventListener("click", closeHistoryPanel);
   document.getElementById("history-panel").addEventListener("click", onRootClick);
+
+  /* Mousedown, not click, is where the default has to be prevented (issue:
+     Production wouldn't open after scrolling past #138's denser header).
+     .topbar is `position: sticky`, and while scrolled it sits in its
+     condensed, one-row state; a plain contenteditable cell was focused
+     when the toolbar button was pressed. Letting the mousedown move focus
+     to the button made the browser scroll the (un-stuck, static) header
+     back into view to reveal it — snapping the topbar out of .is-condensed
+     between the mousedown and the mouseup a real click delivers a few
+     pixels apart, so the button was gone from under the pointer by the
+     time the up-event landed and no click ever fired. The buttons never
+     needed focus for their click handler to run, so simply not taking it
+     leaves the header - and the pointer - exactly where they were. */
+  document.querySelector(".toolbar").addEventListener("mousedown", function (e) {
+    if (e.target.closest(".btn")) e.preventDefault();
+  });
 
   document.getElementById("btn-production").addEventListener("click", function () {
     if (!S.state) { showToast("Still loading...", "warn"); return; }
@@ -1858,9 +1916,10 @@ function init() {
 
   document.getElementById("file-input").addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0];
-    if (file && S.pendingImageRowId) handleImageFile(S.pendingImageRowId, file);
+    if (file && S.pendingImageRowId) handleImageFile(S.pendingImageRowId, file, pendingImageSlot);
     e.target.value = "";
     S.pendingImageRowId = null;
+    pendingImageSlot = undefined;
   });
 
   document.getElementById("doc-title").addEventListener("input", function (e) {

@@ -86,8 +86,9 @@ expect sync0.blob === P && sync0.src === B.urlForSync(P) && sync0.src.indexOf('b
 expect sync1.blob === W && sync1.src === null
 expect sync2.blob === 'e'.repeat(64) && sync2.src === null
 expect B.rowImageUrl(F.state().rows[0]) === B.urlForSync(P) && B.rowImageUrl(F.state().rows[2]) === null && B.rowImageUrl(F.state().rows[3]) === LEGACY
-# the legacy row renders exactly as it always did
-expect document.querySelector('#rows .row[data-id="' + IDS[3] + '"] .image-thumb-wrap').innerHTML.indexOf('<img src="' + LEGACY + '" alt="">') === 0
+# the legacy row's picture is the same <img> it always was — since #135
+# inside the gallery's tile, a button that opens the scene's gallery
+expect document.querySelector('#rows .row[data-id="' + IDS[3] + '"] .image-thumb-wrap .scene-gallery-tile').innerHTML.indexOf('<img src="' + LEGACY + '" alt="">') === 0
 # the hydrator fetches W from IndexedDB and fills its src; P's shows
 wait (function(){ var b = imgOf(1); return b && (b.getAttribute('src') || '').indexOf('blob:') === 0 && b.complete && b.naturalWidth === 37; })()
 wait (function(){ var a = imgOf(0); return a && a.complete && a.naturalWidth === 37 && a.naturalHeight === 23; })()

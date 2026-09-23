@@ -42,7 +42,7 @@ expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="prompter-open-in-
 expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item[data-cmd="find"] .cmdk-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+F'
 expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') == save
 expect document.getElementById('cmdk-input').getAttribute('aria-activedescendant') === document.querySelector('#cmdk-list .cmdk-item.is-active').id
-shot 91-command-menu
+shot 99-command-menu
 
 # --- typing narrows, by name and by the words people use -------------------
 type gear

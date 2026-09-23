@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
-import { rowImage } from "./02c-blobs.js";
+import { gallerySize, rowSlots, setRowSlots } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   cssAttr,
@@ -55,7 +55,7 @@ S.writerLastCell = null;
 
 function writerBlockHtml(row, i) {
   var visual;
-  if (rowImage(row)) {
+  if (gallerySize(row)) {
     var caption = truncateForPreview(htmlToPlainText(row.visualText), 42);
     visual = '<span class="wr-visual-img">▣</span> ' + escapeHtml(caption || "reference image");
   } else {
@@ -260,8 +260,8 @@ function mergeWriterRows(intoIdx) {
   var prev = S.state.rows[intoIdx];
   var cur = S.state.rows[intoIdx + 1];
   if (!prev || !cur) return;
-  var prevHasVisual = !!(htmlToPlainText(prev.visualText) || rowImage(prev));
-  var curHasVisual = !!(htmlToPlainText(cur.visualText) || rowImage(cur));
+  var prevHasVisual = !!(htmlToPlainText(prev.visualText) || gallerySize(prev));
+  var curHasVisual = !!(htmlToPlainText(cur.visualText) || gallerySize(cur));
   if (prevHasVisual && curHasVisual) {
     showToast("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
     return;
@@ -291,8 +291,8 @@ function mergeWriterRows(intoIdx) {
   }
   if (curHasVisual) {
     prev.visualText = cur.visualText;
-    delete prev.visualImage;
-    prev.imageRef = cur.imageRef || null;
+    /* its whole gallery comes with it (#135) */
+    setRowSlots(prev, rowSlots(cur));
   }
   /* Same rule mergeStates() uses for two people editing at once: status is
      not a value to pick between, it is progress to accumulate. Joining a
