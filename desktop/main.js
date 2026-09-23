@@ -4941,8 +4941,22 @@ function registerIpc() {
     return v;
   };
 
-  ipcHandle("splitpage:history-put", async (event, docId, meta, stateJson, protect) => {
-    historyDocIdArg(docId);
+  /* (docId | null, meta, stateJson, {protect?, older?}) — the store's own
+     put(), options bag and all. {older:true} (literally true) writes into
+     the Older bucket, and then the docId MUST be null: the flag names the
+     bucket, never a string, so "_older" or a real docId beside it rejects.
+     Without the flag the docId must be a real one, so null alone rejects
+     too. That one flag is all that is left of splitpage:history-import-
+     older (#83 step 4): an import into Older is a put per entry, each
+     put-if-absent, and the renderer counts what landed. */
+  ipcHandle("splitpage:history-put", async (event, docId, meta, stateJson, opts) => {
+    const o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
+    const older = o.older === true;
+    if (older) {
+      if (docId !== null) throw new Error("history: an Older put names no document");
+    } else {
+      historyDocIdArg(docId);
+    }
     const clean = sanitizeHistoryMeta(meta);
     if (!clean) throw new Error("history: invalid snapshot meta");
     if (typeof stateJson !== "string") throw new Error("history: invalid snapshot body");
@@ -4957,12 +4971,14 @@ function registerIpc() {
        than by A's own put. Each report replaces the last, which is what
        protectHistorySnapshot's release() is: the page sends its current holds
        with every put. */
-    const held = historyProtectList(protect);
+    const held = historyProtectList(o.protect);
     historyHolds.set(event.sender.id, held);
     /* The answer keeps HISTORY-IPC's shape ({ok, sizeBytes, duplicate,
        evicted, overCap} | {ok:false, code, evicted?}), which is what 03a's
-       desktopHistoryBackend reads. */
-    const r = await historyStore.put(docId, clean, stateJson, { protect: held });
+       desktopHistoryBackend reads — an Older put answers it too. */
+    const r = older
+      ? await historyStore.put(null, clean, stateJson, { protect: held, older: true })
+      : await historyStore.put(docId, clean, stateJson, { protect: held });
     if (r.stored) {
       return {
         ok: true,
@@ -4977,18 +4993,25 @@ function registerIpc() {
     return out;
   });
 
+  /* → {entries, older, olderExpiresAt, usage} — usage being the store's
+     {totalBytes, capBytes, overCap, docCount, readOnly}, or null when it
+     could not be read. The panel only ever asked for usage together with
+     a list, so it rides on the list's answer rather than a channel of its
+     own (#83 step 4). A list the store cannot read still rejects. */
   ipcHandle("splitpage:history-list", async (event, docId) => {
     /* null is "just the Older bucket, please" — the panel asks for it on a
        document that has no id yet. Anything else must be a real docId. */
     const id = docId == null ? null : historyDocIdArg(docId);
     /* The v1 migration holds the queue: say so now rather than wait behind
        it (the panel shows a line instead of "No snapshots"). */
-    if (historyBackend.migrating) return { entries: [], older: [], olderExpiresAt: null, migrating: true };
+    if (historyBackend.migrating) return { entries: [], older: [], olderExpiresAt: null, usage: null, migrating: true };
     const r = await historyStore.list(id);
+    const usage = await historyStore.usage().catch(() => null);
     return {
       entries: r.entries.map(historyWireMeta),
       older: r.older.map(historyWireMeta),
-      olderExpiresAt: r.olderExpiresAt
+      olderExpiresAt: r.olderExpiresAt,
+      usage
     };
   });
 
@@ -5024,15 +5047,6 @@ function registerIpc() {
   ipcHandle("splitpage:history-touch", async (event, docId, title) => {
     historyDocIdArg(docId);
     await historyStore.touch(docId, title);
-  });
-
-  ipcHandle("splitpage:history-import-older", async (event, entries) => {
-    if (!Array.isArray(entries)) throw new Error("history: invalid import");
-    return historyStore.importOlder(entries);
-  });
-
-  ipcHandle("splitpage:history-usage", async () => {
-    return historyStore.usage();
   });
 
   /* Enumeration for File > Export app data.. on desktop (20h-appdata.js /

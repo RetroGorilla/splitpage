@@ -1117,12 +1117,17 @@ function addFakeDesktopHistory(backend) {
   }
   function invalid(what) { return Promise.reject(new Error("history: " + what)); }
 
-  backend.historyPut = function (docId, meta, stateJson, protect) {
-    var id = normalizeDocId(docId);
+  /* main's history-put: (docId | null, meta, stateJson, {protect?,
+     older?}). {older:true} — literally true — writes into Older and then
+     the docId must be null; without it the docId must be real. */
+  backend.historyPut = function (docId, meta, stateJson, opts) {
+    var o = opts && typeof opts === "object" && !Array.isArray(opts) ? opts : {};
+    var older = o.older === true;
+    var id = older ? (docId === null ? HISTORY_OLDER_KEY : null) : normalizeDocId(docId);
     var m = sanitizeHistoryMeta(meta);
     if (!id || !m || typeof stateJson !== "string") return invalid("invalid put");
-    if (Array.isArray(protect)) held = protect.slice();
-    return store.put(id, m, stateJson).then(function (r) {
+    if (Array.isArray(o.protect)) held = o.protect.slice();
+    return (older ? store.put(null, m, stateJson, { older: true }) : store.put(id, m, stateJson)).then(function (r) {
       if (!r.stored) return { ok: false, code: r.code };
       return { ok: true, sizeBytes: historyUtf8Length(stateJson), duplicate: !!r.duplicate, evicted: r.evicted || 0, overCap: !!r.overCap };
     });
@@ -1132,9 +1137,12 @@ function addFakeDesktopHistory(backend) {
     var id = docId == null ? null : normalizeDocId(docId);
     if (docId != null && !id) return invalid("invalid document id");
     return store.list(id).then(function (r) {
-      /* main's metas carry no document id: on its side the bucket is the
-         document, and the renderer stamps it back on */
-      return { entries: r.entries.map(sanitizeHistoryMeta), older: r.older.map(sanitizeHistoryMeta), olderExpiresAt: r.olderExpiresAt };
+      return store.usage().then(null, function () { return null; }).then(function (usage) {
+        /* main's metas carry no document id: on its side the bucket is the
+           document, and the renderer stamps it back on. The usage rides on
+           the list's answer, as main's does. */
+        return { entries: r.entries.map(sanitizeHistoryMeta), older: r.older.map(sanitizeHistoryMeta), olderExpiresAt: r.olderExpiresAt, usage: usage };
+      });
     });
   };
 
@@ -1159,13 +1167,6 @@ function addFakeDesktopHistory(backend) {
     if (!id) return invalid("invalid document id");
     return store.touch(id, title);
   };
-
-  backend.historyImportOlder = function (entries) {
-    if (!Array.isArray(entries)) return invalid("invalid import");
-    return store.importOlder(entries);
-  };
-
-  backend.historyUsage = function () { return store.usage(); };
 
   /* main's splitpage:history-list-docs: every document the store has a
      record for, Older excluded — what desktopHistoryBackend.rawDocIds()/

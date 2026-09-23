@@ -249,6 +249,8 @@ test("checkArgs accepts what the channels really send", () => {
   assert.equal(checkArgs(channelFor("splitpage:history-list", "invoke").argsSchema, [null]), null);
   assert.equal(checkArgs(channelFor("splitpage:history-list", "invoke").argsSchema, [doc]), null);
   assert.equal(checkArgs(channelFor("splitpage:history-get", "invoke").argsSchema, [{ docId: doc }, "snap-1"]), null);
+  assert.equal(checkArgs(channelFor("splitpage:history-put", "invoke").argsSchema, [doc, {}, "{}", { protect: [] }]), null);
+  assert.equal(checkArgs(channelFor("splitpage:history-put", "invoke").argsSchema, [null, {}, "{}", { protect: [], older: true }]), null);
   assert.equal(checkArgs(channelFor("splitpage:write-file", "invoke").argsSchema, ["f1", "text"]), null);
   assert.equal(checkArgs(channelFor("splitpage:write-file", "invoke").argsSchema, ["f1", new Uint8Array(2)]), null);
   assert.equal(checkArgs(channelFor("splitpage:update-check", "invoke").argsSchema, []), null);
@@ -259,17 +261,39 @@ test("checkArgs accepts what the channels really send", () => {
 });
 
 test("checkArgs refuses the shapes the handlers used to refuse for themselves", () => {
+  const doc = () => "d0123456789abcdef0123456789abcdef";
   const bad = (name, direction, args) => checkArgs(channelFor(name, direction).argsSchema, args);
   assert.ok(bad("splitpage:tabstrip-activate", "send", ["not-a-tab-id"]), "a tab id that is not 32 hex");
   assert.ok(bad("splitpage:tabstrip-activate", "send", []), "no tab id at all");
   assert.ok(bad("splitpage:tabstrip-reorder", "send", ["0".repeat(32), 1.5]), "a fractional index");
-  assert.ok(bad("splitpage:history-put", "invoke", ["_older", {}, "{}", []]), "the Older bucket as a docId");
+  assert.ok(bad("splitpage:history-put", "invoke", ["_older", {}, "{}", {}]), "the Older bucket as a docId");
+  assert.ok(bad("splitpage:history-put", "invoke", ["_older", {}, "{}", { older: true }]), "the Older bucket as a docId, flag or no flag");
+  assert.ok(bad("splitpage:history-put", "invoke", [doc(), {}, "{}", []]), "a bare protect list where the options bag goes");
+  assert.ok(bad("splitpage:history-put", "invoke", [doc(), {}, "{}"]), "no options bag at all");
   assert.ok(bad("splitpage:history-get", "invoke", [{}, "../escape"]), "a snapshot id that is a path");
   assert.ok(bad("splitpage:update-install", "invoke", ["C:\\anything.exe"]), "an argument to an argument-free call");
   assert.ok(bad("splitpage:write-file", "invoke", ["f1", { not: "bytes" }]), "a body that is not bytes");
   assert.ok(bad("splitpage:open-external", "send", [{ url: "https://x" }]), "a url that is not a string");
   assert.ok(bad("splitpage:set-document-state", "send", [null]), "a null document state");
   assert.ok(bad("splitpage:read-file", "invoke", ["a", "b"]), "more arguments than the channel takes");
+});
+
+/* #83 step 4: version history is six channels. Usage rides on
+   history-list's answer, and an import into Older is history-put with
+   {older:true} — the bucket named by a flag, never by a docId string. */
+test("version history is exactly six app-only invoke channels", () => {
+  const names = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:history-")).map((c) => c.name).sort();
+  assert.deepEqual(names, [
+    "splitpage:history-copy", "splitpage:history-get", "splitpage:history-list",
+    "splitpage:history-list-docs", "splitpage:history-put", "splitpage:history-touch"
+  ]);
+  for (const name of names) {
+    const row = channelFor(name, "invoke");
+    assert.ok(row, name + " is an invoke");
+    assert.deepEqual([...row.allowedOrigins], [APP_ORIGIN], name + " is the app page's alone");
+  }
+  assert.equal(channelFor("splitpage:history-usage", "invoke"), null, "usage folded into history-list");
+  assert.equal(channelFor("splitpage:history-import-older", "invoke"), null, "import-older folded into history-put");
 });
 
 /* Issue #86 is the update bridge's contract again (invariant #28): the page

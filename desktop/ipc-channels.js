@@ -196,17 +196,25 @@ const CHANNELS = [
   { name: "splitpage:draft-flushed", direction: "send", argsSchema: ["number", "any"], allowedOrigins: APP },
 
   /* ---- version history (HISTORY-IPC, invariant #38) -------------------
-     A malformed id REJECTS rather than answering, which is why the ids are
-     typed here: the desktop backend in 03a-history-store.js turns any
-     rejection into code 'invalid' and drops the entry. main.js still runs
-     historyDocIdArg on every one of them — shape here, meaning there. */
-  { name: "splitpage:history-put", direction: "invoke", argsSchema: ["docId", "object", "string", "array"], allowedOrigins: APP },
+     Six channels since #83 step 4. A malformed id REJECTS rather than
+     answering, which is why the ids are typed here: the desktop backend in
+     03a-history-store.js turns any rejection into code 'invalid' and drops
+     the entry. main.js still runs historyDocIdArg on every one of them —
+     shape here, meaning there.
+
+     The page names a document by docId and a snapshot by its id, and the
+     Older bucket ONLY by an explicit flag — never by a string: history-put
+     writes into Older with (null, meta, body, {older:true}) and history-get
+     reads it with ({older:true}, id). "_older" is not a docId, so the table
+     refuses it as one before main does. history-put's last argument is the
+     store's own options bag, {protect?: [{docId, id}], older?: true}.
+     history-list answers the store's usage with the list (the panel always
+     wanted both), so there is no separate usage call. */
+  { name: "splitpage:history-put", direction: "invoke", argsSchema: ["docId|null", "object", "string", "object"], allowedOrigins: APP },
   { name: "splitpage:history-list", direction: "invoke", argsSchema: ["docId|null"], allowedOrigins: APP },
   { name: "splitpage:history-get", direction: "invoke", argsSchema: ["object", "snapshotId"], allowedOrigins: APP },
   { name: "splitpage:history-copy", direction: "invoke", argsSchema: ["docId", "docId"], allowedOrigins: APP },
   { name: "splitpage:history-touch", direction: "invoke", argsSchema: ["docId", "any"], allowedOrigins: APP },
-  { name: "splitpage:history-import-older", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP },
-  { name: "splitpage:history-usage", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:history-list-docs", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
   /* ---- content-addressed blobs (issue #82, main.js § 8c) ---------------

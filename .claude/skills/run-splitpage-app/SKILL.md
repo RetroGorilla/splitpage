@@ -555,10 +555,14 @@ across two windows with dirty tabs, `--host` quit's stop-sharing prompt,
 tear-off preserving live tab state, restore at launch, v1→v2 migration and a
 corrupt-JSON fresh boot) — then document id and desktop history added by
 step M (save-in-place birthtime vs. the duplicate rule, duplicate document id
-across tabs, history round-trip and relaunch, history id validation, a
-crash-after-body relaunch adopting the orphan, a corrupt `index.json`
-rebuilt by fsck, cap-driven eviction, concurrent puts, legacy migration, a
-newer format going read-only) — then
+across tabs, history round-trip and relaunch over the six history channels
+(an Older put and `history-list`'s usage included), history id validation
+(the Older flag beside any docId rejecting too), an exit-after-body relaunch
+showing the prior index generation, a torn `index.json` falling back to
+`index.prev.json`, cap-driven eviction and the 50-per-document trim,
+concurrent puts and a copy from two tabs, legacy migration, a newer format
+going read-only, and the #83 v1 folder tree migrating on first launch and
+finishing after a kill mid-way) — then
 crash-safe drafts added by step N (crash recovery of an untitled document, a
 renderer crash of a dirty file tab, the file changed on disk while down, the
 file deleted while down, quit without saving discarding every draft, closing

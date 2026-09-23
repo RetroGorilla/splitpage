@@ -626,11 +626,27 @@ tabs**.
   durable). Body before index; no fsck — a missing body drops its entries
   on read. Ids validated in renderer and main (#38); the renderer names
   only `(docId, snapshot id)`. Per-tab holds (`historyHolds`, dropped in
-  `forgetTab`) join every eviction. The 8 history IPC channels keep their
-  answer shapes; `history-list` answers `{migrating:true}` while the
+  `forgetTab`) join every eviction. **Channels** (six since #83 step 4,
+  all `invoke`, app origin, table in `desktop/ipc-channels.js`):
+  `history-put(docId|null, meta, stateJson, {protect?, older?})` →
+  `{ok, sizeBytes, duplicate, evicted, overCap}` or `{ok:false, code,
+  evicted?}` — `{older:true}` (literally `true`) with a **null** docId
+  writes into Older, put-if-absent with no stamp (what
+  `history-import-older` was; the renderer's `importOlder` is one such put
+  per entry); `history-list(docId|null)` → `{entries, older,
+  olderExpiresAt, usage}`, `usage` = `{totalBytes, capBytes, overCap,
+  docCount, readOnly}` or null (what `history-usage` was; the panel always
+  asked for both), `{…, usage:null, migrating:true}` at once while the
   one-time `desktop/history-v1-migrate.js` moves the v1 tree
-  (`docs/d-<docId>/`, `older/`) in and then into `history/v1-backup/`
-  (delete both in the release after). Test-mode faults:
+  (`docs/d-<docId>/`, `older/`) in and then into `history/v1-backup/`;
+  `history-get({docId}|{older:true}, snapshotId)` (the query also carries
+  the page's holds as `protect`) → `{meta, stateJson}` or null; `history-copy(from, to)` → `{ok, copied, code?}`;
+  `history-touch(docId, title)` → nothing; `history-list-docs()` →
+  `[{docId, title, lastOpenedAt}]`, Older excluded. Wire metas carry no
+  docId (the renderer stamps it). A malformed call rejects (the renderer
+  reads that as `invalid` and drops the entry); everything a retry could
+  fix is a code. The migrator and `v1-backup/` go in the release after
+  (see §8, "Temporary code to delete"). Test-mode faults:
   `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `exit-mid-migration`,
   `exit-after-migration-index`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
@@ -1155,6 +1171,22 @@ bytes, #82 — nothing deletes them yet, D4).
     can at worst add images to the folder (up to 16 MiB each) and read back
     ones it already knows the sha of — it cannot name a file, read anything
     outside the folder, or plant an SVG that a later page would render.
+    Version history (#83) is the fifth, and its six channels are the
+    fewest that say what a snapshot is. The page names a document by
+    `docId` and a snapshot by its id (both typed in the table and checked
+    again in main, invariant #38) and the Older bucket only by an explicit
+    `{older:true}` flag — `history-get`'s query, or `history-put` with a
+    null docId — never by a string: `"_older"` is not a docId, so it is
+    refused as one, flag or no flag. Main builds every path under its own
+    `userData/history`; answers carry metas, state JSON as text (never
+    parsed in main) and counts, never a path. #83 step 4 took the set from
+    eight to six by folding usage into `history-list`'s answer and
+    import-into-Older into `history-put`'s flag rather than keeping a
+    channel per store method. So a compromised page can at worst read,
+    write and copy the history of documents whose ids it knows, fill the
+    cap (which evicts oldest-first, never a document's newest snapshot),
+    and list which documents have history — it cannot name a file or reach
+    anything outside that folder.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -1200,7 +1232,9 @@ bytes, #82 — nothing deletes them yet, D4).
     splitting history on the next open.
 38. **Version history is addressed only by `(docId, snapshot id)`**,
     validated in renderer and main; the resolved path must stay inside the
-    history folder. The Older bucket is reachable only via `{older: true}`.
+    history folder. The Older bucket is reachable only via `{older: true}`
+    (on the desktop wire: `history-get`'s query, and `history-put` with a
+    null docId — a docId beside the flag rejects).
     The shared store (`shared/history-store.js`) refuses every other bucket
     itself, in the browser and in main alike.
 39. **`pushSnapshot()` captures synchronously, and no save ever waits on
@@ -1343,9 +1377,12 @@ evaluation order via `_entry.js`):
 | --- | --- |
 | `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, server launcher, native menus, test mode |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
+| `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
 | `desktop/tabstrip/` | title-bar tab strip: `tabstrip.css`/`.js`/`index.html`, served only under `TABSTRIP_ALLOWLIST` |
 | `desktop/drafts.js` | crash-safe draft store, plain CommonJS, no Electron dependency (§3.13, #40–#41) |
+| `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
+| `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency |
@@ -1432,6 +1469,20 @@ to the real one, because that needs a Desktop-type OAuth client ID from a
 Google Cloud project only Adam can create — the by-hand check is in
 `docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
+
+**Temporary code to delete (#83).** No issue exists for this yet (as of
+#83 step 4): each item has to ship in one release first, so an upgrading
+user skips nothing.
+When the release after the one that ships #83 is being cut, open ONE issue
+for all four and delete them together: `desktop/history-v1-migrate.js` and
+its call in `main.js`'s `initHistoryStore` (plus its unit suite and the
+smoke v1-migration cases); `<userData>/history/v1-backup/` (delete it at
+launch, once, from main); 03c's v1 → v2 migrator and its read-only v1
+reader (and `seedV1HistoryDb`, suite 70); and an IndexedDB v3 upgrade of
+`splitpage-history` that drops the v1 stores (`docs`, `snapMeta`,
+`snapBody`, `meta`). Until that issue exists, this paragraph and the
+"TEMPORARY"/"temporary" notes in §3.13 and the source map are where they
+are tracked.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)

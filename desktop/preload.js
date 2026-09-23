@@ -306,13 +306,23 @@ if (location.origin === "splitpage://app") {
        (invariant #38) — nothing here can name a folder, and main validates
        both ids again before either reaches a path.
 
-       `protect` is the list of snapshots a restore is currently reading, so
-       main's eviction can skip them; src/js/03a-history-store.js fills it in
-       from protectHistorySnapshot and the page never has to think about it. */
-    historyPut(docId, meta, stateJson, protect) {
-      return invoke("splitpage:history-put", docId, meta, stateJson, protect || []);
+       historyPut's `opts` is the store's options bag: `protect` is the list
+       of snapshots a restore is currently reading, so main's eviction can
+       skip them (src/js/03a-history-store.js fills it in from
+       protectHistorySnapshot); `older: true` writes into the Older bucket,
+       and then docId must be null — Older is named by that flag, never by
+       a string (#83 step 4 folded history-import-older into this). Only a
+       literal true is passed on, so nothing else can smuggle the flag in. */
+    historyPut(docId, meta, stateJson, opts) {
+      const o = opts && typeof opts === "object" ? opts : {};
+      const wire = { protect: Array.isArray(o.protect) ? o.protect : [] };
+      if (o.older === true) wire.older = true;
+      return invoke("splitpage:history-put", docId, meta, stateJson, wire);
     },
 
+    /* {entries, older, olderExpiresAt, usage} — usage is main's
+       {totalBytes, capBytes, overCap, docCount, readOnly} (or null), which
+       used to be a call of its own. */
     historyList(docId) {
       return invoke("splitpage:history-list", docId == null ? null : docId);
     },
@@ -327,14 +337,6 @@ if (location.origin === "splitpage://app") {
 
     historyTouch(docId, title) {
       return invoke("splitpage:history-touch", docId, title);
-    },
-
-    historyImportOlder(entries) {
-      return invoke("splitpage:history-import-older", entries);
-    },
-
-    historyUsage() {
-      return invoke("splitpage:history-usage");
     },
 
     /* Every document this store has history for — {docId, title,
