@@ -334,15 +334,24 @@ that proves #76's `shared/` staging and #77's `files` entry.
   5. Start it in one tab, then in a second: the first says "Another tab is
      following your voice now" and stops; the second follows.
   6. Turn off **Settings ▸ Privacy & security ▸ Microphone ▸ Let desktop apps
-     access your microphone** and start it: after about five seconds (not at
-     once) the status should say Windows isn't hearing the microphone. (If it
-     says nothing, note it — System.Speech's no-signal warning may not fire
-     for a privacy block on every build.) Write down which microphone the
-     status names while blocked: if it is a different one from step 1,
-     Windows switched inputs rather than blocking the app (#118). Turn the
-     setting back on. Muting the microphone in Sound settings should do the
-     same, and unmuting it should put "Listening — <your microphone>" back
-     without pressing anything.
+     access your microphone** and start it: the status should say so at
+     once — "Windows is blocking desktop apps from using the microphone —
+     turn on Settings ▸ Privacy & security ▸ Microphone ▸ Let desktop apps
+     access your microphone" (#134, checked against the consent store, not
+     guessed from silence, so there is no five-second wait here). Turn the
+     setting back on without pressing anything else in Splitpage: within a
+     few seconds the status should put "Listening — <your microphone>" back
+     by itself. Then turn off **Settings ▸ Privacy & security ▸ Microphone**
+     itself (the switch above the per-app list) and start it: the status
+     should instead say "Windows is blocking apps from using the
+     microphone — turn on Settings ▸ Privacy & security ▸ Microphone",
+     naming that switch rather than the desktop-apps one. Turn it back on.
+     Muting the microphone in Sound settings (not a Privacy switch) is a
+     different case: after about five seconds (not at once) the status
+     should say Windows isn't hearing <your microphone>, naming it the way
+     step 1 did (#118; if it is a different one from step 1, Windows
+     switched inputs rather than muting it). Unmuting it should put
+     "Listening — <your microphone>" back without pressing anything.
   7. Unplug the only microphone (or disable it in Sound settings) and start
      it: "No microphone was found."
   Record how long step 1 takes to reach "Listening…" — the first start
