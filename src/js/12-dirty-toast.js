@@ -1,7 +1,9 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { onServerDoc, serverSessionExpired } from "./13-hosted.js";
+import { savedAgoPhrase } from "./00p-prefs.js";
+import { onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
+import { recordMyColor } from "./13a-presence.js";
 import {
   autoSaveEnabled,
   autoSaveHalt,
@@ -71,6 +73,12 @@ export function setSaveButtons(text, disabled) {
 export function markDirty() {
   S.dirty = true;
   S.editSeq++;
+  /* The colour you picked goes into each document you edit (#194), so it
+     reaches everyone who opens it, online or not. Before noteEdit() so it
+     rides with this edit; the undo stack skips the map (12a-undo.js). A
+     reviewer's copy never goes back to the server, so theirs is left
+     alone. */
+  if (!reviewMode()) recordMyColor(S.state);
   /* Every edit ends here, so this is where the undo stack hears about it:
      12a-undo.js diffs the document against its last copy once this task
      is done, and records the difference as one undo entry. */
@@ -180,13 +188,10 @@ var savedAt = 0;
 var lastViewText = "";
 var savedAgoTimer = null;
 
+/* "just now", "12 min ago", then the clock time in the person's own
+   format (#180, formatClock in 00p-prefs.js): "at 2:52 PM" or "at 14:52". */
 function savedAgoText() {
-  if (!savedAt) return "";
-  var mins = Math.floor((Date.now() - savedAt) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return mins + " min ago";
-  var d = new Date(savedAt);
-  return "at " + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+  return savedAgoPhrase(savedAt, Date.now());
 }
 
 export function updateSaveStatus() {

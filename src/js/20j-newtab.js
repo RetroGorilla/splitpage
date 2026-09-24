@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { readDefaultWpm } from "./00p-prefs.js";
 import { home, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
@@ -133,7 +134,9 @@ function onNewTabKeydown(e) {
 function blankDocumentState() {
   return migrateRows({
     title: "Untitled Script",
-    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }]
+    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
+    /* Settings' starting reading speed (#181) */
+    wordsPerMinute: readDefaultWpm()
   });
 }
 

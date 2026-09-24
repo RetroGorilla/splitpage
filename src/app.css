@@ -479,8 +479,6 @@
   /* with shot scenes hidden: what is left, then the whole, quieter */
   .program-clock-of { font-weight: 450; font-size: 14px; color: var(--text-faint); letter-spacing: 0; }
   .program-clock-slot:empty { display: none; }
-  /* the reading-speed box promptForWpm() hangs off the clock */
-  #wpm-editor { top: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
 
   /* Who is here, a review session, an imported file, the shot count, who
      you are: plain text, one dot between each item that is showing. The
@@ -2918,8 +2916,7 @@
   button.stat-chip:hover { color: var(--text); border-color: var(--text-dim); }
   .stat-chip[hidden] { display: none; }
   .stat-chip .stat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
-  #wpm-editor { display: flex; gap: 6px; align-items: center; }
-  #wpm-editor input { width: 66px; }
+  #wpm-editor input { width: 72px; flex: none; }
 
   /* ---------- find & replace ---------- */
   .findbar {
@@ -3113,7 +3110,10 @@
     cursor: pointer;
   }
   .identity-chip:hover { border-color: var(--visual); color: var(--text); }
-  .identity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+  /* Your colour (#192): personColor(your name), set as --person by
+     updateIdentityChip() (03-sync.js) — the same colour the gutter,
+     comments, presence and History give you. */
+  .identity-dot, .person-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--person, var(--text-faint)); flex: none; }
   /* Toggled in JS (03-sync.js) whenever no author name is set, but nothing
      styled it — a named and unnamed chip looked identical apart from the
      text itself. Dims the dot to invite setting a name, the same signal
@@ -3132,6 +3132,78 @@
     transition: opacity var(--dur-fast) var(--ease-standard);
   }
   .row:hover .row-meta { opacity: 1; }
+  /* who last edited it, after a dot in their colour (#192) */
+  .row-meta-who { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+  .row-meta-who .person-dot { width: 6px; height: 6px; }
+
+  /* ---------- a small box under a header button (#193) ----------
+     The name box and the reading-speed box (openAnchorPopover, 03-sync.js):
+     appended to <body>, fixed below the button that opened it and kept on
+     screen, above the rundown strip and the side panels. B's floating
+     layer, like the File menu. */
+  .anchor-popover {
+    position: fixed;
+    z-index: 170;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: max-content;
+    min-width: 220px;
+    padding: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    font-family: var(--font-body);
+    font-size: 13px;
+  }
+  .anchor-popover-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    padding: 0;
+    margin: 0;
+  }
+  .anchor-popover-row { display: flex; align-items: center; gap: 6px; }
+  .anchor-popover-unit { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+  .anchor-popover input[type="text"], .anchor-popover input[type="number"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 32px;
+    box-sizing: border-box;
+    font-family: var(--font-body);
+    font-size: 13px;
+    padding: 0 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .anchor-popover input[type="text"] { width: 180px; }
+  .anchor-popover input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
+  .anchor-popover .btn-outline { flex: none; height: 32px; }
+  /* Your colour (#194): eight round swatches, a radio group; the chosen
+     one ringed in --text, the focused one in the focus ring. */
+  .swatch-group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .swatch-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .swatch { position: relative; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; }
+  .swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+  .swatch-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--swatch);
+    box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 3px transparent;
+    transition: box-shadow var(--dur-fast) var(--ease-standard);
+  }
+  .swatch:hover .swatch-dot { box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 3px var(--border-strong); }
+  .swatch input:checked + .swatch-dot { box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--text); }
+  .swatch input:focus-visible + .swatch-dot { outline: 2px solid var(--focus-ring); outline-offset: 5px; }
+  /* 16px, or iOS zooms the page into the field */
+  @media (max-width: 760px) {
+    .anchor-popover input[type="text"], .anchor-popover input[type="number"] { font-size: 16px; height: 36px; }
+    .anchor-popover .btn-outline { height: 36px; }
+  }
   .row.just-merged { animation: row-merged var(--dur-highlight) var(--ease-standard); }
   @keyframes row-merged {
     0%, 70% { background: color-mix(in srgb, var(--ok) 18%, transparent); }
@@ -3195,7 +3267,10 @@
     font-family: var(--font-display); font-weight: 500; font-size: 14px; line-height: 20px;
     font-variant-numeric: tabular-nums;
     color: var(--text-faint);
+    white-space: nowrap;
   }
+  /* a 12-hour clock's "12:52 PM" (#180) */
+  .history-time.is-wide { width: 72px; }
   .history-card-label {
     flex: 1; min-width: 0;
     font-size: 14px; line-height: 20px;
@@ -5939,6 +6014,90 @@
    the current connection in a well set into the raised surface. */
 .pin-panel { max-width: 420px; }
 .connect-panel { max-width: 600px; }
+
+/* ---------- Settings (#181, 20s-settings.js) ----------
+   A dialog like Servers: headed sections, a label beside or above each
+   control, switches for on/off, the Export dialog's segmented control for
+   a choice of three. The body scrolls under a fixed header. */
+.modal-panel.settings-panel {
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+.settings-body { overflow-y: auto; margin: 0 -24px; padding: 0 24px 4px; }
+.settings-section { padding: 14px 0 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.settings-section:first-child { border-top: 0; padding-top: 4px; }
+.settings-section-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.settings-field.settings-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.settings-label { font-size: 13.5px; font-weight: 500; color: var(--text); padding: 0; }
+.settings-hint { margin: -6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
+.settings-seg { max-width: 360px; }
+.settings-inline-control { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings-inline-control input[type="number"],
+.settings-inline-control input[type="text"] {
+  height: 32px;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+.settings-inline-control input[type="number"] { width: 80px; }
+.settings-inline-control input[type="text"] { width: 220px; max-width: 100%; }
+.settings-inline-control input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
+.settings-inline-control input[type="range"] { width: 160px; accent-color: var(--visual); }
+.settings-unit { font-size: 12.5px; color: var(--text-dim); }
+.settings-value { min-width: 48px; font-family: var(--font-display); font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* an on/off setting: the words on the left, a switch on the right */
+.settings-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.settings-switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-switch-label { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.settings-switch .settings-hint { margin: 0; }
+.settings-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.settings-switch-track {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.settings-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.settings-switch input:checked + .settings-switch-track { background: var(--visual); }
+.settings-switch input:checked + .settings-switch-track .settings-switch-thumb { transform: translateX(14px); }
+.settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .modal-panel.settings-panel { max-height: calc(100vh - 20px); }
+  .settings-body { margin: 0 -14px; padding: 0 14px 4px; }
+  .settings-inline-control input[type="text"], .settings-inline-control input[type="number"] { font-size: 16px; }
+  .settings-inline-control input[type="range"] { width: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch-track, .settings-switch-thumb { transition: none; }
+}
 #pin-input {
   width: 100%;
   height: 44px;

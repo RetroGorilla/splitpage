@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { formatTimecode, rowSeconds } from "./01-scene-status.js";
@@ -390,8 +391,9 @@ var PROMPTER_FLIP_KEY = "splitpage-prompter-flip";
 function readPrompterOrientationFlag(key) {
   try { return localStorage.getItem(key) === "1"; } catch (e) { return false; }
 }
+/* stored and announced, so Settings (#181) follows the prompter's buttons */
 function writePrompterOrientationFlag(key, on) {
-  try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) {}
+  writePref(key, on ? "1" : "0");
 }
 
 function applyPrompterOrientation() {

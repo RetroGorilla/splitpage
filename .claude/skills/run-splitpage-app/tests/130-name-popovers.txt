@@ -1,0 +1,114 @@
+# The name box and the reading-speed box as popovers (#193, openAnchorPopover
+# in 03-sync.js): appended to <body>, below their button, wholly inside the
+# viewport and never overlapped by the header row, no stray "·" in the
+# header's facts line, closing on Escape, on a click outside and on
+# Save/Set, with the focus back on the button. Light and dark.
+
+open /index.html
+sleep 400
+expect document.querySelectorAll('#rows .row').length > 0
+eval window.__inView = function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.top>=0&&r.right<=document.documentElement.clientWidth&&r.bottom<=innerHeight;}
+eval window.__metaSeps = function(){return Array.prototype.filter.call(document.querySelectorAll('.doc-meta > *'),function(el){return !el.hidden;}).length;}
+eval window.__seps0 = window.__metaSeps()
+
+# --- the name box ----------------------------------------------------------
+click #identity-chip
+wait document.getElementById('identity-editor')
+expect document.getElementById('identity-editor').parentNode === document.body
+expect document.getElementById('identity-editor').classList.contains('anchor-popover')
+expect getComputedStyle(document.getElementById('identity-editor')).position === 'fixed'
+expect window.__inView(document.getElementById('identity-editor'))
+# below its button, so the header row cannot overlap it
+expect document.getElementById('identity-editor').getBoundingClientRect().top >= document.getElementById('identity-chip').getBoundingClientRect().bottom
+# the box is what is on top at its own centre (nothing covers it)
+expect (function(){var r=document.getElementById('identity-editor').getBoundingClientRect();var el=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return !!el && !!el.closest('#identity-editor');})()
+# nothing added to the header's facts line, so no "·" for it
+expect document.querySelector('.doc-meta #identity-editor') === null
+expect window.__metaSeps() === window.__seps0
+# no inline styling: the class draws it
+expect document.getElementById('identity-editor').getAttribute('style').indexOf('background') === -1
+expect document.activeElement.id === 'identity-input'
+expect document.getElementById('identity-chip').getAttribute('aria-expanded') === 'true'
+shot 130-name-box-light
+
+# Escape: closed, nothing saved, the focus back on the name
+type Somebody
+key Escape
+expect document.getElementById('identity-editor') === null
+expect localStorage.getItem('splitpage-comment-author') !== 'Somebody'
+expect document.activeElement.id === 'identity-chip'
+expect document.getElementById('identity-chip').getAttribute('aria-expanded') === 'false'
+
+# a click outside closes it without saving
+click #identity-chip
+wait document.getElementById('identity-editor')
+eval document.getElementById('identity-input').value = 'Outside'
+click #rows .row .audio-cell .cell-editable
+expect document.getElementById('identity-editor') === null
+expect localStorage.getItem('splitpage-comment-author') !== 'Outside'
+
+# the button again toggles it shut
+click #identity-chip
+wait document.getElementById('identity-editor')
+click #identity-chip
+expect document.getElementById('identity-editor') === null
+
+# Save stores the name and closes, focus back on the button
+click #identity-chip
+wait document.getElementById('identity-editor')
+eval document.getElementById('identity-input').value = 'Adam Test'
+click #identity-save
+expect document.getElementById('identity-editor') === null
+expect localStorage.getItem('splitpage-comment-author') === 'Adam Test'
+expect document.getElementById('identity-name').textContent === 'Adam Test'
+expect document.activeElement.id === 'identity-chip'
+
+# --- the reading-speed box -------------------------------------------------
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+expect document.getElementById('wpm-editor').parentNode === document.body
+expect document.getElementById('wpm-editor').classList.contains('anchor-popover')
+expect window.__inView(document.getElementById('wpm-editor'))
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('runtime-chip').getBoundingClientRect().bottom
+expect document.querySelector('.program-clock-wrap #wpm-editor') === null
+expect (function(){var r=document.getElementById('wpm-editor').getBoundingClientRect();var el=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return !!el && !!el.closest('#wpm-editor');})()
+# centred under the clock
+expect (function(){var a=document.getElementById('wpm-editor').getBoundingClientRect(),b=document.getElementById('runtime-chip').getBoundingClientRect();return Math.abs((a.left+a.width/2)-(b.left+b.width/2)) < 2;})()
+# only one box at a time
+expect document.getElementById('identity-editor') === null
+shot 130-speed-box-light
+key Escape
+expect document.getElementById('wpm-editor') === null
+expect document.activeElement.id === 'runtime-chip'
+
+# Set stores the speed on the document and closes
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+eval document.getElementById('wpm-input').value = '180'
+click #wpm-save
+expect document.getElementById('wpm-editor') === null
+expect window.__splitpageFormats.state().wordsPerMinute === 180
+expect document.activeElement.id === 'runtime-chip'
+
+# a click outside closes it without setting anything
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+eval document.getElementById('wpm-input').value = '300'
+click #rows .row .audio-cell .cell-editable
+expect document.getElementById('wpm-editor') === null
+expect window.__splitpageFormats.state().wordsPerMinute === 180
+
+# --- dark -------------------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme','dark')
+click #identity-chip
+wait document.getElementById('identity-editor')
+expect getComputedStyle(document.getElementById('identity-editor')).backgroundColor !== 'rgb(233, 232, 228)'
+expect getComputedStyle(document.getElementById('identity-editor')).backgroundColor === getComputedStyle(document.querySelector('#file-menu')).backgroundColor
+expect window.__inView(document.getElementById('identity-editor'))
+shot 130-name-box-dark
+key Escape
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+shot 130-speed-box-dark
+key Escape
+eval document.documentElement.removeAttribute('data-theme')

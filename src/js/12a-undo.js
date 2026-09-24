@@ -42,7 +42,9 @@ import { applySteps, fromHtml, invertSteps, mergeCells, normalizeCell, toHtml } 
    cleanly the undo refuses whole and says so, and the entry is dropped. */
 
 /* Fields that are the document's bookkeeping, not its content. */
-var SKIP_DOC_KEYS = { docId: true, rev: true, lastEditedBy: true, lastEditedAt: true, schema: true, rows: true };
+/* personColors (#194) is who picked which colour, written by markDirty() on
+   the way through an edit — Ctrl+Z must not take somebody's colour back. */
+var SKIP_DOC_KEYS = { docId: true, rev: true, lastEditedBy: true, lastEditedAt: true, schema: true, rows: true, personColors: true };
 var SKIP_ROW_KEYS = { id: true, updatedAt: true, updatedBy: true };
 var TEXT_KEYS = { visualText: true, audioText: true };
 var COALESCE_MS = 1000;

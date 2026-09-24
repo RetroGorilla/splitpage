@@ -388,6 +388,13 @@ if (location.origin === "splitpage://app") {
       send("splitpage:open-external", url);
     },
 
+    /* Settings ▸ Theme (#181): "system" | "light" | "dark". Main checks it
+       again and sets the app's native theme, which is what the title bar
+       and the tab strip draw from. */
+    setTheme(mode) {
+      send("splitpage:set-theme", String(mode));
+    },
+
     /* ---- video files in a scene's gallery (#135) ----
        grantVideoFile takes the File a drop or a paste gave the page — never
        a path: the path is read here, off the File, and a File the page

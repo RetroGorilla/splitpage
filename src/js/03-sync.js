@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
+import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, mergePersonColors, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
@@ -740,6 +741,13 @@ export function mergeStates(base, mine, theirs) {
       case "theirs-wins":
         out[f.key] = theirs[f.key] || mine[f.key] || null; break;
       case "constant": out[f.key] = SCHEMA_VERSION; break;
+      /* name → colour (#194): per name, the side that changed it wins.
+         Absent rather than empty when nobody has picked, so a document
+         without picks never grows the key. */
+      case "person-colors":
+        var pc = mergePersonColors(base && base[f.key], mine[f.key], theirs[f.key]);
+        if (pc) out[f.key] = pc;
+        break;
       default: throw new Error("no merge strategy for state field " + f.key);
     }
   });
@@ -1048,71 +1056,174 @@ export function readStash() {
 
 /* ---- identity ---- */
 
+/* The header's name, and its dot in your colour (#192) — the same colour
+   the gutter, comments, presence and History give you. Grey (the CSS's
+   .unnamed rule) until you have a name. */
 export function updateIdentityChip() {
   var name = getSavedAuthorName();
+  var chip = document.getElementById("identity-chip");
   document.getElementById("identity-name").textContent = name || "Set your name";
-  document.getElementById("identity-chip").classList.toggle("unnamed", !name);
+  chip.classList.toggle("unnamed", !name);
+  var dot = chip.querySelector(".identity-dot");
+  if (dot) {
+    dot.setAttribute("aria-hidden", "true");
+    if (name) dot.style.setProperty("--person", personColor(name));
+    else dot.style.removeProperty("--person");
+  }
+}
+
+/* ---- a small box under a header button (#193) ----
+
+   The name box and the reading-speed box used to be inserted beside their
+   buttons, inside the header: the name box inside .doc-meta, whose
+   overflow clipped it and whose "·" separators counted it as an item. Now
+   each is appended to <body> as a .anchor-popover, fixed below its button
+   (above it only when there is no room below), kept inside the viewport
+   with an 8px margin, and kept there while the page scrolls or resizes.
+   It closes on Escape, on a click anywhere outside it, and on its own
+   Save/Set, and the focus goes back to the button that opened it. Only one
+   is open at a time. */
+var anchorPopover = null;
+
+function closeAnchorPopover(opts) {
+  var p = anchorPopover;
+  if (!p) return;
+  anchorPopover = null;
+  document.removeEventListener("pointerdown", p.onOutside, true);
+  document.removeEventListener("keydown", p.onKey, true);
+  window.removeEventListener("resize", p.place);
+  window.removeEventListener("scroll", p.place, true);
+  p.el.remove();
+  p.host.setAttribute("aria-expanded", "false");
+  if (!(opts && opts.keepFocus) && document.contains(p.host)) {
+    try { p.host.focus({ preventScroll: true }); } catch (e) { p.host.focus(); }
+  }
+}
+
+function placeAnchorPopover(el, host) {
+  var margin = 8, gap = 6;
+  var r = host.getBoundingClientRect();
+  var vw = document.documentElement.clientWidth || window.innerWidth;
+  var vh = window.innerHeight;
+  el.style.maxWidth = (vw - margin * 2) + "px";
+  var w = el.offsetWidth, h = el.offsetHeight;
+  var left = r.left + r.width / 2 - w / 2;
+  left = Math.max(margin, Math.min(left, vw - margin - w));
+  var top = r.bottom + gap;
+  if (top + h > vh - margin && r.top - gap - h >= margin) top = r.top - gap - h;
+  el.style.left = Math.round(left) + "px";
+  el.style.top = Math.round(top) + "px";
+  el.classList.toggle("is-above", top < r.top);
+}
+
+/* → the popover element, or null when this toggled an open one shut. */
+function openAnchorPopover(host, id, label, html) {
+  var wasOpen = anchorPopover && anchorPopover.el.id === id;
+  closeAnchorPopover({ keepFocus: true });
+  if (wasOpen) { host.focus(); return null; }
+  var el = document.createElement("div");
+  el.id = id;
+  el.className = "anchor-popover";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", label);
+  el.innerHTML = html;
+  document.body.appendChild(el);
+  var p = {
+    el: el,
+    host: host,
+    place: function () { placeAnchorPopover(el, host); },
+    onOutside: function (e) {
+      if (el.contains(e.target) || host.contains(e.target)) return;
+      closeAnchorPopover({ keepFocus: true });
+    },
+    onKey: function (e) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeAnchorPopover();
+    }
+  };
+  anchorPopover = p;
+  host.setAttribute("aria-expanded", "true");
+  p.place();
+  document.addEventListener("pointerdown", p.onOutside, true);
+  document.addEventListener("keydown", p.onKey, true);
+  window.addEventListener("resize", p.place);
+  window.addEventListener("scroll", p.place, true);
+  return el;
+}
+
+/* The colour swatches (#194): the eight person colours as a radio group,
+   each named, the current one checked — your pick, or until you pick, the
+   colour your name gives you. Arrow keys move through them as any radio
+   group's do. */
+export function personSwatchesHtml(name, radioName, legendClass) {
+  var current = readMyColor() || personColor(name || "");
+  return '<fieldset class="swatch-group" role="radiogroup" aria-label="Your colour">' +
+    '<legend class="' + (legendClass || "anchor-popover-label") + '">Your colour</legend>' +
+    '<div class="swatch-row">' +
+    PERSON_COLORS.map(function (c, i) {
+      return '<label class="swatch" style="--swatch:' + c + '" title="' + PERSON_COLOR_NAMES[i] + '">' +
+        '<input type="radio" name="' + (radioName || "person-color") + '" value="' + c + '" aria-label="' + PERSON_COLOR_NAMES[i] + '"' +
+          (c === current ? " checked" : "") + '>' +
+        '<span class="swatch-dot" aria-hidden="true"></span></label>';
+    }).join("") +
+    '</div></fieldset>';
+}
+
+/* Picking one is the change: it is stored at once and every dot follows
+   (the header, the gutter, comments, History); the box stays open. */
+export function setMyColor(color) {
+  writePref(PERSON_COLOR_KEY, color);
+  updateIdentityChip();
+  render();
 }
 
 export function promptForName() {
   var current = getSavedAuthorName();
   var host = document.getElementById("identity-chip");
-  var existing = document.getElementById("identity-editor");
-  if (existing) { existing.remove(); return; }
-  var wrap = document.createElement("span");
-  wrap.id = "identity-editor";
-  wrap.className = "link-popover";
-  wrap.style.position = "absolute";
-  wrap.style.zIndex = "170";
-  wrap.style.background = "var(--surface)";
-  wrap.style.border = "1px solid var(--border-strong)";
-  wrap.style.borderRadius = "var(--radius-md)";
-  wrap.style.padding = "8px";
-  wrap.style.boxShadow = "var(--shadow)";
-  wrap.innerHTML =
-    '<input type="text" id="identity-input" placeholder="Your name" value="' + escapeHtml(current) + '">' +
-    '<button type="button" id="identity-save">Save</button>';
-  host.parentNode.insertBefore(wrap, host.nextSibling);
+  var wrap = openAnchorPopover(host, "identity-editor", "Your name and colour",
+    '<label class="anchor-popover-label" for="identity-input">Your name</label>' +
+    '<div class="anchor-popover-row">' +
+      '<input type="text" id="identity-input" placeholder="Your name" autocomplete="name" value="' + escapeHtml(current) + '">' +
+      '<button type="button" id="identity-save" class="btn-outline">Save</button>' +
+    '</div>' +
+    personSwatchesHtml(current));
+  if (!wrap) return;
   var input = document.getElementById("identity-input");
   input.focus();
   input.select();
   function commit() {
     var v = (input.value || "").trim();
     if (v) saveAuthorName(v);
-    wrap.remove();
+    closeAnchorPopover();
     updateIdentityChip();
     render();
   }
   document.getElementById("identity-save").addEventListener("click", commit);
   input.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
-    else if (e.key === "Escape") { e.preventDefault(); wrap.remove(); }
+  });
+  wrap.addEventListener("change", function (e) {
+    if (e.target && e.target.name === "person-color") setMyColor(e.target.value);
   });
 }
 
 /* Reading speed lives on the document (see migrateRows), so the estimate
-   reads the same for whoever opens the file next. Same inline-popover
-   pattern as promptForName. */
+   reads the same for whoever opens the file next. The same popover as the
+   name box. */
 export function promptForWpm() {
   if (!S.state) return;
   var host = document.getElementById("runtime-chip");
-  var existing = document.getElementById("wpm-editor");
-  if (existing) { existing.remove(); return; }
-  var wrap = document.createElement("span");
-  wrap.id = "wpm-editor";
-  wrap.className = "link-popover";
-  wrap.style.position = "absolute";
-  wrap.style.zIndex = "170";
-  wrap.style.background = "var(--surface)";
-  wrap.style.border = "1px solid var(--border-strong)";
-  wrap.style.borderRadius = "var(--radius-md)";
-  wrap.style.padding = "8px";
-  wrap.style.boxShadow = "var(--shadow)";
-  wrap.innerHTML =
-    '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
-      escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
-    '<button type="button" id="wpm-save">Set</button>';
-  host.parentNode.insertBefore(wrap, host.nextSibling);
+  var wrap = openAnchorPopover(host, "wpm-editor", "Reading speed",
+    '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
+    '<div class="anchor-popover-row">' +
+      '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
+        escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
+      '<span class="anchor-popover-unit">words a minute</span>' +
+      '<button type="button" id="wpm-save" class="btn-outline">Set</button>' +
+    '</div>');
+  if (!wrap) return;
   var input = document.getElementById("wpm-input");
   input.focus();
   input.select();
@@ -1124,12 +1235,11 @@ export function promptForWpm() {
       render();
       queueAutoSave();
     }
-    wrap.remove();
+    closeAnchorPopover();
   }
   document.getElementById("wpm-save").addEventListener("click", commit);
   input.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
-    else if (e.key === "Escape") { e.preventDefault(); wrap.remove(); }
   });
 }
 
@@ -1213,9 +1323,10 @@ var HISTORY_SUBTITLE_DEFAULT = "Snapshots of this document, kept before anything
 /* ---- the rows (#169, B-PanelHistory) ----
    This document's snapshots sit under a heading per day ("Today 24 Sep"),
    each a row of time, label and scene count that opens onto a labelled
-   table and "Restore this version". Dates and times are built by hand, not
-   by toLocaleString: the board draws "24 Sep" and a 24-hour "14:52" in the
-   mono, and a locale's "Sept" or "2:52 PM" would not fit the time column. */
+   table and "Restore this version". Dates are built by hand, not by
+   toLocaleString: the board draws "24 Sep" in the mono, and a locale's
+   "Sept" would not fit. Times are the person's own clock (#180) — the
+   system's format or their 12/24-hour setting — like everywhere else. */
 var HISTORY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 var HISTORY_RESTORE_HINT = "Replaces what's on screen, which is saved here first.";
 
@@ -1227,10 +1338,6 @@ var historyToggleBound = false;
 
 function historyFig(text) {
   return '<span class="history-fig">' + escapeHtml(text) + '</span>';
-}
-
-function historyPad2(n) {
-  return (n < 10 ? "0" : "") + n;
 }
 
 /* When the snapshot was taken, or null. `at` is the wall-clock time the
@@ -1260,8 +1367,18 @@ function historyDay(d) {
   };
 }
 
+/* The one clock formatter (#180, 00p-prefs.js): the system's own format,
+   or the 12/24-hour setting — "14:52" or "2:52 PM", like the save status
+   and the comments. */
 function historyClock(d) {
-  return d ? historyPad2(d.getHours()) + ":" + historyPad2(d.getMinutes()) : "";
+  return d ? formatClock(d) : "";
+}
+
+/* A 12-hour clock's "12:52 PM" does not fit the 24-hour column, so the
+   column widens for it (app.css .history-time.is-wide) — every row the
+   same, so the times still line up. */
+function historyClockWide() {
+  return formatClock(new Date(2000, 0, 1, 12, 52)).length > 5;
 }
 
 /* "Today at 14:52", "21 Sep at 11:20" */
@@ -1347,7 +1464,7 @@ function historyCardHtml(m, bucket) {
   return '<li class="history-card' + (status === "writing" ? " is-writing" : status === "pending" ? " is-pending" : "") + '">' +
     '<details class="history-snap" data-snap="' + escapeHtml(key) + '"' + (armed || key === historyOpenKey ? " open" : "") + '>' +
       '<summary class="history-row">' +
-        '<time class="history-time"' + (when ? ' datetime="' + escapeHtml(when.toISOString()) + '"' : "") + '>' +
+        '<time class="history-time' + (historyClockWide() ? " is-wide" : "") + '"' + (when ? ' datetime="' + escapeHtml(when.toISOString()) + '"' : "") + '>' +
           escapeHtml(when ? historyClock(when) : "—") + '</time>' +
         '<span class="history-card-label">' + escapeHtml(m.label || "Snapshot") +
           (status === "pending" ? '<span class="history-card-badge" title="Kept in this window only, and tried again after the next successful write">Not stored</span>' : "") +
