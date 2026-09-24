@@ -5447,6 +5447,63 @@
     flex-direction: column;
   }
   .writer[hidden] { display: none; }
+
+  /* ---------- Present and the Writer arriving and leaving (#133, #136) ----
+
+     Both used to be a `hidden` flip: the whole screen swapped in one frame —
+     for Present, from the light editor to a near-black ground and back, the
+     biggest brightness change in the app, and on the way out right when
+     someone has finished reading in a dim room; for the Writer, the two
+     columns rearranged into one with nothing connecting them. Now each
+     fades in over the view it covers and back out, as one motion shared by
+     the two: the dialogs' mechanism (`display ... allow-discrete` plus
+     @starting-style, see "modals arriving and leaving") on the shared
+     tokens, so it arrives over --dur-enter, leaves over the shorter
+     --dur-exit, and reduced motion collapses both to the instant cut with
+     nothing of its own here.
+
+     Opacity only, on the container, and on purpose:
+     - Mirror and Flip are transforms on .prompter-scroll. The container's
+       opacity never touches them, so the words read correctly mirrored or
+       turned in every frame of the fade.
+     - Nothing moves, so nothing measures differently mid-fade: the caret's
+       scrollIntoView (focusWriterBlock), the scene cue's offsets and every
+       suite that reads a rect straight after opening see the page they
+       will settle on. A transform would also make the container a
+       containing block for anything position:fixed inside it.
+     - The `hidden` attribute still flips in openPrompter()/openWriter() and
+       closePrompter()/closeWriter() themselves, and everything the reader
+       or writer needs is done in that same call. Only the pixels are eased.
+     While it leaves, the layer is inert (set with the hide) and takes no
+     pointer: a click during the fade reaches the view coming back.
+
+     The side panels that opening either one closes (closeAllSidePanels(),
+     invariant #16) slide out underneath over --dur-exit, starting in the
+     same frame and done before this has finished arriving: one transition,
+     not two in a row. z-index is untouched: 145, under the dialogs (150)
+     and the toasts (200). Browsers without @starting-style keep the
+     instant cut; nothing breaks. */
+  .prompter, .writer {
+    opacity: 1;
+    transition: opacity var(--dur-enter) var(--ease-enter),
+                display var(--dur-enter) allow-discrete;
+  }
+  .prompter[hidden], .writer[hidden] {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-exit) var(--ease-exit),
+                display var(--dur-exit) allow-discrete;
+  }
+  @starting-style {
+    .prompter:not([hidden]), .writer:not([hidden]) { opacity: 0; }
+  }
+  /* Leaving fullscreen is the browser's own animation, and a fade under it
+     would be two fighting. closePrompter() holds the prompter on screen,
+     still opaque, until the browser is out, then lets it fade: this beats
+     the global [hidden] rule's !important on specificity, and removing it
+     is the change the fade runs from. */
+  .prompter.is-holding[hidden] { display: flex !important; opacity: 1; transition: none; }
+
   /* The writing's size lives here as a variable so the slider can set it
      inline on this one element and have it reach every paragraph — and so
      the phone can move the default without overriding a size the writer
