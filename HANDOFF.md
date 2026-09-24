@@ -1243,7 +1243,13 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     the script through the rule; both land on the same token, so the dark
     theme and the prompter (which always takes the dark tokens) follow on
     their own (#143). Keep the hues off the Visual blue and Audio amber.
-    `src/test/palette.test.mjs` checks all of it, contrast included.
+    It also needs its light hex in `TAG_PRINT_COLORS` (14-export.js, #171):
+    the PDF and .docx exports draw categories in the light `:root` values
+    (the page is white whatever the theme), and a file format cannot read
+    a CSS token, so that table is a deliberate second copy — the one place
+    they are written out, read through `tagPrintColor(catId)`.
+    `src/test/palette.test.mjs` checks all of it, contrast included, and
+    fails the moment `TAG_PRINT_COLORS` and `:root` disagree.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
@@ -1606,7 +1612,7 @@ evaluation order via `_entry.js`):
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
-| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
+| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171) |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
 | `17-pdf.js` | pdf, packing lists |

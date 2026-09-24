@@ -1066,6 +1066,39 @@ export function xmlEscape(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
+/* ================= category colours on paper (#171) =================
+
+   The breakdown's categories in the PDF and .docx exports — and the
+   packing list's heading — are drawn in each category's colour: the LIGHT
+   theme's --tag-* values from app.css :root, because the page is white
+   whatever theme the app is in. A second copy of those hexes, on purpose:
+   TAG_CATEGORIES names the CSS token (`var(--tag-prop)`), which means
+   nothing to a PDF or a Word file, and reading the live value would give
+   the dark palette to anyone exporting in the dark theme. The build is
+   one esbuild call with no plugins and the unit tests import src/js
+   directly, so there is no build step to inject them from either.
+   `src/test/palette.test.mjs` fails the moment this table and :root
+   disagree, or either gains a category the other lacks, and checks each
+   colour is readable on white (4.5:1) — the same colours the script uses
+   on the light theme's page, and all dark enough to read in greyscale.
+
+   Keyed by TAG_CATEGORIES id; hex without "#", upper case, which is what
+   Word's <w:color w:val> takes. */
+export var TAG_PRINT_COLORS = {
+  prop: "764AA2",
+  location: "2A7449",
+  cast: "A53C75",
+  vfx: "5E6C00",
+  sound: "AB413E",
+  gear: "44693C"
+};
+
+/* A category's print colour by id, or null for one this table lacks — an
+   export then draws it in plain black, as before #171. */
+export function tagPrintColor(catId) {
+  return Object.prototype.hasOwnProperty.call(TAG_PRINT_COLORS, catId) ? TAG_PRINT_COLORS[catId] : null;
+}
+
 /* Walk rich HTML into a flat list of styled runs:
    [{text, b, i, u, s, mark, href}] with text "\n" marking a line break. */
 export function htmlToRuns(html) {
