@@ -2,6 +2,7 @@ import { S } from "./_state.js";
 import {
   ROW_STATUSES,
   formatDuration,
+  formatTimecode,
   rowSeconds,
   rowStatus,
   updateScriptStats
@@ -93,22 +94,28 @@ var LINK_POPOVER_HTML =
     '<button type="button" data-action="link-cancel">Cancel</button>' +
   '</div>';
 
-var COMMENT_BUTTON_HTML = '<button type="button" data-cmd="comment" title="Comment on selected text">💬 Comment</button>';
+/* The script's format toolbar is icons (#169): 32px buttons on the raised
+   floating layer, the four letter formats as the letters themselves, the
+   rest as the sprite's strokes — every one named for a screen reader. */
+function tbIcon(id) { return '<svg class="tb-icon" aria-hidden="true"><use href="#' + id + '"/></svg>'; }
+
+var COMMENT_BUTTON_HTML = '<button type="button" data-cmd="comment" title="Comment on selected text" aria-label="Comment">' + tbIcon("i-comment") + '</button>';
 
 var CELL_TOOLBARS = {
   script: {
     label: "Text formatting",
     buttons:
-      '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)">B</button>' +
-      '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
-      '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
-      '<button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>' +
+      '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><span class="tb-letter tb-b">B</span></button>' +
+      '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic"><span class="tb-letter tb-i">I</span></button>' +
+      '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)" aria-label="Underline"><span class="tb-letter tb-u">U</span></button>' +
+      '<button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><span class="tb-letter tb-s">S</span></button>' +
       '<span class="tb-sep"></span>' +
-      '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>' +
-      '<button type="button" data-cmd="link" title="Add link">Link</button>' +
-      '<span class="tb-sep"></span>' +
+      '<button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight">' + tbIcon("i-highlight") + '</button>' +
+      '<button type="button" data-cmd="link" title="Add link" aria-label="Link">' + tbIcon("i-link") + '</button>' +
       COMMENT_BUTTON_HTML +
-      '<button type="button" data-cmd="tag" title="Label as a prop, location, cast member or effect">🏷 Tag</button>'
+      '<span class="tb-sep"></span>' +
+      '<button type="button" data-cmd="tag" class="tb-tag" title="Label as a prop, location, cast member or effect" aria-label="Tag as…">' +
+        tbIcon("i-tag") + '<svg class="tb-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>'
   },
   /* A review session (13-hosted.js) gets the same field with the writing
      taken out of it: a toolbar holding only the one thing it may still do. */
@@ -166,43 +173,121 @@ function rowFieldHtml(row, field, review) {
   });
 }
 
-/* Reordering, status, insert/delete and the image controls are all
+/* The gutter (#169): the scene number and where it starts in the
+   programme, then its status as a labelled lamp — nothing else at rest.
+   The drag grip and a "⋯" menu (Move up, Move down, Insert scene, Delete)
+   come up on the row's hover or focus (app.css), where the four buttons
+   that used to sit on every scene now live: the same buttons, the same
+   data-actions and the same handlers (onRootClick, 21-events.js), one
+   click further in. Alt+Up / Alt+Down and Ctrl+Enter still do the same
+   from the keyboard without opening anything.
+
+   The start time and the rail's read time are left empty here and filled
+   in by paintRowTimes() below: typing in one scene moves the start of
+   every scene after it, and that must not cost a repaint of every gutter.
+
+   Reordering, status, insert/delete and the image controls are all
    document writes the server would refuse from a review session — so
    they are not rendered at all rather than rendered and then refused.
-   The scene number, its duration and its status colour still show: this
-   is a reader's view of the script, not a stripped-down one. */
+   The scene number, its times and its status still show: this is a
+   reader's view of the script, not a stripped-down one. */
+var STATUS_CHECK_SVG =
+  '<svg class="status-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function rowMenuItemHtml(row, action, icon, label, title, danger) {
+  return '<button class="gutter-btn row-menu-item' + (danger ? ' danger' : '') + '" type="button" role="menuitem" data-action="' +
+    action + '" data-id="' + row.id + '" title="' + title + '">' +
+    '<svg class="mi-icon" aria-hidden="true"><use href="#' + icon + '"/></svg>' +
+    '<span class="row-menu-label">' + label + '</span></button>';
+}
+
 function rowGutterHtml(row, index, review) {
   var st = rowStatus(row.status) || ROW_STATUSES[0];
-  var secs = rowSeconds(row);
+  var num = pad2(index + 1);
+  var lamp = '<span class="status-dot ' + st.cls + '" aria-hidden="true">' +
+    (st.id === "shot" ? STATUS_CHECK_SVG : '') + '</span><span class="status-word">' + escapeHtml(st.label) + '</span>';
+  var head = review
+    ? '<div class="row-head"><span class="row-num">' + num + '</span><span class="row-start"></span></div>'
+    : '<div class="row-head" data-action="drag-grip" data-id="' + row.id + '" title="Drag to reorder">' +
+        '<span class="row-num">' + num + '</span><span class="row-start"></span>' +
+      '</div>';
+  var controls = review
+    ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
+        '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' + lamp + '</span>'
+    : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
+        '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene ' + num + ' status: ' +
+        escapeHtml(st.label) + '. Change status">' + lamp + '</button>' +
+      '<div class="row-tools">' +
+        '<span class="row-grip" data-action="drag-grip" data-id="' + row.id + '" title="Drag to move this scene" aria-hidden="true">' +
+          '<svg aria-hidden="true"><use href="#i-grip"/></svg></span>' +
+        '<div class="row-menu-wrap">' +
+          '<button class="row-more" type="button" data-action="row-menu" data-id="' + row.id +
+            '" aria-haspopup="menu" aria-expanded="false" aria-label="Scene ' + num + ' actions" title="Move, insert or delete this scene">' +
+            '<svg aria-hidden="true"><use href="#i-more"/></svg></button>' +
+          '<div class="row-menu" role="menu" aria-label="Scene ' + num + '" hidden>' +
+            rowMenuItemHtml(row, "move-up", "i-arrow-up", "Move up", "Move this scene up (Alt+Up)") +
+            rowMenuItemHtml(row, "move-down", "i-arrow-down", "Move down", "Move this scene down (Alt+Down)") +
+            rowMenuItemHtml(row, "insert-below", "i-plus", "Insert scene", "Insert an empty scene below this one") +
+            rowMenuItemHtml(row, "delete-row", "i-trash", "Delete", "Delete this scene", true) +
+          '</div>' +
+        '</div>' +
+      '</div>';
   return (
     '<div class="gutter">' +
-      (review
-        ? '<div class="row-head"><span class="row-num">' + pad2(index + 1) + '</span></div>'
-        : '<div class="row-head" data-action="drag-grip" data-id="' + row.id +
-            '" title="Drag to reorder — or use the arrows below">' +
-            '<span class="drag-grip" aria-hidden="true"></span>' +
-            '<span class="row-num">' + pad2(index + 1) + '</span>' +
-          '</div>') +
-      (secs >= 0.5 ? '<div class="row-dur" title="Estimated read time">' + formatDuration(secs) + '</div>' : '') +
-      (review
-        ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
-            '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
-            '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
-          '</span>'
-        : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
-            '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene status: ' + escapeHtml(st.label) + '">' +
-            '<span class="status-dot ' + st.cls + '" style="--st:' + st.color + '"></span>' +
-          '</button>' +
-          '<button class="gutter-btn" type="button" data-action="move-up" data-id="' + row.id + '" title="Move up" aria-label="Move row up">↑</button>' +
-          '<button class="gutter-btn" type="button" data-action="move-down" data-id="' + row.id + '" title="Move down" aria-label="Move row down">↓</button>' +
-          '<button class="gutter-btn" type="button" data-action="insert-below" data-id="' + row.id + '" title="Insert row below" aria-label="Insert row below">+</button>' +
-          '<button class="gutter-btn danger" type="button" data-action="delete-row" data-id="' + row.id + '" title="Delete row" aria-label="Delete row">×</button>') +
+      head +
+      '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
             escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'
         : '') +
     '</div>'
   );
+}
+
+/* Each scene's start in the programme (the gutter) and its read time (the
+   rail), for every scene on screen, from the same rowSeconds() the header
+   total and the rundown strip read. Text only, and only where it changed:
+   no part is repainted and no signature moves, which is what lets it run
+   from the idle refresh while someone is typing (updateScriptStats,
+   01-scene-status.js) — tests/67-render-perf.txt still sees no row
+   painted. */
+export function paintRowTimes() {
+  var rowsEl = document.getElementById("rows");
+  if (!rowsEl || !S.state) return;
+  var byId = {};
+  for (var c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
+    if (c.classList.contains("row")) byId[c.getAttribute("data-id")] = c;
+  }
+  var t = 0;
+  S.state.rows.forEach(function (row) {
+    var secs = rowSeconds(row);
+    var el = byId[row.id];
+    if (el) {
+      setTextIfChanged(el.querySelector(".row-start"), formatTimecode(t));
+      setTextIfChanged(el.querySelector(".row-read"), secs >= 0.5 ? formatDuration(secs) : "");
+    }
+    t += secs;
+  });
+}
+
+function setTextIfChanged(el, text) {
+  if (el && el.textContent !== text) el.textContent = text;
+}
+
+/* The row menu's Delete asks twice (armDelete, 06-rows.js): armed, it says
+   what the second click does; disarmed — the timer ran out, a render came
+   through, another scene's Delete was armed — it says Delete again. Only
+   the label changes: the icon is its sibling and stays put. */
+export function armDeleteButton(btn) {
+  btn.classList.add("armed");
+  var label = btn.querySelector(".row-menu-label");
+  if (label) label.textContent = "Click again to delete";
+}
+
+export function disarmDeleteButton(btn) {
+  btn.classList.remove("armed");
+  var label = btn.querySelector(".row-menu-label");
+  if (label) label.textContent = "Delete";
 }
 
 /* The picture is either a legacy inline data: URI, shown as it always was,
@@ -344,10 +429,14 @@ function rowMediaHtml(row, review) {
   } else if (review) {
     imageBlock = "";
   } else {
+    /* The empty slot (#169): nothing at rest — it used to be a "📎 Image"
+       label on every scene — and a dashed "Add picture" when the row is
+       pointed at or has focus (app.css). Dropping a file anywhere on the
+       Visual column still adds one without it (imageDropTarget). */
     imageBlock =
       '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
-        '" title="Attach a reference image — or drag one anywhere onto this scene’s visual column">' +
-        '<span class="clip-icon" aria-hidden="true">📎</span>Image</button>';
+        '" title="Add a picture — or drag one anywhere onto this scene’s visual column">' +
+        '<svg class="clip-icon" aria-hidden="true"><use href="#i-image"/></svg>Add picture</button>';
   }
   return '<div class="visual-media' + (img ? '' : ' is-empty') + '" data-id="' +
     row.id + '">' + imageBlock + '</div>';
@@ -366,12 +455,18 @@ function rowParts(row, index) {
   };
 }
 
+/* The picture sits under the Visual words (#169), where it used to sit
+   over them; the parts are found by class, not position (rowPartEl), so
+   the order is free. The rail is the fourth column: the scene's read time,
+   right-aligned — filled in by paintRowTimes(), so it is not a part and
+   never needs repainting. */
 function rowHtmlFromParts(row, p) {
   return (
     '<div class="' + p.cls + '" data-id="' + row.id + '">' +
       p.gutter +
-      '<div class="cell visual-cell">' + p.media + p.visualText + '</div>' +
+      '<div class="cell visual-cell">' + p.visualText + p.media + '</div>' +
       '<div class="cell audio-cell">' + p.audioText + '</div>' +
+      '<div class="row-rail"><span class="row-read" title="Estimated read time"></span></div>' +
     '</div>'
   );
 }
@@ -484,8 +579,10 @@ export function renderRow(rowId) {
     touched = true;
   }
   /* The presence marks (13a-presence.js) live in the gutter and the
-     field-wrap — a replaced part took its mark with it. */
+     field-wrap — a replaced part took its mark with it. So do the times
+     paintRowTimes() writes into a gutter: a new one comes up empty. */
   if (touched) paintPresence();
+  if (touched) paintRowTimes();
   /* a scene gallery's dialog shows this row's pictures (#135) */
   if (touched) refreshGalleryOverlay();
   return true;
@@ -673,10 +770,7 @@ function restoreRenderFocus(rowsEl, f) {
 function resetTransientUiState() {
   clearTimeout(S.deleteArmTimer);
   S.deleteArmId = null;
-  document.querySelectorAll("#rows .gutter-btn.danger.armed").forEach(function (b) {
-    b.classList.remove("armed");
-    b.textContent = "×";
-  });
+  document.querySelectorAll("#rows .gutter-btn.danger.armed").forEach(disarmDeleteButton);
   clearTimeout(deleteCommentArmTimer);
   S.deleteCommentArmId = null;
   clearTimeout(S.tagDeleteArmTimer);

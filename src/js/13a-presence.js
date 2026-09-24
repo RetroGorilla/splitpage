@@ -63,11 +63,15 @@ var PRESENCE_MAX_SHOWN = 8;
    the same tab rather than a second ghost of it for one TTL. */
 var PRESENCE_ID_KEY = "splitpage-presence-id";
 
-/* Chosen to stay apart from each other and from the app's own visual/audio
-   colours, and to read as a name badge in both themes. */
+/* A person's colour (#169): filled circles in B's bright values with dark
+   initials, the same in both themes, the way the logo is — preview blue
+   and program amber first, then the tag palette's hues, so eight people
+   stay apart. The initials are #0F0E0C on every one of them (8:1 or more).
+   This is the one table: the Comments, Production, Gear, B-roll and
+   history panels colour a person through personColor() below. */
 var PRESENCE_COLORS = [
-  "#C1461C", "#1B7A68", "#5B5BD6", "#0E7490",
-  "#A8410C", "#7C3AED", "#B3261E", "#3F6212"
+  "#80BDFB", "#F9B64F", "#CBA1FA", "#73D4AC",
+  "#F89DC9", "#C8DE63", "#EF958E", "#64D1D7"
 ];
 
 var presenceSelf = "";
@@ -100,7 +104,13 @@ function presenceSeed(p) {
 }
 
 function presenceColor(p) {
-  var seed = presenceSeed(p);
+  return personColor(presenceSeed(p));
+}
+
+/* The colour of a person, by name — stable across windows and sessions,
+   since it is the name that is hashed. */
+export function personColor(seed) {
+  seed = String(seed || "");
   var hash = 0;
   for (var i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
   return PRESENCE_COLORS[Math.abs(hash) % PRESENCE_COLORS.length];

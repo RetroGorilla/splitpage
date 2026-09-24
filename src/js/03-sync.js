@@ -1150,6 +1150,14 @@ export function closeHistoryPanel() {
   syncPanelClass();
 }
 
+/* Each panel and the header toggle that opens it. */
+var PANEL_TOGGLES = [
+  ["production-panel", "btn-production"],
+  ["gear-panel", "btn-gear"],
+  ["broll-panel", "btn-broll"],
+  ["comments-panel", "btn-comments"]
+];
+
 /* a side panel is fixed over the right edge — shift the document so it never
    covers the toolbar that opened it */
 export function syncPanelClass() {
@@ -1158,6 +1166,13 @@ export function syncPanelClass() {
     return el && !el.hidden;
   });
   document.body.classList.toggle("panel-open", open);
+  /* The header's panel toggles read as pressed while their panel is open
+     (#169) — every open and close of a panel already ends here. */
+  PANEL_TOGGLES.forEach(function (pair) {
+    var panel = document.getElementById(pair[0]);
+    var btn = document.getElementById(pair[1]);
+    if (btn) btn.setAttribute("aria-pressed", panel && !panel.hidden ? "true" : "false");
+  });
 }
 
 /* Async, because the list comes from IndexedDB or the desktop store. Every

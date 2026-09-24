@@ -316,7 +316,17 @@
     transition: background-color var(--dur-enter) var(--ease-standard),
                 color var(--dur-enter) var(--ease-standard);
   }
-  #root { max-width: 1800px; margin: 0 auto; padding: 28px clamp(24px, 4vw, 96px) 80px; }
+  /* 20px from the window's edge, as B's boards draw it (#169): the header,
+     the rundown strip, the column heads and every scene row run the full
+     width and set their own 20px inside it (margin: 0 -20px, padding 0
+     20px), so a row's focus fill and every rule reach the edge while the
+     words line up on one 20px margin. The script's columns are
+     --row-cols: the gutter, Visual, Audio (a little wider — it is what is
+     said), and the rail with each scene's read time. */
+  #root {
+    --row-cols: 112px minmax(0, 1fr) minmax(0, 1.25fr) 80px;
+    max-width: 1800px; margin: 0 auto; padding: 0 20px 80px;
+  }
 
   a { color: inherit; }
   button { font-family: var(--font-body); }
@@ -328,61 +338,68 @@
      the dark-mode "typed text disappears into the selection" report. */
   ::selection { background: var(--selection); color: var(--text); }
 
-  /* ---------- header ----------
-     Two tight rows (issue: a denser menu bar). Row one is the brand, the
-     title and one line of plain-text facts about the document (.doc-meta);
-     row two is the toolbar. Both rows take the full width here; the
-     condensed state further down lets them share one. */
+  /* ---------- header (#169, Direction B) ----------
+     One 52px row, then the rundown strip. Three columns so the program
+     clock sits in the middle of the window whatever is either side of it:
+     the app and the document on the left (its facts clipped from the end
+     when the window is narrow), the clock, and the panels, Write and
+     Present on the right. Sticky, and what it sheds on scroll, are at the
+     end of this file (condensing header). */
   .topbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px 16px;
-    padding: 8px 0 10px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 18px;
+    margin: 0 -20px;
+    background: var(--bg);
   }
-  .topbar > div:first-child {
+  .topbar-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 16px;
+    height: 52px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-left {
     display: flex;
     align-items: center;
-    gap: 0 12px;
-    flex: 1 1 100%;
+    gap: 12px;
     min-width: 0;
   }
-  .brand-row { display: flex; align-items: center; gap: 10px; flex: none; }
-  /* The mark, then the wordmark in Chivo 700 (#169). The rule after it is
-     the divider between the app and the document's title. */
+  .brand-row { display: flex; align-items: center; flex: none; }
+  /* The mark, then the wordmark in Chivo 700 (#169). */
   .brand {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    height: 32px;
     font-family: var(--font-body);
     font-weight: 700;
     font-size: 15px;
     line-height: 20px;
+    letter-spacing: -0.005em;
     color: var(--text);
   }
   .brand-mark { display: block; flex: none; }
-  .brand::after { content: ""; width: 1px; height: 20px; margin-left: 4px; background: var(--border); }
+  /* between the app (the mark and File) and the document (its title) */
+  .topbar-rule { flex: none; width: 1px; height: 20px; background: var(--border); }
   .doc-title {
     font-family: var(--font-body);
-    font-weight: 700;
-    font-size: 19px;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 20px;
     color: var(--text);
     background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    padding: 2px 6px;
-    margin: -2px -6px;
-    /* As wide as the title and no wider, so the facts beside it sit next to
-       it rather than after a fixed-width gap. Browsers without
+    padding: 5px 6px;
+    margin: 0 -6px;
+    /* As wide as the title and no wider, so the status beside it sits next
+       to it rather than after a fixed-width gap — and allowed to give way
+       when the window is too narrow for all of it. Browsers without
        field-sizing keep the input's default width. */
     field-sizing: content;
-    min-width: 6ch;
-    max-width: 40vw;
-    flex: none;
+    min-width: 8ch;
+    max-width: 36ch;
+    flex: 0 1 auto;
     text-overflow: ellipsis;
   }
   .doc-title:hover { border-color: var(--border); }
@@ -392,25 +409,103 @@
     background: var(--surface);
   }
 
-  /* The file, the runtime, who you are: plain text, one dot between each
-     item that is showing. The dot is drawn on the later item only when an
-     earlier sibling is visible, so a hidden chip never leaves one behind. */
+  /* Save as a status (#169). #btn-save draws the status words that
+     updateSaveStatus() (12-dirty-toast.js) writes into data-status — "Saved
+     2 min ago", "Unsaved changes", "Saving…" — in place of its own text,
+     which stays "Save" / "Save •" for the writer's button to mirror and at
+     font-size 0 here. #save-status carries the same words for a screen
+     reader and is drawn nowhere. */
+  .save-state { display: flex; align-items: center; flex: none; }
+  .topbar .save-status {
+    position: absolute;
+    width: 1px;
+    min-width: 0;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .save-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 6px;
+    margin: 0 -2px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 0;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+  }
+  .save-btn::before {
+    content: attr(data-status);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 450;
+  }
+  .save-btn:hover { background: var(--hover); color: var(--text-dim); }
+  .save-btn[data-state="pending"] { color: var(--text-dim); }
+  .save-btn[data-state="warn"] { color: var(--accent); }
+  .save-btn:disabled { cursor: default; }
+  .save-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+  /* The program clock (#169): the script's read time as a timecode,
+     centred. A button — it is the runtime chip, and a click sets the
+     reading speed — but quiet until it is pointed at. */
+  .program-clock-wrap { position: relative; justify-self: center; }
+  .program-clock {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .program-clock:hover { background: var(--hover); }
+  .program-clock:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .program-clock-total { font-weight: 500; font-size: 20px; line-height: 24px; letter-spacing: -0.01em; }
+  /* with shot scenes hidden: what is left, then the whole, quieter */
+  .program-clock-of { font-weight: 450; font-size: 14px; color: var(--text-faint); letter-spacing: 0; }
+  .program-clock-slot:empty { display: none; }
+  /* the reading-speed box promptForWpm() hangs off the clock */
+  #wpm-editor { top: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
+
+  /* Who is here, a review session, an imported file, the shot count, who
+     you are: plain text, one dot between each item that is showing. The
+     dot is drawn on the later item only when an earlier sibling is
+     visible, so a hidden chip never leaves one behind. It takes what the
+     row has left and is clipped from the end, never wrapped. */
   .doc-meta {
     display: flex;
     align-items: center;
+    /* basis 0: the title and the status are sized first, and this has what
+       is left */
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     font-family: var(--font-body);
     font-size: 13px;
-    color: var(--text-dim);
+    color: var(--text-faint);
   }
-  .doc-meta > :not([hidden]) ~ :not([hidden])::before,
-  .doc-meta .stat-chip:not([hidden]) ~ .stat-chip:not([hidden])::before {
+  .doc-meta > :not([hidden]) ~ :not([hidden])::before {
     content: "·";
     color: var(--text-faint);
     margin: 0 8px;
   }
+  .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-family: var(--font-display); font-size: 12px; }
+  .doc-meta .review-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); }
+  .doc-meta .review-chip-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
   /* The chips' own pill styling (further down) is for their other homes;
      in this line they are text. */
   .doc-meta .file-chip,
@@ -425,37 +520,101 @@
     color: inherit;
     flex: none;
   }
-  .doc-meta .stat-chips { gap: 0; margin: 0; flex: none; }
   .doc-meta .file-chip-icon { display: none; }
   .doc-meta .file-chip-state { margin-left: 6px; }
-  .doc-meta .review-chip,
-  .doc-meta .presence-bar { margin: 0; flex: none; }
-  .doc-meta button.stat-chip:hover,
+  .doc-meta .review-chip { margin: 0; flex: none; }
+  .topbar-left .presence-bar { flex: none; margin: 0; }
   .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }
 
   .toolbar {
     display: flex;
-    gap: 6px;
+    gap: 12px;
     align-items: center;
-    flex-wrap: wrap;
-    flex: 1 1 100%;
+    justify-content: flex-end;
+    min-width: 0;
   }
-  /* Everything after Write sits at the right edge. */
-  .toolbar > #btn-write { margin-right: auto; }
-  .toolbar .btn { font-size: 13px; padding: 6px 10px; }
-  .toolbar .btn-accent { padding: 6px 14px; }
-  .toolbar .comments-badge {
-    min-width: 15px; height: 15px; line-height: 15px;
-    margin-left: 5px; font-size: 9.5px;
+  /* The four panels (#169): quiet toggles — icon, label, the count in the
+     mono — with no box until pointed at, and pressed (the hover fill, the
+     text colour) while their panel is open. They share one slot on the
+     right, so they sit together without a border between them. */
+  .btn-group { display: flex; align-items: center; }
+  .btn.panel-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 32px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 450;
   }
-  /* Production, Gear, B-roll and Comments open the same side panel slot,
-     so they read as one control. */
-  .btn-group { display: flex; }
-  .btn-group .btn { border-radius: 0; margin-left: -1px; }
-  .btn-group .btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
-  .btn-group .btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
-  .btn-group .btn:hover,
-  .btn-group .btn:focus-visible { position: relative; z-index: 1; }
+  .btn.panel-toggle:hover { background: var(--hover); color: var(--text); }
+  .btn.panel-toggle[aria-pressed="true"] { background: var(--hover); color: var(--text); }
+  .btn.panel-toggle:active { transform: none; }
+  .btn.panel-toggle .comments-badge {
+    min-width: 0;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text-faint);
+    font-family: var(--font-display);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The sprite's strokes at button size — the header, the gutter's menu,
+     the picture slot, the format toolbar. */
+  .btn-icon, .btn-chevron, .tb-icon, .tb-chevron, .clip-icon {
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .btn-icon { width: 16px; height: 16px; }
+  .btn-chevron { width: 16px; height: 16px; }
+
+  /* File: a quiet button with its chevron, the first thing after the mark. */
+  .btn.btn-quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 6px 0 10px;
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 450;
+  }
+  .btn.btn-quiet:hover, .btn.btn-quiet[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+  .btn.btn-quiet:active { transform: none; }
+
+  /* Write is a mode: a ghost button with a line round it. */
+  .btn.btn-mode {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 11px 0 10px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 450;
+  }
+  .btn.btn-mode .btn-icon { color: var(--text-dim); }
+  .btn.btn-mode:hover { background: var(--hover); border-color: var(--border-strong); }
 
   /* Sentence case in the body face (#169) — this was the loudest of the
      uppercase letter-spaced mono labels, on every button in the app. */
@@ -491,169 +650,273 @@
     padding: 9px 18px;
   }
   .btn-accent:hover { filter: brightness(1.06); }
-  /* Present is the one live control in the header (#169): tally red, the
-     fill with white on it, where every other primary action is amber. */
-  #btn-present { background: var(--tally-fill); border-color: var(--tally-fill); color: #FFFFFF; font-weight: 700; }
+  /* Present is the one primary action in the header, and the one live
+     control (#169): tally red, the fill with white on it and a small white
+     dot before the word, where every other primary action is amber. */
+  #btn-present {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 14px;
+    border: 0;
+    background: var(--tally-fill);
+    color: #FFFFFF;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 700;
+  }
+  #btn-present .tally-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #FFFFFF; }
   .btn-ghost { border-color: transparent; background: transparent; }
 
-  /* ---------- column header ---------- */
+  /* ---------- column header (#169) ----------
+     Which column is which is its heading and a lamp in the column's colour
+     — the page under the words is one calm surface, not two tints. */
   .col-head {
     display: grid;
-    grid-template-columns: 56px 1fr 1fr;
-    gap: 0;
-    position: sticky;
-    top: 0;
+    grid-template-columns: var(--row-cols);
+    column-gap: 32px;
+    align-items: center;
+    height: 40px;
+    margin: 0 -20px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
     background: var(--bg);
-    z-index: 5;
-    padding-top: 4px;
   }
   .col-head-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
     font-family: var(--font-body);
     font-size: 13px;
+    line-height: 16px;
     font-weight: 600;
     color: var(--text-dim);
-    padding: 6px 16px 10px;
-    border-bottom: 2px solid var(--border);
   }
-  .col-head-cell.visual { color: var(--visual); border-bottom-color: var(--visual); }
-  .col-head-cell.audio { color: var(--audio); border-bottom-color: var(--audio); }
+  .col-head-cell.scene { font-weight: 450; color: var(--text-faint); }
+  .col-head-cell.read { justify-content: flex-end; }
+  .col-lamp { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+  .col-head-cell.visual .col-lamp { background: var(--visual); }
+  .col-head-cell.audio .col-lamp { background: var(--audio); }
 
-  /* ---------- rows ---------- */
-  #rows { border-bottom: 1px solid var(--border); }
-
+  /* ---------- rows (#169) ----------
+     A scene is one row of four columns (--row-cols, on #root) with a rule
+     under it, run to the window's edge like the header. At rest nothing
+     but the words, the number, the times and the status lamp; the row that
+     holds the caret takes the surface colour across its whole width. */
   .row {
     display: grid;
-    grid-template-columns: 56px 1fr 1fr;
-    border-top: 1px solid var(--border);
+    grid-template-columns: var(--row-cols);
+    column-gap: 32px;
+    margin: 0 -20px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
     position: relative;
   }
-  .row:hover { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+  .row:focus-within, .row.has-menu-open { background: var(--surface); }
 
   .gutter {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 16px 4px 8px;
-    gap: 4px;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
   }
-  .row-num {
+  /* The number and where the scene starts in the programme. The pair is
+     also the drag handle, as the number always was (and the grip that
+     comes up on hover is a second one). */
+  .row-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    cursor: grab;
+    user-select: none;
     font-family: var(--font-display);
-    font-size: 12px;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
-    color: inherit; /* follows .row-head so the grip and number brighten together */
+    white-space: nowrap;
   }
-  .gutter-btn {
-    width: 24px;
-    height: 22px;
-    border-radius: 5px;
-    border: 1px solid transparent;
+  .row-head:active { cursor: grabbing; }
+  .row-num { font-size: 18px; line-height: 28px; color: var(--text); user-select: none; }
+  .row-start { font-size: 12.5px; line-height: 16px; color: var(--text-faint); }
+  .row-controls { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+
+  /* Status as a labelled lamp (#169): To do an unlit outline, Ready the
+     program amber, Shot lit in the text colour with a small dark check. A
+     click cycles it, as it always did (cycleRowStatus, 01-scene-status.js). */
+  .status-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    margin-left: -8px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-faint);
-    font-size: 12px;
-    line-height: 1;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    line-height: 16px;
+    font-weight: 450;
+    white-space: nowrap;
     cursor: pointer;
+  }
+  .status-btn:hover { background: var(--hover); }
+  .status-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .status-btn.is-static { cursor: default; }
+  .status-btn.is-static:hover { background: transparent; }
+  .status-btn:has(.status-dot.is-half) { color: var(--text); }
+  .status-btn:has(.status-dot:not(.is-open):not(.is-half)) { color: var(--text-dim); }
+  .status-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    border-radius: var(--radius-lamp);
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--text);
   }
-  .gutter-btn:hover { border-color: var(--border); color: var(--text); background: var(--surface); }
-  .gutter-btn.danger { color: var(--danger); }
-  .gutter-btn.danger.armed { background: var(--danger-soft); border-color: var(--danger); }
-  .gutter-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .status-dot.is-open { background: transparent; border: 1.5px solid var(--text-faint); }
+  .status-dot.is-half { background: var(--audio); }
+  .status-check { width: 8px; height: 8px; fill: none; stroke: var(--bg); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 
-  /* --- gutter: status, runtime, drag grip --- */
-  /* The scene number doubles as the drag handle, so it needs to look like
-     one. Dots sit at low contrast at rest — present enough to be noticed
-     without turning every row into clutter — and come up to full strength
-     when the row is hovered. */
-  .row-head {
+  /* The grip and the "⋯" menu (#169): up on the row's hover or focus, or
+     while the menu is open, and always where there is no hover to reveal
+     them with. */
+  .row-tools {
     display: flex;
     align-items: center;
-    gap: 4px;
-    cursor: grab;
-    user-select: none;
-    padding: 1px 3px;
-    border-radius: 5px;
-    margin-bottom: 6px;
-    color: var(--text-faint);
-  }
-  .row-head:active { cursor: grabbing; }
-  .row-head:hover { background: var(--surface); color: var(--text-dim); }
-  .row:hover .drag-grip { opacity: 1; }
-  .drag-grip {
-    width: 2px; height: 2px; flex: none;
-    margin: 0 1px 0 0;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0.42;
+    gap: 2px;
+    margin-left: auto;
+    opacity: 0;
     transition: opacity var(--dur-fast) var(--ease-standard);
-    /* a 2 x 3 dot grid: this element is the top-left dot, the rest are shadows */
-    box-shadow:
-      4px 0 0 currentColor,
-      0 4px 0 currentColor,
-      4px 4px 0 currentColor,
-      0 8px 0 currentColor,
-      4px 8px 0 currentColor;
   }
-  .row-num { user-select: none; }
-  .row-dur {
-    font-family: var(--font-display); font-size: 9.5px; font-weight: 500;
-    color: var(--text-faint); margin-top: -4px; margin-bottom: 2px;
+  .row:hover .row-tools, .row:focus-within .row-tools, .row.has-menu-open .row-tools { opacity: 1; }
+  @media (hover: none) { .row-tools { opacity: 1; } }
+  .row-grip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    cursor: grab;
+  }
+  .row-grip:active { cursor: grabbing; }
+  .row-grip svg, .row-more svg { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .row-grip svg { width: 16px; height: 16px; }
+  .row-more svg { width: 18px; height: 18px; }
+  .row-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .row-more:hover, .row-more[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+  .row-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .row-menu-wrap { position: relative; }
+  /* B's floating layer: raised, 8px, the strong line and the shadow. */
+  .row-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-width: 184px;
+    padding: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+  }
+  .row-menu.opens-up { top: auto; bottom: calc(100% + 4px); }
+  .gutter-btn.row-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 450;
+    text-align: left;
     white-space: nowrap;
+    cursor: pointer;
   }
-  .status-btn {
-    width: 26px; height: 20px; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    border: 1px solid var(--border); border-radius: 999px;
-    background: var(--surface); cursor: pointer; margin-bottom: 4px;
+  .row-menu-item .mi-icon { width: 18px; height: 18px; color: var(--text-dim); }
+  .row-menu-item:hover, .row-menu-item:focus-visible { background: var(--hover); outline: none; }
+  .row-menu-item.danger, .row-menu-item.danger .mi-icon { color: var(--danger); }
+  .row-menu-item.danger.armed { background: var(--danger-soft); }
+
+  /* The rail: the scene's read time, right-aligned on the first line. */
+  .row-rail {
+    text-align: right;
+    font-family: var(--font-display);
+    font-size: 14px;
+    line-height: 29px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
   }
-  .status-btn:hover { border-color: var(--text-dim); }
-  .status-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); }
-  .status-dot.is-open { background: transparent; border: 1.5px solid var(--st); }
-  .status-dot.is-half {
-    background: linear-gradient(90deg, var(--st) 0 50%, transparent 50% 100%);
-    border: 1.5px solid var(--st);
-  }
-  .row.is-shot { background: color-mix(in srgb, var(--ok) 6%, transparent); }
-  .row.is-shot:hover { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+
+  /* Done scenes recede (#169): a shot scene's words, number and read time
+     one step dimmer — no tint over the row. */
+  .row.is-shot .row-num, .row.is-shot .row-rail,
+  .row.is-shot .visual-cell .cell-editable, .row.is-shot .audio-cell .cell-editable { color: var(--text-dim); }
 
   /* --- hidden shot scenes (issue #25) --- */
   .hidden-shot-strip {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
+    width: calc(100% + 40px);
     gap: 10px;
-    padding: 7px 18px;
+    margin: 0 -20px;
+    padding: 9px 20px;
     border: none;
-    border-top: 1px solid var(--border);
-    background: color-mix(in srgb, var(--ok) 8%, transparent);
+    border-bottom: 1px solid var(--border);
+    background: transparent;
     color: var(--text-dim);
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: 13px;
     text-align: left;
     cursor: pointer;
   }
-  .hidden-shot-strip:hover { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--text); }
+  .hidden-shot-strip:hover { background: var(--surface); color: var(--text); }
   .hidden-shot-strip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .hidden-shot-strip .hidden-shot-hint { color: var(--text-faint); font-weight: 400; }
-  #writer-doc .hidden-shot-strip { margin: 4px 0 12px; border-radius: 8px; border-top: none; }
+  #writer-doc .hidden-shot-strip { width: 100%; margin: 4px 0 12px; padding: 7px 18px; border-radius: 8px; border-bottom: none; background: var(--surface); }
 
   /* --- drag to reorder --- */
   .row.is-dragging { opacity: 0.38; }
   .row.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
   .row.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
 
+  /* One calm writing surface (#169): no tint behind either column and no
+     rule between them — the heading's lamp says which is which. */
   .cell {
-    padding: 14px 18px 18px;
-    border-left: 1px solid var(--border);
-    min-height: 74px;
+    min-width: 0;
+    padding: 0;
   }
-  .cell.visual-cell { background: color-mix(in srgb, var(--visual-soft) 30%, transparent); }
-  .cell.audio-cell { background: color-mix(in srgb, var(--audio-soft) 22%, transparent); border-right: 1px solid var(--border); }
 
   /* ---------- rich-text field (toolbar + editable + link popover) ---------- */
   .field-wrap { position: relative; }
@@ -664,7 +927,7 @@
     gap: 2px;
     margin: 0 0 6px;
     padding: 3px;
-    background: var(--surface);
+    background: var(--surface-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     width: fit-content;
@@ -683,10 +946,44 @@
     cursor: pointer;
     line-height: 1;
   }
-  .mini-toolbar button:hover { background: var(--surface-2); color: var(--text); }
-  .mini-toolbar button.is-active { background: var(--visual); color: var(--accent-contrast); }
+  .mini-toolbar button:hover { background: var(--hover); color: var(--text); }
+  .mini-toolbar button.is-active { background: var(--selection); color: var(--text); }
   .mini-toolbar button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-  .mini-toolbar .tb-sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; flex: none; }
+  .mini-toolbar .tb-sep { width: 1px; height: 18px; background: var(--border-strong); margin: 0 2px; flex: none; }
+  /* The script's toolbar (#169): B's floating layer, over the words rather
+     than pushing them down — 36px tall, 32px buttons, icons in the text
+     colour — hung above the field that has focus. A phone keeps it in the
+     flow (the responsive block), where there is no room to float it. */
+  #rows .mini-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--text);
+    border-radius: var(--radius-sm);
+  }
+  #rows .mini-toolbar button.tb-tag { width: auto; gap: 2px; padding: 0 6px 0 8px; }
+  .tb-icon { width: 18px; height: 18px; }
+  .tb-chevron { width: 14px; height: 14px; color: var(--text-dim); }
+  .tb-letter { font-family: var(--font-body); font-size: 15px; line-height: 1; font-weight: 500; }
+  .tb-b { font-weight: 700; }
+  .tb-i { font-style: italic; }
+  .tb-u { text-decoration: underline; text-underline-offset: 3px; }
+  .tb-s { text-decoration: line-through; }
+  @media (min-width: 761px) {
+    #rows .mini-toolbar {
+      position: absolute;
+      left: -4px;
+      bottom: calc(100% + 8px);
+      z-index: 25;
+      height: 36px;
+      margin: 0;
+      padding: 0 1px;
+      width: max-content;
+    }
+  }
   .hl-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--highlight); margin-right: 4px; vertical-align: middle; }
 
   .link-popover, .video-popover {
@@ -734,8 +1031,13 @@
   }
   .cell-editable:hover { background: var(--surface); }
   .cell-editable:focus { background: var(--surface); box-shadow: 0 0 0 2px var(--visual) inset; }
-  .audio-cell .cell-editable { font-size: 16.5px; line-height: 1.65; }
-  .audio-cell .cell-editable:focus { box-shadow: 0 0 0 2px var(--audio) inset; }
+  /* In the script itself the row that holds the caret carries the surface
+     colour (.row:focus-within), so a field needs no fill or ring of its own
+     (#169) — the words sit on one calm surface. Visual 15px on 1.55, Audio
+     18px on 1.6: what is said leads. */
+  #rows .cell-editable { min-height: 28px; }
+  #rows .cell-editable:hover, #rows .cell-editable:focus { background: transparent; box-shadow: none; }
+  .audio-cell .cell-editable { font-size: 18px; line-height: 1.6; }
   /* The script's own words are set in Atkinson Hyperlegible Next (#169),
      the face the writer and the prompter use too; the Visual column one
      step quieter than the Audio column, which is what gets said. */
@@ -770,41 +1072,44 @@
   }
   .cell-editable u { text-underline-offset: 2px; }
 
-  .visual-media { margin-bottom: 10px; }
-  /* An empty slot should cost almost nothing: most scenes never get a
-     reference image, and the old 84px dashed box charged every one of them
-     for the few that do. What replaced it is a paperclip. The drop target
-     that box used to provide moved to the whole visual column (see
-     imageDropTarget()), so dragging a file in got easier, not harder. */
-  .visual-media.is-empty { margin-bottom: 2px; }
+  /* Under the Visual words since #169. */
+  .visual-media { margin-top: 12px; }
+  /* An empty slot costs nothing at rest (#169): most scenes never get a
+     picture, and the "📎 Image" label that used to sit on every one of them
+     was the brief's problem 5. It comes up — a dashed "Add picture" — on
+     the row's hover or focus, and always where there is no hover. The drop
+     target covers the whole visual column (see imageDropTarget()), so
+     dragging a file in needs no slot at all. */
+  .visual-media.is-empty { margin-top: 0; }
   .image-clip {
-    display: inline-flex;
+    display: none;
     align-items: center;
-    gap: 5px;
-    border: 1px solid transparent;
-    background: none;
-    color: var(--text-faint);
+    gap: 6px;
+    height: 32px;
+    margin-top: 10px;
+    padding: 0 10px 0 8px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
     font-family: var(--font-body);
-    font-size: 12px;
-    border-radius: 6px;
-    padding: 3px 6px;
-    margin-left: -6px; /* optically flush with the text below it */
+    font-size: 12.5px;
+    line-height: 16px;
     cursor: pointer;
-    line-height: 1;
   }
-  .image-clip:hover {
-    color: var(--visual);
-    border-color: var(--border);
-    background: var(--surface);
-  }
-  .image-clip .clip-icon { font-size: 12px; filter: grayscale(1); opacity: 0.7; }
-  .image-clip:hover .clip-icon { filter: none; opacity: 1; }
+  .row:hover .image-clip, .row:focus-within .image-clip { display: inline-flex; }
+  @media (hover: none) { .image-clip { display: inline-flex; } }
+  .image-clip:hover { color: var(--text); border-color: var(--text-faint); background: var(--hover); }
+  .image-clip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .image-clip .clip-icon { width: 16px; height: 16px; }
   .visual-cell.drag-over {
     outline: 2px dashed var(--visual);
     outline-offset: 5px;
     border-radius: var(--radius-sm);
   }
-  .image-thumb-wrap { position: relative; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
+  .image-thumb-wrap { position: relative; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-strong); background: var(--surface); }
+  /* one picture on its own: 240px wide at most, as B-Gallery draws it */
+  .scene-gallery.is-single { max-width: 240px; }
   .image-thumb-wrap img { display: block; width: 100%; height: auto; max-height: 160px; object-fit: cover; }
   /* An image whose bytes are still being fetched (#82): the box its
      width/height reserve, tinted, until the hydrator (02c-blobs.js) sets
@@ -812,62 +1117,79 @@
      alt text in that box. Any <img data-blob>, wherever it sits. */
   img[data-blob]:not([src]) { background: var(--surface-2); color: var(--text-dim); font-size: 12px; text-align: center; }
   img[data-blob][data-blob-state="missing"] { min-height: 48px; border: 1px dashed var(--border); }
+  /* A picture's actions (#169): a small raised toolbar in its corner on
+     hover or focus — Add, and for a lone picture Replace and a red Remove. */
   .image-thumb-actions {
-    position: absolute; top: 6px; right: 6px; display: flex; gap: 4px;
+    position: absolute; top: 6px; right: 6px; display: flex; align-items: center; gap: 2px;
+    padding: 1px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
     opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard);
   }
   .image-thumb-wrap:hover .image-thumb-actions { opacity: 1; }
   .image-thumb-actions button {
+    height: 28px;
+    padding: 0 8px;
     font-family: var(--font-body);
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 12.5px;
+    line-height: 16px;
+    font-weight: 450;
     border: none;
     border-radius: 5px;
-    padding: 5px 8px;
     cursor: pointer;
-    background: rgba(15,14,12,0.72);
-    color: #ECEBE7;
+    background: transparent;
+    color: var(--text);
   }
-  .image-thumb-actions button:hover { background: rgba(15,14,12,0.9); }
+  .image-thumb-actions button:hover { background: var(--hover); }
+  .image-thumb-actions [data-action="image-remove"] { color: var(--danger); }
   .image-thumb-wrap:focus-within .image-thumb-actions { opacity: 1; }
   /* ---------- the scene gallery (#135) ----------
      The cell's capped mosaic and caption (rowGalleryHtml, 05-render.js)
      and its dialog (05e-gallery-overlay.js, #gallery-modal in page.html).
      Every rule for it is here and every class is .scene-gallery*. */
+  /* The mosaic (#169, B-Gallery): 360 by 162 at most, the cover over three
+     rows on the left, every tile its own 4px frame with the strong line. */
   .scene-gallery.is-mosaic {
-    display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: repeat(3, 44px); gap: 4px;
+    display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 4px;
+    width: min(360px, 100%); height: 162px;
     border: none; background: none; overflow: visible;
   }
   .scene-gallery-tile {
     position: relative; display: block; width: 100%; height: 100%; min-height: 0; padding: 0; margin: 0;
-    border: none; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2);
+    border: 1px solid var(--border-strong); border-radius: 4px; overflow: hidden; background: var(--surface);
     cursor: pointer; font: inherit; color: inherit;
   }
   .scene-gallery.is-mosaic .scene-gallery-tile.is-cover { grid-row: 1 / span 3; }
-  .scene-gallery.is-single .scene-gallery-tile { border-radius: 0; height: auto; }
+  .scene-gallery.is-single .scene-gallery-tile { border: 0; border-radius: 0; height: auto; }
   .scene-gallery-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .scene-gallery.is-single .scene-gallery-tile img { height: auto; max-height: 160px; }
   .scene-gallery-tile:focus-visible { outline: 2px solid var(--visual); outline-offset: 1px; }
   .scene-gallery-placeholder { display: block; width: 100%; height: 100%; min-height: 72px; background: var(--surface-2); }
   .scene-gallery.is-mosaic .scene-gallery-placeholder { min-height: 0; }
-  /* the play badge: a solid light circle with a dark ▶ */
+  /* the play badge (#169): a dark glass circle with a white ▶, the same
+     over any picture in either theme — it sits on the picture, not on the
+     page */
   .scene-gallery-play {
-    position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
-    border-radius: 50%; background: rgba(242,241,237,.92); box-shadow: 0 1px 3px rgba(15,14,12,.35); pointer-events: none;
+    position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px;
+    border-radius: 50%; background: rgba(15,14,12,.72); pointer-events: none;
   }
   .scene-gallery-play::after {
-    content: ""; position: absolute; left: 50%; top: 50%; margin: -5px 0 0 -3px;
-    border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent #0F0E0C;
+    content: ""; position: absolute; left: 50%; top: 50%; margin: -4px 0 0 -2.5px;
+    border-style: solid; border-width: 4px 0 4px 6.5px; border-color: transparent transparent transparent #FFFFFF;
   }
-  .scene-gallery-play.is-big { width: 40px; height: 40px; margin: -20px 0 0 -20px; }
-  .scene-gallery-play.is-big::after { margin: -7px 0 0 -4px; border-width: 7px 0 7px 11px; }
+  .scene-gallery-play.is-big { width: 28px; height: 28px; margin: -14px 0 0 -14px; }
+  .scene-gallery-play.is-big::after { margin: -5.5px 0 0 -3.5px; border-width: 5.5px 0 5.5px 9px; }
+  /* a video's length, as a pill in the cover's corner */
   .scene-gallery-length {
-    position: absolute; left: 6px; bottom: 6px; padding: 1px 5px; border-radius: 4px;
-    background: rgba(15,14,12,.72); color: #ECEBE7; font-family: var(--font-display); font-size: 10px; font-weight: 500;
+    position: absolute; right: 6px; bottom: 6px; display: flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px;
+    background: rgba(15,14,12,.72); color: #ECEBE7; font-family: var(--font-display); font-size: 11px; line-height: 1; font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
   /* the "+N" tile: the 4th item under a tint */
   .scene-gallery-tile.is-more::before {
-    content: ""; position: absolute; inset: 0; background: rgba(15,14,12,.55); z-index: 1;
+    content: ""; position: absolute; inset: 0; background: rgba(15,14,12,.64); z-index: 1;
     transition: background var(--dur-fast) var(--ease-standard);
   }
   .scene-gallery-tile.is-more .scene-gallery-play { opacity: .55; }
@@ -875,32 +1197,36 @@
   .scene-gallery-tile.is-more:hover { outline: 2px solid var(--visual); outline-offset: 1px; }
   .scene-gallery-more-count {
     position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
-    color: #fff; font-family: var(--font-display); font-size: 15px; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,.45);
+    color: #ECEBE7; font-family: var(--font-display); font-size: 16px; line-height: 20px; font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
   .scene-gallery .image-thumb-actions { z-index: 3; }
-  /* the caption: one line per video, at most three */
-  .scene-gallery-caption { margin-top: 4px; font-size: 11px; line-height: 1.5; color: var(--text-dim); }
-  .scene-gallery-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  /* the caption: one line per video, at most three — where it lives in the
+     mono (File, Vimeo, YouTube…), then the link itself */
+  .scene-gallery-caption { width: min(360px, 100%); margin-top: 2px; font-family: var(--font-body); font-size: 13px; line-height: 24px; color: var(--text-dim); }
+  .scene-gallery-line { display: flex; align-items: center; min-width: 0; height: 24px; }
   .scene-gallery-host {
-    flex: none; font-family: var(--font-body); font-size: 11px;
-    color: var(--text-faint); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; line-height: 1.5;
+    flex: none; width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-display); font-size: 11px; line-height: 16px; font-weight: 500; color: var(--text-faint);
   }
   .scene-gallery-link {
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    color: var(--visual); text-decoration: underline; text-underline-offset: 2px;
+    color: var(--visual); text-decoration: none;
     font: inherit; border: none; background: none; padding: 0; cursor: pointer; text-align: left;
   }
+  .scene-gallery-link:hover { color: var(--text); }
+  .scene-gallery-link.is-file { color: var(--text-visual); }
   .scene-gallery-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   .scene-gallery-link-remove {
     flex: none; border: none; background: none; color: var(--text-faint); cursor: pointer;
-    font-size: 12px; line-height: 1; padding: 0 2px; opacity: 0;
+    font-size: 13px; line-height: 1; padding: 0 4px; opacity: 0;
   }
   .scene-gallery-line:hover .scene-gallery-link-remove, .scene-gallery-link-remove:focus-visible { opacity: 1; }
   .scene-gallery-more-videos {
-    margin-top: 2px; font-family: var(--font-body); font-size: 11.5px; color: var(--text-dim); cursor: pointer;
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+    height: 24px; padding: 0; font-family: var(--font-body); font-size: 13px; line-height: 24px; color: var(--text-dim); cursor: pointer;
+    background: none; border: 0; border-radius: 3px;
   }
-  .scene-gallery-more-videos:hover { color: var(--visual); border-color: var(--visual); }
+  .scene-gallery-more-videos:hover { color: var(--text); }
   /* the dialog */
   .scene-gallery-panel { max-width: 620px; }
   .scene-gallery-show-all { font: inherit; color: var(--visual); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
@@ -1390,15 +1716,17 @@
   #cmdk-input::placeholder { color: var(--text-faint); }
   .cmdk-esc, .cmdk-foot kbd {
     flex: none;
-    font-family: var(--font-body);
+    box-sizing: border-box;
+    height: 20px;
+    font-family: var(--font-display);
     font-size: 11.5px;
-    line-height: 17px;
-    padding: 1px 6px;
+    line-height: 18px;
+    font-weight: 500;
+    padding: 0 6px;
     color: var(--text-dim);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-bottom-width: 2px;
-    border-radius: 5px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
   }
   .cmdk-list {
     flex: 1 1 auto;
@@ -1446,21 +1774,8 @@
   .cmdk-label mark { background: none; color: inherit; font-weight: 700; }
   .cmdk-why { font-size: 12px; color: var(--text-dim); line-height: 1.3; margin-top: 1px; }
   .cmdk-state { font-size: 12px; color: var(--text-dim); }
+  /* the keycaps themselves are B's, with the File menu's (.mi-keys kbd) */
   .cmdk-keys { flex: none; display: inline-flex; gap: 3px; }
-  .cmdk-keys kbd {
-    display: inline-block;
-    min-width: 20px;
-    padding: 1px 5px;
-    font-family: var(--font-body);
-    font-size: 11.5px;
-    line-height: 17px;
-    text-align: center;
-    color: var(--text-dim);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-bottom-width: 2px;
-    border-radius: 5px;
-  }
   .cmdk-empty { padding: 26px 16px; text-align: center; font-size: 14px; color: var(--text-dim); }
   .cmdk-foot {
     flex: none;
@@ -1731,12 +2046,16 @@
      colour of its own rather than the category colour over transparent, so
      it reads the same over the Visual column's blue wash and the Audio
      column's amber one. The colours are the --tag-* tokens at the top. */
+  /* B's mark (#169): the top corners rounded and the bottom square, where
+     the rule runs, which carries on unbroken across a line break. */
   .tag-anchor {
-    border-radius: 3px;
+    border-radius: 3px 3px 0 0;
     padding: 0 2px;
     cursor: pointer;
     box-shadow: inset 0 -2px 0 var(--tag-color, var(--visual));
     background: var(--tag-tint, color-mix(in srgb, var(--tag-color, var(--visual)) 14%, transparent));
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
   .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 22%, var(--tag-tint, transparent)); }
   .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
@@ -2525,19 +2844,23 @@
     margin-top: 1px;
   }
   .mi-keys { flex: none; display: inline-flex; gap: 3px; margin-left: 8px; }
+  /* B's keycap (#169): Chivo Mono, a 1px strong line, 4px corners, 20px
+     tall — a key, drawn flat. */
   .mi-keys kbd, .cmdk-keys kbd, .export-foot kbd {
     display: inline-block;
     min-width: 20px;
-    padding: 1px 5px;
-    font-family: var(--font-body);
+    box-sizing: border-box;
+    height: 20px;
+    padding: 0 6px;
+    font-family: var(--font-display);
     font-size: 11.5px;
-    line-height: 17px;
+    line-height: 18px;
+    font-weight: 500;
     text-align: center;
     color: var(--text-dim);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-bottom-width: 2px;
-    border-radius: 5px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
   }
   .mi-chevron {
     flex: none;
@@ -2713,28 +3036,32 @@
   .presence-bar {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    margin-top: 8px;
-    margin-right: 8px;
+    gap: 0;
+    padding-left: 6px;
     vertical-align: middle;
   }
   .presence-bar[hidden] { display: none; }
+  /* B's avatars (#169): 24px circles filled in the person's colour
+     (personColor, 13a-presence.js — bright values, the same in both
+     themes) with dark initials, overlapping a little, each ringed in the
+     page colour. */
   .presence-chip, .presence-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     border-radius: 999px;
     background: var(--presence, var(--text-dim));
-    color: #fff;
+    color: #0F0E0C;
     font-family: var(--font-body);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     line-height: 1;
     flex: none;
-    box-shadow: 0 0 0 1.5px var(--surface);
+    box-shadow: 0 0 0 2px var(--bg);
   }
+  .presence-chip + .presence-chip { margin-left: -6px; }
   .presence-mark {
     width: 18px;
     height: 18px;
@@ -2827,14 +3154,41 @@
      clear of a link's solid underline, which sits at 2px. */
   .cmt-anchor {
     text-decoration: underline dotted var(--audio);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 4.5px;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 5px;
     text-decoration-skip-ink: none;
     border-radius: 2px;
     cursor: pointer;
   }
   .cmt-anchor:hover { background: color-mix(in srgb, var(--audio) 14%, transparent); }
   .cmt-anchor.resolved { text-decoration-color: var(--text-faint); }
+  /* Each open comment's number, in a small amber speech-bubble marker after
+     its words (#169) — counted down the script in reading order, so the
+     first open comment is 1. Drawn by CSS, never put into the cell: the
+     cell's content is the document, and a marker in it would be saved.
+     The Comments panel's cards carry the same numbers (phase 3). */
+  #rows { counter-reset: cmt-marker; }
+  #rows .cmt-anchor:not(.resolved)::after {
+    counter-increment: cmt-marker;
+    content: counter(cmt-marker);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 14px;
+    box-sizing: border-box;
+    margin-left: 2px;
+    padding: 0 3px;
+    border: 1px solid var(--audio);
+    border-radius: 4px 4px 4px 1px;
+    color: var(--audio);
+    font-family: var(--font-display);
+    font-size: 10px;
+    line-height: 1;
+    font-weight: 500;
+    font-style: normal;
+    vertical-align: 0.55em;
+  }
   .cmt-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
   @keyframes cmt-flash {
     0%, 100% { box-shadow: none; }
@@ -3500,26 +3854,34 @@
        root is enough to stop the sideways widening; two of them is what
        confuses Chromium's sticky containing-block resolution. */
     html { overflow-x: hidden; }
-    #root { padding: 12px 12px 70px; }
+    #root { padding: 0 12px 70px; }
 
-    /* header: title full-width, the facts under it wrapping as they must,
-       toolbar as a flex row of equal buttons — no room for ceremony */
-    .topbar { gap: 8px; margin-bottom: 12px; }
-    .topbar > div:first-child { flex-wrap: wrap; row-gap: 4px; }
-    .brand-row { display: none; }
-    .doc-title { max-width: 100%; width: 100%; font-size: 20px; box-sizing: border-box; }
+    /* header: File and the title on one line, the facts under it wrapping
+       as they must, then the clock, and the buttons as a flex row of equal
+       buttons — no room for ceremony. (#169's own phone layout — content
+       first, modes and panels in a bottom bar — comes with B-Phone.) */
+    .topbar { margin: 0 -12px; }
+    .topbar-row { display: flex; flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
+    .topbar-left { flex: 1 1 100%; flex-wrap: wrap; row-gap: 4px; gap: 8px; }
+    .brand-row, .topbar-rule { display: none; }
+    .doc-title { flex: 1 1 0; min-width: 0; max-width: none; font-size: 17px; }
     /* A dot can land at the start of a wrapped line here, so the items
        are spaced apart instead. */
-    .doc-meta { flex-wrap: wrap; white-space: normal; gap: 2px 14px; }
+    .doc-meta { flex: 1 1 100%; flex-wrap: wrap; white-space: normal; gap: 2px 14px; }
     .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: none; }
-    .toolbar { gap: 6px; }
-    .toolbar > #btn-write { margin-right: 0; }
-    /* The four panels get the first row to themselves; File, Write, Save
-       and Present share the second. */
+    .program-clock-wrap { justify-self: auto; }
+    .toolbar { flex: 1 1 auto; flex-wrap: wrap; justify-content: stretch; gap: 6px; }
+    /* The four panels get a row to themselves; Write and Present share the
+       next. */
     .btn-group { flex: 1 1 100%; order: -1; }
-    .menu-wrap { display: flex; flex: 1 1 auto; }
-    .menu-wrap > .btn { flex: 1 1 auto; }
-    .toolbar .btn { flex: 1 1 auto; padding: 11px 8px; font-size: 13px; text-align: center; }
+    /* four labels and counts only just fit a 375px screen; with an icon
+       each they are wider than it, and a phone widens the whole layout to
+       fit the widest thing on the page */
+    .btn-group .btn-icon { display: none; }
+    .menu-wrap { display: flex; flex: none; }
+    .toolbar .btn { flex: 1 1 auto; justify-content: center; height: 44px; padding: 0 8px; font-size: 13px; text-align: center; }
+    /* the rundown is a phone layout of its own (B-Phone, a later phase) */
+    .rundown { display: none; }
 
     .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
     /* panel is full viewport width here, so there's nothing to drag against */
@@ -3532,7 +3894,9 @@
        content's min-width, and the focus toolbar's row of nowrap buttons
        has a min-content wider than the phone — which silently blew the
        track out to 409px inside a 351px grid */
-    .row { grid-template-columns: minmax(0, 1fr); }
+    .row { grid-template-columns: minmax(0, 1fr); column-gap: 0; margin: 0 -12px; padding: 0; }
+    .row-rail { display: none; }
+    .hidden-shot-strip { width: calc(100% + 24px); margin: 0 -12px; padding: 9px 12px; }
     .cell { border-left: none; border-right: none; padding: 10px 12px 14px; min-height: 0; }
     .cell.visual-cell { grid-row: 2; border-left: 3px solid var(--visual); }
     .cell.audio-cell { grid-row: 3; border-left: 3px solid var(--audio); }
@@ -3551,15 +3915,17 @@
       flex-direction: row;
       align-items: center;
       width: 100%;
-      padding: 8px 10px 4px;
+      padding: 8px 12px 4px;
       gap: 8px;
       box-sizing: border-box;
     }
-    .row-head { margin-bottom: 0; cursor: default; }
-    .drag-grip { display: none; }   /* HTML5 drag doesn't exist on touch; ↑/↓ are the way */
-    .row-dur { margin: 0; }
-    .gutter .status-btn { margin: 0 auto 0 4px; width: 40px; height: 32px; }
-    .gutter-btn { width: 40px; height: 32px; font-size: 15px; border-color: var(--border); background: var(--surface); }
+    .row-head { cursor: default; }
+    .row-num { font-size: 16px; line-height: 20px; }
+    .row-grip { display: none; }   /* HTML5 drag doesn't exist on touch; the menu's Move up/down are the way */
+    .gutter .status-btn { margin: 0; height: 44px; }
+    .row-more { width: 44px; height: 44px; }
+    .gutter-btn.row-menu-item { height: 44px; }
+    .row-menu { left: auto; right: 0; }
     .row-meta { display: none; }
 
     /* focus toolbar: finger-sized and scrollable sideways rather than wrapped,
@@ -3667,7 +4033,8 @@
     .image-thumb-actions { opacity: 1; }
     .scene-gallery-link-remove { opacity: 1; }
     .row-meta { opacity: 1; }
-    .drag-grip { opacity: 0; }
+    /* HTML5 drag does not start from a touch: the menu moves a scene */
+    .row-grip { display: none; }
     /* the Tab key doesn't exist on phone keyboards, so the ghost suggestion
        is a button there: tapping it accepts the completion */
     .tag-ghost-hint { pointer-events: auto; cursor: pointer; }
@@ -3680,38 +4047,51 @@
 
 /* ---- update notice ----
    Sits above the columns rather than floating: it is information, not an
-   interruption, and there is nothing to act on until the next restart. */
+   interruption, and there is nothing to act on until the next restart.
+   One slim line (#169) — the update notice and the desktop-app pointer
+   alike: an icon, the words, a quiet action and the dismiss, 36px tall and
+   on the page's own surface, so the script still starts at the top of the
+   window rather than under a stack of boxes (the brief's problem 6). */
 .update-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 12px;
-  padding: 10px 14px;
+  min-height: 36px;
+  margin: 10px 0 0;
+  padding: 0 6px 0 12px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--visual);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   /* Was a literal #ffffff with no color of its own — in dark mode it
      inherited body's near-white --text, giving near-invisible
      text on a hardcoded white box. --surface is the theme token every
      other panel/card sources its background from, and already flips
      correctly under prefers-color-scheme/data-theme. */
   background: var(--surface);
-  color: var(--text);
+  color: var(--text-dim);
   font-size: 13px;
+  line-height: 18px;
 }
-.update-bar-icon { color: var(--visual); font-size: 14px; }
+.update-bar > span:not([class]), #update-bar-text, #desktop-app-bar-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.update-bar-icon { flex: none; width: 16px; height: 16px; color: var(--visual); fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .update-bar-action {
-  border: 1px solid var(--visual);
+  flex: none;
+  height: 28px;
+  border: 1px solid var(--border-strong);
   background: none;
-  color: var(--visual);
-  border-radius: 6px;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 450;
   white-space: nowrap;
   cursor: pointer;
 }
-.update-bar-action:hover { background: var(--visual); color: var(--accent-contrast); }
+.update-bar-action:hover { background: var(--hover); }
 .update-bar-dismiss {
   margin-left: auto;
   border: 0;
@@ -4020,13 +4400,23 @@
      script. What's shot and what isn't lives in the panel, not here. As
      typed since #169, no longer uppercased: it is a keyword, like the
      tag brackets, and B's boards set it in the mono as it is written. */
+  /* #169: a small bordered label in the mono — B's "B-roll" tag at the
+     head of the line. inline-block rather than flex: it is an atom inside
+     an editable cell, and the caret has to go round it like a word. */
   .broll-key {
-    font-family: var(--font-display); font-size: 0.82em;
-    color: var(--broll); font-weight: 500;
-    margin-right: 4px; cursor: pointer;
-    border-bottom: 1px solid color-mix(in srgb, var(--broll) 45%, transparent);
+    display: inline-block;
+    box-sizing: border-box;
+    height: 18px;
+    padding: 0 5px;
+    margin-right: 6px;
+    border: 1px solid var(--broll);
+    border-radius: 3px;
+    font-family: var(--font-display); font-size: 11px; line-height: 16px; font-weight: 500;
+    color: var(--broll);
+    vertical-align: 2px;
+    cursor: pointer;
   }
-  .broll-key:hover { color: var(--text); border-bottom-color: var(--broll); }
+  .broll-key:hover { background: color-mix(in srgb, var(--broll) 14%, transparent); }
   /* Its own text colour, held to --broll by palette.test.mjs: this badge
      once inherited .comments-badge's white, which sat at 2.9:1 on the dark
      theme's b-roll colour; --accent-contrast is the page's near-white or
@@ -4554,43 +4944,33 @@
        measures the new layout the instant the class changes. */
     transition: box-shadow var(--dur-move) var(--ease-standard);
   }
-  /* The containing block for the two rows the header sheds: they are taken
-     out of flow for the length of the movement rather than out of the
-     document, and must not escape the header to do it. */
-  .topbar > div:first-child { position: relative; }
-  .topbar.is-condensed {
-    margin-bottom: 12px;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
-  }
-  .topbar.is-condensed:not(.is-condensing) .brand-row { display: none; }
+  .topbar.is-condensed { box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06); }
+  /* Since #169 what the header sheds is the rundown's ruler: the header's
+     own row is already one line. */
+  .topbar.is-condensed:not(.is-condensing) .rundown-ruler { display: none; }
   /* A `display` flip cannot fade — the reason the sidebar below reaches for
-     `allow-discrete` — but here the height those two rows occupy is the
-     whole point of condensing, so waiting out a fade before taking it back
-     would only move the snap 180ms later. .is-condensing takes them out of
-     FLOW instead: the header re-flows around them in the frame the class
-     lands (which is what 20i-topbar.js measures), and they fade from where
-     they already stood, translated back there by the same FLIP that moves
-     everything else. That file drops the class when the fade is over and
-     `display: none` above takes it from there. Expanding is the other way
-     about: they return in flow and are faded in. */
-  .topbar.is-condensing .brand-row {
+     `allow-discrete` — but here the height the ruler occupies is the whole
+     point of condensing, so waiting out a fade before taking it back would
+     only move the snap 180ms later. .is-condensing takes it out of FLOW
+     instead: the strip re-flows around it in the frame the class lands
+     (which is what 20i-topbar.js measures), and it fades from where it
+     already stood, while the blocks rise into its place by the same FLIP
+     that moves everything else. That file drops the class when the fade is
+     over and `display: none` above takes it from there. Expanding is the
+     other way about: it returns in flow and is faded in. */
+  .topbar.is-condensing .rundown-ruler {
     position: absolute;
+    left: 20px;
+    right: 20px;
+    top: 0;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-exit) var(--ease-exit);
   }
-  .topbar.is-condensed .doc-title {
-    font-size: 16px;
-    max-width: 24vw;
-  }
-  /* Both rows share one: the toolbar keeps its natural width and the title
-     line takes what is left, its facts clipped from the end (the name
-     first). Too narrow for even 240px of it, and they wrap back to two. */
-  @media (min-width: 761px) {
-    .topbar.is-condensed > div:first-child { flex: 1 1 240px; }
-    .topbar.is-condensed .toolbar { flex: 0 0 auto; flex-wrap: nowrap; }
-    .topbar.is-condensed .toolbar > #btn-write { margin-right: 10px; }
-  }
+  /* condensed, the playhead is the block's height and has no ruler to
+     point down from */
+  .topbar.is-condensed .rundown-playhead { top: 2px; height: 34px; }
+  .topbar.is-condensed .rundown-playhead::before { display: none; }
 
   /* A viewer who asked for less motion gets the condensed layout with no
      transition — the point is the space it saves, not the movement.
@@ -4600,7 +4980,99 @@
      file is trusted to prevent. */
   @media (prefers-reduced-motion: reduce) {
     .topbar { transition: none; }
-    .topbar.is-condensing .brand-row { transition: none; }
+    .topbar.is-condensing .rundown-ruler { transition: none; }
+  }
+
+  /* ---------- the rundown strip (#169, 05f-rundown.js) ----------
+     The script as blocks sized by read time on a time ruler: 26px of ruler
+     (minor ticks, taller major ones with a label), then 45px of track with
+     the blocks 30px tall. Shot is a lit block (the hover fill, dim labels,
+     a small check), Ready the dark amber with a 2px amber top edge, To do
+     an outline. B-roll lines are 2px cyan ticks along a block's foot; the
+     playhead is the Visual blue, at the start of the scene the caret is
+     in, whose block is outlined in it. #rundown-overlay is the layer a
+     target length (#170) draws on. */
+  .rundown {
+    position: relative;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .rundown-ruler { position: relative; height: 26px; }
+  .rd-tick { position: absolute; top: 22px; width: 1px; height: 4px; background: var(--border-strong); }
+  .rd-tick.is-major { top: 18px; height: 8px; }
+  .rd-label {
+    position: absolute;
+    top: 3px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    line-height: 12px;
+    font-weight: 450;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-faint);
+    white-space: nowrap;
+  }
+  .rundown-track { position: relative; height: 45px; }
+  .rundown-blocks, .rundown-overlay { position: absolute; inset: 0; }
+  .rundown-overlay { pointer-events: none; }
+  .rd-block {
+    position: absolute;
+    top: 4px;
+    height: 30px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lamp);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  /* a block too narrow for its number is a sliver, with no room for padding */
+  .rd-block:not(:has(.rd-num)) { padding: 0; }
+  .rd-block .rd-len { color: var(--text-faint); }
+  .rd-block:hover { border-color: var(--text-faint); }
+  .rd-block.is-shot { background: var(--hover); border-color: transparent; color: var(--text-dim); }
+  .rd-block.is-shot:hover { border-color: var(--border-strong); }
+  .rd-check { flex: none; width: 10px; height: 10px; fill: none; stroke: var(--text-dim); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .rd-block.is-ready { background: var(--audio-soft); border-color: transparent; border-top: 2px solid var(--audio); }
+  .rd-block.is-ready .rd-len { color: var(--text-dim); }
+  .rd-block.is-current { outline: 1.5px solid var(--visual); outline-offset: 0; }
+  .rd-block:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .rd-broll {
+    position: absolute;
+    top: 26px;
+    width: 2px;
+    height: 8px;
+    border-radius: 1px 1px 0 0;
+    background: var(--broll);
+    pointer-events: none;
+  }
+  .rundown-playhead {
+    position: absolute;
+    top: -4px;
+    height: 42px;
+    width: 2px;
+    background: var(--visual);
+    pointer-events: none;
+  }
+  .rundown-playhead::before {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: -6px;
+    border-style: solid;
+    border-width: 7px 5px 0 5px;
+    border-color: var(--visual) transparent transparent transparent;
   }
 
   /* ---------- sidebar slide-in (BACKLOG: slide-in animation for sidebars)

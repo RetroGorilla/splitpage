@@ -491,6 +491,12 @@ the app.
   over (`__snapMid` in that suite). A fade that never runs then still fails
   the suite. A value that is already displaced at t=0, such as a FLIP
   transform or a fade-in from 0, has no such gap.
+- **Every suite runs in the light theme.** Both drivers pin
+  `prefers-color-scheme: light` when they connect (#169). Headless Edge
+  otherwise takes the colour scheme from Windows, so on a machine in dark
+  mode every suite that reads a colour back failed against the light
+  values it was written for. A suite that wants the dark theme sets
+  `data-theme="dark"` on `<html>` itself (96 and 97 do).
 - **Assert on `textContent`, not `innerText`.** `innerText` returns the
   *rendered* casing, which is not the source's wherever CSS transforms it —
   until #169 Splitpage uppercased most of its UI that way (`"HAVE IT"`,
