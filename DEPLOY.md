@@ -434,7 +434,16 @@ Electron-built installers, which ship instead:
 
 ## 7. Publishing a release to the mirror
 
-When it's time to cut a new release for users to update to, build the two pieces
+**From CI.** Pushing a `v<version>` tag on the commit that bumped `VERSION`
+runs `.github/workflows/release.yml` on a Windows runner: the two builds
+below, `verify-dist`, and `SHA256SUMS.txt`. With the
+`SPLITPAGE_RELEASES_TOKEN` secret (a fine-grained token with Contents
+read/write on `splitpage-releases` only) it opens a **draft** release there
+with the four files, marked pre-release for a version with a `-` in it;
+review it and press Publish. Without the secret the files are left on the
+run as an artifact to upload by hand, as in steps 1–3 below.
+
+**By hand.** When it's time to cut a new release for users to update to, build the two pieces
 separately — the portable zip from `package.mjs`, and the Electron installers
 from `desktop/`:
 
