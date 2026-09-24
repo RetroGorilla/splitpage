@@ -324,6 +324,10 @@ async function connectCdp() {
   // demo, for the same reason and with the same effect on every suite that
   // clicks into it — off unless the script asked for it with ?newtab=1
   // (30-new-tab.txt does).
+  // No suite touches the network (#141, #168): __splitpageNoRemote keeps a
+  // pasted YouTube or Vimeo link's thumbnail fetch and the gallery's player
+  // frame off the real hosts unless the suite installs a fake of its own
+  // (window.__videoTest, src/js/05v-video.js). driver.ps1 does the same.
   await send("Page.addScriptToEvaluateOnNewDocument", {
     source: `
 if (!/[?&]wizard=1(&|$)/.test(location.search)) {
@@ -334,6 +338,7 @@ if (!/[?&]wizard=1(&|$)/.test(location.search)) {
   } catch (e) {}
 }
 if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = true; }
+window.__splitpageNoRemote = true;
 `,
   });
   await send("Log.enable");

@@ -46,6 +46,10 @@ expect /style-src [^;]*'unsafe-inline'/.test(window.__csp)
 # cells all name pictures by sha), and data: URIs where a picture is still
 # inline. http(s) images stay refused even if one gets past the sanitiser.
 expect /img-src 'self' data: blob:;/.test(window.__csp)
+# Frames: this origin, and the two video players the gallery's dialog plays
+# a YouTube or Vimeo link in once its play button is pressed (#168) — no
+# other host.
+expect /frame-src 'self' https:\/\/www\.youtube-nocookie\.com https:\/\/player\.vimeo\.com;/.test(window.__csp)
 
 # ---- and it is enforcing ---------------------------------------------------
 # An inline <script> injected the way a successful HTML injection would inject

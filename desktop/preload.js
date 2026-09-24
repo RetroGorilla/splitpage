@@ -411,6 +411,17 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:video-file-open", String(token || ""));
     },
 
+    /* A pasted YouTube or Vimeo link's thumbnail (#141): the video named by
+       its host ("youtube" | "vimeo") and id, never a URL — main fetches it
+       from the site's fixed image host. {ok: true, bytes: Uint8Array,
+       mime} or {ok: false, code}; a refused call answers the same way. */
+    videoThumbnail(host, ref) {
+      return invoke("splitpage:video-thumbnail", host, ref).then((got) => {
+        if (got && got.ok && got.bytes && !(got.bytes instanceof Uint8Array)) got = { ...got, bytes: new Uint8Array(got.bytes) };
+        return got || { ok: false, code: "UNAVAILABLE" };
+      }, () => ({ ok: false, code: "REFUSED" }));
+    },
+
     /* ---- updates (see main.js section 9) --------------------------------
        Deliberately argument-free, all four of them. The page asks for the
        update to be downloaded and installed; it never gets to say what is

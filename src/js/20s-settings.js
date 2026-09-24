@@ -9,12 +9,14 @@ import {
   SCRIPT_SCALE_MAX,
   SCRIPT_SCALE_MIN,
   THEME_KEY,
+  VIDEO_THUMBS_KEY,
   applyTheme,
   formatClock,
   readClockPref,
   readDefaultWpm,
   readPref,
   readThemePref,
+  videoThumbsOn,
   writePref
 } from "./00p-prefs.js";
 import { setHideShotScenes } from "./01b-hide-shot.js";
@@ -140,6 +142,8 @@ function bodyHtml() {
     section("Editor",
       switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", flagOn(HIDE_SHOT_KEY)) +
       switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", flagOn(AUTOSAVE_KEY, true)) +
+      switchHtml("settings-video-thumbs", "Fetch video thumbnails",
+        "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", videoThumbsOn()) +
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-default-wpm">Reading speed for new scripts</label>' +
         '<span class="settings-inline-control"><input type="number" id="settings-default-wpm" min="60" max="400" step="5" value="' +
@@ -283,6 +287,8 @@ function applyChange(target) {
   if (name === "settings-clock") { writePref(CLOCK_KEY, target.value === "system" ? null : target.value); return; }
   if (name === "settings-person-color") { setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { writePref(RUNDOWN_MIN_KEY, target.checked ? "1" : "0"); return; }
+  /* on is the default, so on is no key at all */
+  if (id === "settings-video-thumbs") { writePref(VIDEO_THUMBS_KEY, target.checked ? null : "0"); return; }
   /* these setters store and announce the change themselves (writePref) */
   if (id === "settings-hide-shot") { setHideShotScenes(target.checked); return; }
   if (id === "settings-autosave") { setAutoSaveEnabled(target.checked); return; }

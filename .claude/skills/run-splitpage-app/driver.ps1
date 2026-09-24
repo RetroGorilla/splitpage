@@ -156,6 +156,10 @@ function Connect-Cdp {
   # demo, for the same reason and with the same effect on every suite that
   # clicks into it - off unless the script asked for it with ?newtab=1
   # (30-new-tab.txt does).
+  # No suite touches the network (#141, #168): __splitpageNoRemote keeps a
+  # pasted YouTube or Vimeo link's thumbnail fetch and the gallery's player
+  # frame off the real hosts unless the suite installs a fake of its own
+  # (window.__videoTest, src/js/05v-video.js).
   $null = Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = @'
 if (!/[?&]wizard=1(&|$)/.test(location.search)) {
   try {
@@ -165,6 +169,7 @@ if (!/[?&]wizard=1(&|$)/.test(location.search)) {
   } catch (e) {}
 }
 if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = true; }
+window.__splitpageNoRemote = true;
 '@ }
   $null = Send-Cdp 'Log.enable'
 }
