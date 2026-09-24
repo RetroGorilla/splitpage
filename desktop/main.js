@@ -2696,6 +2696,79 @@ function voiceHelperInstance() {
 }
 
 /* ---------------------------------------------------------------------
+ * 9e. YouTube and Vimeo in a scene's gallery (issues #141, #168).
+ *
+ *     THUMBNAILS. A YouTube or Vimeo link pasted into a scene gets its own
+ *     thumbnail, fetched once and kept as a blob like any pasted picture
+ *     (src/js/05v-video.js). In this app the fetch is made here, not by the
+ *     page: splitpage:video-thumbnail takes the video's host ("youtube" |
+ *     "vimeo") and id, typed in the IPC table, and nothing else — never a
+ *     URL (invariant #28). shared/video-embed.js rebuilds every address
+ *     against the two sites' fixed hosts (i.ytimg.com; vimeo.com's oEmbed,
+ *     whose thumbnail must be on i.vimeocdn.com), sends no cookies and no
+ *     referrer, follows no redirect, and keeps only a JPEG, PNG or WebP of
+ *     at most 1 MiB, sniffed from the bytes. So a compromised page can at
+ *     worst make this process fetch a thumbnail of a video it names from
+ *     those hosts — what pasting a link does anyway.
+ *
+ *     THE PLAYER. The gallery's dialog plays such a link in a frame, once
+ *     the play button is pressed (build.mjs's frame-src names the two
+ *     player origins; this app serves that same policy, section 10). Two
+ *     things here make that work and keep it narrow:
+ *     - YouTube's player refuses to play ("Error 153") when its request
+ *       carries no Referer, and a page on splitpage://app sends none — a
+ *       custom scheme is never a referrer. YouTube asks apps that embed it
+ *       to identify themselves with a Referer naming the app, so the one
+ *       request for the player's page, made by a frame inside one of this
+ *       app's own tabs, gets https://com.retrogorilla.splitpage/ (the app
+ *       id). Nothing else is touched: not another host, not a request that
+ *       carries a Referer already, not the tunnel window.
+ *     - A player frame gets no permission at all (the handlers in section
+ *       15 answer by the frame that asks, not by the tab it sits in), and
+ *       every link it opens in a new window goes to the system browser
+ *       like any other (wireTabView's window-open handler).
+ *
+ *     TEST MODE. SPLITPAGE_TEST_VIDEO_BASE points every host at a local
+ *     fake — honoured only under SPLITPAGE_TEST=1.
+ * --------------------------------------------------------------------- */
+const videoEmbed = require(path.join(SHARED_ROOT, "video-embed.js"));
+
+const VIDEO_TEST_BASES = TEST_MODE && process.env.SPLITPAGE_TEST_VIDEO_BASE
+  ? (() => {
+      const base = String(process.env.SPLITPAGE_TEST_VIDEO_BASE).replace(/\/+$/, "");
+      const out = {};
+      for (const k of Object.keys(videoEmbed.VIDEO_HOSTS)) out[k] = base + "/" + k;
+      return out;
+    })()
+  : null;
+
+const YOUTUBE_EMBED_REFERER = "https://com.retrogorilla.splitpage/";
+
+function videoThumbnail(host, ref) {
+  const v = videoEmbed.parseVideoRef(host, ref);
+  if (!v) return Promise.resolve({ ok: false, code: "BAD_REF" });
+  return videoEmbed.fetchVideoThumbnail(v, { fetch: globalThis.fetch, bases: VIDEO_TEST_BASES || undefined }).then((res) => {
+    if (TEST_MODE) process.stderr.write("[splitpage] video-thumbnail " + host + " " + (res.ok ? "ok" : res.code) + "\n");
+    return res.ok ? { ok: true, bytes: res.bytes, mime: res.mime } : { ok: false, code: res.code };
+  });
+}
+
+/* The Referer YouTube's player needs, on its own page request from a
+   frame in one of this app's tabs — and on nothing else. */
+function installPlayerReferer(ses) {
+  const embedPrefix = (VIDEO_TEST_BASES ? VIDEO_TEST_BASES.youtubePlayer : videoEmbed.VIDEO_HOSTS.youtubePlayer) + "/embed/";
+  const filter = { urls: [embedPrefix + "*"] };
+  ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+    const headers = details.requestHeaders || {};
+    const hasReferer = Object.keys(headers).some((k) => k.toLowerCase() === "referer");
+    const fromTab = details.resourceType === "subFrame" && typeof details.webContentsId === "number" &&
+      webContentsIdToTabId.has(details.webContentsId);
+    if (!hasReferer && fromTab && details.url.startsWith(embedPrefix)) headers.Referer = YOUTUBE_EMBED_REFERER;
+    callback({ requestHeaders: headers });
+  });
+}
+
+/* ---------------------------------------------------------------------
  * 10. protocol.handle — the whole of what the window is allowed to load.
  * --------------------------------------------------------------------- */
 
@@ -2734,7 +2807,9 @@ async function readAppCsp() {
 }
 
 /* The tab strip is three static files with no inline script, no network and
-   no bridge (invariant #43), so its policy says exactly that. */
+   no bridge (invariant #43), so its policy says exactly that. Its
+   frame-src stays 'none': the gallery's video players (#168, section 9e)
+   are the app page's, framed under the app page's own policy above. */
 const TABSTRIP_CSP = [
   "default-src 'none'",
   "script-src 'self'",
@@ -4935,6 +5010,11 @@ function registerIpc() {
     return failed ? { ok: false, code: "OPEN_FAILED" } : { ok: true };
   });
 
+  /* A pasted YouTube or Vimeo link's thumbnail (#141, section 9e): the
+     table has already typed both arguments; videoThumbnail checks the pair
+     and builds every address itself. */
+  ipcHandle("splitpage:video-thumbnail", async (event, host, ref) => videoThumbnail(host, ref));
+
   /* ---- updates -------------------------------------------------------
      Four calls, none of which takes an argument. That is the contract: the
      page can ask what the situation is, ask for the download to start, and
@@ -5818,19 +5898,29 @@ app.whenReady().then(async () => {
      the JS-bridge layer but not, until this, at the OS-permission layer).
      Returning false here isn't a hard block on the feature: Electron simply
      denies rather than silently allowing, same as leaving the handler
-     unset — every kind stays off for a remote origin instead of on. */
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+     unset — every kind stays off for a remote origin instead of on.
+
+     And by the FRAME that asks, not only the tab it is in (#168): a video
+     player frame inside a tab (YouTube's or Vimeo's, section 9e) sits in
+     a webContents whose URL is ours, and must not inherit the page's
+     microphone and clipboard. So the asking frame has to be this app's
+     page too. A cross-origin frame's check carries no requestingUrl, only
+     its origin, which is not ours. */
+  const APP_PAGE_RE = /^splitpage:\/\/app(\/|$)/;
+  const APP_PERMISSIONS = ["media", "clipboard-sanitized-write", "clipboard-read", "fullscreen"];
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const url = webContents.getURL();
-    const allowedOrigin = url.startsWith("splitpage://app/");
-    const allowedKinds = ["media", "clipboard-sanitized-write", "clipboard-read", "fullscreen"];
-    callback(allowedOrigin && allowedKinds.includes(permission));
+    const asking = details && typeof details.requestingUrl === "string" ? details.requestingUrl
+      : (details && details.isMainFrame === false ? "" : url);
+    callback(APP_PAGE_RE.test(url) && APP_PAGE_RE.test(asking) && APP_PERMISSIONS.includes(permission));
   });
-  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-    const url = webContents.getURL();
-    const allowedOrigin = url.startsWith("splitpage://app/");
-    const allowedKinds = ["media", "clipboard-sanitized-write", "clipboard-read", "fullscreen"];
-    return allowedOrigin && allowedKinds.includes(permission);
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    const url = webContents ? webContents.getURL() : "";
+    const asking = (details && details.requestingUrl) || requestingOrigin || "";
+    return APP_PAGE_RE.test(url) && APP_PAGE_RE.test(asking) && APP_PERMISSIONS.includes(permission);
   });
+  /* YouTube's player's Referer (section 9e) */
+  installPlayerReferer(session.defaultSession);
 
   if (TUNNEL_TARGET) {
     const ok = await startTunnel();
