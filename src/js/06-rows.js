@@ -340,10 +340,14 @@ export function toggleRowMenu(btn, focusFirst) {
   if (row) row.classList.toggle("has-menu-open", opening);
   if (!opening) return;
   /* Up rather than down when the window has no room under it — the last
-     scene on screen. */
+     scene on screen. On a phone the bottom bar (#169, #phone-bar) takes
+     the foot of the window, and a menu opening under it would be hidden;
+     everywhere else the bar is not drawn and measures 0. */
   menu.classList.remove("opens-up");
   var r = menu.getBoundingClientRect();
-  if (r.bottom > window.innerHeight - 8 && r.top - r.height - btn.offsetHeight > 8) menu.classList.add("opens-up");
+  var phoneBar = document.getElementById("phone-bar");
+  var floor = window.innerHeight - 8 - (phoneBar ? phoneBar.offsetHeight : 0);
+  if (r.bottom > floor && r.top - r.height - btn.offsetHeight > 8) menu.classList.add("opens-up");
   if (focusFirst) {
     var first = menu.querySelector(".row-menu-item");
     if (first) first.focus();

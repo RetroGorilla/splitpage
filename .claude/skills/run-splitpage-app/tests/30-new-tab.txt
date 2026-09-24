@@ -106,10 +106,18 @@ eval window.__desktopTest.restoreBackend()
 # carried into it. No goto from here on: see the note above.
 eval window.__newTab.open()
 wait document.getElementById('newtab-page').hidden == false
-expect document.getElementById('newtab-title').textContent == Start a script
+# Direction B's "On air" band (#169): the heading is "New script" at 28px,
+# beside the clock and the tally lamp. The line under it is only for when
+# there is a recent script to carry on with, which the browser build never
+# has — so here the band is the clock, the lamp and the heading alone.
+expect document.getElementById('newtab-title').textContent == New script
 expect document.querySelector('#newtab-page .newtab-sub').textContent == Pick a layout, or carry on where you left off.
-expect parseFloat(getComputedStyle(document.getElementById('newtab-title')).fontSize) == 36
+expect parseFloat(getComputedStyle(document.getElementById('newtab-title')).fontSize) == 28
 expect getComputedStyle(document.getElementById('newtab-title')).fontWeight == 700
+expect document.querySelector('#newtab-page .newtab-clock').textContent == 00:00
+expect getComputedStyle(document.querySelector('#newtab-page .newtab-clock')).fontFamily.indexOf('Chivo Mono') !== -1
+expect document.querySelector('#newtab-page .newtab-sub').hidden == true
+expect document.getElementById('newtab-continue').hidden == true
 # Blank script first, then the three starters, in STARTERS order
 expect document.querySelectorAll('#newtab-cards .newtab-card').length == 4
 expect document.querySelector('#newtab-cards .newtab-card').getAttribute('data-newtab-action') == new
@@ -117,9 +125,11 @@ expect window.__newTab.starterIds().join(',') == to-camera,interview,spot-30
 expect Array.from(document.querySelectorAll('#newtab-cards [data-starter]')).map(function(b){return b.getAttribute('data-starter');}).join(',') == to-camera,interview,spot-30
 expect Array.from(document.querySelectorAll('#newtab-cards .newtab-card-name')).map(function(n){return n.textContent;}).join('|') == Blank script|To-camera video|Interview|30-second spot
 expect document.querySelector('[data-starter="interview"] .newtab-card-desc').textContent == Questions on the right, cutaways on the left.
-# each starter card has its two-column preview, teal stubs and orange ones
-expect document.querySelectorAll('[data-starter="to-camera"] .newtab-preview i.is-visual').length > 0
-expect document.querySelectorAll('[data-starter="to-camera"] .newtab-preview i.is-audio').length > 0
+# each starter card has its rundown in miniature (#169): a block per scene
+# and the running time — 1:35 is the board's figure for To-camera
+expect document.querySelectorAll('[data-starter="to-camera"] .newtab-preview-bar i').length == 6
+expect document.querySelector('[data-starter="to-camera"] .newtab-preview-time').textContent == 1:35
+expect document.querySelector('[data-starter="to-camera"] .newtab-card-doc').textContent == Three Lights for Under $200
 expect document.querySelectorAll('.newtab-preview.is-blank svg').length == 1
 # the browser build: no Recent column, and the desktop-app line with the
 # desktop-app notice's own link target (20a-update.js)
@@ -131,8 +141,9 @@ expect document.querySelector('#newtab-drop strong').textContent == Drop a scrip
 expect document.querySelectorAll('#newtab-drop [data-newtab-action="paste"], #newtab-drop [data-newtab-action="gdoc"]').length == 2
 expect document.querySelectorAll('.newtab-foot [data-newtab-action="tour"], .newtab-foot [data-newtab-action="tagging-help"], .newtab-foot [data-newtab-action="dismiss"]').length == 3
 expect document.querySelectorAll('.newtab-bar [data-newtab-action="join"], .newtab-bar [data-newtab-action="open"]').length == 2
-# icons are inline SVG, never text
-expect document.querySelectorAll('#newtab-page svg').length >= 8
+# icons are inline SVG, never text (seven since #169: the board's help links
+# are plain text links, so the tour and cheat-sheet icons went)
+expect document.querySelectorAll('#newtab-page svg').length >= 7
 expect document.documentElement.scrollWidth <= innerWidth
 
 # A canonical form of a document, keys sorted and its identity left out, to

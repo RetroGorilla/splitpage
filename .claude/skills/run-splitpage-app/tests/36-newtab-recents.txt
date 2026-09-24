@@ -20,6 +20,8 @@ wait document.getElementById('newtab-page').hidden == false
 # what a browser copy looks like.
 expect document.getElementById('newtab-recents').hidden == true
 expect document.querySelector('#newtab-page .newtab-main').classList.contains('has-recents') == false
+# ...and no Continue in the band (#169): nothing to carry on with
+expect document.getElementById('newtab-continue').hidden == true
 
 # --- with a desktop bridge, the column shows what main hands over --------
 eval (function(){ window.D = window.__desktopTest; window.fake = D.makeFakeBackend(); D.setBackend(window.fake); window.__idA = window.fake._addFile('script-a.md', '# Script A' + String.fromCharCode(10,10) + 'Narration for A.'); window.__idB = window.fake._addFile('script-b.md', '# Script B' + String.fromCharCode(10,10) + 'Narration for B.'); window.fake._addRecent(window.__idB, 'script-b.md', 'Script B', Date.now()); window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now()); return true; })()
@@ -34,13 +36,24 @@ expect document.querySelectorAll('#newtab-recents-list .newtab-recent-name')[0].
 # the entry carries the opaque id and nothing else — no path to be had
 expect document.querySelectorAll('#newtab-recents-list [data-newtab-action="open-recent"]')[0].getAttribute('data-file-id') === window.__idA
 expect document.getElementById('newtab-recents-list').textContent.indexOf('/') === -1
-# the start screen's layout (issue #144): at a desktop window's width the
-# column sits beside the New grid, ~380px wide, and the file name is the one
-# thing on the page in the mono face
-expect innerWidth < 1100 || document.getElementById('newtab-recents').getBoundingClientRect().left > document.getElementById('newtab-cards').getBoundingClientRect().right
-expect innerWidth < 1100 || Math.abs(document.getElementById('newtab-recents').getBoundingClientRect().width - 380) < 2
+# the start screen's layout (issue #144, and "On air" since #169): at a
+# desktop window's width the starters are a row above, and Recent sits
+# under them with the 282px Join card beside it; the file name is in the
+# mono face, the title in the body face
+expect innerWidth < 1100 || document.getElementById('newtab-recents').getBoundingClientRect().top >= document.getElementById('newtab-cards').getBoundingClientRect().bottom
+expect innerWidth < 1100 || document.querySelector('.newtab-join').getBoundingClientRect().left > document.getElementById('newtab-recents').getBoundingClientRect().right
+expect innerWidth < 1100 || Math.abs(document.querySelector('.newtab-join').getBoundingClientRect().width - 282) < 2
 expect getComputedStyle(document.querySelector('.newtab-recent-name')).fontFamily.indexOf('Chivo Mono') !== -1
 expect getComputedStyle(document.querySelector('.newtab-recent-title')).fontFamily.indexOf('Chivo,') === 0
+# the band's Continue row is the most recent entry: its title, and the same
+# open-recent action and fileId its row has; the line under the heading
+# says there is something to carry on with
+expect document.getElementById('newtab-continue').hidden == false
+expect document.getElementById('newtab-continue-title').textContent == Script A
+expect document.getElementById('newtab-continue-btn').getAttribute('data-newtab-action') == open-recent
+expect document.getElementById('newtab-continue-btn').getAttribute('data-file-id') === window.__idA
+expect document.getElementById('newtab-continue-btn').getAttribute('aria-label') == Continue Script A
+expect document.querySelector('#newtab-page .newtab-sub').hidden == false
 # ...and no desktop-app pitch inside the desktop app
 expect document.getElementById('newtab-desktop').hidden == true
 
@@ -61,6 +74,11 @@ expect window.__missingText.indexOf("isn't there any more") !== -1
 # the page stays up, the entry stays on the list — it is the user's to forget
 expect document.getElementById('newtab-page').hidden == false
 expect document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 2
+# Continue is that same open, so it says the same thing
+eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; return window.__toastsBefore; })()
+click #newtab-continue-btn
+wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
+expect document.getElementById('newtab-page').hidden == false
 eval (function(){ window.fake._routeMissing = false; return true; })()
 
 # --- × forgets exactly one entry -----------------------------------------
@@ -71,6 +89,9 @@ expect document.querySelectorAll('#newtab-recents-list .newtab-recent-title')[0]
 eval (async function(){ window.__left = await window.fake.listRecents(); return window.__left.length; })()
 expect window.__left.length == 1
 expect window.__left[0].fileId === window.__idB
+# Continue moves on to what is now the most recent
+expect document.getElementById('newtab-continue-title').textContent == Script B
+expect document.getElementById('newtab-continue-btn').getAttribute('data-file-id') === window.__idB
 
 # --- "Clear recent" empties it, and the column stays with its empty note --
 click [data-newtab-action="clear-recents"]
@@ -78,6 +99,9 @@ wait document.querySelectorAll('#newtab-recents-list .newtab-recent').length == 
 expect document.querySelectorAll('.newtab-recents-empty').length == 1
 expect document.getElementById('newtab-recents').hidden == false
 expect document.getElementById('newtab-recents-clear').hidden == true
+# ...but the band's Continue goes: there is no script left to offer
+expect document.getElementById('newtab-continue').hidden == true
+expect document.querySelector('#newtab-page .newtab-sub').hidden == true
 eval (async function(){ window.__cleared = await window.fake.listRecents(); return window.__cleared.length; })()
 expect window.__cleared.length == 0
 

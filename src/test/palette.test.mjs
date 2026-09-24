@@ -31,7 +31,7 @@ function tokens(selector) {
 }
 const LIGHT = tokens(":root");
 const DARK_MEDIA = tokens(':root:not([data-theme="light"])');
-const DARK = tokens(':root[data-theme="dark"], .prompter-line');
+const DARK = tokens(':root[data-theme="dark"], .prompter, .prompter-line');
 
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 function luminance(hex) {

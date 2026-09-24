@@ -234,12 +234,14 @@
       color-scheme: dark;
     }
   }
-  /* .prompter-line takes the dark tokens whatever the app's theme: the
-     teleprompter is a single dark world (see .prompter below), and the
-     script's own marks inside it — tags, comment anchors — are drawn from
-     these tokens, so in a light-themed app they would otherwise be the
-     light palette on a near-black page: a pale tint box under white text. */
-  :root[data-theme="dark"], .prompter-line {
+  /* The teleprompter takes the dark tokens whatever the app's theme: it is
+     a single dark world (see .prompter below). Its chrome — the top bar,
+     the steppers, the toggles — draws from these tokens, and so do the
+     script's own marks inside the words (.prompter-line: tags, comment
+     anchors), which in a light-themed app would otherwise be the light
+     palette on a near-black page: a pale tint box under white text. One
+     block for all of it (#169), so there is no third copy to keep in step. */
+  :root[data-theme="dark"], .prompter, .prompter-line {
     --bg: #0F0E0C;
     --surface: #171614;
     --surface-2: #21201E;
@@ -1226,46 +1228,190 @@
     background: none; border: 0; border-radius: 3px;
   }
   .scene-gallery-more-videos:hover { color: var(--text); }
-  /* the dialog */
-  .scene-gallery-panel { max-width: 620px; }
-  .scene-gallery-show-all { font: inherit; color: var(--visual); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
-  .scene-gallery-preview { display: flex; align-items: center; gap: 8px; }
-  .scene-gallery-preview-pic {
-    position: relative; flex: 1; height: 190px; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2);
+  /* ---- the dialog (#169, B-GalleryDialog) ----
+     880 wide on the raised layer: a 60px head (the title, its counts
+     beside it, an icon close), the preview well, the caption, the actions,
+     and the grid. The well is the page's own ground (--bg) with the still
+     on it as a 16:9 monitor, 640 by 360 at most — shorter when the window
+     is, so the dialog still fits in its 88vh. Anything drawn ON a picture
+     (the pills, the numbers) is the same dark glass in both themes, as in
+     the cell. The frame, the generic .modal-panel, carries the edge,
+     radius, shadow and motion; the rest is set here. */
+  .modal-panel.scene-gallery-panel {
+    display: flex; flex-direction: column;
+    max-width: 880px; padding: 0 0 14px;
+    background: var(--surface-2);
+    overflow-x: hidden;
   }
-  .scene-gallery-preview-pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
-  .scene-gallery-position {
-    position: absolute; right: 6px; bottom: 6px; padding: 1px 6px; border-radius: 4px;
-    background: rgba(15,14,12,.72); color: #ECEBE7; font-family: var(--font-display); font-size: 10px; font-weight: 500;
+  .scene-gallery-head {
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 60px; padding: 0 14px 0 24px;
+  }
+  .scene-gallery-heading { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+  .scene-gallery-head h2 {
+    margin: 0; flex: none;
+    font-family: var(--font-body); font-size: 18px; line-height: 24px; font-weight: 700; letter-spacing: -0.005em;
+    color: var(--text);
+  }
+  .scene-gallery-summary {
+    margin: 0; min-width: 0;
+    font-family: var(--font-body); font-size: 13px; line-height: 16px; color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery-show-all { font: inherit; color: var(--visual); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
+  .scene-gallery-show-all:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+  .scene-gallery-close {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-dim); cursor: pointer;
+  }
+  .scene-gallery-close:hover { background: var(--layer-hover, var(--hover)); color: var(--text); }
+  .scene-gallery-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .scene-gallery-close svg,
+  .scene-gallery-step svg,
+  .scene-gallery-hint svg,
+  .scene-gallery-grid-tile.is-add svg,
+  .scene-gallery-preview-none {
+    width: 20px; height: 20px; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* the preview well: ‹ at one edge, › at the other, the still between */
+  .scene-gallery-preview {
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    margin: 0 24px; padding: 8px 28px;
+    border-radius: var(--radius-md); background: var(--bg);
   }
   .scene-gallery-step {
-    flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); cursor: pointer; font-size: 16px; line-height: 1;
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; padding: 0;
+    border: 1px solid var(--border-strong); border-radius: 50%;
+    background: transparent; color: var(--text); cursor: pointer;
   }
+  .scene-gallery-step:hover:not(:disabled) { background: var(--hover); border-color: var(--text-faint); }
   .scene-gallery-step:disabled { opacity: .35; cursor: default; }
-  .scene-gallery-step:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-  .scene-gallery-preview-caption { margin: 8px 0 6px; font-size: 12px; color: var(--text-dim); }
-  .scene-gallery-actions { display: flex; gap: 8px; margin-bottom: 14px; }
-  .scene-gallery-grid { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .scene-gallery-step:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .scene-gallery-step svg.is-flipped { transform: scaleX(-1); }
+  .scene-gallery-preview-pic {
+    position: relative; flex: 0 1 auto; min-width: 0;
+    width: min(640px, calc((88vh - 256px) * 16 / 9)); aspect-ratio: 16 / 9;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-strong); border-radius: 4px; overflow: hidden;
+    background: var(--surface);
+  }
+  .scene-gallery-preview-pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  /* no picture to show (a web link, a file whose first frame would not
+     decode): the placeholder's hatching, and a camera in its middle */
+  .scene-gallery-preview-pic .scene-gallery-placeholder,
+  .scene-gallery-grid-tile .scene-gallery-placeholder {
+    background-color: var(--surface);
+    background-image: repeating-linear-gradient(45deg, var(--surface-2) 0 1px, transparent 1px 8px);
+  }
+  .scene-gallery-preview-none { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; color: var(--text-faint); }
+  /* "2 / 4", "▶ Video · first frame" and the length: pills in three corners */
+  .scene-gallery-position,
+  .scene-gallery-kind {
+    position: absolute; display: flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px;
+    background: rgba(15,14,12,.72); color: #ECEBE7; white-space: nowrap;
+    font-family: var(--font-display); font-size: 11px; line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery-position { left: 12px; top: 12px; }
+  .scene-gallery-kind { left: 12px; bottom: 12px; gap: 6px; font-family: var(--font-body); font-size: 12px; }
+  .scene-gallery-kind svg { width: 10px; height: 10px; fill: currentColor; stroke: none; }
+  .scene-gallery-preview-pic .scene-gallery-length { right: 12px; bottom: 12px; }
+  /* the caption: the file's name, or each video link as the cell draws it
+     (where it lives, then the link) — centred under the still */
+  .scene-gallery-preview-caption {
+    flex: none; display: flex; flex-direction: column; align-items: center;
+    min-height: 24px; margin: 12px 24px 0;
+    font-family: var(--font-body); font-size: 13px; line-height: 24px; color: var(--text-visual);
+  }
+  .scene-gallery-preview-caption .scene-gallery-line { justify-content: center; gap: 8px; max-width: 100%; }
+  .scene-gallery-preview-caption .scene-gallery-host { width: auto; }
+  .scene-gallery-preview-caption .scene-gallery-line.is-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the actions: how to reorder on the left; Open, Make cover and a red
+     Remove on the right */
+  .scene-gallery-actions {
+    flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+    min-height: 32px; margin: 8px 24px 0;
+  }
+  .scene-gallery-hint {
+    margin: 0; display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-body); font-size: 12.5px; line-height: 16px; color: var(--text-faint);
+  }
+  .scene-gallery-hint svg { width: 16px; height: 16px; }
+  .scene-gallery-buttons { display: flex; align-items: center; gap: 8px; margin-left: auto; white-space: nowrap; }
+  .scene-gallery-buttons .btn-outline svg { color: var(--text-dim); }
+  .scene-gallery-buttons .btn-outline:hover:not(:disabled) svg { color: var(--text); }
+  .scene-gallery-remove {
+    height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--danger); cursor: pointer;
+    font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 450;
+  }
+  .scene-gallery-remove:hover { background: var(--danger-soft); }
+  .scene-gallery-remove:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* every item, numbered, in 128 by 72 tiles; past two rows the grid
+     scrolls (revealPicked keeps the picked one in view). The padding is
+     the selected outline's room. */
+  .scene-gallery-grid {
+    flex: none; list-style: none; margin: 8px 0 0; padding: 4px 24px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    max-height: 160px; overflow-y: auto; scrollbar-width: thin;
+  }
+  .scene-gallery-grid > li { display: flex; }
   .scene-gallery-grid-tile {
-    position: relative; display: block; width: 64px; height: 64px; padding: 0; overflow: hidden;
-    border: 2px solid transparent; border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer;
+    position: relative; display: block; flex: none; width: 128px; height: 72px; padding: 0; margin: 0; overflow: hidden;
+    border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface);
+    cursor: pointer; font: inherit; color: inherit;
   }
   .scene-gallery-grid-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
-  .scene-gallery-grid-tile.is-selected { border-color: var(--visual); }
-  .scene-gallery-grid-tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .scene-gallery-grid-tile:hover { border-color: var(--text-faint); }
+  .scene-gallery-grid-tile.is-selected { outline: 2px solid var(--visual); outline-offset: 2px; }
+  .scene-gallery-grid-tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .scene-gallery-grid-tile.is-add {
-    border: 1px dashed var(--border); background: none; color: var(--text-dim); font-size: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border-style: dashed; background: transparent; color: var(--text-dim);
   }
+  .scene-gallery-grid-tile.is-add:hover { border-color: var(--text-faint); background: var(--layer-hover, var(--hover)); color: var(--text); }
   .scene-gallery-num {
-    position: absolute; left: 3px; top: 3px; min-width: 16px; padding: 0 3px; border-radius: 3px;
-    background: rgba(15,14,12,.72); color: #ECEBE7; font-family: var(--font-display); font-size: 9px; font-weight: 500; line-height: 14px; text-align: center;
+    position: absolute; left: 4px; top: 4px; display: flex; align-items: center; height: 16px; padding: 0 5px; border-radius: 3px;
+    background: rgba(15,14,12,.72); color: #ECEBE7;
+    font-family: var(--font-display); font-size: 11px; line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums;
   }
+  /* "behind +N" (more than four items): the items after it are the ones
+     the cell keeps behind its "+N" tile. A dashed rule, broken by the word
+     and the count. */
   .scene-gallery-divider {
-    align-self: stretch; display: flex; align-items: center; padding: 0 2px;
-    border-left: 2px dashed var(--border);
+    flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    height: 72px; padding: 0 4px;
+    font-family: var(--font-body); font-size: 11px; line-height: 12px; color: var(--text-faint); white-space: nowrap;
   }
-  .scene-gallery-divider span { font-family: var(--font-body); font-size: 11px; color: var(--text-faint); writing-mode: vertical-rl; transform: rotate(180deg); }
+  .scene-gallery-divider::before,
+  .scene-gallery-divider::after { content: ""; flex: 1; width: 0; border-left: 1px dashed var(--border-strong); }
+  .scene-gallery-divider-count { font-family: var(--font-display); font-weight: 500; font-variant-numeric: tabular-nums; }
+  /* a phone: the same parts, closer to the edges, with smaller tiles; ‹ ›
+     float over the still's edges as the same dark glass as its pills, so
+     the still can take the whole width of the well */
+  @media (max-width: 760px) {
+    .modal-panel.scene-gallery-panel { padding: 0 0 12px; }
+    .scene-gallery-head { min-height: 52px; padding: 6px 4px 6px 16px; }
+    .scene-gallery-heading { flex-wrap: wrap; column-gap: 10px; }
+    .scene-gallery-preview { position: relative; justify-content: center; margin: 0 12px; padding: 8px; }
+    .scene-gallery-preview-pic { width: 100%; max-width: min(640px, calc((88vh - 256px) * 16 / 9)); }
+    .scene-gallery-step {
+      position: absolute; top: 50%; z-index: 1; width: 36px; height: 36px; margin-top: -18px;
+      border-color: transparent; background: rgba(15,14,12,.72); color: #ECEBE7;
+    }
+    .scene-gallery-step:disabled { display: none; }
+    .scene-gallery-step:hover:not(:disabled) { background: rgba(15,14,12,.85); border-color: transparent; }
+    .scene-gallery-step[data-gact="prev"] { left: 16px; }
+    .scene-gallery-step[data-gact="next"] { right: 16px; }
+    .scene-gallery-preview-caption { margin: 10px 12px 0; }
+    .scene-gallery-actions { margin: 8px 12px 0; }
+    .scene-gallery-buttons { flex-wrap: wrap; }
+    .scene-gallery-grid { padding: 4px 12px; max-height: 124px; }
+    .scene-gallery-grid-tile { width: 96px; height: 54px; }
+    .scene-gallery-divider { height: 54px; }
+  }
 
   /* ---------- footer / add row ---------- */
   .add-row-bar { padding: 18px 0 4px; display: flex; justify-content: center; }
@@ -1301,10 +1447,21 @@
     z-index: 200;
     align-items: center;
   }
+  /* B's toast (#169, B-Identity): the floating layer — raised, the strong
+     edge and the shadow, 8px corners — 40px tall, with the words always in
+     --text. What kind of news it is rides on a mark in front of the words
+     rather than on the colour of the words: a check for done, an amber
+     lamp for a warning, a red one for a failure. Drawn in CSS, so a
+     toast's text is still exactly its message (the suites read it). */
   .toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
     font-family: var(--font-body);
     font-size: 13.5px;
-    padding: 10px 16px;
+    line-height: 18px;
+    padding: 10px 14px;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow);
     background: var(--surface-2);
@@ -1312,23 +1469,47 @@
     color: var(--text);
     animation: toast-in var(--dur-enter) var(--ease-enter);
   }
-  .toast.ok { border-color: var(--ok); color: var(--ok); }
+  .toast.ok, .toast.warn, .toast.error { padding-left: 12px; }
+  .toast.ok::before, .toast.warn::before, .toast.error::before {
+    content: "";
+    flex: none;
+    box-sizing: border-box;
+  }
+  /* the board's 16px check, as two strokes of a rotated box */
+  .toast.ok::before {
+    width: 12px;
+    height: 7px;
+    margin: 0 2px 3px 2px;
+    border-left: 1.75px solid currentColor;
+    border-bottom: 1.75px solid currentColor;
+    transform: rotate(-45deg);
+  }
+  .toast.warn::before, .toast.error::before {
+    width: 10px;
+    height: 10px;
+    margin: 0 3px;
+    border-radius: var(--radius-lamp);
+  }
+  .toast.warn::before { background: var(--accent); }
+  .toast.error::before { background: var(--danger); }
   /* stays until clicked — see showToast()'s `sticky` */
-  .toast.is-sticky { cursor: pointer; max-width: 340px; line-height: 1.45; }
-  .toast.warn { border-color: var(--accent); color: var(--accent); }
-  .toast.error { border-color: var(--danger); color: var(--danger); }
-  /* showActionToast() (12-dirty-toast.js): words, then one button */
-  .toast.has-action { display: flex; align-items: center; gap: 12px; }
+  .toast.is-sticky { cursor: pointer; max-width: 340px; }
+  /* showActionToast() (12-dirty-toast.js): words, then one button — B's
+     small outlined button */
+  .toast.has-action { gap: 12px; padding-right: 8px; }
   .toast-action {
+    flex: none;
+    height: 28px;
     font: inherit;
-    color: inherit;
+    color: var(--text);
     background: none;
-    border: 1px solid currentColor;
-    border-radius: 6px;
-    padding: 3px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0 10px;
     cursor: pointer;
   }
-  .toast-action:hover, .toast-action:focus-visible { background: var(--surface-2); }
+  /* the raised surface's hover step (see .modal-panel's --layer-hover) */
+  .toast-action:hover, .toast-action:focus-visible { background: color-mix(in srgb, var(--text) 7%, var(--surface-2)); border-color: var(--text-faint); }
   @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   /* set by showToast()'s dismiss() (12-dirty-toast.js) — toast-in in reverse */
   .toast.is-leaving {
@@ -1399,37 +1580,47 @@
   }
 
   /* ---------- hosted documents ---------- */
+  /* Rows in the raised dialog (#169): a hairline card that lights on hover,
+     the title in the body face and the delete as an icon button. */
   .server-doc-list { max-height: 46vh; overflow-y: auto; margin: 4px 0 2px; }
   .server-doc {
     display: flex; align-items: stretch; gap: 6px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--bg); margin-bottom: 6px;
+    background: transparent; margin-bottom: 6px;
   }
   .server-doc.is-current { border-color: var(--visual); }
   .server-doc-open {
     flex: 1; min-width: 0; text-align: left;
-    display: flex; flex-direction: column; gap: 3px;
-    border: none; background: none; cursor: pointer;
-    padding: 9px 11px; border-radius: var(--radius-sm);
+    display: flex; flex-direction: column; gap: 2px;
+    border: none; background: none; color: inherit; cursor: pointer;
+    padding: 9px 12px; border-radius: var(--radius-sm);
   }
-  .server-doc-open:hover { background: var(--surface); }
-  .server-doc-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
-  .server-doc-meta { font-family: var(--font-body); font-size: 12px; color: var(--text-faint); }
+  .server-doc-open:hover { background: var(--layer-hover, var(--hover)); }
+  .server-doc-title { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text); }
+  .server-doc-meta { font-family: var(--font-body); font-size: 12.5px; line-height: 16px; color: var(--text-faint); }
   .server-doc-current {
     align-self: center; flex: none;
-    font-family: var(--font-body); font-size: 11.5px; font-weight: 500; color: var(--visual);
-    border: 1px solid var(--visual); border-radius: 999px; padding: 2px 8px;
+    font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--visual);
+    border: 1px solid var(--visual); border-radius: var(--radius-lamp); padding: 1px 6px;
   }
   .server-doc-delete {
-    flex: none; align-self: center; margin-right: 8px;
+    flex: none; align-self: center; margin-right: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 28px; height: 28px;
     border: 1px solid transparent; background: none;
     color: var(--text-faint); font-size: 14px; line-height: 1;
-    border-radius: 5px; padding: 3px 7px; cursor: pointer;
+    border-radius: var(--radius-sm); padding: 0 5px; cursor: pointer;
   }
-  .server-doc-delete:hover { color: var(--danger); }
+  .server-doc-delete:hover { color: var(--danger); background: var(--layer-hover, var(--hover)); }
   .server-doc-delete.armed {
-    font-family: var(--font-body); font-size: 12px;
+    font-family: var(--font-body); font-size: 12px; padding: 0 8px;
     border-color: var(--danger); background: var(--danger-soft); color: var(--danger);
+  }
+  /* the icon the delete, the forget-server and the Drive rows' buttons
+     draw at rest (13-hosted.js, 20e-connect.js), where a "×" used to be */
+  .row-icon-svg {
+    width: 16px; height: 16px; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
   }
 
   /* ---------- Google Drive file manager ---------- */
@@ -1441,18 +1632,22 @@
   .drive-setup-steps { margin: 0 0 14px; padding-left: 20px; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
   .drive-setup-steps li { margin-bottom: 4px; }
   .drive-desktop-path { margin: 0 0 12px; }
+  /* a file path: the mono, in a well the dialog's raised surface sets off */
   .drive-desktop-path code {
-    display: block; padding: 8px 10px; border-radius: 6px; background: var(--surface-2);
-    font-size: 12.5px; overflow-wrap: anywhere; user-select: all;
+    display: block; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg);
+    border: 1px solid var(--border);
+    font-family: var(--font-display); font-size: 12.5px; overflow-wrap: anywhere; user-select: all;
   }
   .drive-field { margin-bottom: 10px; }
-  .drive-field label { display: block; font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
-    color: var(--text-dim); margin-bottom: 4px; }
+  .drive-field label { display: block; font-family: var(--font-body); font-size: 13px; font-weight: 450;
+    color: var(--text-dim); margin-bottom: 6px; }
+  /* B's field (#169, B-Identity): 36px, the strong line at rest, the page's
+     own ground inside the raised dialog, and the focus ring outside it */
   .drive-field input, #drive-folder-input, #drive-newfolder-input {
-    width: 100%; box-sizing: border-box; font-size: 13.5px; padding: 8px 10px;
-    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text);
+    width: 100%; box-sizing: border-box; height: 36px; font-size: 14px; padding: 0 12px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg); color: var(--text);
   }
-  .drive-field input:focus, #drive-folder-input:focus, #drive-newfolder-input:focus { outline: none; border-color: var(--visual); }
+  .drive-field input:focus, #drive-folder-input:focus, #drive-newfolder-input:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   .drive-account { margin-bottom: 12px; }
   .drive-account-status { font-size: 12.5px; color: var(--text-dim); }
   .drive-connect-row { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -1465,10 +1660,13 @@
   .drive-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
   .drive-toolbar-actions { display: flex; gap: 6px; flex: none; }
   .drive-breadcrumb { font-size: 12.5px; color: var(--text-dim); display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-width: 0; }
-  .drive-crumb { background: none; border: none; padding: 2px 3px; font: inherit; color: var(--visual); cursor: pointer; border-radius: 4px; }
-  .drive-crumb:hover { background: var(--surface-2); }
-  .drive-crumb-current { padding: 2px 3px; font-weight: 700; color: var(--text); }
+  .drive-crumb { background: none; border: none; padding: 2px 4px; font: inherit; color: var(--visual); cursor: pointer; border-radius: 4px; }
+  .drive-crumb:hover { background: var(--layer-hover, var(--hover)); }
+  .drive-crumb-current { padding: 2px 4px; font-weight: 600; color: var(--text); }
   .drive-crumb-sep { color: var(--text-faint); }
+  /* Refresh is the sprite's i-repeat, not a "⟳" glyph (#169) */
+  .btn.drive-refresh { display: inline-flex; align-items: center; justify-content: center; width: 32px; padding: 0; }
+  .drive-refresh svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
   .drive-newfolder-row { display: flex; gap: 6px; margin-bottom: 8px; }
   .drive-newfolder-row input { flex: 1; min-width: 0; }
   .drive-list { max-height: 44vh; overflow-y: auto; }
@@ -1476,43 +1674,60 @@
   .drive-row {
     display: flex; align-items: center; gap: 6px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--bg); margin-bottom: 6px;
+    background: transparent; margin-bottom: 6px;
   }
   .drive-row-open {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left;
-    border: none; background: none; cursor: pointer; padding: 8px 10px; border-radius: var(--radius-sm);
+    border: none; background: none; color: inherit; cursor: pointer; padding: 8px 10px; border-radius: var(--radius-sm);
   }
-  .drive-row-open:hover { background: var(--surface); }
-  .drive-row-icon { flex: none; font-size: 16px; }
-  .drive-row-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--text);
+  .drive-row-open:hover { background: var(--layer-hover, var(--hover)); }
+  /* a file's kind as a 1.75-stroke icon from the sprite, not an emoji */
+  .drive-row-icon { flex: none; display: inline-flex; color: var(--text-dim); }
+  .drive-row-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drive-row-meta { flex: none; font-family: var(--font-body); font-size: 12px; color: var(--text-faint); }
+  .drive-row-meta { flex: none; font-family: var(--font-body); font-size: 12.5px; color: var(--text-faint); }
   .drive-row-actions { display: flex; gap: 2px; flex: none; margin-right: 6px; }
   .drive-row-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 28px; height: 28px;
     border: 1px solid transparent; background: none; color: var(--text-faint); font-size: 13px;
-    line-height: 1; border-radius: 5px; padding: 5px 7px; cursor: pointer;
+    line-height: 1; border-radius: var(--radius-sm); padding: 0 5px; cursor: pointer;
   }
-  .drive-row-btn:hover { color: var(--text); background: var(--surface-2); }
+  .drive-row-btn:hover { color: var(--text); background: var(--layer-hover, var(--hover)); }
   .drive-row-btn.danger:hover { color: var(--danger); }
   .drive-row-btn.armed {
-    font-family: var(--font-body); font-size: 12px;
+    font-family: var(--font-body); font-size: 12px; padding: 0 8px;
     border-color: var(--danger); background: var(--danger-soft); color: var(--danger);
   }
   .drive-row.is-editing { padding: 6px 10px; }
-  .drive-rename-input { flex: 1; min-width: 0; font-size: 13.5px; padding: 5px 8px;
+  .drive-rename-input { flex: 1; min-width: 0; height: 32px; font-size: 14px; padding: 0 10px;
     border: 1px solid var(--visual); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); }
+  .drive-account-status .row-icon-svg { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; color: var(--ok); }
 
   /* ---------- import modal ---------- */
+  /* B's scrim (#169, B-Command): the graphite ground at 62%, in both
+     themes — it is the room going dark behind the dialog, not a tint. */
   .modal-backdrop {
     position: fixed; inset: 0; z-index: 150;
-    background: rgba(15,14,12,0.55);
+    background: rgba(8, 8, 7, 0.62);
     display: flex; align-items: center; justify-content: center;
     padding: 24px;
   }
   .modal-backdrop[hidden] { display: none; }
-  /* A floating layer (#169): the raised-edge border with the shadow. */
+  /* A floating layer (#169): raised (--surface-2) with the strong edge and
+     the shadow, and a dialog's 10px corners. What sits inside it on a
+     ground of its own — a field, a preview, a code block — takes the
+     page's --bg, so it reads as set into the dialog in either theme.
+
+     --layer-hover is a pointed-at row or button on the raised surface:
+     B draws it #2F2E2B (B-Command's selected row, B-Identity's menu), a
+     step above --hover, which is what 7% of --text over --surface-2 comes
+     to in the dark theme. In the light one --hover sits almost on top of
+     --surface-2, and the same mix stays visible. The File menu, the
+     command menu, the tour card and the toasts use the same step. */
   .modal-panel {
-    background: var(--surface);
+    --layer-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));
+    background: var(--surface-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
@@ -1520,7 +1735,7 @@
     max-width: 560px;
     max-height: 88vh;
     overflow-y: auto;
-    padding: 22px 24px 20px;
+    padding: 20px 24px;
   }
 
   /* ---------- modals arriving and leaving ----------
@@ -1581,14 +1796,28 @@
     .modal-backdrop[hidden] .modal-panel { transition: none; }
     .modal-backdrop[hidden] .modal-panel { transform: none; }
   }
-  .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-  .modal-header h2 { font-family: var(--font-body); font-size: 19px; font-weight: 800; margin: 0; color: var(--text); }
+  /* The head is the side panels' (#169): the title 18px/24px bold and a
+     32px icon close — the sprite's i-close, or a "×" in a dialog whose
+     markup has not been redrawn yet, centred the same way. A panel head's
+     own rule (.comments-panel-head .modal-close) outranks this one and says
+     the same thing. */
+  .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; margin-bottom: 8px; }
+  .modal-header h2 { font-family: var(--font-body); font-size: 18px; line-height: 24px; font-weight: 700; margin: 0; color: var(--text); }
   .modal-close {
-    background: none; border: none; font-size: 20px; color: var(--text-faint);
-    cursor: pointer; line-height: 1; padding: 4px; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 32px; height: 32px;
+    background: none; border: none; font-size: 20px; color: var(--text-dim);
+    cursor: pointer; line-height: 1; padding: 0; border-radius: var(--radius-sm);
   }
-  .modal-close:hover { color: var(--text); background: var(--surface-2); }
+  .modal-close:hover { color: var(--text); background: var(--layer-hover, var(--hover)); }
+  .modal-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .modal-close svg {
+    width: 18px; height: 18px;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }
   .modal-hint { font-size: 13px; color: var(--text-dim); margin: 0 0 14px; line-height: 1.5; }
+  /* B's field (#169, B-Identity): the strong line at rest, the page's
+     ground inside the raised dialog, and the focus ring outside it */
   #import-textarea {
     width: 100%;
     min-height: 160px;
@@ -1597,23 +1826,25 @@
     font-size: 14px;
     line-height: 1.5;
     padding: 10px 12px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--bg);
     color: var(--text);
   }
-  #import-textarea:focus { outline: none; border-color: var(--visual); }
+  #import-textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   #gdoc-url-input {
     width: 100%;
-    font-family: var(--font-body);
-    font-size: 14px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
+    height: 36px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    padding: 0 12px;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--bg);
     color: var(--text);
   }
-  #gdoc-url-input:focus { outline: none; border-color: var(--visual); }
+  #gdoc-url-input::placeholder { font-family: var(--font-display); }
+  #gdoc-url-input:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   .modal-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
   .import-split-group { display: flex; gap: 14px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); }
   .import-split-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
@@ -1621,8 +1852,9 @@
     margin-top: 12px;
     font-family: var(--font-body);
     font-size: 13px;
-    color: var(--text-faint);
-    background: var(--surface-2);
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 9px 12px;
     line-height: 1.5;
@@ -1631,6 +1863,25 @@
     display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
     margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
   }
+  /* A dialog's buttons are B's controls (#169, B-Identity): 32px, the
+     secondary one outlined on the strong line and quiet until hovered,
+     the primary one the amber fill it already is. :where() keeps these at
+     .btn's own weight, so a dialog that styles a button of its own (the
+     gallery's, the comment composer's) still has the last word. */
+  :where(.modal-panel, .tour-card) .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 14px;
+    font-size: 14px; line-height: 20px;
+  }
+  :where(.modal-panel, .tour-card) .btn:where(:not(.btn-accent)) {
+    background: transparent;
+    border-color: var(--border-strong);
+  }
+  :where(.modal-panel, .tour-card) .btn:where(:not(.btn-accent)):where(:hover:not(:disabled)) {
+    background: var(--layer-hover, var(--hover));
+    border-color: var(--text-faint);
+  }
+  :where(.modal-panel, .tour-card) .btn-accent { font-weight: 600; }
   .import-replace-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
   /* the per-import "what to look for" choices (renderImportScanOptions) */
   .import-scan-group { margin-top: 12px; }
@@ -1647,19 +1898,24 @@
   .modal-footer-actions { display: flex; gap: 8px; }
 
   /* ---------- the command menu (issue #147) ----------
-     A search box centred over the script with a scrim behind it: 640px
-     wide, a 60px input row, the matches grouped under it with their
-     shortcut chips. Above the side panels, the writer and the modals'
-     layer (it never opens over a modal, so it never has to sit above one). */
+     A search box centred over the script with a scrim behind it, drawn as
+     B-Command (#169): 640px wide with its top 132px down, raised with the
+     strong edge and the shadow, a 56px input row, the matches under their
+     group heads with the selected row on --hover and the matched letters
+     in bold, and a footer of the three keys. Above the side panels, the
+     writer and the modals' layer (it never opens over a modal, so it never
+     has to sit above one). */
   .cmdk-backdrop {
     position: fixed;
     inset: 0;
     z-index: 170;
-    background: rgba(15, 14, 12, 0.45);
+    background: rgba(8, 8, 7, 0.62);
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding: 12vh 16px 16px;
+    /* 132px on the board's 900px window; a short window keeps the same
+       share of its height rather than pushing the list off the bottom */
+    padding: min(132px, 14.7vh) 16px 16px;
     opacity: 1;
     transition: opacity var(--dur-enter) var(--ease-enter);
   }
@@ -1670,10 +1926,10 @@
   .cmdk-panel {
     width: 640px;
     max-width: 100%;
-    max-height: min(560px, 76vh);
+    max-height: min(560px, calc(100vh - min(132px, 14.7vh) - 16px));
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: var(--surface-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
@@ -1686,14 +1942,14 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    height: 60px;
-    padding: 0 16px 0 20px;
+    height: 56px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--border);
   }
   .cmdk-search-icon {
     flex: none;
-    width: 19px;
-    height: 19px;
+    width: 20px;
+    height: 20px;
     color: var(--text-dim);
     fill: none;
     stroke: currentColor;
@@ -1710,12 +1966,17 @@
     background: transparent;
     font-family: var(--font-body);
     font-size: 17px;
+    line-height: 24px;
     color: var(--text);
   }
   #cmdk-input::placeholder { color: var(--text-faint); }
   .cmdk-esc, .cmdk-foot kbd {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     box-sizing: border-box;
+    min-width: 20px;
     height: 20px;
     font-family: var(--font-display);
     font-size: 11.5px;
@@ -1727,40 +1988,50 @@
     border: 1px solid var(--border-strong);
     border-radius: 4px;
   }
+  /* the arrow keys' caps hold the sprite's arrows, not "↑"/"↓" glyphs */
+  .cmdk-foot kbd.cmdk-arrow { padding: 0; }
+  .cmdk-arrow svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   .cmdk-list {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    padding: 6px;
+    padding: 0 6px 6px;
   }
   .cmdk-group {
-    font-size: 12px;
+    font-size: 12.5px;
+    line-height: 18px;
     font-weight: 600;
-    color: var(--text-dim);
-    padding: 10px 12px 4px;
+    color: var(--text-faint);
+    padding: 12px 10px 4px;
   }
+  /* A row is quiet (--text-dim) until it is the one Enter would run: then
+     it sits a step up — the board's #2F2E2B, 7% of --text over the raised
+     surface, as .modal-panel's --layer-hover — and its words, icon and
+     keycaps come up to --text. */
   .cmdk-item {
     display: flex;
     align-items: center;
     gap: 12px;
     min-height: 40px;
-    padding: 6px 12px;
-    border-radius: 9px;
-    font-size: 14px;
-    color: var(--text);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 14.5px;
+    line-height: 20px;
+    color: var(--text-dim);
     cursor: pointer;
   }
-  .cmdk-item.is-active { background: color-mix(in srgb, var(--visual) 12%, var(--surface)); }
+  .cmdk-item:has(.cmdk-why) { min-height: 52px; }
+  .cmdk-item.is-active { background: color-mix(in srgb, var(--text) 7%, var(--surface-2)); color: var(--text); }
   .cmdk-item[aria-disabled="true"] { cursor: default; }
   .cmdk-item[aria-disabled="true"] .cmdk-label,
   .cmdk-item[aria-disabled="true"] .cmdk-icon { color: var(--text-faint); }
-  .cmdk-item[aria-disabled="true"].is-active { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+  .cmdk-item[aria-disabled="true"].is-active { background: color-mix(in srgb, var(--text) 4%, var(--surface-2)); }
   .cmdk-icon {
     flex: none;
-    width: 17px;
-    height: 17px;
+    width: 18px;
+    height: 18px;
     color: var(--text-dim);
     fill: none;
     stroke: currentColor;
@@ -1768,25 +2039,31 @@
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  .cmdk-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .cmdk-item.is-active .cmdk-icon { color: var(--text); }
+  .cmdk-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   .cmdk-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cmdk-label mark { background: none; color: inherit; font-weight: 700; }
-  .cmdk-why { font-size: 12px; color: var(--text-dim); line-height: 1.3; margin-top: 1px; }
-  .cmdk-state { font-size: 12px; color: var(--text-dim); }
+  /* the letters typed, found in the label (18d-command-menu.js) */
+  .cmdk-label mark { background: none; color: var(--text); font-weight: 700; }
+  .cmdk-why { font-size: 12.5px; color: var(--text-faint); line-height: 16px; }
+  .cmdk-state { font-size: 12.5px; color: var(--text-faint); }
   /* the keycaps themselves are B's, with the File menu's (.mi-keys kbd) */
-  .cmdk-keys { flex: none; display: inline-flex; gap: 3px; }
+  .cmdk-keys { flex: none; display: inline-flex; gap: 4px; }
+  .cmdk-item.is-active .cmdk-keys kbd { color: var(--text); }
   .cmdk-empty { padding: 26px 16px; text-align: center; font-size: 14px; color: var(--text-dim); }
   .cmdk-foot {
     flex: none;
     display: flex;
+    align-items: center;
     gap: 16px;
-    padding: 9px 16px;
+    height: 40px;
+    padding: 0 16px;
     border-top: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 55%, var(--surface));
-    font-size: 12px;
-    color: var(--text-dim);
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--text-faint);
   }
-  .cmdk-foot kbd { margin-right: 3px; padding: 0 5px; }
+  .cmdk-foot > span { display: inline-flex; align-items: center; gap: 6px; }
+  .cmdk-foot-keys { display: inline-flex; gap: 3px; }
   @media (max-width: 760px) {
     .cmdk-backdrop { padding: 10px; }
     .cmdk-panel { max-height: calc(100vh - 20px); }
@@ -1800,7 +2077,10 @@
   /* ---------- the Export dialog (issue #146) ----------
      Formats on the left as radio cards in two groups, what the chosen one
      will make on the right: a small page, one line of what is in it, the
-     options that format has, and the file name. */
+     options that format has, and the file name. In B's language (#169):
+     the raised dialog, cards with the 8px corners of a detail card on the
+     hairline, the chosen one outlined in the preview blue, and the side
+     set into the dialog on --surface like a well. */
   .modal-panel.export-panel {
     max-width: 940px;
     height: min(720px, calc(100vh - 48px));
@@ -1816,9 +2096,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 22px 12px 26px;
+    height: 56px;
+    padding: 0 12px 0 24px;
   }
-  .export-head h2 { font-family: var(--font-body); font-size: 19px; font-weight: 700; margin: 0; color: var(--text); }
+  .export-head h2 { font-family: var(--font-body); font-size: 18px; line-height: 24px; font-weight: 700; margin: 0; color: var(--text); }
   .export-body {
     flex: 1 1 auto;
     min-height: 0;
@@ -1831,13 +2112,14 @@
   .export-formats {
     min-height: 0;
     overflow-y: auto;
-    padding: 6px 22px 20px 26px;
+    padding: 4px 24px 20px;
   }
   .export-group-head {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: 12.5px;
+    line-height: 18px;
     font-weight: 600;
-    color: var(--text-dim);
+    color: var(--text-faint);
     margin: 14px 0 8px;
   }
   .export-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -1848,14 +2130,14 @@
     align-items: start;
     gap: 2px 12px;
     padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: transparent;
     cursor: pointer;
     transition: border-color var(--dur-fast) var(--ease-standard),
                 background var(--dur-fast) var(--ease-standard);
   }
-  .export-card:hover { border-color: var(--text-faint); }
+  .export-card:hover { border-color: var(--text-faint); background: var(--layer-hover, var(--hover)); }
   /* the radio is the card: it stays in the tab order and the arrow keys,
      and the card draws its state */
   .export-card input {
@@ -1868,7 +2150,7 @@
   }
   .export-card:has(input:checked) {
     border-color: var(--visual);
-    background: color-mix(in srgb, var(--visual) 7%, var(--surface));
+    background: color-mix(in srgb, var(--visual) 8%, transparent);
     box-shadow: 0 0 0 1px var(--visual);
   }
   .export-card:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -1877,7 +2159,7 @@
     width: 30px;
     height: 30px;
     padding: 6px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: var(--bg);
     border: 1px solid var(--border);
     color: var(--text-dim);
@@ -1903,8 +2185,8 @@
   .export-side {
     min-height: 0;
     overflow-y: auto;
-    padding: 20px 26px 20px 22px;
-    background: var(--bg);
+    padding: 20px 24px 20px 22px;
+    background: var(--surface);
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
@@ -1957,38 +2239,46 @@
 
   .export-summary { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); text-align: center; }
   .export-options { display: flex; flex-direction: column; gap: 10px; }
-  .export-option-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 5px; }
+  .export-option-label { font-size: 13px; font-weight: 450; color: var(--text-dim); margin-bottom: 6px; }
+  /* B's segmented control (#169, B-Identity): a 32px hairline track, the
+     chosen option a --hover block with the words in --text */
   .export-seg {
     display: flex;
     border: 1px solid var(--border);
-    border-radius: 9px;
-    background: var(--surface);
+    border-radius: var(--radius-sm);
+    background: transparent;
     padding: 2px;
     gap: 2px;
   }
   .export-seg label {
     flex: 1 1 0;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
+    min-height: 26px;
     font-size: 13px;
+    line-height: 16px;
     color: var(--text-dim);
-    padding: 6px 8px;
-    border-radius: 7px;
+    padding: 5px 9px;
+    border-radius: 4px;
     cursor: pointer;
   }
+  .export-seg label:hover { color: var(--text); }
   .export-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
-  .export-seg label:has(input:checked) { background: var(--visual-soft); color: var(--text); font-weight: 600; }
+  .export-seg label:has(input:checked) { background: var(--hover); color: var(--text); }
   .export-seg label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .export-field { display: flex; flex-direction: column; gap: 4px; }
-  .export-field-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .export-field { display: flex; flex-direction: column; gap: 6px; }
+  .export-field-label { font-size: 13px; font-weight: 450; color: var(--text-dim); }
   .export-filename {
     font-family: var(--font-display);
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 7px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
     overflow-wrap: anywhere;
   }
   .export-why {
@@ -1997,7 +2287,7 @@
     line-height: 1.4;
     color: var(--danger);
     background: var(--danger-soft);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 8px 10px;
   }
   .export-foot {
@@ -2005,7 +2295,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 14px 22px 16px 26px;
+    padding: 12px 24px;
   }
   .export-note { flex: 1 1 auto; margin: 0; font-size: 13px; color: var(--text-dim); line-height: 1.4; }
   .export-note-link {
@@ -2032,7 +2322,7 @@
       bottom: 0;
       flex-wrap: wrap;
       padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
-      background: var(--surface);
+      background: var(--surface-2);
       border-top: 1px solid var(--border);
     }
     .export-foot .modal-footer-actions { margin-left: auto; }
@@ -2293,14 +2583,20 @@
     font-size: 11.5px;
     color: var(--text-faint);
   }
+  /* B's keycap (#169), as the File menu draws it */
   .tag-suggest kbd {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: 20px;
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 11.5px;
+    line-height: 18px;
     font-weight: 500;
-    padding: 1px 5px;
-    border: 1px solid var(--border);
+    padding: 0 6px;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
-    color: var(--text-faint);
+    color: var(--text-dim);
   }
   /* only shown when Tab would land the tag in a different category than the
      bracket being typed implies — see updateTagGhost() */
@@ -2583,7 +2879,7 @@
     }
     /* the scene links keep their line and take a thumb-sized target from
        an invisible box around them */
-    #production-panel .tag-scene, #gear-panel .tag-scene { position: relative; padding: 0 2px; font-size: 12.5px; }
+    #production-panel .tag-scene, #gear-panel .tag-scene { position: relative; padding: 0; font-size: 12.5px; }
     #production-panel .tag-scene::after, #gear-panel .tag-scene::after { content: ""; position: absolute; inset: -12px -3px; }
     /* and each row's parts centre on the 40px status */
     #production-panel .tag-scenes, #gear-panel .tag-scenes { padding: 12px 0; }
@@ -2744,15 +3040,20 @@
     border-radius: 4px;
     padding: 1px 5px;
   }
+  /* B's keycap (#169): flat, the strong line, 4px corners */
   .tagging-help-body kbd {
+    display: inline-block;
+    box-sizing: border-box;
+    height: 20px;
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 11.5px;
+    line-height: 18px;
     font-weight: 500;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-bottom-width: 2px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
-    padding: 1px 6px;
+    padding: 0 6px;
+    color: var(--text-dim);
   }
   .tagging-help-body code, .tagging-help-body kbd { flex: none; }
   .comments-empty code {
@@ -3031,11 +3332,16 @@
     position: fixed;
     inset: 0;
     z-index: 159;
-    background: rgba(0, 0, 0, 0.32);
+    background: rgba(8, 8, 7, 0.62);
     display: none;
   }
+  /* B's floating layer (#169, B-Identity's menu): raised --surface-2, the
+     strong edge, the shadow and 8px corners. A row is 32px with 6px
+     corners, quiet in --text-dim until it is pointed at or focused, when it
+     sits a step up (the board's #2F2E2B — see .modal-panel's
+     --layer-hover) and comes up to --text, keycaps and all. */
   .menu {
-    --menu-hover: color-mix(in srgb, var(--text) 6%, var(--surface));
+    --menu-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
@@ -3045,7 +3351,7 @@
     max-height: calc(100vh - 120px);
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: var(--surface-2);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow);
@@ -3072,16 +3378,25 @@
     font-weight: 600;
     color: var(--text);
   }
+  /* the sheet's close: the sprite's i-close, not a "✕" glyph (#169) */
   .menu-close {
     flex: none;
-    font-size: 15px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
     line-height: 1;
     color: var(--text-dim);
     background: none;
     border: none;
-    border-radius: 8px;
-    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    padding: 0;
     cursor: pointer;
+  }
+  .menu-close svg {
+    width: 20px; height: 20px;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
   }
   .menu-close:hover { background: var(--menu-hover); color: var(--text); }
   .menu-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
@@ -3091,7 +3406,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    padding: 6px;
+    padding: 4px;
   }
 
   /* One item: icon, label (with an optional second line saying why it
@@ -3101,26 +3416,28 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    min-height: 36px;
-    padding: 6px 10px;
+    min-height: 32px;
+    padding: 6px 8px;
     text-align: left;
     font-family: var(--font-body);
     font-size: 14px;
-    line-height: 1.25;
-    color: var(--text);
+    line-height: 20px;
+    color: var(--text-dim);
     background: none;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
-  .mi:hover:not(:disabled), .mi:focus-visible { background: var(--menu-hover); }
+  .mi:hover:not(:disabled), .mi:focus-visible { background: var(--menu-hover); color: var(--text); }
+  .mi:hover:not(:disabled) .mi-icon, .mi:focus-visible .mi-icon { color: var(--text); }
+  .mi:hover:not(:disabled) .mi-keys kbd, .mi:focus-visible .mi-keys kbd { color: var(--text); }
   .mi:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .mi:disabled { cursor: default; }
   .mi:disabled .mi-label, .mi:disabled .mi-icon { color: var(--text-faint); }
   .mi-icon {
     flex: none;
-    width: 17px;
-    height: 17px;
+    width: 18px;
+    height: 18px;
     color: var(--text-dim);
     fill: none;
     stroke: currentColor;
@@ -3131,17 +3448,18 @@
   .mi-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
   .mi-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mi-why {
-    font-size: 12px;
-    line-height: 1.3;
-    color: var(--text-dim);
+    font-size: 12.5px;
+    line-height: 16px;
+    color: var(--text-faint);
     white-space: normal;
     margin-top: 1px;
   }
-  .mi-keys { flex: none; display: inline-flex; gap: 3px; margin-left: 8px; }
+  .mi-keys { flex: none; display: inline-flex; gap: 4px; margin-left: 8px; }
   /* B's keycap (#169): Chivo Mono, a 1px strong line, 4px corners, 20px
      tall — a key, drawn flat. */
   .mi-keys kbd, .cmdk-keys kbd, .export-foot kbd {
     display: inline-block;
+    flex: none;
     min-width: 20px;
     box-sizing: border-box;
     height: 20px;
@@ -3181,13 +3499,16 @@
   .menu-sub-empty { font-size: 13px; color: var(--text-dim); padding: 8px 10px; }
 
   /* On/off items are switches, not "…: on" text. aria-checked is the state. */
+  /* Off: a dim knob on the strong line's grey, so it reads on the raised
+     menu in either theme. On: the preview blue with a knob of the ground
+     colour (#169). */
   .mi-switch-track {
     flex: none;
     position: relative;
     width: 30px;
     height: 18px;
     border-radius: 999px;
-    background: var(--border);
+    background: var(--border-strong);
     transition: background var(--dur-fast) var(--ease-standard);
   }
   .mi-switch-thumb {
@@ -3197,12 +3518,12 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--surface);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-    transition: transform var(--dur-fast) var(--ease-standard);
+    background: var(--text-dim);
+    transition: transform var(--dur-fast) var(--ease-standard),
+                background var(--dur-fast) var(--ease-standard);
   }
   .mi-switch[aria-checked="true"] .mi-switch-track { background: var(--visual); }
-  .mi-switch[aria-checked="true"] .mi-switch-thumb { transform: translateX(12px); }
+  .mi-switch[aria-checked="true"] .mi-switch-thumb { transform: translateX(12px); background: var(--bg); }
   .mi-switch .mi-keys { margin-left: 0; }
 
   .menu-group { padding: 4px 0 2px; }
@@ -3210,27 +3531,29 @@
   .menu-group-head {
     font-family: var(--font-body);
     font-size: 12px;
+    line-height: 18px;
     font-weight: 600;
-    color: var(--text-dim);
-    padding: 8px 10px 4px;
+    color: var(--text-faint);
+    padding: 8px 8px 4px;
   }
 
   /* The file card: which file, whether it is all there yet, and the two
-     things every save touches. */
+     things every save touches. A detail card (#169): 8px corners, set into
+     the raised menu on the page's own ground. */
   .fm-card {
     background: var(--bg);
-    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-    border-radius: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     padding: 4px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
-  .fm-card-file { display: flex; align-items: center; gap: 10px; padding: 8px 10px 6px; }
+  .fm-card-file { display: flex; align-items: center; gap: 10px; padding: 8px 8px 6px; }
   .fm-card-icon {
     flex: none;
     width: 28px;
     height: 28px;
     padding: 5px;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text-dim);
@@ -3249,9 +3572,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .fm-card-meta { font-size: 12.5px; color: var(--text-dim); margin-top: 1px; }
+  .fm-card-meta { font-size: 12.5px; line-height: 16px; color: var(--text-faint); margin-top: 1px; }
   .fm-card-meta .is-unsaved { color: var(--accent); }
-  .fm-card .mi:hover:not(:disabled), .fm-card .mi:focus-visible { background: color-mix(in srgb, var(--text) 6%, var(--bg)); }
+  .fm-card .mi:hover:not(:disabled), .fm-card .mi:focus-visible { background: var(--hover); }
   /* Save to file is only an item while there is a foreign file to write
      back to; disabled the rest of the time, and then it is not offered. */
   .fm-card .mi[data-file-action="save-back"]:disabled { display: none; }
@@ -3261,19 +3584,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    padding: 6px;
+    padding: 4px;
     border-top: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 55%, var(--surface));
   }
   .mi.mi-foot {
     width: auto;
-    min-height: 30px;
+    min-height: 28px;
     gap: 6px;
-    padding: 4px 9px;
+    padding: 4px 8px;
     font-size: 13px;
+    line-height: 20px;
     color: var(--text-dim);
   }
-  .mi-foot .mi-icon { width: 15px; height: 15px; }
+  .mi-foot .mi-icon { width: 16px; height: 16px; }
   .mi-foot:hover:not(:disabled) { color: var(--text); }
   .mi-foot .mi-keys { margin-left: 2px; }
   /* A phone's keyboard has no Ctrl, so a chip there only takes room. */
@@ -4174,7 +4497,7 @@
     border-radius: var(--radius-sm);
     color: var(--text-dim);
   }
-  #comment-modal .modal-close:hover { color: var(--text); background: var(--hover); }
+  #comment-modal .modal-close:hover { color: var(--text); background: var(--layer-hover, var(--hover)); }
   #comment-modal .modal-close svg {
     width: 18px; height: 18px;
     fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
@@ -4234,17 +4557,101 @@
      disk" dialog or a toast has to be able to appear over a running
      prompter, not open invisibly behind it. The scale itself is written up
      at .topbar below. */
-  /* Its colours are Direction B's dark ones written out (#169) — the
-     prompter is not inside .prompter-line, so the tokens here would be the
-     app theme's. */
+  /* Direction B's prompter (#169, boards/B-Prompter): nothing in the
+     reading area but the words being read, and a plain gap where a scene
+     changes (Adam's decision). Where the reading is and every control sit
+     outside the text: a 60px top bar and a foot with the running order and
+     the controls.
+
+     It is dark in either theme: .prompter shares the dark token block at
+     the top of this file. Three colours are the prompter's own: the
+     ground, the reading band and the words still to be read. */
   .prompter {
+    --pp-ground: #0A0A09;
+    --pp-band: #161614;
+    --pp-ink: #F2F1ED;
+    /* The Size stepper's value (applyPrompterSize, 20-teleprompter.js) and
+       one line of text at it: the band is exactly one line tall. */
+    --pp-size: 60px;
+    --pp-line: calc(var(--pp-size) * 1.42);
     position: fixed; inset: 0; z-index: 145;
-    background: #0A0A09;
-    color: #F2F1ED;
+    background: var(--pp-ground);
+    color: var(--pp-ink);
+    color-scheme: dark;
     display: flex;
     flex-direction: column;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 450;
   }
   .prompter[hidden] { display: none; }
+  body.prompter-open { overflow: hidden; }
+
+  /* ---- the top bar: the scene, the clock, the voice ----
+     A three-column grid so the clock is centred on the window whatever the
+     two sides hold. Always 60px: a voice message too long for one line
+     hangs below the bar over the read text (above it, on the ground) rather
+     than growing the bar, which would move the reading line each time a
+     warning came or cleared. */
+  .prompter-top {
+    flex: none;
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 24px;
+    height: 60px;
+    box-sizing: border-box;
+    padding: 0 40px;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text);
+  }
+  .pp-where, .pp-clock {
+    display: flex;
+    align-items: baseline;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .pp-where { gap: 12px; }
+  .pp-scene-pos { font-size: 16px; line-height: 20px; }
+  .pp-scene-start { font-size: 14px; line-height: 20px; color: var(--text-faint); }
+  .pp-clock { gap: 10px; }
+  .pp-elapsed { font-size: 30px; line-height: 36px; letter-spacing: -0.01em; }
+  .pp-remaining { font-size: 16px; line-height: 20px; font-weight: 450; color: var(--text-faint); }
+  .pp-voice-state {
+    justify-self: end;
+    align-self: start;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+    margin-top: 20px;
+    text-align: right;
+    background: var(--pp-ground);
+    box-shadow: 0 0 0 10px var(--pp-ground);
+  }
+  .pp-voice-name { flex: none; white-space: nowrap; }
+  .pp-voice-state:not(.is-live):not(.has-msg) .pp-voice-name { display: none; }
+  .pp-voice-status { min-width: 0; color: var(--text-faint); }
+  .pp-voice-status.error { color: var(--danger); }
+  /* The tally lamp: red, and only while it is live. */
+  .pp-lamp {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tally);
+  }
+  .pp-voice-state .pp-lamp { display: none; margin-top: 6px; animation: pp-rec-pulse var(--dur-pulse) ease-in-out infinite; }
+  .pp-voice-state.is-live .pp-lamp { display: block; }
+  @keyframes pp-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pp-voice-state .pp-lamp { animation: none; }
+  }
   /* Sized exactly as #prompter-scroll used to be (the flex:1 slice above the
      control bar) — .prompter-guide is positioned against this box instead of
      the scroller itself so Mirror/Flip transforming the scroller never
@@ -4269,28 +4676,46 @@
     position: absolute; inset: 0;
     overflow-y: auto;
     scrollbar-width: none;
-    /* 46% of the slice above the bar, top and bottom — always under 100%,
-       so the box can never outgrow its slice — lets the first line start at
-       the reading line and the last one scroll up to it. The vh line is only
-       a fallback for an engine with no container units. */
-    padding: 46vh 8vw;
-    padding-block: 46cqh;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
+    /* Half the slice above the bar on top, so the first line starts on the
+       reading line, in the band; a pixel under half below it, so the last
+       line scrolls up past the line into the read text (the clock reaching
+       the end) and the two never quite fill the box — a box that cannot fit
+       its padding grows downward over the bar (suite 71). The vh line is
+       only a fallback for an engine with no container units. */
+    padding: 40vh 8vw;
+    padding-block: 50cqh calc(50cqh - 1px);
+    /* Read text dims (#169): everything above the reading line shows at 37%
+       — B's #5F5E5A over the ground — with a short fade at each edge. The
+       mask turns with the scroller, so under Flip the dim side flips with
+       the words. */
+    --pp-dim: rgba(0, 0, 0, 0.37);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--pp-dim) 24px, var(--pp-dim) calc(50% - 4px), #000 50%, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, var(--pp-dim) 24px, var(--pp-dim) calc(50% - 4px), #000 50%, #000 calc(100% - 24px), transparent 100%);
+  }
+  /* Following a voice, each word dims as it is said instead. */
+  .prompter-scroll.is-following {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
   }
   .prompter-scroll::-webkit-scrollbar { display: none; }
   .prompter-scroll.mirror { transform: scaleX(-1); }
   .prompter-scroll.flip { transform: scaleY(-1); }
   .prompter-scroll.mirror.flip { transform: scale(-1, -1); }
+  #prompter-content { font-size: var(--pp-size); line-height: 1.42; }
+  /* B's prompter text: Atkinson 600 at 60px by default, 1.42, on a 1040px
+     measure; a scene's paragraph ends in a gap of 40px at that size. */
   .prompter-line {
     font-family: var(--font-script);
     font-weight: 600;
-    line-height: 1.5;
-    max-width: 900px;
-    margin: 0 auto 0.9em;
+    line-height: 1.42;
+    letter-spacing: 0.002em;
+    max-width: 1040px;
+    margin: 0 auto 0.667em;
     text-wrap: balance;
   }
-  .prompter-line strong { color: var(--audio); }
+  /* Bold is heavier, not a colour (the board): colour in the reading area
+     is left to the marks the script itself carries. */
+  .prompter-line strong { font-weight: 800; }
   .prompter-line u { text-underline-offset: 3px; }
   .prompter-line a { color: var(--visual); text-decoration: underline; }
   /* The editor's 2px/4.5px comment underline is sized for 16px text; at
@@ -4302,80 +4727,288 @@
     text-underline-offset: 0.28em;
   }
   .prompter-line .w { transition: opacity var(--dur-enter) var(--ease-standard); }
-  .prompter-line .w.spoken { opacity: 0.32; }
-  .prompter-line .w.current-word {
-    background: rgba(249,182,79,0.35);
-    box-shadow: 0 0 0 2px rgba(249,182,79,0.35);
+  .prompter-scroll.is-following .w.spoken { opacity: 0.37; }
+  .prompter-scroll.is-following .w.current-word {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
     border-radius: 3px;
   }
+  /* The reading line: 1px at the middle of the box, which is where
+     20-teleprompter.js's maths put it (clientHeight / 2) and what suite 71
+     measures. Drawn as the band hanging below it — B's #161614, one line of
+     text tall, an amber rule at 35% along its foot and an amber pointer
+     before the start of the line — since a cued line's top sits on the
+     line. It paints under the words (it comes first in page.html) and turns
+     with them: mirrored its pointer stays at the start of the line, flipped
+     it swings about the reading line onto the side the flip puts the line
+     on. */
   .prompter-guide {
     position: absolute;
     left: 0; right: 0; top: 50%;
     height: 1px;
-    background: linear-gradient(to right, transparent, rgba(249,182,79,0.55), transparent);
     pointer-events: none;
   }
-  /* No padding of its own: the scroller's top padding (46cqh) already puts
-     the first line on the reading line, and this message is that line. It
+  .prompter-band {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: var(--pp-line);
+    background: var(--pp-band);
+    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 35%, transparent);
+    transform-origin: 50% 0;
+    font-size: var(--pp-size);
+  }
+  .prompter.pp-mirrored .prompter-band { transform: scaleX(-1); }
+  .prompter.pp-flipped .prompter-band { transform: scaleY(-1); }
+  .prompter.pp-mirrored.pp-flipped .prompter-band { transform: scale(-1, -1); }
+  /* 22×26 at 60px, 50px before the line starts — the line starts at the
+     wider of the scroller's 8vw padding and the centred 1040px measure. */
+  .pp-pointer {
+    position: absolute;
+    top: 50%;
+    left: max(4px, calc(max(8vw, 50% - 520px) - 0.833em));
+    width: 0.367em;
+    height: 0.433em;
+    transform: translateY(-50%);
+    fill: var(--accent);
+  }
+  /* No padding of its own: the scroller's top padding already puts the
+     first line on the reading line, and this message is that line. It
      used to add 40vh on top of it, which sank it into the bottom fade. */
-  .prompter-empty { text-align: center; color: #94928D; font-family: var(--font-body); }
-
-  .prompter-bar {
+  .prompter-empty {
     display: flex;
     align-items: center;
-    gap: 18px;
+    justify-content: center;
+    min-height: var(--pp-line);
+    max-width: 1040px;
+    margin: 0 auto;
+    text-align: center;
+    color: var(--text-faint);
+    font-family: var(--font-body);
+    font-size: max(20px, 0.4em);
+  }
+
+  /* ---- the foot: the running order, then the controls ---- */
+  .prompter-foot { flex: none; background: var(--pp-ground); }
+  /* A block per scene sized by its read time, 3px apart; the part read
+     lit in the text colour, the rest a line; the playhead an amber dot
+     where the reading is. Its left is worked out from the time alone
+     (--pp-at, the share of the script read) plus the gaps before its block
+     (--pp-i of --pp-blocks), all set by updatePrompterStatus(), so a resize
+     never leaves it behind. */
+  .pp-rundown {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    box-sizing: border-box;
+    padding: 0 40px;
+  }
+  .pp-rd-track {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 6px;
+  }
+  .pp-rd-block {
+    flex: 0 1 0;
+    min-width: 0;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+  .pp-rd-block.is-played { background: var(--text); }
+  .pp-rd-block.is-current { background: linear-gradient(to right, var(--text) var(--p, 0%), var(--border) var(--p, 0%)); }
+  .pp-rd-head {
+    position: absolute;
+    top: 50%;
+    left: calc((100% - (var(--pp-blocks, 1) - 1) * 3px) * var(--pp-at, 0) + var(--pp-i, 0) * 3px);
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    border-radius: 50%;
+    background: var(--accent);
+    outline: 2px solid var(--pp-ground);
+  }
+
+  /* The controls: Play, the two steppers, a rule, the modes (scene mode,
+     Follow My Voice, Skip shot), the rig (Mirror, Flip, Full screen), and
+     Close at the far end. Ghost buttons 40px tall with an 8px corner; a
+     toggle that is on is raised with the strong line. Each group wraps as
+     one where the window is too narrow for the row. */
+  .prompter-bar {
+    display: flex;
     flex-wrap: wrap;
-    padding: 12px 22px;
-    background: #171614;
-    border-top: 1px solid #2E2E2B;
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: #B2B1AB;
+    align-items: center;
+    gap: 8px;
+    min-height: 72px;
+    box-sizing: border-box;
+    padding: 10px 40px;
+    color: var(--text);
   }
-  .prompter-bar .grp { display: flex; align-items: center; gap: 8px; }
-  .prompter-bar input[type="range"] { width: 100px; accent-color: #F9B64F; }
-  .prompter-bar button {
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 500;
-    background: #21201E;
-    border: 1px solid #2E2E2B;
-    color: #ECEBE7;
-    border-radius: 6px;
-    padding: 8px 12px;
-    cursor: pointer;
-  }
-  .prompter-bar button:hover { border-color: #F9B64F; }
-  .prompter-bar button.is-active { background: #F9B64F; border-color: #F9B64F; color: #0F0E0C; }
+  /* Author rules below give these display:flex, which would beat the
+     browser's own [hidden] — scene mode's stepper and the value inputs
+     rely on it. */
+  .prompter-bar [hidden] { display: none !important; }
+  .pp-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .prompter-bar .spacer { flex: 1; }
-  .prompter-bar .close-btn { background: transparent; border-color: #43423F; }
-  .prompter-bar .div-sep { width: 1px; height: 20px; background: #2E2E2B; }
-  /* Follow My Voice listening is live: tally red, the fill with white on it. */
-  #pp-voice.is-active { background: #D7352D; border-color: #D7352D; color: #FFFFFF; }
-  .pp-scene-readout {
-    font-family: var(--font-body);
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-    color: #ECEBE7;
+  .prompter-bar .div-sep { flex: none; width: 1px; height: 24px; margin: 0 12px; background: var(--border); }
+  .prompter .pp-icon {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .prompter button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .pp-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
     white-space: nowrap;
   }
-  #pp-voice.is-active::before {
-    content: "●";
-    margin-right: 6px;
-    animation: pp-rec-pulse var(--dur-pulse) ease-in-out infinite;
+
+  /* Play/Pause: the one filled control, program amber. */
+  .prompter-bar .pp-play {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    cursor: pointer;
   }
-  @keyframes pp-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-  @media (prefers-reduced-motion: reduce) {
-    #pp-voice.is-active::before { animation: none; }
+  .prompter-bar .pp-play:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); }
+  .pp-play .pp-icon { width: 22px; height: 22px; fill: currentColor; stroke-width: 3; }
+
+  /* Speed and Size: a label, then − value + in one outlined box. Scene
+     mode's Previous / readout / Next are the same box. */
+  .pp-step { display: flex; align-items: center; gap: 10px; padding-left: 8px; }
+  .pp-play + .pp-step { padding-left: 16px; }
+  .pp-step-label { color: var(--text-dim); white-space: nowrap; }
+  .pp-stepper {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
   }
-  #pp-voice:disabled { opacity: 0.4; cursor: default; }
-  .pp-voice-status {
-    font-size: 12px;
-    color: #94928D;
-    min-width: 0;
+  .prompter-bar .pp-step-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 38px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
   }
-  .pp-voice-status.listening { color: #F45246; }  /* live: the tally */
-  .pp-voice-status.error { color: #F45246; }
+  .prompter-bar .pp-step-btn:first-child { border-radius: 7px 0 0 7px; }
+  .prompter-bar .pp-step-btn:last-child { border-radius: 0 7px 7px 0; }
+  .prompter-bar .pp-step-btn:hover { background: var(--hover); color: var(--text); }
+  .pp-step-value {
+    width: 52px;
+    text-align: center;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .pp-scene-readout {
+    padding: 0 6px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  /* The toggles and Full screen and Close. */
+  .prompter-bar .pp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    box-sizing: border-box;
+    padding: 0 14px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .pp-btn .pp-icon { color: var(--text-dim); }
+  .prompter-bar .pp-btn:hover:not(:disabled) { background: var(--hover); }
+  .pp-btn:hover .pp-icon, .pp-btn.is-active .pp-icon { color: var(--text); }
+  .prompter-bar .pp-btn.is-active { background: var(--surface-2); border-color: var(--border-strong); }
+  .prompter-bar .pp-btn:disabled { opacity: 0.4; cursor: default; }
+  /* Follow My Voice: a microphone while it is off, the tally lamp while it
+     listens — the one live thing in the bar. */
+  #pp-voice .pp-lamp, #pp-voice.is-active .pp-icon { display: none; }
+  #pp-voice.is-active .pp-lamp { display: block; }
+  #pp-voice.is-active { gap: 9px; padding-left: 14px; }
+  .prompter-bar .close-btn { gap: 10px; padding: 0 10px 0 14px; }
+  /* B's keycap. */
+  .pp-kbd {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    box-sizing: border-box;
+    padding: 0 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text-dim);
+  }
+
+  /* A phone: the top bar tighter, the pointer in the narrower gutter, and
+     the controls in rows — Play and the steppers on the first, then every
+     other button in one run, packed as tightly as they go so the words
+     keep as much of the screen as they can. The selectors carry one class
+     more than the shared phone block's older .prompter-bar rules so these
+     win wherever they sit. */
+  @media (max-width: 760px) {
+    .prompter .prompter-top { height: 48px; padding: 0 12px; column-gap: 12px; }
+    .prompter .pp-scene-pos { font-size: 14px; }
+    .prompter .pp-scene-start { font-size: 12.5px; }
+    .prompter .pp-where { gap: 8px; }
+    .prompter .pp-elapsed { font-size: 22px; line-height: 28px; }
+    .prompter .pp-remaining { font-size: 13px; }
+    .prompter .pp-clock { gap: 6px; }
+    .prompter .pp-voice-name { display: none; }
+    .prompter .pp-voice-state { margin-top: 16px; font-size: 12.5px; line-height: 16px; }
+    .prompter .pp-voice-state .pp-lamp { margin-top: 4px; }
+    .prompter .prompter-scroll { padding-inline: 6vw; }
+    .prompter .pp-pointer { left: max(2px, calc(6vw - 0.6em)); width: 0.25em; height: 0.3em; }
+    .prompter .pp-rundown { height: 20px; padding: 0 12px; }
+    .prompter .prompter-bar { gap: 8px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
+    .prompter-bar .pp-transport { flex: 1 1 100%; }
+    .prompter .prompter-bar .pp-modes, .prompter .prompter-bar .pp-rig { display: contents; }
+    .prompter .prompter-bar .div-sep, .prompter .prompter-bar .spacer { display: none; }
+    .prompter .pp-play + .pp-step, .prompter .pp-step { gap: 6px; padding-left: 0; }
+    .prompter-bar .pp-play { width: 44px; height: 44px; }
+    .prompter-bar .pp-step-btn { width: 32px; }
+    .prompter .pp-step-value { width: 40px; }
+    .prompter .prompter-bar .pp-btn { gap: 6px; padding: 0 10px; }
+    .prompter .prompter-bar .close-btn { gap: 8px; padding: 0 8px 0 10px; }
+  }
 
   /* ---------- the writer (word-processor view of the audio column) ----------
 
@@ -4633,7 +5266,18 @@
      in advance which feature that will need. Cells stack (visual above
      audio, labelled, since the colour coding alone is too subtle at a
      glance), and the gutter turns from a left rail into a strip across the
-     top of each scene, where its buttons can be finger-sized. */
+     top of each scene, where its buttons can be finger-sized.
+
+     Content first (#169, B-Phone): a 56px header and the rundown strip at
+     the top, the script, and the modes and panels in a bar along the
+     bottom (#phone-bar, 20k-phone-bar.js), which clicks the header's own
+     buttons. A scene's header is its number and status; its start and
+     read time appear only on the scene you are in. */
+
+  /* The bottom bar and the header's phone faces are drawn only at phone
+     width; everywhere else they are not there at all. */
+  .phone-bar, .btn-phone-icon { display: none; }
+
   @media (max-width: 760px) {
     /* one element overflowing sideways makes a phone browser widen the whole
        layout viewport, shrinking every line of text — the guard keeps a
@@ -4648,80 +5292,198 @@
        device that never sees a mouse to scroll back up with). One overflow
        root is enough to stop the sideways widening; two of them is what
        confuses Chromium's sticky containing-block resolution. */
-    html { overflow-x: hidden; }
-    #root { padding: 0 12px 70px; }
+    html {
+      overflow-x: hidden;
+      /* what a scene scrolled to (the rundown, find, the tour) or a field
+         taking focus is kept clear of: the sticky header above, the bar
+         below */
+      scroll-padding: 108px 0 calc(72px + env(safe-area-inset-bottom));
+    }
+    /* 16px from the screen's edge, as B-Phone draws it, and room at the
+       foot for the bottom bar */
+    #root { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
 
-    /* header: File and the title on one line, the facts under it wrapping
-       as they must, then the clock, and the buttons as a flex row of equal
-       buttons — no room for ceremony. (#169's own phone layout — content
-       first, modes and panels in a bottom bar — comes with B-Phone.) */
-    .topbar { margin: 0 -12px; }
-    .topbar-row { display: flex; flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
-    .topbar-left { flex: 1 1 100%; flex-wrap: wrap; row-gap: 4px; gap: 8px; }
+    /* The header (#169, B-Phone): one 56px row. File as an icon, the title
+       with Save's status and the document's facts in a quiet line under
+       it, the clock as a chip, and Present as a tally icon. The panel
+       toggles and Write are the bottom bar's here; their header buttons
+       stay in the page, and the bar clicks them. Every button keeps its
+       word as its name: font-size 0 drops it from sight only. */
+    .topbar { margin: 0 -16px; }
+    .topbar-row { display: flex; height: 56px; padding: 0 6px 0 2px; gap: 4px; }
+    /* File down both lines; the title on the first, and on the second
+       Save's status (it is still the button), who else is here, and the
+       facts, clipped from the end as the desktop line is. Save and the
+       facts are real controls the board has no room for, so they keep a
+       line of their own rather than go. */
+    .topbar-left {
+      display: grid;
+      grid-template-columns: 44px auto auto minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) 24px 16px minmax(0, 1fr);
+      align-self: stretch;
+      flex: 1 1 auto;
+      gap: 0;
+    }
     .brand-row, .topbar-rule { display: none; }
-    .doc-title { flex: 1 1 0; min-width: 0; max-width: none; font-size: 17px; }
-    /* A dot can land at the start of a wrapped line here, so the items
-       are spaced apart instead. */
-    .doc-meta { flex: 1 1 100%; flex-wrap: wrap; white-space: normal; gap: 2px 14px; }
-    .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: none; }
-    .program-clock-wrap { justify-self: auto; }
-    .toolbar { flex: 1 1 auto; flex-wrap: wrap; justify-content: stretch; gap: 6px; }
-    /* The four panels get a row to themselves; Write and Present share the
-       next. */
-    .btn-group { flex: 1 1 100%; order: -1; }
-    /* four labels and counts only just fit a 375px screen; with an icon
-       each they are wider than it, and a phone widens the whole layout to
-       fit the widest thing on the page */
-    .btn-group .btn-icon { display: none; }
-    .menu-wrap { display: flex; flex: none; }
-    .toolbar .btn { flex: 1 1 auto; justify-content: center; height: 44px; padding: 0 8px; font-size: 13px; text-align: center; }
-    /* the rundown is a phone layout of its own (B-Phone, a later phase) */
-    .rundown { display: none; }
+    .menu-wrap { display: flex; grid-column: 1; grid-row: 1 / -1; align-self: center; }
+    #btn-file { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 0; }
+    #btn-file .btn-chevron { display: none; }
+    #btn-file .btn-phone-icon { display: block; width: 22px; height: 22px; }
+    /* 16px, not the board's 15: iOS zooms the page into a field under 16px */
+    .doc-title {
+      grid-column: 2 / -1;
+      grid-row: 2;
+      field-sizing: fixed;
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      height: 24px;
+      margin: 0;
+      padding: 1px 4px;
+      font-size: 16px;
+    }
+    .save-state { grid-column: 2; grid-row: 3; margin-left: 5px; }
+    /* 16px of line, and a taller target than that: the padding reaches
+       down to the header's edge and the margin hands the room back (not
+       up, where the title is) */
+    .save-btn { height: auto; margin: 0 0 -8px; padding: 0 0 8px; }
+    .save-btn::before { font-size: 12px; line-height: 16px; }
+    .topbar-left .presence-bar { grid-column: 3; grid-row: 3; padding-left: 8px; }
+    .presence-bar .presence-chip { width: 16px; height: 16px; font-size: 7.5px; box-shadow: 0 0 0 1.5px var(--bg); }
+    .presence-bar .presence-chip + .presence-chip { margin-left: -4px; }
+    .doc-meta { grid-column: 4; grid-row: 3; font-size: 12px; line-height: 16px; }
+    .doc-meta::before, .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: "·"; margin: 0 6px; color: var(--text-faint); }
+    .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }
+    /* The clock as a 28px chip on the raised surface, in a 44px target:
+       the chip is drawn behind the figures, the button is the whole
+       height. */
+    .program-clock-wrap { flex: none; margin-right: 2px; }
+    .program-clock { position: relative; isolation: isolate; height: 44px; }
+    .program-clock::before {
+      content: "";
+      position: absolute;
+      inset: 8px 0;
+      z-index: -1;
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+    }
+    .program-clock:hover { background: transparent; }
+    .program-clock:hover::before { background: var(--hover); }
+    .program-clock-total { font-size: 13px; line-height: 16px; letter-spacing: 0; }
+    .program-clock-of { font-size: 11px; }
+    .toolbar { flex: none; gap: 0; }
+    .btn-group, #btn-write { display: none; }
+    /* the 40px tally square in a 44px target: the fill stops at the
+       padding, and the corner inside it is 6px */
+    #btn-present {
+      width: 44px;
+      height: 44px;
+      padding: 2px;
+      border-radius: 8px;
+      background-clip: content-box;
+      justify-content: center;
+      gap: 0;
+      font-size: 0;
+    }
+    #btn-present .tally-dot { display: none; }
+    #btn-present .btn-phone-icon { display: block; width: 20px; height: 20px; }
+
+    /* The rundown strip, compact (B-Phone): 52px, no ruler, 22px blocks
+       with their numbers only. 05f-rundown.js scales to whatever width it
+       is given. Each rule here names .rundown or .topbar as well, because
+       the strip's own rules come later in this file. */
+    .topbar .rundown { padding: 0 16px; }
+    .rundown .rundown-ruler { display: none; }
+    .rundown .rundown-track { height: 51px; }
+    .rundown .rd-block { top: 15px; height: 22px; gap: 4px; padding: 0 6px; font-size: 10.5px; line-height: 12px; }
+    .rundown .rd-len { display: none; }
+    .rundown .rd-check { width: 9px; height: 9px; }
+    .rundown .rd-broll { top: 31px; height: 6px; }
+    /* there is no ruler to shed, so condensing leaves the playhead as it is */
+    .rundown .rundown-playhead,
+    .topbar.is-condensed .rundown .rundown-playhead { top: 10px; height: 32px; }
+    .rundown .rundown-playhead::before,
+    .topbar.is-condensed .rundown .rundown-playhead::before { display: block; left: -3px; top: -5px; border-width: 6px 4px 0 4px; }
 
     .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
     /* panel is full viewport width here, so there's nothing to drag against */
     .comments-panel-resize-handle { display: none; }
 
-    /* one column of scenes; the audio cell keeps its amber accent but each
-       cell also says what it is */
+    /* One column of scenes, each cell saying what it is with a tiny lamp in
+       its column's colour and the word (B-Phone) — the colour alone is too
+       subtle at a glance. */
     .col-head { display: none; }
-    /* minmax(0,1fr), not 1fr: a bare 1fr track refuses to shrink below its
+    /* The scene's header is the first grid line: the number and where the
+       scene starts, then its read time (the rail, brought up beside them),
+       then the status and the "⋯" menu at the far end. The gutter hands
+       its children to the row's grid (display: contents) because the rail
+       is the row's child, not the gutter's, and has to sit between them.
+       minmax(0,1fr), not 1fr: a bare 1fr track refuses to shrink below its
        content's min-width, and the focus toolbar's row of nowrap buttons
        has a min-content wider than the phone — which silently blew the
-       track out to 409px inside a 351px grid */
-    .row { grid-template-columns: minmax(0, 1fr); column-gap: 0; margin: 0 -12px; padding: 0; }
-    .row-rail { display: none; }
-    .hidden-shot-strip { width: calc(100% + 24px); margin: 0 -12px; padding: 9px 12px; }
-    .cell { border-left: none; border-right: none; padding: 10px 12px 14px; min-height: 0; }
-    .cell.visual-cell { grid-row: 2; border-left: 3px solid var(--visual); }
-    .cell.audio-cell { grid-row: 3; border-left: 3px solid var(--audio); }
-    .cell::before {
-      display: block;
-      font-family: var(--font-body); font-size: 12px; font-weight: 600;
-      color: var(--text-faint); margin-bottom: 6px;
+       track out to 409px inside a 351px grid. */
+    .row {
+      grid-template-columns: auto auto minmax(0, 1fr);
+      column-gap: 0;
+      margin: 0 -16px;
+      padding: 0 0 20px;
     }
-    .cell.visual-cell::before { content: "Visual"; color: var(--visual); }
-    .cell.audio-cell::before { content: "Audio"; color: var(--audio); }
-
-    /* the gutter becomes a horizontal strip: number and duration on the
-       left, status + move/insert/delete on the right, all thumb-sized */
-    .gutter {
-      grid-row: 1;
-      flex-direction: row;
-      align-items: center;
-      width: 100%;
-      padding: 8px 12px 4px;
-      gap: 8px;
-      box-sizing: border-box;
-    }
-    .row-head { cursor: default; }
+    .gutter { display: contents; }
+    .row-head { grid-row: 1; grid-column: 1; align-self: baseline; margin-top: 12px; padding-left: 16px; gap: 10px; cursor: default; }
     .row-num { font-size: 16px; line-height: 20px; }
+    /* Adam's call for the phone (#169): the start and the read time only
+       on the scene you are in — elsewhere the header is the number and the
+       status */
+    .row-start { display: none; font-size: 13px; }
+    .row-rail {
+      display: none;
+      grid-row: 1;
+      grid-column: 2;
+      align-self: baseline;
+      margin-left: 10px;
+      font-size: 13px;
+      line-height: 16px;
+      color: var(--text-dim);
+      text-align: left;
+    }
+    .row:focus-within .row-start, .row:focus-within .row-rail { display: block; }
+    .row-read:not(:empty) { display: inline-flex; align-items: center; gap: 4px; }
+    /* the sprite's clock (i-clock), as a mask so it takes the text colour */
+    .row-read:not(:empty)::before {
+      content: "";
+      flex: none;
+      width: 12px;
+      height: 12px;
+      background: currentColor;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .row-controls { grid-row: 1; grid-column: 3; justify-self: end; width: auto; min-height: 44px; padding-right: 4px; gap: 0; }
+    /* someone else in this scene (13a-presence.js): after the times */
+    .gutter > .presence-mark { grid-row: 1; grid-column: 3; justify-self: start; align-self: center; margin-left: 10px; }
     .row-grip { display: none; }   /* HTML5 drag doesn't exist on touch; the menu's Move up/down are the way */
-    .gutter .status-btn { margin: 0; height: 44px; }
+    .gutter .status-btn { margin: 0; height: 44px; font-size: 13px; }
     .row-more { width: 44px; height: 44px; }
     .gutter-btn.row-menu-item { height: 44px; }
     .row-menu { left: auto; right: 0; }
     .row-meta { display: none; }
+    .hidden-shot-strip { width: calc(100% + 32px); margin: 0 -16px; padding: 9px 16px; }
+    .cell { padding: 0 16px; min-height: 0; }
+    .cell.visual-cell { grid-row: 2; grid-column: 1 / -1; padding-top: 6px; }
+    .cell.audio-cell { grid-row: 3; grid-column: 1 / -1; padding-top: 16px; }
+    .cell::before {
+      display: block;
+      margin-bottom: 6px;
+      padding-left: 12px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 600;
+      color: var(--text-dim);
+      background: no-repeat 0 50% / 6px 6px;
+    }
+    .cell.visual-cell::before { content: "Visual"; background-image: radial-gradient(circle closest-side, var(--visual) 90%, transparent); }
+    .cell.audio-cell::before { content: "Audio"; background-image: radial-gradient(circle closest-side, var(--audio) 90%, transparent); }
 
     /* focus toolbar: finger-sized and scrollable sideways rather than wrapped,
        so it never stacks three rows deep over the text being edited.
@@ -4736,7 +5498,8 @@
     /* iOS zooms the page on focusing any input under 16px — keep every
        editing surface at 16 so focus never yanks the viewport */
     .cell-editable { font-size: 16px; }
-    .audio-cell .cell-editable { font-size: 17px; }
+    .visual-cell .cell-editable { line-height: 1.5; }
+    .audio-cell .cell-editable { font-size: 17px; line-height: 1.55; }
     .findbar input[type="text"], .link-popover input, .video-popover input,
     .tag-notes-input, .tag-person-input, .tag-rename-input, .tag-owner-select,
     #tag-name, #comment-name, .bulk-person-row input,
@@ -4748,17 +5511,116 @@
     .modal-backdrop { padding: 10px; align-items: flex-start; }
     .modal-panel { max-width: none; max-height: calc(100vh - 20px); padding: 16px 14px 14px; }
 
-    /* the panel must never leak sideways — its content shrinks, not the page */
-    .comments-panel { overflow-x: hidden; }
+    /* the panel must never leak sideways — its content shrinks, not the page.
+       A panel is a sheet over the whole screen whatever width it was
+       dragged to on a bigger one, from the top down to the bottom bar,
+       which stays: that bar is how you go to another panel or back to the
+       script. */
+    .comments-panel {
+      overflow-x: hidden;
+      left: 0;
+      width: auto;
+      bottom: calc(72px + env(safe-area-inset-bottom));
+      border-left: 0;
+    }
 
-    /* production panel touch targets. The status segment's four nowrap
-       labels min-content to more than a phone card is wide; tighter type
-       and letting them shrink keeps all four on one line */
-    .tag-status-pill { padding: 5px 10px; font-size: 12px; }
-    .tag-status-seg button { padding: 9px 2px; font-size: 11px; min-width: 0; }
-    .tag-scene { padding: 7px 10px; font-size: 12px; }
-    .tag-entity-actions button, .bulk-btn, .tag-person-add, .tag-owner-row button { padding: 8px 10px; }
-    .group-seg button { padding: 8px 10px; }
+    /* The bottom bar (#169, B-Phone): 72px on the surface with a hairline
+       over it — each tab an icon with its count beside it and a word under
+       it; the one you are on is in the text colour with a short Visual-blue
+       bar along the top edge. Under the header's layer (120), so the File
+       menu's sheet and its scrim come up over it; over the script and
+       everything in it. The full-screen modes (the writer, the prompter,
+       the b-roll page), the New Tab page and dialogs cover it. */
+    .phone-bar {
+      display: flex;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 110;
+      height: calc(72px + env(safe-area-inset-bottom));
+      padding: 0 3px env(safe-area-inset-bottom);
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    /* Six tabs share the width: min-width 0 so they never add up to more
+       than a 360px screen, where one wider tab would widen the layout. */
+    .phone-tab {
+      position: relative;
+      flex: 1 1 0;
+      min-width: 0;
+      height: 71px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-dim);
+      font-family: var(--font-body);
+      font-size: 11.5px;
+      line-height: 14px;
+      font-weight: 450;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .phone-tab[aria-current="page"] { color: var(--text); font-weight: 600; }
+    .phone-tab[aria-current="page"]::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: -1px;
+      width: 28px;
+      height: 2px;
+      margin-left: -14px;
+      border-radius: 0 0 2px 2px;
+      background: var(--visual);
+    }
+    .phone-tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -4px; border-radius: var(--radius-sm); }
+    .phone-tab-glyph { position: relative; flex: none; width: 22px; height: 22px; }
+    .phone-tab-icon {
+      display: block;
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .phone-tab-count {
+      position: absolute;
+      left: 25px;
+      top: -3px;
+      font-family: var(--font-display);
+      font-size: 10.5px;
+      line-height: 12px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-faint);
+    }
+    .phone-tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* "Production" fills a tab on a 375px screen; on a narrower one the
+       words step down rather than end in "…" */
+    @media (max-width: 370px) {
+      .phone-tab { font-size: 10.5px; }
+    }
+    /* the writer is a writing surface, and a review session has none */
+    body.is-review .phone-tab[data-for="btn-write"] { display: none; }
+    /* A toast rises clear of the bar, and so does the tour's card where it
+       sits across the foot of the screen (480px and under): one of its
+       steps points at a tab (tourTarget, 20c-help.js). */
+    #toast-host { bottom: calc(88px + env(safe-area-inset-bottom)); }
+    @media (max-width: 480px) {
+      .tour-overlay .tour-card { bottom: calc(88px + env(safe-area-inset-bottom)); }
+    }
+
+    /* production panel touch targets (the status lamps, the status choice
+       and the scene links are sized in the production section's own phone
+       block) */
+    .bulk-btn, .tag-person-add { padding: 8px 10px; }
     .server-doc-delete, .tag-person-remove, .bulk-clear { padding: 6px 10px; font-size: 16px; }
 
     /* teleprompter: controls wrap into a compact grid; sliders get room */
@@ -4912,7 +5774,9 @@
   flex-direction: column;
   overflow: hidden;
 }
-.help-panel .modal-header { padding: 18px 22px 12px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+/* the side panels' 56px head (#169), with the rule under it that the
+   contents list and the page start from */
+.help-panel .modal-header { flex: none; height: 56px; padding: 0 12px 0 22px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
 .help-layout {
   display: flex;
   flex: 1;
@@ -4936,7 +5800,7 @@
   text-decoration: none;
   line-height: 1.35;
 }
-#help-toc a:hover { background: var(--surface-2); color: var(--text); }
+#help-toc a:hover { background: var(--layer-hover, var(--hover)); color: var(--text); }
 #help-body {
   flex: 1;
   min-width: 0;
@@ -4946,32 +5810,35 @@
   line-height: 1.6;
   font-size: 14.5px;
 }
+/* B's headings (#169): the body face at 700, never heavier */
 #help-body h1, #help-body h2, #help-body h3, #help-body h4 {
   font-family: var(--font-body);
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text);
   line-height: 1.3;
   scroll-margin-top: 12px;
 }
 #help-body h1 { font-size: 22px; margin: 0 0 10px; }
-#help-body h2 { font-size: 19px; margin: 30px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+#help-body h2 { font-size: 18px; margin: 30px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
 #help-body h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
-#help-body h3 { font-size: 16px; margin: 20px 0 8px; }
+#help-body h3 { font-size: 15px; margin: 20px 0 8px; }
 #help-body h4 { font-size: 14px; margin: 16px 0 6px; }
 #help-body p { margin: 0 0 12px; color: var(--text); }
 #help-body ul, #help-body ol { margin: 0 0 12px; padding-left: 22px; }
 #help-body li { margin: 3px 0; }
 #help-body li ul { margin: 3px 0; }
 #help-body a { color: var(--visual); }
+/* code and the page's own wells sit on the ground, set into the raised
+   dialog */
 #help-body code {
   font-family: var(--font-display);
   font-size: 0.9em;
-  background: var(--surface-2);
+  background: var(--bg);
   border-radius: 4px;
   padding: 1px 5px;
 }
 #help-body pre {
-  background: var(--surface-2);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
@@ -4990,17 +5857,24 @@
 #help-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 #help-body table { border-collapse: collapse; width: 100%; margin: 0 0 14px; font-size: 13.5px; }
 #help-body th, #help-body td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
-#help-body th { background: var(--surface-2); font-family: var(--font-body); font-size: 13px; font-weight: 600; }
+#help-body th { background: var(--layer-hover, var(--hover)); font-family: var(--font-body); font-size: 13px; font-weight: 600; }
+/* B's keycap (#169): flat, the strong line, 4px corners */
 #help-body kbd {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 18px;
   font-weight: 500;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
+  text-align: center;
+  vertical-align: 1px;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
-  padding: 1px 5px;
-  background: var(--surface-2);
-  color: var(--text);
+  padding: 0 6px;
+  background: transparent;
+  color: var(--text-dim);
 }
 @media (max-width: 720px) {
   .help-layout { flex-direction: column; }
@@ -5018,12 +5892,15 @@
    scroll/resize rather than leaving a stale rect behind. z-index above the
    modals (150) since it can appear layered over Help's "Read more" close,
    but in practice runs alone. */
+/* The card is a popover pinned to what it explains (#169): B's floating
+   layer — raised, the strong edge, the shadow — with a popover's 8px
+   corners, over B's scrim with the target cut out of it. */
 .tour-overlay { position: fixed; inset: 0; z-index: 160; }
 .tour-overlay[hidden] { display: none; }
 .tour-cutout {
   position: absolute;
-  border-radius: 8px;
-  box-shadow: 0 0 0 9999px rgba(15, 14, 12, 0.55);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 9999px rgba(8, 8, 7, 0.62);
   transition: top var(--dur-move) var(--ease-standard),
               left var(--dur-move) var(--ease-standard),
               width var(--dur-move) var(--ease-standard),
@@ -5031,44 +5908,51 @@
   pointer-events: none;
 }
 .tour-card {
+  --layer-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));
   position: absolute;
   width: 300px;
   max-width: calc(100vw - 32px);
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow);
-  padding: 16px 18px;
+  padding: 16px;
 }
 .tour-step {
   font-family: var(--font-body);
   font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   margin-bottom: 6px;
 }
-.tour-card h3 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
+.tour-card h3 { margin: 0 0 6px; font-size: 16px; line-height: 22px; font-weight: 700; color: var(--text); }
 .tour-card p { margin: 0 0 8px; font-size: 13.5px; color: var(--text-dim); line-height: 1.5; }
-.tour-readmore { display: inline-block; margin-bottom: 12px; font-size: 12.5px; color: var(--visual); }
+.tour-readmore { display: inline-block; margin-bottom: 14px; font-size: 13px; color: var(--visual); }
 .tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tour-actions-nav { display: flex; gap: 8px; }
 @media (max-width: 480px) {
   .tour-card { position: fixed; left: 16px; right: 16px; width: auto; bottom: 16px; top: auto !important; }
 }
-/* ---------- connecting to a server (20e-connect.js) ---------- */
+/* ---------- connecting to a server (20e-connect.js) ----------
+   In B's language (#169): fields with the strong line at rest on the
+   page's ground, rows as hairline cards, and what the dialog says about
+   the current connection in a well set into the raised surface. */
 .pin-panel { max-width: 420px; }
 .connect-panel { max-width: 600px; }
 #pin-input {
   width: 100%;
+  height: 44px;
   font-family: var(--font-display);
   font-size: 20px;
+  font-weight: 500;
   letter-spacing: 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
 }
-#pin-input:focus { outline: none; border-color: var(--visual); }
+#pin-input:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .connect-error {
   margin-top: 10px;
   font-size: 13px;
@@ -5086,50 +5970,56 @@
 .connect-caveat { margin-top: 12px; margin-bottom: 0; }
 .connect-current {
   font-size: 13px; color: var(--text-dim);
-  background: var(--surface-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 9px 12px;
   margin-bottom: 12px;
 }
-.connect-current strong { color: var(--text); }
+.connect-current strong { color: var(--text); font-weight: 600; }
 .connect-list { display: flex; flex-direction: column; gap: 8px; }
 .connect-row {
   display: flex; align-items: center; gap: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 9px 11px;
+  padding: 8px 8px 8px 12px;
 }
-.connect-row.is-current { border-color: var(--visual); background: var(--visual-soft); }
+.connect-row.is-current { border-color: var(--visual); background: color-mix(in srgb, var(--visual) 8%, transparent); }
 .connect-row-main { flex: 1; min-width: 0; }
-.connect-row-name { display: block; font-weight: 700; font-size: 14px; color: var(--text); }
+.connect-row-name { display: block; font-weight: 600; font-size: 14px; line-height: 20px; color: var(--text); }
 .connect-row-url {
-  display: block; font-family: var(--font-display); font-size: 12px;
+  display: block; font-family: var(--font-display); font-size: 12px; line-height: 16px;
   color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.connect-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.connect-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* Forget: an icon button, the sprite's i-close where a "×" was */
+.connect-row-actions .connect-forget { width: 32px; padding: 0; color: var(--text-dim); }
+.connect-row-actions .connect-forget:hover { color: var(--text); }
 .connect-empty { font-size: 13px; color: var(--text-faint); padding: 4px 0 2px; }
 .connect-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .connect-add-title {
-  font-family: var(--font-body); font-size: 13px; font-weight: 600;
-  color: var(--text-dim); margin-bottom: 10px;
+  font-family: var(--font-body); font-size: 14px; font-weight: 600;
+  color: var(--text); margin-bottom: 10px;
 }
 .connect-field { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .connect-field > span { flex: 0 0 96px; font-size: 13px; color: var(--text-dim); }
 .connect-field input {
   flex: 1; min-width: 0;
+  height: 36px;
   font-family: var(--font-body); font-size: 14px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg); color: var(--text);
 }
-.connect-field input:focus { outline: none; border-color: var(--visual); }
+.connect-field input:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .connect-ssh-fields { margin-top: 10px; padding-left: 22px; border-left: 2px solid var(--border); }
 .connect-ssh-fields .modal-hint { margin: 8px 0 0; }
 .connect-ssh-out { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .connect-cmd {
   font-family: var(--font-display); font-size: 12.5px;
-  background: var(--surface-2); color: var(--text);
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 12px; margin: 0;
   white-space: pre-wrap; word-break: break-all;
@@ -5161,9 +6051,10 @@
 /* ---------- first-run setup wizard (20b-onboarding.js) ---------- */
 .onboard-panel { max-width: 560px; }
 .onboard-steps { display: flex; justify-content: center; gap: 8px; margin: 2px 0 16px; }
+/* --border-strong, not --border: the dots sit on the raised dialog (#169) */
 .onboard-dot {
   width: 8px; height: 8px; border-radius: 50%;
-  background: var(--border);
+  background: var(--border-strong);
 }
 .onboard-dot.is-current { background: var(--visual); }
 .onboard-dot.is-done { background: var(--text-faint); }
@@ -5649,8 +6540,9 @@
   .broll-page-btn.is-dark { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 500; }
   .broll-page-btn.is-dark:hover { opacity: 0.9; }
   .broll-page-filters { margin: 18px 0 14px; }
+  /* B's detail-card corners (#169), 8px where it was 12 */
   .broll-page-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
     box-shadow: var(--shadow); overflow: hidden;
   }
   .broll-page-card .broll-empty { padding: 48px 24px; }
@@ -6016,216 +6908,313 @@
      so the first-run wizard still appears over it and nothing here can
      cover a dialog.
 
-     A start screen since issue #144: a slim bar of its own, then the
-     heading, the New grid (Blank script plus the starters) with the
-     desktop-only Recent column beside it, the drop zone, and a footer of
-     links. Body text is the body face throughout; the mono face is kept
-     for the one thing that is literally a file name (a recent entry's).
-
-     --nt-line is the cards' hairline — a shade lighter than --border in
-     the light theme, so the cards sit on the page rather than being
-     outlined on it; in the dark theme --border is already that quiet. */
+     A start screen since issue #144, and Direction B's "On air" page
+     since #169 (board B-StartOnAir): a slim bar of its own; a band that
+     is a slate — the programme clock at 00:00 in the mono, a tally lamp,
+     "New script", and on desktop the most recent script with Continue;
+     then the starter cards in a row, Recent and Join side by side, a
+     compact drop zone and the help links. Body text is the body face; the
+     mono is for the clock, times, counts and file names. */
   .newtab-page {
-    --nt-line: #E5E3DE;
     position: fixed; inset: 0; z-index: 130;
     background: var(--bg); color: var(--text);
-    font-family: var(--font-body);
+    font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 450;
     overflow-y: auto; overflow-x: hidden;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .newtab-page { --nt-line: var(--border); }
-  }
-  :root[data-theme="dark"] .newtab-page { --nt-line: var(--border); }
   /* The page is its own scroller (openNewTabPage sets this). */
   html.is-newtab-open { overflow: hidden; }
 
-  .newtab-page svg { flex: none; width: 16px; height: 16px; }
   .newtab-page button { font-family: var(--font-body); }
   .newtab-page button:focus-visible,
   .newtab-page a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* The sprite's icons (<use href="#i-…">) take their stroke from here. */
+  .newtab-page .nt-icon {
+    flex: none; width: 18px; height: 18px;
+    fill: none; stroke: currentColor; stroke-width: 1.75;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* Everything under the bar sits in one centred 1200px column; the band
+     is full-bleed and puts its own content in the same column. */
+  .newtab-wrap { max-width: 1248px; margin: 0 auto; padding: 0 24px; }
 
   /* ---- the slim top bar ---- */
   .newtab-bar {
     position: sticky; top: 0; z-index: 1;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 12px 24px;
+    height: 56px; padding: 0 20px;
     background: var(--bg);
-    border-bottom: 1px solid var(--nt-line);
   }
   .newtab-wordmark {
     display: inline-flex; align-items: center; gap: 8px;
-    font-size: 15px; font-weight: 700;
+    font-size: 15px; font-weight: 700; letter-spacing: -0.005em;
   }
   /* the mark (#169): fixed colours, drawn in page.html */
-  .newtab-page .newtab-wordmark-mark { width: 24px; height: 22px; }
+  .newtab-page .newtab-wordmark-mark { flex: none; width: 24px; height: 22px; }
   .newtab-bar-actions { display: flex; gap: 8px; }
-  .newtab-bar-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 8px 12px;
-    font-size: 13.5px; font-weight: 500; line-height: 1;
-    border: 1px solid var(--border); border-radius: 8px;
-    background: var(--surface); color: var(--text);
-    cursor: pointer; white-space: nowrap;
-    transition: border-color var(--dur-fast) var(--ease-standard),
-                opacity var(--dur-fast) var(--ease-standard);
-  }
-  .newtab-bar-btn:hover { border-color: var(--text-faint); }
-  .newtab-bar-btn:active { transform: translateY(1px); }
-  /* --surface as the text colour: near-white on the deep blue in the light
-     theme, and the dark ground on the bright blue of the dark one. */
-  .newtab-bar-btn.is-primary { background: var(--visual); border-color: var(--visual); color: var(--surface); }
-  .newtab-bar-btn.is-primary:hover { opacity: 0.9; }
+  /* .btn-outline (the shared outlined button) with the board's 18px icons
+     in the dim ink; Open is the raised one of the two. */
+  .newtab-bar-btn { gap: 8px; padding: 0 12px 0 10px; }
+  .newtab-bar-btn .nt-icon { color: var(--text-dim); }
+  .newtab-bar-btn.is-primary { background: var(--surface-2); }
+  .newtab-bar-btn.is-primary:hover { background: var(--hover); }
 
-  /* ---- the content column ----
-     Narrower in the browser build, where there is no Recent column to sit
-     beside the grid; .has-recents (renderRecents) widens it. */
-  .newtab-inner {
-    max-width: 760px; margin: 0 auto;
-    padding: 44px 24px 48px;
+  /* ---- the band: the slate, and Continue ----
+     Full-bleed on the raised surface, with a hairline under it. Its rows
+     are 28px apart and 28px in from its edges, as the board spaces them;
+     without a recent script it is the slate alone, and everything under
+     it moves up by the Continue row's height. */
+  .newtab-band { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .newtab-band > .newtab-wrap {
+    display: flex; flex-direction: column; gap: 28px;
+    padding-top: 28px; padding-bottom: 28px;
   }
-  .newtab-inner.has-recents { max-width: 1120px; }
+  .newtab-slate { display: flex; align-items: center; gap: 28px; min-height: 76px; }
+  /* A timecode, so the mono (#169) — and at 96px, the one big thing on
+     the page. The line box is tighter than the glyphs on purpose, so the
+     clock and the two lines beside it share a centre. */
+  .newtab-clock {
+    flex: none;
+    font-family: var(--font-display); font-weight: 500;
+    font-size: 96px; line-height: 76px; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    color: var(--text);
+  }
+  .newtab-slate-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .newtab-slate-head { display: flex; align-items: center; gap: 12px; }
+  .newtab-lamp { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--tally); }
   .newtab-title {
-    margin: 0 0 6px;
-    font-family: var(--font-body); font-size: 36px; font-weight: 700;
-    line-height: 1.15; letter-spacing: -0.02em;
+    margin: 0;
+    font-family: var(--font-body); font-size: 28px; line-height: 34px; font-weight: 700;
+    letter-spacing: -0.01em;
   }
-  .newtab-sub { margin: 0 0 28px; font-size: 15px; color: var(--text-dim); }
+  /* In line with the heading, past the lamp (14px + the 12px gap). */
+  .newtab-sub { margin: 0; padding-left: 26px; font-size: 15px; line-height: 22px; color: var(--text-dim); }
+
+  .newtab-continue { display: flex; align-items: flex-end; gap: 28px; }
+  .newtab-continue-text {
+    flex: 0 1 auto; min-width: 240px; max-width: 560px;
+    display: flex; flex-direction: column; gap: 4px;
+    padding-bottom: 3px;
+  }
+  .newtab-continue-title {
+    font-size: 15px; line-height: 20px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .newtab-continue-when {
+    font-family: var(--font-display); font-size: 12px; line-height: 16px;
+    font-variant-numeric: tabular-nums; color: var(--text-faint);
+  }
+  /* The page's one amber action, as the board draws it. */
+  .newtab-continue-btn {
+    flex: none;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 44px; min-width: 128px; padding: 0 16px; margin-bottom: 1px;
+    border: 0; border-radius: var(--radius-sm);
+    background: var(--accent); color: var(--accent-contrast);
+    font-size: 14px; line-height: 20px; font-weight: 700;
+    cursor: pointer;
+    transition: filter var(--dur-fast) var(--ease-standard);
+  }
+  .newtab-continue-btn:hover { filter: brightness(1.06); }
+  .newtab-continue-btn:active { transform: translateY(1px); }
+  .newtab-page .newtab-continue-btn .nt-icon { width: 16px; height: 16px; stroke-width: 2.25; }
+
+  /* ---- under the band ---- */
+  .newtab-body { padding-top: 32px; padding-bottom: 40px; }
   .newtab-label {
-    margin: 0 0 10px;
-    font-family: var(--font-body); font-size: 14px; font-weight: 600;
+    margin: 0;
+    font-family: var(--font-body); font-size: 14px; line-height: 22px; font-weight: 600;
     color: var(--text-dim);
   }
-  .newtab-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
-  .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr) 380px; }
 
-  /* ---- the New grid ---- */
-  .newtab-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  /* ---- the starter cards, in a row ----
+     Detail cards, so --radius-md (8px, #169 — they were 12px). Hover is
+     "raised", the way B lifts anything: the next surface up, no shadow
+     (shadows are for the floating layer). */
+  .newtab-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
   .newtab-card {
-    display: flex; flex-direction: column; gap: 3px;
-    min-width: 0; padding: 12px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+    min-width: 0; min-height: 148px; padding: 16px 18px 18px;
     text-align: left;
-    border: 1px solid var(--nt-line); border-radius: 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
     background: var(--surface); color: var(--text);
     cursor: pointer;
-    transition: border-color var(--dur-fast) var(--ease-standard),
-                box-shadow var(--dur-fast) var(--ease-standard);
+    transition: background var(--dur-fast) var(--ease-standard),
+                border-color var(--dur-fast) var(--ease-standard);
   }
-  .newtab-card:hover { border-color: var(--visual); box-shadow: var(--shadow); }
+  .newtab-card:hover { background: var(--surface-2); border-color: var(--border-strong); }
   .newtab-card:active { transform: translateY(1px); }
-  .newtab-card-name { font-size: 15px; font-weight: 600; }
-  .newtab-card-desc { font-size: 13px; line-height: 1.4; color: var(--text-dim); }
-
-  /* The two-column picture of a starter: a blue stub per line of what is
-     seen, an amber one per line of what is said (starterPreviewHtml). */
-  .newtab-preview {
-    display: flex; flex-direction: column; justify-content: center; gap: 8px;
-    height: 92px; margin-bottom: 9px; padding: 12px 14px;
-    border-radius: 8px; background: var(--bg);
-    overflow: hidden;
+  .newtab-card-name { font-size: 15px; line-height: 20px; font-weight: 600; }
+  .newtab-card-desc { font-size: 13px; line-height: 18px; color: var(--text-dim); }
+  /* The document it opens, and its scene count in the mono. */
+  .newtab-card-meta {
+    display: flex; align-items: baseline; gap: 6px; min-width: 0;
+    font-size: 12px; line-height: 16px; color: var(--text-faint); white-space: nowrap;
   }
-  .newtab-preview-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .newtab-preview-col { display: flex; flex-direction: column; gap: 3px; }
-  .newtab-preview i { display: block; height: 4px; border-radius: 2px; opacity: 0.75; }
-  .newtab-preview i.is-visual { background: var(--visual); }
-  .newtab-preview i.is-audio { background: var(--audio); }
+  .newtab-card-doc { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .newtab-card-count {
+    flex: none;
+    font-family: var(--font-display); font-size: 11.5px; font-variant-numeric: tabular-nums;
+  }
+
+  /* The starter's rundown in miniature (starterPreviewHtml): a block per
+     scene sized by read time, in the hairline colour — shape, not status,
+     since nothing in a starter has been shot — and the running time. */
+  .newtab-preview { margin-top: auto; display: flex; align-items: center; gap: 12px; }
+  .newtab-preview-bar { flex: 1 1 auto; display: flex; gap: 1px; height: 8px; min-width: 0; }
+  .newtab-preview-bar i {
+    flex: 1 1 0; min-width: 2px; border-radius: 2px; background: var(--border);
+    transition: background var(--dur-fast) var(--ease-standard);
+  }
+  .newtab-card:hover .newtab-preview-bar i { background: var(--border-strong); }
+  .newtab-preview-time {
+    flex: none;
+    font-family: var(--font-display); font-weight: 500; font-size: 12.5px; line-height: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Blank script: an outline on the page rather than a card on it, and a
+     plus where a starter has its rundown. */
+  .newtab-card.is-blank { border-style: dashed; border-color: var(--border-strong); background: transparent; }
+  .newtab-card.is-blank:hover { background: var(--surface); }
   .newtab-preview.is-blank {
-    align-items: center;
-    background: none; border: 1.5px dashed var(--border);
-    color: var(--text-faint);
+    align-self: flex-start; justify-content: center;
+    width: 32px; height: 32px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    color: var(--text-dim);
     transition: color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
   }
-  .newtab-page .newtab-preview.is-blank svg { width: 26px; height: 26px; }
-  .newtab-card:hover .newtab-preview.is-blank { color: var(--visual); border-color: var(--visual); }
+  .newtab-card:hover .newtab-preview.is-blank { color: var(--text); border-color: var(--text-faint); }
 
-  /* ---- the recent-documents column (issue #15, desktop only) ----
-     A list in a card rather than a card: the entries are the buttons. */
-  .newtab-recents { min-width: 0; }
-  .newtab-recents-box {
-    display: flex; flex-direction: column;
-    padding: 6px;
-    border: 1px solid var(--nt-line); border-radius: 12px;
-    background: var(--surface);
-  }
+  /* ---- Recent and Join, side by side ----
+     Recent takes the row and Join a card-width column at its end
+     (.has-recents, renderRecents). In the browser build there is no
+     Recent, so Join has the row to itself and lies down in it. */
+  .newtab-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; margin-top: 36px; }
+  .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr) 282px; }
+
+  /* The recent documents (issue #15, desktop only): a list on the page,
+     not a card — rows with a hairline between them, the entries the
+     buttons. */
+  .newtab-recents { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .newtab-recents-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .newtab-recents-list {
-    display: flex; flex-direction: column; gap: 2px;
-    /* Capped at 20 entries by main, which is taller than the grid beside
-       it — scroll the list rather than the page. */
-    max-height: 300px; overflow-y: auto;
+    display: flex; flex-direction: column;
+    /* Capped at 20 entries by main — five rows, then the list scrolls
+       rather than the page. */
+    max-height: 285px; overflow-y: auto;
   }
-  .newtab-recent { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
-  .newtab-recent:hover { background: var(--bg); }
+  .newtab-recent { display: flex; align-items: center; min-width: 0; }
+  .newtab-recent + .newtab-recent { border-top: 1px solid var(--border); }
+  .newtab-recent:hover { background: var(--surface); }
   .newtab-recent-open {
     flex: 1 1 auto; min-width: 0;
-    display: flex; flex-direction: column; gap: 3px;
-    padding: 8px 10px;
+    display: flex; align-items: center; gap: 14px;
+    height: 56px; padding: 0 4px;
     text-align: left;
-    border: 0; border-radius: 8px; background: none; color: inherit;
+    border: 0; border-radius: 0; background: none; color: inherit;
     cursor: pointer;
   }
+  .newtab-page .newtab-recent-icon { width: 20px; height: 20px; color: var(--text-dim); }
+  .newtab-recent-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .newtab-recent-title {
-    font-size: 14px; font-weight: 500;
+    font-size: 14.5px; line-height: 20px; font-weight: 600;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .newtab-recent-meta { display: flex; gap: 8px; min-width: 0; font-size: 12px; color: var(--text-dim); }
-  .newtab-recent-name {
-    min-width: 0;
-    font-family: var(--font-display); font-size: 11.5px; font-weight: 500;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* The file name is a file name: the mono. */
+  .newtab-recent-meta {
+    display: flex; min-width: 0;
+    font-family: var(--font-display); font-size: 12px; line-height: 16px; color: var(--text-faint);
   }
-  .newtab-recent-when { flex: none; }
+  .newtab-recent-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .newtab-recent-when { flex: none; font-size: 13px; line-height: 16px; color: var(--text-faint); }
+  /* Forget: not on the board, and kept (issue #15). A quiet × that comes
+     up with the row under the pointer or the keyboard, and is always
+     there on a touch screen, which has no hover to bring it up. */
   .newtab-recent-forget {
     flex: none; display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; height: 28px; margin-right: 4px; padding: 0;
-    border: 0; border-radius: 6px; background: none; color: var(--text-faint);
+    width: 28px; height: 28px; margin: 0 4px 0 8px; padding: 0;
+    border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-faint);
     cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
   }
-  .newtab-page .newtab-recent-forget svg { width: 14px; height: 14px; }
-  .newtab-recent-forget:hover { color: var(--text); background: var(--surface-2); }
-  .newtab-recents-empty { padding: 10px; font-size: 13px; color: var(--text-dim); }
+  .newtab-recent:hover .newtab-recent-forget,
+  .newtab-recent:focus-within .newtab-recent-forget { opacity: 1; }
+  @media (hover: none) {
+    .newtab-recent-forget { opacity: 1; }
+  }
+  .newtab-page .newtab-recent-forget .nt-icon { width: 16px; height: 16px; }
+  .newtab-recent-forget:hover { color: var(--text); background: var(--hover); }
+  .newtab-recents-empty { padding: 17px 4px 18px; font-size: 13px; color: var(--text-dim); }
+  /* Clear recent (not on the board, kept): a text button at the end of
+     the heading's line, underlined like the help links. */
   .newtab-recents-clear {
-    align-self: flex-start; margin: 4px 10px 6px; padding: 2px 0;
-    border: 0; background: none; color: var(--text-dim);
-    font-size: 13px; text-decoration: underline; text-underline-offset: 2px;
+    padding: 0;
+    border: 0; background: none; color: var(--text-faint);
+    font-size: 13px; line-height: 22px;
+    text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 4px;
     cursor: pointer;
   }
-  .newtab-recents-clear:hover { color: var(--text); }
+  .newtab-recents-clear:hover { color: var(--text); text-decoration-color: currentColor; }
 
-  /* ---- the drop zone ---- */
+  /* Join a shared session: the same Servers dialog as the bar's button,
+     set level with the list (under Recent's 22px heading and its gap). */
+  .newtab-join {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 16px;
+    min-width: 0; padding: 20px;
+    border-radius: var(--radius-md); background: var(--surface);
+  }
+  .newtab-main.has-recents .newtab-join { align-self: start; min-height: 170px; margin-top: 30px; }
+  .newtab-join-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .newtab-join-title { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
+  .newtab-join-text { margin: 0; font-size: 13.5px; line-height: 19px; color: var(--text-dim); }
+  .newtab-join .newtab-join-btn { margin-top: auto; padding: 0 14px; background: var(--surface-2); }
+  .newtab-join .newtab-join-btn:hover { background: var(--hover); }
+  .newtab-main:not(.has-recents) .newtab-join { flex-direction: row; align-items: center; justify-content: space-between; }
+  .newtab-main:not(.has-recents) .newtab-join-btn { margin-top: 0; }
+
+  /* ---- the drop zone ----
+     One compact line: what to drop, and the two other ways in. */
   .newtab-drop {
     display: flex; align-items: center; justify-content: center; gap: 14px;
-    margin-top: 28px; padding: 22px 20px;
-    border: 1.5px dashed var(--border); border-radius: 12px;
-    color: var(--text-dim);
+    min-height: 56px; margin-top: 32px; padding: 8px 24px;
+    border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
     transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
   }
   .newtab-drop.is-over { border-color: var(--visual); background: var(--visual-soft); }
-  .newtab-page .newtab-drop-icon { width: 26px; height: 26px; color: var(--visual); }
-  .newtab-drop-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13px; }
-  .newtab-drop-text strong { font-size: 15px; font-weight: 600; color: var(--text); }
-  .newtab-drop-text a, .newtab-desktop a {
-    color: var(--visual); font-weight: 500;
-    text-decoration: underline; text-underline-offset: 2px;
+  .newtab-page .newtab-drop-icon { width: 20px; height: 20px; color: var(--text-dim); }
+  .newtab-drop-text {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 14px;
+    min-width: 0;
+  }
+  .newtab-drop-text strong { font-size: 15px; line-height: 22px; font-weight: 600; color: var(--text); }
+  .newtab-drop-text > span { font-size: 13.5px; line-height: 20px; color: var(--text-dim); }
+  .newtab-drop-text a, .newtab-desktop a { color: var(--visual); text-decoration: none; }
+  .newtab-drop-text a:hover, .newtab-desktop a:hover {
+    color: var(--text); text-decoration: underline; text-underline-offset: 2px;
   }
 
-  /* ---- the footer row ---- */
+  /* ---- the help links ---- */
   .newtab-foot {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;
-    margin-top: 22px;
-    font-size: 13px; color: var(--text-dim);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px;
+    margin-top: 16px;
+    font-size: 13.5px; line-height: 20px; color: var(--text-faint);
   }
   .newtab-foot > a {
-    display: inline-flex; align-items: center; gap: 6px;
-    color: var(--text-dim); text-decoration: none;
+    color: var(--text-dim);
+    text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 4px;
   }
-  .newtab-foot > a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
-  /* A line of its own: it is a different kind of thing from the three
-     links above it, and never fits beside them in the browser build's
-     narrower column anyway (the only build that shows it). */
+  .newtab-foot > a:hover { color: var(--text); text-decoration-color: currentColor; }
+  /* The browser build's desktop-app line (not on the board, kept): a line
+     of its own under the links, quieter than they are. */
   .newtab-desktop {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px;
     flex-basis: 100%;
-    padding-top: 14px; border-top: 1px solid var(--nt-line);
+    margin-top: 4px;
+    font-size: 13px;
   }
+  .newtab-page .newtab-desktop .nt-icon { width: 16px; height: 16px; }
 
   /* Opened from this page (issue #144), the paste modal makes a new
      document (11-import.js), so it has no rows of the user's to replace
@@ -6236,33 +7225,51 @@
   #import-modal.is-new-document .import-hint-new { display: block; }
   #import-modal.is-new-document .modal-footer-actions { margin-left: auto; }
 
-  /* The Recent column drops under the grid before the grid gets cramped:
-     two cards across want ~560px, and the column 380px beside them. */
-  @media (max-width: 1000px) {
-    .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr); }
-    .newtab-recents-list { max-height: 260px; }
+  /* Four cards across want ~1000px; under that, two. */
+  @media (max-width: 1040px) {
+    .newtab-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   }
-  @media (max-width: 640px) {
-    .newtab-bar { padding: 10px 16px; }
+  /* A phone (and a narrow window). The slate shrinks to fit a 390px
+     screen beside its heading; Recent goes over Join; and each card is a
+     row with its picture beside the name rather than above it, so four
+     cards are not four screens. */
+  @media (max-width: 760px) {
+    .newtab-bar { padding: 0 16px; }
     .newtab-long { display: none; }
-    .newtab-inner { padding: 28px 16px 36px; }
-    .newtab-title { font-size: 28px; }
-    .newtab-sub { margin-bottom: 22px; font-size: 14px; }
-    .newtab-drop { flex-direction: column; gap: 8px; text-align: center; }
-  }
-  /* One column on a phone, each card a row: the picture beside the name
-     rather than above it, so four cards are not four screens. */
-  @media (max-width: 520px) {
+    .newtab-wrap { padding: 0 16px; }
+    .newtab-band > .newtab-wrap { gap: 20px; padding-top: 20px; padding-bottom: 20px; }
+    .newtab-slate { gap: 16px; min-height: 0; }
+    .newtab-clock { font-size: 52px; line-height: 44px; }
+    .newtab-slate-text { gap: 4px; }
+    .newtab-slate-head { gap: 10px; }
+    .newtab-lamp { width: 12px; height: 12px; }
+    .newtab-title { font-size: 22px; line-height: 28px; }
+    .newtab-sub { padding-left: 22px; font-size: 13.5px; line-height: 19px; }
+    .newtab-continue { align-items: center; gap: 16px; }
+    .newtab-continue-text { flex: 1 1 auto; min-width: 0; max-width: none; padding-bottom: 0; }
+    .newtab-continue-btn { height: 40px; min-width: 0; margin-bottom: 0; }
+
+    .newtab-body { padding-top: 24px; padding-bottom: 32px; }
     .newtab-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; }
     .newtab-card {
-      display: grid; grid-template-columns: 96px minmax(0, 1fr);
-      column-gap: 12px; row-gap: 2px; align-items: center;
+      display: grid; grid-template-columns: 84px minmax(0, 1fr);
+      column-gap: 14px; row-gap: 2px; align-content: center;
+      min-height: 0; padding: 12px 14px;
     }
-    .newtab-preview { grid-row: 1 / span 2; height: 64px; margin: 0; padding: 8px 10px; gap: 5px; }
-    .newtab-preview-row { gap: 6px; }
-    .newtab-preview-row:nth-child(n + 4) { display: none; }
-    .newtab-card-name { align-self: end; }
-    .newtab-card-desc { align-self: start; }
+    .newtab-card-name, .newtab-card-desc, .newtab-card-meta { grid-column: 2; }
+    .newtab-preview {
+      grid-column: 1; grid-row: 1 / span 3; align-self: center;
+      margin: 0; flex-direction: column; align-items: stretch; gap: 6px;
+    }
+    .newtab-preview-bar { flex: none; }
+    .newtab-preview.is-blank { justify-self: start; align-self: center; align-items: center; }
+
+    .newtab-main, .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr); margin-top: 28px; }
+    .newtab-main.has-recents .newtab-join { min-height: 0; margin-top: 0; }
+    .newtab-main:not(.has-recents) .newtab-join { flex-direction: column; align-items: flex-start; }
+    .newtab-join { gap: 12px; padding: 16px; }
+    .newtab-drop { flex-direction: column; gap: 6px; margin-top: 24px; padding: 14px 16px; text-align: center; }
+    .newtab-drop-text { flex-direction: column; align-items: center; }
   }
 
   /* ---------- the local-file merge review pane (18a-local-merge.js) ---------- */

@@ -251,9 +251,13 @@ import {
   setPrompterMirror,
   setPrompterPlaying,
   setPrompterSceneMode,
+  setPrompterSpeed,
   startVoiceFollow,
+  stepPrompterSize,
+  stepPrompterSpeed,
   stepScene,
   stopVoiceFollow,
+  updatePrompterStatus,
   updateSceneReadout,
   updateVoiceAvailability,
   wireTagEntityContainer
@@ -2103,8 +2107,18 @@ function init() {
     if (S.voiceFollowActive) stopVoiceFollow(); else startVoiceFollow();
   });
   document.getElementById("pp-play").addEventListener("click", function () { setPrompterPlaying(!S.prompterPlaying); });
-  document.getElementById("pp-speed").addEventListener("input", function (e) { S.prompterSpeed = Number(e.target.value); });
+  document.getElementById("pp-speed").addEventListener("input", function (e) { setPrompterSpeed(Number(e.target.value)); });
   document.getElementById("pp-size").addEventListener("input", applyPrompterSize);
+  /* Speed and Size are steppers (#169); the range inputs behind them stay
+     the values, hidden. */
+  document.getElementById("pp-speed-down").addEventListener("click", function () { stepPrompterSpeed(-1); });
+  document.getElementById("pp-speed-up").addEventListener("click", function () { stepPrompterSpeed(1); });
+  document.getElementById("pp-size-down").addEventListener("click", function () { stepPrompterSize(-1); });
+  document.getElementById("pp-size-up").addEventListener("click", function () { stepPrompterSize(1); });
+  /* The top bar's scene and times and the foot's running order follow the
+     reading position, which is the scroll in every mode. */
+  document.getElementById("prompter-scroll").addEventListener("scroll", updatePrompterStatus, { passive: true });
+  window.addEventListener("resize", updatePrompterStatus);
   document.getElementById("pp-skip-shot").addEventListener("click", function (e) {
     S.prompterSkipShot = !S.prompterSkipShot;
     e.currentTarget.classList.toggle("is-active", S.prompterSkipShot);
@@ -2141,8 +2155,8 @@ function init() {
     if (!S.prompterOpen) return;
     if (e.key === "Escape") { closePrompter(); }
     else if (e.key === " ") { e.preventDefault(); setPrompterPlaying(!S.prompterPlaying); }
-    else if (e.key === "ArrowUp") { S.prompterSpeed = Math.min(160, S.prompterSpeed + 6); document.getElementById("pp-speed").value = S.prompterSpeed; }
-    else if (e.key === "ArrowDown") { S.prompterSpeed = Math.max(10, S.prompterSpeed - 6); document.getElementById("pp-speed").value = S.prompterSpeed; }
+    else if (e.key === "ArrowUp") { stepPrompterSpeed(1); }
+    else if (e.key === "ArrowDown") { stepPrompterSpeed(-1); }
     else if (e.key === "m" || e.key === "M") { setPrompterMirror(!prompterMirror); }
     else if (e.key === "f" || e.key === "F") { setPrompterFlip(!prompterFlip); }
     /* Scene mode's own step keys — ArrowUp/Down already own speed, so
