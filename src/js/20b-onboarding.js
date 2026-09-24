@@ -2,11 +2,12 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
+import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { launcherFetch } from "./13-hosted.js";
 import { deliverFile } from "./18-local-files.js";
 import { toggleFileMenu } from "./18b-file-menu.js";
-import { closeSidePanelsForHelp, openHelp, startTour } from "./20c-help.js";
+import { openHelp, startTour } from "./20c-help.js";
 import { addServerBookmark, joinErrorText, openServersDialog } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
 
@@ -147,12 +148,11 @@ function renderOnboardStep() {
 }
 
 /* Anything that opens over the whole screen closes the side panels first
-   (invariant #16) — closeSidePanelsForHelp() (20c-help.js) already does
-   exactly this and is reused rather than duplicated. */
+   (invariant #16), through the one helper every full-screen view uses. */
 function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
-  if (typeof closeSidePanelsForHelp === "function") closeSidePanelsForHelp();
+  closeAllSidePanels();
   onboardReturnFocus = document.activeElement;
   resetOnboardUi();
   modal.hidden = false;

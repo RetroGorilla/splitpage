@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
-import { syncPanelClass } from "./03-sync.js";
-import { SIDE_PANEL_IDS } from "./03b-side-panels.js";
+import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { toggleFileMenu } from "./18b-file-menu.js";
 
@@ -23,16 +22,9 @@ import { toggleFileMenu } from "./18b-file-menu.js";
    immediately is exactly as safe as doing it from init(). */
 
 /* Anything that opens over the whole screen has to close the side panels
-   first (invariant #16) — the same thing openWriter()/openPrompter() do.
-   SIDE_PANEL_IDS is 03b-side-panels.js's one list; this file used to keep
-   its own copy under another name (#59). */
-export function closeSidePanelsForHelp() {
-  SIDE_PANEL_IDS.forEach(function (id) {
-    var el = document.getElementById(id);
-    if (el) el.hidden = true;
-  });
-  if (typeof syncPanelClass === "function") syncPanelClass();
-}
+   first (invariant #16). Help and the tour do it through
+   closeAllSidePanels() (03b-side-panels.js), the one helper
+   openWriter()/openPrompter() use too (#163). */
 
 /* Scrolls #help-body itself, never the page — the modal is the whole
    viewport already, but the TOC and deep links must not rely on native
@@ -56,7 +48,7 @@ export function openHelp(anchor) {
      the tour, not a reason to end it. Remember where the reader was;
      closeHelp() brings them back. */
   suspendTourForHelp();
-  closeSidePanelsForHelp();
+  closeAllSidePanels();
   helpReturnFocus = document.activeElement;
   modal.hidden = false;
   if (anchor) scrollHelpTo(anchor);
@@ -279,7 +271,7 @@ export function startTour() {
   }
   var overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
-  closeSidePanelsForHelp();
+  closeAllSidePanels();
   /* Cleared first: closeHelp() resumes a suspended tour, and this is a
      fresh one starting from step 1. */
   tourSuspendedAt = -1;

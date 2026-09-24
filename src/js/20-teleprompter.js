@@ -3,6 +3,7 @@ import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
+import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cellOf, projection, sliceCell, toHtml, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import {
@@ -573,6 +574,9 @@ export function setPrompterSceneMode(on) {
 }
 
 export function openPrompter() {
+  /* Present covers the whole screen, so the side panels close rather than
+     wait underneath it (invariant #16, #163). */
+  closeAllSidePanels();
   buildPrompterContent();
   var el = document.getElementById("prompter");
   el.hidden = false;
