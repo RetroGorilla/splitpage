@@ -160,7 +160,9 @@
           <span class="brand"><svg class="brand-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>Splitpage</span>
         </div>
       <div class="menu-wrap">
-        <button class="btn btn-quiet" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">File<svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+        <!-- .btn-phone-icon: the button's face at phone width, where the
+             word is dropped (the responsive block) and stays its name. -->
+        <button class="btn btn-quiet" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu"><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-file"/></svg>File<svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
         <!-- Only drawn at phone width, where the menu is a sheet from the
              bottom of the screen; a dropdown needs no scrim. -->
         <div class="menu-backdrop" id="file-menu-backdrop" hidden></div>
@@ -182,7 +184,7 @@
         <div class="menu" id="file-menu" hidden role="menu" aria-label="File" tabindex="-1">
           <div class="menu-head">
             <span class="menu-title">File</span>
-            <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close">✕</button>
+            <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
           </div>
           <div class="menu-body" role="none">
             <!-- The file card: where this document is kept and whether it is
@@ -382,7 +384,7 @@
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg>Write</button>
         <!-- The one primary action, and the one tally-red thing in the
              header: presenting is going live. -->
-        <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span>Present</button>
+        <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
       </div>
     </div>
     <!-- The rundown (#169): the script as blocks sized by read time on a
@@ -519,6 +521,22 @@
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 <input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
+<!-- The phone's bottom bar (#169, B-Phone): the modes and panels under the
+     thumb, drawn only at phone width (app.css, the responsive block), where
+     the header keeps File, the title, the clock and Present. Each tab
+     clicks the header button named in data-for and mirrors the badge in
+     data-badge and the panel in data-panel (20k-phone-bar.js); Script
+     closes whichever panel covers the script. Gear is here as well as the
+     four the board draws: it is a panel like the others, and on a phone
+     this is the only place its button can be reached. -->
+<nav class="phone-bar" id="phone-bar" aria-label="Modes and panels">
+  <button type="button" class="phone-tab" data-for="script" aria-current="page"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-script"/></svg></span><span class="phone-tab-label">Script</span></button>
+  <button type="button" class="phone-tab" data-for="btn-write"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-pen"/></svg></span><span class="phone-tab-label">Write</span></button>
+  <button type="button" class="phone-tab" data-for="btn-production" data-panel="production-panel" data-badge="production-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">Production</span></button>
+  <button type="button" class="phone-tab" data-for="btn-gear" data-panel="gear-panel" data-badge="gear-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">Gear</span></button>
+  <button type="button" class="phone-tab" data-for="btn-broll" data-panel="broll-panel" data-badge="broll-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">B-roll</span></button>
+  <button type="button" class="phone-tab" data-for="btn-comments" data-panel="comments-panel" data-badge="comments-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">Comments</span></button>
+</nav>
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
 
@@ -531,7 +549,7 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
     <div class="modal-header">
       <h2 id="import-title">Import a script</h2>
-      <button type="button" class="modal-close" id="import-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="import-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
     <!-- Opened from the New Tab page (issue #144), where there is no
@@ -581,7 +599,9 @@
       <kbd class="cmdk-esc" aria-hidden="true">Esc</kbd>
     </div>
     <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Commands"></div>
-    <div class="cmdk-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to run</span><span><kbd>Esc</kbd> to close</span></div>
+    <!-- B-Command's footer (#169): the arrow keys' caps hold the sprite's
+         arrows rather than "↑"/"↓" glyphs -->
+    <div class="cmdk-foot" aria-hidden="true"><span><span class="cmdk-foot-keys"><kbd class="cmdk-arrow"><svg aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></kbd><kbd class="cmdk-arrow"><svg aria-hidden="true" focusable="false"><use href="#i-arrow-down"/></svg></kbd></span>to move</span><span><kbd>Enter</kbd>to run</span><span><kbd>Esc</kbd>to close</span></div>
   </div>
 </div>
 
@@ -595,7 +615,7 @@
   <div class="modal-panel export-panel" role="dialog" aria-modal="true" aria-labelledby="export-title">
     <div class="export-head">
       <h2 id="export-title">Export</h2>
-      <button type="button" class="modal-close" id="export-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="export-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <div class="export-body">
       <div class="export-formats" id="export-formats" role="radiogroup" aria-labelledby="export-title"></div>
@@ -627,7 +647,7 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="gdoc-title">
     <div class="modal-header">
       <h2 id="gdoc-title">Import from Google Doc</h2>
-      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint">Paste the link to a Google Doc (or just its ID). Splitpage can't read it directly — it
       opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
@@ -644,42 +664,103 @@
   </div>
 </div>
 
+<!-- The teleprompter (#169, Direction B, boards/B-Prompter). Nothing in the
+     reading area but the words being read (Adam's decision): no scene
+     numbers, no shot lines, no icons between paragraphs, just a gap where a
+     scene changes. Where the reading is and every control live outside the
+     text, in the top bar and the foot. -->
 <div class="prompter" id="prompter" hidden>
+  <!-- Where the reading is: the scene and where it starts, the time read
+       and the time left (the script's own read time, as the program clock
+       counts it), and what Follow My Voice is doing. Written by
+       updatePrompterStatus() and setVoiceStatus() (20-teleprompter.js). -->
+  <div class="prompter-top">
+    <div class="pp-where">
+      <span class="pp-scene-pos" id="pp-scene-pos" aria-hidden="true"></span><span class="pp-sr" id="pp-scene-pos-sr"></span>
+      <span class="pp-scene-start" id="pp-scene-start" title="Where this scene starts"></span>
+    </div>
+    <div class="pp-clock" id="pp-clock" role="timer">
+      <span class="pp-elapsed" id="pp-elapsed">00:00</span>
+      <span class="pp-remaining" id="pp-remaining"></span>
+    </div>
+    <!-- The tally lamp lights only while it is listening; the name shows
+         only when there is something to say. -->
+    <div class="pp-voice-state" id="pp-voice-state">
+      <span class="pp-lamp" aria-hidden="true"></span>
+      <span class="pp-voice-name">Follow My Voice</span>
+      <span id="pp-voice-status" class="pp-voice-status" role="status"></span>
+    </div>
+  </div>
   <div class="prompter-viewport">
+    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
+         Mirror/Flip transform, and the reading line has to stay put and
+         right-side-up while only the text behind it flips. It comes first
+         so the band paints under the words. The guide itself is the 1px
+         reading line at the middle; the band hangs below it, one line of
+         text tall, because a cued line's top sits on the guide. -->
+    <div class="prompter-guide" aria-hidden="true">
+      <div class="prompter-band"><svg class="pp-pointer" viewBox="0 0 22 26" aria-hidden="true"><path d="M0 0L22 13L0 26z"/></svg></div>
+    </div>
     <div class="prompter-scroll" id="prompter-scroll">
       <div id="prompter-content"></div>
     </div>
-    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
-         Mirror/Flip transform, and the reading line has to stay put and
-         right-side-up while only the text behind it flips. -->
-    <div class="prompter-guide"></div>
   </div>
-  <div class="prompter-bar">
-    <button id="pp-voice" type="button">Follow My Voice</button>
-    <span id="pp-voice-status" class="pp-voice-status"></span>
-    <div class="div-sep"></div>
-    <button id="pp-play" type="button">▶ Play</button>
-    <!-- Scene mode (issue #26): off by default, remembered per device
-         (20-teleprompter.js). Prev/Next/readout only show once it's on —
-         updatePrompterSceneModeUI() toggles their `hidden`. -->
-    <button id="pp-scene-mode" type="button" title="Cue and auto-pause one scene at a time">Scene mode</button>
-    <button id="pp-scene-prev" type="button" title="Previous scene (←)" hidden>‹ Prev</button>
-    <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
-    <button id="pp-scene-next" type="button" title="Next scene (→)" hidden>Next ›</button>
-    <div class="grp">
-      <label for="pp-speed">Speed</label>
-      <input id="pp-speed" type="range" min="10" max="160" value="42">
+  <div class="prompter-foot">
+    <!-- The running order: a block per scene sized by its read time, the
+         part read filled, the playhead where the reading is. -->
+    <div class="pp-rundown" id="pp-rundown" role="progressbar" aria-label="Running order" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+      <div class="pp-rd-track" id="pp-rd-track"></div>
     </div>
-    <div class="grp">
-      <label for="pp-size">Text size</label>
-      <input id="pp-size" type="range" min="24" max="84" value="42">
+    <div class="prompter-bar">
+      <div class="pp-group pp-transport">
+        <button id="pp-play" type="button" class="pp-play" title="Play or pause (Space)"><svg class="pp-icon" aria-hidden="true"><use href="#i-play"/></svg><span class="pp-sr">Play</span></button>
+        <!-- Speed and Size are steppers now (#169). The range inputs stay,
+             hidden, as the value the app and the suites read and set; the
+             steppers and ↑/↓ write them through setPrompterSpeed() and
+             stepPrompterSize(). -->
+        <div class="pp-step">
+          <span class="pp-step-label" id="pp-speed-label">Speed</span>
+          <div class="pp-stepper" role="group" aria-labelledby="pp-speed-label">
+            <button type="button" class="pp-step-btn" id="pp-speed-down" aria-label="Slower" title="Slower (↓)"><svg class="pp-icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <output class="pp-step-value" id="pp-speed-value" for="pp-speed">1.0×</output>
+            <button type="button" class="pp-step-btn" id="pp-speed-up" aria-label="Faster" title="Faster (↑)"><svg class="pp-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <input id="pp-speed" type="range" min="10" max="160" value="42" hidden>
+        </div>
+        <div class="pp-step">
+          <span class="pp-step-label" id="pp-size-label">Size</span>
+          <div class="pp-stepper" role="group" aria-labelledby="pp-size-label">
+            <button type="button" class="pp-step-btn" id="pp-size-down" aria-label="Smaller text" title="Smaller text"><svg class="pp-icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <output class="pp-step-value" id="pp-size-value" for="pp-size">60</output>
+            <button type="button" class="pp-step-btn" id="pp-size-up" aria-label="Larger text" title="Larger text"><svg class="pp-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <input id="pp-size" type="range" min="24" max="84" value="60" hidden>
+        </div>
+      </div>
+      <div class="div-sep" aria-hidden="true"></div>
+      <div class="pp-group pp-modes">
+        <!-- Scene mode (issue #26): off by default, remembered per device
+             (20-teleprompter.js). Prev/Next/readout only show once it's on —
+             updatePrompterSceneModeUI() toggles their `hidden`. -->
+        <button id="pp-scene-mode" type="button" class="pp-btn" aria-pressed="false" title="Cue and auto-pause one scene at a time"><svg class="pp-icon" aria-hidden="true"><use href="#i-scene-mode"/></svg>Scene mode</button>
+        <div class="pp-stepper pp-scene-step" id="pp-scene-step" hidden>
+          <button id="pp-scene-prev" type="button" class="pp-step-btn" aria-label="Previous scene" title="Previous scene (←)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+          <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
+          <button id="pp-scene-next" type="button" class="pp-step-btn" aria-label="Next scene" title="Next scene (→)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+        </div>
+        <!-- The label is its own span: the icon and the lamp stay when
+             updateVoiceButtonUI() changes what it says. -->
+        <button id="pp-voice" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="pp-lamp" aria-hidden="true"></span><span class="pp-voice-label">Follow My Voice</span></button>
+        <button id="pp-skip-shot" type="button" class="pp-btn" aria-pressed="false" title="Leave out the scenes already marked Shot"><svg class="pp-icon" aria-hidden="true"><use href="#i-eye-off"/></svg>Skip shot</button>
+      </div>
+      <div class="pp-group pp-rig">
+        <button id="pp-mirror" type="button" class="pp-btn" aria-pressed="false" title="Flip left-right — for a glass beam-splitter in front of the lens (M)"><svg class="pp-icon" aria-hidden="true"><use href="#i-mirror"/></svg>Mirror</button>
+        <button id="pp-flip" type="button" class="pp-btn" aria-pressed="false" title="Flip upside-down — for a monitor mounted inverted (F)"><svg class="pp-icon" aria-hidden="true"><use href="#i-flip"/></svg>Flip</button>
+        <button id="pp-fullscreen" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-fullscreen"/></svg>Full screen</button>
+      </div>
+      <div class="spacer"></div>
+      <button id="pp-close" type="button" class="pp-btn close-btn" title="Close the teleprompter (Esc)">Close<kbd class="pp-kbd">Esc</kbd></button>
     </div>
-    <button id="pp-skip-shot" type="button" title="Leave out the scenes already marked Shot">Skip shot</button>
-    <button id="pp-mirror" type="button" title="Flip left-right — for a glass beam-splitter in front of the lens (M)">Mirror</button>
-    <button id="pp-flip" type="button" title="Flip upside-down — for a monitor mounted inverted (F)">Flip</button>
-    <button id="pp-fullscreen" type="button">Fullscreen</button>
-    <div class="spacer"></div>
-    <button id="pp-close" class="close-btn" type="button">Close (Esc)</button>
   </div>
 </div>
 
@@ -778,7 +859,7 @@
   <div class="modal-panel conflict-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
     <div class="modal-header">
       <h2 id="file-conflict-title">That file changed on disk</h2>
-      <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="file-conflict-detail"></p>
     <div class="modal-footer">
@@ -804,7 +885,7 @@
   <div class="modal-panel merge-review-panel" role="dialog" aria-modal="true" aria-labelledby="merge-review-title">
     <div class="modal-header">
       <h2 id="merge-review-title">What's different</h2>
-      <button type="button" class="modal-close" id="merge-review-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="merge-review-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="merge-review-detail"></p>
     <div id="merge-review-list"></div>
@@ -820,14 +901,18 @@
 
 <!-- A .md project whose scene table gained or lost rows somewhere else.
      There is no right answer to guess at, so it is asked (20d-formats.js). -->
-<!-- a scene's gallery, all of it (#135, 05e-gallery-overlay.js fills #gallery-body) -->
+<!-- a scene's gallery, all of it (#135, 05e-gallery-overlay.js fills #gallery-body).
+     Direction B (#169, B-GalleryDialog): the title with its counts beside
+     it on one line and an icon close; the body is the module's. -->
 <div class="modal-backdrop scene-gallery-overlay" id="gallery-modal" hidden>
-  <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
-    <div class="modal-header">
-      <h2 id="gallery-title">Scene · Visual</h2>
-      <button type="button" class="modal-close" id="gallery-close" aria-label="Close">×</button>
+  <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title" aria-describedby="gallery-summary">
+    <div class="scene-gallery-head">
+      <div class="scene-gallery-heading">
+        <h2 id="gallery-title">Scene · Visual</h2>
+        <p class="scene-gallery-summary" id="gallery-summary"></p>
+      </div>
+      <button type="button" class="scene-gallery-close" id="gallery-close" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint" id="gallery-summary"></p>
     <div id="gallery-body"></div>
   </div>
 </div>
@@ -977,7 +1062,7 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="server-title">
     <div class="modal-header">
       <h2 id="server-title">Documents on the server</h2>
-      <button type="button" class="modal-close" id="server-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="server-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint">Everyone who can reach this page sees the same documents. Saving publishes
       straight back, and if two of you edit at once the versions are merged rather than one
@@ -996,7 +1081,7 @@
   <div class="modal-panel drive-panel" role="dialog" aria-modal="true" aria-labelledby="drive-title">
     <div class="modal-header">
       <h2 id="drive-title">Google Drive files</h2>
-      <button type="button" class="modal-close" id="drive-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="drive-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="drive-web-hint">Browse, upload, rename, and delete files in any publicly shared Google
       Drive folder, straight from here — separate from opening and saving your script.</p>
@@ -1054,7 +1139,7 @@
         <div class="drive-toolbar">
           <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
           <div class="drive-toolbar-actions">
-            <button type="button" class="btn" data-action="drive-refresh" title="Refresh">⟳</button>
+            <button type="button" class="btn drive-refresh" data-action="drive-refresh" title="Refresh" aria-label="Refresh"><svg aria-hidden="true" focusable="false"><use href="#i-repeat"/></svg></button>
             <button type="button" class="btn" data-action="drive-newfolder-toggle" id="drive-newfolder-toggle">New folder</button>
             <button type="button" class="btn" data-action="drive-upload">Upload…</button>
           </div>
@@ -1166,7 +1251,7 @@
   <div class="modal-panel help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
     <div class="modal-header">
       <h2 id="help-title">Help</h2>
-      <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="help-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <div class="help-layout">
       <nav id="help-toc" aria-label="Help topics">{{HELP_TOC}}</nav>
@@ -1205,7 +1290,7 @@
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
     <div class="modal-header">
       <h2 id="pin-title">Join PIN</h2>
-      <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close">×</button>
+      <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="pin-reason">This server asks for a join PIN.</p>
     <input type="text" id="pin-input" inputmode="numeric" autocomplete="off"
@@ -1230,7 +1315,7 @@
   <div class="modal-panel connect-panel" role="dialog" aria-modal="true" aria-labelledby="connect-title">
     <div class="modal-header">
       <h2 id="connect-title">Servers</h2>
-      <button type="button" class="modal-close" data-connect-action="close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" data-connect-action="close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint">A server is someone's shared session — theirs or your own. Add its
       address once and this browser remembers it. Splitpage never stores a password or an SSH
@@ -1317,8 +1402,14 @@
 
      The starter cards are built from STARTERS (_starters.js) by
      20j-newtab.js, into #newtab-cards after Blank script, so a fourth
-     starter is a JSON file and a line in that list. Icons are inline
-     stroke SVG in currentColor, so they follow the theme. -->
+     starter is a JSON file and a line in that list. Icons are the sprite's
+     (#169), drawn in currentColor, so they follow the theme.
+
+     Direction B's "On air" start page (#169, board B-StartOnAir): the band
+     under the bar is a slate — the programme clock at 00:00, a tally lamp
+     and "New script" — and, when the desktop app has a recent script, its
+     title, when it was last open, and Continue. Recent and Join sit side
+     by side under the starters. -->
 <div class="newtab-page" id="newtab-page" hidden>
   <header class="newtab-bar">
     <span class="newtab-wordmark">
@@ -1328,77 +1419,113 @@
       Splitpage
     </span>
     <div class="newtab-bar-actions">
-      <button type="button" class="newtab-bar-btn" data-newtab-action="join" aria-label="Join a shared session">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.25"/><path d="M3 19.5c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><path d="M16 5.2a3.25 3.25 0 0 1 0 5.6"/><path d="M18 14.8c1.6.6 2.7 2.2 3 4.7"/></svg>
+      <button type="button" class="btn-outline newtab-bar-btn" data-newtab-action="join" aria-label="Join a shared session">
+        <svg class="nt-icon" aria-hidden="true"><use href="#i-people"/></svg>
         <span>Join<span class="newtab-long"> a shared session</span></span>
       </button>
-      <button type="button" class="newtab-bar-btn is-primary" data-newtab-action="open" aria-label="Open a file">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-6.2l-2-2.5H5.5a2 2 0 0 0-2 2z"/></svg>
-        <span>Open<span class="newtab-long"> a file</span></span>
+      <button type="button" class="btn-outline newtab-bar-btn is-primary" data-newtab-action="open" aria-label="Open a file">
+        <svg class="nt-icon" aria-hidden="true"><use href="#i-folder"/></svg>
+        <span>Open<span class="newtab-long"> a file…</span></span>
       </button>
     </div>
   </header>
 
   <div class="newtab-inner" role="group" aria-labelledby="newtab-title">
-    <h2 class="newtab-title" id="newtab-title">Start a script</h2>
-    <p class="newtab-sub">Pick a layout, or carry on where you left off.</p>
-
-    <div class="newtab-main">
-      <section class="newtab-new" aria-labelledby="newtab-new-label">
-        <h3 class="newtab-label" id="newtab-new-label">New</h3>
-        <div class="newtab-cards" id="newtab-cards">
-          <button type="button" class="newtab-card" data-newtab-action="new">
-            <span class="newtab-preview is-blank" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            </span>
-            <strong class="newtab-card-name">Blank script</strong>
-            <span class="newtab-card-desc">One empty scene, and nothing else.</span>
+    <!-- The slate. The clock is a picture of a script that hasn't started
+         (nothing here is timed), so it is hidden from a screen reader; the
+         heading is what names the page. -->
+    <section class="newtab-band" id="newtab-band">
+      <div class="newtab-wrap">
+        <div class="newtab-slate">
+          <span class="newtab-clock" aria-hidden="true">00:00</span>
+          <div class="newtab-slate-text">
+            <div class="newtab-slate-head">
+              <span class="newtab-lamp" aria-hidden="true"></span>
+              <h2 class="newtab-title" id="newtab-title">New script</h2>
+            </div>
+            <!-- Shown with the Continue row below and only then: with nothing
+                 to carry on, the band is the clock, the lamp and the heading. -->
+            <p class="newtab-sub" hidden>Pick a layout, or carry on where you left off.</p>
+          </div>
+        </div>
+        <!-- The most recent script (desktop only; renderContinue in
+             20j-newtab.js). Its title and when it was last open — not its
+             rundown: a recent entry carries no scenes, and drawing them
+             would mean reading the file before anyone asked to open it.
+             Continue is the same open a Recent row makes. -->
+        <div class="newtab-continue" id="newtab-continue" hidden>
+          <div class="newtab-continue-text">
+            <span class="newtab-continue-title" id="newtab-continue-title"></span>
+            <span class="newtab-continue-when" id="newtab-continue-when"></span>
+          </div>
+          <button type="button" class="newtab-continue-btn" id="newtab-continue-btn" data-newtab-action="open-recent" data-file-id="">
+            <svg class="nt-icon" aria-hidden="true"><use href="#i-play"/></svg>
+            Continue
           </button>
         </div>
-      </section>
-
-      <!-- Recent documents (issue #15). DESKTOP ONLY: the list lives in the
-           main process (desktop-state.json, contract DESKTOP-RECENTS), and
-           the browser build has no equivalent, so this stays hidden there
-           and .newtab-main keeps its one column. -->
-      <section class="newtab-recents" id="newtab-recents" aria-labelledby="newtab-recents-label" hidden>
-        <h3 class="newtab-label" id="newtab-recents-label">Recent</h3>
-        <div class="newtab-recents-box">
-          <div class="newtab-recents-list" id="newtab-recents-list"></div>
-          <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
-        </div>
-      </section>
-    </div>
-
-    <!-- The whole page takes a dropped file (20j-newtab.js); this is where
-         it says so, and it lights up while one is dragged over the page. -->
-    <div class="newtab-drop" id="newtab-drop">
-      <svg class="newtab-drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14.5v3a2.5 2.5 0 0 0 2.5 2.5h11a2.5 2.5 0 0 0 2.5-2.5v-3"/></svg>
-      <div class="newtab-drop-text">
-        <strong>Drop a script here</strong>
-        <span>.md, .splitpage, .docx, .txt or .csv — or <a href="#" data-newtab-action="paste">paste one</a> or <a href="#" data-newtab-action="gdoc">import a Google Doc link</a></span>
       </div>
-    </div>
+    </section>
 
-    <footer class="newtab-foot">
-      <a href="#" data-newtab-action="tour">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.8v6.4l5.3-3.2z"/></svg>
-        Take the one-minute tour
-      </a>
-      <a href="#" data-newtab-action="tagging-help">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12.3V4.8c0-.7.6-1.3 1.3-1.3h7.5l8.2 8.2a1.3 1.3 0 0 1 0 1.8l-7.3 7.3a1.3 1.3 0 0 1-1.8 0z"/><circle cx="8.2" cy="8.2" r="1.3"/></svg>
-        Tagging cheat sheet
-      </a>
-      <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
-      <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
-           bridge is there. The link is desktopAppUrl() (20a-update.js), the
-           same page the desktop-app notice points at. -->
-      <span class="newtab-desktop" id="newtab-desktop">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg>
-        <span>Want its own window and unlimited version history?</span>
-        <a href="https://github.com/RetroGorilla/splitpage-releases/releases/latest" id="newtab-desktop-link" target="_blank" rel="noopener">Get the desktop app</a>
-      </span>
-    </footer>
+    <div class="newtab-wrap newtab-body">
+      <div class="newtab-cards" id="newtab-cards" role="group" aria-label="Starter scripts">
+        <button type="button" class="newtab-card is-blank" data-newtab-action="new">
+          <strong class="newtab-card-name">Blank script</strong>
+          <span class="newtab-card-desc">One empty scene, and nothing else.</span>
+          <span class="newtab-preview is-blank" aria-hidden="true">
+            <svg class="nt-icon" aria-hidden="true"><use href="#i-plus"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <div class="newtab-main">
+        <!-- Recent documents (issue #15). DESKTOP ONLY: the list lives in the
+             main process (desktop-state.json, contract DESKTOP-RECENTS), and
+             the browser build has no equivalent, so this stays hidden there
+             and Join has the row to itself. -->
+        <section class="newtab-recents" id="newtab-recents" aria-labelledby="newtab-recents-label" hidden>
+          <div class="newtab-recents-head">
+            <h3 class="newtab-label" id="newtab-recents-label">Recent</h3>
+            <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
+          </div>
+          <div class="newtab-recents-list" id="newtab-recents-list"></div>
+        </section>
+
+        <!-- The same Servers dialog as the bar's "Join a shared session". -->
+        <section class="newtab-join" aria-labelledby="newtab-join-title">
+          <div class="newtab-join-copy">
+            <h3 class="newtab-join-title" id="newtab-join-title">Join a shared session</h3>
+            <p class="newtab-join-text">Open the link you were sent, or connect to a server with its PIN.</p>
+          </div>
+          <button type="button" class="btn-outline newtab-join-btn" data-newtab-action="join">Connect…</button>
+        </section>
+      </div>
+
+      <!-- The whole page takes a dropped file (20j-newtab.js); this is where
+           it says so, and it lights up while one is dragged over the page. -->
+      <div class="newtab-drop" id="newtab-drop">
+        <svg class="nt-icon newtab-drop-icon" aria-hidden="true"><use href="#i-import"/></svg>
+        <div class="newtab-drop-text">
+          <strong>Drop a script here</strong>
+          <span>.md, .splitpage, .docx, .txt or .csv — or <a href="#" data-newtab-action="paste">paste one</a> · <a href="#" data-newtab-action="gdoc">import a Google Doc link</a></span>
+        </div>
+      </div>
+
+      <footer class="newtab-foot">
+        <a href="#" data-newtab-action="tour">Take the tour</a>
+        <span class="newtab-foot-sep" aria-hidden="true">·</span>
+        <a href="#" data-newtab-action="tagging-help">Tagging cheat sheet</a>
+        <span class="newtab-foot-sep" aria-hidden="true">·</span>
+        <a href="#" data-newtab-action="dismiss">Look at the example script</a>
+        <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
+             bridge is there. The link is desktopAppUrl() (20a-update.js), the
+             same page the desktop-app notice points at. -->
+        <span class="newtab-desktop" id="newtab-desktop">
+          <svg class="nt-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
+          <span>Want its own window and unlimited version history?</span>
+          <a href="https://github.com/RetroGorilla/splitpage-releases/releases/latest" id="newtab-desktop-link" target="_blank" rel="noopener">Get the desktop app</a>
+        </span>
+      </footer>
+    </div>
   </div>
 </div>
 
@@ -1412,7 +1539,7 @@
   <div class="modal-panel onboard-panel" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="modal-header">
       <h2 id="onboard-title">Set up Splitpage</h2>
-      <button type="button" class="modal-close" data-onboard-action="skip" aria-label="Skip setup">×</button>
+      <button type="button" class="modal-close" data-onboard-action="skip" aria-label="Skip setup"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
 
     <div class="onboard-steps" id="onboard-steps" aria-hidden="true">

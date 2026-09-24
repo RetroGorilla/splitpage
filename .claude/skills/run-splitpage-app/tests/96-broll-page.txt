@@ -45,7 +45,8 @@ expect document.querySelector('#broll-page .broll-page-group .broll-loc-pin').ge
 expect Array.prototype.map.call(document.querySelectorAll('#broll-page thead th'), function(t){ return t.textContent; }).join('|') === 'Shot or to shoot|Shot|Scene|Props|Cuts against|Assigned|Note'
 expect document.querySelectorAll('#broll-page .broll-page-row').length === 8
 expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-page-row'), function(r){ var h = r.getBoundingClientRect().height; return h >= 45 && h <= 48; })
-expect getComputedStyle(document.querySelector('#broll-page .broll-page-card')).borderTopLeftRadius === '12px'
+# --radius-md, a detail card's radius since #169 (it was 12px)
+expect getComputedStyle(document.querySelector('#broll-page .broll-page-card')).borderTopLeftRadius === '8px'
 expect prow('bs1').querySelector('.broll-page-c-props').textContent === 'Fishing nets, Drone'
 expect Array.prototype.map.call(prow('bs1').querySelectorAll('.broll-page-c-props .broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Have it|Needed'
 expect prow('bs3').querySelector('.broll-page-c-props .broll-st-dot').classList.contains('is-sourcing')

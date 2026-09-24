@@ -69,6 +69,7 @@ import { __init as init_20g_drafts } from "./20g-drafts.js";
 import { __init as init_20h_appdata } from "./20h-appdata.js";
 import { __init as init_20i_topbar } from "./20i-topbar.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
+import { __init as init_20k_phone_bar } from "./20k-phone-bar.js";
 import { __init as init_21_events } from "./21-events.js";
 
 init_00_prelude();
@@ -124,4 +125,5 @@ init_20g_drafts();
 init_20h_appdata();
 init_20i_topbar();
 init_20j_newtab();
+init_20k_phone_bar();
 init_21_events();

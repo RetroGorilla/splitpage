@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { home, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
+import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
@@ -27,6 +28,9 @@ import { STARTERS, starterById } from "./_starters.js";
    issue #144 a start screen: a blank script or one of three starter
    scripts, the recent documents on desktop, a drop zone, and the file
    picker and the shared-session dialog one click away in its own top bar.
+   Since #169 it is Direction B's "On air" page (board B-StartOnAir): a
+   band with the programme clock at 00:00, a tally lamp and "New script",
+   and on desktop the most recent script with a Continue button.
 
    WHAT IT IS NOT: a modal. It is an opaque full-page layer at z-index
    130 — above the topbar (120), below the side panels (140), the modals
@@ -50,8 +54,10 @@ import { STARTERS, starterById } from "./_starters.js";
    desktop-state.json (contract DESKTOP-RECENTS) because that is the only
    side that can hold a durable reference to a file: the browser build
    remembers exactly one handle, and can only reopen one it still has
-   permission for. So in the browser this column stays hidden and the
-   page is narrower.
+   permission for. So in the browser this column stays hidden, and so
+   does the band's Continue row — which in the browser could never have
+   anything to show anyway, because a remembered handle is exactly what
+   keeps this page from showing itself there (the gate at the bottom).
 
    Nothing about the list reaches this page but what it needs to draw it
    and click it: an opaque fileId, the file's basename, the title the
@@ -256,31 +262,27 @@ function newTabOpenDropped(file) {
 /* ---- the starter cards ----
 
    Built from STARTERS once, at boot, after the Blank script card that is
-   written into page.html. The preview is drawn from the starter's own
-   rows — a teal stub per line of the visual column, an orange one per
-   line of the audio, sized by how much each actually says — so it is a
-   picture of the layout that stays true if a starter is rewritten. */
-var PREVIEW_ROWS = 4;
-var PREVIEW_LINE_CHARS = 140;
-
-function previewColumn(html, cls) {
-  var len = String(html || "").replace(/<br\s*\/?>/gi, " ").replace(/<[^>]*>/g, "").length;
-  var lines = len > PREVIEW_LINE_CHARS ? 2 : 1;
-  var last = Math.round(Math.max(30, Math.min(100, ((len % PREVIEW_LINE_CHARS) || PREVIEW_LINE_CHARS) / PREVIEW_LINE_CHARS * 100)));
-  var out = "";
-  for (var i = 0; i < lines; i++) {
-    out += '<i class="' + cls + '" style="width:' + (i < lines - 1 ? 100 : last) + '%"></i>';
-  }
-  return '<span class="newtab-preview-col">' + out + '</span>';
+   written into page.html. Each is drawn the way Direction B draws any
+   script (#169, board B-StartOnAir): the document it opens and how many
+   scenes it has, then its rundown in miniature — a block per scene, sized
+   by read time the way the editor's rundown strip sizes them — and its
+   running time. Worked out from the starter's own rows at its own reading
+   speed, so the picture stays true if a starter is rewritten. */
+function starterSceneSeconds(state) {
+  var wpm = state.wordsPerMinute || DEFAULT_WPM;
+  return state.rows.map(function (row) { return wordCount(row.audioText) / wpm * 60; });
 }
 
 function starterPreviewHtml(state) {
+  var secs = starterSceneSeconds(state);
+  var total = secs.reduce(function (n, s) { return n + s; }, 0);
+  /* Whole seconds as flex weights, with a floor of one so a scene with no
+     words yet is still a block rather than a gap. */
   return '<span class="newtab-preview" aria-hidden="true">' +
-    state.rows.slice(0, PREVIEW_ROWS).map(function (row) {
-      return '<span class="newtab-preview-row">' +
-        previewColumn(row.visualText, "is-visual") + previewColumn(row.audioText, "is-audio") +
-      '</span>';
-    }).join("") +
+    '<span class="newtab-preview-bar">' + secs.map(function (s) {
+      return '<i style="flex-grow:' + Math.max(1, Math.round(s)) + '"></i>';
+    }).join("") + '</span>' +
+    '<span class="newtab-preview-time">' + escapeHtml(formatDuration(total)) + '</span>' +
   '</span>';
 }
 
@@ -288,10 +290,16 @@ function renderStarterCards() {
   var cards = document.getElementById("newtab-cards");
   if (!cards || cards.querySelector('[data-newtab-action="starter"]')) return;
   cards.insertAdjacentHTML("beforeend", STARTERS.map(function (s) {
+    var scenes = s.state.rows.length;
     return '<button type="button" class="newtab-card" data-newtab-action="starter" data-starter="' + escapeHtml(s.id) + '">' +
-      starterPreviewHtml(s.state) +
       '<strong class="newtab-card-name">' + escapeHtml(s.name) + '</strong>' +
       '<span class="newtab-card-desc">' + escapeHtml(s.desc) + '</span>' +
+      '<span class="newtab-card-meta">' +
+        '<span class="newtab-card-doc">' + escapeHtml(s.state.title) + '</span>' +
+        '<span aria-hidden="true">·</span>' +
+        '<span class="newtab-card-count">' + scenes + (scenes === 1 ? ' scene' : ' scenes') + '</span>' +
+      '</span>' +
+      starterPreviewHtml(s.state) +
     '</button>';
   }).join(""));
 }
@@ -316,30 +324,62 @@ function recentsSupported() {
   return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
 }
 
+/* "2 h ago", "Yesterday", then a date — "12 Sep" on the board (#169),
+   in the locale's order. Each is a label of its own, so sentence case
+   starts it. The day and short month rather than a numeric date, which
+   most locales write with slashes — on a list that promises to show no
+   paths (invariant #34), and that suite 36 checks for a "/". */
 function formatRecentWhen(at) {
   if (!at) return "";
-  var days = Math.floor((Date.now() - at) / 86400000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
+  var mins = Math.floor((Date.now() - at) / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return mins + " min ago";
+  var hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + " h ago";
+  var days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
   if (days < 7) return days + " days ago";
-  return new Date(at).toLocaleDateString();
+  var d = new Date(at);
+  return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear()
+    ? { day: "numeric", month: "short" }
+    : { day: "numeric", month: "short", year: "numeric" });
 }
 
-var FORGET_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+/* The band's Continue row: the most recent entry, or nothing. Its button
+   carries the same data-newtab-action and fileId a Recent row's does, so
+   it opens through openRecent below and says the same thing when the file
+   has gone. The line under the heading ("…or carry on where you left
+   off") shows only while there is something to carry on with. */
+function renderContinue(entry) {
+  var row = document.getElementById("newtab-continue");
+  var sub = document.querySelector("#newtab-page .newtab-sub");
+  var btn = document.getElementById("newtab-continue-btn");
+  if (!row || !btn) return;
+  var has = !!(entry && entry.fileId);
+  row.hidden = !has;
+  if (sub) sub.hidden = !has;
+  if (!has) { btn.setAttribute("data-file-id", ""); return; }
+  var title = entry.title || entry.name;
+  document.getElementById("newtab-continue-title").textContent = title;
+  document.getElementById("newtab-continue-when").textContent = formatRecentWhen(entry.at);
+  btn.setAttribute("data-file-id", entry.fileId);
+  btn.setAttribute("aria-label", "Continue " + title);
+  btn.title = entry.name;
+}
 
 function renderRecents(entries) {
   var col = document.getElementById("newtab-recents");
   var list = document.getElementById("newtab-recents-list");
   var main = document.querySelector("#newtab-page .newtab-main");
-  var inner = document.querySelector("#newtab-page .newtab-inner");
   if (!col || !list) return;
   /* The column itself stays once it is up, empty list and all: "Recent
      (nothing yet)" is a truthful answer, and a column that appears and
-     disappears under the pointer as the last entry is forgotten is not. */
+     disappears under the pointer as the last entry is forgotten is not.
+     The band's Continue row does go with the last entry: it offers one
+     script, and there is none. */
   col.hidden = false;
   if (main) main.classList.add("has-recents");
-  if (inner) inner.classList.add("has-recents");
+  renderContinue(entries[0] || null);
   var clear = document.getElementById("newtab-recents-clear");
   if (clear) clear.hidden = !entries.length;
   if (!entries.length) {
@@ -352,22 +392,24 @@ function renderRecents(entries) {
     return '<div class="newtab-recent">' +
       '<button type="button" class="newtab-recent-open" data-newtab-action="open-recent" ' +
         'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
-        '<span class="newtab-recent-title">' + escapeHtml(title) + '</span>' +
-        '<span class="newtab-recent-meta">' +
-          '<span class="newtab-recent-name">' + escapeHtml(r.name) + '</span>' +
-          (when ? '<span class="newtab-recent-when">' + escapeHtml(when) + '</span>' : '') +
+        '<svg class="nt-icon newtab-recent-icon" aria-hidden="true"><use href="#i-file"/></svg>' +
+        '<span class="newtab-recent-text">' +
+          '<span class="newtab-recent-title">' + escapeHtml(title) + '</span>' +
+          '<span class="newtab-recent-meta"><span class="newtab-recent-name">' + escapeHtml(r.name) + '</span></span>' +
         '</span>' +
+        (when ? '<span class="newtab-recent-when">' + escapeHtml(when) + '</span>' : '') +
       '</button>' +
       '<button type="button" class="newtab-recent-forget" data-newtab-action="forget-recent" ' +
         'data-file-id="' + escapeHtml(r.fileId) + '" title="Forget this one" ' +
-        'aria-label="Forget ' + escapeHtml(title) + '">' + FORGET_ICON + '</button>' +
+        'aria-label="Forget ' + escapeHtml(title) + '">' +
+        '<svg class="nt-icon" aria-hidden="true"><use href="#i-close"/></svg></button>' +
     '</div>';
   }).join("");
 }
 
 async function refreshRecents() {
   updateDesktopPitch();
-  if (!recentsSupported()) return;
+  if (!recentsSupported()) { renderContinue(null); return; }
   var entries;
   try { entries = await S.DESKTOP.listRecents(); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);

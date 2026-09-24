@@ -26,6 +26,15 @@ import { reviewMode } from "./13-hosted.js";
    grid, a dashed "behind +N" line after item 3 when the cell shows only
    three, and a "+" tile to add a picture.
 
+   Drawn as Direction B's B-GalleryDialog (#169). The preview is a still —
+   a picture, or a video's first frame — on a dark monitor, never a
+   player: Splitpage plays nothing itself (Adam's call), so there is no big
+   play button to promise it. A small "▶ Video · first frame" pill says
+   what the still is, and the length sits opposite. The button that opens a
+   video says how ("Open file" plays it in the computer's own player,
+   through the desktop app; "Open link" opens the address in the browser),
+   and its title says where.
+
    Reordering: drag a tile onto another, or Shift+← / Shift+→ on the picked
    one. ← / → pick, Delete removes, Esc closes. Make cover, Remove, a move
    and an add are each one undo step (the document's own undo, 12a-undo.js)
@@ -62,6 +71,8 @@ export function openGalleryOverlay(rowId, slot, videosOnly) {
   var slots = rowSlots(got.row);
   var shown = shownSlots(slots);
   if (shown.indexOf(view.sel) === -1) view.sel = shown.length ? shown[0] : 0;
+  /* the last scene's grid goes, so its scroll is not carried over (paint) */
+  document.getElementById("gallery-body").innerHTML = "";
   modal().hidden = false;
   paint();
   var picked = modal().querySelector(".scene-gallery-grid-tile.is-selected");
@@ -121,16 +132,31 @@ function paint() {
   var sel = view.sel;
   var slot = slots[sel];
   var poster = slotPoster(slot);
+  var still = !!(slot.ref || slot.dataUrl);
   var pos = shown.indexOf(sel);
   var length = poster ? formatVideoLength(poster.duration) : "";
+  var openLink = poster || slot.links[0] || null;
+  /* What the still is, for a screen reader: the monitor is one image, its
+     pills part of it. */
+  var about = (poster ? "Video " : "Picture ") + (sel + 1) + " of " + n +
+    (poster ? ": " + videoLinkLabel(poster) + (length ? ", " + length : "") +
+      (still ? ". First frame shown; " : ". No picture of it; ") +
+      (poster.href ? "Open link opens it in your browser" : "Open file plays it in your video player")
+      : slot.name ? ": " + slot.name : "");
   var preview =
     '<div class="scene-gallery-preview">' +
-      '<button type="button" class="scene-gallery-step" data-gact="prev" aria-label="Previous"' + (shown.length < 2 ? ' disabled' : '') + '>‹</button>' +
-      '<div class="scene-gallery-preview-pic' + (poster ? ' is-video' : '') + '">' + gallerySlotPictureHtml(slot) +
-        (poster ? galleryBadgeHtml(true) : '') + (length ? '<span class="scene-gallery-length">' + length + '</span>' : '') +
+      '<button type="button" class="scene-gallery-step" data-gact="prev" aria-label="Previous"' + (shown.length < 2 ? ' disabled' : '') + '>' +
+        '<svg class="is-flipped" aria-hidden="true"><use href="#i-chevron"/></svg></button>' +
+      '<div class="scene-gallery-preview-pic' + (poster ? ' is-video' : '') + '" role="img" aria-label="' + escapeHtml(about) + '">' +
+        gallerySlotPictureHtml(slot) +
+        (poster && !still ? '<svg class="scene-gallery-preview-none" aria-hidden="true"><use href="#i-camera"/></svg>' : '') +
         '<span class="scene-gallery-position">' + (pos + 1) + ' / ' + shown.length + '</span>' +
+        (poster ? '<span class="scene-gallery-kind"><svg aria-hidden="true"><use href="#i-play"/></svg>' +
+          (still ? 'Video · first frame' : 'Video') + '</span>' : '') +
+        (length ? '<span class="scene-gallery-length">' + length + '</span>' : '') +
       '</div>' +
-      '<button type="button" class="scene-gallery-step" data-gact="next" aria-label="Next"' + (shown.length < 2 ? ' disabled' : '') + '>›</button>' +
+      '<button type="button" class="scene-gallery-step" data-gact="next" aria-label="Next"' + (shown.length < 2 ? ' disabled' : '') + '>' +
+        '<svg aria-hidden="true"><use href="#i-chevron"/></svg></button>' +
     '</div>';
 
   var caption = slot.links.length
@@ -140,14 +166,18 @@ function paint() {
           escapeHtml(videoLinkKey(l)) + '" title="' + escapeHtml(l.href || l.name) + '">' + escapeHtml(videoLinkLabel(l)) + '</button></div>';
       }).join("")
     : '<div class="scene-gallery-line is-name">' + escapeHtml(slot.name || (poster ? "" : "Picture " + (sel + 1))) + '</div>';
-  var openLink = poster || slot.links[0] || null;
-  var actions =
-    '<div class="scene-gallery-actions">' +
-      (openLink ? '<button type="button" class="btn" data-gact="open" data-key="' + escapeHtml(videoLinkKey(openLink)) + '">Open</button>' : '') +
-      (review ? '' :
-        '<button type="button" class="btn" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>Make cover</button>' +
-        '<button type="button" class="btn" data-gact="remove">Remove</button>') +
-    '</div>';
+  var buttons =
+    (openLink ? openButtonHtml(openLink) : '') +
+    (review ? '' :
+      '<button type="button" class="btn-outline" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>' + COVER_ICON + 'Make cover</button>' +
+      '<button type="button" class="scene-gallery-remove" data-gact="remove">Remove</button>');
+  /* the hint only where a drag does something: not in review, and not
+     when the grid holds one tile */
+  var hint = review || shown.length < 2 ? '' :
+    '<p class="scene-gallery-hint"><svg aria-hidden="true"><use href="#i-grip"/></svg>Drag to reorder</p>';
+  var actions = hint || buttons
+    ? '<div class="scene-gallery-actions">' + hint + '<div class="scene-gallery-buttons">' + buttons + '</div></div>'
+    : '';
 
   var grid = '<ol class="scene-gallery-grid" aria-label="All pictures and videos">';
   shown.forEach(function (i, k) {
@@ -159,15 +189,57 @@ function paint() {
       (i === sel ? ' aria-current="true"' : '') + '>' +
       gallerySlotPictureHtml(s) + (p ? galleryBadgeHtml(false) : '') + '<span class="scene-gallery-num">' + (i + 1) + '</span></button></li>';
     if (!view.videos && n > 4 && k === 2) {
-      grid += '<li class="scene-gallery-divider" aria-hidden="true"><span>behind +' + (n - 3) + '</span></li>';
+      /* the word over the count, a dashed rule above and below (app.css) */
+      grid += '<li class="scene-gallery-divider" aria-hidden="true"><span>behind</span> ' +
+        '<span class="scene-gallery-divider-count">+' + (n - 3) + '</span></li>';
     }
   });
   if (!review && !view.videos) {
-    grid += '<li><button type="button" class="scene-gallery-grid-tile is-add" data-gact="add" aria-label="Add a picture">+</button></li>';
+    grid += '<li><button type="button" class="scene-gallery-grid-tile is-add" data-gact="add" aria-label="Add a picture">' +
+      '<svg aria-hidden="true"><use href="#i-plus"/></svg></button></li>';
   }
   grid += '</ol>';
+  /* the grid scrolls past two rows (app.css): keep where it was across a
+     repaint, and bring the picked tile into it */
+  var before = modal().querySelector(".scene-gallery-grid");
+  var scrolled = before ? before.scrollTop : 0;
   document.getElementById("gallery-body").innerHTML = preview +
     '<div class="scene-gallery-preview-caption">' + caption + '</div>' + actions + grid;
+  var after = modal().querySelector(".scene-gallery-grid");
+  after.scrollTop = scrolled;
+  revealPicked(after);
+}
+
+/* B-GalleryDialog's two glyphs that are not in the sprite (#169): "open
+   elsewhere" (a box with an arrow leaving it) and "make cover" (a large
+   frame beside two small ones, the cell's mosaic). */
+var OPEN_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13M17.5 14v4.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5V8.5A1.5 1.5 0 0 1 6 7h4.5"/></svg>';
+var COVER_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3.5" y="5" width="10" height="14" rx="1.5"/>' +
+  '<rect x="16" y="5" width="4.5" height="6" rx="1"/><rect x="16" y="13" width="4.5" height="6" rx="1"/></svg>';
+
+/* The button that opens a video, saying how: a file plays in the
+   computer's own player (the desktop app hands it over — openVideoFile,
+   06-rows.js — and says so in a toast anywhere else); an address opens in
+   the browser. Its title says where. */
+function openButtonHtml(l) {
+  var title = l.href
+    ? "Opens " + videoLinkLabel(l) + (S.DESKTOP ? " in your web browser" : " in a new tab")
+    : "Plays " + l.name + " in your computer’s video player (desktop app)";
+  return '<button type="button" class="btn-outline" data-gact="open" data-key="' + escapeHtml(videoLinkKey(l)) +
+    '" title="' + escapeHtml(title) + '">' + OPEN_ICON + (l.href ? "Open link" : "Open file") + '</button>';
+}
+
+/* Scrolls the grid, and only the grid, so the picked tile and its outline
+   are in view — focus() is called with preventScroll, which would
+   otherwise leave it hidden below the second row. */
+function revealPicked(grid) {
+  var tile = grid && grid.querySelector(".scene-gallery-grid-tile.is-selected");
+  if (!tile) return;
+  var g = grid.getBoundingClientRect();
+  var t = tile.getBoundingClientRect();
+  var room = 4;   /* the selected outline: 2px, 2px out */
+  if (t.top - room < g.top) grid.scrollTop -= g.top - t.top + room;
+  else if (t.bottom + room > g.bottom) grid.scrollTop += t.bottom - g.bottom + room;
 }
 
 /* One edit of the scene's gallery: its own undo entry, the cell and the
