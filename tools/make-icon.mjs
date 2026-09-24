@@ -12,7 +12,15 @@
 //   node tools/make-icon.mjs --check  fail if they are stale or opaque
 //
 // No dependencies: icon.svg is nothing but rounded rectangles, so the few
-// hundred lines of scanline work below beat pulling in a renderer.
+// hundred lines of scanline work below beat pulling in a renderer. Since the
+// "Glass Split" icon they may also carry a vertical linear gradient
+// (fill="url(#id)"), opacity / fill-opacity, and a stroke for the hairline,
+// and are blended in painter's order. Anything else in the SVG is an error
+// here rather than a silent difference between the .ico and the browser.
+//
+// data-min-size="N" on a rect leaves it out of frames smaller than N px: the
+// fine lines on the slabs are a smudge at 16 px, and a browser ignores the
+// attribute.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -37,19 +45,56 @@ function parseSvg(svg) {
   if (!viewBox) throw new Error("icon.svg has no viewBox");
   const [minX, minY, width, height] = viewBox[1].trim().split(/\s+/).map(Number);
 
+  // Comments first, so a rect or gradient mentioned in prose is never parsed.
+  svg = svg.replace(/<!--[\s\S]*?-->/g, "");
+  for (const tag of svg.matchAll(/<(\w+)\b/g)) {
+    if (!["svg", "defs", "linearGradient", "stop", "rect"].includes(tag[1])) {
+      throw new Error(`icon.svg: <${tag[1]}> is not something tools/make-icon.mjs can draw`);
+    }
+  }
+
+  const gradients = new Map();
+  for (const g of svg.matchAll(/<linearGradient\b([^>]*)>([\s\S]*?)<\/linearGradient>/g)) {
+    const attr = attrReader(g[1]);
+    if (attr("x1", "0") !== attr("x2", "0") || attr("gradientUnits", "objectBoundingBox") !== "objectBoundingBox") {
+      throw new Error(`icon.svg: gradient "${attr("id")}" must run straight down its shape`);
+    }
+    const y1 = Number(attr("y1", "0"));
+    const y2 = Number(attr("y2", "1"));
+    const stops = [...g[2].matchAll(/<stop\b([^>]*)\/?>/g)].map((s) => {
+      const a = attrReader(s[1]);
+      return {
+        offset: Number(a("offset", "0")),
+        color: parseHex(a("stop-color", "#000000")),
+        alpha: Number(a("stop-opacity", "1")),
+      };
+    });
+    if (!stops.length) throw new Error(`icon.svg: gradient "${attr("id")}" has no stops`);
+    gradients.set(attr("id"), { y1, y2, stops });
+  }
+
+  const paint = (value, opacity) => {
+    if (!value || value === "none") return null;
+    const ref = /^url\(#([^)]+)\)$/.exec(value.trim());
+    if (ref) {
+      const gradient = gradients.get(ref[1]);
+      if (!gradient) throw new Error(`icon.svg: no gradient "${ref[1]}"`);
+      return { gradient, opacity };
+    }
+    return { color: parseHex(value), opacity };
+  };
+
   const rects = [];
   for (const tag of svg.matchAll(/<rect\b([^>]*)\/?>/g)) {
-    const attr = (name) => {
-      // The leading boundary matters: a bare /x="/ also matches inside rx="96".
-      const m = new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(tag[1]);
-      return m ? m[1] : null;
-    };
+    const attr = attrReader(tag[1]);
     const num = (name, fallback = 0) => {
       const v = attr(name);
       return v === null ? fallback : Number(v);
     };
-    const fill = attr("fill");
-    if (!fill || fill === "none") continue;
+    const opacity = num("opacity", 1);
+    const fill = paint(attr("fill", "#000000"), opacity * num("fill-opacity", 1));
+    const stroke = paint(attr("stroke"), opacity * num("stroke-opacity", 1));
+    if (!fill && !stroke) continue;
     const rx = num("rx", 0);
     rects.push({
       x: num("x"),
@@ -58,11 +103,48 @@ function parseSvg(svg) {
       h: num("height"),
       rx,
       ry: num("ry", rx),
-      color: parseHex(fill),
+      fill,
+      stroke,
+      strokeWidth: num("stroke-width", 1),
+      minSize: num("data-min-size", 0),
     });
   }
   if (!rects.length) throw new Error("icon.svg has no filled rects");
   return { minX, minY, width, height, rects };
+}
+
+function attrReader(source) {
+  return (name, fallback = null) => {
+    // The leading boundary matters: a bare /x="/ also matches inside rx="96".
+    const m = new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(source);
+    return m ? m[1] : fallback;
+  };
+}
+
+// The colour and alpha a paint has at height py inside rect. A gradient runs
+// top to bottom over the rect's own box (objectBoundingBox), clamped past its
+// first and last stops.
+function sample(paint, rect, py) {
+  if (paint.color) return [paint.color[0], paint.color[1], paint.color[2], paint.opacity];
+  const { y1, y2, stops } = paint.gradient;
+  const t = ((py - rect.y) / rect.h - y1) / (y2 - y1);
+  let a = stops[0];
+  let b = stops[stops.length - 1];
+  if (t <= a.offset) b = a;
+  else if (t >= b.offset) a = b;
+  else {
+    for (let i = 1; i < stops.length; i++) {
+      if (t <= stops[i].offset) { a = stops[i - 1]; b = stops[i]; break; }
+    }
+  }
+  const k = b.offset > a.offset ? (t - a.offset) / (b.offset - a.offset) : 0;
+  const mix = (p, q) => p + (q - p) * k;
+  return [
+    mix(a.color[0], b.color[0]),
+    mix(a.color[1], b.color[1]),
+    mix(a.color[2], b.color[2]),
+    mix(a.alpha, b.alpha) * paint.opacity,
+  ];
 }
 
 function parseHex(fill) {
@@ -88,44 +170,66 @@ function covers(rect, px, py) {
   return dx * dx + dy * dy <= 1;
 }
 
-// Renders one frame as straight (non-premultiplied) RGBA. Each sample is either
-// fully covered by the topmost rect under it or fully transparent; averaging
-// the samples is what produces the anti-aliased edge and the partial alpha
-// along the rounded corners.
+// A stroke is the band stroke-width wide centred on the rect's outline: inside
+// the rect grown by half the width and not inside it shrunk by half.
+function inStroke(rect, px, py) {
+  const h = rect.strokeWidth / 2;
+  const grow = (d) => ({ x: rect.x - d, y: rect.y - d, w: rect.w + 2 * d, h: rect.h + 2 * d, rx: Math.max(0, rect.rx + d), ry: Math.max(0, rect.ry + d) });
+  return covers(grow(h), px, py) && !covers(grow(-h), px, py);
+}
+
+// Renders one frame as straight (non-premultiplied) RGBA. Every sample blends
+// the rects under it in painter's order ("over", premultiplied), then the
+// samples are averaged: that is what anti-aliases the edges and gives the
+// rounded corners their partial alpha. A sample nothing covers stays
+// transparent.
 function render(doc, size) {
   const px = new Uint8Array(size * size * 4);
   const step = doc.width / (size * SUPERSAMPLE);
   const half = step / 2;
+  const rects = doc.rects.filter((rect) => size >= rect.minSize);
+  const total = SUPERSAMPLE * SUPERSAMPLE;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       let r = 0;
       let g = 0;
       let b = 0;
-      let hits = 0;
+      let a = 0;
       for (let sy = 0; sy < SUPERSAMPLE; sy++) {
         const uy = doc.minY + (y * SUPERSAMPLE + sy) * step + half;
         for (let sx = 0; sx < SUPERSAMPLE; sx++) {
           const ux = doc.minX + (x * SUPERSAMPLE + sx) * step + half;
-          let hit = null;
-          for (const rect of doc.rects) if (covers(rect, ux, uy)) hit = rect; // last wins: painter's order
-          if (!hit) continue;
-          r += hit.color[0];
-          g += hit.color[1];
-          b += hit.color[2];
-          hits++;
+          // premultiplied colour of this sample
+          let sr = 0;
+          let sg = 0;
+          let sb = 0;
+          let sa = 0;
+          const over = (c) => {
+            const k = 1 - c[3];
+            sr = c[0] * c[3] + sr * k;
+            sg = c[1] * c[3] + sg * k;
+            sb = c[2] * c[3] + sb * k;
+            sa = c[3] + sa * k;
+          };
+          for (const rect of rects) {
+            if (rect.fill && covers(rect, ux, uy)) over(sample(rect.fill, rect, uy));
+            if (rect.stroke && inStroke(rect, ux, uy)) over(sample(rect.stroke, rect, uy));
+          }
+          r += sr;
+          g += sg;
+          b += sb;
+          a += sa;
         }
       }
+      if (!a) continue; // leave it transparent black
       const o = (y * size + x) * 4;
-      const total = SUPERSAMPLE * SUPERSAMPLE;
-      if (!hits) continue; // leave it transparent black
-      // Average over the covered samples only, so an edge pixel keeps the
-      // shape's colour and carries the coverage in alpha instead of bleeding
-      // toward transparent black.
-      px[o] = Math.round(r / hits);
-      px[o + 1] = Math.round(g / hits);
-      px[o + 2] = Math.round(b / hits);
-      px[o + 3] = Math.round((hits / total) * 255);
+      // Un-premultiply, so an edge pixel keeps the shape's colour and carries
+      // the coverage in alpha instead of bleeding toward transparent black.
+      px[o] = Math.round(r / a);
+      px[o + 1] = Math.round(g / a);
+      px[o + 2] = Math.round(b / a);
+      px[o + 3] = Math.round((a / total) * 255);
     }
   }
   return px;
