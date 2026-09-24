@@ -3,7 +3,7 @@ import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
-import { SIDE_PANEL_IDS } from "./03b-side-panels.js";
+import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { pad2, render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
@@ -1464,8 +1464,9 @@ export function wireBrollPanel() {
    (one question, "what am I looking at", asked in two places); the page's
    grouping is its own, since it defaults differently.
 
-   It covers the whole screen, so it closes the side panels (HANDOFF
-   invariant #16) — the b-roll panel comes back when it closes if it was
+   It covers the whole screen, so it closes the side panels through
+   closeAllSidePanels() (HANDOFF invariant #16) — the b-roll panel, which
+   is where the page is opened from, comes back when it closes if it was
    open — and owns the focus while it is up (invariant #19): Escape or
    "← Script" closes it and gives the focus back to what opened it. */
 
@@ -1504,11 +1505,7 @@ export function openBrollPage() {
   pagePanelWasOpen = !!panel && !panel.hidden;
   groupMenuOpen = false;
   menuFor = null;
-  SIDE_PANEL_IDS.forEach(function (pid) {
-    var el = document.getElementById(pid);
-    if (el) el.hidden = true;
-  });
-  syncPanelClass();
+  closeAllSidePanels();
   page.hidden = false;
   document.body.classList.add("broll-page-open");
   renderBrollPage();

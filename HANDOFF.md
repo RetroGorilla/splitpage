@@ -1182,11 +1182,20 @@ bytes, #82 — nothing deletes them yet, D4).
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
 16. **Anything that opens over the whole screen must close the side
-    panels.** Not yet true everywhere: `openWriter()` closes Production,
-    Gear, Comments and find but not B-roll or History, and `openPrompter()`
-    closes none (#163). Help (`closeSidePanelsForHelp()`) and the full-page
-    shot list (`openBrollPage()`) each walk `SIDE_PANEL_IDS` with their own
-    loop; #163 folds all four into one helper. Writer and Present sit at
+    panels**, through the one helper `closeAllSidePanels()`
+    (03b-side-panels.js, #163). It walks `SIDE_PANEL_IDS`, calls each open
+    panel's own close function (`closeCommentsPanel()`,
+    `closeProductionPanel()`, `closeGearPanel()`, `closeBrollPanel()`,
+    `closeHistoryPanel()`, via `SIDE_PANEL_CLOSERS`) and then
+    `syncPanelClass()` once, so `body.panel-open` and `#root`'s padding
+    reset. Present (`openPrompter()`), the Writer (`openWriter()`, which
+    also closes the find bar), Help, the tour, the setup wizard and the
+    full-page shot list (`openBrollPage()`) all call it. Leaving Present or
+    the Writer brings no panel back; the shot list alone reopens the B-roll
+    panel on close if that is where it was opened from. A new panel goes in
+    `SIDE_PANEL_WIDTH_DEFAULTS` (which is `SIDE_PANEL_IDS`) and, if it has a
+    close function, in `SIDE_PANEL_CLOSERS`. `tests/85-side-panels-modes.txt`
+    checks every panel against both modes. Writer and Present sit at
     `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
 18. **A comment's anchor is its `cmt` mark in the script; `rowId`/`field`
