@@ -4237,12 +4237,19 @@
   }
   .comment-quote.orphaned { color: var(--text-faint); }
   .comment-quote.orphaned .comment-quote-words { text-decoration-color: var(--text-faint); }
-  .comment-orphan-note {
-    margin-top: 4px;
-    font-family: var(--font-body); font-style: normal; font-size: 12.5px; line-height: 16px;
-    color: var(--text-faint);
+  /* "No longer in script" / "Changed" (#186): a small tag after the quote,
+     upright and in --danger so it never reads as quoted words */
+  .comment-state-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-family: var(--font-body); font-style: normal; font-weight: 600;
+    font-size: 11px; line-height: 17px;
+    vertical-align: 2px;
+    white-space: nowrap;
   }
-  .comment-orphan-note s { color: inherit; }
   .comment-resolved-note {
     display: flex; align-items: center; gap: 6px;
     margin-top: 8px;

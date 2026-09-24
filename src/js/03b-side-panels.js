@@ -1,3 +1,8 @@
+import { closeHistoryPanel, syncPanelClass } from "./03-sync.js";
+import { closeGearPanel, closeProductionPanel } from "./08-production-panels.js";
+import { closeBrollPanel } from "./08d-broll-panel.js";
+import { closeCommentsPanel } from "./10-comments.js";
+
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
    run in fragment order rather than in whatever order the bundle lands in. */
@@ -154,6 +159,38 @@ function initSidePanelResize(id) {
 
 export function initSidePanelResizeHandles() {
   SIDE_PANEL_IDS.forEach(initSidePanelResize);
+}
+
+/* ================= closing every side panel =================
+
+   Anything that opens over the whole screen closes the side panels first
+   (HANDOFF invariant #16): Present, the Writer, Help and the full-page
+   shot list all come through here, so a panel added to SIDE_PANEL_IDS is
+   closed by every one of them without anyone remembering to (#163).
+
+   Each open panel is closed by its own close function, which may do more
+   than hide it (the b-roll panel drops an open menu); a panel without one
+   is just hidden. syncPanelClass() then runs once more at the end so
+   body.panel-open, #root's padding and the header toggles are right
+   however many panels there were. Nothing is remembered: leaving the mode
+   does not bring a panel back. */
+var SIDE_PANEL_CLOSERS = {
+  "comments-panel": closeCommentsPanel,
+  "production-panel": closeProductionPanel,
+  "gear-panel": closeGearPanel,
+  "broll-panel": closeBrollPanel,
+  "history-panel": closeHistoryPanel
+};
+
+export function closeAllSidePanels() {
+  SIDE_PANEL_IDS.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el || el.hidden) return;
+    var close = SIDE_PANEL_CLOSERS[id];
+    if (typeof close === "function") close();
+    el.hidden = true;
+  });
+  syncPanelClass();
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
