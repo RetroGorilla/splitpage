@@ -7,7 +7,7 @@
 
 open
 
-click text*=COMMENTS
+click #btn-comments
 sleep 500
 expect document.querySelectorAll('.comment-card').length == 1
 expect document.querySelector('.comment-card').classList.contains('is-jumpable')
@@ -25,9 +25,9 @@ sleep 300
 expect document.querySelector('.cmt-anchor').textContent.indexOf('word for word-ish') !== -1
 
 # --- reopen the panel to pick up the render --------------------------------
-click text*=COMMENTS
+click #btn-comments
 sleep 300
-click text*=COMMENTS
+click #btn-comments
 sleep 500
 expect document.querySelectorAll('.comment-card').length == 1
 expect document.querySelector('.comment-card').classList.contains('is-jumpable')
@@ -53,9 +53,9 @@ sleep 300
 eval document.activeElement.blur()
 sleep 300
 
-click text*=COMMENTS
+click #btn-comments
 sleep 300
-click text*=COMMENTS
+click #btn-comments
 sleep 500
 expect document.querySelectorAll('.comment-card').length == 1
 expect document.querySelector('.comment-card').classList.contains('is-jumpable') === false

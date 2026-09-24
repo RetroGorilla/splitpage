@@ -49,7 +49,7 @@ expect getComputedStyle(document.querySelector('#broll-page .broll-page-card')).
 expect prow('bs1').querySelector('.broll-page-c-props').textContent === 'Fishing nets, Drone'
 expect Array.prototype.map.call(prow('bs1').querySelectorAll('.broll-page-c-props .broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Have it|Needed'
 expect prow('bs3').querySelector('.broll-page-c-props .broll-st-dot').classList.contains('is-sourcing')
-expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(193, 70, 28)'
+expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(158, 88, 0)'
 expect prow('bs1').querySelector('.broll-page-c-cuts').textContent.indexOf('Every morning') === 0
 expect prow('bs1').querySelector('.broll-page-scene').textContent === '01'
 expect prow('bs2').classList.contains('is-flagged') && !prow('bs4').classList.contains('is-flagged')
@@ -120,10 +120,10 @@ expect window.__pdf.indexOf('hands mending a net') !== -1 && window.__pdf.indexO
 
 # ---- 7. dark mode takes the dark tokens --------------------------------
 eval document.documentElement.setAttribute('data-theme', 'dark')
-expect getComputedStyle(document.getElementById('broll-page')).backgroundColor === 'rgb(22, 19, 15)'
+expect getComputedStyle(document.getElementById('broll-page')).backgroundColor === 'rgb(15, 14, 12)'
 expect getComputedStyle(prow('bs2').querySelector('td')).backgroundColor !== 'rgb(255, 247, 245)'
-expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(255, 133, 82)'
-expect getComputedStyle(prow('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(86, 214, 188)'
+expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(249, 182, 79)'
+expect getComputedStyle(prow('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(100, 209, 215)'
 shot 96-broll-page-dark
 eval document.documentElement.setAttribute('data-theme', 'light')
 

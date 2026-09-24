@@ -37,7 +37,8 @@ expect !document.getElementById('export-modal').hidden
 expect document.getElementById('file-menu').hidden
 expect document.querySelector('#export-modal .export-panel').getAttribute('role') == dialog
 expect Math.round(document.querySelector('#export-modal .export-panel').getBoundingClientRect().width) == 940
-expect getComputedStyle(document.querySelector('#export-modal .export-panel')).borderTopLeftRadius == 18px
+# --radius, every dialog's radius since #169 (it was 18px)
+expect getComputedStyle(document.querySelector('#export-modal .export-panel')).borderTopLeftRadius == 10px
 expect document.querySelector('input[name="export-format"]:checked').value == pdf
 expect document.activeElement === document.querySelector('input[name="export-format"]:checked')
 expect document.getElementById('export-go').textContent == Export PDF

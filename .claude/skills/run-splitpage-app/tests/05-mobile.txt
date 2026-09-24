@@ -48,7 +48,7 @@ sleep 700
 expect document.querySelectorAll('#rows .visual-cell .tag-anchor').length == 1
 
 # --- long-press starts a selection; a tap then toggles ----------------------
-click text*=PRODUCTION
+click #btn-production
 sleep 600
 expect document.querySelectorAll('#production-list .tag-entity').length >= 1
 

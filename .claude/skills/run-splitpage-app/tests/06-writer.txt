@@ -9,8 +9,8 @@
 open
 
 # --- one paragraph per scene ------------------------------------------------
-# by id, not text=: .btn is text-transform:uppercase and the driver matches
-# on innerText, which returns the rendered casing ("WRITE")
+# by id, not text=: an id outlives a relabel (until #169 .btn was also
+# uppercased by CSS, and text= matches innerText's rendered casing)
 click #btn-write
 sleep 700
 expect !document.getElementById('writer').hidden
@@ -121,8 +121,8 @@ expect document.querySelector('#rows .row .audio-cell .cell-editable strong').te
 expect document.querySelectorAll('#rows .row .audio-cell .cell-editable em').length >= 1
 
 # --- the gutter cycles: visuals -> numbers -> compact -> visuals ------------
-# by id, not text=: .btn is text-transform:uppercase and the driver matches
-# on innerText, which returns the rendered casing ("WRITE")
+# by id, not text=: an id outlives a relabel (until #169 .btn was also
+# uppercased by CSS, and text= matches innerText's rendered casing)
 click #btn-write
 sleep 600
 expect document.getElementById('writer').getAttribute('data-gutter') == visuals

@@ -1049,8 +1049,8 @@ export function promptForName() {
   wrap.style.position = "absolute";
   wrap.style.zIndex = "170";
   wrap.style.background = "var(--surface)";
-  wrap.style.border = "1px solid var(--border)";
-  wrap.style.borderRadius = "8px";
+  wrap.style.border = "1px solid var(--border-strong)";
+  wrap.style.borderRadius = "var(--radius-md)";
   wrap.style.padding = "8px";
   wrap.style.boxShadow = "var(--shadow)";
   wrap.innerHTML =
@@ -1088,8 +1088,8 @@ export function promptForWpm() {
   wrap.style.position = "absolute";
   wrap.style.zIndex = "170";
   wrap.style.background = "var(--surface)";
-  wrap.style.border = "1px solid var(--border)";
-  wrap.style.borderRadius = "8px";
+  wrap.style.border = "1px solid var(--border-strong)";
+  wrap.style.borderRadius = "var(--radius-md)";
   wrap.style.padding = "8px";
   wrap.style.boxShadow = "var(--shadow)";
   wrap.innerHTML =

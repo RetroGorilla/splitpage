@@ -39,8 +39,8 @@ expect document.getElementById('newtab-recents-list').textContent.indexOf('/') =
 # thing on the page in the mono face
 expect innerWidth < 1100 || document.getElementById('newtab-recents').getBoundingClientRect().left > document.getElementById('newtab-cards').getBoundingClientRect().right
 expect innerWidth < 1100 || Math.abs(document.getElementById('newtab-recents').getBoundingClientRect().width - 380) < 2
-expect getComputedStyle(document.querySelector('.newtab-recent-name')).fontFamily.indexOf('Plex Mono') !== -1
-expect getComputedStyle(document.querySelector('.newtab-recent-title')).fontFamily.indexOf('Work Sans') !== -1
+expect getComputedStyle(document.querySelector('.newtab-recent-name')).fontFamily.indexOf('Chivo Mono') !== -1
+expect getComputedStyle(document.querySelector('.newtab-recent-title')).fontFamily.indexOf('Chivo,') === 0
 # ...and no desktop-app pitch inside the desktop app
 expect document.getElementById('newtab-desktop').hidden == true
 

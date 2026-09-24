@@ -91,9 +91,10 @@ expect row('bs1').querySelector('.broll-row-meta').textContent.indexOf('Harbour'
 expect row('bs1').querySelector('.broll-avatar').textContent === 'JS'
 expect row('bs1').querySelector('.broll-row-meta').textContent.indexOf('Jordan Sato') !== -1
 expect row('bs1').querySelector('.broll-meta-props').textContent === 'Fishing nets, Drone'
-# each prop's status as a dot before its name: Have it teal, Needed a hollow ring
+# each prop's status as a dot before its name: Have it --ok (the b-roll cyan
+# since #169; the Visual teal before), Needed a hollow ring
 expect Array.prototype.map.call(row('bs1').querySelectorAll('.broll-meta-props .broll-st-dot'), function(d){ return d.className.replace('broll-st-dot ', '') + ':' + d.getAttribute('title'); }).join('|') === 'is-have:Have it|is-needed:Needed'
-expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(27, 122, 104)'
+expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(0, 113, 127)'
 expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-needed')).backgroundColor === 'rgba(0, 0, 0, 0)'
 expect row('bs1').querySelector('.broll-meta-props').getAttribute('title') === 'Fishing nets (Have it), Drone (Needed)'
 expect row('bs1').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
