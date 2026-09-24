@@ -575,17 +575,56 @@ export function setPrompterSceneMode(on) {
   else { promptSceneIndex = -1; promptSceneEndWordOffset = null; }
 }
 
+/* ---- arriving and leaving (#133) ----
+   The prompter fades in over the editor and back out (app.css, "Present and
+   the Writer arriving and leaving"), which is all CSS: `hidden` still flips
+   here, in the same call, and everything the reader needs is ready in that
+   same call. Only the pixels are eased. Two things here are about the
+   motion rather than the reader:
+
+   - The page's scroll lock (body.prompter-open) goes on once the prompter
+     has finished arriving. Locking it takes the window's scrollbar away and
+     the whole editor steps sideways by its width; in the first frame of the
+     fade that step is in plain view under a nearly clear layer, at the end
+     of it nothing shows through. Nothing reads the class but the scroll
+     lock, and the prompter's own scroller is what a wheel over it moves.
+   - Leaving fullscreen is the browser's own movement and cannot be styled.
+     Fading out while it runs is two animations fighting, so the prompter
+     holds (.is-holding keeps it on screen and opaque) until the browser is
+     out of fullscreen, and fades after. `prompterLeaveSeq` makes a hold
+     that ends after the prompter was opened again, or closed again, do
+     nothing. */
+var prompterLeaveSeq = 0;
+
+function lockPageScrollWhenArrived(el) {
+  var lock = function () { if (S.prompterOpen) document.body.classList.add("prompter-open"); };
+  /* getAnimations() brings style up to date first, so the entrance started
+     by the `hidden` flip is already in the list (none at all without
+     @starting-style, or once reduced motion has made it instant) */
+  var arriving = el.getAnimations ? el.getAnimations().filter(function (a) {
+    return a.effect && a.effect.target === el;
+  }) : [];
+  if (!arriving.length) { lock(); return; }
+  /* finished rejects when the entrance is cancelled — closed again before
+     it ended — and then there is nothing to lock */
+  Promise.all(arriving.map(function (a) { return a.finished; })).then(lock, function () {});
+}
+
 export function openPrompter() {
   /* Present covers the whole screen, so the side panels close rather than
-     wait underneath it (invariant #16, #163). */
+     wait underneath it (invariant #16, #163). They slide out beneath the
+     prompter's fade, starting in the same frame. */
   closeAllSidePanels();
   buildPrompterContent();
   var el = document.getElementById("prompter");
+  prompterLeaveSeq++;
+  el.classList.remove("is-holding");
+  el.inert = false;
   el.hidden = false;
+  S.prompterOpen = true;
   /* the page's own scrollbar has nothing to scroll while this covers it
      (#169; the b-roll page and the New Tab page do the same) */
-  document.body.classList.add("prompter-open");
-  S.prompterOpen = true;
+  lockPageScrollWhenArrived(el);
   document.getElementById("prompter-scroll").scrollTop = 0;
   setPrompterPlaying(false);
   applyPrompterDefaultSize();
@@ -600,15 +639,31 @@ export function openPrompter() {
 }
 
 export function closePrompter() {
+  /* The reader is done: the scroll, the voice and the wake lock stop now,
+     not when the fade ends. */
   setPrompterPlaying(false);
   stopVoiceFollow();
-  document.getElementById("prompter").hidden = true;
-  document.body.classList.remove("prompter-open");
   S.prompterOpen = false;
   releaseWakeLock();
+  var el = document.getElementById("prompter");
+  /* A layer on its way out keeps nothing: the focus leaves it (Space on a
+     still-focused Close would press it again) and inert takes it out of
+     reach, so a click during the fade lands on the editor coming back. */
+  if (el.contains(document.activeElement)) document.activeElement.blur();
+  el.inert = true;
+  var seq = ++prompterLeaveSeq;
   if (document.fullscreenElement) {
-    document.exitFullscreen().catch(function () {});
+    el.classList.add("is-holding");
+    var fade = function () { if (seq === prompterLeaveSeq) el.classList.remove("is-holding"); };
+    document.exitFullscreen().then(fade, fade);
+    /* a browser that never settles the promise must not leave the
+       prompter standing over the editor */
+    setTimeout(fade, 1000);
   }
+  el.hidden = true;
+  /* with the hide, so the page's scrollbar is back before anything shows
+     through (a fullscreen prompter is still opaque over it) */
+  document.body.classList.remove("prompter-open");
 }
 
 export function setPrompterPlaying(on) {
