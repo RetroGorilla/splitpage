@@ -1,0 +1,130 @@
+# The rundown's hover lens (issue #184, 05f-rundown.js): over the strip,
+# the scenes near the pointer grow to a readable width and the rest shrink
+# to make room, so a 3-second scene in a long script can be read and hit.
+# The layout math is src/test/rundown.test.mjs; this is the page: an
+# 80-scene document opened through the real open path, the pointer moved
+# with PointerEvents (pointerType "mouse") on the track, since the driver
+# has no hover of its own — then a real click, which is a real mouse at
+# that point.
+#
+# Checked: a sliver gets its number and read time and is under the pointer;
+# a real click there goes to that scene; the strip is never re-rendered by
+# a pointer move (its children stay the same nodes); the ruler and the
+# #170 overlay fade while lensed and rundownX() answers in lensed pixels;
+# b-roll ticks and the playhead move with the blocks; a slow move keeps the
+# scene under the pointer; leaving puts every block back exactly; keyboard
+# focus opens the lens on the focused block; reduced motion lenses without
+# the glide; a touch never lenses; the condensed header lenses too.
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; var w = function(n){ var a = []; for (var i = 0; i < n; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 80; i++) { var n = i === 40 ? 0 : (i % 9 === 4 ? 4 : 10 + (i * 7) % 28); rows.push({ id: 'r' + i, visualText: (i % 5 === 0 ? 'B-roll: shot ' + i + '<br>B-roll: another ' + i : 'Visual ' + i), audioText: (i === 40 ? '' : 'Scene ' + i + ' opens ' + w(n)), status: i % 4 === 0 ? 'shot' : i % 4 === 1 ? 'ready' : 'todo' }); } F.openFile(new File([JSON.stringify({ schema: 2, title: 'Lens suite', rows: rows })], 'lens-suite.splitpage')); return true; })()
+wait F.state().title === 'Lens suite' && document.querySelectorAll('#rundown .rd-block').length === 80
+sleep 300
+eval (function(){ window.blk = function(i){ return document.querySelectorAll('#rundown .rd-block')[i]; }; window.track = function(){ return document.querySelector('#rundown .rundown-track'); }; window.move = function(x, type){ var r = track().getBoundingClientRect(); track().dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: r.top + 18, pointerType: type || 'mouse' })); }; window.shown = function(el){ return getComputedStyle(el).display !== 'none'; }; window.under = function(x){ var r = track().getBoundingClientRect(); var el = document.elementFromPoint(x, r.top + 18); var b = el && el.closest && el.closest('.rd-block'); return b ? Number(b.getAttribute('data-i')) : -1; }; return true; })()
+
+# --- at rest: to scale, scene 14 (index 13) a sliver with no labels ----------
+expect RT.lens().Z === null
+expect !document.getElementById('rundown').classList.contains('is-lensed')
+eval (function(){ window.__rest = Array.prototype.map.call(document.querySelectorAll('#rundown .rd-block'), function(b){ return b.style.left + '|' + b.style.width; }); var r = blk(13).getBoundingClientRect(); window.__x = r.left + r.width / 2; return [r.width, window.__x]; })()
+expect blk(13).getBoundingClientRect().width < 26
+expect !shown(blk(13).querySelector('.rd-num'))
+# b-roll ticks are inside their block now, so they move with it
+expect blk(15).querySelectorAll('.rd-broll').length === 2
+expect document.querySelectorAll('#rundown .rundown-blocks > .rd-broll').length === 0
+
+# --- hovering the sliver opens the lens on it ---------------------------------
+eval (function(){ window.__muts = 0; window.__mo = new MutationObserver(function(list){ list.forEach(function(m){ if (m.type === 'childList') window.__muts++; }); }); window.__mo.observe(document.querySelector('#rundown .rundown-blocks'), { childList: true, subtree: true }); window.__nodes = Array.prototype.slice.call(document.querySelectorAll('#rundown .rd-block')); move(__x); return true; })()
+wait document.getElementById('rundown').classList.contains('is-lensed')
+wait blk(13).getBoundingClientRect().width >= 80
+sleep 300
+expect under(__x) === 13
+expect shown(blk(13).querySelector('.rd-num'))
+expect shown(blk(13).querySelector('.rd-len'))
+expect blk(13).querySelector('.rd-num').textContent == 14
+# neighbours grow a little less; far scenes shrink; the whole script still fits
+expect blk(12).getBoundingClientRect().width > 20
+expect blk(70).getBoundingClientRect().width < parseFloat(__rest[70].split('|')[1])
+expect (function(){ var t = track().getBoundingClientRect(); var last = blk(79).getBoundingClientRect(); var first = blk(0).getBoundingClientRect(); return first.left >= t.left - 0.5 && last.right <= t.right + 0.5; })()
+# blocks stay in order, none overlapping the next
+expect (function(){ var bs = document.querySelectorAll('#rundown .rd-block'); for (var i = 1; i < bs.length; i++) { if (parseFloat(bs[i].style.left) < parseFloat(bs[i-1].style.left)) return false; } return true; })()
+# the ruler and the overlay fade; rundownX() is where a time is on screen now
+wait parseFloat(getComputedStyle(document.querySelector('#rundown .rundown-ruler')).opacity) === 0
+expect parseFloat(getComputedStyle(document.getElementById('rundown-overlay')).opacity) === 0
+expect Math.abs(RT.x(RT.lens().starts[13]) - parseFloat(blk(13).style.left)) < 0.6
+expect Math.abs(RT.x(RT.lens().starts[60]) - parseFloat(blk(60).style.left)) < 0.6
+# a b-roll block's ticks sit inside it
+expect (function(){ var b = blk(15).getBoundingClientRect(); return Array.prototype.every.call(blk(15).querySelectorAll('.rd-broll'), function(t){ var r = t.getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1; }); })()
+# no pointer move re-rendered the strip: the same block nodes, no child changes
+expect window.__muts === 0
+expect Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block'), function(b, i){ return b === window.__nodes[i]; })
+
+# --- a slow move keeps the scene under the pointer ----------------------------
+eval (async function(){ for (var k = 1; k <= 20; k++) { move(__x + k); await new Promise(function(r){ setTimeout(r, 18); }); } return under(__x + 20); })()
+sleep 300
+expect under(__x + 20) === 13
+expect window.__muts === 0
+
+# --- a real click lands on what is under the pointer and goes to the scene ----
+eval (function(){ var r = blk(13).getBoundingClientRect(); return [r.left, r.width, __x + 20]; })()
+click #rundown .rd-block[data-i="13"]
+wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r13'
+expect (function(){ var r = document.querySelector('#rows .row[data-id="r13"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
+# the playhead is on that scene's block, lensed
+wait !document.querySelector('#rundown .rundown-playhead').hidden
+sleep 300
+expect Math.abs(parseFloat(document.querySelector('#rundown .rundown-playhead').style.left) - (parseFloat(blk(13).style.left) - 1)) < 0.6
+expect blk(13).classList.contains('is-current')
+
+# --- leaving the strip puts every block back exactly --------------------------
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+wait RT.lens().Z === null
+expect !document.getElementById('rundown').classList.contains('is-lensed')
+expect Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block'), function(b, i){ return i === 13 ? true : (b.style.left + '|' + b.style.width) === __rest[i]; })
+expect blk(13).style.width === __rest[13].split('|')[1]
+wait parseFloat(getComputedStyle(document.querySelector('#rundown .rundown-ruler')).opacity) === 1
+
+# --- keyboard focus opens the lens on the focused block -----------------------
+eval blk(12).focus()
+key ArrowRight
+wait document.activeElement === blk(13)
+wait RT.lens().on && RT.lens().src === 'focus'
+wait blk(13).getBoundingClientRect().width >= 80
+key ArrowRight
+wait document.activeElement === blk(14)
+wait blk(14).getBoundingClientRect().width >= 60
+eval document.activeElement.blur()
+wait RT.lens().Z === null
+
+# --- reduced motion: still magnifies, in one frame ----------------------------
+eval (function(){ window.__mm = window.matchMedia; window.matchMedia = function(q){ if (/reduced-motion/.test(q)) return { matches: true, media: q, addListener: function(){}, removeListener: function(){}, addEventListener: function(){}, removeEventListener: function(){} }; return window.__mm.call(window, q); }; return true; })()
+eval (async function(){ move(__x); await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); }); window.__w1 = blk(13).getBoundingClientRect().width; return window.__w1; })()
+sleep 400
+expect window.__w1 >= 80
+expect Math.abs(blk(13).getBoundingClientRect().width - window.__w1) < 0.5
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+eval (async function(){ await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); }); return RT.lens().Z === null; })()
+expect RT.lens().Z === null
+eval (function(){ window.matchMedia = window.__mm; return true; })()
+
+# --- a touch never lenses -----------------------------------------------------
+eval move(__x, 'touch')
+sleep 300
+expect RT.lens().Z === null
+expect !document.getElementById('rundown').classList.contains('is-lensed')
+
+# --- the condensed header lenses too ------------------------------------------
+eval (function(){ window.scrollTo(0, 1500); return true; })()
+wait document.querySelector('.topbar').classList.contains('is-condensed')
+sleep 400
+eval (function(){ var r = blk(30).getBoundingClientRect(); window.__x2 = r.left + r.width / 2; move(__x2); return true; })()
+wait document.getElementById('rundown').classList.contains('is-lensed')
+sleep 300
+expect under(__x2) === 30
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+wait RT.lens().Z === null
+eval window.__mo.disconnect()
+
+quit

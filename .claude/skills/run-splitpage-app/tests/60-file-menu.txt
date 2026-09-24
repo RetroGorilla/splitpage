@@ -177,9 +177,9 @@ expect F.docId() === window.__docId0
 # --- every data-file-action is here exactly once ----------------------------
 # The old flat menu's 34 (tests and the desktop native menu click them),
 # plus New script, Export… / Export again (#146) — the eleven formats' own
-# buttons wait, hidden, in the Export group for the dialog to click — and
-# Search commands… (#147).
-eval (function(){var ids=["save-as","save-back","autosave","open","paste","gdoc-import","drive-open","server-open","server-publish","share-link","servers","export-docx","export-md","export-md-table","export-csv","export-breakdown","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","history","find","toggle-hide-shot","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
+# buttons wait, hidden, in the Export group for the dialog to click —
+# Search commands… (#147) and Minimize the rundown (#178).
+eval (function(){var ids=["save-as","save-back","autosave","open","paste","gdoc-import","drive-open","server-open","server-publish","share-link","servers","export-docx","export-md","export-md-table","export-csv","export-breakdown","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","history","find","toggle-hide-shot","toggle-rundown-min","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
 expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 

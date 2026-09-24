@@ -4434,6 +4434,11 @@ function buildMenu() {
          and clicks the matching #file-menu button, which already keeps its
          own label and aria-checked in sync (01b-hide-shot.js). */
       { label: "Hide shot scenes", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
+      /* Issue #178: the rundown strip down to a thin line, and back. Same
+         shape as the item above — the page owns the setting (per-device
+         localStorage) and its switch in File ▸ This document, which
+         sendMenuCommand clicks. No accelerator: Adam picks keys. */
+      { label: "Minimize the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" },
