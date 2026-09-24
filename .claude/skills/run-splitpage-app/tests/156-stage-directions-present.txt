@@ -1,0 +1,140 @@
+# Stage directions for the performer (#167): where they are read.
+#
+# A document holding three directions is opened through File ▸ Open's own
+# path. Then: the read time leaves them out (rowSeconds counts only the
+# words said); the teleprompter shows each in place, dim, italic, smaller
+# and bracketed, in mirror and flip too, and none of its words is a
+# <span class="w"> — the list voice follow listens for; the Writer shows
+# them as the editor does and counts only the words said; and the narration
+# export's "Include stage directions" option (on by default, per device)
+# puts them in as "(look to camera two)" or leaves them out. Writing one is
+# 155-stage-directions.txt; the model and every format is
+# src/test/directions.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.__files=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__files.push({blob:b,name:null});return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download){var f=window.__files[window.__files.length-1];if(f&&!f.name)f.name=this.download;return;}return c.apply(this,arguments);};window.F=window.__splitpageFormats;window.rd=function(i){return document.querySelectorAll('#rows .row .row-read')[i];};return true;})()
+eval (function(){ var D = function (t) { return '<span class="stage-dir">' + t + '</span>'; }; var doc = { schema: 2, title: 'Directions', wordsPerMinute: 150, rows: [ { id: 'r1', visualText: 'Host', audioText: 'Hello there, ' + D('look to camera two') + ' and welcome back to the kitchen.', status: 'todo' }, { id: 'r2', visualText: 'Kettle', audioText: 'one two three four five six seven eight nine ten ' + D('hold a long slow beat while the kettle comes up to the boil'), status: 'todo' }, { id: 'r3', visualText: 'Close', audioText: D('beat'), status: 'todo' } ] }; return F.openFile(new File([JSON.stringify(doc)], 'directions.splitpage')).then(function () { return true; }); })()
+wait F.state().title === 'Directions' && document.querySelectorAll('#rows .row').length === 3
+sleep 400
+expect F.state().rows[1].audioText.indexOf('<span class="stage-dir">hold a long slow beat') !== -1
+expect document.querySelectorAll('#rows .audio-cell .stage-dir').length === 3
+
+# --- read time: a direction takes none --------------------------------------
+# 8 words said (3.2 s), 10 words said (4 s), and a scene that is only a direction
+expect rd(0).textContent == 0:03
+expect rd(1).textContent == 0:04
+# nothing said: no read time shown, as for a scene with no Audio at all
+expect rd(2).textContent === ''
+expect document.getElementById('runtime-total').textContent == 00:07
+
+# --- the teleprompter: shown in place, never a word to hear -----------------
+click #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 300
+expect document.querySelectorAll('#prompter-content .stage-dir').length === 3
+expect document.querySelectorAll('#prompter-content .stage-dir .w').length === 0
+expect document.querySelectorAll('#prompter-content .w').length === 18
+expect Array.prototype.map.call(document.querySelectorAll('#prompter-content .w'), function (w) { return w.textContent; }).join(' ') == Hello there, and welcome back to the kitchen. one two three four five six seven eight nine ten
+expect document.querySelector('#prompter-content .stage-dir').textContent == look to camera two
+# where it stands: between "there," and "and"
+expect document.querySelector('#prompter-content .stage-dir').previousElementSibling.textContent == there,
+# not for saying, at reading distance: slanted, lighter, smaller, dimmer, bracketed
+eval (function(){ window.__sd = getComputedStyle(document.querySelector('#prompter-content .stage-dir')); window.__w = getComputedStyle(document.querySelector('#prompter-content .w')); return true; })()
+expect window.__sd.fontStyle == italic
+expect Number(window.__sd.fontWeight) < Number(window.__w.fontWeight)
+expect parseFloat(window.__sd.fontSize) < parseFloat(window.__w.fontSize) * 0.85
+expect window.__sd.color !== window.__w.color
+expect getComputedStyle(document.querySelector('#prompter-content .stage-dir'), '::before').content == "("
+expect getComputedStyle(document.querySelector('#prompter-content .stage-dir'), '::after').content == ")"
+shot 156-prompter
+# mirror and flip turn it with the words, still shown
+jsclick #pp-mirror
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.querySelector('#prompter-content .stage-dir').getClientRects().length > 0
+jsclick #pp-flip
+sleep 200
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+expect document.querySelector('#prompter-content .stage-dir').getClientRects().length > 0
+expect getComputedStyle(document.querySelector('#prompter-content .stage-dir')).fontStyle == italic
+shot 156-prompter-mirror-flip
+jsclick #pp-mirror
+jsclick #pp-flip
+sleep 200
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+# --- the Writer shows it as the editor does, and counts the words said -------
+click #btn-write
+wait !document.getElementById('writer').hidden
+sleep 300
+expect document.querySelectorAll('#writer-doc .wr-para .stage-dir').length === 3
+expect getComputedStyle(document.querySelector('#writer-doc .stage-dir')).fontStyle == italic
+expect getComputedStyle(document.querySelector('#writer-doc .stage-dir'), '::before').content == "("
+expect document.getElementById('wr-words').textContent == 18
+expect document.querySelector('.writer-bar .wr-fmt[data-cmd="direction"]') !== null
+shot 156-writer
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+
+# --- the narration export: "Include stage directions", on by default --------
+expect localStorage.getItem('splitpage-export-directions') === null
+click #btn-file
+sleep 200
+click #menu-export
+sleep 300
+jsclick .export-card[data-format="narration"] input
+sleep 200
+expect document.querySelector('input[name="export-toggle"]') !== null
+expect document.querySelector('input[name="export-toggle"]').checked === true
+expect document.querySelector('.export-toggle').textContent.trim() == Include stage directions
+jsclick input[name="export-choice"][value="txt"]
+sleep 200
+expect document.getElementById('export-preview').textContent.indexOf('(look to camera two)') !== -1
+shot 156-export-option
+eval window.__n0 = window.__files.length
+jsclick #export-go
+wait window.__files.length === window.__n0 + 1
+eval window.__files[window.__files.length - 1].blob.text().then(function (t) { window.__txt = t; return true; })
+wait typeof window.__txt === 'string'
+expect window.__txt.indexOf('Hello there, (look to camera two) and welcome back to the kitchen.') !== -1
+expect window.__txt.indexOf('(beat)') !== -1
+
+# switched off: remembered on this device, and the file has none
+click #btn-file
+sleep 200
+click #menu-export
+sleep 300
+expect document.querySelector('input[name="export-format"]:checked').value == narration
+jsclick input[name="export-toggle"]
+sleep 200
+expect localStorage.getItem('splitpage-export-directions') == 0
+expect document.getElementById('export-preview').textContent.indexOf('look to camera') === -1
+expect document.getElementById('export-summary').textContent.indexOf('stage directions') !== -1
+eval (function(){ window.__n0 = window.__files.length; window.__txt = null; return true; })()
+jsclick #export-go
+wait window.__files.length === window.__n0 + 1
+eval window.__files[window.__files.length - 1].blob.text().then(function (t) { window.__txt = t; return true; })
+wait typeof window.__txt === 'string'
+expect window.__txt.indexOf('Hello there, and welcome back to the kitchen.') !== -1
+expect window.__txt.indexOf('look') === -1
+expect window.__txt.indexOf('kettle') === -1
+expect window.__txt.indexOf('beat') === -1
+# a scene that is only a direction is no narration without it
+expect window.__txt.split('\n').filter(Boolean).length === 3
+
+# and back on: the key is gone again
+click #btn-file
+sleep 200
+click #menu-export
+sleep 300
+expect document.querySelector('input[name="export-toggle"]').checked === false
+jsclick input[name="export-toggle"]
+sleep 200
+expect localStorage.getItem('splitpage-export-directions') === null
+key Escape
+sleep 200
+quit

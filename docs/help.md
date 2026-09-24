@@ -40,6 +40,11 @@ beta copy is offered it like any other update.
 - **Merging works a word at a time.** When two people edit the same scene,
   their changes combine unless both changed the same words, or linked or
   tagged the same words differently; only then is it a conflict.
+- **Stage directions for the performer.** Type `((beat))` in the Audio
+  column, or select words and press the **( )** button: they show dim and
+  in brackets, appear in the teleprompter where they belong, are never
+  waited for by Follow My Voice and don't count toward the read time — see
+  [Stage directions](#stage-directions).
 - **Find and replace** finds a phrase even when part of it is bold, a link or
   a tag.
 - **Markdown export** writes bold, italic and strikethrough that other
@@ -778,11 +783,44 @@ column, no breakdown, no comments. That's the same shape **Paste a script…**
 reads back in its paragraph mode, so narration written elsewhere and pasted in
 lands one paragraph per scene — and a `.txt` exported here and re-imported
 gives you your scenes back, plus one extra row holding the title line, which
-you delete. The same button is on the writer's own bar.
+you delete. The same button is on the writer's own bar. **Include stage
+directions** in the dialog (on unless you switch it off, and remembered on
+this computer) puts your [stage directions](#stage-directions) in as
+*(beat)*, or leaves them out for a clean read.
+
+### Stage directions
+
+A stage direction is a note for whoever reads the script aloud — *(beat)*,
+*(smile)*, *(look to camera 2)*, *(slower here)* — written into the Audio
+column at the exact point where it applies. It shows dim, slanted and in
+brackets, so it never reads as something to say.
+
+- **Type it:** `((beat))`. The moment you type the second closing bracket,
+  the words between the double brackets become a direction and the brackets
+  go. <kbd>Ctrl</kbd>+<kbd>Z</kbd> straight after gives you back the
+  `((beat))` you typed, if that is what you meant. Single brackets are
+  ordinary writing and never change — `(see below)` stays as it is.
+- **Or mark it:** select the words and press **( )** on the Audio column's
+  formatting bar (or the writer's bar). Press it again over a direction, or
+  with the caret inside one, to make it ordinary words again. It's there in
+  the Audio column only — the Visual column is all directions already.
+
+What you type straight after a direction is narration again. Directions
+appear in the teleprompter in place, smaller, lighter and in brackets, in
+mirror and flip too — and **Follow My Voice skips them**: it never waits to
+hear one. They don't count toward the read time. They are saved in every
+format, kept by copy and paste, find and replace, undo and merging; the
+exports print one as *(beat)* in their own style, and the `.md` project's
+table shows it as `((beat))`, so you can write new ones there too. A Word
+document you open with `((…))` in its narration gets directions as well
+(a paragraph that is *all* in brackets still goes to the Visual column,
+as it always has). Pasted into the Visual column, a direction becomes its
+words in brackets.
 
 **Runtime estimate.** The chip beside your name shows how long the Audio
 column takes to read, and each scene shows its own estimate in the gutter.
-Visual notes are directions, not spoken words, so they don't count. Click
+Visual notes are directions, not spoken words, so they don't count, and
+neither do [stage directions](#stage-directions) in the Audio column. Click
 the chip to set your reading speed — it's saved with the file, so the
 estimate means the same thing to whoever opens it next.
 
@@ -1289,8 +1327,9 @@ format. Pick a card on the left:
   side by side), a **Spreadsheet** with a row per scene, or a **Standalone
   page** that opens in any browser with nothing installed.
 - **Part of it** — **Narration only** (the Audio column, as `.docx` or
-  `.txt`), the **Breakdown** as a spreadsheet, or a **Packing list** of your
-  gear or your props to print and tick off.
+  `.txt`, with or without your [stage directions](#stage-directions)), the
+  **Breakdown** as a spreadsheet, or a **Packing list** of your gear or your
+  props to print and tick off.
 
 The right-hand side shows a sketch of the first page, what the file will
 hold (how many scenes, whether pictures come with it), the options that

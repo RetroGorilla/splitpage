@@ -10,6 +10,7 @@ import {
   cellOf,
   commentIds,
   deleteRange,
+  flattenDirections,
   fromHtml,
   insertText,
   joinCells,
@@ -82,8 +83,10 @@ export function clipboardOfCell(cell, opts) {
   var c = opts.keepComments ? normalizeCell(cell) : stripComments(cell);
   var html = toHtml(c);
   if (opts.nonce) html = "<span " + CUT_ATTR + '="' + String(opts.nonce).replace(/[^A-Za-z0-9]/g, "") + '">' + html + "</span>";
+  /* a stage direction as it is shown, "(beat)" (#167) \u2014 the plain text
+     another program gets */
   var text = "";
-  c.forEach(function (r) { text += r.text; });
+  flattenDirections(c).forEach(function (r) { text += r.text; });
   return { html: html, text: text.replace(/\u00a0/g, " ") };
 }
 
@@ -458,6 +461,9 @@ export function pasteIntoCell(cellEl, html, text, extra) {
        unless this is a cut moving it (see freshBrollIds) */
     var piece = got.text !== null ? got.cell
       : freshBrollIds(got.cell, brollIdsTaken(S.state, rowId, field, rest, got.fromCut)).cell;
+    /* The Visual column has no stage directions (#167): one pasted there
+       is its words again, in the brackets it was shown with. */
+    if (field === "visualText") piece = flattenDirections(piece);
     var next = got.text !== null
       ? insertText(rest, from, got.text)
       : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));

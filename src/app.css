@@ -1277,6 +1277,8 @@
   .tb-i { font-style: italic; }
   .tb-u { text-decoration: underline; text-underline-offset: 3px; }
   .tb-s { text-decoration: line-through; }
+  /* the Direction button (#167): the brackets a direction is shown in */
+  .tb-dir { font-style: italic; letter-spacing: 0.04em; }
   @media (min-width: 761px) {
     #rows .mini-toolbar {
       position: absolute;
@@ -1405,6 +1407,18 @@
     border-radius: 2px;
   }
   .cell-editable u { text-underline-offset: 2px; }
+  /* A stage direction for the performer (#167): the words of it dim and
+     slanted, in brackets — the way a script prints one — so it reads at a
+     glance as "not for saying". The brackets are drawn here, never stored
+     in the cell (04c-doc-model.js); --text-faint is 4.5:1 or better on
+     the page in both themes. The prompter's own size and weight are with
+     .prompter-line below. */
+  .cell-editable .stage-dir, .prompter-line .stage-dir {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+  .cell-editable .stage-dir::before, .prompter-line .stage-dir::before { content: "("; }
+  .cell-editable .stage-dir::after, .prompter-line .stage-dir::after { content: ")"; }
 
   /* Under the Visual words since #169. */
   .visual-media { margin-top: 12px; }
@@ -2601,6 +2615,10 @@
   .export-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
   .export-seg label:has(input:checked) { background: var(--hover); color: var(--text); }
   .export-seg label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  /* a format's one on/off option under its choices (#167, "Include stage
+     directions") */
+  .export-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+  .export-toggle input { margin: 0; accent-color: var(--accent); }
   .export-field { display: flex; flex-direction: column; gap: 6px; }
   .export-field-label { font-size: 13px; font-weight: 450; color: var(--text-dim); }
   .export-filename {
@@ -5141,6 +5159,14 @@
     text-decoration-thickness: 0.07em;
     text-underline-offset: 0.28em;
   }
+  /* A stage direction (#167) at reading distance: lighter, slanted,
+     smaller and bracketed, so the eye skips it; it is no .w, so voice
+     follow never waits for it. Mirror and flip turn it with the words. */
+  .prompter-line .stage-dir {
+    font-weight: 400;
+    font-size: 0.78em;
+    letter-spacing: 0.01em;
+  }
   .prompter-line .w { transition: opacity var(--dur-enter) var(--ease-standard); }
   .prompter-scroll.is-following .w.spoken { opacity: 0.37; }
   .prompter-scroll.is-following .w.current-word {
@@ -5623,6 +5649,7 @@
   .writer-bar .wr-fmt[data-cmd="bold"] { font-weight: 800; }
   .writer-bar .wr-fmt[data-cmd="italic"] { font-style: italic; }
   .writer-bar .wr-fmt[data-cmd="underline"] { text-decoration: underline; }
+  .writer-bar .wr-fmt[data-cmd="direction"] { font-style: italic; }
   .writer-bar .div-sep { width: 1px; height: 20px; background: var(--border); }
   .writer-bar .grp {
     display: flex;

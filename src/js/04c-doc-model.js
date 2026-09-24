@@ -14,8 +14,10 @@ import { BROLL_MARKER_RE } from "./08c-broll.js";
      { text: "the red mug", marks: { b: true, tag: "t_8f2a", cmt: ["c12"] } }
      { atom: "broll", id: "bs_41", text: "B-roll:", marks: {} }
 
-   Marks, all optional: b, i, u, s, hl (true); href (a safeHref URL); tag (a
-   registry id, at most one per run); cmt (sorted comment ids). "\n" in text
+   Marks, all optional: b, i, u, s, hl (true); dir (true: a stage direction
+   for the performer, #167 — shown, never read aloud); href (a safeHref
+   URL); tag (a registry id, at most one per run); cmt (sorted comment
+   ids). "\n" in text
    is a line break. A no-break space stays what it is (it is how two typed
    spaces survive white-space: normal) and every reader treats it as a
    space. normalizeCell() puts any cell in its one canonical form, so two
@@ -59,6 +61,8 @@ function cleanMarks(marks, forAtom) {
   var out = {};
   if (!marks || typeof marks !== "object") return out;
   FORMAT_MARKS.forEach(function (k) { if (marks[k] === true) out[k] = true; });
+  /* a b-roll key is never part of a direction */
+  if (!forAtom && marks.dir === true) out.dir = true;
   if (typeof marks.href === "string") {
     var href = safeHref(marks.href);
     if (href) out.href = href;
@@ -90,7 +94,7 @@ function sameMarks(a, b) {
 function orderedMarks(m) {
   /* One key order, so equal marks are equal JSON too. */
   var out = {};
-  ["b", "i", "u", "s", "hl", "href", "tag", "cmt"].forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
+  ["b", "i", "u", "s", "hl", "dir", "href", "tag", "cmt"].forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
   return out;
 }
 
@@ -125,25 +129,28 @@ export function normalizeCell(cell, opts) {
     runs.push({ text: t, marks: m });
   });
 
-  /* A tag is one unit in the editor, so a comment or a link covers all of
-     it or none of it: across each stretch of one tag, cmt becomes the union
-     and href the first one found. That is also what lets toHtml() nest a
-     tag inside its comments and links without ever splitting it. */
+  /* A tag is one unit in the editor, so a comment, a link or a direction
+     covers all of it or none of it: across each stretch of one tag, cmt
+     becomes the union, href the first one found and dir set if any of it
+     was. That is also what lets toHtml() nest a tag inside its comments,
+     directions and links without ever splitting it. */
   for (var i = 0; i < runs.length;) {
     var tag = runs[i].atom ? null : runs[i].marks.tag;
     if (!tag) { i++; continue; }
     var j = i;
     while (j < runs.length && !runs[j].atom && runs[j].marks.tag === tag) j++;
     if (j - i > 1) {
-      var cmt = [], href = null;
+      var cmt = [], href = null, dir = false;
       for (var k = i; k < j; k++) {
         (runs[k].marks.cmt || []).forEach(function (c) { if (cmt.indexOf(c) === -1) cmt.push(c); });
         if (!href && runs[k].marks.href) href = runs[k].marks.href;
+        if (runs[k].marks.dir) dir = true;
       }
       cmt.sort();
       for (k = i; k < j; k++) {
         if (cmt.length) runs[k].marks.cmt = cmt.slice(); else delete runs[k].marks.cmt;
         if (href) runs[k].marks.href = href; else delete runs[k].marks.href;
+        if (dir) runs[k].marks.dir = true;
       }
     }
     i = j;
@@ -216,6 +223,8 @@ export function fromHtml(html, opts) {
         next.tag = tagId(child.getAttribute("data-tag-cat"), child.getAttribute("data-tag-name"));
       } else if (tag === "SPAN" && cls && cls.contains("cmt-anchor")) {
         next.cmt = (marks.cmt || []).concat([child.getAttribute("data-cmt")]);
+      } else if (tag === "SPAN" && cls && cls.contains("stage-dir")) {
+        next.dir = true;
       }
       walk(child, next);
     });
@@ -264,15 +273,20 @@ export function namedTagId(cat, name) {
 /* ---- the one nesting, shared by every writer ----
 
    Elements open outermost first in this order: each comment (by id), the
-   link, the tag, then highlight, bold, italic, underline, strike. Where two
-   neighbouring runs share a prefix of that list the elements stay open
-   across both, so a comment over bold and plain text is one span. The order
-   never changes with the content, which is what makes the output canonical
-   — and normalizeCell() guarantees no comment or link starts or ends inside
-   a tag, so a tag is never split. */
+   stage direction, the link, the tag, then highlight, bold, italic,
+   underline, strike. Where two neighbouring runs share a prefix of that
+   list the elements stay open across both, so a comment over bold and
+   plain text is one span. The order never changes with the content, which
+   is what makes the output canonical — and normalizeCell() guarantees no
+   comment, direction or link starts or ends inside a tag, so a tag is never
+   split. A direction sits just inside the comments so that only a comment
+   edge can cut one in two: its brackets are drawn around each span of it
+   (app.css), and a link or a format edge inside a direction must not add a
+   pair. */
 function elementKeys(marks, isAtom) {
   var keys = [];
   (marks.cmt || []).forEach(function (id) { keys.push({ k: "cmt", v: id }); });
+  if (marks.dir && !isAtom) keys.push({ k: "dir", v: true });
   if (marks.href) keys.push({ k: "href", v: marks.href });
   if (marks.tag && !isAtom) keys.push({ k: "tag", v: marks.tag });
   FORMAT_MARKS.forEach(function (f) { if (marks[f]) keys.push({ k: f, v: true }); });
@@ -330,29 +344,35 @@ var FORMAT_TAG = { hl: "mark", b: "strong", i: "em", u: "u", s: "s" };
 /* The stored HTML for a cell: exactly the markup sanitizeHtml() writes,
    nested in the fixed order above.
 
-   opts.textHtml(text, esc), when given, writes each stretch of text
+   opts.textHtml(text, esc, where), when given, writes each stretch of text
    instead of esc(text) — a stretch being what one text node of the output
-   would hold (never a line break), the b-roll key's word included. It is
-   how a reader that wants the cell's own markup around something of its
-   own, the teleprompter's per-word spans, gets it without parsing HTML.
-   What it returns goes in as it is, so it must escape what it writes. */
+   would hold (never a line break), the b-roll key's word included; `where`
+   is {dir: true} for a stretch inside a stage direction, {dir: false}
+   otherwise. It is how a reader that wants the cell's own markup around
+   something of its own, the teleprompter's per-word spans, gets it without
+   parsing HTML. What it returns goes in as it is, so it must escape what
+   it writes. */
+var OUTSIDE_DIRECTION = { dir: false };
+var INSIDE_DIRECTION = { dir: true };
+
 export function toHtml(cell, opts) {
   var t = buildTree(cell, opts);
   var textHtml = opts && opts.textHtml
-    ? function (s) { return opts.textHtml(s, escText); }
+    ? function (s, where) { return opts.textHtml(s, escText, where); }
     : escText;
-  function render(node) {
+  function render(node, where) {
     var out = "";
     node.kids.forEach(function (n) {
-      if (n.text !== undefined) { out += textHtml(n.text); return; }
+      if (n.text !== undefined) { out += textHtml(n.text, where); return; }
       if (n.br) { out += "<br>"; return; }
       if (n.atom) {
-        out += '<span class="broll-key" data-broll-id="' + escAttr(n.atom.id) + '" contenteditable="false">' + textHtml(n.atom.text) + "</span>";
+        out += '<span class="broll-key" data-broll-id="' + escAttr(n.atom.id) + '" contenteditable="false">' + textHtml(n.atom.text, where) + "</span>";
         return;
       }
-      var inner = render(n);
       var e = n.el;
+      var inner = render(n, e.k === "dir" ? INSIDE_DIRECTION : where);
       if (e.k === "cmt") out += '<span class="cmt-anchor" data-cmt="' + escAttr(e.v) + '">' + inner + "</span>";
+      else if (e.k === "dir") out += '<span class="stage-dir">' + inner + "</span>";
       else if (e.k === "href") out += '<a href="' + escAttr(e.v) + '" target="_blank" rel="noopener">' + inner + "</a>";
       else if (e.k === "tag") {
         var info = t.tagOf(e.v);
@@ -364,16 +384,52 @@ export function toHtml(cell, opts) {
     });
     return out;
   }
-  return render(t.root);
+  return render(t.root, OUTSIDE_DIRECTION);
 }
 
 /* ---- readers (what htmlToPlainText, htmlToMarkdown and htmlToRuns give
-   for this cell's HTML, without parsing any) ---- */
+   for this cell's HTML, without parsing any) ----
 
-export function toPlainText(cell) {
-  var out = "";
-  normalizeCell(cell).forEach(function (r) { out += r.text; });
+   A stage direction (#167) is written the way a script prints one, in
+   brackets: "(beat)". Its brackets are not in the cell \u2014 they are how a
+   reader shows where one starts and ends \u2014 so every reader that writes
+   text adds them round each stretch of it. */
+
+function isDirRun(r) { return !!(r && !r.atom && r.marks.dir); }
+
+/* opts.directions: "brackets" (the default) writes each direction as
+   "(its words)"; "omit" leaves them out, for the words that are said (the
+   read-time estimate, a narration export without them) \u2014 one space kept
+   where one stood between two words, none before the punctuation that
+   followed it ("Pour it (slowly)." is "Pour it."). */
+export var OMIT_CLOSES = /^[.,;:!?)\]}"'\u2019\u201d]/;
+
+export function toPlainText(cell, opts) {
+  var omit = !!(opts && opts.directions === "omit");
+  var runs = normalizeCell(cell);
+  var out = "", gap = false;
+  runs.forEach(function (r, i) {
+    var t = r.text;
+    if (isDirRun(r)) {
+      if (omit) { gap = true; return; }
+      if (!isDirRun(runs[i - 1])) t = "(" + t;
+      if (!isDirRun(runs[i + 1])) t += ")";
+    }
+    if (gap) {
+      gap = false;
+      if (OMIT_CLOSES.test(t)) out = out.replace(/[ \t\u00a0]+$/, "");
+      else if (/[\s\u00a0]$/.test(out)) t = t.replace(/^[ \t\u00a0]+/, "");
+      else if (out && !/^[\s\u00a0]/.test(t)) t = " " + t;
+    }
+    out += t;
+  });
   return out.replace(/\u00a0/g, " ").trim();
+}
+
+/* The words someone says aloud: the cell's text without its directions \u2014
+   what the read-time estimate counts (01-scene-status.js wordCount). */
+export function spokenText(cell) {
+  return toPlainText(cell, { directions: "omit" });
 }
 
 /* ---- Markdown ----
@@ -415,10 +471,18 @@ var MD_PUNCT = /[\p{P}\p{S}]/u;
 
 function mdChars(cell) {
   var chars = [];
-  normalizeCell(cell).forEach(function (r) {
+  var runs = normalizeCell(cell);
+  runs.forEach(function (r, ri) {
     var m = {};
     MD_MARKS.forEach(function (k) { if (r.marks[k]) m[k] = r.marks[k]; });
+    /* a stage direction as the script prints it: "(beat)", in italics —
+       the brackets italic and nothing else, so a bold last word does not
+       take its closing bracket with it */
+    var dir = isDirRun(r);
+    if (dir) m.i = true;
+    if (dir && !isDirRun(runs[ri - 1])) chars.push({ ch: "(", m: { i: true } });
     Array.from(r.text).forEach(function (ch) { chars.push({ ch: ch, m: Object.assign({}, m) }); });
+    if (dir && !isDirRun(runs[ri + 1])) chars.push({ ch: ")", m: { i: true } });
   });
   var n = chars.length, i, j;
   /* a blank line ends a paragraph, and everything open with it */
@@ -603,7 +667,12 @@ export function toMarkdown(cell) {
   return mdSettle(mdTokens(cell)).replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/* [{text, b, i, u, s, mark, href}], a line break as its own {text:"\n"}. */
+/* [{text, b, i, u, s, mark, href}], a line break as its own {text:"\n"}.
+   A run inside a stage direction also carries dir: true (and only then \u2014
+   a cell with none gives exactly the runs htmlToRuns gives), and each
+   direction is bracketed: a "(" run before it and a ")" run after it,
+   unformatted but for dir, so a writer that knows nothing of directions
+   still prints "(beat)". */
 export function toDocxRuns(cell, opts) {
   var t = buildTree(cell, opts);
   var runs = [];
@@ -611,18 +680,37 @@ export function toDocxRuns(cell, opts) {
     node.kids.forEach(function (n) {
       if (n.text !== undefined || n.atom) {
         var text = (n.atom ? n.atom.text : n.text).replace(/\u00a0/g, " ");
-        if (text) runs.push({ text: text, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href });
+        if (!text) return;
+        var run = { text: text, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href };
+        if (fmt.dir) run.dir = true;
+        runs.push(run);
         return;
       }
-      if (n.br) { runs.push({ text: "\n" }); return; }
+      if (n.br) { runs.push(fmt.dir ? { text: "\n", dir: true } : { text: "\n" }); return; }
       var k = n.el.k;
       walk(n, {
         b: fmt.b || k === "b", i: fmt.i || k === "i", u: fmt.u || k === "u", s: fmt.s || k === "s",
-        mark: fmt.mark || k === "hl", href: k === "href" ? n.el.v : fmt.href
+        mark: fmt.mark || k === "hl", href: k === "href" ? n.el.v : fmt.href, dir: fmt.dir || k === "dir"
       });
     });
-  })(t.root, { b: false, i: false, u: false, s: false, mark: false, href: null });
-  return runs;
+  })(t.root, { b: false, i: false, u: false, s: false, mark: false, href: null, dir: false });
+  return bracketDirections(runs);
+}
+
+function bracketDirections(runs) {
+  if (!runs.some(function (r) { return r.dir; })) return runs;
+  function bracket(ch) {
+    return { text: ch, b: false, i: false, u: false, s: false, mark: false, href: null, dir: true };
+  }
+  var out = [];
+  runs.forEach(function (r, i) {
+    var starts = r.dir && !(runs[i - 1] && runs[i - 1].dir);
+    var ends = r.dir && !(runs[i + 1] && runs[i + 1].dir);
+    if (starts) out.push(bracket("("));
+    out.push(r);
+    if (ends) out.push(bracket(")"));
+  });
+  return out;
 }
 
 /* ---- positions ----
@@ -678,15 +766,27 @@ export function marksAt(cell, pos) {
 }
 
 /* Typing carries formatting on (bold stays bold) but never a tag, a
-   comment or a link: those end where they end. Exported for the editor's
-   toolbar state and its pending marks (05-render.js): what a character
-   typed at pos would carry. */
+   comment or a link: those end where they end. A stage direction is typed
+   into only between two of its own characters: at either edge of one,
+   what is typed is narration again, so the words after "((beat))" are
+   never swallowed into it. Exported for the editor's toolbar state and its
+   pending marks (05-render.js): what a character typed at pos would carry. */
 export function typingMarks(cell, pos) {
   var m = marksAt(cell, pos);
   delete m.tag;
   delete m.cmt;
   delete m.href;
+  if (m.dir && !insideDirection(cell, pos)) delete m.dir;
   return m;
+}
+
+function isDirChar(c) { return !!(c && !c.atom && c.marks.dir); }
+
+/* Is pos strictly inside a direction — a character of one on each side? */
+export function insideDirection(cell, pos) {
+  var chars = explode(cell);
+  pos = clamp(cell, pos);
+  return isDirChar(chars[pos - 1]) && isDirChar(chars[pos]);
 }
 
 export function sliceCell(cell, from, to) {
@@ -759,8 +859,8 @@ export function replaceWithBrollKey(cell, from, to, id, keyText) {
   return { cell: insertBrollKey(deleteRange(cell, a, b), a, id, keyText, {}), end: a + 1 };
 }
 
-/* name is b, i, u, s, hl (value true/false), href (a URL or null) or tag
-   (an id or null). Comments have addComment/removeComment. */
+/* name is b, i, u, s, hl, dir (value true/false), href (a URL or null)
+   or tag (an id or null). Comments have addComment/removeComment. */
 export function setMark(cell, from, to, name, value) {
   var chars = explode(cell);
   from = clamp(cell, from);
@@ -769,7 +869,7 @@ export function setMark(cell, from, to, name, value) {
   for (var i = Math.min(from, to); i < Math.max(from, to); i++) {
     var c = chars[i];
     var base = c.atom ? c.atom.marks : c.marks;
-    if (c.atom && name === "tag") continue;
+    if (c.atom && (name === "tag" || name === "dir")) continue;
     var next = cache.get(base);
     if (!next) {
       next = Object.assign({}, base);
@@ -810,6 +910,139 @@ export function markThroughout(cell, from, to, name) {
    edge of an existing bold run makes one run, never a checkerboard. */
 export function toggleMark(cell, from, to, name) {
   return setMark(cell, from, to, name, !markThroughout(cell, from, to, name));
+}
+
+/* ---- stage directions (#167) ----
+
+   A direction for the performer — "(beat)", "(look to camera 2)" — is the
+   mark dir on ordinary words of the Audio column: the editor and the
+   Writer show it dim and bracketed, the teleprompter shows it in place but
+   leaves it out of the words voice follow listens for, and the read-time
+   estimate does not count it. The brackets are never in the cell; every
+   reader adds them (toPlainText, toMarkdown, toDocxRuns, app.css). */
+
+/* The whole direction at pos — the one holding the character after pos,
+   else the one before — as {from, to}, or null. */
+export function directionRangeAt(cell, pos) {
+  var chars = explode(cell);
+  pos = clamp(cell, pos);
+  var at = isDirChar(chars[pos]) ? pos : isDirChar(chars[pos - 1]) ? pos - 1 : -1;
+  if (at === -1) return null;
+  var a = at, b = at + 1;
+  while (a > 0 && isDirChar(chars[a - 1])) a--;
+  while (b < chars.length && isDirChar(chars[b])) b++;
+  return { from: a, to: b };
+}
+
+/* The Direction button over a selection: already a direction throughout
+   comes off; anything less becomes one, without the spaces at its ends
+   (a double-click's trailing space would otherwise print "(beat )"). */
+export function toggleDirection(cell, from, to) {
+  var r = directionToggleRange(cell, from, to);
+  return setMark(cell, r.from, r.to, "dir", !r.off);
+}
+
+/* What toggleDirection acts on: {from, to, off} — the range itself when
+   it comes off, the range without its end spaces when it goes on (where
+   the editor puts the selection afterwards). */
+export function directionToggleRange(cell, from, to) {
+  from = clamp(cell, from);
+  to = clamp(cell, to);
+  if (to < from) { var x = from; from = to; to = x; }
+  if (markThroughout(cell, from, to, "dir")) return { from: from, to: to, off: true };
+  var p = projection(cell);
+  while (from < to && /\s/.test(p.charAt(from))) from++;
+  while (to > from && /\s/.test(p.charAt(to - 1))) to--;
+  return { from: from, to: to, off: false };
+}
+
+/* The typed shortcut: "((" words "))". The typing convention, signed off
+   by Adam for #167: a DOUBLE pair of round brackets, closed by typing the
+   second ")", turns the words between into a direction and the four
+   brackets go; one Ctrl+Z (a separate undo entry, like the tag shortcuts)
+   gives the literal "((words))" back. Single brackets are ordinary prose
+   and never convert. Only in the Audio column (the caller checks).
+   Called with pos just after the "))"; returns {cell, end} with end just
+   past the direction, or null when the text there is not one: nothing
+   between the pairs but spaces, a bracket, a line break or a b-roll key
+   inside, more than DIRECTION_MAX characters, a bracket that is part of a
+   tag, or words that already are a direction. "(((x))" makes "(" and a
+   direction "x"; "((x)))" — what typing ")" after an undo gives — stays. */
+var DIRECTION_MAX = 200;
+
+export function directionShortcut(cell, pos) {
+  var chars = explode(cell);
+  pos = clamp(cell, pos);
+  var p = projection(cell);
+  if (pos < 5 || p.slice(pos - 2, pos) !== "))") return null;
+  var open = p.lastIndexOf("((", pos - 5);
+  if (open === -1) return null;
+  var inner = p.slice(open + 2, pos - 2);
+  if (!inner.trim() || inner.length > DIRECTION_MAX || /[()\n￼]/.test(inner)) return null;
+  for (var i = open; i < pos; i++) {
+    var c = chars[i];
+    if (c.atom || c.marks.dir) return null;
+    if (c.marks.tag && (i < open + 2 || i >= pos - 2)) return null;
+  }
+  var lead = inner.length - inner.replace(/^\s+/, "").length;
+  var trail = inner.length - inner.replace(/\s+$/, "").length;
+  var next = deleteRange(deleteRange(cell, pos - 2, pos), open, open + 2);
+  return { cell: setMark(next, open + lead, pos - 4 - trail, "dir", true), end: pos - 4 };
+}
+
+/* Directions in text that came from outside (an import, a Markdown table
+   edited by hand): each "((words))" in text that is not already one
+   becomes a direction, the way typing it would; and a direction that
+   arrives with its brackets round it — a .docx Splitpage wrote, which
+   prints them — loses them. For the Audio column only; the caller
+   decides. */
+export function importDirections(cell) {
+  var out = normalizeCell(cell);
+  /* brackets the writer printed round a direction */
+  var chars = explode(out);
+  var drop = [];
+  for (var i = 0; i < chars.length;) {
+    if (!isDirChar(chars[i])) { i++; continue; }
+    var j = i;
+    while (j < chars.length && isDirChar(chars[j])) j++;
+    if (j - i >= 3 && chars[i].ch === "(" && chars[j - 1].ch === ")" &&
+        !chars[i].marks.tag && !chars[j - 1].marks.tag) drop.push(i, j - 1);
+    i = j;
+  }
+  for (var d = drop.length - 1; d >= 0; d--) out = deleteRange(out, drop[d], drop[d] + 1);
+  /* "((words))" typed as text — the pattern holds no bracket inside, so
+     it finds the same pair the shortcut takes ("(((x))" matches at its
+     second bracket) */
+  for (var guard = 0; guard < 1000; guard++) {
+    var p = projection(out), done = true;
+    var re = /\(\([^()\n￼]{1,200}\)\)/g, m;
+    while ((m = re.exec(p)) !== null) {
+      var got = directionShortcut(out, m.index + m[0].length);
+      if (got) { out = got.cell; done = false; break; }
+    }
+    if (done) break;
+  }
+  return out;
+}
+
+/* A cell's directions as ordinary words again, each in the brackets it
+   was shown with — what a direction pasted into the Visual column, which
+   has none, becomes. A bracket is a run of its own, never part of a tag. */
+export function flattenDirections(cell) {
+  var runs = normalizeCell(cell);
+  if (!runs.some(isDirRun)) return runs;
+  var out = [];
+  runs.forEach(function (r, i) {
+    if (!isDirRun(r)) { out.push(r); return; }
+    var m = Object.assign({}, r.marks);
+    delete m.dir;
+    var edge = Object.assign({}, m);
+    delete edge.tag;
+    if (!isDirRun(runs[i - 1])) out.push({ text: "(", marks: edge });
+    out.push({ text: r.text, marks: m });
+    if (!isDirRun(runs[i + 1])) out.push({ text: ")", marks: edge });
+  });
+  return normalizeCell(out);
 }
 
 /* Enter / Shift+Enter over [from, to): the range replaced by a line break,
@@ -924,6 +1157,7 @@ export function joinCells(a, b, glue) {
       if (last.marks.href && last.marks.href === first.marks.href) marks.href = last.marks.href;
       var cmt = (last.marks.cmt || []).filter(function (id) { return (first.marks.cmt || []).indexOf(id) !== -1; });
       if (cmt.length) marks.cmt = cmt;
+      if (isDirRun(last) && isDirRun(first)) marks.dir = true;
     }
     runs.push({ text: glue, marks: marks });
   }
@@ -1146,6 +1380,7 @@ function lcsMap(a, b) {
 function markSet(m) {
   var set = {};
   FORMAT_MARKS.forEach(function (k) { if (m[k]) set[k] = true; });
+  if (m.dir) set.dir = true;
   if (m.href) set["href=" + m.href] = true;
   if (m.tag) set["tag=" + m.tag] = true;
   (m.cmt || []).forEach(function (id) { set["cmt=" + id] = true; });

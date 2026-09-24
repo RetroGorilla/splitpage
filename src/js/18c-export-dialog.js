@@ -1,12 +1,12 @@
 import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
 import { rowImage } from "./02c-blobs.js";
+import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { htmlToPlainText } from "./14-export.js";
-import { narrationRows } from "./15-docx.js";
+import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
 import { writerOpen } from "./19-writer.js";
@@ -57,7 +57,13 @@ export var EXPORT_FORMATS = [
     option: "Format", choices: [
       { value: "docx", label: "Word (.docx)", action: "export-narration-docx" },
       { value: "txt", label: "Plain text (.txt)", action: "export-narration-txt" }
-    ] },
+    ],
+    /* #167: a checkbox under the choices, kept per device — the exporter
+       reads the same preference, so the dialog still builds nothing
+       itself. Functions, not the key: they are there however the modules
+       happen to be evaluated. */
+    toggle: { id: "directions", label: "Include stage directions",
+              on: narrationIncludesDirections, set: setNarrationIncludesDirections } },
   { id: "breakdown", group: "part", name: "Breakdown", ext: ".csv", icon: "i-tag",
     purpose: "Every tagged item, its status and owner", action: "export-breakdown" },
   { id: "packing", group: "part", name: "Packing list", ext: ".pdf", icon: "i-box",
@@ -187,7 +193,11 @@ function renderOptions() {
     f.choices.map(function (c) {
       return '<label><input type="radio" name="export-choice" value="' + c.value + '" data-action="' + c.action + '"' +
         (c.value === current ? " checked" : "") + '>' + escapeHtml(c.label) + '</label>';
-    }).join("") + '</div></div>';
+    }).join("") + '</div></div>' +
+    (f.toggle
+      ? '<label class="export-toggle"><input type="checkbox" name="export-toggle" data-toggle="' + escapeHtml(f.toggle.id) + '"' +
+        (f.toggle.on() ? " checked" : "") + '> ' + escapeHtml(f.toggle.label) + '</label>'
+      : "");
 }
 
 function trunc(s, n) {
@@ -195,7 +205,9 @@ function trunc(s, n) {
   return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
 }
 
-function cellText(html, n) { return escapeHtml(trunc(htmlToPlainText(html), n)); }
+/* a stage direction as the file prints it, "(beat)" (#167) — or, for the
+   narration with them switched off, not at all */
+function cellText(html, n, opts) { return escapeHtml(trunc(toPlainText(cellOf(html), opts), n)); }
 
 /* A sketch of the first page: the real title and the first scenes' words,
    laid out the way the format lays them out. Escaped all the way — it is
@@ -238,8 +250,9 @@ function previewHtml(action) {
   if (action === "export-narration-docx" || action === "export-narration-txt") {
     var paras = narrationRows().slice(0, 8);
     var mono = action === "export-narration-txt" ? ' pv-mono' : '';
+    var said = narrationIncludesDirections() ? null : { directions: "omit" };
     return '<div class="pv-title">' + title + '</div><div class="' + mono.trim() + '">' +
-      (paras.length ? paras.map(function (r) { return '<p class="pv-para">' + cellText(r.audioText, 180) + '</p>'; }).join("")
+      (paras.length ? paras.map(function (r) { return '<p class="pv-para">' + cellText(r.audioText, 180, said) + '</p>'; }).join("")
                     : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
   if (action === "export-breakdown") {
@@ -278,7 +291,8 @@ export function exportSummary(action) {
     if (action === "export-html") bits.push("editable, with Splitpage around it");
   } else if (f.format.id === "narration") {
     bits.push(plural(narrationRows().length, "scene") + " of narration");
-    bits.push("no visuals, breakdown or comments");
+    bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
+      : "no visuals, stage directions, breakdown or comments");
   } else if (f.format.id === "breakdown") {
     bits.push(plural(breakdownRows().length, "tagged item"));
     bits.push("category, status, owner and scenes");
@@ -410,7 +424,7 @@ function refreshExportAgainItem() {
 function trapTab(e) {
   var modal = el("export-modal");
   var focusables = Array.prototype.filter.call(
-    modal.querySelectorAll('button, input[type="radio"]:checked, [tabindex]:not([tabindex="-1"])'),
+    modal.querySelectorAll('button, input[type="radio"]:checked, input[type="checkbox"], [tabindex]:not([tabindex="-1"])'),
     function (x) { return !x.disabled && x.getClientRects().length > 0; });
   if (!focusables.length) return;
   var first = focusables[0];
@@ -429,6 +443,9 @@ export function __init() {
     if (t.name === "export-format") choose(t.value, false);
     else if (t.name === "export-choice" && chosenFormat) {
       chosenChoice[chosenFormat.id] = t.value;
+      renderSide();
+    } else if (t.name === "export-toggle" && chosenFormat && chosenFormat.toggle) {
+      chosenFormat.toggle.set(t.checked);
       renderSide();
     }
   });
