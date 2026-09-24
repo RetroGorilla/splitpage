@@ -11,6 +11,7 @@ import {
   tagStatus
 } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
+import { brollShotsByProp } from "./08c-broll.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, latin1Bytes } from "./14-export.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
@@ -861,10 +862,15 @@ export function buildPackingListPdf(catId) {
      straight off the page's right edge (unwrapped, untruncated, simply
      invisible past x=612) instead of wrapping to a second line. */
   var ITEM_TEXT_W = PW - M * 2 - 18;
+  /* a prop a b-roll shot needs says which (#149): the packer then knows
+     it has to go out with the second unit too */
+  var shotsFor = brollShotsByProp();
   items.forEach(function (item) {
     var owner = personById(item.owner);
     var st = tagStatus(item.status) || TAG_STATUSES[0];
-    var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "");
+    var shots = shotsFor[item.key] || [];
+    var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "") +
+      (shots.length ? "  ·  B-roll: " + shots.join(", ") : "");
     var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
     var need = wrapped.length * LEAD;
     if (y - need < M) { newPage(); header(); }
@@ -881,6 +887,14 @@ export function buildPackingListPdf(catId) {
   pages.push(ops);
 
   /* ---- assemble: one font pair, no images — see the note above ---- */
+  return assembleTextPdf(pages, PW, PH);
+}
+
+/* The object and xref plumbing for a PDF of text and lines only — one
+   Helvetica pair (F1 regular, F2 bold), no images: the packing list's, and
+   the b-roll shot list's (#150), which is the same kind of page. `pages`
+   is one array of content-stream operators per page. */
+function assembleTextPdf(pages, PW, PH) {
   var chunks = [], offsets = [], length = 0;
   function put(data) {
     var bytes = typeof data === "string" ? latin1Bytes(data) : data;
@@ -929,6 +943,117 @@ export function buildPackingListPdf(catId) {
   put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
 
   return concatBytes(chunks);
+}
+
+/* ================= the b-roll shot list (#150) =================
+
+   What the full-page shot list's "Print shot list" makes: the list as it
+   is on screen — its filter and its grouping (brollShotListForPrint,
+   08d-broll-panel.js) — as a sheet to take on the day. A box per shot
+   (ticked when it is in the can), the shot in bold, and under it the
+   scene, who has it, the props it needs, the line it cuts against and the
+   note, with FLAGGED in red in front of a flagged one's.
+
+   A PDF, the way the packing lists are, rather than the browser's print of
+   the page: the same file in the browser and the desktop app, one that can
+   be sent to whoever is shooting as well as printed, and a page laid out
+   for paper rather than a screen's table squeezed onto one. The cost is
+   the one the packing list already pays — Helvetica's WinAnsi, so a
+   character outside it prints as "?". */
+export function buildShotListPdf(data) {
+  var PW = 612, PH = 792, M = 54, W = PW - M * 2;
+  var TEXT_X = M + 20, TEXT_W = W - 20;
+  var pages = [], ops = [], y = 0;
+  function newPage() {
+    if (ops.length) pages.push(ops);
+    ops = [];
+    y = PH - M;
+  }
+  function text(str, x, yy, font, size, rgb) {
+    ops.push((rgb ? rgb + " rg " : "") + "BT /" + font + " " + size + " Tf 1 0 0 1 " +
+      x.toFixed(2) + " " + yy.toFixed(2) + " Tm (" + pdfEscapeText(str) + ") Tj ET" + (rgb ? " 0 g" : ""));
+  }
+  function rule(yy, gray) {
+    ops.push("q " + (gray || "0.85 0.84 0.81") + " RG 0.6 w " + M.toFixed(2) + " " + yy.toFixed(2) + " m " +
+      (M + W).toFixed(2) + " " + yy.toFixed(2) + " l S Q");
+  }
+  function box(x, yy, shot) {
+    ops.push("q 0.4 0.4 0.4 RG 0.9 w " + x.toFixed(2) + " " + yy.toFixed(2) + " 10 10 re S Q");
+    if (shot) {
+      ops.push("q 0.106 0.478 0.408 RG 1.6 w " + (x + 2).toFixed(2) + " " + (yy + 5).toFixed(2) + " m " +
+        (x + 4.3).toFixed(2) + " " + (yy + 2.4).toFixed(2) + " l " + (x + 8.4).toFixed(2) + " " + (yy + 8.2).toFixed(2) + " l S Q");
+    }
+  }
+  function lines(str, bold, size, width) {
+    return pdfWrapRuns([{ text: str, b: bold }], width, size).map(function (segs) {
+      return segs.map(function (seg) { return seg.text; }).join("");
+    });
+  }
+  function header(first) {
+    text(data.title + "  —  B-roll shot list", M, y - 16, "F2", first ? 15 : 11);
+    y -= first ? 24 : 18;
+    if (first) {
+      text(data.summary + "   ·   " + data.scope, M, y - 10, "F1", 10, "0.42 0.4 0.35");
+      y -= 24;
+    }
+  }
+
+  newPage();
+  header(true);
+  if (!data.groups.length) text("No shots to list.", M, y - 11, "F1", 11);
+
+  data.groups.forEach(function (g) {
+    /* a group's heading never ends a page on its own */
+    if (y - 60 < M) { newPage(); header(false); }
+    var count = g.done + "/" + g.total + " shot";
+    text(g.label, M, y - 12, "F2", 12);
+    text(count, M + W - pdfTextWidth(count, false, 10), y - 12, "F1", 10, "0.42 0.4 0.35");
+    y -= 18;
+    rule(y, "0.55 0.53 0.5");
+    y -= 4;
+    g.items.forEach(function (r) {
+      var name = lines(r.name, true, 11, TEXT_W);
+      var details = [];
+      var meta = [];
+      if (r.scene) meta.push("Scene " + r.scene);
+      if (r.location && g.label !== r.location) meta.push(r.location);
+      if (r.owner) meta.push("Assigned: " + r.owner);
+      if (r.props.length) meta.push("Props: " + (r.propsWithStatus || r.props).join(", "));
+      if (meta.length) details.push({ text: meta.join("   ·   ") });
+      if (r.cuts) details.push({ text: "Cuts against: \u201C" + r.cuts.replace(/\s+/g, " ") + "\u201D" });
+      if (r.flagged || r.note) details.push({ text: (r.note || "").replace(/\s+/g, " "), flag: r.flagged });
+      var wrapped = [];
+      details.forEach(function (d) {
+        var prefix = d.flag ? "FLAGGED" + (d.text ? "  —  " : "") : "";
+        lines(prefix + d.text, false, 9.5, TEXT_W).forEach(function (l, i) {
+          wrapped.push({ text: l, flag: d.flag && i === 0 ? prefix : "" });
+        });
+      });
+      var need = 8 + name.length * 14 + wrapped.length * 12.5 + 6;
+      if (y - need < M) { newPage(); header(false); }
+      y -= 8;
+      box(M, y - 10, r.shot);
+      name.forEach(function (l) {
+        text(l, TEXT_X, y - 9.5, "F2", 11, r.shot ? "0.42 0.4 0.35" : null);
+        y -= 14;
+      });
+      wrapped.forEach(function (l) {
+        if (l.flag) {
+          text(l.flag, TEXT_X, y - 8, "F2", 9.5, "0.70 0.15 0.12");
+          text(l.text.slice(l.flag.length), TEXT_X + pdfTextWidth(l.flag, true, 9.5), y - 8, "F1", 9.5, "0.3 0.29 0.26");
+        } else {
+          text(l.text, TEXT_X, y - 8, "F1", 9.5, "0.3 0.29 0.26");
+        }
+        y -= 12.5;
+      });
+      y -= 6;
+      rule(y);
+    });
+    y -= 14;
+  });
+
+  pages.push(ops);
+  return assembleTextPdf(pages, PW, PH);
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

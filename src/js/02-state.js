@@ -26,7 +26,7 @@ import {
   tagStatus
 } from "./07-production-tags.js";
 import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
-import { BROLL_STATUSES, brollStatus } from "./08c-broll.js";
+import { BROLL_STATUSES, brollStatus, normalizeBrollProps } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 
 /* ================= state ================= */
@@ -482,6 +482,10 @@ export function migrateRows(s) {
     b.location = plainText(b.location).trim().slice(0, 80);
     b.owner = knownPeople[b.owner] ? b.owner : "";
     b.origin = b.origin === "list" ? "list" : "script";
+    /* the props added to it by hand (#149): registry ids with their names
+       beside them, every name refreshed from its entry; one the registry
+       does not know is kept, by name (normalizeBrollProps, 08c-broll.js) */
+    b.props = normalizeBrollProps(b.props, s.productionTags);
   });
   /* A nameless entry renders as a blank card nobody can identify. If its
      marker is still in the script the next scan mints it again, with the

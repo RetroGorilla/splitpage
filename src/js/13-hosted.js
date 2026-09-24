@@ -61,6 +61,7 @@ import {
   tunnelCommand,
   updateConnectMenu
 } from "./20e-connect.js";
+import { setMenuItemReason } from "./18b-file-menu.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 
@@ -961,23 +962,28 @@ export async function finishServerDetect() {
   }, function () { openSharedDocFromLink(); });
 }
 
-function updateServerMenu() {
+export function updateServerMenu() {
   ["menu-server-open", "menu-server-new"].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.hidden = !S.serverMode.available;
   });
-  var sep = document.getElementById("menu-server-sep");
-  if (sep) sep.hidden = !S.serverMode.available;
   var newBtn = document.getElementById("menu-server-new");
   /* Publishing is a write, and a review session has none. The server says
      so too (403 review-only on POST /api/docs) — this only keeps the app
-     from offering something it knows will be refused. */
-  if (newBtn) newBtn.disabled = S.serverMode.readOnly || conn.role === "review";
+     from offering something it knows will be refused, and says why on the
+     item (#145) rather than leaving a greyed line to be guessed at. */
+  if (newBtn) {
+    newBtn.disabled = S.serverMode.readOnly || conn.role === "review";
+    setMenuItemReason(newBtn, !newBtn.disabled ? ""
+      : conn.role === "review" ? "Viewing only — publishing needs the editing code"
+      : "This server is read-only");
+  }
   /* The share entry is never hidden — it is how someone with no server yet
-     finds out that sharing a live document is possible at all, and it says
-     so and opens the Servers dialog rather than doing nothing. Read-only is
-     the one state where pressing it could not work, so it is disabled with
-     the reason in its tooltip. */
+     finds out that sharing a live document is possible at all. With none it
+     stays pressable and says so on its second line: pressing it opens the
+     Servers dialog to set one up rather than doing nothing. Read-only is the
+     one state where pressing it could not work, so it is disabled, with the
+     reason on the item and in its tooltip. */
   var shareBtn = document.getElementById("menu-share-link");
   if (shareBtn) {
     shareBtn.disabled = S.serverMode.available && (S.serverMode.readOnly || conn.role === "review");
@@ -987,18 +993,10 @@ function updateServerMenu() {
           : "This server is published read-only — nothing new can be put on it.")
       : "Puts this script on the connected server and copies a link to it. " +
         "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
-  }
-  /* The Server section (issue #51) hides itself, heading and all, once
-     every item inside it is hidden — same "nothing to show" rule as the
-     items above rather than a fixed assumption about which of them can
-     ever go dark. Disabled is not hidden: Publish & copy a link and
-     Servers… are never hidden by this function, so in practice the
-     section stays put even with no server connected. */
-  var serverSectionWrap = document.getElementById("menu-section-server-wrap");
-  if (serverSectionWrap) {
-    var serverItems = document.querySelectorAll("#menu-section-server [data-file-action]");
-    var anyVisible = Array.prototype.some.call(serverItems, function (b) { return !b.hidden; });
-    serverSectionWrap.hidden = !anyVisible;
+    setMenuItemReason(shareBtn, !S.serverMode.available ? "No server connected — set one up first"
+      : !shareBtn.disabled ? ""
+      : conn.role === "review" ? "Viewing only — publishing needs the editing code"
+      : "This server is read-only — nothing new can go on it");
   }
 }
 
@@ -2557,7 +2555,7 @@ export function openDriveModal() {
        20f-desktop.js's initDesktop() — so this is the defensive half, for a
        native menu command or a stale shortcut). */
     if (!driveDesktopBridge()) {
-      showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open a document… instead.", "warn");
+      showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open… instead.", "warn");
       return;
     }
     document.getElementById("drive-modal").hidden = false;

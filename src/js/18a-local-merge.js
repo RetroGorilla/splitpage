@@ -305,8 +305,10 @@ function mergeDiffModel(base, mine, theirs) {
     function (s) { return s.id; },
     function (s) { return s.name || "Shot"; },
     function (s) {
+      /* the panel's words (#148), and the props added to it (#149) */
       return mergeItemSummary([s.name, s.desc, s.location, s.owner, s.audioRef, s.notes,
-        s.status === "shot" ? "Shot" : "Not shot", s.reshoot ? "Needs attention" : ""]);
+        s.status === "shot" ? "Shot" : "To shoot", s.reshoot ? "Flagged" : "",
+        (Array.isArray(s.props) ? s.props : []).map(function (p) { return p && p.name; }).filter(Boolean).join(", ")]);
     });
   if (brollEntries.length) groups.push({ label: "B-roll", entries: brollEntries });
 

@@ -567,7 +567,8 @@ of the document.
 ### 3.12 Gear is a category, and its panel is not a second copy of anything
 
 Adding Gear was one `TAG_CATEGORIES` entry, one `TAG_SHORTCUTS` entry, and
-one matching `.tag-anchor[data-tag-cat="gear"]` CSS rule (invariant 14) —
+one matching `.tag-anchor[data-tag-cat="gear"]` CSS rule (invariant 14;
+since #143 also its `--tag-gear` tokens) —
 everything else already iterates `TAG_CATEGORIES` generically. `#gear-panel`
 reuses `tagEntityHtml()` cards filtered by `gearEntries()`.
 **`wireTagEntityContainer(id)`** is `#production-panel`'s event wiring
@@ -963,7 +964,12 @@ builds two fields.
   "people": [{ "id": "p…", "name": "Jordan" }],
   "productionTags": [{ "cat": "prop | location | cast | vfx | sound", "name": "Camera Rig",
     "owner": "p… or ''", "notes": "plain text ≤2000",
-    "status": "needed | sourcing | have | returned" }]
+    "status": "needed | sourcing | have | returned" }],
+  "brollShots": [{ "id": "bs…", "name": "the line's words", "desc": "plain text",
+    "status": "unshot | shot", "reshoot": false, "notes": "plain text ≤2000",
+    "owner": "p… or ''", "audioRef": "plain text", "location": "plain text ≤80",
+    "origin": "script | list",
+    "props": [{ "id": "t_… (a productionTags id) or ''", "name": "≤80" }] }]  // ≤40, hand-added only (#149)
 }
 ```
 
@@ -1163,9 +1169,15 @@ bytes, #82 — nothing deletes them yet, D4).
     it** — checked at the very top of the click delegation.
 13. **Two different drags share the root handlers.** The image branch is
     gated on `isFileDrag(e) && !dragRowId`, or scene reordering breaks.
-14. **A new `TAG_CATEGORIES` entry needs a matching
-    `.tag-anchor[data-tag-cat="…"]` CSS rule** — panel colour comes from JS,
-    script colour comes from CSS.
+14. **A new `TAG_CATEGORIES` entry needs its colour tokens and a matching
+    `.tag-anchor[data-tag-cat="…"]` CSS rule** — `--tag-<id>` and
+    `--tag-<id>-tint` in `:root` and in both dark blocks of `app.css`, its
+    `color` set to `"var(--tag-<id>)"`, and the rule pointing `--tag-color`/
+    `--tag-tint` at them. Panels read the colour through `TAG_CATEGORIES`,
+    the script through the rule; both land on the same token, so the dark
+    theme and the prompter (which always takes the dark tokens) follow on
+    their own (#143). Keep the hues off the Visual teal and Audio orange.
+    `src/test/palette.test.mjs` checks all of it, contrast included.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
@@ -1451,11 +1463,31 @@ bytes, #82 — nothing deletes them yet, D4).
     survive every edit; `mediaTable` lifts and restores them, and a new
     kind of object in a comment body needs a place there and in
     `walkCell`'s atoms.
+56. **A b-roll shot stores only the props added to it by hand, and names
+    each by its registry id** (#149, 08c-broll.js). The props tagged on its
+    own lines are read off the script every time (`brollPropsInCell`) and
+    never copied onto the record. `props` is `[{id, name}]`: `id` is the
+    `productionTags` entry's id, which a rename keeps, so a rename carries
+    through with nothing to do; `name` is the fallback for an entry the
+    breakdown no longer has, refreshed from the entry by `migrateRows`
+    (`normalizeBrollProps`: garbage tolerated, an unknown name kept, a
+    name-only one given the id of the prop of that name, capped at 40).
+    The one rename that drops an id — folding onto another entry's name —
+    re-points them (`brollPropsRenamed`, called from `renameTag` in the
+    same edit). The merge is a base-aware set per shot (`mergeBrollProps`,
+    03-sync.js): both sides' additions kept, a removal kept unless the
+    other side still has it and did not have it in the base. A pasted copy
+    of a shot's line gets none of them (`recordPastedBroll` makes a fresh
+    record), exactly as it gets none of the status, notes or owner. A new
+    field on a shot record needs `migrateRows`, `mergeBrollShots` (which
+    clones a shot whole and folds the other side in field by field) and
+    `newBrollRecord`; `state-fields.test.mjs` checks the record's keys
+    survive a merge and a save.
 ---
 
 ## 6. Map of the source
 
-`src/js/` (43 modules; filenames say where things live, and still set
+`src/js/` (46 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
@@ -1483,6 +1515,8 @@ evaluation order via `_entry.js`):
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
+| `08c-broll.js` | the b-roll list itself: reading `B-roll:` lines off the model, the records in `state.brollShots`, anchoring (#21), a pasted key's record (invariant #54), the props a shot needs (#149, invariant #56), the badge and the idle refresh |
+| `08d-broll-panel.js` | how the b-roll list is shown and edited (#148): the side panel — one line per shot, summary bar, filter chips and Group menu (remembered per device, `splitpage-broll-view`), the compact detail card, multi-select and the bulk bar (one change, one undo); and the full-page shot list (#150) — a table over the script at the writer's z-index that closes the side panels and traps the focus (invariants #16, #19), edited through the panel's own handlers (`wireBrollRoot`), with its CSV (`buildBrollCsv`) and printable PDF (`buildShotListPdf` in 17-pdf.js, the packing list's writer) |
 | `09-find-replace.js` | find & replace |
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
@@ -1495,6 +1529,9 @@ evaluation order via `_entry.js`):
 | `17-pdf.js` | pdf, packing lists |
 | `18-local-files.js` | `openProjectFile`/`adoptProjectState`, save-back, File menu dispatch |
 | `18a-local-merge.js` | the on-disk conflict modal's "Merge them": the mergeable-file probe, the retained ancestor (`diskBase`), the field-by-field review pane and its word-level diff |
+| `18b-file-menu.js` | the File menu as a dropdown (#145): `toggleFileMenu`, the file card, `refreshFileMenu` (what is offered right now), `setMenuItemReason`/`setMenuItemLabel` (the second line and the label, never the button's textContent), shortcut chips from `data-keys`, submenus opening in place, Open recent, New script (`startNewScript`), the keyboard, and the browser's Ctrl+S / Ctrl+Shift+S / Ctrl+O (the desktop's are main's accelerators) |
+| `18c-export-dialog.js` | File ▸ Export… (#146): the `EXPORT_FORMATS` table the cards and options are built from, the page sketch, summary and file name (`exportFileName`, 18-local-files.js, which `buildFileData` names every file with), `exportActionReason`, the remembered format (`splitpage-last-export`, per device) and Export again, Ctrl/Cmd+E. Builds nothing itself: Export clicks the format's own hidden `data-file-action` button |
+| `18d-command-menu.js` | the command menu (#147, Ctrl/Cmd+K and File ▸ Search commands…): the `COMMANDS` list (File-menu buttons, each export format, the header's panel/Write/Present/Save buttons) with the words each is found by, ranking, recently run (`splitpage-recent-commands`, per device), and where it will not open (teleprompter, writer, a modal, the tour). Runs every command by clicking the button the menu or header already has, and reads whether it is offered and why not off that same button |
 | `19-writer.js` | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | teleprompter and voice follow |
 | `20a-update.js` | update notice (desktop: Download/Install; portable: release-page signpost), desktop-app notice, About box |
@@ -1505,7 +1542,8 @@ evaluation order via `_entry.js`):
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
-| `20j-newtab.js` | the New Tab page: its gate, the blank document, the two choices, the desktop recents column (DESKTOP-RECENTS, issue #15) |
+| `20j-newtab.js` | the New Tab page, a start screen since #144: its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
+| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed |
 | `21-events.js` | all event wiring, `init()` |
 
 **Desktop files** (optional; the web app runs without them):
@@ -1559,6 +1597,15 @@ other two (alphabetical order) — keeping only one full-screen modal open at
 a time (invariant #19). The wizard's own Escape/Tab handling listens in the
 bubble phase instead, since it can sit open, unnoticed, during an unrelated
 test.
+
+Since #145 the menu is a dropdown (`18b-file-menu.js`), but every item is
+still one `<button data-file-action>` inside `#file-menu`, exactly once — the
+desktop native menu clicks them (`runDesktopMenuCommand`). What an item's
+state is lives on the button (`hidden`, `disabled`, the `.mi-why` second line
+through `setMenuItemReason`), and a label is rewritten through
+`setMenuItemLabel`, never the button's `textContent`, which would take its
+icon with it. Items that are not actions (the Open recent / Import submenu
+parents) carry `data-submenu` instead, so no listener mistakes them for one.
 
 ### Merging main into a branch that has `src/`
 

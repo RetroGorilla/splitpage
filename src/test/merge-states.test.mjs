@@ -664,3 +664,64 @@ test("a cell holding a picture is compared whole, as a string — the model has 
   assert.equal(mergeTextField("one two", "1 two " + img, "one 2", ctx).outcome, "conflict");
 });
 
+
+/* ---- a shot's hand-added props (#149) ----
+
+   A set, merged against the base: both sides' additions kept, a removal
+   kept unless the other side still had it untouched, and a side that never
+   saw the prop cannot bring back one the other took off. */
+function withProps(names) {
+  const s = mk();
+  s.productionTags.push({ cat: "prop", name: "Ladder", owner: "", notes: "", status: "needed" });
+  const out = migrateRows(s);
+  out.brollShots[0].props = names.map((n) => ({ id: out.productionTags.find((t) => t.name === n).id, name: n }));
+  return out;
+}
+const propNames = (s) => s.brollShots[0].props.map((p) => p.name);
+
+test("b-roll props: both sides' additions are kept", () => {
+  const base = withProps([]), mine = withProps(["Kettle"]), theirs = withProps(["Ladder"]);
+  assert.deepEqual(propNames(mergeStates(base, mine, theirs).merged).sort(), ["Kettle", "Ladder"]);
+});
+
+test("b-roll props: a prop I took off stays off, and so does one they took off", () => {
+  const base = withProps(["Kettle", "Ladder"]);
+  assert.deepEqual(propNames(mergeStates(base, withProps(["Ladder"]), withProps(["Kettle", "Ladder"])).merged), ["Ladder"]);
+  assert.deepEqual(propNames(mergeStates(base, withProps(["Kettle", "Ladder"]), withProps(["Kettle"])).merged), ["Kettle"]);
+});
+
+test("b-roll props: a removal on one side and an addition on the other both land", () => {
+  const base = withProps(["Kettle"]);
+  assert.deepEqual(propNames(mergeStates(base, withProps([]), withProps(["Kettle", "Ladder"])).merged), ["Ladder"]);
+});
+
+test("b-roll props: with no base copy of the shot, the two lists union", () => {
+  const base = mk();
+  base.brollShots = [];
+  assert.deepEqual(propNames(mergeStates(base, withProps(["Kettle"]), withProps(["Ladder"])).merged).sort(), ["Kettle", "Ladder"]);
+});
+
+test("b-roll props: a copy from before props (no list at all) never removes one", () => {
+  const base = withProps(["Kettle"]), mine = withProps(["Kettle"]), theirs = withProps(["Kettle"]);
+  delete base.brollShots[0].props;
+  delete theirs.brollShots[0].props;
+  assert.deepEqual(propNames(mergeStates(base, mine, theirs).merged), ["Kettle"]);
+});
+
+test("b-roll props: one side's name-only copy and the other's id'd one are one prop", () => {
+  const base = withProps([]), mine = withProps(["Kettle"]), theirs = withProps([]);
+  theirs.brollShots[0].props = [{ id: "", name: "kettle" }];
+  const out = mergeStates(base, mine, theirs).merged;
+  assert.equal(out.brollShots[0].props.length, 1);
+  assert.deepEqual(out.brollShots[0].props[0], mine.brollShots[0].props[0]);
+});
+
+test("b-roll props: the other fields of a shot still merge the way they did", () => {
+  const base = withProps([]), mine = withProps(["Kettle"]), theirs = withProps([]);
+  theirs.brollShots[0].status = "shot";
+  mine.brollShots[0].notes = "wide and tight";
+  const out = mergeStates(base, mine, theirs).merged.brollShots[0];
+  assert.equal(out.status, "shot");
+  assert.equal(out.notes, "wide and tight");
+  assert.deepEqual(out.props.map((p) => p.name), ["Kettle"]);
+});

@@ -13,17 +13,26 @@
  * And one thing the old pass never did: a key repeating an id an earlier
  * line holds (a copy pasted before a paste gave keys ids of their own) is
  * given one of its own; and the record a paste makes for its keys.
+ *
+ * And the props a shot needs (#149): the prop tags on its own lines, the
+ * ones added to it by hand, a rename in the breakdown carrying through,
+ * and the exports that list the shots each prop is needed for.
  */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { escapeHtml } from "../js/02-state.js";
+import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, normalizeCell } from "../js/04c-doc-model.js";
 import {
-  BROLL_MARKER_RE, __init as brollInit, anchorBrollInRows, brollInCell, recordPastedBroll, renameBrollInScript
+  BROLL_MARKER_RE, __init as brollInit, addBrollProp, anchorBrollInRows, brollInCell, brollPropKey, brollPropsInCell,
+  brollShotsByProp, recordPastedBroll, removeBrollProp, renameBrollInScript
 } from "../js/08c-broll.js";
+import { renameTag } from "../js/07-production-tags.js";
+import { buildBreakdownCsv } from "../js/08-production-panels.js";
+import { brollShotListForPrint, buildBrollCsv } from "../js/08d-broll-panel.js";
+import { buildShotListPdf } from "../js/17-pdf.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 brollInit();
@@ -469,4 +478,156 @@ test("a pasted key's record is a new shot seeded from its scene; a moved one kee
   assert.equal(rec.origin, "script");
   assert.equal(rec.audioRef, "Waves on the pier");
   assert.equal(rec.location, "Pier");
+});
+
+/* ---- the props a shot needs (#149) ---- */
+
+test("brollPropsInCell: the prop tags on each item's own lines, one array per item, lined up with brollInCell", () => {
+  const html = sanitizeHtml(
+    "Open on the " + tagSpan("prop", "Kettle", "kettle") + "<br>" +
+    KEY("b1") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill<br>" +
+    "with the " + tagSpan("prop", "Tea towel", "towel") + " and a " + tagSpan("location", "Kitchen", "kitchen") +
+      " and the " + tagSpan("prop", "Red mug", "mug") + " again<br>" +
+    "<strong>B-roll:</strong> steam, <strong>" + tagSpan("prop", "Kettle", "kettle") + "</strong><br>" +
+    KEY("b3") + " nothing needed");
+  const cell = cellOf(html);
+  assert.deepEqual(brollInCell(cell).map((b) => b.name), ["the red mug on the sill", "steam, kettle", "nothing needed"]);
+  /* the kettle before the first marker belongs to no shot; a location is not
+     a prop; one name once however often it is tagged */
+  assert.deepEqual(brollPropsInCell(cell), [["Red mug", "Tea towel"], ["Kettle"], []]);
+  assert.deepEqual(brollPropsInCell(cellOf("no markers " + tagSpan("prop", "Kettle", "kettle"))), []);
+});
+
+function propsDoc() {
+  S.state = migrateRows({
+    schema: 2,
+    rows: [
+      { id: "r0", visualText: KEY("b1") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill", audioText: "Morning." },
+      { id: "r1", visualText: KEY("b2") + " drone over the pier", audioText: "" }
+    ],
+    productionTags: [{ cat: "prop", name: "Red mug", status: "have" }, { cat: "prop", name: "Kettle" }],
+    brollShots: [{ id: "b1", name: "the red mug on the sill" }, { id: "b2", name: "drone over the pier" }]
+  });
+  return S.state;
+}
+const shotsBy = () => {
+  const out = {};
+  const by = brollShotsByProp();
+  Object.keys(by).forEach((k) => { out[k] = by[k]; });
+  return out;
+};
+
+test("addBrollProp: an existing prop by any spelling, or a new registry entry for a new name", () => {
+  const s = propsDoc();
+  const kettle = s.productionTags.find((t) => t.name === "Kettle");
+  assert.equal(addBrollProp("b2", "  KETTLE "), true);
+  assert.deepEqual(s.brollShots[1].props, [{ id: kettle.id, name: "Kettle" }]);
+  assert.equal(addBrollProp("b2", "kettle"), false, "already there");
+  assert.equal(addBrollProp("b2", "Drone batteries"), true);
+  const added = s.productionTags.find((t) => t.name === "Drone batteries");
+  assert.ok(added && added.cat === "prop" && added.id, "registered as a prop, the way the Gear box registers a line");
+  assert.deepEqual(s.brollShots[1].props.map((p) => p.id), [kettle.id, added.id]);
+  assert.equal(addBrollProp("b2", "   "), false);
+  assert.equal(addBrollProp("nope", "Kettle"), false);
+});
+
+test("removeBrollProp takes a hand-added prop off by its key and leaves the breakdown alone", () => {
+  const s = propsDoc();
+  addBrollProp("b2", "Kettle");
+  const key = brollPropKey(s.brollShots[1].props[0].id, "Kettle");
+  assert.equal(removeBrollProp("b2", key), true);
+  assert.deepEqual(s.brollShots[1].props, []);
+  assert.ok(s.productionTags.some((t) => t.name === "Kettle"));
+  assert.equal(removeBrollProp("b2", key), false);
+});
+
+test("the shots a prop is needed by: tagged on the line or added by hand, each once", () => {
+  propsDoc();
+  addBrollProp("b1", "red mug"); /* also tagged: still one mention of b1 */
+  addBrollProp("b2", "Red mug");
+  addBrollProp("b2", "Kettle");
+  assert.deepEqual(shotsBy(), {
+    "prop red mug": ["the red mug on the sill", "drone over the pier"],
+    "prop kettle": ["drone over the pier"]
+  });
+});
+
+test("renaming a prop in the breakdown carries through to the shots that need it", () => {
+  const s = propsDoc();
+  addBrollProp("b2", "Kettle");
+  const id = s.brollShots[1].props[0].id;
+  assert.ok(renameTag("prop", "Kettle", "Whistling kettle"));
+  assert.deepEqual(s.brollShots[1].props, [{ id: id, name: "Whistling kettle" }]);
+  assert.deepEqual(shotsBy()["prop whistling kettle"], ["drone over the pier"]);
+});
+
+test("renaming a prop onto another's name re-points the shots at the one it folded into", () => {
+  const s = propsDoc();
+  addBrollProp("b2", "Kettle");
+  const mug = s.productionTags.find((t) => t.name === "Red mug");
+  renameTag("prop", "Kettle", "red mug");
+  assert.equal(s.productionTags.filter((t) => t.cat === "prop").length, 1);
+  assert.deepEqual(s.brollShots[1].props, [{ id: mug.id, name: "Red mug" }]);
+});
+
+test("a prop deleted from the breakdown still shows on the shot by its name, with no status", () => {
+  const s = propsDoc();
+  addBrollProp("b2", "Kettle");
+  s.productionTags = s.productionTags.filter((t) => t.name !== "Kettle");
+  assert.deepEqual(shotsBy()["prop kettle"], ["drone over the pier"]);
+});
+
+test("a pasted copy of a shot's line gets none of its hand-added props", () => {
+  /* the same rule that drops status, notes and owner: the copy is a new shot */
+  const s = propsDoc();
+  addBrollProp("b1", "Kettle");
+  s.rows[1].visualText = KEY("bsPasted") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill";
+  recordPastedBroll("r1", cellOf(s.rows[1].visualText), ["bsPasted"]);
+  const rec = s.brollShots.find((r) => r.id === "bsPasted");
+  assert.ok(rec);
+  assert.deepEqual(rec.props, []);
+  assert.equal(s.brollShots[0].props.length, 1, "the original keeps its own");
+});
+
+test("the breakdown CSV names the b-roll shots each prop is needed for, in a last column", () => {
+  propsDoc();
+  addBrollProp("b2", "Kettle");
+  const lines = buildBreakdownCsv().replace(/^\uFEFF/, "").split("\r\n");
+  assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots");
+  const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
+  assert.ok(kettle.endsWith(",drone over the pier"), kettle);
+  const mug = lines.find((l) => l.startsWith("Prop,Red mug,"));
+  assert.ok(mug.endsWith(",the red mug on the sill"), mug);
+});
+
+/* ---- the full-page shot list's files (#150) ---- */
+
+test("the shot list CSV: one row per shot in script order, with a Props column, nothing written", () => {
+  const s = propsDoc();
+  addBrollProp("b2", "Kettle");
+  s.brollShots[1].notes = "wide, then \"tight\"";
+  s.brollShots[1].reshoot = true;
+  s.rows.push({ id: "r2", visualText: "B-roll: an unanchored line", audioText: "" });
+  const before = JSON.stringify(s.brollShots);
+  const lines = buildBrollCsv().replace(/^\uFEFF/, "").split("\r\n");
+  assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
+  assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description");
+  assert.equal(lines.length, 4);
+  assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,");
+  assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",');
+  assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,");
+});
+
+test("the printed shot list is a PDF of the shots as shown, flagged ones marked", () => {
+  const s = propsDoc();
+  s.brollShots[1].reshoot = true;
+  s.brollShots[1].notes = "too dark";
+  const text = Buffer.from(buildShotListPdf(brollShotListForPrint())).toString("latin1");
+  assert.ok(text.startsWith("%PDF-1.4"));
+  assert.ok(text.includes("(the red mug on the sill) Tj"));
+  assert.ok(text.includes("(drone over the pier) Tj"));
+  assert.ok(text.includes("(FLAGGED  \u0097  ) Tj"), "FLAGGED in front of the note");
+  /* the PDF string escapes its parentheses */
+  assert.ok(text.includes("Props: Red mug \\(have it\\)"), "each prop with its status in words");
+  assert.match(text, /\/Count 1 >>/);
 });

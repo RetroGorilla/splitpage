@@ -1,0 +1,148 @@
+# The b-roll shot list as a full page (#150, src/js/08d-broll-panel.js):
+#
+#   * "Open as a full page" in the panel's head opens it over the script,
+#     closes the side panels, and takes the focus; Escape (or "← Script")
+#     closes it, brings the panel back and gives the focus back;
+#   * a summary ("3 of 8 shot · 1 flagged"), the panel's own filter chips
+#     (the filter is shared), and grouping by Location (the default),
+#     Scene or Person, remembered per device;
+#   * a table in a card: group rows with the location's pin and done/total,
+#     rows 46px, a flagged row tinted with a flag before its note;
+#   * the checkbox, the assignee and the note edited in place through the
+#     panel's own code — a tick shows in the panel, and Ctrl+Z takes it
+#     back;
+#   * the Scene link jumps to the scene and closes the page;
+#   * CSV: one row per shot with a Props column; Print: a PDF of the list
+#     as shown;
+#   * in dark mode it takes the dark tokens.
+# The phone layout is 97-broll-page-phone.txt. Every `eval` is one line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ try { localStorage.removeItem('splitpage-broll-view'); } catch (e) {} window.__blobs = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) return; return c.apply(this, arguments); }; return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Harbour town", "rows": [{"id": "r1", "visualText": "Host at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Harbour\" contenteditable=\"false\">harbour</span> wall.<br><span class=\"broll-key\" data-broll-id=\"bs1\" contenteditable=\"false\">B-roll:</span> gulls wheeling over the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Fishing nets\" contenteditable=\"false\">nets</span><br>wide, then tight on one bird<br><span class=\"broll-key\" data-broll-id=\"bs2\" contenteditable=\"false\">B-roll:</span> boats coming in at dawn", "audioText": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "status": "todo"}, {"id": "r2", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs3\" contenteditable=\"false\">B-roll:</span> steam off the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> in the caf\u00e9 window", "audioText": "Inside, the caf\u00e9 has been open since five, and the kettle has not stopped once.", "status": "todo"}, {"id": "r3", "visualText": "Interview, two shot.<br><span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span> hands mending a net<br><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span> the ice machine at the market", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "todo"}, {"id": "r4", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs6\" contenteditable=\"false\">B-roll:</span> the lighthouse at blue hour", "audioText": "And when the light goes, the lighthouse takes over.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}, {"id": "p2", "name": "Ada Brenner"}], "productionTags": [{"cat": "prop", "name": "Fishing nets", "status": "have"}, {"cat": "prop", "name": "Kettle", "status": "sourcing"}, {"cat": "prop", "name": "Drone", "status": "needed"}, {"cat": "location", "name": "Harbour"}, {"cat": "location", "name": "Fish market"}], "brollShots": [{"id": "bs1", "name": "gulls wheeling over the nets", "status": "shot", "location": "Harbour", "owner": "p1", "audioRef": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "props": [{"name": "Drone"}]}, {"id": "bs2", "name": "boats coming in at dawn", "status": "unshot", "reshoot": true, "notes": "Too late last time, the light was gone.", "location": "Harbour", "owner": "p2"}, {"id": "bs3", "name": "steam off the kettle in the caf\u00e9 window", "status": "shot", "location": "Caf\u00e9", "owner": "p1"}, {"id": "bs4", "name": "hands mending a net", "status": "unshot", "location": "Harbour", "props": [{"name": "Fishing nets"}]}, {"id": "bs5", "name": "the ice machine at the market", "status": "unshot", "location": "Fish market", "owner": "p2"}, {"id": "bs6", "name": "the lighthouse at blue hour", "status": "shot", "location": "Headland"}, {"id": "bs7", "name": "Establisher of the street, blue hour", "status": "unshot", "origin": "list"}, {"id": "bs8", "name": "Crowd at the fish auction", "status": "unshot", "origin": "list", "location": "Fish market", "notes": "Ask the harbourmaster first."}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; })()
+wait F.state().title === 'Harbour town' && document.querySelector('#rows .row[data-id="r4"]')
+eval (function(){ window.rec = function(id){ return F.state().brollShots.filter(function(r){ return r.id === id; })[0]; }; window.prow = function(id){ return document.querySelector('#broll-page .broll-page-row[data-id="' + id + '"]'); }; window.pheads = function(){ return Array.prototype.map.call(document.querySelectorAll('#broll-page .broll-page-group'), function(h){ var n = h.querySelector('.broll-page-group-name, .broll-page-group-scene'); return n.textContent; }).join('|'); }; return true; })()
+jsclick #btn-broll
+wait document.querySelectorAll('#broll-list .broll-row').length === 8
+sleep 400
+
+# ---- 1. open: over everything, panels shut, focus taken ------------------
+click #broll-open-page
+wait !document.getElementById('broll-page').hidden
+expect document.getElementById('broll-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect document.activeElement.id === 'broll-page-close'
+expect getComputedStyle(document.getElementById('broll-page')).position === 'fixed'
+expect document.getElementById('broll-page-title').textContent === 'B-roll shot list'
+expect document.getElementById('broll-page-summary').textContent === '3 of 8 shot · 1 flagged'
+expect document.getElementById('broll-page-group').value === 'location'
+
+# ---- 2. the table: groups by location, rows 46px, flagged tinted --------
+expect pheads() === 'Café|Fish market|Harbour|Headland|No location'
+expect Array.prototype.map.call(document.querySelectorAll('#broll-page .broll-page-group-count'), function(c){ return c.textContent; }).join(',') === '1/1 shot,0/2 shot,1/3 shot,1/1 shot,0/1 shot'
+expect document.querySelector('#broll-page .broll-page-group .broll-loc-pin').getAttribute('style').indexOf('--loc:') === 0
+expect Array.prototype.map.call(document.querySelectorAll('#broll-page thead th'), function(t){ return t.textContent; }).join('|') === 'Shot or to shoot|Shot|Scene|Props|Cuts against|Assigned|Note'
+expect document.querySelectorAll('#broll-page .broll-page-row').length === 8
+expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-page-row'), function(r){ var h = r.getBoundingClientRect().height; return h >= 45 && h <= 48; })
+expect getComputedStyle(document.querySelector('#broll-page .broll-page-card')).borderTopLeftRadius === '12px'
+expect prow('bs1').querySelector('.broll-page-c-props').textContent === 'Fishing nets, Drone'
+expect Array.prototype.map.call(prow('bs1').querySelectorAll('.broll-page-c-props .broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Have it|Needed'
+expect prow('bs3').querySelector('.broll-page-c-props .broll-st-dot').classList.contains('is-sourcing')
+expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(193, 70, 28)'
+expect prow('bs1').querySelector('.broll-page-c-cuts').textContent.indexOf('Every morning') === 0
+expect prow('bs1').querySelector('.broll-page-scene').textContent === '01'
+expect prow('bs2').classList.contains('is-flagged') && !prow('bs4').classList.contains('is-flagged')
+expect getComputedStyle(prow('bs2').querySelector('td')).backgroundColor === 'rgb(255, 247, 245)'
+expect !!prow('bs2').querySelector('.broll-page-c-note .broll-flag-ico')
+expect prow('bs8').querySelector('.broll-page-note').value === 'Ask the harbourmaster first.'
+
+# ---- 3. the filter is the panel's; the grouping is the page's -----------
+click #broll-page .broll-chip[data-filter="flagged"]
+wait document.querySelectorAll('#broll-page .broll-page-row').length === 1
+expect window.__brollTest.view().filter === 'flagged'
+click #broll-page .broll-chip[data-filter="all"]
+wait document.querySelectorAll('#broll-page .broll-page-row').length === 8
+eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'scene'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait pheads() === 'Scene 01|Scene 02|Scene 03|Scene 04|Added here'
+eval (function(){ var s = document.getElementById('broll-page-group'); s.value = 'person'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait pheads() === 'Ada Brenner|Jordan Sato|Unassigned'
+expect JSON.parse(localStorage.getItem('splitpage-broll-view')).pageGroup === 'person'
+expect window.__brollTest.view().group === 'scene'
+expect window.__hostedTest.dirty() === false
+
+# ---- 4. edited in place, through the panel's own code -------------------
+eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()
+click #broll-page .broll-page-row[data-id="bs4"] .broll-check
+wait rec('bs4').status === 'shot'
+wait prow('bs4').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
+expect document.getElementById('broll-page-summary').textContent === '4 of 8 shot · 1 flagged'
+eval U.flush()
+expect U.sizes().undo === window.__u0 + 1
+eval (function(){ var s = prow('bs4').querySelector('.broll-owner-select'); s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait rec('bs4').owner === 'p2'
+caret #broll-page .broll-page-row[data-id="bs4"] .broll-page-note
+type light goes at 6
+key Enter
+wait rec('bs4').notes === 'light goes at 6'
+eval U.flush()
+expect U.sizes().undo === window.__u0 + 3
+# the note, the assignee, then the tick, each taken back on its own
+eval document.getElementById('broll-page-close').focus()
+key ctrl KeyZ
+wait rec('bs4').notes === ''
+key ctrl KeyZ
+wait rec('bs4').owner === ''
+key ctrl+shift KeyZ
+wait rec('bs4').owner === 'p2'
+expect rec('bs4').status === 'shot'
+
+# ---- 5. CSV: one row per shot, with the props ---------------------------
+click #broll-page [data-action="broll-page-csv"]
+wait window.__blobs.length === 1
+eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
+expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description'
+expect window.__csv.length === 9
+expect window.__csv[1].indexOf('01,gulls wheeling over the nets,Shot,,Harbour,Fishing nets; Drone,') === 0
+expect window.__csv.filter(function(l){ return l.indexOf('boats coming in at dawn,To shoot,yes,') !== -1; }).length === 1
+expect window.__csv.filter(function(l){ return l.indexOf(',hands mending a net,Shot,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
+expect window.__csv[8].indexOf(',Establisher of the street, blue hour') === -1 && window.__csv[8].indexOf('"Establisher of the street, blue hour"') !== -1
+
+# ---- 6. Print: a PDF of the list as shown -------------------------------
+click #broll-page [data-action="broll-page-print"]
+wait window.__blobs.length === 2
+eval (async function(){ window.__pdf = new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[1].arrayBuffer())); return window.__pdf.length; })()
+expect window.__blobs[1].type === 'application/pdf'
+expect window.__pdf.indexOf('%PDF') === 0
+expect window.__pdf.indexOf('B-roll shot list') !== -1
+expect window.__pdf.indexOf('(Ada Brenner) Tj') !== -1 && window.__pdf.indexOf('(Jordan Sato) Tj') !== -1
+expect window.__pdf.indexOf('hands mending a net') !== -1 && window.__pdf.indexOf('FLAGGED') !== -1
+
+# ---- 7. dark mode takes the dark tokens --------------------------------
+eval document.documentElement.setAttribute('data-theme', 'dark')
+expect getComputedStyle(document.getElementById('broll-page')).backgroundColor === 'rgb(22, 19, 15)'
+expect getComputedStyle(prow('bs2').querySelector('td')).backgroundColor !== 'rgb(255, 247, 245)'
+expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(255, 133, 82)'
+expect getComputedStyle(prow('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(86, 214, 188)'
+shot 96-broll-page-dark
+eval document.documentElement.setAttribute('data-theme', 'light')
+
+# ---- 8. Escape closes it: the panel back, the focus back ---------------
+key Escape
+wait document.getElementById('broll-page').hidden
+expect !document.getElementById('broll-panel').hidden
+expect document.activeElement.id === 'broll-open-page'
+expect !document.body.classList.contains('broll-page-open')
+wait (document.querySelector('#broll-list .broll-row[data-id="bs4"] .broll-check') || { getAttribute: function(){ return ''; } }).getAttribute('aria-checked') === 'true'
+
+# ---- 9. the Scene link jumps to the scene and closes the page ----------
+sleep 400
+click #broll-open-page
+wait !document.getElementById('broll-page').hidden
+click #broll-page .broll-page-row[data-id="bs5"] .broll-page-scene
+wait document.getElementById('broll-page').hidden
+wait document.activeElement && document.activeElement.closest && !!document.activeElement.closest('#rows .row[data-id="r3"]')
+
+shot 96-broll-page
+
+quit

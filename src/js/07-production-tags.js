@@ -22,7 +22,7 @@ import {
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
+import { brollPropsRenamed, runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
@@ -39,26 +39,33 @@ var TAG_SHORTCUT_CHARS;
    A tag is not a separate record - it is a span wrapping the words in the
    script itself. Tags therefore travel with the text through editing,
    merging, restore and export with no bookkeeping of their own, and the
-   breakdown is simply what you get when you read the script back. */
+   breakdown is simply what you get when you read the script back.
+
+   `color` names a CSS token rather than holding a hex (#143): the panels
+   drop it straight into a style attribute (--dot, border-color), and a
+   token is what lets those follow the theme — the dark palette is a set of
+   lighter hues, not the light one on a dark page. The values, and why
+   they avoid the columns' teal and orange, are with the tokens at the top
+   of app.css. Only ever used inside CSS; nothing reads it as a hex. */
 
 export var TAG_CATEGORIES = [
-  { id: "prop",     label: "Prop",      plural: "Props & set dressing", color: "#C2703D" },
-  { id: "location", label: "Location",  plural: "Locations & shots",    color: "#2F7D6B" },
-  { id: "cast",     label: "Cast",      plural: "Cast & wardrobe",      color: "#7A5AA8" },
-  { id: "vfx",      label: "VFX",       plural: "VFX & graphics",       color: "#B03A5B" },
+  { id: "prop",     label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)" },
+  { id: "location", label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)" },
+  { id: "cast",     label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)" },
+  { id: "vfx",      label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)" },
   /* Split out of the old combined "VFX/SFX" bucket: music and sound are
      sourced, licensed and cleared by different people than graphics are,
      so they need their own list to hand over. The "vfx" id is unchanged,
      so a file saved before the split keeps every tag it had — nothing is
      silently re-filed; anything already tagged stays under VFX until
      someone moves it deliberately. */
-  { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "#3D6DA8" },
+  { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)" },
   /* Equipment, not set dressing: the camera, the lav mic, the C-stand.
      Kept apart from Prop on purpose — different list, different person
      usually packing it — with its own typing shortcut for the same
      reason [prop]/{location}/~vfx~ have theirs: named enough, common
      enough while writing, to be worth a character. */
-  { id: "gear",     label: "Gear",      plural: "Gear",                 color: "#A67C1F" }
+  { id: "gear",     label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)" }
 ];
 
 /* ---- how far along each tracked item is ----
@@ -1449,6 +1456,9 @@ export function renameTag(cat, oldName, newName) {
       }
       var oi = S.state.productionTags.indexOf(oldEntry);
       if (oi !== -1) S.state.productionTags.splice(oi, 1);
+      /* a b-roll shot that needed the folded-away entry needs the one it
+         folded into (#149) */
+      brollPropsRenamed(oldEntry.id, cat === "prop" ? oldEntry.name : "", collision.id, collision.name);
     }
   }
   /* an orphaned item has no live spans to rename, but its registry entry
@@ -1456,7 +1466,10 @@ export function renameTag(cat, oldName, newName) {
      one the next time productionEntries() reads it */
   var spanCount = eachTaggedField(cat, oldName, clean);
   var entry = registryEntry(cat, oldName);
-  if (entry) entry.name = clean;
+  if (entry) {
+    entry.name = clean;
+    brollPropsRenamed(entry.id, cat === "prop" ? oldName : "", entry.id, clean);
+  }
   return spanCount > 0 || !!entry;
 }
 
