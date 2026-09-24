@@ -52,7 +52,7 @@ const hueGap = (a, b) => { const d = Math.abs(hue(a) - hue(b)); return Math.min(
 
 test("the palette tests read the three token blocks they mean to", () => {
   assert.equal(LIGHT["--bg"], "#F6F4EC");
-  assert.equal(DARK["--surface"], "#1F1B15");
+  assert.equal(DARK["--surface"], "#1E1C19");
   assert.deepEqual(DARK_MEDIA, DARK, "the two dark blocks have drifted apart");
 });
 
