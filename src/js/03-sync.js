@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
-import { DEFAULT_WPM } from "./01-scene-status.js";
+import { DEFAULT_WPM, hasSetLength } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
 import { galleryFieldKey, mergeGalleryField } from "./02d-gallery.js";
@@ -323,7 +323,14 @@ export function rowFieldKey(row, f) {
 
 export function rowContentEqual(a, b) {
   if (!a || !b) return false;
-  return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); });
+  return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); }) &&
+    setLengthOf(a) === setLengthOf(b);
+}
+
+/* A row's hand-set length (#179), or null for the estimate. A change to it
+   is an edit like any other — it outranks the other side's delete. */
+function setLengthOf(row) {
+  return hasSetLength(row) ? row.lengthSeconds : null;
 }
 
 /* The comment-level equivalent of rowContentEqual, used the same way: to
@@ -551,6 +558,17 @@ export function mergeStates(base, mine, theirs) {
        furthest-along value can never un-shoot something someone filmed. */
     var rank = { todo: 0, ready: 1, shot: 2 };
     out.status = (rank[m.status] || 0) >= (rank[t.status] || 0) ? m.status : t.status;
+    /* A length set by hand (#179) is one value, not text: the side that
+       changed it since the base wins; both changed it, theirs stays (the
+       published truth — a length is no loss worth a conflict card); with
+       no base, a set length beats none. */
+    var ml = setLengthOf(m), tl = setLengthOf(t), bl = b ? setLengthOf(b) : null;
+    if (ml !== tl) {
+      var useMine = b ? (tl === bl) : (tl === null);
+      var len = useMine ? ml : tl;
+      if (len === null) delete out.lengthSeconds; else out.lengthSeconds = len;
+      if (useMine) tookMine = true; else tookTheirs = true;
+    }
     /* A row whose cells combine both sides' words counts as mine: my edit
        is in it, which is what "rows you edited" reports. With no ancestor
        nothing can be told apart, and any row they hold counts as theirs,

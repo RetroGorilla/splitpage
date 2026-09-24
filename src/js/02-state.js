@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
-import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
+import { DEFAULT_WPM, normalizeSceneLength, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
@@ -275,6 +275,9 @@ export function migrateRows(s) {
   s.rows.forEach(function (r) {
     r.id = safeId(r.id, "r");
     r.status = rowStatus(r.status) ? r.status : "todo";
+    /* a length set by hand (#179): whole seconds, or absent (the estimate) */
+    var setLength = normalizeSceneLength(r.lengthSeconds);
+    if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
     r.visualText = sanitizeHtml(legacy ? legacyMdToHtml(r.visualText || "") : (r.visualText || ""));
     r.audioText = sanitizeHtml(legacy ? legacyMdToHtml(r.audioText || "") : (r.audioText || ""));
     /* A row's picture is `imageRef`, a record naming bytes in the image

@@ -1,0 +1,114 @@
+# Ctrl + wheel zooms the script, and only the script (#191,
+# src/js/05s-script-zoom.js).
+#
+# Over #rows, Ctrl + wheel (and a trackpad pinch, which arrives as the same
+# event) sets --script-scale on #root, 70 %–200 %, gliding a frame at a
+# time, keeping the line under the pointer where it was; the header and the
+# panels keep their size; a "Script 125 %" readout comes up and a click on
+# it is 100 % again. Ctrl + "+" / "−" / "0" do the same in the editor view
+# (Adam's call) but not in the Writer. The value is the reader's, in
+# localStorage `splitpage-script-scale`, and the Settings dialog's
+# `splitpage:pref` event re-applies it.
+#
+# The wheel and key events are dispatched from the page: the driver has no
+# wheel command, and the handlers read nothing a real event has that these
+# lack (ctrlKey, deltaY, deltaMode, clientY, key/code).
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.removeItem('splitpage-script-scale')
+sleep 300
+eval (function(){ window.scale = function () { return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale')); }; window.afs = function () { return parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .cell-editable')).fontSize); }; window.ctrlKey = function (key, code) { var ev = new KeyboardEvent('keydown', { key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }); (document.activeElement || document.body).dispatchEvent(ev); return ev.defaultPrevented; }; window.wheelAt = function (el, dy, ctrl) { var r = el.getBoundingClientRect(); var ev = new WheelEvent('wheel', { ctrlKey: ctrl !== false, deltaY: dy, deltaMode: 0, clientX: r.left + 20, clientY: r.top + Math.min(20, r.height / 2), bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; }; return true; })()
+expect scale() === 1
+expect afs() === 18
+
+# --- the keyboard, and a reload keeps it ------------------------------------------
+expect ctrlKey('=', 'Equal') === true
+sleep 700
+expect scale() === 1.1
+expect ctrlKey('+', 'Equal') === true
+sleep 700
+expect scale() === 1.25
+expect Math.abs(afs() - 22.5) < 0.01
+expect localStorage.getItem('splitpage-script-scale') == 1.25
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 300
+eval (function(){ window.scale = function () { return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale')); }; window.afs = function () { return parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .cell-editable')).fontSize); }; window.ctrlKey = function (key, code) { var ev = new KeyboardEvent('keydown', { key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }); (document.activeElement || document.body).dispatchEvent(ev); return ev.defaultPrevented; }; window.wheelAt = function (el, dy, ctrl) { var r = el.getBoundingClientRect(); var ev = new WheelEvent('wheel', { ctrlKey: ctrl !== false, deltaY: dy, deltaMode: 0, clientX: r.left + 20, clientY: r.top + Math.min(20, r.height / 2), bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; }; return true; })()
+expect scale() === 1.25
+expect Math.abs(afs() - 22.5) < 0.01
+expect ctrlKey('-', 'Minus') === true
+sleep 700
+expect scale() === 1.1
+expect ctrlKey('0', 'Digit0') === true
+sleep 300
+expect scale() === 1
+expect localStorage.getItem('splitpage-script-scale') === null
+eval window.__hdr = getComputedStyle(document.querySelector('.doc-title')).fontSize + '|' + getComputedStyle(document.querySelector('.col-head-cell')).fontSize + '|' + getComputedStyle(document.querySelector('#btn-present')).fontSize
+
+# --- Ctrl + wheel over the script zooms the script ---------------------------------
+# more scenes, so there is room to scroll and a place to keep
+eval (function(){ for (var i = 0; i < 8; i++) document.querySelector('[data-action="add-row"]').click(); return document.querySelectorAll('#rows .row').length; })()
+sleep 400
+eval document.activeElement.blur()
+eval window.scrollTo(0, 0)
+eval (function(){ var c = document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'); var r = c.getBoundingClientRect(); window.__y = r.top + Math.min(20, r.height / 2); window.__frac = (window.__y - r.top) / r.height; return window.__y; })()
+expect wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), -300) === true
+sleep 900
+expect scale() > 1.3
+expect afs() > 18 * 1.3
+# only the script: the header, the column heads and the buttons are as they were
+expect getComputedStyle(document.querySelector('.doc-title')).fontSize + '|' + getComputedStyle(document.querySelector('.col-head-cell')).fontSize + '|' + getComputedStyle(document.querySelector('#btn-present')).fontSize === window.__hdr
+# the gutter and rail grow with it, and the row's padding
+expect parseFloat(getComputedStyle(document.querySelector('#rows .row-num')).fontSize) > 18
+# the line under the pointer is still under the pointer
+expect (function(){ var r = document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable').getBoundingClientRect(); return Math.abs(r.top + window.__frac * r.height - window.__y) <= 3; })()
+expect window.scrollY > 0
+# the readout says so, and is remembered
+expect document.getElementById('script-zoom-readout').hidden === false
+expect /^Script \d+ %$/.test(document.getElementById('script-zoom-readout').textContent)
+expect document.getElementById('script-zoom-readout').textContent === 'Script ' + Math.round(scale() * 100) + ' %'
+expect Math.abs(parseFloat(localStorage.getItem('splitpage-script-scale')) - scale()) < 0.006
+
+# --- a plain wheel is a scroll, not a zoom -------------------------------------------
+eval window.__s = scale()
+expect wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), 100, false) === false
+sleep 300
+expect scale() === window.__s
+
+# --- the readout is the way back to 100 % --------------------------------------------
+jsclick #script-zoom-readout
+sleep 300
+expect scale() === 1
+expect afs() === 18
+
+# --- 70 % to 200 %, and no further ---------------------------------------------------
+eval (function(){ for (var i = 0; i < 20; i++) wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), 300); return true; })()
+sleep 1500
+expect scale() === 0.7
+expect matchMedia('(hover: none), (pointer: coarse)').matches || Math.abs(afs() - 12.6) < 0.01
+eval (function(){ for (var i = 0; i < 30; i++) wheelAt(document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'), -300); return true; })()
+sleep 1500
+expect scale() === 2
+expect afs() === 36
+
+# --- the Settings dialog's event ------------------------------------------------------
+eval localStorage.setItem('splitpage-script-scale', '1.5')
+eval document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-script-scale', value: 1.5 } }))
+sleep 200
+expect scale() === 1.5
+eval document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-something-else', value: 1 } }))
+sleep 100
+expect scale() === 1.5
+
+# --- the Writer keeps the browser's own keys and its own size control ----------------
+jsclick #btn-write
+wait document.querySelectorAll('#writer-doc .wr-para').length > 0
+sleep 300
+expect ctrlKey('=', 'Equal') === false
+sleep 300
+expect scale() === 1.5

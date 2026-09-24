@@ -44,9 +44,93 @@ function nextRowStatus(id) {
 
 export var DEFAULT_WPM = 150;
 
-export function rowSeconds(row) {
+/* A scene's length (#179). By default it is estimated from its Audio words
+   at the document's reading speed; a length set by hand (the rail's Read
+   time, 05r-read-time.js) replaces the estimate outright — Adam's call: an
+   override, not a minimum. It is the row key `lengthSeconds`, a whole
+   number of seconds, absent when the scene uses the estimate (every file
+   from before #179 reads that way). Everything that uses a scene's length
+   reads rowSeconds(): the gutter's start times, the program clock, the
+   rundown strip, the panels, the CSV and Present's clock. Present's scroll
+   speed does not — that is words and reading speed, as before. */
+export var SCENE_LENGTH_MAX = 24 * 3600;
+
+export function estimatedSeconds(row) {
   var wpm = (S.state && S.state.wordsPerMinute) || DEFAULT_WPM;
   return wordCount(row.audioText) / wpm * 60;
+}
+
+export function hasSetLength(row) {
+  return !!row && typeof row.lengthSeconds === "number" && isFinite(row.lengthSeconds) &&
+    row.lengthSeconds >= 0 && row.lengthSeconds <= SCENE_LENGTH_MAX;
+}
+
+export function rowSeconds(row) {
+  return hasSetLength(row) ? row.lengthSeconds : estimatedSeconds(row);
+}
+
+/* What a stored `lengthSeconds` is allowed to be (migrateRows, 02-state.js):
+   a whole number of seconds from 0 to a day, or nothing. */
+export function normalizeSceneLength(v) {
+  if (typeof v !== "number" || !isFinite(v) || v < 0 || v > SCENE_LENGTH_MAX) return undefined;
+  return Math.round(v);
+}
+
+/* What you can type as a scene's length (#179, typing convention signed
+   off by Adam): "1:30" and "1:02:03", a bare number of seconds ("90"), or
+   numbers with units — "90s", "1m30", "1m 30s", "2 min", "1.5m", "1h 5m".
+   A bare number after minutes is seconds ("1m30"), after hours minutes
+   ("1h30"). Units must run hours, minutes, seconds, each once. Blank is
+   null (use the estimate); anything else unreadable is NaN. The result is
+   whole seconds. */
+var LENGTH_UNITS = { h: 3600, m: 60, s: 1 };
+
+function lengthUnit(word) {
+  if (!word) return "";
+  if (/^(h|hr|hrs|hour|hours)$/.test(word)) return "h";
+  if (/^(m|min|mins|minute|minutes)$/.test(word)) return "m";
+  if (/^(s|sec|secs|second|seconds)$/.test(word)) return "s";
+  return null;
+}
+
+export function parseSceneLength(text) {
+  var s = String(text == null ? "" : text).trim().toLowerCase();
+  if (!s) return null;
+  var total;
+  var clock = /^(\d+):([0-5]\d)(?::([0-5]\d))?$/.exec(s);
+  if (clock) {
+    total = clock[3] != null
+      ? (+clock[1]) * 3600 + (+clock[2]) * 60 + (+clock[3])
+      : (+clock[1]) * 60 + (+clock[2]);
+  } else {
+    var re = /(\d+(?:\.\d+)?|\.\d+)\s*([a-z]*)\s*/g;
+    var pos = 0, m, last = "", order = ["h", "m", "s"], parts = 0;
+    total = 0;
+    while (pos < s.length) {
+      re.lastIndex = pos;
+      m = re.exec(s);
+      if (!m || m.index !== pos) return NaN;
+      pos = re.lastIndex;
+      var unit = lengthUnit(m[2]);
+      if (unit === null) return NaN;
+      if (!unit) {
+        /* a bare number: seconds alone or after minutes, minutes after hours */
+        if (!parts) unit = "s";
+        else if (last === "m") unit = "s";
+        else if (last === "h") unit = "m";
+        else return NaN;
+        if (pos < s.length) return NaN;   /* only ever the last thing typed */
+      }
+      if (last && order.indexOf(unit) <= order.indexOf(last)) return NaN;
+      total += parseFloat(m[1]) * LENGTH_UNITS[unit];
+      last = unit;
+      parts++;
+    }
+    if (!parts) return NaN;
+  }
+  total = Math.round(total);
+  if (!isFinite(total) || total < 0 || total > SCENE_LENGTH_MAX) return NaN;
+  return total;
 }
 
 export function totalSeconds() {

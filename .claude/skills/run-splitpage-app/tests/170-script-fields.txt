@@ -1,0 +1,100 @@
+# Where you can type in the script (#182, app.css "#rows .cell-editable",
+# src/js/05q-cell-reach.js).
+#
+# The page stays calm — no box round a field at rest — but: the current
+# scene steps off the page (--row-current), the field with the caret has a
+# 2px bar in its column's colour and a faint fill, an empty field is a
+# dashed outline, and a press anywhere in a cell puts the caret at the end
+# of its field. The writer's paragraphs and the comment boxes keep theirs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 400
+eval (function(){ window.cellAt = function (row, col) { return document.querySelector('#rows .row:nth-child(' + row + ') .' + col + '-cell .cell-editable'); }; window.cs = function (el) { return getComputedStyle(el); }; return true; })()
+
+# --- at rest: one calm surface ---------------------------------------------------
+expect cs(cellAt(1, 'visual')).boxShadow === 'none'
+expect cs(cellAt(1, 'audio')).boxShadow === 'none'
+expect cs(cellAt(1, 'visual')).outlineStyle === 'none'
+expect cs(document.querySelector('#rows .row')).backgroundColor === 'rgba(0, 0, 0, 0)'
+
+# --- the field with the caret: its column's bar, a faint fill, the row lit ----
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+sleep 200
+expect cs(cellAt(2, 'audio')).boxShadow.indexOf('inset') !== -1
+expect cs(cellAt(2, 'audio')).boxShadow.indexOf('2px 0px 0px 0px') !== -1
+expect cs(cellAt(2, 'audio')).backgroundColor !== 'rgba(0, 0, 0, 0)'
+eval window.__audioBar = cs(cellAt(2, 'audio')).boxShadow
+# the bar is the Audio amber
+expect window.__audioBar.indexOf('rgb(158, 88, 0)') === 0
+expect cs(document.querySelector('#rows .row:nth-child(2)')).backgroundColor == rgb(255, 255, 255)
+expect cs(document.querySelector('#rows .row:nth-child(1)')).backgroundColor === 'rgba(0, 0, 0, 0)'
+# the other field in the row has no bar
+expect cs(cellAt(2, 'visual')).boxShadow === 'none'
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+sleep 200
+# ...and in the Visual column it is the Visual blue
+expect cs(cellAt(2, 'visual')).boxShadow.indexOf('rgb(40, 99, 171)') === 0
+expect cs(cellAt(2, 'audio')).boxShadow === 'none'
+
+# --- dark: the same marks, the dark theme's step ----------------------------------
+eval document.documentElement.setAttribute('data-theme', 'dark')
+sleep 300
+expect cs(document.querySelector('#rows .row:nth-child(2)')).backgroundColor == rgb(30, 29, 26)
+expect cs(cellAt(2, 'visual')).boxShadow.indexOf('rgb(128, 189, 251)') === 0
+eval document.documentElement.removeAttribute('data-theme')
+sleep 200
+
+# --- an empty field is visible without hovering ------------------------------------
+eval document.activeElement.blur()
+jsclick [data-action="add-row"]
+sleep 400
+expect document.querySelectorAll('#rows .row').length == 3
+eval document.activeElement.blur()
+sleep 200
+expect cellAt(3, 'visual').innerHTML === ''
+expect cs(cellAt(3, 'visual')).outlineStyle == dashed
+expect cs(cellAt(3, 'audio')).outlineStyle == dashed
+# a field with words has none
+expect cs(cellAt(1, 'visual')).outlineStyle === 'none'
+# stronger on the current scene
+eval window.__faint = cs(cellAt(3, 'audio')).outlineColor
+caret #rows .row:nth-child(3) .visual-cell .cell-editable
+sleep 200
+expect cs(cellAt(3, 'audio')).outlineColor !== window.__faint
+# the field with the caret shows its bar instead
+expect cs(cellAt(3, 'visual')).outlineColor == rgba(0, 0, 0, 0)
+
+# --- a press anywhere in the cell puts the caret at the end of its field -------
+eval document.activeElement.blur()
+eval (function(){ var cell = document.querySelector('#rows .row:nth-child(1) .visual-cell'); var ed = cellAt(1, 'visual'); window.__room = cell.getBoundingClientRect().bottom - ed.getBoundingClientRect().bottom; return window.__room; })()
+# the Visual column runs the height of the row, well past its words
+expect window.__room > 20
+eval (function(){ var cell = document.querySelector('#rows .row:nth-child(1) .visual-cell'); var ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }); cell.dispatchEvent(ev); window.__reach = ev.defaultPrevented; return true; })()
+expect window.__reach === true
+expect document.activeElement === cellAt(1, 'visual')
+expect (function(){ var s = getSelection(); if (!s.rangeCount || !s.isCollapsed) return false; var r = document.createRange(); r.setStart(s.anchorNode, s.anchorOffset); r.setEnd(cellAt(1, 'visual'), cellAt(1, 'visual').childNodes.length); return r.toString() === ''; })()
+# the same from the Audio cell's wrap
+eval document.activeElement.blur()
+eval (function(){ var wrap = document.querySelector('#rows .row:nth-child(1) .audio-cell .field-wrap'); wrap.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true; })()
+expect document.activeElement === cellAt(1, 'audio')
+# a press ON the field is the browser's: nothing taken
+eval (function(){ var ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }); cellAt(2, 'audio').dispatchEvent(ev); window.__own = ev.defaultPrevented; return true; })()
+expect window.__own === false
+# and a press on the picture button is the picture button's
+eval (function(){ var b = document.querySelector('#rows .row:nth-child(1) .image-clip'); var ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }); b.dispatchEvent(ev); window.__clip = ev.defaultPrevented; return true; })()
+expect window.__clip === false
+
+# --- the writer and the comment boxes keep their own look --------------------------
+expect cs(document.querySelector('.col-head')).display !== 'none'
+eval document.activeElement.blur()
+jsclick #btn-write
+wait document.querySelectorAll('#writer-doc .wr-para').length > 0
+caret #writer-doc .wr-para
+sleep 200
+expect cs(document.querySelector('#writer-doc .wr-para')).boxShadow.indexOf('2px 0px 0px 0px') === -1
+expect cs(document.querySelector('#writer-doc .wr-para')).outlineStyle !== 'dashed'

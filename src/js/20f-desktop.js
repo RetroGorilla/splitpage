@@ -13,6 +13,7 @@ import {
 import { hashText as historyHashText } from "./03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
+import { runScriptZoomCommand } from "./05s-script-zoom.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { concatBytes, saveDoc, strBytes } from "./14-export.js";
@@ -187,6 +188,8 @@ function runDesktopMenuCommand(cmd) {
      (#menu-present-browser), clicked like any other item below. It had no
      in-page twin at first, which left it unreachable on Windows — the
      title bar is the tab strip, so there is no menu bar to open (#86). */
+  /* View ▸ Zoom In / Zoom Out / Actual Size zoom the script (#191) */
+  if (runScriptZoomCommand(cmd)) return;
   var btnId = DESKTOP_HEADER_BUTTONS[cmd];
   if (btnId) {
     var btn = document.getElementById(btnId);
