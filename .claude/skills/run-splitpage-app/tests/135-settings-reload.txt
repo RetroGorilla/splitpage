@@ -1,0 +1,51 @@
+# Settings survive a reload (#181, #180, #194): changed in the dialog, the
+# page reloaded, and each one read back — in Settings and where it acts.
+# Its own suite because a goto after a busy session can abort the CDP
+# socket (SKILL.md).
+
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){['splitpage-theme','splitpage-clock','splitpage-hide-shot','splitpage-rundown-min','splitpage-script-scale','splitpage-default-wpm','splitpage-prompter-mirror','splitpage-prompter-flip','splitpage-person-color'].forEach(function(k){localStorage.removeItem(k);});localStorage.setItem('splitpage-comment-author','Kim');return true;})()
+eval window.__set = function(id,v){var el=document.getElementById(id);el.value=String(v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true;}
+eval window.__settingsTest.open()
+wait window.__settingsTest.isOpen()
+click #settings-modal input[name="settings-theme"][value="dark"]
+click #settings-modal input[name="settings-clock"][value="24"]
+click #settings-modal label[for="settings-rundown-min"]
+click #settings-modal label[for="settings-hide-shot"]
+click #settings-modal label[for="settings-prompter-flip"]
+eval window.__set('settings-script-scale', 130)
+eval window.__set('settings-default-wpm', 170)
+click #settings-modal input[name="settings-person-color"][value="#C8DE63"] + .swatch-dot
+expect localStorage.getItem('splitpage-person-color') === '#C8DE63'
+key Escape
+
+goto /index.html
+sleep 600
+wait document.querySelectorAll('#rows .row').length > 0
+# where they act
+expect document.documentElement.getAttribute('data-theme') === 'dark'
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.getElementById('pp-flip').classList.contains('is-active')
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+key Escape
+wait document.getElementById('prompter').hidden
+expect getComputedStyle(document.querySelector('#identity-chip .identity-dot')).backgroundColor === 'rgb(200, 222, 99)'
+# ...and in Settings
+eval window.__settingsTest.open()
+wait window.__settingsTest.isOpen()
+expect document.querySelector('#settings-modal input[name="settings-theme"]:checked').value === 'dark'
+expect document.querySelector('#settings-modal input[name="settings-clock"]:checked').value === '24'
+expect document.getElementById('settings-rundown-min').checked === true
+expect document.getElementById('settings-hide-shot').checked === true
+expect document.getElementById('settings-prompter-flip').checked === true
+expect document.getElementById('settings-prompter-mirror').checked === false
+expect document.getElementById('settings-script-scale').value === '130'
+expect document.getElementById('settings-default-wpm').value === '170'
+expect document.querySelector('#settings-modal input[name="settings-person-color"]:checked').value === '#C8DE63'
+expect document.getElementById('settings-name').value === 'Kim'
+shot 135-settings-after-reload-dark
+key Escape

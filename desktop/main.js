@@ -4356,6 +4356,11 @@ function buildMenu() {
       { label: "Export…", accelerator: "CmdOrCtrl+E", registerAccelerator: false, click: () => sendMenuCommand("export") },
       { label: "Export", submenu: exportSubmenu },
       { type: "separator" },
+      /* Settings (#181): the page's own dialog, reached like every other
+         File item (the in-page File menu's Settings button). No
+         accelerator — Adam picks one if it ever gets one. */
+      { label: "Settings…", click: () => sendMenuCommand("settings") },
+      { type: "separator" },
       isMac ? { role: "close" } : { role: "quit", label: "Exit" }
     ]
   };
@@ -4871,6 +4876,15 @@ function registerIpc() {
 
   ipcOn("splitpage:open-external", (event, url) => {
     if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
+  });
+
+  /* Settings ▸ Theme (#181). The page's own data-theme repaints the page;
+     the title bar overlay and the tab strip are this process's, and follow
+     nativeTheme — its "updated" listener (in app.whenReady) repaints every
+     window. One of three words, and nothing else is ever set. */
+  ipcOn("splitpage:set-theme", (event, mode) => {
+    if (mode !== "system" && mode !== "light" && mode !== "dark") return;
+    if (nativeTheme.themeSource !== mode) nativeTheme.themeSource = mode;
   });
 
   /* ---- video files in a scene's gallery (#135) -----------------------

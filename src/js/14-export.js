@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { writePref } from "./00p-prefs.js";
 import { fileHome, home, restoreHome, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { formatDuration, totalSeconds } from "./01-scene-status.js";
@@ -529,9 +530,11 @@ export function autoSaveTarget() {
   return "file";
 }
 
-function setAutoSaveEnabled(on) {
+/* Exported for Settings (#181), which sets it rather than toggling it. */
+export function setAutoSaveEnabled(on) {
   autoSaveEnabled = !!on;
-  try { localStorage.setItem(AUTOSAVE_KEY, autoSaveEnabled ? "1" : "0"); } catch (e) {}
+  /* stored and announced, so Settings (#181) follows the File menu's switch */
+  writePref(AUTOSAVE_KEY, autoSaveEnabled ? "1" : "0");
   if (!autoSaveEnabled) clearAutoSaveTimers();
   else if (S.dirty) scheduleAutoSave();
   updateAutoSaveMenu();

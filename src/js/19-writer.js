@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { writePref } from "./00p-prefs.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
@@ -419,9 +420,8 @@ export function applyWriterSize(px, remember) {
   var n = Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, Math.round(px)));
   el.style.setProperty("--wr-font", n + "px");
   document.getElementById("wr-size").value = String(n);
-  if (remember) {
-    try { localStorage.setItem(WRITER_SIZE_KEY, String(n)); } catch (e) {}
-  }
+  /* stored and announced, so Settings (#181) follows the writer's slider */
+  if (remember) writePref(WRITER_SIZE_KEY, String(n));
 }
 
 function setWriterGutter(mode) {
