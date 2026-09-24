@@ -78,6 +78,7 @@ const files = [
   ["index.html", "index.html"],
   ["manifest.webmanifest", "manifest.webmanifest"],
   ["icon.svg", "icon.svg"],
+  ["icon-maskable.svg", "icon-maskable.svg"],
   ["sw.js", "sw.js"],
   ["docs/help.md", "help.md"],
   ["VERSION", "VERSION"]
