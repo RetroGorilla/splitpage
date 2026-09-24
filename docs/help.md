@@ -18,10 +18,17 @@ so others on your network open and edit the same scripts live, or
 
 ## What's new in 3.0
 
-3.0.0-beta.3 is a pre-release. Copies on 2.1 and on an earlier beta are not
+3.0.0-beta.4 is a pre-release. Copies on 2.1 and on an earlier beta are not
 offered it: download it from the releases page. When 3.0.0 itself ships, a
 beta copy is offered it like any other update.
 
+- **A new look, built for the shoot.** A calmer dark theme (and a matching
+  light one), a program clock in the header and a running order of the
+  whole script under it, each scene's status as a lamp, and side panels
+  that open beside the script instead of over it: Production as labelled
+  columns, B-roll one line per shot, Comments one card per thread, Version
+  history by day. The teleprompter shows only the words being read, and on
+  a phone the script comes first, with the panels in a bar at the bottom.
 - **A start screen for every new tab.** A blank script or one of three
   starter scripts (to-camera video, interview, 30-second spot), your recent
   documents and a **Continue** button for the last one in the desktop app,
