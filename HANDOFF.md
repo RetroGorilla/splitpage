@@ -818,6 +818,36 @@ for the entrance. Side panels, the File drawer and every `.modal-backdrop`
 use it. A transition declaration outranks `!important` in the cascade, so
 the global `[hidden] { display: none !important }` does not defeat it.
 
+Present and the Writer use it too (#133, #136): each fades in over the view
+it covers and back out, opacity only, on the container. Three rules keep a
+fade from costing anything but pixels, and a change to either mode keeps
+them:
+
+- **`hidden` flips in the open/close call, and everything the mode needs is
+  done in that call.** Keys, Play, Mirror/Flip and the Writer's caret work
+  mid-arrival; the split view is painted when `closeWriter()` returns. Suites
+  read `.hidden` straight after a click and must keep being right to.
+- **`closeWriter()` syncs the focused paragraph (`syncFieldFromDom`) before
+  anything about leaving happens** — then blurs it, then sets `inert` and
+  `hidden`. A fading writer that still held the focus would go on taking
+  keystrokes nobody could see. `closePrompter()` likewise stops playback,
+  voice and the wake lock first. A leaving layer is `inert` with
+  `pointer-events: none`, so a click during the fade reaches the view
+  underneath.
+- **No transform on either container.** Mirror/Flip are transforms on
+  `.prompter-scroll`, the caret's `scrollIntoView` and the scene cue measure
+  the page, and a transform would make the container a containing block for
+  anything fixed inside it.
+
+Two exceptions to "CSS only": a fullscreen prompter is held opaque
+(`.is-holding`, the one rule that overrides the global `[hidden]`) until
+`exitFullscreen()` settles (or 1s), so the browser's own exit and our fade
+never run together; and `body.prompter-open` (the page scroll lock) goes on
+when the arrival finishes, not in the frame it starts, so the scrollbar
+leaving does not shift the editor under a still-clear layer.
+`tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
+on the two elements and checks all of it.
+
 **`render()` must stay synchronous.** `04a-row-motion.js` animates scene
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
 `#rows` (§3.16), measure again, put things back with a transform and animate
@@ -1256,7 +1286,10 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     `syncPanelClass()` once, so `body.panel-open` and `#root`'s padding
     reset. Present (`openPrompter()`), the Writer (`openWriter()`, which
     also closes the find bar), Help, the tour, the setup wizard and the
-    full-page shot list (`openBrollPage()`) all call it. Leaving Present or
+    full-page shot list (`openBrollPage()`) all call it. Present and the
+    Writer call it in the same call that starts their fade-in, so the
+    panels' slide-out (`--dur-exit`) runs under and inside the mode's
+    arrival (`--dur-enter`) as one transition (§3.14). Leaving Present or
     the Writer brings no panel back; the shot list alone reopens the B-roll
     panel on close if that is where it was opened from. A new panel goes in
     `SIDE_PANEL_WIDTH_DEFAULTS` (which is `SIDE_PANEL_IDS`) and, if it has a
