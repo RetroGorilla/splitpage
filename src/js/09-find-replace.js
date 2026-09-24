@@ -30,7 +30,7 @@ import { queueAutoSave } from "./14-export.js";
    tracked another. Renaming a tag is the Production panel's job, which
    changes both halves together. Words inside a comment ARE replaceable:
    the comment card compares its quote with the anchor's live text and says
-   "Text changed — was …" (10-comments.js), so the panel never shows a
+   so with a "Changed" tag (10-comments.js), so the panel never shows a
    quote as current when it is not. */
 
 export var findOpen = false;
