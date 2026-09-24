@@ -1,0 +1,140 @@
+# Dragging a scene from the script onto the rundown to move it (issue #185,
+# 05f-rundown.js's onStripDragOver/onStripDrop, 21-events.js's auto-scroll
+# standing down over the strip). A real native drag cannot be produced over
+# CDP, so, as in 33-drag-autoscroll.txt, this fires the events a grip drag
+# does: `mousedown` on the grip, `dragstart` on the row, then `dragover` and
+# `drop` built with a real DataTransfer — on the strip this time.
+#
+# Checked: a drop marker in the gap nearest the pointer and "Move to after
+# scene N" under it; none over a block's middle or beside the scene's own
+# place; the window-edge auto-scroll never running while over the strip;
+# Escape (a dragend with no drop), a drop over a block and a drop in place
+# changing nothing; a drop in the gap after the last block moving scene 2
+# there as ONE undo step, the script scrolling to it and lighting it, the
+# caret and the playhead on it; Ctrl+Z putting it back; and no drop at all in
+# a review session.
+
+open
+viewport 1200 700
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.RT = window.__rundownTest; var rows = []; for (var i = 1; i <= 8; i++) { var words = []; for (var k = 0; k < 20 + i * 6; k++) words.push('line' + i + 'w' + k); rows.push({ id: 's' + i, visualText: 'Visual ' + i, audioText: words.join(' '), status: 'todo' }); } F.openFile(new File([JSON.stringify({ schema: 2, title: 'Drop suite', rows: rows })], 'drop-suite.splitpage')); return true; })()
+wait F.state().title === 'Drop suite' && document.querySelectorAll('#rundown .rd-block').length === 8
+sleep 300
+eval (function(){ window.__mkDT=function(){try{return new DataTransfer();}catch(e){return {dropEffect:"none",effectAllowed:"uninitialized",setData:function(){},getData:function(){return "";},files:[],types:[]};}};window.__mkDrag=function(type,x,y,dt){var ev;try{ev=new DragEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,dataTransfer:dt});}catch(e){ev=new Event(type,{bubbles:true,cancelable:true});try{Object.defineProperty(ev,"dataTransfer",{value:dt});}catch(e2){}}try{Object.defineProperty(ev,"clientX",{value:x,configurable:true});}catch(e3){}try{Object.defineProperty(ev,"clientY",{value:y,configurable:true});}catch(e4){}return ev;}; window.order = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.blk = function(i){ return document.querySelectorAll('#rundown .rd-block')[i]; }; window.pickUp = function(id){ var row = document.querySelector('#rows .row[data-id="' + id + '"]'); var grip = row.querySelector('[data-action="drag-grip"]'); grip.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); window.__dt = __mkDT(); row.dispatchEvent(__mkDrag('dragstart', 50, 300, __dt)); window.__dragRow = row; return row.classList.contains('is-dragging'); }; window.over = function(x){ var t = document.querySelector('#rundown .rundown-blocks'); var r = t.getBoundingClientRect(); var ev = __mkDrag('dragover', x, r.top + 18, __dt); t.dispatchEvent(ev); return ev.defaultPrevented; }; window.dropAt = function(x){ var t = document.querySelector('#rundown .rundown-blocks'); var r = t.getBoundingClientRect(); var ev = __mkDrag('drop', x, r.top + 18, __dt); t.dispatchEvent(ev); return ev.defaultPrevented; }; window.endDrag = function(){ if (window.__dragRow) window.__dragRow.dispatchEvent(__mkDrag('dragend', 0, 0, __dt)); }; window.marker = function(){ return document.querySelector('#rundown .rundown-drop'); }; window.label = function(){ return document.querySelector('#rundown .rundown-drop-label'); }; window.afterLast = function(){ var b = blk(7).getBoundingClientRect(); return b.right + 1; }; return order(); })()
+expect order() == s1,s2,s3,s4,s5,s6,s7,s8
+
+# --- the auto-scroll at the window's top edge stands down over the strip ------
+eval (function(){ window.scrollTo(0, 600); return window.scrollY; })()
+sleep 400
+expect window.scrollY > 0
+expect pickUp('s2')
+eval (function(){ window.__y0 = window.scrollY; return over(afterLast()); })()
+sleep 500
+expect window.scrollY === window.__y0
+# ...and still runs everywhere else in the hot zone: the header's own row
+eval (function(){ document.querySelector('.topbar-row').dispatchEvent(__mkDrag('dragover', 300, 10, __dt)); return true; })()
+wait window.scrollY < window.__y0
+eval over(afterLast())
+eval (function(){ window.__y1 = window.scrollY; return window.__y1; })()
+sleep 400
+expect window.scrollY === window.__y1
+# leaving the strip takes the marker and the lens away
+eval (function(){ document.getElementById('rows').dispatchEvent(__mkDrag('dragover', 300, 400, __dt)); return true; })()
+wait marker().hidden
+wait !RT.lens().on
+eval endDrag()
+eval (function(){ window.scrollTo(0, 0); return true; })()
+sleep 300
+
+# --- Escape: a dragend with no drop changes nothing ---------------------------
+eval U.flush()
+eval (function(){ window.__undo0 = U.sizes().undo; return window.__undo0; })()
+expect pickUp('s2')
+expect over(afterLast())
+wait !marker().hidden
+expect label().textContent == Move to after scene 08
+# the lens opens during the drag too
+expect RT.lens().on && RT.lens().src === 'drag'
+expect document.getElementById('rundown').classList.contains('is-lensed')
+eval endDrag()
+wait marker().hidden
+expect label().hidden
+wait !RT.lens().on
+expect order() == s1,s2,s3,s4,s5,s6,s7,s8
+expect !document.querySelector('#rows .row.is-dragging')
+
+# --- over a block's middle there is no gap: no marker, and a drop moves nothing
+expect pickUp('s2')
+eval (function(){ var b = blk(4).getBoundingClientRect(); window.__mid = b.left + b.width / 2; return over(window.__mid); })()
+sleep 200
+expect marker().hidden
+eval dropAt(window.__mid)
+eval endDrag()
+expect order() == s1,s2,s3,s4,s5,s6,s7,s8
+
+# --- beside its own place: no marker, and a drop moves nothing ----------------
+expect pickUp('s2')
+eval (function(){ var b = blk(1).getBoundingClientRect(); window.__own = b.right + 1; return over(window.__own); })()
+sleep 200
+expect marker().hidden
+eval dropAt(window.__own)
+eval endDrag()
+expect order() == s1,s2,s3,s4,s5,s6,s7,s8
+eval U.flush()
+expect U.sizes().undo === window.__undo0
+
+# --- between two blocks: the marker and its words -----------------------------
+expect pickUp('s2')
+eval (function(){ var a = blk(4).getBoundingClientRect(); window.__g5 = a.right + 1; return over(window.__g5); })()
+wait !marker().hidden
+expect label().textContent == Move to after scene 05
+# the marker is in the gap: between block 5's right edge and block 6's left
+expect (function(){ var m = marker().getBoundingClientRect(); var cx = m.left + m.width / 2; return cx >= blk(4).getBoundingClientRect().right - 2 && cx <= blk(5).getBoundingClientRect().left + 2; })()
+eval endDrag()
+wait marker().hidden
+
+# --- the real thing: scene 2 dropped in the gap after the last block ----------
+eval (function(){ window.scrollTo(0, 0); return true; })()
+sleep 200
+eval U.flush()
+eval (function(){ window.__undo1 = U.sizes().undo; return window.__undo1; })()
+expect pickUp('s2')
+expect over(afterLast())
+wait !marker().hidden
+expect label().textContent == Move to after scene 08
+expect dropAt(afterLast())
+eval endDrag()
+expect order() == s1,s3,s4,s5,s6,s7,s8,s2
+expect marker().hidden
+expect !document.querySelector('#rows .row.is-dragging')
+# one undo step
+eval U.flush()
+expect U.sizes().undo === window.__undo1 + 1
+# the script follows it there: scrolled down to it, lit, the caret in it
+wait (function(){ var r = document.querySelector('#rows .row[data-id="s2"]').getBoundingClientRect(); var h = document.querySelector('.topbar').getBoundingClientRect().bottom; return window.scrollY > 0 && r.top >= h - 2 && r.top < innerHeight - 40; })()
+expect document.querySelector('#rows .row[data-id="s2"]').classList.contains('just-merged')
+expect document.activeElement.closest('#rows .row').getAttribute('data-id') == s2
+# the strip's outline and playhead moved with it: the last block is the current one
+wait blk(7).classList.contains('is-current')
+expect !document.querySelector('#rundown .rundown-playhead').hidden
+
+# --- undo puts it back ----------------------------------------------------------
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait order() === 's1,s2,s3,s4,s5,s6,s7,s8'
+
+# --- a review session takes no drop -----------------------------------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+eval (function(){ window.__dt = __mkDT(); return true; })()
+# no grip to pick a scene up by in review; force the drag state the way a stale
+# grip would, and the strip still refuses it
+expect (function(){ var row = document.querySelector('#rows .row[data-id="s3"]'); row.setAttribute('draggable', 'true'); row.dispatchEvent(__mkDrag('dragstart', 50, 300, __dt)); window.__dragRow = row; return true; })()
+expect over(afterLast()) === false
+sleep 200
+expect marker().hidden
+eval dropAt(afterLast())
+eval endDrag()
+expect order() == s1,s2,s3,s4,s5,s6,s7,s8
+
+quit

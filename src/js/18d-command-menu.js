@@ -159,6 +159,7 @@ function commands() {
     fromMenu("history", "This document", "versions restore snapshot backup older undo"),
     fromMenu("find", "This document", "search replace look for"),
     fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
+    fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
     fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
     fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
     fromMenu("help", "Help", "guide manual docs user guide how", "Help"),

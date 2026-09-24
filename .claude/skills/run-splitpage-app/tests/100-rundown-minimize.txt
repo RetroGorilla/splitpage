@@ -1,0 +1,178 @@
+# Minimizing the rundown strip (issue #178, 05f-rundown.js): a per-device
+# view setting in localStorage "splitpage-rundown-min", never the document.
+# Minimized, the strip is a thin bar — the blocks as a coloured line and the
+# playhead, no ruler, no labels — and the whole bar is the button that
+# brings it back. Flipped from the chevron on the strip, File ▸ This
+# document ▸ Minimize the rundown, the desktop View menu (the native item
+# clicks the File item, like Hide shot scenes) and the Settings dialog's
+# `splitpage:pref` event. Remembered across a reload; side panels still open
+# right under the header's row; the condensing header does not flip back
+# and forth when it changes height.
+#
+# The reload leg comes first, while the page has done little: a `goto`
+# after a lot of DOM churn can abort the CDP socket (SKILL.md, gotchas).
+# The phone width is its own suite (101), since the viewport is set once.
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+
+# --- off by default, and the controls say so --------------------------------
+expect localStorage.getItem('splitpage-rundown-min') === null
+expect !document.getElementById('rundown').classList.contains('is-min')
+expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == true
+expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-label') == Minimize the rundown
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
+expect document.getElementById('menu-rundown-min').getAttribute('role') == menuitemcheckbox
+
+# --- remembered across a reload ---------------------------------------------
+eval localStorage.setItem('splitpage-rundown-min', '1')
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+wait document.getElementById('rundown').classList.contains('is-min')
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+expect document.querySelectorAll('#rundown .rd-seg').length === document.querySelectorAll('#rows .row').length
+eval localStorage.setItem('splitpage-rundown-min', '0')
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+expect !document.getElementById('rundown').classList.contains('is-min')
+# the full strip's height, to come back to (after the reloads, which clear window)
+eval (function(){ window.__fullH = document.getElementById('rundown').getBoundingClientRect().height; return window.__fullH; })()
+expect window.__fullH > 60
+
+# --- the chevron on the strip minimizes it -----------------------------------
+click #rundown .rundown-toggle
+wait document.getElementById('rundown').classList.contains('is-min')
+expect localStorage.getItem('splitpage-rundown-min') == 1
+expect document.getElementById('rundown').getBoundingClientRect().height <= 12
+expect getComputedStyle(document.querySelector('#rundown .rundown-ruler')).display == none
+# the blocks are a coloured line: one segment per scene, no buttons, no labels
+expect document.querySelectorAll('#rundown .rd-block').length === 0
+expect document.querySelectorAll('#rundown .rd-seg').length === document.querySelectorAll('#rows .row').length
+expect document.querySelectorAll('#rundown .rd-num').length === 0
+expect getComputedStyle(document.querySelector('#rundown .rd-seg.is-ready, #rundown .rd-seg.is-todo, #rundown .rd-seg.is-shot')).height == 3px
+expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == false
+expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-label') == Show the rundown
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+# a view setting, not an edit
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
+
+# the playhead is kept, on the current scene's segment
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+wait !document.querySelector('#rundown .rundown-playhead').hidden
+expect document.querySelector('#rundown .rd-seg.is-current')
+expect Math.abs(parseFloat(document.querySelector('#rundown .rundown-playhead').style.left) - (parseFloat(document.querySelector('#rundown .rd-seg.is-current').style.left) - 1)) < 0.2
+eval document.activeElement.blur()
+
+# --- side panels still start right under the header's row ---------------------
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden
+sleep 300
+expect Math.abs(document.getElementById('production-panel').getBoundingClientRect().top - document.querySelector('.topbar-row').getBoundingClientRect().bottom) <= 1
+jsclick #btn-production
+wait document.getElementById('production-panel').hidden
+sleep 300
+
+# --- a click anywhere on the thin bar brings it back -------------------------
+# (at the top of the page, so the header is not condensed: its ruler is
+# part of the height compared below)
+eval (function(){ window.scrollTo(0, 0); return window.scrollY; })()
+sleep 400
+expect !document.querySelector('.topbar').classList.contains('is-condensed')
+expect document.elementFromPoint(document.getElementById('rundown').getBoundingClientRect().left + 500, document.getElementById('rundown').getBoundingClientRect().top + 4).closest('.rundown-toggle')
+click #rundown .rundown-toggle
+wait !document.getElementById('rundown').classList.contains('is-min')
+wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+expect localStorage.getItem('splitpage-rundown-min') == 0
+expect Math.abs(document.getElementById('rundown').getBoundingClientRect().height - window.__fullH) < 1
+# the ruler is painted again, not left empty from while it was hidden
+expect document.querySelectorAll('#rundown .rd-tick').length > 3
+expect getComputedStyle(document.querySelector('#rundown .rundown-ruler')).display !== 'none'
+
+# --- the File menu's switch, which leaves the menu open ----------------------
+click #btn-file
+wait !document.getElementById('file-menu').hidden
+click #menu-rundown-min
+wait document.getElementById('rundown').classList.contains('is-min')
+expect !document.getElementById('file-menu').hidden
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+click #menu-rundown-min
+wait !document.getElementById('rundown').classList.contains('is-min')
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
+key Escape
+wait document.getElementById('file-menu').hidden
+
+# --- the desktop View menu: the native item clicks the File item -------------
+eval window.__desktopTest.runMenuCommand('toggle-rundown-min')
+wait document.getElementById('rundown').classList.contains('is-min')
+eval window.__desktopTest.runMenuCommand('toggle-rundown-min')
+wait !document.getElementById('rundown').classList.contains('is-min')
+
+# --- the command menu offers it too -------------------------------------------
+expect window.__commandTest.results('rundown').some(function(g){ return g.items.some(function(it){ return it.id === 'toggle-rundown-min' && it.label === 'Minimize the rundown'; }); })
+
+# --- the Settings dialog's event (lane C writes the key, then says so) -------
+eval (function(){ localStorage.setItem('splitpage-rundown-min', '1'); document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-rundown-min', value: '1' } })); return true; })()
+wait document.getElementById('rundown').classList.contains('is-min')
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+# another key is not ours
+eval (function(){ document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-hide-shot', value: '0' } })); return true; })()
+sleep 100
+expect document.getElementById('rundown').classList.contains('is-min')
+eval (function(){ localStorage.setItem('splitpage-rundown-min', '0'); document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-rundown-min', value: '0' } })); return true; })()
+wait !document.getElementById('rundown').classList.contains('is-min')
+# a detail with no value reads the key
+eval (function(){ localStorage.setItem('splitpage-rundown-min', '1'); document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-rundown-min' } })); return true; })()
+wait document.getElementById('rundown').classList.contains('is-min')
+eval window.__rundownTest.setMinimized(false)
+wait !document.getElementById('rundown').classList.contains('is-min')
+
+# --- no lens on a minimized strip --------------------------------------------
+eval window.__rundownTest.setMinimized(true)
+eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + 100, clientY: r.top + 4, pointerType: 'mouse' })); return true; })()
+sleep 200
+expect !document.getElementById('rundown').classList.contains('is-lensed')
+expect window.__rundownTest.lens().Z === null
+eval window.__rundownTest.setMinimized(false)
+wait !document.getElementById('rundown').classList.contains('is-min')
+
+# --- scrolled down, minimizing does not set the header flipping --------------
+# Enough scenes to scroll, then watch the condensed class for half a second
+# after each change of height: at most the one change the new height asks
+# for, then still.
+eval (function(){ for (var i = 0; i < 30; i++) document.querySelector('.add-row-btn').click(); return document.querySelectorAll('#rows .row').length; })()
+sleep 300
+eval (function(){ window.scrollTo(0, 400); return window.scrollY; })()
+sleep 400
+expect document.querySelector('.topbar').classList.contains('is-condensed')
+eval (function(){ window.__flips = 0; var tb = document.querySelector('.topbar'); var was = tb.classList.contains('is-condensed'); window.__watch = new MutationObserver(function(){ var now = tb.classList.contains('is-condensed'); if (now !== was) { window.__flips++; was = now; } }); window.__watch.observe(tb, { attributes: true, attributeFilter: ['class'] }); return true; })()
+jsclick #rundown .rundown-toggle
+sleep 600
+expect window.__flips <= 1
+eval (function(){ window.__y1 = window.scrollY; return window.__y1; })()
+sleep 300
+expect window.scrollY === window.__y1
+jsclick #rundown .rundown-toggle
+sleep 600
+expect window.__flips <= 2
+eval (function(){ window.__y2 = window.scrollY; return window.__y2; })()
+sleep 300
+expect window.scrollY === window.__y2
+# minimized, condensing changes no height at all
+eval window.__rundownTest.setMinimized(true)
+sleep 200
+eval (function(){ window.scrollTo(0, 0); return true; })()
+sleep 300
+eval (function(){ window.__hTop = document.querySelector('.topbar').getBoundingClientRect().height; window.scrollTo(0, 300); return true; })()
+sleep 400
+expect document.querySelector('.topbar').classList.contains('is-condensed')
+expect Math.abs(document.querySelector('.topbar').getBoundingClientRect().height - window.__hTop) < 1
+eval window.__watch.disconnect()
+eval window.__rundownTest.setMinimized(false)
+expect localStorage.getItem('splitpage-rundown-min') == 0
+
+quit

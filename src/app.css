@@ -5391,14 +5391,22 @@
     /* The rundown strip, compact (B-Phone): 52px, no ruler, 22px blocks
        with their numbers only. 05f-rundown.js scales to whatever width it
        is given. Each rule here names .rundown or .topbar as well, because
-       the strip's own rules come later in this file. */
+       the strip's own rules come later in this file. The labels are the
+       block's container queries (below); here only the number is ever
+       shown, which takes the id to outrank them. */
     .topbar .rundown { padding: 0 16px; }
     .rundown .rundown-ruler { display: none; }
     .rundown .rundown-track { height: 51px; }
-    .rundown .rd-block { top: 15px; height: 22px; gap: 4px; padding: 0 6px; font-size: 10.5px; line-height: 12px; }
-    .rundown .rd-len { display: none; }
+    .rundown .rd-block { top: 15px; height: 22px; font-size: 10.5px; line-height: 12px; }
+    @container rdb (min-width: 26px) {
+      .rundown .rd-in { gap: 4px; padding: 0 6px; }
+    }
+    #rundown .rd-len, #rundown .rd-stat, #rundown .rd-snip { display: none; }
     .rundown .rd-check { width: 9px; height: 9px; }
-    .rundown .rd-broll { top: 31px; height: 6px; }
+    .rundown .rd-broll { height: 5px; }
+    .rundown .rundown-drop { top: 11px; height: 30px; }
+    /* the chevron fills the 16px margin exactly, clear of the track */
+    .rundown .rundown-toggle { right: 0; top: 18px; }
     /* there is no ruler to shed, so condensing leaves the playhead as it is */
     .rundown .rundown-playhead,
     .topbar.is-condensed .rundown .rundown-playhead { top: 10px; height: 32px; }
@@ -6765,8 +6773,7 @@
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 8px;
+    padding: 0;
     overflow: hidden;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lamp);
@@ -6779,10 +6786,61 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     cursor: pointer;
+    /* Each block is a size container, so which of its labels show is its
+       own width (#184): the lens widens a block and its number, read
+       time, status and first words appear with no repaint. The widths are
+       the content box — the block's less its 1px border either side —
+       so 26/64/78 here are 05f-rundown.js's 28/66/80. */
+    container: rdb / inline-size;
   }
+  .rd-in {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+  }
+  .rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip { display: none; }
   /* a block too narrow for its number is a sliver, with no room for padding */
-  .rd-block:not(:has(.rd-num)) { padding: 0; }
+  @container rdb (min-width: 26px) {
+    .rd-in { padding: 0 8px; }
+    .rd-num { display: inline; }
+    .rd-check { display: block; }
+  }
+  @container rdb (min-width: 64px) {
+    .rd-block:not(.is-shot) .rd-len { display: inline; }
+  }
+  @container rdb (min-width: 78px) {
+    .rd-len { display: inline; }
+  }
+  /* Only the lens makes a block this wide in a long script, and only then
+     do its status and its first words have somewhere to go. */
+  @container rdb (min-width: 134px) {
+    .rundown.is-lensed .rd-stat { display: inline; }
+  }
+  @container rdb (min-width: 188px) {
+    .rundown.is-lensed .rd-snip { display: block; }
+  }
   .rd-block .rd-len { color: var(--text-faint); }
+  .rd-stat {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .rd-snip {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
   .rd-block:hover { border-color: var(--text-faint); }
   .rd-block.is-shot { background: var(--hover); border-color: transparent; color: var(--text-dim); }
   .rd-block.is-shot:hover { border-color: var(--border-strong); }
@@ -6791,11 +6849,12 @@
   .rd-block.is-ready .rd-len { color: var(--text-dim); }
   .rd-block.is-current { outline: 1.5px solid var(--visual); outline-offset: 0; }
   .rd-block:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* inside its block since #184, by percentage, so it moves with it */
   .rd-broll {
     position: absolute;
-    top: 26px;
+    bottom: 0;
     width: 2px;
-    height: 8px;
+    height: 7px;
     border-radius: 1px 1px 0 0;
     background: var(--broll);
     pointer-events: none;
@@ -6816,6 +6875,117 @@
     border-style: solid;
     border-width: 7px 5px 0 5px;
     border-color: var(--visual) transparent transparent transparent;
+  }
+
+  /* The lens (#184): the ruler and the overlay fade while it is on — the
+     blocks are not to scale then, so neither is anything placed by time
+     over them. 05f-rundown.js fades them back in when it comes to rest. */
+  .rundown.is-lensed .rundown-ruler,
+  .rundown.is-lensed .rundown-overlay {
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+  }
+
+  /* The strip's own switch (#178): a chevron in its right-hand margin,
+     outside the track, so it never sits over a block. */
+  .rundown-toggle {
+    position: absolute;
+    top: 5px;
+    right: 2px;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+  }
+  .rundown-toggle svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: rotate(180deg);
+  }
+  .rundown-toggle:hover { color: var(--text); background: var(--hover); }
+  .rundown-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+  /* Minimized (#178): a thin bar. The blocks are a coloured line (.rd-seg:
+     to do the outline's grey, ready the amber, shot the lit grey), the
+     playhead a short blue tick, no ruler and no labels, and the whole bar
+     is the toggle — a click anywhere on it brings the strip back. The id
+     outranks the condensed header's and the phone's rules. */
+  #rundown.is-min .rundown-ruler { display: none; }
+  #rundown.is-min .rundown-track { height: 9px; }
+  #rundown.is-min .rundown-playhead { top: 0; height: 9px; }
+  #rundown.is-min .rundown-playhead::before { display: none; }
+  #rundown.is-min:hover { background: var(--hover); }
+  #rundown.is-min .rundown-toggle {
+    top: 0; right: 0; bottom: 0; left: 0;
+    width: auto;
+    height: auto;
+    place-items: center end;
+    padding-right: 4px;
+    border-radius: 0;
+    background: transparent;
+  }
+  #rundown.is-min .rundown-toggle svg { width: 10px; height: 10px; transform: none; }
+  #rundown.is-min .rundown-toggle:focus-visible { outline-offset: -2px; }
+  .rd-seg {
+    position: absolute;
+    top: 3px;
+    height: 3px;
+    border-radius: 1.5px;
+    background: var(--border-strong);
+    pointer-events: none;
+  }
+  .rd-seg.is-ready { background: var(--audio); }
+  .rd-seg.is-shot { background: var(--text-dim); }
+
+  /* Dropping a scene on the strip (#185): a line in the gap it would land
+     in, in the accent the script's own drop line uses, and what that means
+     in words just under the strip. */
+  .rundown-drop {
+    position: absolute;
+    top: 0;
+    height: 38px;
+    width: 3px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .rundown-drop-label {
+    position: absolute;
+    top: calc(100% + 6px);
+    z-index: 3;
+    transform: translateX(-50%);
+    padding: 4px 9px;
+    border-radius: var(--radius-sm);
+    background: var(--text);
+    color: var(--bg);
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: var(--shadow);
+    pointer-events: none;
+  }
+  .rundown-drop[hidden], .rundown-drop-label[hidden] { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rundown.is-lensed .rundown-ruler,
+    .rundown.is-lensed .rundown-overlay { transition: none; }
   }
 
   /* ---------- sidebar slide-in (BACKLOG: slide-in animation for sidebars)

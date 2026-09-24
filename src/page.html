@@ -140,6 +140,8 @@
     <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
     <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
     <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
+    <!-- The rundown strip put away to a thin line (#178) -->
+    <symbol id="i-rundown-min" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="6" height="6" rx="1"/><rect x="11" y="5.5" width="3.5" height="6" rx="1"/><rect x="16" y="5.5" width="4.5" height="6" rx="1"/><path d="M3.5 17.5h17"/></symbol>
   </defs>
 </svg>
 <div id="root">
@@ -283,6 +285,12 @@
                    aria-checked. Ctrl/Cmd+Alt+H, mirrored in the desktop View
                    menu (desktop/main.js). -->
               <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse scenes marked Shot into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide shot scenes</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
+              <!-- Shrinks the rundown strip under the header to a thin
+                   progress line — issue #178. A per-device view setting
+                   (localStorage "splitpage-rundown-min"), the same switch as
+                   the chevron on the strip itself; 05f-rundown.js keeps
+                   aria-checked. Mirrored in the desktop View menu. -->
+              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimize the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <!-- Desktop app only (issue #86): the in-page twin of View ▸
                    Present in Browser, which a Windows user cannot reach —
                    the window's title bar is the tab strip, so there is no
