@@ -1,0 +1,88 @@
+# One clock (#180, formatClock in 00p-prefs.js): the header's "Saved at …"
+# an hour after a save (Date.now faked forward), the History panel's times
+# and the comments' times all follow the system's format by default and
+# Settings ▸ Clock's 12-hour / 24-hour when it is set — changed from
+# Settings, taking effect at once everywhere.
+
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;localStorage.removeItem('splitpage-clock');return true;})()
+eval window.__sys = function(d){return new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(d);}
+eval window.__status = function(){return document.getElementById('btn-save').getAttribute('data-status');}
+
+# --- a document with a file, saved ----------------------------------------
+eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__fakeHandle = {name:'clock.md',_mtime: window.__t0,createWritable: async function(){return {write: async function(b){window.__body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
+eval (function(){var f = new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__t0});return F.openFile(f, window.__fakeHandle);})()
+wait F.docFile().kind === 'md'
+caret #rows .row .audio-cell .cell-editable
+type clock words
+eval document.activeElement.blur()
+eval F.save()
+wait window.__status() === 'Saved just now'
+eval window.__savedAt = Date.now()
+
+# --- an hour later: the clock time, in the system's own format -------------
+eval (function(){window.__realNow = window.__realNow || Date.now;var off = 65*60000;Date.now = function(){return window.__realNow() + off;};window.__settingsTest.refreshSaveStatus();return window.__status();})()
+expect window.__status() === 'Saved at ' + window.__sys(new Date(window.__savedAt))
+
+# --- Settings ▸ Clock ▸ 12-hour: at once, no reload -----------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="settings"]
+wait window.__settingsTest.isOpen()
+click #settings-modal input[name="settings-clock"][value="12"]
+expect localStorage.getItem('splitpage-clock') === '12'
+expect /^Saved at \d{1,2}:\d{2}\s?[AP]M$/.test(window.__status())
+expect /[AP]M/.test(document.getElementById('settings-clock-example').textContent)
+shot 133-settings-clock-12
+
+# --- 24-hour ---------------------------------------------------------------
+click #settings-modal input[name="settings-clock"][value="24"]
+expect localStorage.getItem('splitpage-clock') === '24'
+expect /^Saved at \d{2}:\d{2}$/.test(window.__status())
+expect document.getElementById('settings-clock-example').textContent.indexOf('14:52') === 0
+
+# --- System takes the key away ----------------------------------------------
+click #settings-modal input[name="settings-clock"][value="system"]
+expect localStorage.getItem('splitpage-clock') === null
+expect window.__status() === 'Saved at ' + window.__sys(new Date(window.__savedAt))
+key Escape
+wait !window.__settingsTest.isOpen()
+eval (function(){Date.now = window.__realNow;return true;})()
+
+# --- History: a snapshot of this document, its time in the same clock -----
+# Opening a foreign file files "Before opening …" for the document it
+# replaces; reopening ours brings its history back into the panel.
+eval (function(){return F.openFile(new File(['A plain text file.'], 'other.txt', {type:'text/plain'}));})()
+wait F.state().title !== '' && document.querySelector('#rows .row')
+eval (function(){var f = new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});return F.openFile(f, window.__fakeHandle);})()
+wait F.docFile() && F.docFile().kind === 'md'
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait document.querySelector('#history-panel .history-time[datetime]')
+eval window.__ht = function(){var t=document.querySelector('#history-panel .history-time[datetime]');return {text:t.textContent,at:new Date(t.getAttribute('datetime')),wide:t.classList.contains('is-wide')};}
+expect window.__ht().text === window.__sys(window.__ht().at)
+eval localStorage.setItem('splitpage-clock','12')
+eval document.dispatchEvent(new CustomEvent('splitpage:pref',{detail:{key:'splitpage-clock',value:'12'}}))
+wait /^\d{1,2}:\d{2}\s?[AP]M$/.test(window.__ht().text)
+expect window.__ht().wide === true
+# the whole label reads the same
+expect /at \d{1,2}:\d{2}\s?[AP]M/.test(document.querySelector('#history-panel .history-facts dd').textContent)
+shot 133-history-12
+eval localStorage.setItem('splitpage-clock','24')
+eval document.dispatchEvent(new CustomEvent('splitpage:pref',{detail:{key:'splitpage-clock',value:'24'}}))
+wait /^\d{2}:\d{2}$/.test(window.__ht().text)
+expect window.__ht().wide === false
+jsclick #history-close
+
+# --- the gutter's "last edited" time and a comment's time, the same clock ---
+eval (function(){var r=F.state().rows[0];r.updatedBy='Sam';r.updatedAt=new Date().toISOString();F.state().comments.forEach(function(c){c.createdAt=new Date().toISOString();});window.__renderTest.render();return true;})()
+jsclick #btn-comments
+wait document.querySelector('#comments-list time[title]')
+expect /\d{2}:\d{2}$/.test(document.querySelector('#rows .row-meta').textContent.trim())
+expect /[AP]M/.test(document.querySelector('#comments-list time[title]').getAttribute('title')) === false
+eval localStorage.setItem('splitpage-clock','12')
+eval document.dispatchEvent(new CustomEvent('splitpage:pref',{detail:{key:'splitpage-clock',value:'12'}}))
+expect /[AP]M$/.test(document.querySelector('#rows .row-meta').textContent.trim())
+expect /\d:\d{2}\s?[AP]M/.test(document.querySelector('#comments-list time[title]').getAttribute('title'))
+eval localStorage.removeItem('splitpage-clock')

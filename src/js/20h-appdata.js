@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { SETTINGS_APPDATA_PREFS } from "./00p-prefs.js";
 import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import { SNAPSHOT_KEY } from "./03-sync.js";
 import {
@@ -159,6 +160,10 @@ async function buildAppDataBundle() {
       taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY),
       autosave: appDataReadRaw(AUTOSAVE_KEY)
     };
+    /* and the rest of Settings (#181, 00p-prefs.js) */
+    SETTINGS_APPDATA_PREFS.forEach(function (spec) {
+      bundle.prefs[spec.name] = appDataReadRaw(spec.key);
+    });
   } catch (e) {
     bundle.prefs = {};
   }
@@ -300,7 +305,7 @@ function appDataNormalizeBlobs(b) {
 function appDataNormalizePrefs(p) {
   if (!appDataIsPlainObject(p)) return {};
   function str(v) { return typeof v === "string" ? v : null; }
-  return {
+  var out = {
     onboarding: appDataIsPlainObject(p.onboarding) ? p.onboarding : null,
     tourDone: str(p.tourDone),
     commentAuthor: str(p.commentAuthor),
@@ -309,6 +314,8 @@ function appDataNormalizePrefs(p) {
     taggingHelpDismissed: str(p.taggingHelpDismissed),
     autosave: str(p.autosave)
   };
+  SETTINGS_APPDATA_PREFS.forEach(function (spec) { out[spec.name] = str(p[spec.name]); });
+  return out;
 }
 
 /* text → a normalised AppDataBundle, or throws an Error whose code is
@@ -433,7 +440,7 @@ function appDataPrefSpecs() {
       valid: function (v) { return v === "0" || v === "1"; } },
     { name: "autosave", key: AUTOSAVE_KEY,
       valid: function (v) { return v === "0" || v === "1"; } }
-  ];
+  ].concat(SETTINGS_APPDATA_PREFS);
 }
 
 function appDataMergePrefs(prefs) {

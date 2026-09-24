@@ -51,7 +51,7 @@ import {
 } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
-import { paintPresence } from "./13a-presence.js";
+import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
 
 /* ================= rendering =================
@@ -238,7 +238,10 @@ function rowGutterHtml(row, index, review) {
       '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-            escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'
+            /* in their colour, the header's dot for them (#192) */
+            '<span class="row-meta-who"><span class="person-dot" style="--person:' + personColor(row.updatedBy) +
+              '" aria-hidden="true"></span>' + escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '</span><br>' +
+            formatTimestamp(row.updatedAt) + '</div>'
         : '') +
     '</div>'
   );

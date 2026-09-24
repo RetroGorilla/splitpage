@@ -1,0 +1,51 @@
+# The name box and the reading-speed box at phone width (#193): the identity
+# chip moves to the header's third line there (app.css), and both boxes must
+# still open below their button and wholly on screen, with 16px text boxes
+# (iOS zooms the page into anything smaller).
+
+open
+viewport 375 812 mobile
+goto /index.html
+sleep 800
+wait document.querySelectorAll('#rows .row').length > 0
+expect innerWidth == 375
+eval window.__inView = function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.top>=0&&r.right<=document.documentElement.clientWidth&&r.bottom<=innerHeight;}
+
+jsclick #identity-chip
+wait document.getElementById('identity-editor')
+expect document.getElementById('identity-editor').parentNode === document.body
+expect window.__inView(document.getElementById('identity-editor'))
+expect document.getElementById('identity-editor').getBoundingClientRect().top >= document.getElementById('identity-chip').getBoundingClientRect().bottom
+expect document.documentElement.scrollWidth <= document.documentElement.clientWidth
+expect parseFloat(getComputedStyle(document.getElementById('identity-input')).fontSize) >= 16
+# all eight swatches on screen and at least 28px to tap
+expect document.querySelectorAll('#identity-editor .swatch').length === 8
+expect Array.prototype.every.call(document.querySelectorAll('#identity-editor .swatch'), function(s){return window.__inView(s) && s.getBoundingClientRect().width >= 28;})
+shot 131-name-box-phone
+key Escape
+expect document.getElementById('identity-editor') === null
+
+jsclick #runtime-chip
+wait document.getElementById('wpm-editor')
+expect window.__inView(document.getElementById('wpm-editor'))
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('runtime-chip').getBoundingClientRect().bottom
+expect parseFloat(getComputedStyle(document.getElementById('wpm-input')).fontSize) >= 16
+expect document.documentElement.scrollWidth <= document.documentElement.clientWidth
+shot 131-speed-box-phone
+key Escape
+expect document.getElementById('wpm-editor') === null
+
+# --- Settings (#181) at phone width: on screen, nothing wider than it ------
+eval window.__settingsTest.open()
+wait window.__settingsTest.isOpen()
+expect window.__inView(document.querySelector('#settings-modal .modal-panel'))
+expect document.querySelector('#settings-modal .modal-panel').scrollWidth <= document.querySelector('#settings-modal .modal-panel').clientWidth + 1
+expect Array.prototype.every.call(document.querySelectorAll('#settings-modal .settings-seg, #settings-modal .settings-switch, #settings-modal .swatch-row, #settings-modal .settings-actions'), function(el){var r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;})
+expect parseFloat(getComputedStyle(document.getElementById('settings-name')).fontSize) >= 16
+sleep 500
+shot 131-settings-phone
+eval document.documentElement.setAttribute('data-theme','dark')
+shot 131-settings-phone-dark
+eval document.documentElement.removeAttribute('data-theme')
+key Escape
+expect window.__settingsTest.isOpen() === false

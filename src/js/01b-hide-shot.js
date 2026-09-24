@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { writePref } from "./00p-prefs.js";
 import { escapeHtml } from "./02-state.js";
 import { findRowIndex } from "./03-sync.js";
 import { render } from "./05-render.js";
@@ -47,7 +48,8 @@ export function updateHideShotMenu() {
   item.setAttribute("aria-checked", hideShotScenes ? "true" : "false");
 }
 
-function setHideShotScenes(on) {
+/* Exported for Settings (#181), which sets it rather than toggling it. */
+export function setHideShotScenes(on) {
   on = !!on;
   if (on === hideShotScenes) return;
   hideShotScenes = on;
@@ -55,7 +57,8 @@ function setHideShotScenes(on) {
      moment hiding is off, and re-enabling should collapse everything
      Shot again rather than remember what used to be expanded. */
   if (on) expandedShotRowIds = {};
-  try { localStorage.setItem(HIDE_SHOT_KEY, on ? "1" : "0"); } catch (e) {}
+  /* stored and announced, so Settings (#181) follows the File menu's switch */
+  writePref(HIDE_SHOT_KEY, on ? "1" : "0");
   updateHideShotMenu();
   if (S.state) render();
 }

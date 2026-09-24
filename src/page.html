@@ -94,6 +94,7 @@
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 0 1 4.9.6c0 1.7-2.4 2.3-2.4 3.9"/><path d="M12 17h.01"/></symbol>
     <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6.5h9M17 6.5h3M4 12h3M11 12h9M4 17.5h11M19 17.5h1"/><circle cx="15" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17.5" r="2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/><circle cx="12" cy="12" r="6.8"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5z"/><circle cx="8" cy="8" r="1.5"/></symbol>
     <symbol id="i-box" viewBox="0 0 24 24"><path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/></symbol>
@@ -308,6 +309,9 @@
           <!-- Help and the app's own settings: small, always at the bottom,
                outside the scrolling list so they are never scrolled away. -->
           <div class="menu-foot" role="group" aria-label="Help and settings">
+            <!-- Settings (#181): the per-person preferences in one dialog
+                 (20s-settings.js, which catches this click first). -->
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="settings" id="menu-settings"><svg class="mi-icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="mi-label">Settings</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="help" data-keys="F1" data-keys-only="desktop"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-label">Help</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tour"><svg class="mi-icon" aria-hidden="true"><use href="#i-compass"/></svg><span class="mi-label">Tour</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="setup" title="Set up Splitpage…"><svg class="mi-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="mi-label">Set up</span></button>

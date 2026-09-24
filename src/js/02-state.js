@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
+import { normalizePersonColors } from "./00p-prefs.js";
 import { DEFAULT_WPM, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
@@ -68,6 +69,8 @@ function defaultState() {
      max-plus-one         — a revision counter
      theirs-wins          — theirs, then mine, then nothing
      constant             — stamped, never reconciled
+     person-colors        — name → colour, per name the side that changed
+                            it (mergePersonColors, 00p-prefs.js, #194)
 */
 export var STATE_FIELDS = [
   { key: "title",          merge: "title",  def: function () { return ""; } },
@@ -84,6 +87,10 @@ export var STATE_FIELDS = [
   { key: "rev",            merge: "max-plus-one", def: function () { return 0; } },
   { key: "lastEditedBy",   merge: "theirs-wins" },
   { key: "lastEditedAt",   merge: "theirs-wins" },
+  /* The colours people picked for themselves (#194), {name: colour}. No
+     `def`: a document nobody picked in has no key at all, so an older file
+     reads and saves exactly as it did. */
+  { key: "personColors",   merge: "person-colors" },
   { key: "schema",         merge: "constant" }
 ];
 
@@ -498,6 +505,14 @@ export function migrateRows(s) {
      whoever opens it next. Clamped to a range a human can actually read at. */
   var wpm = Number(s.wordsPerMinute);
   s.wordsPerMinute = (isFinite(wpm) && wpm >= 60 && wpm <= 400) ? Math.round(wpm) : DEFAULT_WPM;
+
+  /* The colours people picked (#194): names and the eight colours only,
+     and no key at all when there is nothing valid in it. */
+  if ("personColors" in s) {
+    var personColors = normalizePersonColors(s.personColors);
+    if (personColors) s.personColors = personColors;
+    else delete s.personColors;
+  }
 
   s.title = plainText(s.title).slice(0, 300);
   if (typeof s.rev !== "number") s.rev = 0;

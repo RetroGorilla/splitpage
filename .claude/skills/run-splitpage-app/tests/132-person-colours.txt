@@ -1,0 +1,99 @@
+# A person's colour (#192, #194): the header's identity dot in your colour
+# (grey with no name), a dot in the editor's colour before the gutter's
+# "last edited by", eight named swatches in the name box, a pick changing
+# the header and the gutter at once and going into the document you edit,
+# and how anyone else's colour is found: presence, then the document's map,
+# then the hash of their name.
+
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.P=window.__presenceTest;localStorage.removeItem('splitpage-person-color');localStorage.removeItem('splitpage-comment-author');return true;})()
+eval window.__rgb = function(hex){var n=parseInt(hex.slice(1),16);return 'rgb('+(n>>16)+', '+((n>>8)&255)+', '+(n&255)+')';}
+eval window.__dotBg = function(sel){var el=document.querySelector(sel);return el?getComputedStyle(el).backgroundColor:'';}
+eval window.__rowDot = function(id){var el=document.querySelector('#rows .row[data-id="'+id+'"] .row-meta .person-dot');return el?el.style.getPropertyValue('--person').trim():'';}
+
+# --- no name: a grey dot ----------------------------------------------------
+expect document.getElementById('identity-chip').classList.contains('unnamed')
+expect document.querySelector('#identity-chip .identity-dot').getAttribute('aria-hidden') === 'true'
+expect window.__dotBg('#identity-chip .identity-dot') !== window.__rgb('#80BDFB')
+
+# --- a name: the dot is your colour, the one your name gives you -----------
+click #identity-chip
+wait document.getElementById('identity-editor')
+eval document.getElementById('identity-input').value = 'Adam'
+click #identity-save
+expect document.getElementById('identity-chip').classList.contains('unnamed') === false
+eval window.__hashed = P.color({id:'x',name:'Adam'})
+expect window.__dotBg('#identity-chip .identity-dot') === window.__rgb(window.__hashed)
+
+# --- the swatches: a named radio group, the current one checked ------------
+click #identity-chip
+wait document.getElementById('identity-editor')
+expect document.querySelector('#identity-editor [role="radiogroup"]') !== null
+expect document.querySelectorAll('#identity-editor input[type="radio"][name="person-color"]').length === 8
+expect Array.prototype.map.call(document.querySelectorAll('#identity-editor input[type="radio"]'), function(r){return r.getAttribute('aria-label');}).join(',') == Blue,Amber,Violet,Green,Pink,Lime,Coral,Teal
+expect document.querySelector('#identity-editor input[type="radio"]:checked').value === window.__hashed
+# pick Violet: stored, the header dot follows at once, the box stays open
+click #identity-editor input[value="#CBA1FA"] + .swatch-dot
+expect localStorage.getItem('splitpage-person-color') === '#CBA1FA'
+expect document.querySelector('#identity-editor input[type="radio"]:checked').value === '#CBA1FA'
+expect window.__dotBg('#identity-chip .identity-dot') === 'rgb(203, 161, 250)'
+expect document.getElementById('identity-editor') !== null
+shot 132-swatches-light
+key Escape
+
+# --- the gutter: your edit carries your colour, and the document keeps it --
+caret #rows .row[data-id="r1"] .audio-cell .cell-editable
+type more words
+eval document.activeElement.blur()
+# typing repaints no gutter (#84); the next render shows who edited it
+eval window.__renderTest.render()
+wait window.__rowDot('r1') === '#CBA1FA'
+expect document.querySelector('#rows .row[data-id="r1"] .row-meta').textContent.indexOf('Adam') !== -1
+expect document.querySelector('#rows .row[data-id="r1"] .row-meta .person-dot').getAttribute('aria-hidden') === 'true'
+expect document.querySelector('#rows .row[data-id="r1"] .row-meta').getAttribute('title') === 'Last edited by Adam'
+wait F.state().personColors && F.state().personColors.Adam === '#CBA1FA'
+# Ctrl+Z takes the typing back, not the colour
+key ctrl KeyZ
+sleep 200
+expect F.state().personColors.Adam === '#CBA1FA'
+
+# --- somebody else: their name's colour, unless they picked one -----------
+eval (function(){var r=F.state().rows[1];r.updatedBy='Priya Malhotra';r.updatedAt=new Date().toISOString();window.__renderTest.render();return true;})()
+eval window.__priya = P.color({id:'x',name:'Priya Malhotra'})
+expect window.__rowDot('r2') === window.__priya
+# two editors, two dots
+expect window.__rowDot('r2') !== window.__rowDot('r1')
+# the document's map says what Priya picked
+eval (function(){var pc=F.state().personColors;pc['Priya Malhotra']='#73D4AC';window.__renderTest.render();return true;})()
+expect window.__rowDot('r2') === '#73D4AC'
+# someone here now says it better than the document
+eval P.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'audioText',color:'#F89DC9'}])
+wait window.__rowDot('r2') === '#F89DC9'
+expect getComputedStyle(document.querySelector('#presence-bar .presence-chip')).backgroundColor === 'rgb(248, 157, 201)'
+# a colour that is not one of the eight is no colour
+eval P.apply([{id:'p2',name:'Priya Malhotra',rowId:'r2',field:'audioText',color:'red'}])
+wait window.__rowDot('r2') === '#73D4AC'
+# gone from presence: the document's again
+eval P.apply([])
+expect window.__rowDot('r2') === '#73D4AC'
+# and nobody's pick changes anybody else's colour
+expect window.__rowDot('r1') === '#CBA1FA'
+
+# --- comments and History use the same colour ------------------------------
+eval (function(){F.state().comments.forEach(function(c){c.author='Adam';});window.__renderTest.render();return true;})()
+jsclick #btn-comments
+wait document.querySelector('#comments-list .comment-avatar')
+expect document.querySelector('#comments-list .comment-avatar').style.getPropertyValue('--presence').trim() === '#CBA1FA'
+
+# --- dark ------------------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme','dark')
+eval (function(){var s=document.createElement('style');s.id='shot-meta';s.textContent='.row-meta{opacity:1 !important}';document.head.appendChild(s);return true;})()
+jsclick #btn-comments
+click #identity-chip
+wait document.getElementById('identity-editor')
+shot 132-swatches-dark
+key Escape
+eval document.documentElement.removeAttribute('data-theme')
+shot 132-gutter-light
