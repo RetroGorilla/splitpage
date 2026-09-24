@@ -239,7 +239,7 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
     /* a match that ended inside an element leaves that element empty (the
        range keeps what it only partly covered); the model writes no empty
        elements, so neither does this */
-    Array.prototype.forEach.call(body.querySelectorAll("strong, em, u, s, mark, a, span.cmt-anchor"), function (el) {
+    Array.prototype.forEach.call(body.querySelectorAll("strong, em, u, s, mark, a, span.cmt-anchor, span.stage-dir"), function (el) {
       if (el.parentNode && !el.textContent && !el.querySelector("img, br")) el.parentNode.removeChild(el);
     });
     return { html: sanitizeHtml(body.innerHTML), changed: matches.length };

@@ -37,10 +37,12 @@ import {
   handleToolbarCmd,
   insertLineBreak,
   isScriptCell,
+  maybeDirectionShortcut,
   render,
   renderRow,
   syncFieldFromDom,
   toggleCellFormat,
+  typeAtDirectionEdge,
   typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
@@ -830,7 +832,9 @@ function onFormatBeforeInput(e) {
   if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
   if (!cellEl || !isScriptCell(cellEl)) return;
-  var fresh = typePendingMarks(cellEl, e.data);
+  /* the same for a character typed at the edge of a stage direction
+     (#167), which is narration, not more of the direction */
+  var fresh = typePendingMarks(cellEl, e.data) || typeAtDirectionEdge(cellEl, e.data);
   if (!fresh) return;
   e.preventDefault();
   onRootInput({ target: fresh, inputType: "insertText", data: e.data });
@@ -890,6 +894,7 @@ function onRootInput(e) {
      own history notes it (05d-draft-edit.js) */
   if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
   maybeAutoTagShortcut(e, cellEl);
+  maybeDirectionShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
   syncFieldFromDom(cellEl);
   afterScriptCellChange(cellEl);

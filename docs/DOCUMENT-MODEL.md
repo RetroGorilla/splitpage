@@ -98,6 +98,7 @@ atomic inline object, the b-roll key:
 | Mark | Value | Notes |
 | --- | --- | --- |
 | `b` `i` `u` `s` `hl` | `true` | bold, italic, underline, strike, highlight |
+| `dir` | `true` | a stage direction for the performer (#167, Audio column): stored as `<span class="stage-dir">`, nested just inside the comments; never on the b-roll key; its brackets are added by every reader, never stored; left out of `spokenText()` (the read time) and of the teleprompter's word spans |
 | `href` | string | http, https or mailto only (`safeHref`) |
 | `tag` | registry id | **at most one tag per run** — nested tags have no meaning |
 | `cmt` | array of comment ids, sorted | comments may overlap |
@@ -116,10 +117,11 @@ already does).
 - `cmt` is sorted and de-duplicated
 - marks equal to `false`, `null` or `[]` are removed
 - a `tag` or `cmt` id that doesn't resolve is removed
-- across each stretch of one tag, `cmt` becomes the union and `href` the
-  first one found: a tag is one unit, so a comment or link covers all of it
-  or none of it — which is also what lets `toHtml` nest a tag inside its
-  comments and links without ever splitting it
+- across each stretch of one tag, `cmt` becomes the union, `href` the
+  first one found and `dir` set if any of it was: a tag is one unit, so a
+  comment, link or direction covers all of it or none of it — which is also
+  what lets `toHtml` nest a tag inside its comments, directions and links
+  without ever splitting it
 
 Two cells with the same content are then the same JSON. That is what makes
 comparison, merge and memoisation keys trivial.

@@ -1077,6 +1077,30 @@ compared as a string, whole. The on-disk merge review (18a-local-merge.js)
 decides each cell with the same `mergeTextField()`, and shows "both sets of
 changes are combined" for an outcome of `merged`.
 
+**A stage direction** (#167) is the model's `dir` mark on words of the
+Audio column, stored as `<span class="stage-dir">` (the sanitiser keeps the
+class and nothing else), nested just inside the comments so only a comment
+edge can cut one; never on a b-roll key; a tag is all in one or not
+(`normalizeCell`). Its brackets are never stored: app.css draws them in the
+editor, the Writer and the prompter, and every text reader adds them —
+`toPlainText` "(beat)" (its `directions: "omit"` and `spokenText()` leave
+them out), `toMarkdown` `*(beat)*`, `toDocxRuns` a `(`/`)` run each side with
+`dir: true` (the .docx writes the `SplitpageDirection` character style,
+which `docxToRows` reads back; the PDF prints them grey italic), and
+`htmlToMarkdown` — the `.md` project's table — `((beat))`, the typing
+notation, so a hand-edited table cell gets them back (`audioDirectionsHtml`,
+15-docx.js, also run on a `.docx`'s and a paste import's Audio). An older
+copy's sanitiser unwraps the span, so there a direction reads as narration;
+its `.md` table shows the `((beat))` literally. `wordCount` (so
+`rowSeconds`) counts `spokenText`; `prompterSceneHtml` leaves a direction's
+words out of the `.w` spans voice follow listens for. Typing: `((words))`
+converts on the second `)` in the Audio column only (`directionShortcut`,
+04c-doc-model.js, where the typing convention Adam signed off is recorded;
+`maybeDirectionShortcut`, 05-render.js), one undo entry of its own; a
+character typed at either edge of one is narration (`typingMarks`,
+`typeAtDirectionEdge`). The narration export's "Include stage directions"
+is `localStorage["splitpage-export-directions"]` (`"0"` off, absent on).
+
 **Images are references, not bytes** (#82). The document state never holds
 image bytes; the bytes live once, content-addressed by SHA-256, in a blob
 store (browser IndexedDB `splitpage-blobs`, desktop `<userData>/blobs`,
