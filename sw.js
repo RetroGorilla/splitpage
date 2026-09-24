@@ -13,7 +13,7 @@
    for a full load after every deploy — and the entries of every release that
    ever ran stayed on disk. A per-version name turns the activate handler
    below from a no-op into the thing that actually reclaims that space. */
-var CACHE = "splitpage-3.0.0-beta.3";
+var CACHE = "splitpage-3.0.0-beta.4";
 var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 
 /* Resolved once, against this worker's own URL, the same way the relative
