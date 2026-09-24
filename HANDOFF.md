@@ -969,9 +969,33 @@ builds two fields.
     "status": "unshot | shot", "reshoot": false, "notes": "plain text ≤2000",
     "owner": "p… or ''", "audioRef": "plain text", "location": "plain text ≤80",
     "origin": "script | list",
-    "props": [{ "id": "t_… (a productionTags id) or ''", "name": "≤80" }] }]  // ≤40, hand-added only (#149)
+    "props": [{ "id": "t_… (a productionTags id) or ''", "name": "≤80" }] }],  // ≤40, hand-added only (#149)
+  "personColors": { "Adam": "#CBA1FA" }  // #194 — ABSENT until somebody picks; see below
 }
 ```
+
+**`personColors`** (#194) is the colour each person picked for themselves,
+`{name: colour}`: a name (trimmed, ≤80 characters) to one of the eight
+`PERSON_COLORS` (`00p-prefs.js`), at most 200 of them. It has **no
+default**: a document nobody picked in has no key at all, so a file from
+before #194 reads, merges and saves byte for byte as it did, and an older
+client that meets the key just carries it. Your pick lives in your prefs
+(`splitpage-person-color`) and `markDirty()` writes it under your name into
+each document you edit (`recordMyColor`, 13a-presence.js; a reviewer's copy
+is left alone). It is bookkeeping, not content: `12a-undo.js` keeps it out of
+the undo stack. `migrateRows()` cleans it (`normalizePersonColors`: garbage
+dropped, names that differ only in case or padding kept once, the key
+deleted when nothing valid is left); `mergeStates()` merges it per name with
+`mergePersonColors` — the side that moved a name off the base wins, both
+moved it is mine, a name either side (or only the base) has is kept, nothing
+is ever removed. Both project formats carry it unchanged (it is just a
+state key). A person's colour is resolved by `personColor(name)`
+(13a-presence.js over `resolvePersonColor`): your own pick for your name,
+then what the people online now send with presence (`color` on
+`/api/presence`, `#RRGGBB` only, whitelisted by the server and checked
+against the eight again by the page), then this map, then the hash of the
+name — which is what everyone got before #194 and still gets until they
+pick.
 
 `ROW_FIELDS = ["visualText","imageRef","audioText","imageLinks","moreImages"]`
 merges as content (an `imageRef` compared by its sha; the gallery's two
@@ -1124,6 +1148,23 @@ not write to it), `splitpage-conflict-stash`/`-reloaded` (sessionStorage),
 stores until the one-time move has emptied them — see above), `splitpage-blobs` (IndexedDB, store
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
+
+**Per-person settings** (#181, the Settings dialog, `20s-settings.js`), all
+localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
+absent = system; sets `data-theme` on `<html>` and, in the desktop app,
+`nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
+(`12`/`24`, absent = system; `formatClock()` in `00p-prefs.js` is the one
+clock formatter, #180), `splitpage-person-color` (#194),
+`splitpage-default-wpm` (the reading speed a NEW script starts at),
+`splitpage-rundown-min` and `splitpage-script-scale` (other lanes' own
+controls; Settings only reads and writes them), plus the keys that already
+had homes (`splitpage-hide-shot`, `splitpage-autosave`,
+`splitpage-writer-size`, `splitpage-prompter-mirror`/`-flip`/`-scene-mode`,
+`splitpage-comment-author`). Every write goes through `writePref(key,
+value)`, which stores it and then fires `document`'s
+`"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
+setting listens for its key, so a change made anywhere shows everywhere.
+File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 
 ---
 
@@ -1500,6 +1541,7 @@ evaluation order via `_entry.js`):
 | `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11) |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
+| `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`, `savedAgoPhrase`), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
@@ -1526,7 +1568,7 @@ evaluation order via `_entry.js`):
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
-| `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks |
+| `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
@@ -1548,6 +1590,7 @@ evaluation order via `_entry.js`):
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
+| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed |
 | `21-events.js` | all event wiring, `init()` |
 

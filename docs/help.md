@@ -1222,6 +1222,36 @@ Something that cannot run right now is still listed, greyed, with the reason
 underneath — the same one the File menu gives. The box does not open over
 the teleprompter, the writer or another dialog.
 
+### Settings
+
+**File ▸ Settings** (at the foot of the menu, or type *settings* after
+<kbd>Ctrl</kbd>+<kbd>K</kbd>; in the desktop app also **File ▸ Settings…**)
+is how Splitpage works for you on this computer. Nothing in it changes the
+script.
+
+- **Appearance** — the theme (System, Light or Dark; the desktop app's
+  title bar follows), the clock (System, 12-hour or 24-hour — used for
+  "Saved at …", Version history, comments and the scene gutter), and
+  whether the rundown strip starts minimized.
+- **Editor** — Hide shot scenes, Autosave, the reading speed a *new* script
+  starts at (each script keeps its own; click the clock in the header to
+  change it), the writer's text size, and the script's zoom.
+- **Present** — the teleprompter's Mirror, Flip and One scene at a time.
+- **You** — your name, and your colour: the dot by your name in the
+  header, the scene gutter, comments, History and the people-here row. Until
+  you pick one, your colour comes from your name. Once you pick, it is
+  written into each script you edit, so other people see it too.
+- **Help & tips** — bring back the tagging reference, the tour and the
+  desktop-app notice.
+- **Data** — Export app data (your history, server bookmarks and these
+  settings), Servers and Google Drive.
+
+The same switches still work where they always were (the File menu, the
+teleprompter's buttons, the writer's size slider) and Settings shows what
+they say.
+
+Your name and colour are also a click away: click your name in the header.
+
 ## Exporting
 
 **File ▸ Export…** (<kbd>Ctrl</kbd>+<kbd>E</kbd>) opens one dialog for every
