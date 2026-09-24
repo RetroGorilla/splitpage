@@ -14,7 +14,7 @@
    ever ran stayed on disk. A per-version name turns the activate handler
    below from a no-op into the thing that actually reclaims that space. */
 var CACHE = "splitpage-3.0.0-beta.4";
-var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
+var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-maskable.svg"];
 
 /* Resolved once, against this worker's own URL, the same way the relative
    entries in SHELL are — so these are the exact keys cache.addAll() wrote. */
@@ -115,7 +115,7 @@ self.addEventListener("fetch", function (event) {
 
   if (!cacheable) return;
 
-  /* Everything else same-origin: manifest.webmanifest and icon.svg. Those
+  /* Everything else same-origin: manifest.webmanifest and the icons. Those
      change only with a release, and the whole cache is dropped by name when
      one lands, so stale-while-revalidate is still right for them — unlike
      the page, a one-load-old icon cannot leave anybody running last

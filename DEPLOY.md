@@ -49,7 +49,7 @@ the unzipped folder is already a working `docker build` context.
 
 > **Building it yourself instead.** From a checkout: `npm install` once, then
 > `node build.mjs`, and copy `index.html`, `sw.js`, `manifest.webmanifest`,
-> `icon.svg`, `Dockerfile` and `server/` yourself. A checkout that has never
+> `icon.svg`, `icon-maskable.svg`, `Dockerfile` and `server/` yourself. A checkout that has never
 > been built has no `index.html` at all — that is normal, not a broken clone.
 > `node build.mjs --check` says whether the copy you have is current.
 >
@@ -68,6 +68,7 @@ You should end up with:
     index.html
     manifest.webmanifest
     icon.svg
+    icon-maskable.svg
     sw.js
     Dockerfile
     server/server.js

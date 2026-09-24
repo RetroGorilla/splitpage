@@ -170,6 +170,7 @@ jobs:
             sw.js
             manifest.webmanifest
             icon.svg
+            icon-maskable.svg
             Dockerfile
             server/server.js
             server/package.json

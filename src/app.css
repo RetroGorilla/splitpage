@@ -6950,7 +6950,7 @@
     font-size: 15px; font-weight: 700; letter-spacing: -0.005em;
   }
   /* the mark (#169): fixed colours, drawn in page.html */
-  .newtab-page .newtab-wordmark-mark { flex: none; width: 24px; height: 22px; }
+  .newtab-page .newtab-wordmark-mark { flex: none; width: 22px; height: 22px; }
   .newtab-bar-actions { display: flex; gap: 8px; }
   /* .btn-outline (the shared outlined button) with the board's 18px icons
      in the dim ink; Open is the raised one of the two. */
