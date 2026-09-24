@@ -53,6 +53,10 @@
  *   snapshotId  a version-history snapshot id (invariant #38)
  *   sha256      /^[0-9a-f]{64}$/ — a content-addressed blob's name (#82):
  *               64 lowercase hex, so it can never be a path or a URL
+ *   videoHost   "youtube" or "vimeo", and nothing else (#141)
+ *   videoRef    a YouTube video id (11 of [A-Za-z0-9_-]) or a Vimeo one
+ *               (digits, then ":" and the privacy hash when it has one) —
+ *               never a URL, a host or a path
  *
  * `any` is not laziness: it is what a channel that must answer a bad payload
  * with a CODE rather than a rejection needs. splitpage:draft-write returns
@@ -81,6 +85,10 @@ const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
 const DOC_ID_RE = /^d[0-9a-f]{32}$/;
 const HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
+/* shared/video-embed.js's VIDEO_REF_RE, repeated for the reason the three
+   above are: a YouTube id, or a Vimeo id with its privacy hash after a
+   colon. main.js still checks the pair against the host (parseVideoRef). */
+const VIDEO_REF_RE = /^(?:[A-Za-z0-9_-]{11}|[0-9]{1,12}(?::[0-9a-f]{6,32})?)$/;
 
 const TYPES = {
   any: () => true,
@@ -95,7 +103,9 @@ const TYPES = {
   tabId: (v) => typeof v === "string" && TAB_OR_WINDOW_ID_RE.test(v),
   docId: (v) => typeof v === "string" && DOC_ID_RE.test(v),
   snapshotId: (v) => typeof v === "string" && HISTORY_SNAP_ID_RE.test(v),
-  sha256: (v) => typeof v === "string" && SHA256_RE.test(v)
+  sha256: (v) => typeof v === "string" && SHA256_RE.test(v),
+  videoHost: (v) => v === "youtube" || v === "vimeo",
+  videoRef: (v) => typeof v === "string" && VIDEO_REF_RE.test(v)
 };
 
 const NONE = [];
@@ -148,6 +158,13 @@ const CHANNELS = [
      and are never written anywhere. */
   { name: "splitpage:video-file-grant", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
   { name: "splitpage:video-file-open", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
+  /* A pasted YouTube or Vimeo link's thumbnail (#141, main.js § 9e). The
+     page names the video by its host and id and nothing else — never a
+     URL (invariant #28) — and main builds every request against the two
+     sites' fixed hosts (shared/video-embed.js), follows no redirect, and
+     answers {ok: true, bytes, mime} for a JPEG, PNG or WebP of at most
+     1 MiB, or {ok: false, code}. */
+  { name: "splitpage:video-thumbnail", direction: "invoke", argsSchema: ["videoHost", "videoRef"], allowedOrigins: APP },
 
   /* ---- updates (section 9) -------------------------------------------
      Argument-free, all four, and now that is enforced rather than merely

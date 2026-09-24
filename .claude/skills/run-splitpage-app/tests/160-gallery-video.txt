@@ -1,0 +1,276 @@
+# YouTube and Vimeo in a scene's gallery (#141, #168; 05v-video.js,
+# 05e-gallery-overlay.js, shared/video-embed.js), against a FAKE host — no
+# request in this suite leaves the page (the drivers set
+# __splitpageNoRemote, and window.__videoTest stands in for the network):
+#   * a pasted YouTube link's thumbnail is fetched once from i.ytimg.com,
+#     its letterbox trimmed, kept as a blob (a ref in state, the bytes in
+#     the registry), and lands in the PASTE'S undo entry: one Undo takes the
+#     video and its picture, one redo brings both;
+#   * Vimeo's comes through its oEmbed answer, from its image host;
+#   * a failed fetch keeps the placeholder with no toast, and the dialog
+#     offers "Retry thumbnail" (its own undo step);
+#   * the dialog's player: click to play — no frame anywhere before the
+#     button is pressed, never in the script; YouTube's no-cookie embed,
+#     Vimeo's player with dnt=1; a sandboxed frame; a repaint for the same
+#     item leaves it alone; picking another item or closing removes it;
+#   * what cannot play says so and offers Open: YouTube from file://, a
+#     player the page's policy refuses, a video file only named here;
+#   * a video file dropped this session plays in a <video> from a blob: URL;
+#   * other sites stay links; Settings ▸ Fetch video thumbnails off fetches
+#     nothing; the desktop bridge is asked by host and id, never a URL;
+#   * the policy's frame-src names exactly the two players.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- a document: three empty scenes, an old video file, a Loom link, two web videos ----
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.D = window.__desktopTest; window.V = window.__videoTest; var doc = { schema: 2, title: 'Gallery video', rows: [ { id: 'r1', visualText: 'one', audioText: 'Alpha', status: 'todo' }, { id: 'r2', visualText: 'two', audioText: 'Bravo', status: 'todo' }, { id: 'r3', visualText: 'three', audioText: 'Charlie', status: 'todo' }, { id: 'r4', visualText: 'four', audioText: 'Delta', status: 'todo', imageRef: null, imageLinks: [{ name: 'old take.mp4', size: 10, poster: true }] }, { id: 'r5', visualText: 'five', audioText: 'Echo', status: 'todo', imageRef: null, imageLinks: [{ href: 'https://www.loom.com/share/abc', poster: true }] }, { id: 'r6', visualText: 'six', audioText: 'Foxtrot', status: 'todo', imageRef: null, imageLinks: [{ href: 'https://vimeo.com/22439234', poster: true }], moreImages: [{ links: [{ href: 'https://youtu.be/bbbbbbbbbbb', poster: true }] }] } ], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'gallery-video.splitpage')); return true; })()
+wait F.state().title === 'Gallery video' && document.querySelector('#rows .row[data-id="r6"]')
+eval (function(){ window.cell = function(id, field){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (field === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.row = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.st = function(id, field){ return row(id)[field]; }; window.caretEnd = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; window.dt = function(data, files){ var d = new DataTransfer(); if (data) Object.keys(data).forEach(function(k){ d.setData(k, data[k]); }); (files || []).forEach(function(f){ d.items.add(f); }); return d; }; window.paste = function(el, data, files){ var ev = new ClipboardEvent('paste', { clipboardData: dt(data, files), bubbles: true, cancelable: true }); el.dispatchEvent(ev); return ev.defaultPrevented; }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast:not(.is-leaving)'), function(t){ return t.textContent; }); }; window.clearToasts = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.mark = function(){ U.flush(); window.__u = U.sizes().undo; return true; }; window.media = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .visual-media'); }; window.M = function(){ return document.getElementById('gallery-modal'); }; window.closeM = function(){ if (!M().hidden) document.getElementById('gallery-close').click(); return M().hidden; }; return true; })()
+
+# ---- the fake host: a letterboxed 480x360 JPEG for YouTube, a PNG for Vimeo ----
+eval (async function(){ var c = document.createElement('canvas'); c.width = 480; c.height = 360; var g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 480, 360); g.fillStyle = '#2a7'; g.fillRect(0, 45, 480, 270); g.fillStyle = '#fc3'; g.fillRect(60, 100, 140, 120); var b = await new Promise(function(r){ c.toBlob(r, 'image/jpeg', 0.92); }); window.YT_JPEG = new Uint8Array(await b.arrayBuffer()); var c2 = document.createElement('canvas'); c2.width = 64; c2.height = 36; var g2 = c2.getContext('2d'); g2.fillStyle = '#36c'; g2.fillRect(0, 0, 64, 36); var b2 = await new Promise(function(r){ c2.toBlob(r, 'image/png'); }); window.VM_PNG = new Uint8Array(await b2.arrayBuffer()); g2.fillStyle = '#c63'; g2.fillRect(0, 0, 32, 36); var b3 = await new Promise(function(r){ c2.toBlob(r, 'image/png'); }); window.DESK_PNG = new Uint8Array(await b3.arrayBuffer()); return YT_JPEG.length + ':' + VM_PNG.length + ':' + DESK_PNG.length; })()
+eval (function(){ window.calls = []; window.routes = {}; V.setFetch(function(url, init){ calls.push(url); var r = routes[url]; if (!r) return Promise.resolve(new Response('no such video', { status: 404 })); return Promise.resolve(new Response(r.body, { status: r.status || 200 })); }); window.OE = 'https://vimeo.com/api/oembed.json?url=' + encodeURIComponent('https://vimeo.com/76979871') + '&width=640'; routes['https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'] = { body: YT_JPEG }; routes[OE] = { body: JSON.stringify({ type: 'video', thumbnail_url: 'https://i.vimeocdn.com/video/1-abc-d_640' }) }; routes['https://i.vimeocdn.com/video/1-abc-d_640'] = { body: VM_PNG }; return true; })()
+expect YT_JPEG.length > 0 && VM_PNG.length > 0
+
+# ---- 1. a YouTube link's thumbnail: fetched once, trimmed, in the paste's undo entry ----
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r1', 'audioText'))
+expect paste(cell('r1', 'audioText'), { 'text/plain': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }) === true
+wait !!st('r1', 'imageRef')
+expect calls.join('|') === 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'
+# the black bands above and below the 16:9 picture are cut off
+expect st('r1', 'imageRef').width === 480 && st('r1', 'imageRef').height === 270 && st('r1', 'imageRef').mime === 'image/jpeg'
+expect JSON.stringify(st('r1', 'imageLinks')) === JSON.stringify([{ href: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', poster: true }])
+expect st('r1', 'audioText') === 'Alpha'
+wait !!media('r1').querySelector('.scene-gallery-tile.is-video img')
+expect !media('r1').querySelector('.scene-gallery-placeholder')
+# the bytes are the registry's; state holds a ref, nothing from the web
+expect !!window.__blobsTest.recordFor(st('r1', 'imageRef').sha256)
+expect (function(){ var j = JSON.stringify(F.state()); return j.indexOf('data:image') === -1 && j.indexOf('ytimg') === -1 && j.indexOf('blob:') === -1; })()
+# ONE undo entry: the paste's, now holding the picture too
+eval U.flush()
+expect U.sizes().undo === __u + 1
+wait toasts().indexOf('Video added to scene 1Undo') !== -1
+jsclick #toast-host .toast-action
+wait !st('r1', 'imageLinks') && st('r1', 'imageRef') === null
+expect media('r1').classList.contains('is-empty')
+eval document.activeElement && document.activeElement.blur()
+key ctrl+shift KeyZ
+wait !!st('r1', 'imageLinks') && !!st('r1', 'imageRef') && st('r1', 'imageRef').height === 270
+# a redo fetches nothing again
+expect calls.length === 1
+
+# ---- 2. Vimeo: the oEmbed answer, then the picture from Vimeo's image host ----
+eval mark()
+eval caretEnd(cell('r2', 'visualText'))
+expect paste(cell('r2', 'visualText'), { 'text/plain': ' see https://vimeo.com/76979871 here' }) === true
+wait !!st('r2', 'imageRef')
+expect calls.slice(1).join('|') === OE + '|https://i.vimeocdn.com/video/1-abc-d_640'
+expect st('r2', 'imageRef').width === 64 && st('r2', 'imageRef').height === 36 && st('r2', 'imageRef').mime === 'image/png'
+expect st('r2', 'visualText') === 'two see https://vimeo.com/76979871 here'
+eval U.flush()
+expect U.sizes().undo === __u + 1
+eval document.activeElement && document.activeElement.blur()
+key ctrl KeyZ
+wait st('r2', 'visualText') === 'two' && st('r2', 'imageRef') === null && !st('r2', 'imageLinks')
+key ctrl+shift KeyZ
+wait !!st('r2', 'imageRef') && st('r2', 'imageRef').width === 64
+
+# ---- 3. a failed fetch: the placeholder stays, silently; Retry thumbnail ---------------
+eval clearToasts()
+eval mark()
+eval caretEnd(cell('r3', 'audioText'))
+expect paste(cell('r3', 'audioText'), { 'text/plain': 'https://youtu.be/aaaaaaaaaaa' }) === true
+wait calls.indexOf('https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg') !== -1
+sleep 300
+expect st('r3', 'imageRef') === null && !!media('r3').querySelector('.scene-gallery-placeholder')
+expect toasts().join('|') === 'Video added to scene 3Undo'
+eval media('r3').querySelector('.scene-gallery-tile').click()
+wait !M().hidden
+expect M().querySelector('.scene-gallery-kind').textContent === 'Video'
+expect !!M().querySelector('.scene-gallery-actions [data-gact="retry-thumb"]')
+# still failing: a word, since this time someone asked
+eval (function(){ clearToasts(); M().querySelector('[data-gact="retry-thumb"]').click(); return true; })()
+wait toasts().some(function(t){ return t.indexOf('get this video') !== -1; })
+expect st('r3', 'imageRef') === null
+# and then it works: one undo step of its own, with a toast
+eval (function(){ routes['https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg'] = { body: YT_JPEG }; clearToasts(); mark(); return true; })()
+wait !!M().querySelector('[data-gact="retry-thumb"]') && !M().querySelector('[data-gact="retry-thumb"]').disabled
+eval M().querySelector('[data-gact="retry-thumb"]').click()
+wait !!st('r3', 'imageRef') && st('r3', 'imageRef').height === 270
+wait toasts().indexOf('Thumbnail addedUndo') !== -1
+eval U.flush()
+expect U.sizes().undo === __u + 1
+wait M().querySelector('.scene-gallery-kind').textContent === 'Video · thumbnail'
+expect !M().querySelector('[data-gact="retry-thumb"]')
+expect closeM()
+
+# ---- 4. the player: click to play, in the dialog only -----------------------------------
+# nothing framed anywhere yet: not in the script, not in a closed dialog
+expect document.querySelectorAll('iframe').length === 0
+eval media('r1').querySelector('.scene-gallery-tile').click()
+wait !M().hidden && !!M().querySelector('.scene-gallery-playbtn')
+expect M().querySelector('.scene-gallery-kind').textContent === 'Video · thumbnail'
+expect M().querySelectorAll('iframe').length === 0
+expect M().querySelector('.scene-gallery-playbtn').getAttribute('title').indexOf('nothing is asked of YouTube before you press play') !== -1
+expect M().querySelector('.scene-gallery-playbtn').getAttribute('aria-label') === 'Play youtube.com/watch?v=dQw4w9WgXcQ here'
+sleep 400
+shot 160-dialog-still
+eval M().querySelector('.scene-gallery-playbtn').click()
+wait !!M().querySelector('iframe.scene-gallery-player')
+eval (function(){ window.IF = M().querySelector('iframe.scene-gallery-player'); return IF.getAttribute('data-src'); })()
+expect IF.getAttribute('data-src') === 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0&playsinline=1'
+# under the harness nothing real is loaded
+expect IF.getAttribute('src') === 'about:blank'
+expect IF.getAttribute('sandbox').split(' ').sort().join(' ') === 'allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts'
+expect IF.getAttribute('allow').indexOf('autoplay') !== -1 && IF.getAttribute('referrerpolicy') === 'strict-origin-when-cross-origin'
+expect IF.getAttribute('title') === 'YouTube player: youtube.com/watch?v=dQw4w9WgXcQ'
+expect !M().querySelector('.scene-gallery-playbtn') && !M().querySelector('.scene-gallery-kind')
+expect M().querySelector('.scene-gallery-preview-pic').classList.contains('is-playing')
+expect !!M().querySelector('.scene-gallery-actions [data-gact="open"]')
+expect document.querySelectorAll('#rows iframe').length === 0
+# a repaint for the same item leaves the playing frame where it is
+eval document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-video-thumbs', value: null } }))
+expect M().querySelector('iframe.scene-gallery-player') === IF && IF.isConnected
+shot 160-dialog-playing
+# closing takes the player, and its playback, with it
+expect closeM()
+expect !IF.isConnected && document.querySelectorAll('iframe').length === 0
+# Vimeo: its player, with dnt=1; picking another item stops it
+eval media('r6').querySelector('.scene-gallery-tile').click()
+wait !M().hidden && !!M().querySelector('.scene-gallery-playbtn')
+eval M().querySelector('.scene-gallery-playbtn').click()
+wait !!M().querySelector('iframe.scene-gallery-player')
+expect M().querySelector('iframe.scene-gallery-player').getAttribute('data-src') === 'https://player.vimeo.com/video/22439234?autoplay=1&dnt=1'
+expect M().querySelector('iframe.scene-gallery-player').getAttribute('title') === 'Vimeo player: vimeo.com/22439234'
+eval M().querySelector('[data-gact="next"]').click()
+wait M().querySelector('.scene-gallery-position') && M().querySelector('.scene-gallery-position').textContent === '2 / 2'
+expect document.querySelectorAll('iframe').length === 0
+expect !!M().querySelector('.scene-gallery-playbtn')
+# a placeholder video that plays: no camera under the play button
+expect M().querySelector('.scene-gallery-kind').textContent === 'Video' && !M().querySelector('.scene-gallery-preview-none')
+expect closeM()
+
+# ---- 5. what cannot play says so, and offers the way it opens ----------------------------
+# YouTube in a copy opened from disk sends no referrer and is refused: say so
+eval (function(){ V.setProtocol('file:'); window.__opened = []; window.__realOpen = window.open; window.open = function(u){ window.__opened.push(u); return null; }; return true; })()
+eval media('r6').querySelector('.scene-gallery-tile').click()
+wait !M().hidden
+# Vimeo plays from anywhere
+expect !!M().querySelector('.scene-gallery-playbtn') && !M().querySelector('.scene-gallery-note')
+eval M().querySelector('[data-gact="next"]').click()
+wait !!M().querySelector('.scene-gallery-note')
+expect M().querySelector('.scene-gallery-note p').textContent.indexOf('opened from a file') !== -1
+expect !M().querySelector('.scene-gallery-playbtn')
+eval M().querySelector('.scene-gallery-note [data-gact="open"]').click()
+expect __opened.join() === 'https://youtu.be/bbbbbbbbbbb'
+shot 160-dialog-refused
+expect closeM()
+eval (function(){ V.setProtocol(null); window.open = window.__realOpen; return true; })()
+# a player the page's policy turns away is not an empty frame
+eval V.setBases({ youtubePlayer: 'https://blocked.example' })
+eval media('r1').querySelector('.scene-gallery-tile').click()
+wait !M().hidden && !!M().querySelector('.scene-gallery-playbtn')
+eval M().querySelector('.scene-gallery-playbtn').click()
+wait !!M().querySelector('.scene-gallery-note')
+expect M().querySelector('.scene-gallery-note p').textContent.indexOf('load here') !== -1
+expect document.querySelectorAll('iframe').length === 0
+expect closeM()
+eval V.setBases(null)
+# a video file only named in the document: it cannot play, and says why
+eval clearToasts()
+eval media('r4').querySelector('.scene-gallery-tile').click()
+wait !M().hidden && !!M().querySelector('.scene-gallery-note')
+expect M().querySelector('.scene-gallery-note p').textContent.indexOf('name is kept') !== -1
+expect !M().querySelector('.scene-gallery-playbtn')
+expect M().querySelector('.scene-gallery-note [data-gact="open"]').textContent === 'Open file'
+eval M().querySelector('.scene-gallery-note [data-gact="open"]').click()
+wait toasts().some(function(t){ return t.indexOf('only its name is kept here') !== -1; })
+expect closeM()
+
+# ---- 6. a video file dropped this session plays here, from a blob: URL ----------------------
+eval (async function(){ var c = document.createElement('canvas'); c.width = 64; c.height = 48; var g = c.getContext('2d'); var rec = new MediaRecorder(c.captureStream(15), { mimeType: 'video/webm' }); var parts = []; rec.ondataavailable = function(e){ if (e.data && e.data.size) parts.push(e.data); }; var stopped = new Promise(function(r){ rec.onstop = r; }); rec.start(); var t0 = Date.now(); while (Date.now() - t0 < 700) { g.fillStyle = '#2a6'; g.fillRect(0, 0, 64, 48); g.fillStyle = '#fff'; g.fillRect((Date.now() - t0) % 40, 10, 12, 12); await new Promise(function(r){ setTimeout(r, 40); }); } rec.stop(); await stopped; window.WEBM = new Blob(parts, { type: 'video/webm' }); return WEBM.size; })()
+expect WEBM.size > 0
+eval caretEnd(cell('r4', 'audioText'))
+expect paste(cell('r4', 'audioText'), { 'text/plain': '' }, [ new File([WEBM], 'new take.webm', { type: 'video/webm' }) ]) === true
+wait (st('r4', 'moreImages') || []).length === 1
+eval media('r4').querySelectorAll('.scene-gallery-tile')[1].click()
+wait !M().hidden && !!M().querySelector('.scene-gallery-playbtn')
+expect M().querySelector('.scene-gallery-kind').textContent === 'Video · first frame'
+expect M().querySelector('.scene-gallery-playbtn').getAttribute('title') === 'Play it here'
+eval M().querySelector('.scene-gallery-playbtn').click()
+wait !!M().querySelector('video.scene-gallery-player')
+expect M().querySelector('video.scene-gallery-player').getAttribute('src').indexOf('blob:') === 0
+expect M().querySelector('video.scene-gallery-player').controls === true
+wait M().querySelector('video.scene-gallery-player').readyState >= 1
+shot 160-dialog-file-playing
+# its own arrow keys are the video's: they seek, they do not pick
+eval (function(){ var v = M().querySelector('video.scene-gallery-player'); v.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })); return true; })()
+expect !!M().querySelector('video.scene-gallery-player') && M().querySelectorAll('.scene-gallery-grid-tile')[1].classList.contains('is-selected')
+expect closeM()
+expect document.querySelectorAll('video').length === 0
+
+# ---- 7. other sites stay links --------------------------------------------------------------
+eval media('r5').querySelector('.scene-gallery-tile').click()
+wait !M().hidden
+expect !M().querySelector('.scene-gallery-playbtn') && !M().querySelector('.scene-gallery-note') && !M().querySelector('[data-gact="retry-thumb"]')
+expect !!M().querySelector('.scene-gallery-actions [data-gact="open"]')
+expect closeM()
+
+# ---- 8. Settings ▸ Fetch video thumbnails, off: nothing is asked -----------------------------
+eval window.__settingsTest.open()
+wait !!document.getElementById('settings-video-thumbs')
+expect document.getElementById('settings-video-thumbs').checked === true
+jsclick #settings-video-thumbs
+wait localStorage.getItem('splitpage-video-thumbs') === '0'
+expect document.getElementById('settings-video-thumbs').checked === false
+sleep 400
+shot 160-settings
+eval window.__settingsTest.close()
+eval (function(){ window.__n = calls.length; return __n; })()
+eval caretEnd(cell('r2', 'audioText'))
+expect paste(cell('r2', 'audioText'), { 'text/plain': 'https://youtu.be/ccccccccccc' }) === true
+wait (st('r2', 'moreImages') || []).length === 1
+sleep 400
+expect calls.length === __n
+# and no Retry either
+eval media('r2').querySelectorAll('.scene-gallery-tile')[1].click()
+wait !M().hidden
+expect !M().querySelector('[data-gact="retry-thumb"]') && !!M().querySelector('.scene-gallery-playbtn')
+expect closeM()
+eval window.__settingsTest.open()
+jsclick #settings-video-thumbs
+wait localStorage.getItem('splitpage-video-thumbs') === null
+eval window.__settingsTest.close()
+
+# ---- 9. the desktop app asks main, by host and id — the page fetches nothing -----------------
+eval (function(){ window.fake = D.makeFakeBackend(); fake._thumbAnswer = { ok: true, bytes: DESK_PNG, mime: 'image/png' }; D.setBackend(fake); window.__n = calls.length; return true; })()
+eval caretEnd(cell('r3', 'visualText'))
+expect paste(cell('r3', 'visualText'), { 'text/plain': 'https://www.youtube.com/shorts/ddddddddddd' }) === true
+wait (st('r3', 'moreImages') || []).length === 1 && !!st('r3', 'moreImages')[0].imageRef
+expect JSON.stringify(fake._thumbCalls) === JSON.stringify([['youtube', 'ddddddddddd']])
+expect calls.length === __n
+expect st('r3', 'moreImages')[0].imageRef.width === 64
+eval D.setBackend(null)
+
+# ---- 10. the policy frames exactly the two players ---------------------------------------------
+expect /frame-src 'self' https:\/\/www\.youtube-nocookie\.com https:\/\/player\.vimeo\.com;/.test(document.querySelector('meta[http-equiv="Content-Security-Policy"]').content)
+expect /img-src 'self' data: blob:;/.test(document.querySelector('meta[http-equiv="Content-Security-Policy"]').content)
+
+# ---- 11. dark: the still, the play button and a note -------------------------------------------
+eval (function(){ document.documentElement.setAttribute('data-theme', 'dark'); V.setProtocol('file:'); return true; })()
+eval media('r6').querySelector('.scene-gallery-tile').click()
+wait !M().hidden && !!M().querySelector('.scene-gallery-playbtn')
+eval clearToasts()
+sleep 400
+shot 160-dark-still
+eval M().querySelector('[data-gact="next"]').click()
+wait !!M().querySelector('.scene-gallery-note')
+shot 160-dark-refused
+expect closeM()
+eval (function(){ document.documentElement.removeAttribute('data-theme'); V.setProtocol(null); V.setFetch(null); return true; })()
+
+logs

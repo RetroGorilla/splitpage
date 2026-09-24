@@ -270,10 +270,11 @@ export function cellFromClipboard(html, text, opts) {
    after the ones there (the cover only when the gallery is empty), never
    over them: a video with its thumbnail (a video file's first frame,
    `poster`) or a placeholder, and its link in the lines under the
-   gallery, not in the words. Returns {pictures, videos}: how many of
-   each went in. */
+   gallery, not in the words. Returns {pictures, videos, links}: how many
+   of each went in, and the web links among the videos — the ones whose
+   thumbnail may be fetched next (#141, 05v-video.js). */
 export function attachToGallery(row, attach) {
-  var out = { pictures: 0, videos: 0 };
+  var out = { pictures: 0, videos: 0, links: [] };
   attach.forEach(function (item) {
     if (item.kind === "image") {
       addGalleryPicture(row, item.ref, item.name);
@@ -281,7 +282,10 @@ export function attachToGallery(row, attach) {
       return;
     }
     var link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size, duration: item.duration };
-    if (addGalleryVideo(row, link, item.poster || null) !== -1) out.videos++;
+    if (addGalleryVideo(row, link, item.poster || null) !== -1) {
+      out.videos++;
+      if (link.href) out.links.push(link.href);
+    }
   });
   return out;
 }

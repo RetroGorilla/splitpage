@@ -305,11 +305,40 @@ export function createUndoHistory() {
     keep(undone);
   }
 
+  /* Where `entry` stands for foldIntoEdit: whether it is on the undo stack
+     (done), and whether any entry at all — or any entry after it, or on
+     the redo stack (later) — satisfies `hits`. */
+  function standing(entry, hits) {
+    var at = entry ? done.indexOf(entry) : -1;
+    return {
+      done: at !== -1,
+      hit: at !== -1 && hits(entry),
+      any: done.some(hits) || undone.some(hits),
+      later: done.slice(at + 1).some(hits) || undone.some(hits)
+    };
+  }
+
+  /* Folds `steps` into `entry`: a field it already changes now ends where
+     the new step does; anything else is added to it. It is no longer a
+     typing entry that more typing could join. */
+  function amend(entry, steps) {
+    steps.forEach(function (s) {
+      var mine = s.op === "rowField" && entry.steps.filter(function (e) {
+        return e.op === "rowField" && e.rowId === s.rowId && e.key === s.key;
+      })[0];
+      if (mine) mine.after = s.after;
+      else entry.steps.push(s);
+    });
+    entry.cell = null;
+  }
+
   return {
     record: record,
     undo: function (state) { return step(done, undone, state, true); },
     redo: function (state) { return step(undone, done, state, false); },
     forget: forget,
+    standing: standing,
+    amend: amend,
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
     clear: function () { done.length = 0; undone.length = 0; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
@@ -474,6 +503,32 @@ function run(dir) {
 export function settleAfterApply() {
   if (!S.state || S.state !== tracked) return;
   base = clone(S.state);
+}
+
+/* Something the app finishes by itself a moment after an edit — a pasted
+   video's thumbnail arriving from YouTube or Vimeo (#141) — made part of
+   THAT edit rather than an edit of its own: apply(S.state) changes the
+   document and says whether it did, and the difference is folded into
+   `entry` (the edit's own undo entry), so one Ctrl+Z takes back the paste
+   and its picture together and a redo brings both back. When no entry on
+   either stack touches what it changes (touches(step) says which steps
+   do: the stack was cleared, a merge forgot the entry), it is taken in
+   with no entry at all. When anything since touches it — another edit of
+   the same thing, or `entry` already undone — nothing is changed and the
+   answer is false: folding it in then would leave a later entry's undo
+   finding something it did not leave. The caller still calls markDirty()
+   to have it saved; that records nothing, since `base` has it already. */
+export function foldIntoEdit(entry, touches, apply) {
+  flushEdits();
+  if (!S.state || S.state !== tracked || !base) return false;
+  function hits(e) { return e.steps.some(touches); }
+  var where = history.standing(entry, hits);
+  if (where.any && (!where.hit || where.later)) return false;
+  if (!apply(S.state)) return false;
+  var steps = diffStates(base, S.state);
+  if (where.any) history.amend(entry, steps.filter(function (s) { return !cosmetic(s); }));
+  try { base = applySteps(base, steps); } catch (e) { base = clone(S.state); }
+  return true;
 }
 
 export function undo() { return run("undo"); }

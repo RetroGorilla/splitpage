@@ -1025,6 +1025,14 @@ function makeFakeDesktopBackend(opts) {
       (this._videoOpens = this._videoOpens || []).push(name);
       return Promise.resolve({ ok: true });
     },
+    /* A pasted YouTube or Vimeo link's thumbnail (#141): the real bridge
+       asks main, which fetches it from the site. This records what it was
+       asked — (host, ref), never a URL — and answers what a suite put in
+       _thumbAnswer ({ok, bytes, mime} or {ok:false, code}), else fails. */
+    videoThumbnail: function (host, ref) {
+      (this._thumbCalls = this._thumbCalls || []).push([host, ref]);
+      return Promise.resolve(this._thumbAnswer || { ok: false, code: "UNAVAILABLE" });
+    },
     /* The teleprompter's Open in browser (issue #86). Argument-free, like
        the real bridge; records what this page had told main about itself
        at the moment it asked (the real handler reads exactly that), and

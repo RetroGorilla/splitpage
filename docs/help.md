@@ -990,12 +990,23 @@ beside it; a **+N** tile, showing the next one dimmed, stands for the rest.
 A video's tile has a ▶ badge (and its length on the cover, when known).
 
 Click any tile for the scene's whole gallery: a large still with **‹ ›** (a
-video shows its first frame, marked "Video · first frame", with its length),
-**Open file** or **Open link** for a video, **Make cover** and **Remove**, and
-every item numbered below it — with more than four, a dashed "behind +N"
-line marks where the scene's cover stops showing them. Nothing plays inside
-Splitpage: Open file hands a video to your own player (desktop app), Open
-link to your browser.
+video shows its first frame or its thumbnail — "Video · first frame",
+"Video · thumbnail" — with its length), **Open file** or **Open link** for a
+video, **Make cover** and **Remove**, and every item numbered below it — with
+more than four, a dashed "behind +N" line marks where the scene's cover stops
+showing them.
+
+**Watching a video in the gallery.** A YouTube or Vimeo link, and a video
+file you dropped or pasted in since you opened the script, plays right there
+in the large still: press its **▶**. Nothing is loaded from YouTube or Vimeo
+until you press play — the script's own tiles never play anything — and
+YouTube plays through its privacy-enhanced (no-cookie) player, Vimeo with
+"do not track". Picking another item or closing the gallery stops it.
+What can't play there says why and offers **Open file** / **Open link**
+instead: a video file added on another visit (the script keeps only its
+name), YouTube in a copy of Splitpage opened from a file on disk (YouTube
+refuses to play there), and videos from any other site — those always open
+in your browser.
 Drag a tile to reorder, or pick one and press Shift+← / Shift+→; ← and →
 pick, Delete removes, Esc closes, and the **+** tile adds a picture. Each
 change is one Ctrl+Z, and its toast has **Undo**. A comment can carry a
@@ -1007,15 +1018,29 @@ section — puts it in that scene's Image section, and a toast says so with
 **Undo**; the words that came with it go in as usual, and one Ctrl+Z takes
 back both. Each picture and each video is added after the ones already
 there. A video goes in the Image section, not in your words, as a tile of
-its own with a ▶ badge: its thumbnail is a video file's first frame, or a
-plain placeholder for a web link (Splitpage doesn't fetch pictures from
-video sites). Every video also gets a line under the pictures — up to three,
+its own with a ▶ badge: its thumbnail is a video file's first frame, a
+YouTube or Vimeo link's own thumbnail, or a plain placeholder for a link to
+any other site. Every video also gets a line under the pictures — up to three,
 then **+N more videos**. Click a line (or **Open file** / **Open link** in the gallery) to open
 it: a web link in your browser; a video file in its own app, in the desktop
 app, as long as you dropped or pasted it since Splitpage started (the
 script keeps only its name, never the file or where it is). Hover a line
 for **×** to take it off. A picture that was copied only as a link to a web page can't
 be kept; save it and paste or drop the file instead.
+
+**Video thumbnails, and privacy.** When you paste a YouTube or Vimeo link,
+Splitpage asks that site once for the video's thumbnail (from `i.ytimg.com`,
+or Vimeo's `vimeo.com` and `i.vimeocdn.com`) and keeps the picture with the
+script like any picture you add, so it's there offline, in files you save
+and on a server. That request is the only thing pasting a link sends
+anywhere; it names only the video, sends no cookies, and happens once —
+never while you scroll. If it fails (you're offline, the video is private or gone) the
+placeholder stays and nothing is said; the gallery offers **Retry
+thumbnail**. The picture lands in the same undo step as the paste. To paste
+links without contacting the site at all, turn off **Settings ▸ Fetch video
+thumbnails** (it's on by default, and File ▸ Export app data carries the
+choice). Playing a video in the gallery is a separate choice you make each
+time by pressing ▶.
 
 **Where pictures are kept.** The script itself only names each picture; the
 picture is stored once, separately, wherever the script lives:
@@ -1336,9 +1361,12 @@ script.
   title bar follows), the clock (System, 12-hour or 24-hour — used for
   "Saved at …", Version history, comments and the scene gutter), and
   whether the rundown strip starts minimized.
-- **Editor** — Hide shot scenes, Autosave, the reading speed a *new* script
-  starts at (each script keeps its own; click the clock in the header to
-  change it), the writer's text size, and the script's zoom.
+- **Editor** — Hide shot scenes, Autosave, Fetch video thumbnails (whether
+  a pasted YouTube or Vimeo link's thumbnail is asked for from the site;
+  on unless you turn it off — see *Video thumbnails, and privacy*), the
+  reading speed a *new* script starts at (each script keeps its own; click
+  the clock in the header to change it), the writer's text size, and the
+  script's zoom.
 - **Present** — the teleprompter's Mirror, Flip and One scene at a time.
 - **You** — your name, and your colour: the dot by your name in the
   header, the scene gutter, comments, History and the people-here row. Until

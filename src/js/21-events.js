@@ -48,6 +48,7 @@ import {
 } from "./05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
 import { openGalleryOverlay } from "./05e-gallery-overlay.js";
+import { thumbnailsAfterPaste } from "./05v-video.js";
 import {
   appendDraftMedia,
   draftRedo,
@@ -997,8 +998,15 @@ function insertIntoScriptCellNow(cellEl, html, text, extra) {
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
   if (res.attached) {
     /* the Image section shows what just went in */
-    renderRow(cellEl.getAttribute("data-id"));
+    var attachedRowId = cellEl.getAttribute("data-id");
+    renderRow(attachedRowId);
     announceAttached(res, before);
+    /* a YouTube or Vimeo link's thumbnail, fetched now and folded into
+       this paste's own undo entry when it comes (#141) */
+    if (res.attached.links && res.attached.links.length) {
+      var entry = lastUndoEntry();
+      thumbnailsAfterPaste(attachedRowId, res.attached.links, entry === before ? null : entry);
+    }
   }
   if (res.movedComments) {
     /* a cut comment's card follows its words to the new scene */

@@ -398,23 +398,40 @@ const PARTS = [
    font-src             the same, plus data: for anything embedded.
    img-src              'self' data: blob: — every image in a document is a
                         data: URI (safeImageSrc allows nothing else) and
-                        exports build blob: URLs.
+                        exports build blob: URLs. A YouTube or Vimeo link's
+                        thumbnail (#141) is no exception: it is fetched
+                        once, when the link is pasted, and kept as a blob
+                        like any pasted picture, so no remote host is ever
+                        needed here.
    media-src            'self' blob: — a video file dropped or pasted into a
                         scene is read through a blob: URL the page made from
-                        it, for its first frame (#135). Nothing remote: a
-                        video on the web is a link, never played here.
+                        it, for its first frame (#135), and played through
+                        one in the gallery's dialog (#168). Nothing remote:
+                        a web video plays in its site's own player, a
+                        frame (frame-src), never in a <video> here.
    connect-src          this origin, and any http(s) server the user points
                         File > Servers... at, which is a documented feature
                         and includes a LAN address over plain http. Narrower
                         than '*': ws:, data: and the rest stay refused.
    object-src 'none'    the app has no plugins.
-   frame-src 'self'     the app never creates a frame; 24-history.txt does,
-                        to run a second copy of the app in this origin and
-                        race it against the first over one IndexedDB store.
-                        'none' would be tidier and buys nothing: walkSanitize
-                        drops an <iframe> from every untrusted path, so the
-                        only way to get one into this page is to be running
-                        script in it already.
+   frame-src            'self' and the two video players the gallery's
+                        dialog plays a YouTube or Vimeo link in (#168):
+                        YouTube's no-cookie embed and Vimeo's player, both
+                        exact origins (shared/video-embed.js PLAYER_ORIGINS;
+                        src/test/video-embed.test.mjs holds the two in
+                        step). Adam's call: playing a reference
+                        clip beside the script beats leaving the app for
+                        it, so long as nothing is asked of either site
+                        until the play button is pressed — the frame is
+                        only ever made then, in the dialog, never in the
+                        script's own tiles — and no other host is framed:
+                        every other video site stays a link. 'self' because
+                        24-history.txt frames a second copy of the app in
+                        this origin to race it against the first over one
+                        IndexedDB store. walkSanitize drops an <iframe> from
+                        every untrusted path, so the only way to get another
+                        frame into this page is to be running script in it
+                        already.
    worker-src 'self'    the service worker that makes a hosted copy work
                         offline, and nothing else. Named explicitly, or it
                         falls back to child-src and from there to default-src.
@@ -433,7 +450,7 @@ const CSP_DIRECTIVES = (scriptHash) => [
   "media-src 'self' blob:",
   "connect-src 'self' https: http:",
   "object-src 'none'",
-  "frame-src 'self'",
+  "frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com",
   "worker-src 'self'",
   "base-uri 'self'",
   "form-action 'none'"

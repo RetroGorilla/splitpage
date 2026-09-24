@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
+import { PREF_EVENT, VIDEO_THUMBS_KEY } from "./00p-prefs.js";
 import { escapeHtml } from "./02-state.js";
-import { moveGallerySlot, removeGallerySlot, rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
+import { moveGallerySlot, removeGallerySlot, rowSlots, setVideoThumbnail, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import {
@@ -11,7 +12,8 @@ import {
   slotPoster,
   videoHostLabel
 } from "./05-render.js";
-import { openGalleryLink } from "./06-rows.js";
+import { embeddableVideo, embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
+import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
 import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
@@ -27,13 +29,31 @@ import { reviewMode } from "./13-hosted.js";
    three, and a "+" tile to add a picture.
 
    Drawn as Direction B's B-GalleryDialog (#169). The preview is a still —
-   a picture, or a video's first frame — on a dark monitor, never a
-   player: Splitpage plays nothing itself (Adam's call), so there is no big
-   play button to promise it. A small "▶ Video · first frame" pill says
-   what the still is, and the length sits opposite. The button that opens a
-   video says how ("Open file" plays it in the computer's own player,
-   through the desktop app; "Open link" opens the address in the browser),
-   and its title says where.
+   a picture, a video file's first frame, a web video's fetched thumbnail
+   (#141) — on a dark monitor. A small pill says what the still is ("▶
+   Video · first frame", "▶ Video · thumbnail"), and the length sits
+   opposite.
+
+   Some videos PLAY there (#168), and only there — never in the script's
+   own tiles, so scrolling a script never contacts anyone: a YouTube or
+   Vimeo link (05v-video.js: YouTube's no-cookie embed, Vimeo's player
+   with dnt=1), and a video file dropped or pasted in since this page
+   opened (a blob: URL made from the File this page still holds,
+   06-rows.js). Click to play: the still carries a play button, and
+   nothing is asked of YouTube or Vimeo until it is pressed. The player
+   then takes the still's place; picking another item, closing the
+   dialog, or anything that repaints it for another item removes it, and
+   with it the playback. A repaint for the same item (an undo, a merge,
+   the grid) leaves a playing player where it is. What cannot play here
+   says so on the still and offers the way it opens instead: a file this
+   page no longer holds (only its name is in the document), YouTube in a
+   copy opened from disk, a player the page's policy refused.
+
+   The button that opens a video says how ("Open file" plays it in the
+   computer's own player, through the desktop app; "Open link" opens the
+   address in the browser), and its title says where. A web video with no
+   picture offers "Retry thumbnail" while Settings lets thumbnails be
+   fetched.
 
    Reordering: drag a tile onto another, or Shift+← / Shift+→ on the picked
    one. ← / → pick, Delete removes, Esc closes. Make cover, Remove, a move
@@ -43,7 +63,10 @@ import { reviewMode } from "./13-hosted.js";
    render/renderRow). All of it is .scene-gallery*; the markup lives in
    page.html as #gallery-modal. */
 
-var view = null;          /* {rowId, sel, videos} while open */
+var view = null;          /* {rowId, sel, videos, playing, refused} while open:
+                             playing is the videoLinkKey of the video whose
+                             player is up, refused the one whose player the
+                             page's policy turned away */
 var returnFocus = null;
 var dragFrom = -1;
 
@@ -67,7 +90,7 @@ export function openGalleryOverlay(rowId, slot, videosOnly) {
   var got = rowOf(rowId);
   if (!got || !rowSlots(got.row).length) return;
   returnFocus = document.activeElement;
-  view = { rowId: rowId, sel: slot || 0, videos: !!videosOnly };
+  view = { rowId: rowId, sel: slot || 0, videos: !!videosOnly, playing: null, refused: null };
   var slots = rowSlots(got.row);
   var shown = shownSlots(slots);
   if (shown.indexOf(view.sel) === -1) view.sel = shown.length ? shown[0] : 0;
@@ -84,6 +107,8 @@ export function closeGalleryOverlay() {
   var rowId = view.rowId;
   view = null;
   modal().hidden = true;
+  /* a player goes with the dialog, and its playback with it */
+  document.getElementById("gallery-body").innerHTML = "";
   /* back where it was opened from — or, when an edit repainted that tile,
      the scene's cover */
   var back = returnFocus && returnFocus.isConnected && returnFocus !== document.body ? returnFocus
@@ -136,25 +161,48 @@ function paint() {
   var pos = shown.indexOf(sel);
   var length = poster ? formatVideoLength(poster.duration) : "";
   var openLink = poster || slot.links[0] || null;
+  var play = playState(poster);
+  var playKey = play && play.can ? videoLinkKey(poster) : null;
+  if (view.playing && view.playing !== playKey) view.playing = null;
+  var playing = !!(playKey && view.playing === playKey);
+  /* A web video's still is its fetched thumbnail (#141); a file's, its
+     first frame. */
+  var stillKind = poster && poster.href ? "thumbnail" : "first frame";
   /* What the still is, for a screen reader: the monitor is one image, its
-     pills part of it. */
+     pills part of it — or, when it holds a play button or a note, a group
+     named the same way. */
   var about = (poster ? "Video " : "Picture ") + (sel + 1) + " of " + n +
     (poster ? ": " + videoLinkLabel(poster) + (length ? ", " + length : "") +
-      (still ? ". First frame shown; " : ". No picture of it; ") +
+      (still ? ". " + stillKind.charAt(0).toUpperCase() + stillKind.slice(1) + " shown; " : ". No picture of it; ") +
+      (play && play.can ? "Play plays it here; " : "") +
       (poster.href ? "Open link opens it in your browser" : "Open file plays it in your video player")
       : slot.name ? ": " + slot.name : "");
+  var inner;
+  if (playing) {
+    inner = playerHtml(poster, play);
+  } else {
+    inner = gallerySlotPictureHtml(slot) +
+      (poster && !still && !(play && (play.note || play.can)) ? '<svg class="scene-gallery-preview-none" aria-hidden="true"><use href="#i-camera"/></svg>' : '') +
+      '<span class="scene-gallery-position">' + (pos + 1) + ' / ' + shown.length + '</span>' +
+      (poster ? '<span class="scene-gallery-kind"><svg aria-hidden="true"><use href="#i-play"/></svg>' +
+        (still ? 'Video · ' + stillKind : 'Video') + '</span>' : '') +
+      (length ? '<span class="scene-gallery-length">' + length + '</span>' : '') +
+      (play && play.can ? playButtonHtml(poster, play) : '') +
+      (play && play.note ? noteHtml(poster, play.note) : '');
+  }
+  var group = playing || (play && (play.can || play.note));
+  var picHtml =
+      '<div class="scene-gallery-preview-pic' + (poster ? ' is-video' : '') + (playing ? ' is-playing' : '') +
+        (play && play.note ? ' has-note' : '') + '"' +
+        (playing ? ' data-play="' + escapeHtml(playKey) + '"' : '') +
+        ' role="' + (group ? 'group' : 'img') + '" aria-label="' + escapeHtml(about) + '">' +
+        inner +
+      '</div>';
   var preview =
     '<div class="scene-gallery-preview">' +
       '<button type="button" class="scene-gallery-step" data-gact="prev" aria-label="Previous"' + (shown.length < 2 ? ' disabled' : '') + '>' +
         '<svg class="is-flipped" aria-hidden="true"><use href="#i-chevron"/></svg></button>' +
-      '<div class="scene-gallery-preview-pic' + (poster ? ' is-video' : '') + '" role="img" aria-label="' + escapeHtml(about) + '">' +
-        gallerySlotPictureHtml(slot) +
-        (poster && !still ? '<svg class="scene-gallery-preview-none" aria-hidden="true"><use href="#i-camera"/></svg>' : '') +
-        '<span class="scene-gallery-position">' + (pos + 1) + ' / ' + shown.length + '</span>' +
-        (poster ? '<span class="scene-gallery-kind"><svg aria-hidden="true"><use href="#i-play"/></svg>' +
-          (still ? 'Video · first frame' : 'Video') + '</span>' : '') +
-        (length ? '<span class="scene-gallery-length">' + length + '</span>' : '') +
-      '</div>' +
+      picHtml +
       '<button type="button" class="scene-gallery-step" data-gact="next" aria-label="Next"' + (shown.length < 2 ? ' disabled' : '') + '>' +
         '<svg aria-hidden="true"><use href="#i-chevron"/></svg></button>' +
     '</div>';
@@ -166,8 +214,13 @@ function paint() {
           escapeHtml(videoLinkKey(l)) + '" title="' + escapeHtml(l.href || l.name) + '">' + escapeHtml(videoLinkLabel(l)) + '</button></div>';
       }).join("")
     : '<div class="scene-gallery-line is-name">' + escapeHtml(slot.name || (poster ? "" : "Picture " + (sel + 1))) + '</div>';
+  /* a YouTube or Vimeo link with no picture: ask the site again (#141) */
+  var retry = !review && poster && !still && embeddableVideo(poster) && thumbnailsAllowed()
+    ? '<button type="button" class="btn-outline" data-gact="retry-thumb" data-key="' + escapeHtml(videoLinkKey(poster)) + '"' +
+      (view.fetching === videoLinkKey(poster) ? ' disabled aria-busy="true"' : '') + '>Retry thumbnail</button>'
+    : '';
   var buttons =
-    (openLink ? openButtonHtml(openLink) : '') +
+    (openLink ? openButtonHtml(openLink) : '') + retry +
     (review ? '' :
       '<button type="button" class="btn-outline" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>' + COVER_ICON + 'Make cover</button>' +
       '<button type="button" class="scene-gallery-remove" data-gact="remove">Remove</button>');
@@ -203,8 +256,22 @@ function paint() {
      repaint, and bring the picked tile into it */
   var before = modal().querySelector(".scene-gallery-grid");
   var scrolled = before ? before.scrollTop : 0;
-  document.getElementById("gallery-body").innerHTML = preview +
-    '<div class="scene-gallery-preview-caption">' + caption + '</div>' + actions + grid;
+  var body = document.getElementById("gallery-body");
+  var rest = '<div class="scene-gallery-preview-caption">' + caption + '</div>' + actions + grid;
+  /* A player already up for this same video stays exactly where it is —
+     a frame taken out of the page and put back would start again — and
+     everything round it is drawn afresh. */
+  var livePic = playing ? body.querySelector(".scene-gallery-preview-pic.is-playing") : null;
+  var livePreview = livePic && livePic.getAttribute("data-play") === playKey ? livePic.parentNode : null;
+  if (livePreview && livePreview.parentNode === body) {
+    while (livePreview.previousSibling) body.removeChild(livePreview.previousSibling);
+    while (livePreview.nextSibling) body.removeChild(livePreview.nextSibling);
+    livePreview.insertAdjacentHTML("afterend", rest);
+    Array.prototype.forEach.call(livePreview.querySelectorAll(".scene-gallery-step"), function (b) { b.disabled = shown.length < 2; });
+    livePic.setAttribute("aria-label", about);
+  } else {
+    body.innerHTML = preview + rest;
+  }
   var after = modal().querySelector(".scene-gallery-grid");
   after.scrollTop = scrolled;
   revealPicked(after);
@@ -227,6 +294,94 @@ function openButtonHtml(l) {
     : "Plays " + l.name + " in your computer’s video player (desktop app)";
   return '<button type="button" class="btn-outline" data-gact="open" data-key="' + escapeHtml(videoLinkKey(l)) +
     '" title="' + escapeHtml(title) + '">' + OPEN_ICON + (l.href ? "Open link" : "Open file") + '</button>';
+}
+
+/* ---- playing it here (#168) ----
+
+   What the preview can do with the picked item's video: {can: true,
+   embed} for a YouTube or Vimeo link, {can: true, file: true} for a file
+   this page still holds, {note} for one it cannot play — and why, in
+   words — or null for a picture or another site's link, which stay as
+   they were. */
+function playState(poster) {
+  if (!poster) return null;
+  var key = videoLinkKey(poster);
+  if (poster.href) {
+    var v = embeddableVideo(poster);
+    if (!v) return null;
+    var why = view.refused === key ? "The player couldn’t load here." : embedRefusal(v);
+    return why ? { note: why } : { can: true, embed: v };
+  }
+  if (hasSessionVideo(poster)) return { can: true, file: true };
+  return { note: "Only this video’s name is kept, so it can’t play here. Drop the file on this scene again to play it." };
+}
+
+function hostName(play) {
+  return play.embed && play.embed.host === "vimeo" ? "Vimeo" : "YouTube";
+}
+
+/* The big ▶ over the still. For a web video its title says what pressing
+   it does: it is the first time the site is asked for anything. */
+function playButtonHtml(poster, play) {
+  var label = videoLinkLabel(poster);
+  var title = play.file ? "Play it here"
+    : "Play it here. This loads " + hostName(play) + "’s player — nothing is asked of " + hostName(play) + " before you press play.";
+  return '<button type="button" class="scene-gallery-playbtn" data-gact="play" aria-label="' + escapeHtml("Play " + label + " here") +
+    '" title="' + escapeHtml(title) + '"><span aria-hidden="true"></span></button>';
+}
+
+/* The player in the still's place: a <video> over the file's blob: URL, or
+   the site's player in a frame that may run the player's own scripts and
+   open its own links in a new window, and nothing else — no navigating
+   this page, no forms. */
+function playerHtml(poster, play) {
+  if (play.file) {
+    var url = sessionVideoUrl(poster);
+    return url ? '<video class="scene-gallery-player" src="' + escapeHtml(url) + '" controls autoplay playsinline></video>'
+      : noteHtml(poster, "This video couldn’t be read here.");
+  }
+  var p = playerSrc(play.embed);
+  if (!p) return noteHtml(poster, "The player couldn’t load here.");
+  return '<iframe class="scene-gallery-player" src="' + escapeHtml(p.src) + '" data-src="' + escapeHtml(p.real) + '"' +
+    ' title="' + escapeHtml(hostName(play) + " player: " + videoLinkLabel(poster)) + '"' +
+    ' allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"' +
+    ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"></iframe>';
+}
+
+/* Why it cannot play here, on the still, with the way it does open. */
+function noteHtml(poster, text) {
+  return '<div class="scene-gallery-note"><p>' + escapeHtml(text) + '</p>' +
+    '<button type="button" class="btn-outline is-small" data-gact="open" data-key="' + escapeHtml(videoLinkKey(poster)) + '">' +
+    OPEN_ICON + (poster.href ? "Open link" : "Open file") + '</button></div>';
+}
+
+function startPlaying() {
+  var slot = rowSlots(rowOf(view.rowId).row)[view.sel];
+  var poster = slot && slotPoster(slot);
+  var play = playState(poster);
+  if (!play || !play.can) return;
+  view.playing = videoLinkKey(poster);
+  paint();
+  var player = modal().querySelector(".scene-gallery-player");
+  if (player) { try { player.focus({ preventScroll: true }); } catch (e) { /* not focusable yet */ } }
+}
+
+/* "Retry thumbnail": the picked web video's thumbnail, asked for again —
+   one gallery edit when it comes, a word when it does not. */
+function retryThumbnail() {
+  var rowId = view.rowId;
+  var slot = rowSlots(rowOf(rowId).row)[view.sel];
+  var poster = slot && slotPoster(slot);
+  if (!poster || !poster.href || reviewMode()) return;
+  var key = videoLinkKey(poster);
+  view.fetching = key;
+  paint();
+  fetchThumbnailRecord(poster.href).then(function (rec) {
+    if (view && view.fetching === key) view.fetching = null;
+    var done = rec && rowOf(rowId) && galleryEdit(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
+    if (!done) showToast("Couldn’t get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
+    if (view && view.rowId === rowId) refreshGalleryOverlay();
+  });
 }
 
 /* Scrolls the grid, and only the grid, so the picked tile and its outline
@@ -327,6 +482,8 @@ function onClick(e) {
   else if (act === "cover") makeCover();
   else if (act === "remove") removeSelected();
   else if (act === "all") { view.videos = false; paint(); }
+  else if (act === "play") startPlaying();
+  else if (act === "retry-thumb") retryThumbnail();
   else if (act === "open" || act === "link") openGalleryLink(view.rowId, view.sel, el.getAttribute("data-key"));
   else if (act === "add") {
     S.pendingImageRowId = view.rowId;
@@ -338,6 +495,8 @@ function onKeydown(e) {
   if (!view) return;
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGalleryOverlay(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
+  /* a playing <video>'s own keys: ← → seek it, rather than pick */
+  if (e.target && e.target.classList && e.target.classList.contains("scene-gallery-player")) return;
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     e.preventDefault();
     var by = e.key === "ArrowRight" ? 1 : -1;
@@ -395,4 +554,17 @@ export function __init() {
   m.addEventListener("drop", onDrop);
   m.addEventListener("dragend", function () { dragFrom = -1; });
   document.getElementById("gallery-close").addEventListener("click", closeGalleryOverlay);
+  /* A player the page's policy turned away would be an empty frame: say
+     so instead, and offer the link (#168). */
+  document.addEventListener("securitypolicyviolation", function (e) {
+    if (!view || !view.playing) return;
+    if (!/^(frame-src|child-src|default-src)/.test(e.effectiveDirective || e.violatedDirective || "")) return;
+    view.refused = view.playing;
+    view.playing = null;
+    paint();
+  });
+  /* Settings ▸ Fetch video thumbnails decides whether Retry is offered */
+  document.addEventListener(PREF_EVENT, function (e) {
+    if (e.detail && e.detail.key === VIDEO_THUMBS_KEY) refreshGalleryOverlay();
+  });
 }

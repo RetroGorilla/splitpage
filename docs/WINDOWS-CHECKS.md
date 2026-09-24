@@ -427,6 +427,22 @@ that proves #76's `shared/` staging and #77's `files` entry.
   them. The saved `.splitpage` still carries the pictures inside it: if a
   1.x/2.x copy of Splitpage is to hand, it opens the file with the pictures.
   Export to PDF with a PNG picture in it — it appears (it used to vanish).
+- **YouTube and Vimeo in the gallery, in the desktop app** (#141, #168).
+  The suites never reach the real sites, and the smoke case
+  (`caseGalleryVideoThumbnail`) fetches from a fake. In the browser build
+  over http both were checked against the real sites on 2026-09-24
+  (thumbnails fetched and trimmed, both players playing in the dialog);
+  the desktop app has not been. By hand, in the desktop app: paste
+  `https://www.youtube.com/watch?v=dQw4w9WgXcQ` and
+  `https://vimeo.com/22439234` into two scenes — each gets its real
+  thumbnail within a second or two, and one Ctrl+Z takes the link and its
+  picture back together. Click each tile, press ▶: the video plays in the
+  dialog. YouTube in particular: it refuses a player page asked for with
+  no Referer ("Video player configuration error", Error 153), and main
+  adds one for the app's own tabs (`installPlayerReferer`, main.js §9e) —
+  if Error 153 shows, that is what failed. Close the dialog while one
+  plays: the sound stops. With Settings ▸ Fetch video thumbnails off, a
+  pasted link stays a placeholder.
 
 ## 4. The browser suites, on Windows
 
