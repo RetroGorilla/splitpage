@@ -25,19 +25,20 @@ var SIDE_PANEL_WIDTHS_KEY = "splitpage-panel-widths";
 var LEGACY_COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
 var SIDE_PANEL_WIDTH_MIN = 280;
 var SIDE_PANEL_WIDTH_MAX = 720;
-/* Production and B-roll hold tables — item names, owners, scene lists,
-   notes — that are cramped at 400px, so they start wider. Comments, Gear
-   and History are comfortable narrow. */
+/* Every panel starts at 488px, the width all five B boards draw them at
+   (#169, Adam's call): Production's labelled columns, B-roll's open shot
+   and Comments' filter row on one line are all laid out for it. Each is
+   still dragged wider or narrower and remembered on its own. */
 var SIDE_PANEL_WIDTH_DEFAULTS = {
-  "comments-panel": 400,
-  "production-panel": 520,
-  "gear-panel": 400,
-  "broll-panel": 520,
-  "history-panel": 400
+  "comments-panel": 488,
+  "production-panel": 488,
+  "gear-panel": 488,
+  "broll-panel": 488,
+  "history-panel": 488
 };
 
 function sidePanelWidthDefault(id) {
-  return SIDE_PANEL_WIDTH_DEFAULTS[id] || 400;
+  return SIDE_PANEL_WIDTH_DEFAULTS[id] || 488;
 }
 function clampSidePanelWidth(w, id) {
   if (!isFinite(w)) return sidePanelWidthDefault(id);

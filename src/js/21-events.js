@@ -159,6 +159,7 @@ import {
   setCommentFilterMode,
   setCommentSortMode,
   syncAnchorResolvedClasses,
+  toggleCommentMenu,
   toggleReplyComposer,
   toggleResolve
 } from "./10-comments.js";
@@ -347,6 +348,13 @@ export function onRootClick(e) {
   var restoreConflictBtn = e.target.closest('[data-action="restore-conflict"]');
   if (restoreConflictBtn) { restoreConflictValue(restoreConflictBtn.getAttribute("data-id")); return; }
 
+  /* A comment card's "⋯" and the menu it opens (#169, 10-comments.js)
+     are not the card's jump below: the "⋯" toggles its menu, and a press
+     on the menu's own padding does nothing. Delete in it returned above. */
+  var commentMenuBtn = e.target.closest('[data-action="comment-menu"]');
+  if (commentMenuBtn) { toggleCommentMenu(commentMenuBtn.getAttribute("data-id")); return; }
+  if (e.target.closest(".comment-menu")) return;
+
   var jumpTagBtn = e.target.closest('[data-action="jump-tag"]');
   if (jumpTagBtn) {
     jumpToTag(jumpTagBtn.getAttribute("data-row"), jumpTagBtn.getAttribute("data-key"));
@@ -378,14 +386,17 @@ export function onRootClick(e) {
     ? e.target.closest("#production-list .tag-entity") : null;
   if (selCard && handleSelectionClick(e, selCard)) { e.preventDefault(); return; }
 
-  /* On touch, while a selection exists, taps on card HEADS toggle
+  /* On touch, while a selection exists, taps on an item's row toggle
      membership (standard mobile selection-mode behaviour, and far kinder
-     than long-pressing every card). Only the head: the open card's detail
-     controls — owner, notes, status — keep working mid-selection. */
+     than long-pressing every card). The whole row line since #169 — name,
+     status, owner; a tap on its status must not step the status on — but
+     only the row: the open item's detail controls — owner, notes, status —
+     keep working mid-selection, and a scene link (jump-tag, above) still
+     jumps. */
   if (IS_TOUCH && selectedKeys().length) {
-    var touchHead = e.target.closest("#production-list .tag-entity-head");
-    if (touchHead) {
-      toggleCardSelection(touchHead.closest(".tag-entity").getAttribute("data-key"));
+    var touchRow = e.target.closest("#production-list .tag-entity-row");
+    if (touchRow) {
+      toggleCardSelection(touchRow.closest(".tag-entity").getAttribute("data-key"));
       return;
     }
   }

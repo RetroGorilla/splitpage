@@ -75,9 +75,14 @@ wait rec('bs5').props.length === 1 && !!prop('Ice scoop')
 key ctrl+shift KeyZ
 wait rec('bs5').props.length === 2
 wait metaProps('bs5') === 'Ice scoop, Kettle'
-expect Array.prototype.map.call(row('bs5').querySelectorAll('.broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Needed|Sourcing'
+# each with the breakdown's lamp before it (#169; a status dot before)
+expect Array.prototype.map.call(row('bs5').querySelectorAll('.broll-meta-props .item-lamp'), function(d){ return d.getAttribute('title'); }).join('|') === 'Needed|Sourcing'
 
 # the script's own have no ×; a hand-added one comes off with its own
+# (#169: an open shot is taller now, and typing in its Add prop box has
+# scrolled the list, so bs1's line is brought back into view first — the
+# driver's click measures against the window, not the list)
+eval (function(){ document.querySelector('#broll-list .broll-row-main[data-id="bs1"]').scrollIntoView({ block: 'center' }); return true; })()
 click #broll-list .broll-row-main[data-id="bs1"]
 wait !!document.querySelector('#broll-list .broll-card[data-id="bs1"]')
 expect document.querySelectorAll('#broll-list .broll-card .broll-prop-chip').length === 2
@@ -106,8 +111,11 @@ jsclick #btn-broll
 wait metaProps('bs1') === 'Fishing nets, Drone kit'
 
 # ---- 5. and the × takes a hand-added one off ------------------------------
+# (bs1 is open above it, so bs5's line is below the fold: into view first)
+eval (function(){ document.querySelector('#broll-list .broll-row-main[data-id="bs5"]').scrollIntoView({ block: 'center' }); return true; })()
 click #broll-list .broll-row-main[data-id="bs5"]
 wait !!document.querySelector('#broll-list .broll-card[data-id="bs5"] .broll-prop-remove')
+eval (function(){ document.querySelector('#broll-list .broll-card[data-id="bs5"] .broll-prop-remove').scrollIntoView({ block: 'center' }); return true; })()
 click #broll-list .broll-card[data-id="bs5"] .broll-prop-remove
 wait rec('bs5').props.length === 1
 expect rec('bs5').props[0].name === 'Kettle'

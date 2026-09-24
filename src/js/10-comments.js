@@ -23,6 +23,7 @@ import { resetDraftHistory } from "./05d-draft-edit.js";
 import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
+import { personColor } from "./13a-presence.js";
 import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -176,10 +177,16 @@ export function setCommentAssignee(id, name) {
   queueAutoSave();
 }
 
+/* The empty choice reads "Assign…" while nobody has the thread — the
+   select is the card's Assign button (#169), and that is what it says at
+   rest — and "Unassigned" once somebody does, where picking it is how the
+   thread is taken back. A review session's select is disabled and never
+   an invitation, so it always says "Unassigned". */
 function commentAssigneeOptionsHtml(current) {
   var candidates = commentAssigneeCandidates();
   var found = false;
-  var html = '<option value=""' + (current ? "" : " selected") + '>Unassigned</option>';
+  var html = '<option value=""' + (current ? "" : " selected") + '>' +
+    (current || reviewMode() ? "Unassigned" : "Assign…") + '</option>';
   candidates.forEach(function (name) {
     var sel = normalizeTagName(name) === normalizeTagName(current || "");
     if (sel) found = true;
@@ -305,6 +312,67 @@ function findAnchorLocationLabel(rowId, field) {
   var rowLabel = idx === -1 ? "Deleted row" : ("Row " + pad2(idx + 1));
   var fieldLabel = field === "audioText" ? "Audio" : "Visual";
   return rowLabel + " · " + fieldLabel;
+}
+
+/* The same place, as a thread's card says it (#169): "Scene 03 · Audio",
+   the number in the mono as everywhere else a scene is named. The export
+   appendix keeps findAnchorLocationLabel()'s "Row 03" — a file's wording
+   is not the panel's to change. */
+function commentLocationHtml(rowId, field) {
+  if (field === "title") return "Document title";
+  var idx = findRowIndex(rowId);
+  var fieldLabel = field === "audioText" ? "Audio" : "Visual";
+  if (idx === -1) return "Deleted scene · " + fieldLabel;
+  return 'Scene <span class="comment-loc-num">' + pad2(idx + 1) + '</span> · ' + fieldLabel;
+}
+
+/* Each open thread's number (#169): the number its words carry in the
+   script, where a CSS counter draws it after each open anchor (app.css
+   `#rows .cmt-anchor:not(.resolved)::after`). So it is counted the way the
+   counter counts — down the rendered script, open anchors only — and read
+   from the DOM, not from state, because the DOM is what the counter sees:
+   a thread whose words are gone, or folded away with the shot scenes, has
+   no marker there and no number here, and nor has a resolved one.
+   renderComments() runs at the end of render(), after #rows is painted,
+   so it always numbers the finished script.
+
+   The counter steps at each anchor's END (::after), so a span nested in
+   another — two comments over overlapping words — counts before the one
+   around it; the sort below puts the spans in that order. A thread whose
+   words sit in two spans (the overlap again, or a split scene) has two
+   markers in the script and takes the first one's number, so the numbers
+   on the cards can skip one; every card still names the marker beside
+   its words. */
+function commentThreadNumbers() {
+  var spans = Array.prototype.slice.call(document.querySelectorAll("#rows .cmt-anchor:not(.resolved)"));
+  spans.sort(function (a, b) {
+    if (a.contains(b)) return 1;
+    if (b.contains(a)) return -1;
+    return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+  var nums = Object.create(null);
+  spans.forEach(function (el, i) {
+    var id = el.getAttribute("data-cmt");
+    if (id && !nums[id]) nums[id] = i + 1;
+  });
+  return nums;
+}
+
+/* A person on a card: the panels' avatar in their colour (personColor,
+   13a-presence.js — the one table), holding their first letter. */
+function commentAvatarHtml(name) {
+  var first = Array.from(String(name || "").trim())[0] || "?";
+  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + personColor(name) +
+    '" aria-hidden="true">' + escapeHtml(first.toUpperCase()) + '</span>';
+}
+
+/* "2 hours ago", with the date and time on hover — a thread is read as a
+   conversation, and how long ago someone said something is what matters
+   in one. No role beside it: the board's "Reviewer" / "Host" are not
+   stored anywhere, and an author is only ever a typed name. */
+function commentTimeHtml(iso, cls) {
+  return '<time class="' + cls + '" datetime="' + escapeHtml(iso || "") + '" title="' +
+    escapeHtml(formatTimestampAbsolute(iso)) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
 }
 
 /* Unlike formatTimestamp() (which says "3:04 PM" for anything posted
@@ -525,7 +593,9 @@ export function openCommentComposer(ctx) {
   S.savedRange = null;
   S.savedRangeCell = null;
   closeFieldPopovers(document.getElementById("comment-modal"));
-  document.getElementById("comment-modal-quote").textContent = ctx.quotedText;
+  /* the words as a thread's card shows them (#169): quoted, underlined */
+  document.getElementById("comment-modal-quote").innerHTML =
+    '“<span class="comment-quote-words">' + escapeHtml(ctx.quotedText) + '</span>”';
   var nameInput = document.getElementById("comment-name");
   nameInput.value = getSavedAuthorName();
   var bodyEl = document.getElementById("comment-body-editable");
@@ -647,6 +717,7 @@ function deleteComment(id) {
   S.state.comments.splice(idx, 1);
   delete expandedReplyIds[id];
   delete replyDrafts[id];
+  if (commentMenuFor === id) commentMenuFor = null;
   markDirty();
   render();
   queueAutoSave();
@@ -759,26 +830,193 @@ export function jumpToComment(cmtId) {
   }, 30);
 }
 
+/* The reply box, in line with the comments above it (#169): the words
+   first, then who is writing and the two buttons, Post reply the amber
+   one. Closed, it is the outlined "Write a reply…" control in
+   commentReplyHtml() below. */
 function replyComposerHtml(commentId) {
   var draft = replyDrafts[commentId] || {};
   return (
     '<div class="reply-composer" data-for="' + commentId + '">' +
-      '<input type="text" class="reply-name-input" placeholder="Your name" value="' +
-        escapeHtml(draft.name !== undefined ? draft.name : getSavedAuthorName()) + '" autocomplete="off">' +
       /* The same cell builder as a script field (05-render.js) — which is
          what gives a reply box the script's toolbar handling for free. */
       editableCellHtml({
         value: draft.body,
         placeholder: "Write a reply…",
-        toolbar: "reply",
-        wrapStyle: "margin-top:6px;"
+        toolbar: "reply"
       }) +
-      '<div class="comment-actions">' +
-        '<button type="button" data-action="reply-post" data-id="' + commentId + '">Post reply</button>' +
-        '<button type="button" data-action="reply-cancel" data-id="' + commentId + '">Cancel</button>' +
+      '<div class="reply-composer-foot">' +
+        '<label class="reply-name">Your name' +
+          '<input type="text" class="reply-name-input ev-field" placeholder="Your name" value="' +
+            escapeHtml(draft.name !== undefined ? draft.name : getSavedAuthorName()) + '" autocomplete="off">' +
+        '</label>' +
+        '<span class="reply-composer-actions">' +
+          '<button type="button" class="reply-cancel" data-action="reply-cancel" data-id="' + commentId + '">Cancel</button>' +
+          '<button type="button" class="reply-post" data-action="reply-post" data-id="' + commentId + '">Post reply</button>' +
+        '</span>' +
       '</div>' +
     '</div>'
   );
+}
+
+/* Where a reply is written: the box itself while it is open, and until
+   then a control drawn as that box, which opens it. It is the card's
+   toggle-reply button, the one a review session keeps (21-events.js
+   REVIEW_SAFE_ACTIONS) — replying is the one thing a reviewer does here. */
+function commentReplyHtml(c) {
+  return '<div class="comment-reply">' +
+    (expandedReplyIds[c.id] ? replyComposerHtml(c.id) :
+      '<button type="button" class="comment-reply-open" data-action="toggle-reply" data-id="' + c.id + '">Write a reply…</button>') +
+  '</div>';
+}
+
+/* One said thing in a thread — the opening comment or a reply — as the
+   board draws each: the avatar, the bold name and when, then the words.
+   The classes a reply has always had (reply-card, reply-author, reply-time,
+   reply-body) stay on a reply; the opening comment keeps comment-author,
+   comment-time and comment-body. */
+function commentEntryHtml(author, createdAt, bodyHtml, reply) {
+  var p = reply ? "reply" : "comment";
+  return '<li class="comment-entry' + (reply ? ' reply-card' : '') + '">' +
+    commentAvatarHtml(author) +
+    '<div class="comment-entry-main">' +
+      '<div class="comment-entry-head">' +
+        '<span class="' + p + '-author">' + escapeHtml(author) + '</span>' +
+        commentTimeHtml(createdAt, p + "-time") +
+      '</div>' +
+      '<div class="' + p + '-body">' + bodyHtml + '</div>' +
+    '</div>' +
+  '</li>';
+}
+
+/* ---- the thread's "⋯" menu (#169) ----
+
+   The same menu as Production's and B-roll's "⋯": Delete inside it, with
+   its arm-to-confirm (first click "Delete?", the second deletes, the arm
+   times out — armDeleteComment). Which thread's menu is open is state, not
+   DOM, the way B-roll keeps its own (08d-broll-panel.js menuFor): arming
+   Delete re-renders the list, and so does anything else that lands while
+   the menu is up — a reply posted, a merge — and the menu has to be drawn
+   open again each time rather than lost. Closing it (a press outside,
+   Escape, Tab) only takes it out of the DOM: a re-render on the press
+   would replace whatever the press was about to click. */
+var commentMenuFor = null;
+
+function commentMoreHtml(c) {
+  var open = commentMenuFor === c.id;
+  var armed = S.deleteCommentArmId === c.id;
+  return '<span class="comment-more-wrap">' +
+    '<button type="button" class="btn-outline is-icon comment-more" data-action="comment-menu" data-id="' + c.id +
+      '" aria-haspopup="menu" aria-expanded="' + (open ? 'true' : 'false') + '" aria-label="More actions for this thread" title="More">' +
+      '<svg aria-hidden="true"><use href="#i-more"/></svg></button>' +
+    (open
+      ? '<div class="comment-menu" role="menu" aria-label="Actions for this thread">' +
+          '<button type="button" role="menuitem" class="comment-menu-item danger' + (armed ? ' armed' : '') +
+            '" data-action="delete-comment" data-id="' + c.id + '"' +
+            (armed ? ' title="Click again to delete this thread"' : '') + '>' +
+            '<svg aria-hidden="true"><use href="#i-trash"/></svg>' +
+            '<span class="comment-menu-label">' + (armed ? 'Delete?' : 'Delete') + '</span></button>' +
+        '</div>'
+      : '') +
+  '</span>';
+}
+
+function commentMenuEl() {
+  return commentMenuFor ? document.querySelector('#comments-list .comment-card[data-id="' + safeId(commentMenuFor, "c") + '"] .comment-menu') : null;
+}
+
+function focusCommentMenuItem() {
+  var menu = commentMenuEl();
+  var item = menu && menu.querySelector(".comment-menu-item");
+  if (item) item.focus();
+}
+
+/* Down from the "⋯", or up when the list has no room under it — the
+   last card on screen — the way the other panels' menus do. */
+function placeCommentMenu() {
+  var menu = commentMenuEl();
+  if (!menu) return;
+  menu.classList.remove("opens-up");
+  var list = document.getElementById("comments-list");
+  var box = list.getBoundingClientRect();
+  var r = menu.getBoundingClientRect();
+  if (r.bottom > box.bottom - 8 && r.top - r.height - 40 > box.top + 8) menu.classList.add("opens-up");
+}
+
+/* Closed without a re-render, and the arm goes with it: a "Delete?" that
+   is no longer on screen must not be waiting for a click. */
+function closeCommentMenu(refocus) {
+  var id = commentMenuFor;
+  if (!id) return;
+  var menu = commentMenuEl();
+  commentMenuFor = null;
+  if (S.deleteCommentArmId === id) { clearTimeout(deleteCommentArmTimer); S.deleteCommentArmId = null; }
+  if (!menu) return;
+  var btn = menu.parentNode.querySelector(".comment-more");
+  menu.parentNode.removeChild(menu);
+  if (btn) {
+    btn.setAttribute("aria-expanded", "false");
+    if (refocus) btn.focus();
+  }
+}
+
+/* The "⋯" itself (onRootClick, 21-events.js): opens this thread's menu
+   with the focus on its first item, or closes it back onto the "⋯". */
+export function toggleCommentMenu(id) {
+  if (commentMenuFor === id) { closeCommentMenu(true); return; }
+  closeCommentMenu(false);
+  commentMenuFor = id;
+  captureReplyDrafts();
+  renderComments();
+  focusCommentMenuItem();
+}
+
+function onCommentMenuMouseDown(e) {
+  if (!commentMenuFor) return;
+  if (e.target.closest && e.target.closest('.comment-menu, [data-action="comment-menu"]')) return;
+  closeCommentMenu(false);
+}
+
+/* The keyboard, as the other panels' menus have it: ArrowDown/Up on the
+   "⋯" opens it, Escape closes it back onto the "⋯", Tab leaves it
+   closed. Capture phase, so the Escape that closes a menu does not also
+   close the panel (the window's Escape, 21-events.js). */
+function onCommentMenuKeydown(e) {
+  var t = e.target;
+  if (!t || !t.closest) return;
+  var btn = t.closest('#comments-list [data-action="comment-menu"]');
+  if (btn) {
+    var id = btn.getAttribute("data-id");
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && commentMenuFor !== id) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleCommentMenu(id);
+    } else if (e.key === "Escape" && commentMenuFor === id) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeCommentMenu(true);
+    }
+    return;
+  }
+  var menu = t.closest("#comments-list .comment-menu");
+  if (!menu) return;
+  var items = Array.prototype.slice.call(menu.querySelectorAll(".comment-menu-item"));
+  var i = items.indexOf(t);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (items.length) items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+  } else if (e.key === "Home" || e.key === "End") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (items.length) items[e.key === "Home" ? 0 : items.length - 1].focus();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    closeCommentMenu(true);
+  } else if (e.key === "Tab") {
+    closeCommentMenu(false);
+  }
 }
 
 /* "Resolved by Adam · 2 days ago" — blank the instant a comment is
@@ -788,11 +1026,14 @@ function replyComposerHtml(commentId) {
    no resolvedBy, which just falls back to a bare "Resolved". */
 function commentResolvedNoteHtml(c) {
   if (!c.resolved || !c.resolvedBy) return "";
-  return '<div class="comment-resolved-note">Resolved by ' + escapeHtml(c.resolvedBy) +
+  return '<div class="comment-resolved-note"><svg aria-hidden="true"><use href="#i-check-circle"/></svg>Resolved by ' + escapeHtml(c.resolvedBy) +
     (c.resolvedAt ? ' · ' + escapeHtml(formatRelativeTime(c.resolvedAt)) : '') + '</div>';
 }
 
-function commentCardHtml(c) {
+/* One card per thread (#169, B-PanelComments): what it is about on top —
+   the thread's number, where it sits and the words — then the
+   conversation, the reply box, and a foot bar with the thread's actions. */
+function commentCardHtml(c, num) {
   if (c.kind === "conflict") return conflictCardHtml(c);
   /* Orphaned: the span is gone, or emptied out by editing until nothing is
      left to anchor to — either way there is no text left to jump to, so it
@@ -805,48 +1046,42 @@ function commentCardHtml(c) {
   var liveText = anchorLiveText(c.id);
   var orphaned = liveText === null || liveText.length === 0;
   var changed = !orphaned && liveText !== c.quotedText;
-  var repliesHtml = "";
-  if (c.replies.length) {
-    repliesHtml = '<div class="comment-replies">' + c.replies.map(function (r) {
-      return (
-        '<div class="reply-card">' +
-          '<div class="reply-head"><span class="reply-author">' + escapeHtml(r.author) + '</span><span class="reply-time">' + formatTimestamp(r.createdAt) + '</span></div>' +
-          '<div class="reply-body">' + r.body + '</div>' +
-        '</div>'
-      );
-    }).join("") + '</div>';
-  }
+  var review = reviewMode();
+  var entries = commentEntryHtml(c.author, c.createdAt, c.body, false) +
+    c.replies.map(function (r) { return commentEntryHtml(r.author, r.createdAt, r.body, true); }).join("");
   return (
     '<div class="comment-card' + (c.resolved ? ' is-resolved' : '') + (orphaned ? '' : ' is-jumpable') +
       '" data-id="' + c.id + '"' + (orphaned ? '' : ' title="Click to jump to this text in the script"') + '>' +
       '<div class="comment-card-head">' +
-        '<span class="comment-author">' + escapeHtml(c.author) + '</span>' +
-        '<span class="comment-time">' + formatTimestamp(c.createdAt) + '</span>' +
+        '<div class="comment-card-where">' +
+          /* the same amber marker the words carry in the script, filled */
+          (num ? '<span class="comment-num" role="img" aria-label="Thread ' + num + '">' + num + '</span>' : '') +
+          /* A button with no action of its own: its click falls through to
+             the card's jump (onRootClick, 21-events.js), so this is the
+             card's "go to these words" said out loud, and a keyboard's way
+             to it. Nothing to go to once the words are gone. */
+          (orphaned
+            ? '<span class="comment-loc">' + commentLocationHtml(c.rowId, c.field) + '</span>'
+            : '<button type="button" class="jump-link comment-loc" title="Go to these words in the script"><span>' +
+                commentLocationHtml(c.rowId, c.field) + '</span><svg aria-hidden="true"><use href="#i-arrow-right"/></svg></button>') +
+        '</div>' +
+        (orphaned ?
+          '<div class="comment-quote orphaned">“<span class="comment-quote-words">' + escapeHtml(c.quotedText) + '</span>”' +
+            '<div class="comment-orphan-note">Text no longer found in the script</div>' +
+          '</div>' :
+        changed ?
+          '<div class="comment-quote changed" title="Originally: “' + escapeHtml(c.quotedText) + '”">' +
+            '“<span class="comment-quote-words">' + escapeHtml(liveText) + '</span>”' +
+            '<div class="comment-orphan-note">Text changed — was <s>' + escapeHtml(c.quotedText) + '</s></div>' +
+          '</div>' :
+          '<div class="comment-quote">“<span class="comment-quote-words">' + escapeHtml(c.quotedText) + '</span>”</div>'
+        ) +
+        commentResolvedNoteHtml(c) +
       '</div>' +
-      commentResolvedNoteHtml(c) +
-      '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
-      (orphaned ?
-        '<div class="comment-quote orphaned">“' + escapeHtml(c.quotedText) + '”' +
-          '<div class="comment-orphan-note">Text no longer found in the script</div>' +
-        '</div>' :
-      changed ?
-        '<div class="comment-quote changed" title="Originally: “' + escapeHtml(c.quotedText) + '”">' +
-          '“' + escapeHtml(liveText) + '”' +
-          '<div class="comment-orphan-note">Text changed — was <s>' + escapeHtml(c.quotedText) + '</s></div>' +
-        '</div>' :
-        '<div class="comment-quote">“' + escapeHtml(c.quotedText) + '”</div>'
-      ) +
-      '<div class="comment-body">' + c.body + '</div>' +
-      repliesHtml +
-      (expandedReplyIds[c.id] ? replyComposerHtml(c.id) : "") +
-      '<div class="comment-assign-row">' +
-        '<label for="comment-assignee-' + c.id + '">Assign</label>' +
-        '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to"' +
-          (reviewMode() ? ' disabled' : '') + '>' +
-          commentAssigneeOptionsHtml(c.assignee) +
-        '</select>' +
-      '</div>' +
-      '<div class="comment-actions">' +
+      /* a 2px line joins each comment to the reply that answers it (app.css) */
+      '<ol class="comment-thread" aria-label="Comments in this thread">' + entries + '</ol>' +
+      commentReplyHtml(c) +
+      '<div class="comment-actions comment-foot">' +
         /* A review session adds to a thread and does not delete or
            resolve one. Its only write is POSTing a comment or a reply
            (#71). Resolving is an editor's alone, by the owner's decision:
@@ -856,14 +1091,24 @@ function commentCardHtml(c) {
            reviewer's PATCH (403 reviewers-cannot-resolve), 21-events.js's
            click guard (REVIEW_SAFE_ACTIONS) refuses toggle-resolve, and
            toggleResolve() itself does nothing in a review session. */
-        (reviewMode() ? '' :
-          '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
-            (c.resolved ? "Unresolve" : "Resolve") + '</button>') +
-        (expandedReplyIds[c.id] ? "" : '<button type="button" data-action="toggle-reply" data-id="' + c.id + '">Reply</button>') +
-        (reviewMode() ? '' :
-          '<button type="button" class="danger' + (S.deleteCommentArmId === c.id ? ' armed' : '') +
-            '" data-action="delete-comment" data-id="' + c.id + '">' +
-            (S.deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>') +
+        (review ? '' :
+          '<button type="button" class="btn-outline comment-resolve" data-action="toggle-resolve" data-id="' + c.id + '">' +
+            (c.resolved
+              ? '<svg aria-hidden="true"><use href="#i-return"/></svg>Unresolve'
+              : '<svg class="comment-resolve-tick" aria-hidden="true"><use href="#i-check-circle"/></svg>Resolve') +
+          '</button>') +
+        /* Assign is the select itself, drawn as an outlined button with the
+           person icon: disabled rather than gone in a review session, so a
+           reader still sees who has the thread (#71). */
+        '<span class="ev-field comment-assign">' +
+          '<svg class="comment-assign-icon" aria-hidden="true"><use href="#i-person"/></svg>' +
+          '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to"' +
+            (review ? ' disabled' : '') + '>' +
+            commentAssigneeOptionsHtml(c.assignee) +
+          '</select>' +
+          '<svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>' +
+        '</span>' +
+        (review ? '' : commentMoreHtml(c)) +
       '</div>' +
     '</div>'
   );
@@ -883,31 +1128,40 @@ function conflictBodyHtml(c) {
   return c.body;
 }
 
+/* The conflict card's flag: a warning triangle, drawn here rather than
+   added to the sprite (#169 — the "⚠" it replaces was an emoji). */
+var CONFLICT_ICON_SVG =
+  '<svg class="conflict-flag-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M10.3 4.3L2.8 17.5a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17h.01"/>' +
+  '</svg>';
+
 /* A card holding one edit that could not be merged automatically —
-   the user's own version, kept verbatim with a one-click way to put it back. */
+   the user's own version, kept verbatim with a one-click way to put it back.
+   The thread card's language (#169) — head, the person, the foot bar —
+   with the flag in the accent where the number would be: it has no words
+   in the script to be numbered by or to jump to. */
 function conflictCardHtml(c) {
   return (
     '<div class="comment-card is-conflict' + (c.resolved ? ' is-resolved' : '') + '" data-id="' + c.id + '">' +
-      '<div class="conflict-flag">⚠ Unmerged edit · ' + escapeHtml(c.conflictField || "Field") + '</div>' +
       '<div class="comment-card-head">' +
-        '<span class="comment-author">' + escapeHtml(c.author) + '</span>' +
-        '<span class="comment-time">' + formatTimestamp(c.createdAt) + '</span>' +
+        '<div class="conflict-flag">' + CONFLICT_ICON_SVG + 'Unmerged edit · ' + escapeHtml(c.conflictField || "Field") + '</div>' +
+        '<div class="comment-card-where"><span class="comment-loc">' + commentLocationHtml(c.rowId, c.field) + '</span></div>' +
+        '<div class="conflict-note">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
+        commentResolvedNoteHtml(c) +
       '</div>' +
-      commentResolvedNoteHtml(c) +
-      '<div class="comment-loc">' + escapeHtml(findAnchorLocationLabel(c.rowId, c.field)) + '</div>' +
-      '<div class="comment-quote">Someone else changed this at the same time. Their version is live; yours is below.</div>' +
-      '<div class="comment-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>' +
-      '<div class="comment-actions">' +
-        /* All three write the document: "Use my version" puts text back
-           into a row, and the other two change a stored comment. */
-        (reviewMode() ? '' :
-          '<button type="button" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
-          '<button type="button" data-action="toggle-resolve" data-id="' + c.id + '">' +
+      '<ol class="comment-thread" aria-label="Your version">' +
+        commentEntryHtml(c.author, c.createdAt,
+          '<div class="conflict-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>', false) +
+      '</ol>' +
+      /* All three write the document: "Use my version" puts text back
+         into a row, and the other two change a stored comment. */
+      (reviewMode() ? '' :
+        '<div class="comment-actions comment-foot">' +
+          '<button type="button" class="btn-outline" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
+          '<button type="button" class="btn-outline" data-action="toggle-resolve" data-id="' + c.id + '">' +
             (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
-          '<button type="button" class="danger' + (S.deleteCommentArmId === c.id ? ' armed' : '') +
-            '" data-action="delete-comment" data-id="' + c.id + '">' +
-            (S.deleteCommentArmId === c.id ? "Confirm?" : "Delete") + '</button>') +
-      '</div>' +
+          commentMoreHtml(c) +
+        '</div>') +
     '</div>'
   );
 }
@@ -957,6 +1211,10 @@ export function captureReplyDrafts() {
   });
 }
 
+/* How a thread starts, under the list (#169) — the Comment button is in
+   the script's own toolbar, not in this panel, so the panel says where. */
+var COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
+
 export function renderComments() {
   if (!S.state) return;
   var listEl = document.getElementById("comments-list");
@@ -969,10 +1227,23 @@ export function renderComments() {
     ? function (a, b) { return commentLastActivity(b).localeCompare(commentLastActivity(a)); }
     : commentPositionCompare);
   if (!items.length) {
-    listEl.innerHTML = '<div class="comments-empty">' + (S.state.comments.length ? "No comments match this filter." : "No comments yet. Select text in a row and click 💬 Comment to leave one.") + '</div>';
+    listEl.innerHTML = '<div class="comments-empty">' + (S.state.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
+      COMMENTS_HINT_HTML;
     return;
   }
-  listEl.innerHTML = items.map(commentCardHtml).join("");
+  /* An open "⋯" menu is drawn open again (commentMenuFor); if the focus
+     was in it — the Delete just armed — it goes back to the same item. */
+  var a = document.activeElement;
+  var focusInMenu = !!(a && a.closest && a.closest("#comments-list .comment-menu"));
+  /* numbered here, after the script is painted — see commentThreadNumbers */
+  var nums = commentThreadNumbers();
+  listEl.innerHTML = items.map(function (c) {
+    return commentCardHtml(c, c.resolved ? 0 : nums[c.id] || 0);
+  }).join("") + COMMENTS_HINT_HTML;
+  if (commentMenuFor) {
+    placeCommentMenu();
+    if (focusInMenu) focusCommentMenuItem();
+  }
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
@@ -981,4 +1252,9 @@ export function __init() {
   S.commentSortMode = readCommentSortMode();
 
   commentFilter = readCommentFilter();
+
+  /* the thread menus' press-outside and keyboard, on the document like
+     the Production panel's (08-production-panels.js) */
+  document.addEventListener("mousedown", onCommentMenuMouseDown, true);
+  document.addEventListener("keydown", onCommentMenuKeydown, true);
 }
