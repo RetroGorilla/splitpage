@@ -40,9 +40,9 @@ comments naming the app source they were drawn from.
 | Phase | State | Commit | Notes |
 | --- | --- | --- | --- |
 | 1. Tokens, type, logo, sentence case | done | `d72e47c` | 94/94 browser suites, 563/563 unit tests, eslint 0 |
-| 2. Editor, topbar, rundown strip | **next**, not started | | A run was started and stopped before it edited anything |
-| 3. Side panels | pending | | |
-| 4. Start page, prompter, phone, gallery, menus | pending | | |
+| 2. Editor, topbar, rundown strip | done | `8fb43e2` | Windows 11 x64, real fonts: all 94 browser suites (4911/4911), 574/574 unit tests, eslint 0; desktop smoke dev 808/808 (the first run since phase 1). See "What phase 2 did" |
+| 3. Side panels | **next**, planned | | Planned for four parallel lanes after a shared panel shell: `2026-09-24-0539-direction-b-phases-3-4-8d326eb5-5ba1-4b4d-8759-20638d702fee.md` |
+| 4. Start page, prompter, phone, gallery, menus | planned | | Five parallel lanes, the same handoff |
 | PR into `main` | not opened | | Ask Adam first; he hasn't asked for one yet |
 
 ## Adam's decisions from the design review (all of them; the briefs repeat the relevant ones)
@@ -133,6 +133,75 @@ the phase 2 commit message and in #170.
   - scene status colours in `01-scene-status.js` and the presence palette in `13a-presence.js` (phase 2)
   - panel shadows (phase 3)
   - card radii, the PDF/.docx tag colours and the Help wording for the highlight (phase 4)
+
+## What phase 2 did (so you don't redo it)
+Run locally on Windows 11 (the session had the real fonts; Node from
+`Splitpage x64 Testing\tools\node`, nothing is on PATH there).
+
+- **Test drivers pin the light theme.** `driver.ps1` and `driver.mjs` send
+  `Emulation.setEmulatedMedia prefers-color-scheme: light` on connect. This
+  Windows machine is in dark mode, so headless Edge drew the dark palette
+  and suites 12, 94 and 96 (which read colours back) failed against light
+  values. 96 and 97 set `data-theme` themselves when they want dark.
+- **Topbar** (`src/page.html`, app.css "header (#169)"): one 52px row in a
+  three-column grid. Left: mark, File (`.btn-quiet` + chevron),
+  `.topbar-rule`, title, then Save as a status. `#btn-save` draws its
+  status from `data-status` via `::before` (written by `updateSaveStatus`,
+  12-dirty-toast.js, including "Saved 2 min ago"), and its own text stays
+  "Save" / "Save •" for the writer mirror and the suites. `#save-status`
+  is visually hidden but still the live region. Then presence avatars,
+  then `.doc-meta` (review chip, file chip, shot count, identity), which
+  only takes the room left over. Centre: the program clock, which is still
+  `#runtime-chip` (click = reading speed). Right: the panel toggles
+  (`.panel-toggle`, `aria-pressed` kept in `syncPanelClass`, 03-sync.js),
+  Write (`.btn-mode`), and Present (`.tally-dot`).
+- **Header condensing** (20i-topbar.js) now sheds the rundown's ruler.
+  The header row never moves. Suite 61 was updated to match (brand, title
+  and toolbar assertions became ruler and track ones).
+- **Script table:** `--row-cols` on `#root` is 112px / 1fr / 1.25fr / 80px.
+  Rows, column heads and header are full-bleed (`margin: 0 -20px`) inside
+  `#root`'s new 20px padding.
+  - The gutter (`rowGutterHtml`, 05-render.js) holds the number and start
+    time, then the status lamp and word (`.status-dot` keeps
+    `is-open` / `is-half`), then `.row-tools`: a grip and a "⋯" menu.
+  - The menu holds the same four `.gutter-btn` buttons with the same
+    data-actions. Its open/close and keyboard handling is in 06-rows.js
+    (`toggleRowMenu`, `rowMenuKeydown`). Delete's armed label comes from
+    `armDeleteButton` / `disarmDeleteButton`.
+  - Start times and the rail's read time are written by `paintRowTimes()`
+    (text only, no repaint, so suite 67 still sees no row painted while
+    typing), called from `updateScriptStats` and `renderRow`.
+  - Media sits under the Visual text now. The empty slot is a hover-only
+    dashed "Add picture". The mosaic is 360×162 (suite 91's height range
+    was updated).
+  - Comment markers are CSS counters (`#rows .cmt-anchor:not(.resolved)::after`),
+    numbered in document order. **Phase 3's comment cards should number
+    threads by the DOM order of `#rows .cmt-anchor` so the two agree.**
+- **Rundown strip:** `src/js/05f-rundown.js`, skeleton in page.html inside
+  the header, tested by `src/test/rundown.test.mjs`. The playhead follows
+  focusin and selectionchange. Clicking a block reveals the scene, centres
+  it and focuses its Audio. The blocks use a roving tabindex with arrow keys.
+  It is hidden at ≤760px, and the writer and prompter cover it (the writer
+  has its own runtime; a strip moving with every sentence there adds nothing).
+- **#170 hooks:** `rundownScale(total, extra, width)`,
+  `setRundownExtraSeconds(sec)`, `#rundown-overlay`, `rundownX(sec)`,
+  `onRundownPaint(fn)`, and `#program-clock-slot`. Open question for #170:
+  a click on the clock opens the reading-speed box today.
+- **Also:**
+  - The tagging reference no longer opens itself on every visit (it's in
+    File, Help, the start page and the tour).
+  - The update and desktop-app notices are one slim line.
+  - Presence colours are B's (`personColor(name)`, exported from
+    13a-presence.js — **phase 3 should use this for every person**).
+  - Menu and command-menu keycaps are Chivo Mono.
+  - Panel toggle icons are hidden ≤760px (they overflowed a 375px phone).
+- **Known deviations from B-Editor:**
+  - The b-roll label shows the typed keyword ("B-roll:"), because it is
+    document text. There is no hanging indent, because a cell's lines
+    aren't blocks.
+  - The row menu has no shortcut chips; the shortcuts are in each item's
+    title instead.
+  - The status button still cycles (no chevron), as the brief asked.
 
 ## How to verify (every phase)
 ```
