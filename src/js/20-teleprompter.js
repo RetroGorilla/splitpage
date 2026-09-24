@@ -54,12 +54,16 @@ function normalizeWord(w) {
    is two spans. (Two neighbouring elements of the SAME format, which the
    stored markup can hold, are one stretch now, so a word split between
    them is one span instead of two.) Nesting is the model's one order, not
-   whatever the stored markup had; it looks the same. Returns the markup
-   and how many words it holds. */
+   whatever the stored markup had; it looks the same. A stage direction
+   (#167) is shown in place — its own span, dim and bracketed by app.css —
+   but its words are not spans: they are not said, so voice follow never
+   waits to hear them and a scene's word count leaves them out. Returns
+   the markup and how many words it holds. */
 export function prompterSceneHtml(cell) {
   var words = 0;
   var html = toHtml(cell, {
-    textHtml: function (text, esc) {
+    textHtml: function (text, esc, where) {
+      if (where && where.dir) return esc(text);
       return text.split(/(\s+)/).map(function (part) {
         if (!part) return "";
         if (/^\s+$/.test(part)) return esc(part);

@@ -82,13 +82,21 @@ function pdfCirclePath(cx, cy, r) {
     p(cx + k, cy - r) + " " + p(cx + r, cy - k) + " " + p(cx + r, cy) + " c h";
 }
 
-/* break styled runs into lines that fit maxWidth */
+/* break styled runs into lines that fit maxWidth. A stage direction's
+   runs (#167, toDocxRuns: dir, already bracketed) are set in italic and
+   keep dir, which drawLines prints grey. */
 function pdfWrapRuns(runs, maxWidth, size) {
   var lines = [], line = [], lineWidth = 0;
 
   function pushLine() { lines.push(line); line = []; lineWidth = 0; }
 
   runs.forEach(function (run) {
+    if (run.dir) run = Object.assign({}, run, { i: true });
+    var seg = function (text, width) {
+      var s = { text: text, b: run.b, i: run.i, u: run.u, s: run.s, mark: run.mark, width: width };
+      if (run.dir) s.dir = true;
+      return s;
+    };
     if (run.text === "\n") { pushLine(); return; }
     var words = run.text.split(/(\s+)/);
     words.forEach(function (word) {
@@ -102,7 +110,7 @@ function pdfWrapRuns(runs, maxWidth, size) {
         var chunk = "";
         for (var i = 0; i < word.length; i++) {
           if (pdfTextWidth(chunk + word[i], run.b, size) > maxWidth && chunk) {
-            line.push({ text: chunk, b: run.b, i: run.i, u: run.u, s: run.s, mark: run.mark, width: pdfTextWidth(chunk, run.b, size) });
+            line.push(seg(chunk, pdfTextWidth(chunk, run.b, size)));
             pushLine();
             chunk = "";
           }
@@ -110,12 +118,12 @@ function pdfWrapRuns(runs, maxWidth, size) {
         }
         if (chunk) {
           var cw = pdfTextWidth(chunk, run.b, size);
-          line.push({ text: chunk, b: run.b, i: run.i, u: run.u, s: run.s, mark: run.mark, width: cw });
+          line.push(seg(chunk, cw));
           lineWidth += cw;
         }
         return;
       }
-      line.push({ text: word, b: run.b, i: run.i, u: run.u, s: run.s, mark: run.mark, width: w });
+      line.push(seg(word, w));
       lineWidth += w;
     });
   });
@@ -299,7 +307,10 @@ export function buildPdf(jpegs, commentJpegs) {
             " " + seg.width.toFixed(2) + " " + (SIZE + 1).toFixed(2) + " re f Q");
         }
         if (seg.text.trim()) {
+          /* a stage direction (#167): grey, as the editor shows it */
+          if (seg.dir) ops.push("0.42 0.42 0.40 rg");
           text(seg.text, cx, yy, fontFor(seg), fs);
+          if (seg.dir) ops.push("0 g");
           if (seg.u) rule(cx, yy - 1.6, seg.width, 0.5);
           if (seg.s) rule(cx, yy + SIZE * 0.28, seg.width, 0.5);
         }

@@ -257,6 +257,16 @@ function walkSanitize(srcParent, destParent) {
       destParent.appendChild(anchorSpan);
       return;
     }
+    /* A stage direction for the performer (#167, 04c-doc-model.js): the
+       words stay editable — it is prose, not a label — and the class is
+       all it carries. Its brackets are drawn by app.css, never stored. */
+    if (tag === "SPAN" && node.classList && node.classList.contains("stage-dir")) {
+      var dirSpan = document.createElement("span");
+      dirSpan.className = "stage-dir";
+      walkSanitize(node, dirSpan);
+      destParent.appendChild(dirSpan);
+      return;
+    }
     if (tag === "A") {
       var href = safeHref(node.getAttribute("href") || "");
       if (href) {
@@ -332,6 +342,9 @@ function walkToMd(node) {
        escaping them is what CommonMark itself expects inside link text. */
     else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
     else if (tag === "BR") out += "\n";
+    /* a stage direction (#167) in the notation that types one, so a table
+       cell edited by hand keeps it (importDirections, 20d-formats.js) */
+    else if (tag === "SPAN" && child.classList && child.classList.contains("stage-dir")) out += "((" + inner + "))";
     else out += inner;
   });
   return out;

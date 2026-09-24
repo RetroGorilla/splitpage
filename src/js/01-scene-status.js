@@ -3,7 +3,7 @@ import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { pad2, paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown } from "./05f-rundown.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
+import { cellOf, spokenText } from "./04c-doc-model.js";
 import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { queueAutoSave } from "./14-export.js";
@@ -229,9 +229,10 @@ export function __init() {
   /* Same reasoning as tagsInField(): the runtime estimate re-counts every row
      on every refresh, but only the row being typed in has changed. The
      words are the cell's text as the document model reads it (cellOf,
-     #85), not a parse of the markup here. */
+     #85), not a parse of the markup here — and only the words that are
+     said: a stage direction ("(beat)", #167) takes no reading time. */
   wordCount = contentMemo(function (html) {
-    var text = toPlainText(cellOf(html));
+    var text = spokenText(cellOf(html));
     return text ? text.split(/\s+/).filter(Boolean).length : 0;
   });
 }
