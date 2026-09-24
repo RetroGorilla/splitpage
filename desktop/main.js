@@ -4254,8 +4254,11 @@ function routeLaunchFile(absPath) {
  *    (src/js/18b-file-menu.js) stand down whenever the desktop bridge is
  *    there, so the real accelerators below are the only ones that fire. Ctrl+B/I/U and Ctrl+Enter/Alt+Enter are also
  *    page-handled but aren't menu commands at all, so they don't come up.
+ *    View ▸ Zoom In / Zoom Out / Actual Size are the page's script zoom
+ *    (Ctrl/Cmd + "+" / "-" / "0", src/js/05s-script-zoom.js, #191), display
+ *    only for the same reason.
  *    Everything else below — Save, Save As, Open, undo/redo/cut/copy/paste
- *    roles, zoom, fullscreen — has no page-level listener, so real
+ *    roles, fullscreen — has no page-level listener, so real
  *    accelerators are safe to register normally.
  * --------------------------------------------------------------------- */
 
@@ -4450,9 +4453,15 @@ function buildMenu() {
         { role: "toggleDevTools" },
         { type: "separator" }
       ]),
-      { role: "resetZoom" },
-      { role: "zoomIn" },
-      { role: "zoomOut" },
+      /* Issue #191: these zoom the script, not the page — Chromium's page
+         zoom scaled the header and the panels with it. The page's own
+         Ctrl/Cmd + "0" / "+" / "-" keydown (src/js/05s-script-zoom.js) does
+         the same, so like Find above the accelerators are shown and not
+         registered, and the keystroke reaches the page. Present and the
+         Writer keep their own size controls. */
+      { label: "Actual Size", accelerator: "CmdOrCtrl+0", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-reset") },
+      { label: "Zoom In", accelerator: "CmdOrCtrl+Plus", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-in") },
+      { label: "Zoom Out", accelerator: "CmdOrCtrl+-", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-out") },
       { type: "separator" },
       { role: "togglefullscreen" }
     ]

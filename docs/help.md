@@ -786,6 +786,29 @@ Visual notes are directions, not spoken words, so they don't count. Click
 the chip to set your reading speed — it's saved with the file, so the
 estimate means the same thing to whoever opens it next.
 
+**Setting a scene's length yourself.** Some scenes aren't as long as their
+words: a b-roll montage, a pause, a title card, a clip under one line of
+voice-over, a scene with no Audio at all. Click the scene's time in the
+**Read** column and type its length — `1:30`, `90` (seconds), `90s`, `1m30`
+or `1m 30s` — then press <kbd>Enter</kbd> (<kbd>Esc</kbd> leaves it as it
+was). That length replaces the estimate everywhere: the scene starts after
+it, the clock, the rundown strip, the panels, the exports and Present's
+clock. A length you set sits in a thin box; if the Audio later reads longer
+than it, it turns amber, and hovering it shows the estimate. Empty the box
+and press <kbd>Enter</kbd> to go back to the estimate. It's saved with the
+file and undoes like any edit. On a phone, tap into the scene and then tap
+its time.
+
+**Making the script bigger or smaller.** Hold <kbd>Ctrl</kbd> and turn the
+mouse wheel over the script — or pinch on a trackpad — to zoom the script
+alone, from 70 % to 200 %; the header and the panels stay as they are, and
+the line under the pointer stays put. <kbd>Ctrl</kbd>+<kbd>+</kbd>,
+<kbd>Ctrl</kbd>+<kbd>−</kbd> and <kbd>Ctrl</kbd>+<kbd>0</kbd> do the same
+(in the desktop app so do View ▸ Zoom In, Zoom Out and Actual Size). A
+"Script 125 %" note shows the size for a moment; click it to go back to
+100 %. The size is yours, remembered on this device, not saved in the file.
+The writer and Present keep their own size controls.
+
 **Scene status.** The dot in each scene's gutter cycles **To do → Ready →
 Shot**. Shot scenes are tinted, and a counter appears in the header once
 you've shot anything. In the teleprompter, **Skip shot** leaves those
