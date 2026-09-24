@@ -1155,7 +1155,9 @@ document.
 
 ## The File menu
 
-**☰ File** drops down from its button. At the top is a card about the script
+The **Splitpage** mark and name at the top left, with its ▾, is the File
+button (on a phone it is the file icon). The menu drops down from it. At the
+top is a card about the script
 you are in: the file it lives in (or *Not saved yet*), whether everything on
 screen is in it (*Saved 2 min ago · Markdown*), the **Autosave** switch, and
 **Save a copy…**, which writes the script to a new file of your choosing and
@@ -1208,8 +1210,10 @@ work in the app you are using. On a Mac, read <kbd>Cmd</kbd> for
 
 ### Search commands
 
-<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac), or **File ▸
-Search commands…**, opens a search box over the script. Type part of what
+<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac), the
+**Search or run a command** box in the header (a magnifier when the window
+is narrow), or **File ▸ Search commands…**, opens a search box over the
+script. Type part of what
 you want — *pdf*, *gear*, *history*, or a word for it like *teleprompter* or
 *voice over* — and the list narrows to the commands that match: everything
 in the File menu, every export format, the Production, Gear, B-roll and

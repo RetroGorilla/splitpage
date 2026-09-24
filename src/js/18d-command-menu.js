@@ -2,7 +2,9 @@ import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
 import { reviewMode } from "./13-hosted.js";
 import {
+  IS_MAC,
   fileMenuOpen,
+  keyChipWords,
   keyChipsHtml,
   keysWorkHere,
   menuItemReason,
@@ -441,6 +443,17 @@ export function __init() {
   modal.addEventListener("focusout", function (e) {
     if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget))) closeCommandMenu(false);
   });
+
+  /* The header's "Search or run a command" button (#175): the same menu,
+     for whoever has not met Ctrl K yet. Its tooltip names the shortcut in
+     the words the chips use; where it is only a magnifier that tooltip is
+     all the hint there is. Opened from it, Esc hands the focus back to it
+     (returnFocus above). */
+  var trigger = el("btn-command");
+  if (trigger) {
+    trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
+    trigger.addEventListener("click", function () { openCommandMenu(); });
+  }
 
   /* Ctrl/Cmd+K, in both builds: nothing in desktop/main.js registers it
      (its Search Commands… item shows the accelerator without registering
