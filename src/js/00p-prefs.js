@@ -36,9 +36,18 @@ export var DEFAULT_WPM_KEY = "splitpage-default-wpm";
 export var RUNDOWN_MIN_KEY = "splitpage-rundown-min";
 export var SCRIPT_SCALE_KEY = "splitpage-script-scale";
 export var SCRIPT_SCALE_MIN = 0.7, SCRIPT_SCALE_MAX = 2;
+/* Settings ▸ Fetch video thumbnails (#141): "0" off, absent (or "1") on —
+   whether a pasted YouTube or Vimeo link's thumbnail is fetched from the
+   site (05v-video.js). */
+export var VIDEO_THUMBS_KEY = "splitpage-video-thumbs";
 
 export function readPref(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+/* On unless it was switched off. */
+export function videoThumbsOn() {
+  return readPref(VIDEO_THUMBS_KEY) !== "0";
 }
 
 /* `value` null removes the key. The event fires whether or not storage
@@ -71,6 +80,7 @@ export var SETTINGS_APPDATA_PREFS = [
   { name: "prompterFlip", key: "splitpage-prompter-flip", valid: isFlag },
   { name: "prompterSceneMode", key: "splitpage-prompter-scene-mode", valid: isFlag },
   { name: "rundownMin", key: "splitpage-rundown-min", valid: isFlag },
+  { name: "videoThumbs", key: "splitpage-video-thumbs", valid: isFlag },
   { name: "scriptScale", key: "splitpage-script-scale",
     valid: function (v) { var n = Number(v); return /^\d(\.\d{1,3})?$/.test(v) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX; } }
 ];

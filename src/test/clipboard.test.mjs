@@ -145,7 +145,8 @@ test("what a paste attaches goes into the scene's gallery, each its own item (#1
      its poster; a picture after it is an item of its own, never over it */
   const row = { id: "r1", imageRef: null };
   let got = attachToGallery(row, [{ kind: "video", href: "https://youtu.be/abc" }]);
-  assert.deepEqual(got, { pictures: 0, videos: 1 });
+  /* links: the web videos, whose thumbnails may be fetched next (#141) */
+  assert.deepEqual(got, { pictures: 0, videos: 1, links: ["https://youtu.be/abc"] });
   assert.equal(row.imageRef, null);
   assert.deepEqual(row.imageLinks, [{ href: "https://youtu.be/abc", poster: true }]);
   attachToGallery(row, [{ kind: "image", ref: P1 }]);
@@ -153,7 +154,7 @@ test("what a paste attaches goes into the scene's gallery, each its own item (#1
   assert.deepEqual(row.moreImages, [{ imageRef: P1 }]);
   /* a video into a scene with pictures: a tile of its own, after them */
   got = attachToGallery(row, [{ kind: "image", ref: P2 }, { kind: "videoFile", name: "<b>take</b>.mp4", size: 3 }]);
-  assert.deepEqual(got, { pictures: 1, videos: 1 });
+  assert.deepEqual(got, { pictures: 1, videos: 1, links: [] });
   assert.deepEqual(row.moreImages, [{ imageRef: P1 }, { imageRef: P2 }, { links: [{ name: "take.mp4", size: 3, poster: true }] }]);
   /* the same picture or video twice is one item */
   attachToGallery(row, [{ kind: "image", ref: P2 }, { kind: "video", href: "https://youtu.be/abc" }]);

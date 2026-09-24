@@ -494,16 +494,49 @@ export function removeImageLink(rowId, slot, key) {
    webUtils.getPathForFile, so a page cannot name a path of its choosing)
    and answers a token; the caption's link opens the file with its own app
    through openVideoFile(token), which main honours only for a path it was
-   given that way. The browser has no path to keep. */
+   given that way. The browser has no path to keep.
+
+   Every build also keeps the File itself for as long as this page is open
+   (#168): the gallery's dialog plays it through a blob: URL — which the
+   page's policy already allows as media — made from it when you press
+   play (sessionVideoUrl). Nothing of it is written anywhere; a reload
+   forgets it, and then the dialog says so and offers Open file. */
 var videoFileTokens = {};
+var sessionVideoFiles = {};
+var sessionVideoUrls = {};
 
 export function grantVideoFile(file, link) {
-  if (!S.DESKTOP || typeof S.DESKTOP.grantVideoFile !== "function") return;
   /* keyed as the caption will hold it: its name made safe */
   var key = videoLinkKey(normalizeVideoLink(link) || link);
+  if (file && typeof file.size === "number") {
+    if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
+      try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { /* already gone */ }
+      delete sessionVideoUrls[key];
+    }
+    sessionVideoFiles[key] = file;
+  }
+  if (!S.DESKTOP || typeof S.DESKTOP.grantVideoFile !== "function") return;
   Promise.resolve(S.DESKTOP.grantVideoFile(file)).then(function (token) {
     if (typeof token === "string" && token) videoFileTokens[key] = token;
   }, function () {});
+}
+
+/* Whether a caption's video file was dropped or pasted in since this page
+   opened, so it can play here. */
+export function hasSessionVideo(link) {
+  return !!(link && !link.href && sessionVideoFiles[videoLinkKey(link)]);
+}
+
+/* A blob: URL for a video file this page still holds, made once and kept
+   for the rest of the page's life (the dialog may play it again), or
+   null. */
+export function sessionVideoUrl(link) {
+  if (!hasSessionVideo(link)) return null;
+  var key = videoLinkKey(link);
+  if (!sessionVideoUrls[key]) {
+    try { sessionVideoUrls[key] = URL.createObjectURL(sessionVideoFiles[key]); } catch (e) { return null; }
+  }
+  return sessionVideoUrls[key];
 }
 
 export function openVideoFile(link) {
