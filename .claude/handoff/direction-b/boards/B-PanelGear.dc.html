@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gear panel — Control Room</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:#80BDFB;text-decoration:none}a:hover{color:#ECEBE7}
+::selection{background:#2F4A66;color:#ECEBE7}
+:focus-visible{outline:2px solid #80BDFB;outline-offset:2px}
+input::placeholder,textarea::placeholder{color:#94928D;opacity:1}
+.tg{padding:0 2px;border-radius:3px 3px 0 0;border-bottom:2px solid;color:#ECEBE7;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.tp{background:#2D2437;border-color:#CBA1FA}
+.tl{background:#172E25;border-color:#73D4AC}
+.tv{background:#272B17;border-color:#C8DE63}
+.tq{background:#202D1D;border-color:#90B888}
+.ts{background:#382220;border-color:#EF958E}
+.br{display:inline-flex;align-items:center;flex:none;height:18px;box-sizing:border-box;padding:0 5px;border:1px solid #64D1D7;border-radius:3px;font:500 11px/1 'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;color:#64D1D7}
+.cm{text-decoration:underline dotted #F9B64F;text-decoration-thickness:1.5px;text-underline-offset:5px}
+.ev{border:1px solid #43423F;border-radius:6px}
+.ev:hover,.ev:focus-within{border-color:#94928D}
+.cv{opacity:1}
+.pl:hover{text-decoration:underline;text-underline-offset:3px}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;overflow:hidden;position:relative;background:#0F0E0C;color:#ECEBE7;font-family:Chivo,'Helvetica Neue','Segoe UI',sans-serif;font-size:14px;line-height:20px;font-weight:450;-webkit-font-smoothing:antialiased">
+
+  <!-- Header -->
+  <header style="position:absolute;left:0;top:0;width:1440px;height:52px;box-sizing:border-box;padding:0 20px;border-bottom:1px solid #2E2E2B;background:#0F0E0C;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:12px;white-space:nowrap">
+      <a href="#" aria-label="Splitpage — start page" style="display:flex;align-items:center;gap:8px;height:32px;color:#ECEBE7">
+        <svg width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>
+        <span style="font-weight:700;font-size:15px;letter-spacing:-0.005em">Splitpage</span>
+      </a>
+      <button type="button" aria-haspopup="menu" style="display:flex;align-items:center;gap:4px;height:32px;padding:0 6px 0 10px;border:0;border-radius:6px;background:transparent;color:#B2B1AB;font-size:14px;cursor:pointer">File<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+      <span aria-hidden="true" style="width:1px;height:20px;background:#2E2E2B"></span>
+      <h1 style="margin:0;font-size:15px;line-height:20px;font-weight:600;color:#ECEBE7">Three Lights for Under $200</h1>
+      <button type="button" aria-label="Saved 2 minutes ago. Save now" style="height:32px;padding:0 4px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:13px;line-height:16px;cursor:pointer">Saved 2 min ago</button>
+      <div style="display:flex;align-items:center;padding-left:6px">
+        <span role="img" aria-label="Sam, host, is here" style="width:24px;height:24px;border-radius:50%;outline:2px solid #0F0E0C;background:#80BDFB;color:#0F0E0C;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;font-weight:700">S</span>
+        <span role="img" aria-label="Priya, reviewer, is here" style="width:24px;height:24px;margin-left:-6px;border-radius:50%;outline:2px solid #0F0E0C;background:#F9B64F;color:#0F0E0C;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;font-weight:700">P</span>
+      </div>
+    </div>
+
+    <div role="timer" aria-label="Program clock" style="position:absolute;left:720px;top:0;height:51px;transform:translateX(-50%);display:flex;align-items:center;white-space:nowrap">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <div style="display:flex;align-items:baseline;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums">
+          <span style="font-weight:500;font-size:20px;line-height:24px;color:#ECEBE7;letter-spacing:-0.01em">01:35</span>
+          <span style="font-weight:450;font-size:14px;line-height:20px;color:#94928D;white-space:pre"> / 02:00</span>
+        </div>
+        <span style="font-size:13px;line-height:16px;color:#B2B1AB;font-variant-numeric:tabular-nums">0:25 left</span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;white-space:nowrap">
+      <nav aria-label="Panels" style="display:flex;align-items:center;gap:0">
+        <button type="button" aria-pressed="false" style="display:flex;align-items:center;gap:5px;height:32px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#B2B1AB;font-size:13px;line-height:16px;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5z"/><circle cx="8" cy="8" r="1.5"/></svg>Production<span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;color:#94928D;font-variant-numeric:tabular-nums">10</span></button>
+        <button type="button" aria-pressed="true" style="display:flex;align-items:center;gap:5px;height:32px;padding:0 6px;border:0;border-radius:6px;background:#2A2926;color:#ECEBE7;font-size:13px;line-height:16px;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z M3.5 7.5L12 12l8.5-4.5M12 12v9"/></svg>Gear<span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;color:#B2B1AB;font-variant-numeric:tabular-nums">2</span></button>
+        <button type="button" aria-pressed="false" style="display:flex;align-items:center;gap:5px;height:32px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#B2B1AB;font-size:13px;line-height:16px;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/></svg>B-roll<span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;color:#94928D;font-variant-numeric:tabular-nums">3</span></button>
+        <button type="button" aria-pressed="false" style="display:flex;align-items:center;gap:5px;height:32px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#B2B1AB;font-size:13px;line-height:16px;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 5h15a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Comments<span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;color:#94928D;font-variant-numeric:tabular-nums">1</span></button>
+      </nav>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" aria-pressed="false" style="display:flex;align-items:center;gap:6px;height:32px;box-sizing:border-box;padding:0 11px 0 10px;border:1px solid #43423F;border-radius:6px;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z M13.5 7l3 3"/></svg>Write</button>
+        <button type="button" style="display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border:0;border-radius:6px;background:#D7352D;color:#FFFFFF;font-size:14px;line-height:20px;font-weight:700;cursor:pointer"><span aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:#FFFFFF"></span>Present</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Rundown strip (editor part only) -->
+  <section aria-label="Rundown" style="position:absolute;left:0;top:52px;width:952px;height:72px;box-sizing:border-box;background:#171614;border-bottom:1px solid #2E2E2B">
+    <div style="position:absolute;left:20px;top:0;width:912px;height:71px">
+      <span aria-hidden="true" style="position:absolute;left:0px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:35px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:70px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:105px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:140px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:175px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:210px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:246px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:281px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:316px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:351px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:386px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:421px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:456px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:491px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:526px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:561px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:596px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:631px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:666px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:702px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:737px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:772px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:807px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:842px;top:18px;width:1px;height:8px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:877px;top:22px;width:1px;height:4px;background:#43423F"></span><span aria-hidden="true" style="position:absolute;left:911px;top:22px;width:1px;height:4px;background:#43423F"></span>
+
+      <span style="position:absolute;left:4px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">0:00</span>
+      <span style="position:absolute;left:109px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">0:15</span>
+      <span style="position:absolute;left:214px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">0:30</span>
+      <span style="position:absolute;left:320px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">0:45</span>
+      <span style="position:absolute;left:425px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">1:00</span>
+      <span style="position:absolute;left:530px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">1:15</span>
+      <span style="position:absolute;left:635px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">1:30</span>
+      <span style="position:absolute;left:741px;top:3px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11px;line-height:12px;color:#94928D;font-variant-numeric:tabular-nums">1:45</span>
+
+      <span aria-hidden="true" style="position:absolute;left:666.5px;top:30px;width:175.4px;height:30px;background-image:repeating-linear-gradient(-45deg,#43423F 0 1px,transparent 1px 6px)"></span>
+      <span style="position:absolute;left:754.2px;top:38px;transform:translateX(-50%);padding:0 4px;background:#171614;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:11px;line-height:14px;color:#94928D;font-variant-numeric:tabular-nums">0:25</span>
+
+      <button type="button" aria-label="Scene 01, 0:15, shot" style="position:absolute;left:0px;top:30px;width:103.2px;height:30px;box-sizing:border-box;padding:0 8px;border:0;border-radius:3px;background:#2A2926;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;line-height:14px;font-variant-numeric:tabular-nums;cursor:pointer"><span style="color:#B2B1AB">01</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span style="color:#94928D">0:15</span></button>
+      <button type="button" aria-label="Scene 02, 0:16, shot" style="position:absolute;left:105.2px;top:30px;width:110.2px;height:30px;box-sizing:border-box;padding:0 8px;border:0;border-radius:3px;background:#2A2926;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;line-height:14px;font-variant-numeric:tabular-nums;cursor:pointer"><span style="color:#B2B1AB">02</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span style="color:#94928D">0:16</span></button>
+      <button type="button" aria-current="true" aria-label="Scene 03, 0:19, ready — current scene" style="position:absolute;left:217.5px;top:30px;width:131.3px;height:30px;box-sizing:border-box;padding:0 8px;border:0;border-top:2px solid #F9B64F;border-radius:3px;background:#4A3A1C;outline:1.5px solid #80BDFB;outline-offset:0;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;line-height:14px;font-variant-numeric:tabular-nums;cursor:pointer"><span style="color:#ECEBE7">03</span><span style="color:#B2B1AB">0:19</span></button>
+      <button type="button" aria-label="Scene 04, 0:14, to do" style="position:absolute;left:350.8px;top:30px;width:96.2px;height:30px;box-sizing:border-box;padding:0 8px;border:1px solid #43423F;border-radius:3px;background:transparent;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;line-height:14px;font-variant-numeric:tabular-nums;cursor:pointer"><span style="color:#ECEBE7">04</span><span style="color:#94928D">0:14</span></button>
+      <button type="button" aria-label="Scene 05, 0:14, to do" style="position:absolute;left:449px;top:30px;width:96.2px;height:30px;box-sizing:border-box;padding:0 8px;border:1px solid #43423F;border-radius:3px;background:transparent;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;line-height:14px;font-variant-numeric:tabular-nums;cursor:pointer"><span style="color:#ECEBE7">05</span><span style="color:#94928D">0:14</span></button>
+      <button type="button" aria-label="Scene 06, 0:17, to do" style="position:absolute;left:547.2px;top:30px;width:117.3px;height:30px;box-sizing:border-box;padding:0 8px;border:1px solid #43423F;border-radius:3px;background:transparent;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12px;line-height:14px;font-variant-numeric:tabular-nums;cursor:pointer"><span style="color:#ECEBE7">06</span><span style="color:#94928D">0:17</span></button>
+
+      <span aria-hidden="true" style="position:absolute;left:65px;top:52px;width:2px;height:8px;border-radius:1px 1px 0 0;background:#64D1D7"></span>
+      <span aria-hidden="true" style="position:absolute;left:316px;top:52px;width:2px;height:8px;border-radius:1px 1px 0 0;background:#64D1D7"></span>
+      <span aria-hidden="true" style="position:absolute;left:518px;top:52px;width:2px;height:8px;border-radius:1px 1px 0 0;background:#64D1D7"></span>
+
+      <span style="position:absolute;left:842px;top:3px;transform:translateX(-50%);font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:11px;line-height:12px;color:#ECEBE7;font-variant-numeric:tabular-nums;white-space:nowrap">Target 2:00</span>
+      <span aria-hidden="true" style="position:absolute;left:842px;top:17px;width:0;height:47px;border-left:1px dashed #ECEBE7"></span>
+
+      <svg width="10" height="7" viewBox="0 0 10 7" aria-hidden="true" style="position:absolute;left:212.5px;top:16px"><path d="M0 0h10L5 7z" fill="#80BDFB"/></svg>
+      <span aria-hidden="true" style="position:absolute;left:216.5px;top:22px;width:2px;height:42px;background:#80BDFB"></span>
+    </div>
+  </section>
+
+  <!-- Column heads -->
+  <div style="position:absolute;left:0;top:124px;width:952px;height:40px;box-sizing:border-box;padding:0 20px;border-bottom:1px solid #2E2E2B;background:#0F0E0C;display:grid;grid-template-columns:112px 1fr 1.25fr 80px;column-gap:32px;align-items:center;font-size:13px;line-height:16px;font-weight:600;color:#B2B1AB">
+    <span style="font-weight:450;color:#94928D">Scene</span>
+    <span style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:8px;height:8px;border-radius:50%;background:#80BDFB"></span>Visual</span>
+    <span style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:8px;height:8px;border-radius:50%;background:#F9B64F"></span>Audio</span>
+    <span style="text-align:right">Read</span>
+  </div>
+
+  <!-- Script -->
+  <main style="position:absolute;left:0;top:164px;width:952px">
+    <!-- 01 -->
+    <div style="display:grid;grid-template-columns:112px 1fr 1.25fr 80px;column-gap:32px;padding:18px 20px;border-bottom:1px solid #2E2E2B">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+        <div style="display:flex;align-items:baseline;gap:8px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">
+          <span style="font-size:18px;line-height:28px;color:#B2B1AB">01</span>
+          <span style="font-size:12.5px;line-height:16px;color:#94928D">00:00</span>
+        </div>
+        <button type="button" aria-label="Scene 01 status: Shot. Change status" style="display:flex;align-items:center;gap:7px;height:32px;margin-left:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#B2B1AB;font-size:12.5px;line-height:16px;cursor:pointer"><span aria-hidden="true" style="flex:none;width:10px;height:10px;border-radius:3px;background:#ECEBE7;display:flex;align-items:center;justify-content:center"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#0F0E0C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Shot</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:15px;line-height:1.55;color:#B2B1AB">
+        <p style="margin:0">Cold open. Host at the desk in the <span class="tg tl" style="color:#B2B1AB">home office</span>, lit flat by the ceiling light — then all three lights snap on in one cut.</p>
+        <p style="margin:0;display:flex;align-items:flex-start;gap:8px"><span class="br" style="margin-top:3px">B-roll</span><span>hand hits the wall switch, the lights pop on one by one</span></p>
+        <button type="button" aria-label="Picture for scene 01: medium shot. Open" style="margin-top:6px;width:144px;height:81px;box-sizing:border-box;padding:0;border:1px solid #43423F;border-radius:4px;background-color:#171614;background-image:repeating-linear-gradient(45deg,#232220 0 1px,transparent 1px 8px);display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="padding:0 4px;background:#171614;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:11px;line-height:16px;color:#94928D">MS</span></button>
+      </div>
+      <div style="font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:18px;line-height:1.6;color:#B2B1AB">This is what my desk looked like on camera a year ago. And this is it now. Same room, same camera — three lights that cost less than one decent lens. Let me show you exactly how.</div>
+      <div style="text-align:right;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:14px;line-height:29px;color:#B2B1AB;font-variant-numeric:tabular-nums">0:15</div>
+    </div>
+
+    <!-- 02 -->
+    <div style="display:grid;grid-template-columns:112px 1fr 1.25fr 80px;column-gap:32px;padding:18px 20px;border-bottom:1px solid #2E2E2B">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+        <div style="display:flex;align-items:baseline;gap:8px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">
+          <span style="font-size:18px;line-height:28px;color:#B2B1AB">02</span>
+          <span style="font-size:12.5px;line-height:16px;color:#94928D">00:15</span>
+        </div>
+        <button type="button" aria-label="Scene 02 status: Shot. Change status" style="display:flex;align-items:center;gap:7px;height:32px;margin-left:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#B2B1AB;font-size:12.5px;line-height:16px;cursor:pointer"><span aria-hidden="true" style="flex:none;width:10px;height:10px;border-radius:3px;background:#ECEBE7;display:flex;align-items:center;justify-content:center"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#0F0E0C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Shot</button>
+      </div>
+      <div style="font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:15px;line-height:1.55;color:#B2B1AB">
+        <p style="margin:0">Medium shot, host to camera, <span class="tg tq" style="color:#B2B1AB">lav mic</span> clipped out of sight. <span class="tg tv" style="color:#B2B1AB">Title card</span> animates in over the first line, with the <span class="tg ts" style="color:#B2B1AB">intro sting</span> under it.</p>
+      </div>
+      <div style="font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:18px;line-height:1.6;color:#B2B1AB">Hi, I'm Sam, and on this channel I make videos about making videos. If you film yourself at home and it always looks a bit flat, this one's for you. We'll build it in three steps: <strong style="font-weight:700">key</strong>, <strong style="font-weight:700">fill</strong> and <strong style="font-weight:700">background</strong>.</div>
+      <div style="text-align:right;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:14px;line-height:29px;color:#B2B1AB;font-variant-numeric:tabular-nums">0:16</div>
+    </div>
+
+    <!-- 03 (scene of the selected shot) -->
+    <div style="display:grid;grid-template-columns:112px 1fr 1.25fr 80px;column-gap:32px;padding:18px 20px;border-bottom:1px solid #2E2E2B;background:#171614">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+        <div style="display:flex;align-items:baseline;gap:8px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">
+          <span style="font-size:18px;line-height:28px;color:#ECEBE7">03</span>
+          <span style="font-size:12.5px;line-height:16px;color:#94928D">00:31</span>
+        </div>
+        <button type="button" aria-label="Scene 03 status: Ready. Change status" style="display:flex;align-items:center;gap:7px;height:32px;margin-left:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#ECEBE7;font-size:12.5px;line-height:16px;cursor:pointer"><span aria-hidden="true" style="flex:none;width:10px;height:10px;border-radius:3px;background:#F9B64F"></span>Ready</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:15px;line-height:1.55;color:#D6D5D0">
+        <p style="margin:0">Wide: the <span class="tg tp">softbox</span> on a <span class="tg tq">light stand</span>, 45° off to camera left, just above eye line.</p>
+        <p style="margin:0"><span class="tg tv">Lower third</span>: “Key light — $65”</p>
+        <p style="margin:0;display:flex;align-items:flex-start;gap:8px"><span class="br" style="margin-top:3px">B-roll</span><span>close-up of the key light going up, diffusion sock pulled on</span></p>
+      </div>
+      <div style="font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:18px;line-height:1.6;color:#ECEBE7">Step one is your key light — the brightest one, and the one that shapes your face. A cheap one is fine. Put it off to one side and <span class="cm">a little above your eyes</span><button type="button" aria-label="Open comment from Priya" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:14px;box-sizing:border-box;margin-left:2px;padding:0;border:1px solid #F9B64F;border-radius:4px 4px 4px 1px;background:transparent;color:#F9B64F;vertical-align:0.55em;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:10px;line-height:1;cursor:pointer">1</button>, and angle it so it skims across you instead of hitting you head-on.</div>
+      <div style="text-align:right;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:14px;line-height:29px;color:#ECEBE7;font-variant-numeric:tabular-nums">0:19</div>
+    </div>
+    <!-- 04 -->
+    <div style="display:grid;grid-template-columns:112px 1fr 1.25fr 80px;column-gap:32px;padding:18px 20px;border-bottom:1px solid #2E2E2B">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+        <div style="display:flex;align-items:baseline;gap:8px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">
+          <span style="font-size:18px;line-height:28px;color:#ECEBE7">04</span>
+          <span style="font-size:12.5px;line-height:16px;color:#94928D">00:50</span>
+        </div>
+        <button type="button" aria-label="Scene 04 status: To do. Change status" style="display:flex;align-items:center;gap:7px;height:32px;margin-left:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:12.5px;line-height:16px;cursor:pointer"><span aria-hidden="true" style="flex:none;width:10px;height:10px;box-sizing:border-box;border:1.5px solid #94928D;border-radius:3px"></span>To do</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:15px;line-height:1.55;color:#D6D5D0">
+        <p style="margin:0">Same framing, key light only — then a sheet of <span class="tg tp">white foam board</span> slides in on camera right and the shadow side lifts.</p>
+        <p style="margin:0"><span class="tg tv">Lower third</span>: “Fill — $8”</p>
+      </div>
+      <div style="font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:18px;line-height:1.6;color:#ECEBE7">Step two: fill. You don't need a second light for this. Foam board on the other side bounces the key back into the shadows. Move it closer for a softer look, further away for more contrast.</div>
+      <div style="text-align:right;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:14px;line-height:29px;color:#ECEBE7;font-variant-numeric:tabular-nums">0:14</div>
+    </div>
+
+    <!-- 05 -->
+    <div style="display:grid;grid-template-columns:112px 1fr 1.25fr 80px;column-gap:32px;padding:18px 20px;border-bottom:1px solid #2E2E2B">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+        <div style="display:flex;align-items:baseline;gap:8px;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">
+          <span style="font-size:18px;line-height:28px;color:#ECEBE7">05</span>
+          <span style="font-size:12.5px;line-height:16px;color:#94928D">01:04</span>
+        </div>
+        <button type="button" aria-label="Scene 05 status: To do. Change status" style="display:flex;align-items:center;gap:7px;height:32px;margin-left:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:12.5px;line-height:16px;cursor:pointer"><span aria-hidden="true" style="flex:none;width:10px;height:10px;box-sizing:border-box;border:1.5px solid #94928D;border-radius:3px"></span>To do</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:15px;line-height:1.55;color:#D6D5D0">
+        <p style="margin:0">Over-the-shoulder toward the back wall: the <span class="tg tp">RGB tube light</span> on the shelf, washing the wall in amber.</p>
+        <p style="margin:0"><span class="tg tv">Lower third</span>: “Background — $120”</p>
+        <p style="margin:0;display:flex;align-items:flex-start;gap:8px"><span class="br" style="margin-top:3px">B-roll</span><span>slow push-in on the tube light fading from blue to amber</span></p>
+      </div>
+      <div style="font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',Verdana,sans-serif;font-size:18px;line-height:1.6;color:#ECEBE7">Step three is what makes it look expensive: separation. A little colour on the wall behind you pulls you off the background. One RGB tube, set warm, pointed at the wall — never at you.</div>
+      <div style="text-align:right;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:14px;line-height:29px;color:#ECEBE7;font-variant-numeric:tabular-nums">0:14</div>
+    </div>
+  </main>
+
+  <!-- Gear panel
+       Source: #gear-panel in page.html, renderGearList(), tagEntityHtml() and
+       tagEntityDetailHtml() in 08-production-panels.js, TAG_STATUSES in
+       07-production-tags.js. Real controls only: close (Gear has no full-page
+       view, so there is no expand button), group by List / Scene, Packing list
+       (.pdf), per-item status (a click cycles to the next status), jump to the
+       mention, Assigned to with + Person, Notes and links, Rename, Remove label,
+       and the quick-add box, which the app pre-fills with the tracked list.
+       The app has no packed or checked state: packing is ticked off on the
+       printed list.
+
+       Item status lamps (Needed / Sourcing / Have it / Returned) are 12x6 bars
+       with round ends, so they never read as the 10x10 square scene lamps
+       (To do / Ready / Shot) or as the 6px round tag dots:
+         Needed   = unlit: 1.5px #94928D outline, word #94928D
+         Sourcing = half lit: left half #F9B64F inside a #F9B64F outline
+                    (program amber; the app already colours Sourcing with its audio token)
+         Have it  = lit: solid #ECEBE7 (in hand; the same lit white as Shot)
+         Returned = off the list: return-arrow glyph #94928D, word #94928D -->
+  <aside aria-label="Gear" style="position:absolute;left:952px;top:52px;width:488px;height:848px;box-sizing:border-box;background:#171614;border-left:1px solid #2E2E2B;display:flex;flex-direction:column">
+
+    <!-- Panel header -->
+    <div style="flex:none;height:56px;box-sizing:border-box;padding:0 12px 0 20px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:baseline;gap:12px;white-space:nowrap">
+        <h2 style="margin:0;font-size:18px;line-height:24px;font-weight:700;color:#ECEBE7">Gear</h2>
+        <span style="font-size:13px;line-height:16px;color:#94928D"><span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">2</span> items</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <button type="button" aria-label="Close Gear panel" style="width:32px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:#B2B1AB;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Grouping and the packing list: plain text tabs, one hairline -->
+    <div style="flex:none;height:40px;box-sizing:border-box;padding:0 20px;border-bottom:1px solid #2E2E2B;display:flex;align-items:flex-end;justify-content:space-between">
+      <div role="radiogroup" aria-label="Group gear by" style="display:flex;gap:20px">
+        <button type="button" role="radio" aria-checked="true" style="display:flex;align-items:center;height:40px;box-sizing:border-box;margin-bottom:-1px;padding:2px 0 0;border:0;border-bottom:2px solid #ECEBE7;border-radius:0;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer">List</button>
+        <button type="button" role="radio" aria-checked="false" style="display:flex;align-items:center;height:40px;box-sizing:border-box;margin-bottom:-1px;padding:2px 0 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:#94928D;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer">Scene</button>
+      </div>
+      <button type="button" title="Export a printable packing list" aria-label="Packing list: export a printable PDF" style="align-self:center;display:flex;align-items:center;gap:6px;height:32px;margin-right:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 14V3 M7.5 7.5L12 3l4.5 4.5 M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>Packing list</button>
+    </div>
+
+    <!-- Gear list -->
+    <ul aria-label="Gear items" style="flex:1;min-height:0;overflow:hidden;box-sizing:border-box;margin:0;padding:8px 0 0;list-style:none;display:flex;flex-direction:column">
+
+      <!-- lav mic -->
+      <li>
+        <div style="min-height:44px;box-sizing:border-box;padding:6px 20px;display:flex;align-items:flex-start;gap:10px">
+          <span aria-hidden="true" style="flex:none;width:6px;height:6px;margin-top:13px;border-radius:50%;background:#90B888"></span>
+          <button type="button" aria-expanded="false" style="flex:1;min-width:0;padding:6px 0;border:0;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;text-align:left;overflow-wrap:anywhere;cursor:pointer">lav mic</button>
+          <button type="button" title="Have it — click for Returned" aria-label="lav mic: Have it. Click for Returned" style="flex:none;display:flex;align-items:center;gap:7px;height:32px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:12.5px;line-height:16px;white-space:nowrap;cursor:pointer"><span aria-hidden="true" style="flex:none;width:12px;height:6px;border-radius:3px;background:#ECEBE7"></span>Have it</button>
+          <a href="#scene-02" class="pl" title="Go to scene 02, Visual" aria-label="Mentioned in scene 02, Visual" style="flex:none;height:32px;display:flex;align-items:center;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12.5px;line-height:16px;color:#94928D;font-variant-numeric:tabular-nums">02</a>
+        </div>
+      </li>
+
+      <!-- light stand: open -->
+      <li style="background:#21201E;padding-bottom:12px">
+        <div style="min-height:44px;box-sizing:border-box;padding:6px 20px;display:flex;align-items:flex-start;gap:10px">
+          <span aria-hidden="true" style="flex:none;width:6px;height:6px;margin-top:13px;border-radius:50%;background:#90B888"></span>
+          <button type="button" aria-expanded="true" aria-controls="gear-light-stand" style="flex:1;min-width:0;padding:6px 0;border:0;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;text-align:left;overflow-wrap:anywhere;cursor:pointer">light stand</button>
+          <button type="button" title="Have it — click for Returned" aria-label="light stand: Have it. Click for Returned" style="flex:none;display:flex;align-items:center;gap:7px;height:32px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:12.5px;line-height:16px;white-space:nowrap;cursor:pointer"><span aria-hidden="true" style="flex:none;width:12px;height:6px;border-radius:3px;background:#ECEBE7"></span>Have it</button>
+          <a href="#scene-03" class="pl" title="Go to scene 03, Visual" aria-label="Mentioned in scene 03, Visual" style="flex:none;height:32px;display:flex;align-items:center;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12.5px;line-height:16px;color:#94928D;font-variant-numeric:tabular-nums">03</a>
+        </div>
+
+        <dl id="gear-light-stand" style="margin:0;padding:0 20px 0 36px;display:grid;grid-template-columns:88px minmax(0,1fr);grid-auto-rows:minmax(28px,auto);align-items:center">
+          <dt style="font-size:12.5px;line-height:16px;color:#94928D">Status</dt>
+          <dd style="margin:0;display:flex"><button type="button" class="ev" aria-haspopup="menu" aria-label="Status: Have it. Change" style="display:flex;align-items:center;gap:8px;height:28px;box-sizing:border-box;margin-left:-7px;padding:0 4px 0 6px;border-color:#43423F;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;cursor:pointer"><span aria-hidden="true" style="flex:none;width:12px;height:6px;border-radius:3px;background:#ECEBE7"></span>Have it<svg class="cv" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94928D" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="opacity:1"><path d="M6 9.5l6 6 6-6"/></svg></button></dd>
+
+          <dt style="font-size:12.5px;line-height:16px;color:#94928D">Mentions</dt>
+          <dd style="margin:0;display:flex"><a href="#scene-03" class="pl" title="Go to this mention in scene 03" style="font-size:14px;line-height:20px;color:#ECEBE7;white-space:nowrap"><span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-variant-numeric:tabular-nums">03</span> Visual</a></dd>
+
+          <dt style="font-size:12.5px;line-height:16px;color:#94928D"><label for="gear-light-stand-owner">Assigned to</label></dt>
+          <dd style="margin:0;display:flex;align-items:center;gap:2px"><span class="ev" style="position:relative;display:flex;align-items:center;height:28px;box-sizing:border-box;margin-left:-7px"><select id="gear-light-stand-owner" style="-webkit-appearance:none;appearance:none;height:26px;padding:0 26px 0 6px;border:0;border-radius:5px;background:transparent;color:#94928D;font-size:14px;line-height:20px;cursor:pointer">
+              <option>Unassigned</option>
+              <option>Sam</option>
+              <option>Priya</option>
+            </select><svg class="cv" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94928D" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="position:absolute;right:6px;top:6px;pointer-events:none"><path d="M6 9.5l6 6 6-6"/></svg></span><button type="button" title="Add someone to the crew list" aria-label="Add a person to the crew list" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Person</button></dd>
+
+          <dt style="align-self:start;padding-top:6px;font-size:12.5px;line-height:16px;color:#94928D"><label for="gear-light-stand-notes">Notes &amp; links</label></dt>
+          <dd style="margin:0;display:flex;min-width:0"><textarea id="gear-light-stand-notes" class="ev" rows="2" placeholder="Reference link, file path, spec, where it’s coming from…" style="display:block;flex:1;min-width:0;height:48px;box-sizing:border-box;margin-left:-7px;padding:3px 6px;resize:none;overflow:hidden;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px"></textarea></dd>
+        </dl>
+
+        <div style="margin-top:4px;padding:0 20px 0 36px;display:flex;align-items:center;justify-content:space-between">
+          <button type="button" style="display:flex;align-items:center;gap:8px;height:32px;margin-left:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#94928D;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z M13.5 7l3 3"/></svg>Rename</button>
+          <button type="button" aria-haspopup="menu" aria-label="More actions for this item: Remove label" style="width:32px;height:32px;margin-right:-7px;padding:0;border:0;border-radius:6px;background:transparent;color:#B2B1AB;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+        </div>
+      </li>
+    </ul>
+
+    <!-- Quick add: the whole list as text, one item per line, pre-filled with what is tracked -->
+    <form action="#" style="flex:none;box-sizing:border-box;margin:0;padding:16px 20px;border-top:1px solid #2E2E2B;display:flex;flex-direction:column;gap:8px">
+      <label for="gear-quickadd" style="font-size:12.5px;line-height:16px;color:#94928D">Add gear — one item per line</label>
+      <textarea id="gear-quickadd" rows="3" aria-describedby="gear-quickadd-hint" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand" style="display:block;width:100%;height:76px;box-sizing:border-box;margin:0;padding:8px 12px;border:0;border-radius:6px;background:#0F0E0C;color:#ECEBE7;font-size:14px;line-height:20px;resize:none;overflow:hidden">lav mic
+light stand
+</textarea>
+      <div style="display:flex;align-items:flex-start;gap:16px">
+        <span id="gear-quickadd-hint" style="flex:1;min-width:0;padding-top:8px;font-size:12.5px;line-height:16px;color:#94928D">Remove a line to un-track it — unless it’s still tagged in the script.</span>
+        <button type="submit" style="flex:none;height:32px;margin-right:-8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer">Update list</button>
+      </div>
+    </form>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

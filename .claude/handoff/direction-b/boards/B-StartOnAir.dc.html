@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Start page — On air</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:#80BDFB;text-decoration:none}a:hover{color:#ECEBE7}
+::selection{background:#2F4A66;color:#ECEBE7}
+:focus-visible{outline:2px solid #80BDFB;outline-offset:2px}
+.qa{color:#B2B1AB;text-decoration:underline;text-decoration-color:#43423F;text-underline-offset:4px}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;overflow:hidden;position:relative;background:#0F0E0C;color:#ECEBE7;font-family:Chivo,'Helvetica Neue','Segoe UI',sans-serif;font-size:14px;line-height:20px;font-weight:450;-webkit-font-smoothing:antialiased">
+
+  <!-- Header -->
+  <header style="position:absolute;left:0;top:0;width:1440px;height:56px;box-sizing:border-box;padding:0 20px;display:flex;align-items:center;justify-content:space-between">
+    <a href="#" aria-label="Splitpage" style="display:flex;align-items:center;gap:8px;height:32px;color:#ECEBE7">
+      <svg width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>
+      <span style="font-weight:700;font-size:15px;letter-spacing:-0.005em">Splitpage</span>
+    </a>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button type="button" style="display:flex;align-items:center;gap:8px;height:32px;box-sizing:border-box;padding:0 12px 0 10px;border:1px solid #43423F;border-radius:6px;background:transparent;color:#ECEBE7;font-size:14px;line-height:20px;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3.25"/><path d="M3 19.5a6 6 0 0 1 12 0 M15.5 5.5a3.25 3.25 0 0 1 0 6.3 M17.5 14a6 6 0 0 1 3.5 5.5"/></svg>Join a shared session</button>
+      <button type="button" style="display:flex;align-items:center;gap:8px;height:32px;box-sizing:border-box;padding:0 12px 0 10px;border:1px solid #43423F;border-radius:6px;background:#21201E;color:#ECEBE7;font-size:14px;line-height:20px;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>Open a file…</button>
+    </div>
+  </header>
+
+  <!-- Hero band: programme clock + last script's rundown -->
+  <section aria-labelledby="new-h" style="position:absolute;left:0;top:56px;width:1440px;height:220px;box-sizing:border-box;background:#171614;border-bottom:1px solid #2E2E2B">
+
+    <!-- Slate: clock, tally, heading -->
+    <div style="position:absolute;left:120px;top:28px;height:76px;display:flex;align-items:center;gap:28px">
+      <span aria-hidden="true" style="flex:none;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:96px;line-height:76px;letter-spacing:-0.03em;color:#ECEBE7;font-variant-numeric:tabular-nums;white-space:nowrap">00:00</span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span aria-hidden="true" style="flex:none;width:14px;height:14px;border-radius:50%;background:#F45246"></span>
+          <h1 id="new-h" style="margin:0;font-size:28px;line-height:34px;font-weight:700;letter-spacing:-0.01em;color:#ECEBE7;white-space:nowrap">New script</h1>
+        </div>
+        <p style="margin:0;padding-left:26px;font-size:15px;line-height:22px;color:#B2B1AB;white-space:nowrap">Pick a layout, or carry on where you left off.</p>
+      </div>
+    </div>
+
+    <!-- Carry on: title, rundown, continue -->
+    <div style="position:absolute;left:120px;top:132px;width:1200px;height:60px;display:flex;align-items:flex-end;gap:28px">
+      <div style="flex:none;width:240px;box-sizing:border-box;padding-bottom:3px;display:flex;flex-direction:column;gap:4px">
+        <span style="font-size:15px;line-height:20px;font-weight:600;color:#ECEBE7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Three Lights for Under $200</span>
+        <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap;font-variant-numeric:tabular-nums">2 h ago · 1:35 · 2/6 shot</span>
+      </div>
+
+      <div role="group" aria-label="Rundown of Three Lights for Under $200" style="flex:none;position:relative;width:776px;height:60px">
+        <span style="position:absolute;left:264px;top:0;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:11px;line-height:12px;color:#80BDFB;font-variant-numeric:tabular-nums;white-space:nowrap">00:31</span>
+
+        <button type="button" aria-label="Scene 01, 0:15, shot" style="position:absolute;left:0;top:14px;width:121px;height:46px;box-sizing:border-box;padding:7px 10px;border:0;border-radius:3px;background:#ECEBE7;color:#0F0E0C;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums;text-align:left;cursor:pointer">
+          <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;line-height:14px">01<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0F0E0C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+          <span style="font-weight:450;font-size:12px;line-height:14px">0:15</span>
+        </button>
+        <button type="button" aria-label="Scene 02, 0:16, shot" style="position:absolute;left:123px;top:14px;width:129px;height:46px;box-sizing:border-box;padding:7px 10px;border:0;border-radius:3px;background:#ECEBE7;color:#0F0E0C;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums;text-align:left;cursor:pointer">
+          <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;line-height:14px">02<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0F0E0C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+          <span style="font-weight:450;font-size:12px;line-height:14px">0:16</span>
+        </button>
+        <button type="button" aria-current="true" aria-label="Scene 03, 0:19, ready — you left off here" style="position:absolute;left:254px;top:14px;width:153px;height:46px;box-sizing:border-box;padding:7px 10px 7px 12px;border:0;border-radius:3px;background:#F9B64F;color:#0F0E0C;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums;text-align:left;cursor:pointer">
+          <span style="font-weight:600;font-size:13px;line-height:14px">03</span>
+          <span style="font-weight:450;font-size:12px;line-height:14px">0:19</span>
+        </button>
+        <button type="button" aria-label="Scene 04, 0:14, to do" style="position:absolute;left:409px;top:14px;width:113px;height:46px;box-sizing:border-box;padding:6px 9px;border:1px solid #94928D;border-radius:3px;background:transparent;color:#ECEBE7;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums;text-align:left;cursor:pointer">
+          <span style="font-weight:600;font-size:13px;line-height:14px">04</span>
+          <span style="font-weight:450;font-size:12px;line-height:14px;color:#94928D">0:14</span>
+        </button>
+        <button type="button" aria-label="Scene 05, 0:14, to do" style="position:absolute;left:524px;top:14px;width:113px;height:46px;box-sizing:border-box;padding:6px 9px;border:1px solid #94928D;border-radius:3px;background:transparent;color:#ECEBE7;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums;text-align:left;cursor:pointer">
+          <span style="font-weight:600;font-size:13px;line-height:14px">05</span>
+          <span style="font-weight:450;font-size:12px;line-height:14px;color:#94928D">0:14</span>
+        </button>
+        <button type="button" aria-label="Scene 06, 0:17, to do" style="position:absolute;left:639px;top:14px;width:137px;height:46px;box-sizing:border-box;padding:6px 9px;border:1px solid #94928D;border-radius:3px;background:transparent;color:#ECEBE7;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-variant-numeric:tabular-nums;text-align:left;cursor:pointer">
+          <span style="font-weight:600;font-size:13px;line-height:14px">06</span>
+          <span style="font-weight:450;font-size:12px;line-height:14px;color:#94928D">0:17</span>
+        </button>
+
+        <svg width="10" height="7" viewBox="0 0 10 7" aria-hidden="true" style="position:absolute;left:248px;top:5px"><path d="M0 0h10L5 7z" fill="#80BDFB"/></svg>
+        <span aria-hidden="true" style="position:absolute;left:252px;top:11px;width:2px;height:49px;background:#80BDFB"></span>
+      </div>
+
+      <button type="button" aria-label="Continue Three Lights for Under $200" style="flex:none;width:128px;height:44px;margin-bottom:1px;box-sizing:border-box;padding:0 16px;border:0;border-radius:6px;background:#F9B64F;color:#0F0E0C;display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;line-height:20px;font-weight:700;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>Continue</button>
+    </div>
+  </section>
+
+  <!-- Starters -->
+  <div role="group" aria-label="Starter scripts" style="position:absolute;left:120px;top:308px;width:1200px;display:grid;grid-template-columns:repeat(4,282px);gap:24px">
+
+    <button type="button" style="display:flex;flex-direction:column;align-items:flex-start;width:282px;height:148px;box-sizing:border-box;padding:16px 18px 18px;border:1px dashed #43423F;border-radius:10px;background:transparent;color:#ECEBE7;text-align:left;gap:4px;cursor:pointer">
+      <span style="font-size:15px;line-height:20px;font-weight:600">Blank script</span>
+      <span style="font-size:13px;line-height:18px;color:#B2B1AB">One empty scene, and nothing else.</span>
+      <span aria-hidden="true" style="margin-top:auto;width:32px;height:32px;box-sizing:border-box;border:1px solid #43423F;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#B2B1AB"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
+    </button>
+
+    <button type="button" style="display:flex;flex-direction:column;align-items:stretch;width:282px;height:148px;box-sizing:border-box;padding:16px 18px 18px;border:1px solid #2E2E2B;border-radius:10px;background:#171614;color:#ECEBE7;text-align:left;gap:4px;cursor:pointer">
+      <span style="font-size:15px;line-height:20px;font-weight:600">To-camera video</span>
+      <span style="font-size:13px;line-height:18px;color:#B2B1AB">Hook, intro, sections, call to action.</span>
+      <span style="display:flex;align-items:baseline;gap:6px;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">Three Lights for Under $200</span><span aria-hidden="true">·</span><span style="flex:none;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11.5px;font-variant-numeric:tabular-nums">6 scenes</span></span>
+      <span style="margin-top:auto;display:flex;align-items:center;gap:12px">
+        <span aria-hidden="true" style="flex:1;display:flex;gap:1px;height:8px">
+          <span style="flex:15 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:16 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:19 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:14 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:14 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:17 1 0;border-radius:2px;background:#2E2E2B"></span>
+        </span>
+        <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12.5px;line-height:16px;color:#ECEBE7;font-variant-numeric:tabular-nums">1:35</span>
+      </span>
+    </button>
+
+    <button type="button" style="display:flex;flex-direction:column;align-items:stretch;width:282px;height:148px;box-sizing:border-box;padding:16px 18px 18px;border:1px solid #2E2E2B;border-radius:10px;background:#171614;color:#ECEBE7;text-align:left;gap:4px;cursor:pointer">
+      <span style="font-size:15px;line-height:20px;font-weight:600">Interview</span>
+      <span style="font-size:13px;line-height:18px;color:#B2B1AB">Questions on the right, cutaways on the left.</span>
+      <span style="display:flex;align-items:baseline;gap:6px;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">Meet the Baker — Crumb &amp; Co.</span><span aria-hidden="true">·</span><span style="flex:none;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11.5px;font-variant-numeric:tabular-nums">6 scenes</span></span>
+      <span style="margin-top:auto;display:flex;align-items:center;gap:12px">
+        <span aria-hidden="true" style="flex:1;display:flex;gap:1px;height:8px">
+          <span style="flex:7 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:9 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:10 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:7 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:9 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:13 1 0;border-radius:2px;background:#2E2E2B"></span>
+        </span>
+        <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12.5px;line-height:16px;color:#ECEBE7;font-variant-numeric:tabular-nums">0:55</span>
+      </span>
+    </button>
+
+    <button type="button" style="display:flex;flex-direction:column;align-items:stretch;width:282px;height:148px;box-sizing:border-box;padding:16px 18px 18px;border:1px solid #2E2E2B;border-radius:10px;background:#171614;color:#ECEBE7;text-align:left;gap:4px;cursor:pointer">
+      <span style="font-size:15px;line-height:20px;font-weight:600">30-second spot</span>
+      <span style="font-size:13px;line-height:18px;color:#B2B1AB">Six timed beats with a packshot.</span>
+      <span style="display:flex;align-items:baseline;gap:6px;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">Keepwarm Travel Mug — 30s</span><span aria-hidden="true">·</span><span style="flex:none;font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:11.5px;font-variant-numeric:tabular-nums">6 scenes</span></span>
+      <span style="margin-top:auto;display:flex;align-items:center;gap:12px">
+        <span aria-hidden="true" style="flex:1;display:flex;gap:1px;height:8px">
+          <span style="flex:8 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:6 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:7 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:5 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:4 1 0;border-radius:2px;background:#2E2E2B"></span><span style="flex:2 1 0;border-radius:2px;background:#2E2E2B"></span>
+        </span>
+        <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-weight:500;font-size:12.5px;line-height:16px;color:#ECEBE7;font-variant-numeric:tabular-nums">0:32</span>
+      </span>
+    </button>
+  </div>
+
+  <!-- Recent -->
+  <section aria-labelledby="recent-h" style="position:absolute;left:120px;top:492px;width:894px;display:flex;flex-direction:column;gap:8px">
+    <h2 id="recent-h" style="margin:0;font-size:14px;line-height:22px;font-weight:600;color:#B2B1AB">Recent</h2>
+    <div style="display:flex;flex-direction:column">
+      <button type="button" style="display:flex;align-items:center;gap:14px;width:100%;height:56px;box-sizing:border-box;padding:0 4px;border:0;border-radius:0;background:transparent;color:#ECEBE7;text-align:left;cursor:pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5"/></svg>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:14.5px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Three Lights for Under $200</span>
+          <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap;font-variant-numeric:tabular-nums">three-lights.splitpage · 1:35 · 2/6 shot</span>
+        </span>
+        <span style="flex:none;font-size:13px;line-height:16px;color:#94928D">2 h ago</span>
+      </button>
+      <button type="button" style="display:flex;align-items:center;gap:14px;width:100%;height:57px;box-sizing:border-box;padding:0 4px;border:0;border-top:1px solid #2E2E2B;border-radius:0;background:transparent;color:#ECEBE7;text-align:left;cursor:pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5"/></svg>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:14.5px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Meet the Baker — Crumb &amp; Co.</span>
+          <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap;font-variant-numeric:tabular-nums">crumb-and-co-interview.splitpage · 0:55</span>
+        </span>
+        <span style="flex:none;font-size:13px;line-height:16px;color:#94928D">Yesterday</span>
+      </button>
+      <button type="button" style="display:flex;align-items:center;gap:14px;width:100%;height:57px;box-sizing:border-box;padding:0 4px;border:0;border-top:1px solid #2E2E2B;border-radius:0;background:transparent;color:#ECEBE7;text-align:left;cursor:pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5"/></svg>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:14.5px;line-height:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Keepwarm Travel Mug — 30s</span>
+          <span style="font-family:'Chivo Mono',ui-monospace,'SF Mono',Consolas,monospace;font-size:12px;line-height:16px;color:#94928D;white-space:nowrap;font-variant-numeric:tabular-nums">keepwarm-30s.md · 0:32</span>
+        </span>
+        <span style="flex:none;font-size:13px;line-height:16px;color:#94928D">12 Sep</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Join a shared session -->
+  <div style="position:absolute;left:1038px;top:522px;width:282px;height:170px;box-sizing:border-box;padding:20px;border-radius:10px;background:#171614;display:flex;flex-direction:column;align-items:flex-start;gap:4px">
+    <h3 style="margin:0;font-size:15px;line-height:22px;font-weight:600;color:#ECEBE7">Join a shared session</h3>
+    <p style="margin:0;font-size:13.5px;line-height:19px;color:#B2B1AB">Open the link you were sent, or connect to a server with its PIN.</p>
+    <button type="button" style="margin-top:auto;height:32px;box-sizing:border-box;padding:0 14px;border:1px solid #43423F;border-radius:6px;background:#21201E;color:#ECEBE7;font-size:14px;line-height:20px;cursor:pointer">Connect…</button>
+  </div>
+
+  <!-- Drop zone -->
+  <div style="position:absolute;left:120px;top:724px;width:1200px;display:flex;flex-direction:column;gap:16px">
+    <div style="height:56px;box-sizing:border-box;padding:0 24px;border:1px dashed #43423F;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:14px;white-space:nowrap">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B2B1AB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11 M7.5 9.5L12 14l4.5-4.5 M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <span style="font-size:15px;line-height:22px;font-weight:600;color:#ECEBE7">Drop a script here</span>
+      <span style="font-size:13.5px;line-height:20px;color:#B2B1AB">.md, .splitpage, .docx, .txt or .csv — or <a href="#">paste one</a> · <a href="#">import a Google Doc link</a></span>
+    </div>
+    <nav aria-label="Help" style="display:flex;justify-content:center;align-items:center;gap:12px;font-size:13.5px;line-height:20px;color:#94928D">
+      <a class="qa" href="#">Take the tour</a>
+      <span aria-hidden="true">·</span>
+      <a class="qa" href="#">Tagging cheat sheet</a>
+      <span aria-hidden="true">·</span>
+      <a class="qa" href="#">Look at the example script</a>
+    </nav>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
