@@ -182,12 +182,19 @@ export function rundownTicks(spanSeconds, pxPerSecond, widthPx) {
    a lens for them. The anchor is kept within the magnified room either
    side of the focus (it cannot drift further than that), so the rest of
    the script is only ever shrunk, never stretched. */
-export var LENS_MIN_PX = 140;
-export var LENS_RADIUS_PX = 40;
+/* Kept tight on purpose: at 140px over 40px of reach, a long script's
+   run of short scenes all grew at once and the strip lurched under the
+   mouse (Adam, beta.6). A few scenes around the pointer grow; the rest
+   hardly move. */
+export var LENS_MIN_PX = 96;
+export var LENS_RADIUS_PX = 14;
 var LENS_MIN_SLOT_PX = 4;
 /* The least share of its unmagnified width either side keeps: however
    much the lens wants, what is outside it never vanishes. */
 var LENS_FLOOR = 0.12;
+/* The most of the strip the lens may take in all, however many scenes
+   are in reach: past this every magnified scene gives some back. */
+var LENS_MAX_SHARE = 0.3;
 
 /* The to-scale knots of `blocks` (rundownBlocks) on a strip `widthPx`
    wide. */
@@ -256,9 +263,10 @@ export function rundownLens(slots, focus, anchor, opts) {
       EL += extraL[j]; ER += extraR[j];
     }
   }
-  /* Everything still has to fit: no more than (1 - floor) of the strip is
-     extra, however many scenes want it. */
-  var c = EL + ER > (1 - LENS_FLOOR) * W ? (1 - LENS_FLOOR) * W / (EL + ER) : 1;
+  /* Everything still has to fit, and the lens stays a lens: no more than
+     LENS_MAX_SHARE of the strip is extra, however many scenes want it. */
+  var maxExtra = Math.min(1 - LENS_FLOOR, LENS_MAX_SHARE) * W;
+  var c = EL + ER > maxExtra ? maxExtra / (EL + ER) : 1;
   EL *= c; ER *= c;
   /* The anchor never drifts further from the focus than the magnified room
      on the side it drifts towards. */
@@ -300,6 +308,14 @@ export function rundownLens(slots, focus, anchor, opts) {
   if (fw > 0) {
     var phiF = (p - slots[jp]) / fw;
     var D = Y[jp + 1] - Y[jp];
+    /* Near either end of the strip the focus scene may have grown wider
+       than the room on one side of the anchor; narrow it just enough that
+       the focus still lands on the anchor rather than the block being
+       pushed off the end (which would slide it under the pointer). */
+    if (jp > 0 && jp + 1 < m) {
+      if (phiF > 0) D = Math.min(D, a / phiF);
+      if (phiF < 1) D = Math.min(D, (W - a) / (1 - phiF));
+    }
     var oldL = Y[jp], oldR = Y[jp + 1];
     /* the strip's two ends never move */
     var newL = jp === 0 ? 0 : jp + 1 === m ? W - D : clamp(a - phiF * D, 0, W - D);
