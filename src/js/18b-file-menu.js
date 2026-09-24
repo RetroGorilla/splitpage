@@ -563,6 +563,9 @@ export function __init() {
   window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
   window.addEventListener("keydown", onShortcutKeydown);
   renderKeyChips(menu);
+  /* the header's Search button (#175) wears the same Ctrl K chip */
+  var search = el("btn-command");
+  if (search && search.parentElement) renderKeyChips(search.parentElement);
 
   /* ---- test hook ----
      What a headless suite cannot reach by clicking: the view the card is

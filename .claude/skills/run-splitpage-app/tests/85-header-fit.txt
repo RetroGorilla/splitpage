@@ -1,0 +1,281 @@
+# The header at every width (#174, #183, #166, #175, #190, #189, #187, #188).
+#
+# Nothing in the header row may overlap at any width from 761px up — the
+# File button (the mark and the name, #166), the title, the save status,
+# each of the document's facts and your name (#identity-chip), the clock,
+# Search (#175), the panel toggles, Write and Present. An overflow there is
+# not clipped and not counted in scrollWidth (it spills out of a flex-end
+# box), so this compares bounding boxes, pairwise.
+#
+# The widths come from #174 (761 800 900 1000 1100 1240 1280), #183 (1440
+# 1920) and #190 (2560 3440). A suite can set the device metrics only once
+# (SKILL: changing them mid-session aborts the CDP socket), so the app is
+# loaded a second time in an iframe on this page and the IFRAME is resized:
+# its media queries answer to its own width, the same as a window's, and
+# its layout is read straight out of its document (same origin).
+#
+# Then, at the widths each issue names:
+#   #183  a 60-character title ends in "…" (it is cut short: scrollWidth >
+#         clientWidth) with the whole of it as the tooltip, your name is
+#         visible, unobstructed and the element at its own centre (so it is
+#         clickable), and clicking into the title gives the whole title back
+#   #166  opening each panel changes neither the header's height nor its
+#         left edge, nor the File button's place
+#   #190  at 2560 and 3440 the row runs from the window's left edge to its
+#         right, with or without a panel, and the script is still 1800px
+#         (1760 of #rows plus its rows' 20px either side), centred
+#   #189  the rundown strip runs the window's width with no panel, and to
+#         the panel's left edge with one
+#   #187  one slim scroll-bar style everywhere; the page's own bar goes
+#         while a panel is open
+#   #188  an open panel's right edge is the window's, its top the row's
+#         bottom edge
+#   #175  Search is there at every width, the field on a wide window, the
+#         word and its keycaps a step down, the magnifier below 1600 and on
+#         a phone width
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 1600 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ var f=document.createElement('iframe'); f.id='hf'; f.style.cssText='position:fixed;left:0;top:0;width:1440px;height:800px;border:0;z-index:99999;background:#fff'; f.src='/index.html'; document.body.appendChild(f); return true; })()
+wait document.getElementById('hf').contentDocument && document.getElementById('hf').contentDocument.querySelectorAll('#rows .row').length > 0
+sleep 800
+
+eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__at=function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); return true; }; W.__boxes=function(){ var d=W.__d(); var sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',clock:'#runtime-chip',search:'#btn-command',panels:'.btn-group',write:'#btn-write',present:'#btn-present'}; var out=[]; Object.keys(sel).forEach(function(k){ var e=d.querySelector(sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__check=function(w){ W.__at(w); var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['file','title','save','clock','search','panels','write','present'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(!bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); W.__last=bad.length? w+': '+bad.join(', ') : ''; return W.__last; }; W.__title=function(t){ var i=W.__d().getElementById('doc-title'); i.value=t; i.dispatchEvent(new Event('input',{bubbles:true})); i.blur(); return true; }; W.__panel=function(id){ W.__d().getElementById(id).click(); return true; }; W.__hdr=function(){ var r=W.__d().querySelector('.topbar-row').getBoundingClientRect(); var f=W.__d().getElementById('btn-file').getBoundingClientRect(); return [Math.round(r.left),Math.round(r.height),Math.round(f.left)].join(','); }; return true; })()
+expect true
+
+# =============================================================================
+# #174: no overlap, short title, no panel
+# =============================================================================
+eval window.__title('Pilot')
+sleep 300
+eval window.__check(761)
+expect window.__last === ''
+eval window.__check(800)
+expect window.__last === ''
+eval window.__check(900)
+expect window.__last === ''
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1240)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
+eval window.__check(1440)
+expect window.__last === ''
+eval window.__check(1920)
+expect window.__last === ''
+eval window.__check(2560)
+expect window.__last === ''
+eval window.__check(3440)
+expect window.__last === ''
+
+# =============================================================================
+# a 60-character title, no panel
+# =============================================================================
+eval window.__title('The Long Road Home: Episode Four of the Documentary Series!!')
+sleep 300
+expect window.__d().getElementById('doc-title').value.length === 60
+eval window.__check(761)
+expect window.__last === ''
+eval window.__check(800)
+expect window.__last === ''
+eval window.__check(900)
+expect window.__last === ''
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1240)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
+eval window.__check(1440)
+expect window.__last === ''
+eval window.__check(1920)
+expect window.__last === ''
+
+# =============================================================================
+# #183: the title gives way, your name stays, at 1100 1280 1440 1920
+# =============================================================================
+eval (function(){ var W=window; W.__name=function(w){ W.__at(w); var d=W.__d(); var c=d.getElementById('identity-chip'); var r=c.getBoundingClientRect(); var row=d.querySelector('.topbar-row').getBoundingClientRect(); var hit=d.elementFromPoint(r.left+r.width/2, r.top+r.height/2); var t=d.getElementById('doc-title'); var bad=[]; if(r.width<40) bad.push('name only '+Math.round(r.width)+'px'); if(r.left<row.left||r.right>row.right) bad.push('name outside the row'); if(!hit||!c.contains(hit)) bad.push('name covered by '+(hit&&(hit.id||hit.className))); if(!(t.scrollWidth>t.clientWidth)) bad.push('title not cut short'); W.__last=bad.length? w+': '+bad.join(', ') : ''; return W.__last; }; return true; })()
+expect true
+eval window.__name(1100)
+expect window.__last === ''
+eval window.__name(1280)
+expect window.__last === ''
+eval window.__name(1920)
+expect window.__last === ''
+eval window.__name(1440)
+expect window.__last === ''
+# the whole title is the tooltip, and is there once clicked into
+eval (function(){ var t=window.__d().getElementById('doc-title'); t.dispatchEvent(new MouseEvent('mouseenter')); return t.title; })()
+expect window.__d().getElementById('doc-title').title === 'The Long Road Home: Episode Four of the Documentary Series!!'
+eval (function(){ var t=window.__d().getElementById('doc-title'); t.focus(); t.setSelectionRange(60,60); return true; })()
+sleep 100
+expect window.__d().activeElement.id == doc-title
+expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
+# editing, it is the facts that give way — your name still stays
+eval window.__check(1440)
+expect window.__last === ''
+eval window.__d().getElementById('doc-title').blur()
+# a real click on your name reaches it (21-events.js opens the name box)
+eval (function(){ var W=window; W.__nameClicks=0; W.__d().getElementById('identity-chip').addEventListener('click', function(){ W.__nameClicks++; }); var c=W.__d().getElementById('identity-chip').getBoundingClientRect(); return JSON.stringify([c.left,c.top,c.width,c.height]); })()
+eval (function(){ var d=window.__d(); var c=d.getElementById('identity-chip').getBoundingClientRect(); var el=d.elementFromPoint(c.left+c.width/2, c.top+c.height/2); el.click(); return window.__nameClicks; })()
+expect window.__nameClicks === 1
+eval (function(){ var d=window.__d(); var e=d.getElementById('identity-editor'); if(e) e.remove(); var p=d.querySelector('.identity-popover, #identity-popover'); if(p) p.hidden=true; return true; })()
+
+# =============================================================================
+# a panel open (Production, then Comments), the long title
+# =============================================================================
+eval window.__at(1440)
+eval window.__panel('btn-production')
+sleep 500
+expect !window.__d().getElementById('production-panel').hidden
+eval window.__check(761)
+expect window.__last === ''
+eval window.__check(800)
+expect window.__last === ''
+eval window.__check(900)
+expect window.__last === ''
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__at(1100)
+sleep 400
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1240)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
+eval window.__check(1440)
+expect window.__last === ''
+eval window.__check(1920)
+expect window.__last === ''
+eval window.__panel('btn-comments')
+sleep 500
+expect !window.__d().getElementById('comments-panel').hidden
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
+eval window.__at(1000)
+sleep 400
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__check(761)
+expect window.__last === ''
+eval window.__panel('btn-comments')
+sleep 500
+expect window.__d().getElementById('comments-panel').hidden
+
+# =============================================================================
+# #166: opening a panel leaves the header alone — its height, its left
+# edge and the File button — at 1100 1280 1440 1920, each panel in turn
+# =============================================================================
+eval (function(){ var W=window; W.__steady=function(w){ W.__at(w); var before=W.__hdr(); var bad=[]; ['btn-production','btn-gear','btn-broll','btn-comments'].forEach(function(id){ W.__panel(id); var now=W.__hdr(); if(now!==before) bad.push(id+' '+before+' -> '+now); W.__panel(id); }); var after=W.__hdr(); if(after!==before) bad.push('closed '+before+' -> '+after); W.__last=bad.length? w+': '+bad.join('; ') : ''; return W.__last; }; return true; })()
+expect true
+eval window.__steady(1100)
+expect window.__last === ''
+eval window.__steady(1280)
+expect window.__last === ''
+eval window.__steady(1440)
+expect window.__last === ''
+eval window.__steady(1920)
+expect window.__last === ''
+# and with a panel's slide and the row's margin settled, not only in the
+# frame it opened: the height is 52 either way
+eval window.__at(1440)
+eval window.__panel('btn-gear')
+sleep 500
+expect window.__hdr() === '0,52,14'
+eval window.__panel('btn-gear')
+sleep 500
+expect window.__hdr() === '0,52,14'
+
+# =============================================================================
+# #190, #189: the header and the strip span the window; the script stays
+# 1800px (1760 of #rows) and centred
+# =============================================================================
+eval (function(){ var W=window; W.__wide=function(w){ W.__at(w); var d=W.__d(); var vw=d.documentElement.clientWidth; var row=d.querySelector('.topbar-row').getBoundingClientRect(); var strip=d.getElementById('rundown').getBoundingClientRect(); var rows=d.getElementById('rows').getBoundingClientRect(); var open=d.querySelector('.comments-panel:not([hidden])'); var edge=open? open.getBoundingClientRect().left : vw; var bad=[]; if(Math.abs(row.left)>0.5||Math.abs(row.right-vw)>0.5) bad.push('row '+Math.round(row.left)+'-'+Math.round(row.right)+' of '+vw); if(Math.abs(strip.left)>0.5||Math.abs(strip.right-edge)>1) bad.push('strip '+Math.round(strip.left)+'-'+Math.round(strip.right)+' to '+Math.round(edge)); if(Math.abs(rows.width-1760)>0.5) bad.push('script '+Math.round(rows.width)); if(Math.abs((rows.left+rows.right)/2-edge/2)>1) bad.push('script centred on '+Math.round((rows.left+rows.right)/2)+' not '+Math.round(edge/2)); var c=d.getElementById('runtime-chip').getBoundingClientRect(); if(Math.abs((c.left+c.right)/2-vw/2)>1) bad.push('clock off centre'); var f=d.getElementById('btn-file').getBoundingClientRect(); if(f.left>20) bad.push('File button at '+Math.round(f.left)); var p=d.getElementById('btn-present').getBoundingClientRect(); if(vw-p.right>20.5) bad.push('Present ends '+Math.round(vw-p.right)+'px short'); W.__last=bad.length? w+': '+bad.join(', ') : ''; return W.__last; }; return true; })()
+expect true
+eval window.__wide(2560)
+expect window.__last === ''
+eval window.__wide(3440)
+expect window.__last === ''
+eval window.__wide(1920)
+expect window.__last === ''
+# the strip's blocks take the width: the track is the window's less its
+# 20px either side, and the blocks are laid out across it (the ruler runs
+# on past the script's end to a round time, so they stop short of it)
+expect (function(){ var d=window.__d(); var vw=d.documentElement.clientWidth; var t=d.querySelector('#rundown .rundown-track').getBoundingClientRect(); var bl=d.querySelectorAll('#rundown .rd-block'); var last=bl[bl.length-1].getBoundingClientRect(); return Math.abs(t.width - (vw - 40)) < 1 && last.right - t.left > t.width / 2; })()
+eval window.__panel('btn-production')
+sleep 500
+eval window.__wide(2560)
+expect window.__last === ''
+eval window.__wide(3440)
+expect window.__last === ''
+
+# =============================================================================
+# #187, #188: the slim bars, the page's own bar gone under a panel, and the
+# panel meeting the window's edge and the row's bottom
+# =============================================================================
+# (a longer script first, so the page has something to scroll)
+eval (function(){ var b=window.__d().querySelector('.add-row-btn'); for(var i=0;i<8;i++) b.click(); window.__d().activeElement.blur(); return window.__d().querySelectorAll('#rows .row').length; })()
+eval window.__at(1440)
+sleep 400
+expect window.__d().documentElement.scrollHeight > window.__w().innerHeight
+# panel open: no page bar at all, so the page is the whole window wide
+expect window.__w().innerWidth - window.__d().documentElement.clientWidth === 0
+expect Math.abs(window.__d().getElementById('production-panel').getBoundingClientRect().right - window.__w().innerWidth) < 0.5
+expect Math.abs(window.__d().getElementById('production-panel').getBoundingClientRect().top - window.__d().querySelector('.topbar-row').getBoundingClientRect().bottom) < 1
+expect Math.abs(window.__d().querySelector('.topbar-row').getBoundingClientRect().right - window.__w().innerWidth) < 0.5
+eval window.__panel('btn-production')
+sleep 500
+# no panel: the page's bar is back, and it is the slim one (10px, where the
+# browser's own is 15-17px)
+expect window.__w().innerWidth - window.__d().documentElement.clientWidth === 10
+# any scroller in the app gets the same 10px bar
+expect (function(){ var d=window.__d(); var s=d.createElement('div'); s.style.cssText='position:absolute;top:0;left:0;width:100px;height:50px;overflow-y:scroll'; s.innerHTML='<div style="height:200px"></div>'; d.body.appendChild(s); var w=s.offsetWidth-s.clientWidth; s.remove(); return w === 10; })()
+# a scroller that hides its bar still does
+expect window.__w().getComputedStyle(window.__d().querySelector('.prompter-scroll')).scrollbarWidth == none
+
+# =============================================================================
+# #175: Search at each width — the field, the word, the magnifier
+# =============================================================================
+eval window.__at(1920)
+expect window.__d().getElementById('btn-command').getBoundingClientRect().width > 240
+expect window.__d().querySelector('#btn-command .cmdk-trigger-more').getBoundingClientRect().width > 50
+expect window.__d().querySelector('#btn-command .mi-keys').getBoundingClientRect().width > 30
+eval window.__at(1700)
+expect window.__d().getElementById('btn-command').getBoundingClientRect().width > 100
+expect window.__d().getElementById('btn-command').getBoundingClientRect().width < 200
+expect window.__d().querySelector('#btn-command .cmdk-trigger-more').getBoundingClientRect().width <= 1
+expect window.__d().querySelector('#btn-command .mi-keys').getBoundingClientRect().width > 30
+eval window.__at(1440)
+expect Math.round(window.__d().getElementById('btn-command').getBoundingClientRect().width) == 32
+eval window.__at(761)
+expect Math.round(window.__d().getElementById('btn-command').getBoundingClientRect().width) == 32
+# its name is the whole phrase at every width
+expect window.__d().getElementById('btn-command').textContent.indexOf('Search or run a command') === 0
+# the panel toggles below 1250: an icon and a count, the label still the name
+eval window.__at(1240)
+expect window.__d().querySelector('#btn-production .btn-label').getBoundingClientRect().width <= 1
+expect window.__d().getElementById('btn-production').textContent.indexOf('Production') === 0
+eval window.__at(1250)
+expect window.__d().querySelector('#btn-production .btn-label').getBoundingClientRect().width > 40
+# a phone's width: the magnifier as a 44px target, inside the screen
+eval window.__at(375)
+sleep 200
+expect Math.round(window.__d().getElementById('btn-command').getBoundingClientRect().width) == 44
+expect window.__d().getElementById('btn-command').getBoundingClientRect().right <= window.__d().documentElement.clientWidth
+expect Math.round(window.__d().getElementById('btn-file').getBoundingClientRect().width) == 44
+expect window.__d().querySelector('#btn-file .brand-mark').getBoundingClientRect().width === 0
+expect window.__d().documentElement.scrollWidth <= window.__d().documentElement.clientWidth
+
+quit
