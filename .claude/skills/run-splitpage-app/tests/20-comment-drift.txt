@@ -2,8 +2,9 @@
 # writer out of their own sentence), so the words inside it can drift away
 # from the comment's `quotedText` without the anchor itself disappearing.
 # This checks the card notices: still jumpable while the span has text, with
-# a "text changed" note and the original quote kept visible; orphaned once
-# the span is edited down to nothing.
+# a small red "Changed" tag and the original quote in its tooltip; orphaned
+# once the span is edited down to nothing, with a "No longer in script" tag
+# after the quote, and the tag alone when the quote was empty (#186).
 
 open
 
@@ -38,8 +39,20 @@ expect document.querySelector('.comment-quote').textContent.indexOf('word for wo
 # the original is kept visible rather than silently dropped
 expect document.querySelector('.comment-quote').textContent.indexOf('word for word') !== -1
 expect document.querySelector('.comment-quote').getAttribute('title').indexOf('word for word') !== -1
-expect document.querySelector('.comment-orphan-note') !== null
-expect document.querySelector('.comment-orphan-note').textContent.indexOf('changed') !== -1
+# #186: a small "Changed" tag after the closing quote mark, not a line of
+# its own; the original words live in its tooltip, not struck through
+expect document.querySelector('.comment-orphan-note') === null
+expect document.querySelector('.comment-quote s') === null
+expect document.querySelector('.comment-quote .comment-state-tag').textContent === 'Changed'
+expect document.querySelector('.comment-quote .comment-state-tag').getAttribute('title').indexOf('word for word') !== -1
+expect document.querySelector('.comment-quote .comment-state-tag').previousSibling.nodeValue.indexOf('”') === 0
+expect getComputedStyle(document.querySelector('.comment-state-tag')).display === 'inline-block'
+expect getComputedStyle(document.querySelector('.comment-state-tag')).fontStyle === 'normal'
+eval (function(){var p=document.createElement('span');p.style.color='var(--danger)';document.body.appendChild(p);window.__dangerColor=getComputedStyle(p).color;p.remove();return window.__dangerColor;})()
+expect getComputedStyle(document.querySelector('.comment-state-tag')).color === __dangerColor
+eval (function(){var t=document.querySelector('.comment-state-tag').getBoundingClientRect();var w=document.querySelector('.comment-quote .comment-quote-words').getBoundingClientRect();window.__tagRect={tagH:t.height,tagTop:t.top,wordsBottom:w.bottom};return window.__tagRect;})()
+expect __tagRect.tagH < 20
+expect __tagRect.tagTop < __tagRect.wordsBottom
 
 # --- jump still works: the anchor still exists, just with different words --
 click .comment-card
@@ -60,8 +73,30 @@ sleep 500
 expect document.querySelectorAll('.comment-card').length == 1
 expect document.querySelector('.comment-card').classList.contains('is-jumpable') === false
 expect document.querySelector('.comment-quote').classList.contains('orphaned')
-expect document.querySelector('.comment-orphan-note').textContent.indexOf('no longer found') !== -1
+# #186: a small red "No longer in script" tag after the quote, not a line
+expect document.querySelector('.comment-orphan-note') === null
+expect document.querySelector('.comment-quote .comment-state-tag').textContent === 'No longer in script'
+expect document.querySelector('.comment-quote .comment-state-tag').getAttribute('title').indexOf('no longer found') !== -1
+expect document.querySelector('.comment-quote .comment-state-tag').previousSibling.nodeValue.indexOf('”') === 0
+expect getComputedStyle(document.querySelector('.comment-state-tag')).fontStyle === 'normal'
+expect getComputedStyle(document.querySelector('.comment-state-tag')).color === __dangerColor
+eval (function(){var t=document.querySelector('.comment-state-tag').getBoundingClientRect();var w=document.querySelector('.comment-quote .comment-quote-words').getBoundingClientRect();window.__tagRect={tagH:t.height,tagTop:t.top,wordsBottom:w.bottom};return window.__tagRect;})()
+expect __tagRect.tagH < 20
+expect __tagRect.tagTop < __tagRect.wordsBottom
 # the historical quote is still shown even though the anchor is gone
 expect document.querySelector('.comment-quote').textContent.indexOf('word for word') !== -1
+
+# --- an orphan with an empty quote: the tag alone, no empty quote marks -----
+eval (function(){var c=window.__splitpageFormats.state().comments[0];c.quotedText='';return c.id;})()
+click #btn-comments
+sleep 300
+click #btn-comments
+sleep 500
+expect document.querySelector('.comment-quote').classList.contains('orphaned')
+expect document.querySelector('.comment-quote .comment-quote-words') === null
+expect document.querySelector('.comment-quote').textContent.indexOf('“') === -1
+expect document.querySelector('.comment-quote').textContent.indexOf('”') === -1
+expect document.querySelector('.comment-quote').textContent === 'No longer in script'
+expect document.querySelector('.comment-quote .comment-state-tag') !== null
 
 quit

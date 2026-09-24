@@ -1,8 +1,10 @@
 import { S } from "./_state.js";
+import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
+import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cellOf, projection, sliceCell, toHtml, toPlainText } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import {
@@ -390,8 +392,9 @@ var PROMPTER_FLIP_KEY = "splitpage-prompter-flip";
 function readPrompterOrientationFlag(key) {
   try { return localStorage.getItem(key) === "1"; } catch (e) { return false; }
 }
+/* stored and announced, so Settings (#181) follows the prompter's buttons */
 function writePrompterOrientationFlag(key, on) {
-  try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) {}
+  writePref(key, on ? "1" : "0");
 }
 
 function applyPrompterOrientation() {
@@ -573,6 +576,9 @@ export function setPrompterSceneMode(on) {
 }
 
 export function openPrompter() {
+  /* Present covers the whole screen, so the side panels close rather than
+     wait underneath it (invariant #16, #163). */
+  closeAllSidePanels();
   buildPrompterContent();
   var el = document.getElementById("prompter");
   el.hidden = false;

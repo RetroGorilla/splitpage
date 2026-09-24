@@ -1,0 +1,49 @@
+# A desktop window narrowed past 760px keeps its text sizes (#162).
+#
+# The iOS 16px floors (iOS zooms the page into a field under 16px) are
+# keyed on the device — (hover: none), (pointer: coarse) — not the width,
+# so a narrow desktop window, split screen or the desktop app keeps the
+# script at 15px Visual / 18px Audio, the writer at 19px and the inputs at
+# their own sizes, while the layout still goes to one column. The phone
+# keeps every floor: tests/05-mobile.txt and 174-scene-length-phone.txt.
+#
+# Headless Chromium can report (hover: none) for a desktop window (the
+# note in #162), which would make this window a "touch device" and the
+# floors correct for it. So the sizes are asserted when the browser says it
+# has a fine pointer that hovers, and the rules themselves are checked
+# either way: every font floor this change moved lives only under a touch
+# query, never under the width alone. (The comments panel's reply boxes
+# keep their own width-keyed floor, app.css's comments block — not moved
+# here.)
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 740 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 400
+eval window.__desk = matchMedia('(hover: hover) and (pointer: fine)').matches
+eval (function(){ window.fs = function (sel) { return parseFloat(getComputedStyle(document.querySelector(sel)).fontSize); }; return true; })()
+
+# --- the layout still goes to one column ------------------------------------------
+expect getComputedStyle(document.querySelector('.col-head')).display == none
+expect (function(){ var r = document.querySelector('#rows .row'); var a = r.querySelector('.visual-cell').getBoundingClientRect(), b = r.querySelector('.audio-cell').getBoundingClientRect(); return b.top >= a.bottom; })()
+expect document.documentElement.scrollWidth <= innerWidth
+
+# --- a mouse and a narrow window: the sizes it had wide ------------------------------
+expect !window.__desk || fs('#rows .visual-cell .cell-editable') === 15
+expect !window.__desk || fs('#rows .audio-cell .cell-editable') === 18
+expect !window.__desk || parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .cell-editable')).lineHeight) === 28.8
+expect !window.__desk || getComputedStyle(document.getElementById('root')).getPropertyValue('--script-floor').trim() === '0px'
+expect !window.__desk || getComputedStyle(document.querySelector('#writer')).getPropertyValue('--wr-font').trim() === '19px'
+expect !window.__desk || fs('#find-input, .findbar input[type="text"]') < 16
+
+# --- the rules: every floor is under a touch query, none under the width alone ----
+eval (function(){ var bad = [], floors = 0; function walk(rules, media) { for (var i = 0; i < rules.length; i++) { var r = rules[i]; if (r.cssRules && r.media) { walk(r.cssRules, media.concat([r.media.mediaText])); continue; } if (!r.style) continue; var sel = r.selectorText || ''; var touch = media.some(function (m) { return /hover: none|pointer: coarse/.test(m); }); var narrow = media.some(function (m) { return /max-width: 760px/.test(m); }); if (r.style.getPropertyValue('--script-floor').trim() === '16px') { floors++; if (!touch) bad.push('floor: ' + sel + ' @ ' + media.join(' / ')); } if (narrow && !touch && /^\.cell-editable$|visual-cell|audio-cell|findbar input|link-popover input|tag-name|comment-name/.test(sel) && r.style.fontSize === '16px') bad.push('width-only 16px: ' + sel); if (narrow && !touch && /^\.writer$/.test(sel.trim()) && r.style.getPropertyValue('--wr-font')) bad.push('width-only writer font'); } } for (var s = 0; s < document.styleSheets.length; s++) { try { walk(document.styleSheets[s].cssRules, []); } catch (e) {} } window.__floorRules = floors; window.__floorBad = bad; return floors + ' floor rule(s); ' + bad.join(' | '); })()
+expect window.__floorRules >= 1
+expect window.__floorBad.length === 0
+
+# --- and the script's own fields take the floor as a max(), so the zoom cannot
+#     take a touch device's under it (#191)
+expect (function(){ var found = false; for (var s = 0; s < document.styleSheets.length; s++) { var rules; try { rules = document.styleSheets[s].cssRules; } catch (e) { continue; } for (var i = 0; i < rules.length; i++) { var r = rules[i]; if (r.selectorText === '.audio-cell .cell-editable' && /max\(var\(--script-floor\)/.test(r.style.fontSize)) found = true; } } return found; })()

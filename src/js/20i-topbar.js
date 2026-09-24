@@ -81,6 +81,16 @@ import { rowMotionMs } from "./04a-row-motion.js";
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
+  /* The title gives way first when the row is short (#183) and ends in
+     "…"; pointing at it shows the whole of it. Read at the moment it is
+     pointed at, so no path that sets the title has to remember this. */
+  const titleInput = document.getElementById("doc-title");
+  if (titleInput) {
+    titleInput.addEventListener("mouseenter", function () {
+      titleInput.title = titleInput.value || "";
+    });
+  }
+
   (function setupCondensingTopbar() {
     const topbar = document.querySelector(".topbar");
     if (!topbar) return;

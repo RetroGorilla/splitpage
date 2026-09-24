@@ -1,8 +1,10 @@
 import { S } from "./_state.js";
 import {
   ROW_STATUSES,
+  estimatedSeconds,
   formatDuration,
   formatTimecode,
+  hasSetLength,
   rowSeconds,
   rowStatus,
   updateScriptStats
@@ -51,7 +53,7 @@ import {
 } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
-import { paintPresence } from "./13a-presence.js";
+import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
 
 /* ================= rendering =================
@@ -238,7 +240,10 @@ function rowGutterHtml(row, index, review) {
       '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-            escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '<br>' + formatTimestamp(row.updatedAt) + '</div>'
+            /* in their colour, the header's dot for them (#192) */
+            '<span class="row-meta-who"><span class="person-dot" style="--person:' + personColor(row.updatedBy) +
+              '" aria-hidden="true"></span>' + escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '</span><br>' +
+            formatTimestamp(row.updatedAt) + '</div>'
         : '') +
     '</div>'
   );
@@ -259,15 +264,40 @@ export function paintRowTimes() {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id")] = c;
   }
   var t = 0;
+  var review = reviewMode();
   S.state.rows.forEach(function (row) {
     var secs = rowSeconds(row);
     var el = byId[row.id];
     if (el) {
       setTextIfChanged(el.querySelector(".row-start"), formatTimecode(t));
-      setTextIfChanged(el.querySelector(".row-read"), secs >= 0.5 ? formatDuration(secs) : "");
+      paintReadTime(el.querySelector(".row-read"), row, secs, review);
     }
     t += secs;
   });
+}
+
+/* The rail's Read time (#179) is a button: a click sets the scene's length
+   by hand (05r-read-time.js). A set length is drawn as a chip, and turns
+   the Audio amber when the words now read longer than it; an estimate is
+   plain figures. Written only where something changed, like the text. */
+function paintReadTime(btn, row, secs, review) {
+  if (!btn) return;
+  var set = hasSetLength(row);
+  var est = set ? estimatedSeconds(row) : secs;
+  var over = set && Math.round(est) > Math.round(secs);
+  setTextIfChanged(btn, set || secs >= 0.5 ? formatDuration(secs) : "");
+  btn.classList.toggle("is-set", set);
+  btn.classList.toggle("is-over", over);
+  var title = set
+    ? "Set by hand · estimate " + formatDuration(est) +
+      (over ? " — the Audio now reads longer than this" : "") +
+      (review ? "" : ". Click to change; clear it to use the estimate")
+    : (review ? "Estimated read time" : "Estimated read time — click to set this scene’s length");
+  if (btn.title !== title) btn.title = title;
+  /* aria-disabled rather than disabled: a disabled button shows no
+     tooltip, and a reviewer should still be able to read "Set by hand" */
+  var ro = review ? "true" : "false";
+  if (btn.getAttribute("aria-disabled") !== ro) btn.setAttribute("aria-disabled", ro);
 }
 
 function setTextIfChanged(el, text) {
@@ -466,7 +496,7 @@ function rowHtmlFromParts(row, p) {
       p.gutter +
       '<div class="cell visual-cell">' + p.visualText + p.media + '</div>' +
       '<div class="cell audio-cell">' + p.audioText + '</div>' +
-      '<div class="row-rail"><span class="row-read" title="Estimated read time"></span></div>' +
+      '<div class="row-rail"><button type="button" class="row-read" data-id="' + row.id + '"></button></div>' +
     '</div>'
   );
 }

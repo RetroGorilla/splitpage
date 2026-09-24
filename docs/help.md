@@ -786,6 +786,29 @@ Visual notes are directions, not spoken words, so they don't count. Click
 the chip to set your reading speed — it's saved with the file, so the
 estimate means the same thing to whoever opens it next.
 
+**Setting a scene's length yourself.** Some scenes aren't as long as their
+words: a b-roll montage, a pause, a title card, a clip under one line of
+voice-over, a scene with no Audio at all. Click the scene's time in the
+**Read** column and type its length — `1:30`, `90` (seconds), `90s`, `1m30`
+or `1m 30s` — then press <kbd>Enter</kbd> (<kbd>Esc</kbd> leaves it as it
+was). That length replaces the estimate everywhere: the scene starts after
+it, the clock, the rundown strip, the panels, the exports and Present's
+clock. A length you set sits in a thin box; if the Audio later reads longer
+than it, it turns amber, and hovering it shows the estimate. Empty the box
+and press <kbd>Enter</kbd> to go back to the estimate. It's saved with the
+file and undoes like any edit. On a phone, tap into the scene and then tap
+its time.
+
+**Making the script bigger or smaller.** Hold <kbd>Ctrl</kbd> and turn the
+mouse wheel over the script — or pinch on a trackpad — to zoom the script
+alone, from 70 % to 200 %; the header and the panels stay as they are, and
+the line under the pointer stays put. <kbd>Ctrl</kbd>+<kbd>+</kbd>,
+<kbd>Ctrl</kbd>+<kbd>−</kbd> and <kbd>Ctrl</kbd>+<kbd>0</kbd> do the same
+(in the desktop app so do View ▸ Zoom In, Zoom Out and Actual Size). A
+"Script 125 %" note shows the size for a moment; click it to go back to
+100 %. The size is yours, remembered on this device, not saved in the file.
+The writer and Present keep their own size controls.
+
 **Scene status.** The dot in each scene's gutter cycles **To do → Ready →
 Shot**. Shot scenes are tinted, and a counter appears in the header once
 you've shot anything. In the teleprompter, **Skip shot** leaves those
@@ -1155,7 +1178,9 @@ document.
 
 ## The File menu
 
-**☰ File** drops down from its button. At the top is a card about the script
+The **Splitpage** mark and name at the top left, with its ▾, is the File
+button (on a phone it is the file icon). The menu drops down from it. At the
+top is a card about the script
 you are in: the file it lives in (or *Not saved yet*), whether everything on
 screen is in it (*Saved 2 min ago · Markdown*), the **Autosave** switch, and
 **Save a copy…**, which writes the script to a new file of your choosing and
@@ -1208,8 +1233,10 @@ work in the app you are using. On a Mac, read <kbd>Cmd</kbd> for
 
 ### Search commands
 
-<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac), or **File ▸
-Search commands…**, opens a search box over the script. Type part of what
+<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac), the
+**Search or run a command** box in the header (a magnifier when the window
+is narrow), or **File ▸ Search commands…**, opens a search box over the
+script. Type part of what
 you want — *pdf*, *gear*, *history*, or a word for it like *teleprompter* or
 *voice over* — and the list narrows to the commands that match: everything
 in the File menu, every export format, the Production, Gear, B-roll and
@@ -1221,6 +1248,36 @@ computer come first.
 Something that cannot run right now is still listed, greyed, with the reason
 underneath — the same one the File menu gives. The box does not open over
 the teleprompter, the writer or another dialog.
+
+### Settings
+
+**File ▸ Settings** (at the foot of the menu, or type *settings* after
+<kbd>Ctrl</kbd>+<kbd>K</kbd>; in the desktop app also **File ▸ Settings…**)
+is how Splitpage works for you on this computer. Nothing in it changes the
+script.
+
+- **Appearance** — the theme (System, Light or Dark; the desktop app's
+  title bar follows), the clock (System, 12-hour or 24-hour — used for
+  "Saved at …", Version history, comments and the scene gutter), and
+  whether the rundown strip starts minimized.
+- **Editor** — Hide shot scenes, Autosave, the reading speed a *new* script
+  starts at (each script keeps its own; click the clock in the header to
+  change it), the writer's text size, and the script's zoom.
+- **Present** — the teleprompter's Mirror, Flip and One scene at a time.
+- **You** — your name, and your colour: the dot by your name in the
+  header, the scene gutter, comments, History and the people-here row. Until
+  you pick one, your colour comes from your name. Once you pick, it is
+  written into each script you edit, so other people see it too.
+- **Help & tips** — bring back the tagging reference, the tour and the
+  desktop-app notice.
+- **Data** — Export app data (your history, server bookmarks and these
+  settings), Servers and Google Drive.
+
+The same switches still work where they always were (the File menu, the
+teleprompter's buttons, the writer's size slider) and Settings shows what
+they say.
+
+Your name and colour are also a click away: click your name in the header.
 
 ## Exporting
 

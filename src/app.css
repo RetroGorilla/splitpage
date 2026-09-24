@@ -23,6 +23,13 @@
   :root {
     --bg: #F1F0ED;
     --surface: #FCFCFA;
+    /* the scene that holds the caret (#182): a clear step off --bg, further
+       than --surface, which was too close to the page to read at a glance */
+    --row-current: #FFFFFF;
+    /* a script field's hover and caret fill (#182): the text colour at a
+       whisper, so it is a shade darker on the light page and lighter on
+       the dark one without a second value (var(--text) resolves per theme) */
+    --field-hint: color-mix(in srgb, var(--text) 5%, transparent);
     /* raised: a step off --bg — in this theme a step darker, where the dark
        theme's raised is a step lighter */
     --surface-2: #E9E8E4;
@@ -186,6 +193,7 @@
     :root:not([data-theme="light"]) {
       --bg: #0F0E0C;
       --surface: #171614;
+      --row-current: #1E1D1A;
       --surface-2: #21201E;   /* raised */
       --hover: #2A2926;
       --border: #2E2E2B;
@@ -244,6 +252,7 @@
   :root[data-theme="dark"], .prompter, .prompter-line {
     --bg: #0F0E0C;
     --surface: #171614;
+    --row-current: #1E1D1A;
     --surface-2: #21201E;
     --hover: #2A2926;
     --border: #2E2E2B;
@@ -287,6 +296,53 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
 
+  /* ---------- scroll bars (#187) ----------
+     One slim style for every scroller in the app — the page, the panels,
+     menus, dialogs, the writer: thin, no arrow buttons, a rounded thumb in
+     the theme's faint text colour on a transparent track, so it reads on
+     --bg and --surface alike and follows the theme. The thumb token is
+     worked out from --text-faint on :root, where the theme is decided, so
+     it needs no copy in the dark blocks. A scroller that hides its bar
+     (the prompter, the b-roll tabs) still does: a class outranks `*`.
+
+     Two spellings of the one style. ::-webkit-scrollbar where it exists
+     (Chromium — so the desktop app, Edge and Chrome — and Safari): it is
+     the only way to a bar with no arrow buttons there, since Chromium
+     draws its arrows even on a `scrollbar-width: thin` bar. Chromium also
+     ignores every -webkit- rule on an element that sets scrollbar-width
+     or scrollbar-color, so the standard properties are given only to a
+     browser without the pseudo-elements (Firefox), and nothing else in
+     this file may set `scrollbar-width: thin` — only `none`, to hide a
+     bar, beside a `::-webkit-scrollbar { display: none }`. Windows'
+     "always show scroll bars" and the phone's overlay bars are the
+     browser's to honour; nothing here overrides them. */
+  :root {
+    --scrollbar-thumb: color-mix(in srgb, var(--text-faint) 55%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-faint) 85%, transparent);
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    min-height: 32px;
+    min-width: 32px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb) padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  @supports not selector(::-webkit-scrollbar) {
+    :root { scrollbar-color: var(--scrollbar-thumb) transparent; }
+    * { scrollbar-width: thin; }
+  }
+  /* With a side panel open the page's own bar goes (#187, decided: option
+     b), so the panel's is the only one at the window's edge and the
+     header's line and the panel's edges meet the frame (#188). The page
+     still scrolls — wheel, keys, the rundown strip — and the strip still
+     shows where you are in it. */
+  html:has(> body.panel-open) { scrollbar-width: none; }
+  html:has(> body.panel-open)::-webkit-scrollbar { display: none; }
+
   /* ---------- switching themes ----------
 
      data-theme is swapped on <html> at runtime, which repaints every colour
@@ -324,10 +380,44 @@
      20px), so a row's focus fill and every rule reach the edge while the
      words line up on one 20px margin. The script's columns are
      --row-cols: the gutter, Visual, Audio (a little wider — it is what is
-     said), and the rail with each scene's read time. */
+     said), and the rail with each scene's read time.
+
+     #root spans the window (#190): the header and the rundown strip run
+     edge to edge like the desktop app's tab strip above them, and only the
+     script is held to 1800px — see "the script's own width" just below. */
+  /* --script-scale is the script's own zoom (#191, 05s-script-zoom.js sets
+     it here from Ctrl + wheel): the script's type, its gutter and rail and
+     a row's padding are calc()s of it, and nothing outside the script is.
+     --script-floor is the smallest a script field may be set, 16px on a
+     touch device (#162 — iOS zooms the page into a smaller field) and no
+     floor anywhere else. The sizes and line heights are variables so the
+     phone can set its own without restating the calc. */
   #root {
-    --row-cols: 112px minmax(0, 1fr) minmax(0, 1.25fr) 80px;
-    max-width: 1800px; margin: 0 auto; padding: 0 20px 80px;
+    --script-scale: 1;
+    --script-floor: 0px;
+    --script-visual-size: 15px;
+    --script-visual-lh: 1.55;
+    --script-audio-size: 18px;
+    --script-audio-lh: 1.6;
+    --row-cols: calc(112px * var(--script-scale)) minmax(0, 1fr) minmax(0, 1.25fr) calc(80px * var(--script-scale));
+    padding: 0 20px 80px;
+  }
+  /* The script's own width (#190). 1800px with its rows' 20px either side,
+     so 1760px of #root's content, centred in whatever #root has — the
+     window, or the window beside an open panel (#root's padding-right,
+     further down). Every child of #root but the header is set in by the
+     same amount from both sides; the column heads reach 20px past it, as
+     rows do (margin: 0 -20px). Below this width the inset is 0 anyway, so
+     the rule only exists where it can do something. */
+  @media (min-width: 1801px) {
+    #root > :not(.topbar) {
+      margin-left: max(0px, calc((100% - 1760px) / 2));
+      margin-right: max(0px, calc((100% - 1760px) / 2));
+    }
+    #root > .col-head {
+      margin-left: calc(max(0px, calc((100% - 1760px) / 2)) - 20px);
+      margin-right: calc(max(0px, calc((100% - 1760px) / 2)) - 20px);
+    }
   }
 
   a { color: inherit; }
@@ -343,17 +433,30 @@
   /* ---------- header (#169, Direction B) ----------
      One 52px row, then the rundown strip. Three columns so the program
      clock sits in the middle of the window whatever is either side of it:
-     the app and the document on the left (its facts clipped from the end
-     when the window is narrow), the clock, and the panels, Write and
-     Present on the right. Sticky, and what it sheds on scroll, are at the
-     end of this file (condensing header). */
+     the app and the document on the left (the title giving way first, then
+     the facts), the clock, and search, the panels, Write and Present on
+     the right. Sticky, and what it sheds on scroll, are at the end of this
+     file (condensing header).
+
+     The row spans the window, not the script (#190): #root no longer has
+     a width of its own, so the header's 20px either side are the window's.
+
+     Nothing in it overlaps at any width (#174). The right column is never
+     narrower than its buttons (max-content), so where the two halves no
+     longer fit either side of a centred clock, the left gives way and the
+     clock moves over rather than the buttons spilling left across it. The
+     buttons themselves drop what they can as the window narrows — "the
+     header's widths" below — so the clock stays centred down to about
+     1000px. Suite 85-header-fit.txt measures all of it with bounding
+     boxes: an overflow here is not clipped and not counted in scrollWidth,
+     so nothing else would see it. */
   .topbar {
     margin: 0 -20px;
     background: var(--bg);
   }
   .topbar-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
     align-items: center;
     column-gap: 16px;
     height: 52px;
@@ -366,13 +469,18 @@
     gap: 12px;
     min-width: 0;
   }
-  .brand-row { display: flex; align-items: center; flex: none; }
-  /* The mark, then the wordmark in Chivo 700 (#169). */
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 32px;
+  /* The File button is the mark, the name and a chevron (#166). The mark is
+     drawn at 22px from the sprite's #i-mark whatever its shape; the name in
+     Chivo 700, the wordmark (#169). It reads as a button before it is
+     pointed at — the chevron, and the same pressed and hover fills and
+     focus ring as the header's other quiet buttons (.btn-quiet below). */
+  .btn.btn-quiet.btn-brand { gap: 8px; padding: 0 4px 0 6px; }
+  /* the mark on the row's 20px margin, its button's hover fill reaching
+     past it; pulled on the wrap, so the File menu still hangs off the
+     button's own left edge */
+  .topbar-left > .menu-wrap { margin-left: -6px; }
+  .btn-brand .brand-mark { display: block; flex: none; width: 22px; height: 22px; }
+  .btn-brand .brand-name {
     font-family: var(--font-body);
     font-weight: 700;
     font-size: 15px;
@@ -380,7 +488,9 @@
     letter-spacing: -0.005em;
     color: var(--text);
   }
-  .brand-mark { display: block; flex: none; }
+  .btn-brand .btn-chevron { margin-left: -4px; color: var(--text-dim); }
+  .btn-brand:hover .btn-chevron, .btn-brand[aria-expanded="true"] .btn-chevron { color: var(--text); }
+  .btn.btn-brand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   /* between the app (the mark and File) and the document (its title) */
   .topbar-rule { flex: none; width: 1px; height: 20px; background: var(--border); }
   .doc-title {
@@ -401,14 +511,20 @@
     field-sizing: content;
     min-width: 8ch;
     max-width: 36ch;
-    flex: 0 1 auto;
+    /* The title gives way first (#183): it shrinks a hundred times as fast
+       as the facts beside it, so a long one ends in "…" long before a fact
+       is clipped, and your name (#identity-chip) never is. The whole title
+       is the tooltip (20i-topbar.js) and is there to edit once clicked. */
+    flex: 0 100 auto;
     text-overflow: ellipsis;
   }
   .doc-title:hover { border-color: var(--border); }
+  /* Being edited, it is the facts that give way instead. */
   .doc-title:focus {
     outline: none;
     border-color: var(--visual);
     background: var(--surface);
+    flex-shrink: 1;
   }
 
   /* Save as a status (#169). #btn-save draws the status words that
@@ -479,40 +595,42 @@
   /* with shot scenes hidden: what is left, then the whole, quieter */
   .program-clock-of { font-weight: 450; font-size: 14px; color: var(--text-faint); letter-spacing: 0; }
   .program-clock-slot:empty { display: none; }
-  /* the reading-speed box promptForWpm() hangs off the clock */
-  #wpm-editor { top: calc(100% + 6px); left: 50%; transform: translateX(-50%); }
 
   /* Who is here, a review session, an imported file, the shot count, who
      you are: plain text, one dot between each item that is showing. The
      dot is drawn on the later item only when an earlier sibling is
-     visible, so a hidden chip never leaves one behind. It takes what the
-     row has left and is clipped from the end, never wrapped. */
+     visible, so a hidden chip never leaves one behind. Never wrapped.
+
+     Sized to its facts, and it gives way only after the title has (#183,
+     the title's flex-shrink above). Then each fact but your name is cut
+     short with "…"; your name (#identity-chip, the way to change what your
+     edits and comments are signed with) keeps its place and is only ever
+     shortened, never lost. */
   .doc-meta {
     display: flex;
     align-items: center;
-    /* basis 0: the title and the status are sized first, and this has what
-       is left */
-    flex: 1 1 0;
+    flex: 0 1 auto;
     min-width: 0;
-    overflow: hidden;
     white-space: nowrap;
     font-family: var(--font-body);
     font-size: 13px;
     color: var(--text-faint);
   }
+  .doc-title:focus ~ .doc-meta { flex-shrink: 1000; }
   .doc-meta > :not([hidden]) ~ :not([hidden])::before {
     content: "·";
     color: var(--text-faint);
     margin: 0 8px;
   }
   .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-family: var(--font-display); font-size: 12px; }
-  .doc-meta .review-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); }
-  .doc-meta .review-chip-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .doc-meta .review-chip { color: var(--text-dim); }
+  .doc-meta .review-chip-icon { width: 15px; height: 15px; margin-right: 5px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
   /* The chips' own pill styling (further down) is for their other homes;
      in this line they are text. */
   .doc-meta .file-chip,
   .doc-meta .identity-chip,
-  .doc-meta .stat-chip {
+  .doc-meta .stat-chip,
+  .doc-meta .review-chip {
     border: 0;
     border-radius: 0;
     background: none;
@@ -520,12 +638,25 @@
     margin: 0;
     font-size: inherit;
     color: inherit;
-    flex: none;
   }
+  /* Each fact is a line of text that can end in "…" (a block, since a flex
+     box draws no ellipsis) and gives way in turn. */
+  .doc-meta .file-chip,
+  .doc-meta .stat-chip,
+  .doc-meta .review-chip {
+    display: block;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .doc-meta .review-chip { color: var(--text-dim); }
   .doc-meta .file-chip-icon { display: none; }
   .doc-meta .file-chip-state { margin-left: 6px; }
-  .doc-meta .review-chip { margin: 0; flex: none; }
   .topbar-left .presence-bar { flex: none; margin: 0; }
+  /* Your name: never squeezed out. A very long one is shortened to 16ch. */
+  .doc-meta .identity-chip { flex: none; display: inline-flex; align-items: center; }
+  .doc-meta #identity-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
   .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }
 
   .toolbar {
@@ -533,8 +664,34 @@
     gap: 12px;
     align-items: center;
     justify-content: flex-end;
-    min-width: 0;
   }
+  .toolbar > .btn { flex: none; }
+
+  /* Search or run a command (#175): a button drawn as a search field — the
+     magnifier, the words as a placeholder, the Ctrl K keycaps (.mi-keys,
+     from data-keys, the File menu's own chips) at its far end. It opens the
+     command menu; typing starts there. Where the row runs short it is only
+     the magnifier ("the header's widths" below), its words still its name. */
+  .btn.cmdk-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 5px 0 9px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 450;
+    cursor: pointer;
+  }
+  .btn.cmdk-trigger .btn-icon { color: var(--text-dim); }
+  .btn.cmdk-trigger .mi-keys { margin-left: 18px; }
+  .btn.cmdk-trigger:hover { border-color: var(--border-strong); background: var(--surface); color: var(--text-dim); }
+  .btn.cmdk-trigger:hover .mi-keys kbd { color: var(--text); }
+  .btn.cmdk-trigger:active { transform: none; }
+  .btn.cmdk-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   /* The four panels (#169): quiet toggles — icon, label, the count in the
      mono — with no box until pointed at, and pressed (the hover fill, the
      text colour) while their panel is open. They share one slot on the
@@ -617,6 +774,77 @@
   }
   .btn.btn-mode .btn-icon { color: var(--text-dim); }
   .btn.btn-mode:hover { background: var(--hover); border-color: var(--border-strong); }
+
+  /* ---- the header's widths (#174, #175, #166) ----
+     What the row lets go of as the window narrows, widest first, so that
+     nothing in it ever overlaps and the clock stays centred for as long as
+     it can. Each step keeps every control: a label that leaves the screen
+     stays the button's name (a screen reader reads it, innerText has it)
+     and its title is the tooltip.
+       below 1860  search is "Search" and its keycaps
+       below 1600  search is its magnifier
+       below 1250  the panel toggles are an icon and their count
+       below 1180  the File button is its mark and chevron
+       below 1000  Write is its icon, and the gaps close up
+       below  880  "Saved 2 min ago" and the rest shorten to a dot in the
+                   state's colour (the words stay its name and tooltip)
+     The phone (760 and under) is its own layout, further down. Measured by
+     suite 85-header-fit.txt at every width #174 lists. */
+  @media (max-width: 1859px) {
+    .cmdk-trigger-more {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+  }
+  @media (max-width: 1599px) {
+    .btn.cmdk-trigger {
+      width: 32px;
+      padding: 0;
+      justify-content: center;
+      border-color: transparent;
+      background: transparent;
+    }
+    .btn.cmdk-trigger:hover { background: var(--hover); border-color: transparent; color: var(--text); }
+    .btn.cmdk-trigger .mi-keys { display: none; }
+    .cmdk-trigger .btn-label {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+  }
+  @media (max-width: 1249px) {
+    .panel-toggle .btn-label {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .btn.panel-toggle { gap: 4px; }
+  }
+  @media (max-width: 1179px) {
+    .btn-brand .brand-name {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .btn.btn-quiet.btn-brand { gap: 6px; }
+  }
+  @media (max-width: 999px) {
+    .topbar-row { column-gap: 12px; }
+    .topbar-left { gap: 8px; }
+    .toolbar { gap: 6px; }
+    #btn-write .btn-label {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .btn.btn-mode { width: 32px; padding: 0; justify-content: center; }
+  }
+  @media (min-width: 761px) and (max-width: 879px) {
+    .doc-title { min-width: 6ch; }
+    .save-btn { width: 24px; padding: 0; justify-content: center; }
+    .save-btn::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-faint);
+    }
+    .save-btn[data-state="none"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-faint); }
+    .save-btn[data-state="ok"]::before { background: var(--ok); }
+    .save-btn[data-state="pending"]::before { background: var(--audio); }
+    .save-btn[data-state="warn"]::before { background: var(--danger); }
+  }
 
   /* Sentence case in the body face (#169) — this was the loudest of the
      uppercase letter-spaced mono labels, on every button in the app. */
@@ -712,11 +940,13 @@
     grid-template-columns: var(--row-cols);
     column-gap: 32px;
     margin: 0 -20px;
-    padding: 18px 20px;
+    padding: calc(18px * var(--script-scale)) 20px;
     border-bottom: 1px solid var(--border);
     position: relative;
   }
-  .row:focus-within, .row.has-menu-open { background: var(--surface); }
+  /* The current scene (#182): a step further off the page than --surface
+     was, in both themes, so the row you are in reads at a glance. */
+  .row:focus-within, .row.has-menu-open { background: var(--row-current); }
 
   .gutter {
     display: flex;
@@ -740,8 +970,8 @@
     white-space: nowrap;
   }
   .row-head:active { cursor: grabbing; }
-  .row-num { font-size: 18px; line-height: 28px; color: var(--text); user-select: none; }
-  .row-start { font-size: 12.5px; line-height: 16px; color: var(--text-faint); }
+  .row-num { font-size: calc(18px * var(--script-scale)); line-height: calc(28px * var(--script-scale)); color: var(--text); user-select: none; }
+  .row-start { font-size: calc(12.5px * var(--script-scale)); line-height: calc(16px * var(--script-scale)); color: var(--text-faint); }
   .row-controls { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
 
   /* Status as a labelled lamp (#169): To do an unlit outline, Ready the
@@ -873,11 +1103,84 @@
   .row-rail {
     text-align: right;
     font-family: var(--font-display);
-    font-size: 14px;
-    line-height: 29px;
+    font-size: calc(14px * var(--script-scale));
+    line-height: calc(29px * var(--script-scale));
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     color: var(--text);
+  }
+  /* The read time is a button (#179): a click sets the scene's length by
+     hand (05r-read-time.js). An estimate is plain figures that take a
+     hover fill; a length set by hand sits in a hairline chip, and turns
+     the Audio amber when the words now read longer than it. An empty one
+     (no Audio, nothing set) offers "Set" on the row's hover or focus. */
+  .row-read {
+    display: inline-block;
+    min-width: 0;
+    margin: 0 -6px 0 0;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    text-align: right;
+    cursor: pointer;
+  }
+  .row-read:hover { background: var(--hover); }
+  .row-read:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .row-read.is-set { box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .row-read.is-over { color: var(--audio); box-shadow: inset 0 0 0 1px var(--audio); }
+  .row-read:empty::after { content: "Set"; font-family: var(--font-body); font-size: 12.5px; font-weight: 450; color: var(--text-faint); visibility: hidden; }
+  .row:hover .row-read:empty::after, .row:focus-within .row-read:empty::after { visibility: visible; }
+  .row-read[aria-disabled="true"] { cursor: default; }
+  .row-read[aria-disabled="true"]:hover { background: transparent; }
+  .row-read[aria-disabled="true"]:empty::after { content: none; }
+  .row-read-input {
+    width: 100%;
+    max-width: calc(80px * var(--script-scale));
+    height: calc(29px * var(--script-scale));
+    margin: 0;
+    padding: 0 6px;
+    border: 1px solid var(--visual);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: right;
+    outline: none;
+  }
+  .row-read-input[aria-invalid="true"] { border-color: var(--danger); }
+
+  /* The script zoom's readout (#191, 05s-script-zoom.js): "Script 125 %"
+     for a moment after a change, on the floating layer at the foot of the
+     window; a click is back to 100 %. */
+  .script-zoom-readout {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 190;
+    transform: translateX(-50%);
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .script-zoom-readout:hover { background: var(--hover); }
+  .script-zoom-readout:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  @media (max-width: 760px) {
+    .script-zoom-readout { bottom: calc(88px + env(safe-area-inset-bottom)); }
   }
 
   /* Done scenes recede (#169): a shot scene's words, number and read time
@@ -1032,13 +1335,43 @@
   }
   .cell-editable:hover { background: var(--surface); }
   .cell-editable:focus { background: var(--surface); box-shadow: 0 0 0 2px var(--visual) inset; }
-  /* In the script itself the row that holds the caret carries the surface
-     colour (.row:focus-within), so a field needs no fill or ring of its own
-     (#169) — the words sit on one calm surface. Visual 15px on 1.55, Audio
-     18px on 1.6: what is said leads. */
-  #rows .cell-editable { min-height: 28px; }
+  /* In the script itself the words sit on one calm surface (#169): no box
+     and no ring round a field. What says where you can type (#182):
+     - the row that holds the caret steps off the page (.row:focus-within,
+       --row-current);
+     - the field with the caret carries a 2px bar down its left edge in its
+       column's colour — Visual blue, Audio amber — and the faintest fill,
+       which is also where its box ends;
+     - under a mouse, a field takes that fill on hover, so you can see where
+       a click will land (a touch screen has no hover to show it with);
+     - an empty field is a dashed outline, fainter away from the current
+       scene, so it reads as a field and not as blank page;
+     - a click anywhere in the cell puts the caret at the end of its field
+       (05q-cell-reach.js).
+     The writer and the panels' fields keep their own look. Visual 15px on
+     1.55, Audio 18px on 1.6: what is said leads — both times the script's
+     zoom (--script-scale), never under the touch floor (--script-floor). */
+  #rows .cell-editable { min-height: calc(28px * var(--script-scale)); }
   #rows .cell-editable:hover, #rows .cell-editable:focus { background: transparent; box-shadow: none; }
-  .audio-cell .cell-editable { font-size: 18px; line-height: 1.6; }
+  @media (hover: hover) {
+    #rows .cell-editable:hover { background: var(--field-hint); }
+  }
+  /* :focus-within on the field's wrap rather than :focus on the field: the
+     same thing to a person, and it also holds while the field's own
+     toolbar or link box has the focus */
+  #rows .field-wrap:focus-within > .cell-editable { background: var(--field-hint); box-shadow: inset 2px 0 0 var(--visual); }
+  #rows .audio-cell .field-wrap:focus-within > .cell-editable { box-shadow: inset 2px 0 0 var(--audio); }
+  #rows .cell-editable:empty { outline: 1px dashed var(--border); outline-offset: -1px; }
+  #rows .row:focus-within .cell-editable:empty { outline-color: var(--border-strong); }
+  #rows .field-wrap:focus-within > .cell-editable:empty { outline-color: transparent; }
+  .visual-cell .cell-editable {
+    font-size: max(var(--script-floor), calc(var(--script-visual-size) * var(--script-scale)));
+    line-height: var(--script-visual-lh);
+  }
+  .audio-cell .cell-editable {
+    font-size: max(var(--script-floor), calc(var(--script-audio-size) * var(--script-scale)));
+    line-height: var(--script-audio-lh);
+  }
   /* The script's own words are set in Atkinson Hyperlegible Next (#169),
      the face the writer and the prompter use too; the Visual column one
      step quieter than the Audio column, which is what gets said. */
@@ -1355,7 +1688,7 @@
   .scene-gallery-grid {
     flex: none; list-style: none; margin: 8px 0 0; padding: 4px 24px;
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    max-height: 160px; overflow-y: auto; scrollbar-width: thin;
+    max-height: 160px; overflow-y: auto;
   }
   .scene-gallery-grid > li { display: flex; }
   .scene-gallery-grid-tile {
@@ -1996,7 +2329,6 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
     padding: 0 6px 6px;
   }
   .cmdk-group {
@@ -2918,8 +3250,7 @@
   button.stat-chip:hover { color: var(--text); border-color: var(--text-dim); }
   .stat-chip[hidden] { display: none; }
   .stat-chip .stat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
-  #wpm-editor { display: flex; gap: 6px; align-items: center; }
-  #wpm-editor input { width: 66px; }
+  #wpm-editor input { width: 72px; flex: none; }
 
   /* ---------- find & replace ---------- */
   .findbar {
@@ -3113,7 +3444,10 @@
     cursor: pointer;
   }
   .identity-chip:hover { border-color: var(--visual); color: var(--text); }
-  .identity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+  /* Your colour (#192): personColor(your name), set as --person by
+     updateIdentityChip() (03-sync.js) — the same colour the gutter,
+     comments, presence and History give you. */
+  .identity-dot, .person-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--person, var(--text-faint)); flex: none; }
   /* Toggled in JS (03-sync.js) whenever no author name is set, but nothing
      styled it — a named and unnamed chip looked identical apart from the
      text itself. Dims the dot to invite setting a name, the same signal
@@ -3132,6 +3466,78 @@
     transition: opacity var(--dur-fast) var(--ease-standard);
   }
   .row:hover .row-meta { opacity: 1; }
+  /* who last edited it, after a dot in their colour (#192) */
+  .row-meta-who { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+  .row-meta-who .person-dot { width: 6px; height: 6px; }
+
+  /* ---------- a small box under a header button (#193) ----------
+     The name box and the reading-speed box (openAnchorPopover, 03-sync.js):
+     appended to <body>, fixed below the button that opened it and kept on
+     screen, above the rundown strip and the side panels. B's floating
+     layer, like the File menu. */
+  .anchor-popover {
+    position: fixed;
+    z-index: 170;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: max-content;
+    min-width: 220px;
+    padding: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    font-family: var(--font-body);
+    font-size: 13px;
+  }
+  .anchor-popover-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    padding: 0;
+    margin: 0;
+  }
+  .anchor-popover-row { display: flex; align-items: center; gap: 6px; }
+  .anchor-popover-unit { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+  .anchor-popover input[type="text"], .anchor-popover input[type="number"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 32px;
+    box-sizing: border-box;
+    font-family: var(--font-body);
+    font-size: 13px;
+    padding: 0 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .anchor-popover input[type="text"] { width: 180px; }
+  .anchor-popover input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
+  .anchor-popover .btn-outline { flex: none; height: 32px; }
+  /* Your colour (#194): eight round swatches, a radio group; the chosen
+     one ringed in --text, the focused one in the focus ring. */
+  .swatch-group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .swatch-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .swatch { position: relative; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; }
+  .swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+  .swatch-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--swatch);
+    box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 3px transparent;
+    transition: box-shadow var(--dur-fast) var(--ease-standard);
+  }
+  .swatch:hover .swatch-dot { box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 3px var(--border-strong); }
+  .swatch input:checked + .swatch-dot { box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--text); }
+  .swatch input:focus-visible + .swatch-dot { outline: 2px solid var(--focus-ring); outline-offset: 5px; }
+  /* 16px, or iOS zooms the page into the field */
+  @media (max-width: 760px) {
+    .anchor-popover input[type="text"], .anchor-popover input[type="number"] { font-size: 16px; height: 36px; }
+    .anchor-popover .btn-outline { height: 36px; }
+  }
   .row.just-merged { animation: row-merged var(--dur-highlight) var(--ease-standard); }
   @keyframes row-merged {
     0%, 70% { background: color-mix(in srgb, var(--ok) 18%, transparent); }
@@ -3195,7 +3601,10 @@
     font-family: var(--font-display); font-weight: 500; font-size: 14px; line-height: 20px;
     font-variant-numeric: tabular-nums;
     color: var(--text-faint);
+    white-space: nowrap;
   }
+  /* a 12-hour clock's "12:52 PM" (#180) */
+  .history-time.is-wide { width: 72px; }
   .history-card-label {
     flex: 1; min-width: 0;
     font-size: 14px; line-height: 20px;
@@ -3405,7 +3814,6 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
     padding: 4px;
   }
 
@@ -4237,12 +4645,19 @@
   }
   .comment-quote.orphaned { color: var(--text-faint); }
   .comment-quote.orphaned .comment-quote-words { text-decoration-color: var(--text-faint); }
-  .comment-orphan-note {
-    margin-top: 4px;
-    font-family: var(--font-body); font-style: normal; font-size: 12.5px; line-height: 16px;
-    color: var(--text-faint);
+  /* "No longer in script" / "Changed" (#186): a small tag after the quote,
+     upright and in --danger so it never reads as quoted words */
+  .comment-state-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-family: var(--font-body); font-style: normal; font-weight: 600;
+    font-size: 11px; line-height: 17px;
+    vertical-align: 2px;
+    white-space: nowrap;
   }
-  .comment-orphan-note s { color: inherit; }
   .comment-resolved-note {
     display: flex; align-items: center; gap: 6px;
     margin-top: 8px;
@@ -5324,10 +5739,12 @@
       flex: 1 1 auto;
       gap: 0;
     }
-    .brand-row, .topbar-rule { display: none; }
-    .menu-wrap { display: flex; grid-column: 1; grid-row: 1 / -1; align-self: center; }
-    #btn-file { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 0; }
-    #btn-file .btn-chevron { display: none; }
+    .topbar-rule { display: none; }
+    .menu-wrap, .topbar-left > .menu-wrap { display: flex; grid-column: 1; grid-row: 1 / -1; align-self: center; margin: 0; }
+    /* The phone keeps File as its icon button (#166): the mark and the
+       name are the desktop row's. */
+    #btn-file { width: 44px; height: 44px; margin: 0; padding: 0; justify-content: center; font-size: 0; }
+    #btn-file .btn-chevron, #btn-file .brand-mark, #btn-file .brand-name { display: none; }
     #btn-file .btn-phone-icon { display: block; width: 22px; height: 22px; }
     /* 16px, not the board's 15: iOS zooms the page into a field under 16px */
     .doc-title {
@@ -5373,6 +5790,9 @@
     .program-clock-of { font-size: 11px; }
     .toolbar { flex: none; gap: 0; }
     .btn-group, #btn-write { display: none; }
+    /* Search (#175): the magnifier, in a 44px target */
+    .btn.cmdk-trigger { width: 44px; height: 44px; }
+    .btn.cmdk-trigger .btn-icon { width: 20px; height: 20px; }
     /* the 40px tally square in a 44px target: the fill stops at the
        padding, and the corner inside it is 6px */
     #btn-present {
@@ -5391,14 +5811,22 @@
     /* The rundown strip, compact (B-Phone): 52px, no ruler, 22px blocks
        with their numbers only. 05f-rundown.js scales to whatever width it
        is given. Each rule here names .rundown or .topbar as well, because
-       the strip's own rules come later in this file. */
+       the strip's own rules come later in this file. The labels are the
+       block's container queries (below); here only the number is ever
+       shown, which takes the id to outrank them. */
     .topbar .rundown { padding: 0 16px; }
     .rundown .rundown-ruler { display: none; }
     .rundown .rundown-track { height: 51px; }
-    .rundown .rd-block { top: 15px; height: 22px; gap: 4px; padding: 0 6px; font-size: 10.5px; line-height: 12px; }
-    .rundown .rd-len { display: none; }
+    .rundown .rd-block { top: 15px; height: 22px; font-size: 10.5px; line-height: 12px; }
+    @container rdb (min-width: 26px) {
+      .rundown .rd-in { gap: 4px; padding: 0 6px; }
+    }
+    #rundown .rd-len, #rundown .rd-stat, #rundown .rd-snip { display: none; }
     .rundown .rd-check { width: 9px; height: 9px; }
-    .rundown .rd-broll { top: 31px; height: 6px; }
+    .rundown .rd-broll { height: 5px; }
+    .rundown .rundown-drop { top: 11px; height: 30px; }
+    /* the chevron fills the 16px margin exactly, clear of the track */
+    .rundown .rundown-toggle { right: 0; top: 18px; }
     /* there is no ruler to shed, so condensing leaves the playhead as it is */
     .rundown .rundown-playhead,
     .topbar.is-condensed .rundown .rundown-playhead { top: 10px; height: 32px; }
@@ -5430,7 +5858,7 @@
     }
     .gutter { display: contents; }
     .row-head { grid-row: 1; grid-column: 1; align-self: baseline; margin-top: 12px; padding-left: 16px; gap: 10px; cursor: default; }
-    .row-num { font-size: 16px; line-height: 20px; }
+    .row-num { font-size: calc(16px * var(--script-scale)); line-height: calc(20px * var(--script-scale)); }
     /* Adam's call for the phone (#169): the start and the read time only
        on the scene you are in — elsewhere the header is the number and the
        status */
@@ -5495,15 +5923,9 @@
     }
     .mini-toolbar button { padding: 9px 12px; font-size: 13px; flex: none; }
 
-    /* iOS zooms the page on focusing any input under 16px — keep every
-       editing surface at 16 so focus never yanks the viewport */
-    .cell-editable { font-size: 16px; }
-    .visual-cell .cell-editable { line-height: 1.5; }
-    .audio-cell .cell-editable { font-size: 17px; line-height: 1.55; }
-    .findbar input[type="text"], .link-popover input, .video-popover input,
-    .tag-notes-input, .tag-person-input, .tag-rename-input, .tag-owner-select,
-    #tag-name, #comment-name, .bulk-person-row input,
-    .comment-assignee-select, #comments-assignee-filter { font-size: 16px; }
+    /* The iOS 16px floors are keyed on the device, not the width (#162):
+       they are in the touch block after this one, so a narrowed desktop
+       window keeps the script and its fields at the sizes they had. */
 
     .findbar button { padding: 9px 11px; font-size: 13px; }
 
@@ -5672,15 +6094,37 @@
     .writer-kicker { display: none; }
     .writer-stats { gap: 10px; font-size: 12px; }
     .writer-scroll { padding: 18px 12px 60vh; }
-    /* the default only — an explicit choice from the slider is set inline on
-       .writer and still wins */
-    .writer { --wr-font: 17px; }
+    /* the writer's phone default, 17px, is a touch device's (#162) — in the
+       touch block after this one */
     .writer .wr-para.cell-editable { padding: 6px 10px 10px; }
     .writer-bar { gap: 6px 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
     .writer-bar button { padding: 9px 10px; }
     .writer-bar .grp { flex: 1 1 100%; }
     .writer-bar input[type="range"] { flex: 1; width: auto; }
     .writer-bar .div-sep, .writer-hint { display: none; }
+  }
+
+  /* iOS zooms the page the moment you focus a field under 16px, so on a
+     touch device — phone or tablet, whatever its width — every editing
+     surface here is at least 16px. Keyed on the device, not the window
+     (#162): it used to be the 760px block above, which also made the
+     script's text GROW in a narrowed desktop window, where there is no iOS
+     to zoom. The script's own fields take the floor through --script-floor,
+     so the script's zoom (#191) can never take them under it either. */
+  @media (hover: none), (pointer: coarse) {
+    #root { --script-floor: 16px; }
+    .cell-editable { font-size: 16px; }
+    .findbar input[type="text"], .link-popover input, .video-popover input,
+    .tag-notes-input, .tag-person-input, .tag-rename-input, .tag-owner-select,
+    #tag-name, #comment-name, .bulk-person-row input,
+    .comment-assignee-select, #comments-assignee-filter, .row-read-input { font-size: 16px; }
+  }
+  /* ...and a phone's own type: the Audio a step under the desktop's 18px,
+     tighter lines, and the writer's default at 17px (an explicit choice
+     from its slider is set inline on .writer and still wins). */
+  @media (max-width: 760px) and (hover: none), (max-width: 760px) and (pointer: coarse) {
+    #root { --script-visual-lh: 1.5; --script-audio-size: 17px; --script-audio-lh: 1.55; }
+    .writer { --wr-font: 17px; }
   }
 
   /* Touch affordances, regardless of screen size (tablets included).
@@ -5939,6 +6383,90 @@
    the current connection in a well set into the raised surface. */
 .pin-panel { max-width: 420px; }
 .connect-panel { max-width: 600px; }
+
+/* ---------- Settings (#181, 20s-settings.js) ----------
+   A dialog like Servers: headed sections, a label beside or above each
+   control, switches for on/off, the Export dialog's segmented control for
+   a choice of three. The body scrolls under a fixed header. */
+.modal-panel.settings-panel {
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+.settings-body { overflow-y: auto; margin: 0 -24px; padding: 0 24px 4px; }
+.settings-section { padding: 14px 0 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.settings-section:first-child { border-top: 0; padding-top: 4px; }
+.settings-section-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.settings-field.settings-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.settings-label { font-size: 13.5px; font-weight: 500; color: var(--text); padding: 0; }
+.settings-hint { margin: -6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
+.settings-seg { max-width: 360px; }
+.settings-inline-control { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings-inline-control input[type="number"],
+.settings-inline-control input[type="text"] {
+  height: 32px;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+.settings-inline-control input[type="number"] { width: 80px; }
+.settings-inline-control input[type="text"] { width: 220px; max-width: 100%; }
+.settings-inline-control input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
+.settings-inline-control input[type="range"] { width: 160px; accent-color: var(--visual); }
+.settings-unit { font-size: 12.5px; color: var(--text-dim); }
+.settings-value { min-width: 48px; font-family: var(--font-display); font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* an on/off setting: the words on the left, a switch on the right */
+.settings-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.settings-switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-switch-label { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.settings-switch .settings-hint { margin: 0; }
+.settings-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.settings-switch-track {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.settings-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.settings-switch input:checked + .settings-switch-track { background: var(--visual); }
+.settings-switch input:checked + .settings-switch-track .settings-switch-thumb { transform: translateX(14px); }
+.settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .modal-panel.settings-panel { max-height: calc(100vh - 20px); }
+  .settings-body { margin: 0 -14px; padding: 0 14px 4px; }
+  .settings-inline-control input[type="text"], .settings-inline-control input[type="number"] { font-size: 16px; }
+  .settings-inline-control input[type="range"] { width: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch-track, .settings-switch-thumb { transition: none; }
+}
 #pin-input {
   width: 100%;
   height: 44px;
@@ -6765,8 +7293,7 @@
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 8px;
+    padding: 0;
     overflow: hidden;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lamp);
@@ -6779,10 +7306,61 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     cursor: pointer;
+    /* Each block is a size container, so which of its labels show is its
+       own width (#184): the lens widens a block and its number, read
+       time, status and first words appear with no repaint. The widths are
+       the content box — the block's less its 1px border either side —
+       so 26/64/78 here are 05f-rundown.js's 28/66/80. */
+    container: rdb / inline-size;
   }
+  .rd-in {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+  }
+  .rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip { display: none; }
   /* a block too narrow for its number is a sliver, with no room for padding */
-  .rd-block:not(:has(.rd-num)) { padding: 0; }
+  @container rdb (min-width: 26px) {
+    .rd-in { padding: 0 8px; }
+    .rd-num { display: inline; }
+    .rd-check { display: block; }
+  }
+  @container rdb (min-width: 64px) {
+    .rd-block:not(.is-shot) .rd-len { display: inline; }
+  }
+  @container rdb (min-width: 78px) {
+    .rd-len { display: inline; }
+  }
+  /* Only the lens makes a block this wide in a long script, and only then
+     do its status and its first words have somewhere to go. */
+  @container rdb (min-width: 134px) {
+    .rundown.is-lensed .rd-stat { display: inline; }
+  }
+  @container rdb (min-width: 188px) {
+    .rundown.is-lensed .rd-snip { display: block; }
+  }
   .rd-block .rd-len { color: var(--text-faint); }
+  .rd-stat {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .rd-snip {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
   .rd-block:hover { border-color: var(--text-faint); }
   .rd-block.is-shot { background: var(--hover); border-color: transparent; color: var(--text-dim); }
   .rd-block.is-shot:hover { border-color: var(--border-strong); }
@@ -6791,11 +7369,12 @@
   .rd-block.is-ready .rd-len { color: var(--text-dim); }
   .rd-block.is-current { outline: 1.5px solid var(--visual); outline-offset: 0; }
   .rd-block:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* inside its block since #184, by percentage, so it moves with it */
   .rd-broll {
     position: absolute;
-    top: 26px;
+    bottom: 0;
     width: 2px;
-    height: 8px;
+    height: 7px;
     border-radius: 1px 1px 0 0;
     background: var(--broll);
     pointer-events: none;
@@ -6816,6 +7395,117 @@
     border-style: solid;
     border-width: 7px 5px 0 5px;
     border-color: var(--visual) transparent transparent transparent;
+  }
+
+  /* The lens (#184): the ruler and the overlay fade while it is on — the
+     blocks are not to scale then, so neither is anything placed by time
+     over them. 05f-rundown.js fades them back in when it comes to rest. */
+  .rundown.is-lensed .rundown-ruler,
+  .rundown.is-lensed .rundown-overlay {
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+  }
+
+  /* The strip's own switch (#178): a chevron in its right-hand margin,
+     outside the track, so it never sits over a block. */
+  .rundown-toggle {
+    position: absolute;
+    top: 5px;
+    right: 2px;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+  }
+  .rundown-toggle svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: rotate(180deg);
+  }
+  .rundown-toggle:hover { color: var(--text); background: var(--hover); }
+  .rundown-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+  /* Minimized (#178): a thin bar. The blocks are a coloured line (.rd-seg:
+     to do the outline's grey, ready the amber, shot the lit grey), the
+     playhead a short blue tick, no ruler and no labels, and the whole bar
+     is the toggle — a click anywhere on it brings the strip back. The id
+     outranks the condensed header's and the phone's rules. */
+  #rundown.is-min .rundown-ruler { display: none; }
+  #rundown.is-min .rundown-track { height: 9px; }
+  #rundown.is-min .rundown-playhead { top: 0; height: 9px; }
+  #rundown.is-min .rundown-playhead::before { display: none; }
+  #rundown.is-min:hover { background: var(--hover); }
+  #rundown.is-min .rundown-toggle {
+    top: 0; right: 0; bottom: 0; left: 0;
+    width: auto;
+    height: auto;
+    place-items: center end;
+    padding-right: 4px;
+    border-radius: 0;
+    background: transparent;
+  }
+  #rundown.is-min .rundown-toggle svg { width: 10px; height: 10px; transform: none; }
+  #rundown.is-min .rundown-toggle:focus-visible { outline-offset: -2px; }
+  .rd-seg {
+    position: absolute;
+    top: 3px;
+    height: 3px;
+    border-radius: 1.5px;
+    background: var(--border-strong);
+    pointer-events: none;
+  }
+  .rd-seg.is-ready { background: var(--audio); }
+  .rd-seg.is-shot { background: var(--text-dim); }
+
+  /* Dropping a scene on the strip (#185): a line in the gap it would land
+     in, in the accent the script's own drop line uses, and what that means
+     in words just under the strip. */
+  .rundown-drop {
+    position: absolute;
+    top: 0;
+    height: 38px;
+    width: 3px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .rundown-drop-label {
+    position: absolute;
+    top: calc(100% + 6px);
+    z-index: 3;
+    transform: translateX(-50%);
+    padding: 4px 9px;
+    border-radius: var(--radius-sm);
+    background: var(--text);
+    color: var(--bg);
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: var(--shadow);
+    pointer-events: none;
+  }
+  .rundown-drop[hidden], .rundown-drop-label[hidden] { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rundown.is-lensed .rundown-ruler,
+    .rundown.is-lensed .rundown-overlay { transition: none; }
   }
 
   /* ---------- sidebar slide-in (BACKLOG: slide-in animation for sidebars)

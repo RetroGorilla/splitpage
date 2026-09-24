@@ -1,7 +1,15 @@
 import { S } from "./_state.js";
 import { homeConn, serverHomeId } from "./_home.js";
+import {
+  normalizePersonColors,
+  paletteColor,
+  personKey,
+  readMyColor,
+  resolvePersonColor
+} from "./00p-prefs.js";
 import { escapeHtml } from "./02-state.js";
 import { cssAttr } from "./04-richtext.js";
+import { render } from "./05-render.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiFetch,
@@ -64,15 +72,11 @@ var PRESENCE_MAX_SHOWN = 8;
 var PRESENCE_ID_KEY = "splitpage-presence-id";
 
 /* A person's colour (#169): filled circles in B's bright values with dark
-   initials, the same in both themes, the way the logo is — preview blue
-   and program amber first, then the tag palette's hues, so eight people
-   stay apart. The initials are #0F0E0C on every one of them (8:1 or more).
-   This is the one table: the Comments, Production, Gear, B-roll and
-   history panels colour a person through personColor() below. */
-var PRESENCE_COLORS = [
-  "#80BDFB", "#F9B64F", "#CBA1FA", "#73D4AC",
-  "#F89DC9", "#C8DE63", "#EF958E", "#64D1D7"
-];
+   initials, the same in both themes, the way the logo is. The eight are
+   PERSON_COLORS (00p-prefs.js); the initials are #0F0E0C on every one of
+   them (8:1 or more). The Comments, Production, Gear, B-roll and history
+   panels, the gutter's "last edited by" and the header's identity dot all
+   colour a person through personColor() below. */
 
 var presenceSelf = "";
 var presenceHere = [];                       /* others, as last reported */
@@ -103,17 +107,64 @@ function presenceSeed(p) {
   return (p && p.name) || (p && p.id) || "";
 }
 
+/* Someone here now who picked a colour sends it with every beat (#194);
+   anyone else is coloured by name like everybody else. */
 function presenceColor(p) {
-  return personColor(presenceSeed(p));
+  return paletteColor(p && p.color) || personColor(presenceSeed(p));
 }
 
-/* The colour of a person, by name — stable across windows and sessions,
-   since it is the name that is hashed. */
+/* name (personKey) → colour, from the people in this document right now
+   who picked one. Rebuilt from each answer; a change repaints the script,
+   whose gutters name people too. */
+var presenceLiveColors = {};
+
+function noteLiveColors(list) {
+  var next = {};
+  (list || []).forEach(function (p) {
+    var color = paletteColor(p && p.color);
+    var key = personKey(p && p.name);
+    if (color && key) next[key] = color;
+  });
+  var changed = JSON.stringify(next) !== JSON.stringify(presenceLiveColors);
+  presenceLiveColors = next;
+  return changed;
+}
+
+/* The colour of a person, by name (#192, #194): your own pick for you,
+   then what the people here now say, then the document's own map, then
+   the hash of the name — which is what everyone got before anyone could
+   pick, and still gets until they do. resolvePersonColor (00p-prefs.js)
+   is the order; this only gathers what it reads. */
 export function personColor(seed) {
-  seed = String(seed || "");
-  var hash = 0;
-  for (var i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
-  return PRESENCE_COLORS[Math.abs(hash) % PRESENCE_COLORS.length];
+  return resolvePersonColor(seed, {
+    self: getSavedAuthorName(),
+    selfColor: readMyColor(),
+    live: presenceLiveColors,
+    doc: S.state && S.state.personColors
+  });
+}
+
+/* Your pick, into the document you are editing, so everyone who opens it
+   later sees the colour you chose (#194). Called from markDirty() — every
+   edit ends there (invariant #53) — so a document you only read is never
+   changed by it. The map is bookkeeping, not content: 12a-undo.js leaves
+   it out of the undo stack. */
+export function recordMyColor(state) {
+  if (!state) return false;
+  var name = getSavedAuthorName().trim();
+  var color = readMyColor();
+  if (!name || !color) return false;
+  var map = state.personColors && typeof state.personColors === "object" ? state.personColors : null;
+  var have = "";
+  if (map) {
+    Object.keys(map).forEach(function (k) { if (personKey(k) === personKey(name)) have = k; });
+    if (have && map[have] === color) return false;
+  }
+  var next = {};
+  if (map) Object.keys(map).forEach(function (k) { if (k !== have) next[k] = map[k]; });
+  next[name.slice(0, 80)] = color;
+  state.personColors = normalizePersonColors(next);
+  return true;
 }
 
 function presenceInitials(name) {
@@ -164,6 +215,9 @@ function presencePayload(gone) {
        Empty is not "anonymous is a secret" — it is what makes the other
        end say "Guest". */
     name: getSavedAuthorName() || "",
+    /* The colour you picked (#194), "" until you pick — the others then
+       colour you by your name, exactly as before. */
+    color: readMyColor(),
     rowId: presenceWhere.rowId || "",
     field: presenceWhere.field || "",
     gone: !!gone
@@ -172,8 +226,16 @@ function presencePayload(gone) {
 
 function clearPresence() {
   if (!presenceHere.length) { paintPresence(); return; }
-  presenceHere = [];
+  setPresenceHere([]);
+}
+
+/* Everyone the server says is here, painted; and when what they say about
+   their colours changed, the script too — its gutters name people. */
+function setPresenceHere(list) {
+  presenceHere = list || [];
+  var recolored = noteLiveColors(presenceHere);
   paintPresence();
+  if (recolored && S.state) render();
 }
 
 async function presenceTick() {
@@ -184,8 +246,7 @@ async function presenceTick() {
     var body = await apiFetch("api/presence", { method: "POST", body: presencePayload(false) });
     presenceFailures = 0;
     presenceAnnounced = true;
-    presenceHere = (body && body.here) || [];
-    paintPresence();
+    setPresenceHere((body && body.here) || []);
     /* The beat is the pull channel too (#69): the answer names the
        document's rev, and 13-hosted.js decides whether that means going and
        getting it. Presence knows nothing about documents and is not about to
@@ -337,7 +398,7 @@ export function __init() {
      the app reads this. */
   window.__presenceTest = {
     /* Answer as the server would have. */
-    apply: function (here) { presenceHere = here || []; presenceFailures = 0; paintPresence(); },
+    apply: function (here) { presenceFailures = 0; setPresenceHere(here || []); },
     payload: presencePayload,
     wanted: presenceWanted,
     beat: presenceTick,

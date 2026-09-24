@@ -1,9 +1,11 @@
 import { S } from "./_state.js";
+import { writePref } from "./00p-prefs.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
 import { gallerySize, rowSlots, setRowSlots } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
+import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
   cssAttr,
   ensureTrailingCaretSpot,
@@ -21,9 +23,7 @@ import {
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
-import { closeGearPanel, closeProductionPanel } from "./08-production-panels.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
-import { closeCommentsPanel } from "./10-comments.js";
 import { truncateForPreview } from "./11-import.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
@@ -419,9 +419,8 @@ export function applyWriterSize(px, remember) {
   var n = Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, Math.round(px)));
   el.style.setProperty("--wr-font", n + "px");
   document.getElementById("wr-size").value = String(n);
-  if (remember) {
-    try { localStorage.setItem(WRITER_SIZE_KEY, String(n)); } catch (e) {}
-  }
+  /* stored and announced, so Settings (#181) follows the writer's slider */
+  if (remember) writePref(WRITER_SIZE_KEY, String(n));
 }
 
 function setWriterGutter(mode) {
@@ -445,10 +444,8 @@ export function openWriter() {
   /* The writer is a mode, not a layer. A side panel left open underneath
      it is either covered or showing through the edge, and on a phone it
      is the whole screen — so they close, the same way they would if you
-     had navigated somewhere else. */
-  closeProductionPanel();
-  closeGearPanel();
-  closeCommentsPanel();
+     had navigated somewhere else (invariant #16). */
+  closeAllSidePanels();
   if (findOpen) closeFindBar();
   document.getElementById("writer-title").value = S.state.title || "";
   mirrorFileChipToWriter();

@@ -954,6 +954,8 @@ builds two fields.
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
+    // a length set by hand (#179): whole seconds 0–86400, absent = the estimate
+    "lengthSeconds": 90,
     "status": "todo | ready | shot", "updatedAt": "ISO", "updatedBy": "name" }],
   "comments": [{ "id": "c1", "rowId": "r1", "field": "audioText | visualText | visualImage",
     "anchorId": "c1", "quotedText": "plain text", "author": "name", "body": "sanitised HTML",
@@ -969,15 +971,62 @@ builds two fields.
     "status": "unshot | shot", "reshoot": false, "notes": "plain text ≤2000",
     "owner": "p… or ''", "audioRef": "plain text", "location": "plain text ≤80",
     "origin": "script | list",
-    "props": [{ "id": "t_… (a productionTags id) or ''", "name": "≤80" }] }]  // ≤40, hand-added only (#149)
+    "props": [{ "id": "t_… (a productionTags id) or ''", "name": "≤80" }] }],  // ≤40, hand-added only (#149)
+  "personColors": { "Adam": "#CBA1FA" }  // #194 — ABSENT until somebody picks; see below
 }
 ```
+
+**`personColors`** (#194) is the colour each person picked for themselves,
+`{name: colour}`: a name (trimmed, ≤80 characters) to one of the eight
+`PERSON_COLORS` (`00p-prefs.js`), at most 200 of them. It has **no
+default**: a document nobody picked in has no key at all, so a file from
+before #194 reads, merges and saves byte for byte as it did, and an older
+client that meets the key just carries it. Your pick lives in your prefs
+(`splitpage-person-color`) and `markDirty()` writes it under your name into
+each document you edit (`recordMyColor`, 13a-presence.js; a reviewer's copy
+is left alone). It is bookkeeping, not content: `12a-undo.js` keeps it out of
+the undo stack. `migrateRows()` cleans it (`normalizePersonColors`: garbage
+dropped, names that differ only in case or padding kept once, the key
+deleted when nothing valid is left); `mergeStates()` merges it per name with
+`mergePersonColors` — the side that moved a name off the base wins, both
+moved it is mine, a name either side (or only the base) has is kept, nothing
+is ever removed. Both project formats carry it unchanged (it is just a
+state key). A person's colour is resolved by `personColor(name)`
+(13a-presence.js over `resolvePersonColor`): your own pick for your name,
+then what the people online now send with presence (`color` on
+`/api/presence`, `#RRGGBB` only, whitelisted by the server and checked
+against the eight again by the page), then this map, then the hash of the
+name — which is what everyone got before #194 and still gets until they
+pick.
 
 `ROW_FIELDS = ["visualText","imageRef","audioText","imageLinks","moreImages"]`
 merges as content (an `imageRef` compared by its sha; the gallery's two
 lists as sets, both sides' additions kept, never a conflict, #135); `rows[].status` and
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
+
+**A scene's length** (#179) is `rowSeconds(row)` (01-scene-status.js):
+`rows[].lengthSeconds` when it is set, which replaces the estimate outright,
+otherwise the Audio words at `wordsPerMinute`. Every consumer — the gutter's
+start times, the program clock, the rundown strip, the Production and B-roll
+panels, the CSV, Present's clock — reads `rowSeconds()`, never the words
+directly (Present's *scroll speed* is still words and reading speed).
+`migrateRows()` keeps a whole number 0–86400 and drops anything else, so a
+file from before #179 reads as the estimate. It is set from the rail's Read
+time (05r-read-time.js; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
+`parseSceneLength()`), which is read-only in a review session. It is not in
+`ROW_FIELDS` (not text): `mergeRow` takes the side that changed it since the
+base, theirs when both did (no conflict card), and with no base a set length
+beats none; `rowContentEqual()` counts it, so setting it outranks the other
+side's delete. Undo needs nothing — `diffStates` makes it a `rowField` step.
+A `.splitpage` and the `.md` data block carry it as any row key; the `.md`
+table does not show it.
+
+**Per person, not per document:** the script's zoom (#191) is
+`localStorage["splitpage-script-scale"]` (a number, 1 = 100 %, absent at
+100 %), applied as `--script-scale` on `#root` by 05s-script-zoom.js, which
+also re-applies on a `splitpage:pref` event (`detail.key` that key) and on
+another window's `storage` event.
 
 **The two script cells merge a word at a time** (#85,
 `docs/DOCUMENT-MODEL.md` §8). `mergeRow` hands each to `mergeTextField()`
@@ -1125,6 +1174,23 @@ stores until the one-time move has emptied them — see above), `splitpage-blobs
 `blobs`, key = sha256, `{mime, size, bytes: Blob, addedAt, usedAt}`; image
 bytes, #82 — nothing deletes them yet, D4).
 
+**Per-person settings** (#181, the Settings dialog, `20s-settings.js`), all
+localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
+absent = system; sets `data-theme` on `<html>` and, in the desktop app,
+`nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
+(`12`/`24`, absent = system; `formatClock()` in `00p-prefs.js` is the one
+clock formatter, #180), `splitpage-person-color` (#194),
+`splitpage-default-wpm` (the reading speed a NEW script starts at),
+`splitpage-rundown-min` and `splitpage-script-scale` (other lanes' own
+controls; Settings only reads and writes them), plus the keys that already
+had homes (`splitpage-hide-shot`, `splitpage-autosave`,
+`splitpage-writer-size`, `splitpage-prompter-mirror`/`-flip`/`-scene-mode`,
+`splitpage-comment-author`). Every write goes through `writePref(key,
+value)`, which stores it and then fires `document`'s
+`"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
+setting listens for its key, so a change made anywhere shows everywhere.
+File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
+
 ---
 
 ## 5. Invariants — break these and data goes quietly wrong
@@ -1182,11 +1248,20 @@ bytes, #82 — nothing deletes them yet, D4).
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
 16. **Anything that opens over the whole screen must close the side
-    panels.** Not yet true everywhere: `openWriter()` closes Production,
-    Gear, Comments and find but not B-roll or History, and `openPrompter()`
-    closes none (#163). Help (`closeSidePanelsForHelp()`) and the full-page
-    shot list (`openBrollPage()`) each walk `SIDE_PANEL_IDS` with their own
-    loop; #163 folds all four into one helper. Writer and Present sit at
+    panels**, through the one helper `closeAllSidePanels()`
+    (03b-side-panels.js, #163). It walks `SIDE_PANEL_IDS`, calls each open
+    panel's own close function (`closeCommentsPanel()`,
+    `closeProductionPanel()`, `closeGearPanel()`, `closeBrollPanel()`,
+    `closeHistoryPanel()`, via `SIDE_PANEL_CLOSERS`) and then
+    `syncPanelClass()` once, so `body.panel-open` and `#root`'s padding
+    reset. Present (`openPrompter()`), the Writer (`openWriter()`, which
+    also closes the find bar), Help, the tour, the setup wizard and the
+    full-page shot list (`openBrollPage()`) all call it. Leaving Present or
+    the Writer brings no panel back; the shot list alone reopens the B-roll
+    panel on close if that is where it was opened from. A new panel goes in
+    `SIDE_PANEL_WIDTH_DEFAULTS` (which is `SIDE_PANEL_IDS`) and, if it has a
+    close function, in `SIDE_PANEL_CLOSERS`. `tests/128-side-panels-modes.txt`
+    checks every panel against both modes. Writer and Present sit at
     `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
 18. **A comment's anchor is its `cmt` mark in the script; `rowId`/`field`
@@ -1500,6 +1575,7 @@ evaluation order via `_entry.js`):
 | `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11) |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
+| `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`, `savedAgoPhrase`), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
@@ -1516,6 +1592,9 @@ evaluation order via `_entry.js`):
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
+| `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
+| `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
+| `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
@@ -1526,7 +1605,7 @@ evaluation order via `_entry.js`):
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
-| `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks |
+| `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
@@ -1548,6 +1627,7 @@ evaluation order via `_entry.js`):
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
+| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed |
 | `21-events.js` | all event wiring, `init()` |
 
@@ -1661,13 +1741,22 @@ Google Cloud project only Adam can create — the by-hand check is in
 `docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
 
-**The header after Direction B (#169).** Between 761 and about 1240 px the
-header row overlaps itself: the labelled panel toggles don't fit their
-column and spill left over the clock, title and save status (#174). Fix
-that first: #166 (the mark and name become the File button, with a clear
-button cue) and #175 (a visible Ctrl K search control) both add to that
-row. A new logo is coming, so keep the header mark a single swappable SVG.
-The open issues were re-checked against the redesign on 2026-09-24.
+**The header after Direction B (#169).** The row no longer overlaps
+itself at any width (#174): its right column is never narrower than its
+buttons (`minmax(max-content, 1fr)`), and "the header's widths" in
+`app.css` drop what they can as the window narrows — Search to its word
+and then its magnifier (#175), the panel toggles to icon + count below
+1250, the File button to its mark below 1180, Write to its icon below
+1000, the save status to a dot below 880 — each label staying the
+button's name and tooltip. The mark and name are the File button (#166,
+still `#btn-file`); the mark is ONE symbol, `#i-mark` in the sprite, which
+the header and the New Tab page both `<use>` — a new logo changes that
+symbol and nothing else. The title gives way before the facts and your
+name never does (#183). `#root` spans the window and only the script is
+held to 1800px (#190); the rundown strip runs the window's width, less an
+open panel (#189). One slim scroll-bar style app-wide, and the page's own
+bar hidden while a panel is open (#187, #188). `tests/85-header-fit.txt`
+measures all of it by resizing an iframe.
 
 **Temporary code to delete (#83) — tracked in #100.** Each item has to
 ship in one release first, so an upgrading user skips nothing. #83 first

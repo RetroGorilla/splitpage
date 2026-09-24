@@ -148,6 +148,44 @@ key Escape
 sleep 200
 expect document.activeElement.id == btn-file
 
+# --- the header's "Search or run a command" button (#175) -------------------
+# At this suite's 1440px it is the magnifier (the field's words are its name
+# and tooltip); its keycaps are the File menu's chips, drawn from data-keys.
+expect document.getElementById('btn-command').textContent.indexOf('Search or run a command') === 0
+expect Array.prototype.map.call(document.querySelectorAll('#btn-command .mi-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+K'
+expect document.getElementById('btn-command').getAttribute('aria-keyshortcuts') == Control+K
+expect document.getElementById('btn-command').title == Search or run a command (Ctrl+K)
+expect document.getElementById('btn-command').getBoundingClientRect().width > 0
+click #btn-command
+sleep 300
+expect !document.getElementById('cmdk').hidden
+expect document.activeElement.id == cmdk-input
+expect document.querySelectorAll('#cmdk-list .cmdk-item').length > 30
+# Esc closes it; a mouse click never took the focus from where it was (the
+# header keeps a script cell's caret), so that is where it goes back to
+key Escape
+sleep 200
+expect document.getElementById('cmdk').hidden
+expect document.activeElement.id == btn-file
+# from the keyboard: Enter on the focused button opens it, Esc comes back
+# to the button, and Ctrl+K still closes it
+eval document.getElementById('btn-command').focus()
+key Enter
+sleep 300
+expect !document.getElementById('cmdk').hidden
+expect document.activeElement.id == cmdk-input
+key Escape
+sleep 200
+expect document.activeElement.id == btn-command
+key Enter
+sleep 300
+expect !document.getElementById('cmdk').hidden
+expect document.activeElement.id == cmdk-input
+key ctrl KeyK
+sleep 200
+expect document.getElementById('cmdk').hidden
+eval document.activeElement.blur()
+
 # --- not inside the teleprompter ---------------------------------------------
 jsclick #btn-present
 sleep 500

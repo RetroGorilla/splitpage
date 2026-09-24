@@ -134,6 +134,11 @@ const CHANNELS = [
 
   { name: "splitpage:open-external", direction: "send", argsSchema: ["string"], allowedOrigins: APP },
 
+  /* Settings ▸ Theme (#181): "system", "light" or "dark", and nothing
+     else — main sets nativeTheme.themeSource, which the title bar, the tab
+     strip and every tab's prefers-color-scheme follow. */
+  { name: "splitpage:set-theme", direction: "send", argsSchema: ["string"], allowedOrigins: APP },
+
   /* A video file dropped or pasted into a scene's gallery (#135). The
      preload reads the path off the File itself (webUtils.getPathForFile —
      a page cannot make a File that has one) and hands it to video-file-

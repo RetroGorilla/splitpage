@@ -4254,8 +4254,11 @@ function routeLaunchFile(absPath) {
  *    (src/js/18b-file-menu.js) stand down whenever the desktop bridge is
  *    there, so the real accelerators below are the only ones that fire. Ctrl+B/I/U and Ctrl+Enter/Alt+Enter are also
  *    page-handled but aren't menu commands at all, so they don't come up.
+ *    View ▸ Zoom In / Zoom Out / Actual Size are the page's script zoom
+ *    (Ctrl/Cmd + "+" / "-" / "0", src/js/05s-script-zoom.js, #191), display
+ *    only for the same reason.
  *    Everything else below — Save, Save As, Open, undo/redo/cut/copy/paste
- *    roles, zoom, fullscreen — has no page-level listener, so real
+ *    roles, fullscreen — has no page-level listener, so real
  *    accelerators are safe to register normally.
  * --------------------------------------------------------------------- */
 
@@ -4356,6 +4359,11 @@ function buildMenu() {
       { label: "Export…", accelerator: "CmdOrCtrl+E", registerAccelerator: false, click: () => sendMenuCommand("export") },
       { label: "Export", submenu: exportSubmenu },
       { type: "separator" },
+      /* Settings (#181): the page's own dialog, reached like every other
+         File item (the in-page File menu's Settings button). No
+         accelerator — Adam picks one if it ever gets one. */
+      { label: "Settings…", click: () => sendMenuCommand("settings") },
+      { type: "separator" },
       isMac ? { role: "close" } : { role: "quit", label: "Exit" }
     ]
   };
@@ -4434,15 +4442,26 @@ function buildMenu() {
          and clicks the matching #file-menu button, which already keeps its
          own label and aria-checked in sync (01b-hide-shot.js). */
       { label: "Hide shot scenes", accelerator: "CmdOrCtrl+Alt+H", click: () => sendMenuCommand("toggle-hide-shot") },
+      /* Issue #178: the rundown strip down to a thin line, and back. Same
+         shape as the item above — the page owns the setting (per-device
+         localStorage) and its switch in File ▸ This document, which
+         sendMenuCommand clicks. No accelerator: Adam picks keys. */
+      { label: "Minimize the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" },
         { role: "toggleDevTools" },
         { type: "separator" }
       ]),
-      { role: "resetZoom" },
-      { role: "zoomIn" },
-      { role: "zoomOut" },
+      /* Issue #191: these zoom the script, not the page — Chromium's page
+         zoom scaled the header and the panels with it. The page's own
+         Ctrl/Cmd + "0" / "+" / "-" keydown (src/js/05s-script-zoom.js) does
+         the same, so like Find above the accelerators are shown and not
+         registered, and the keystroke reaches the page. Present and the
+         Writer keep their own size controls. */
+      { label: "Actual Size", accelerator: "CmdOrCtrl+0", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-reset") },
+      { label: "Zoom In", accelerator: "CmdOrCtrl+Plus", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-in") },
+      { label: "Zoom Out", accelerator: "CmdOrCtrl+-", registerAccelerator: false, click: () => sendMenuCommand("script-zoom-out") },
       { type: "separator" },
       { role: "togglefullscreen" }
     ]
@@ -4871,6 +4890,15 @@ function registerIpc() {
 
   ipcOn("splitpage:open-external", (event, url) => {
     if (typeof url === "string" && /^(https?|mailto):/i.test(url)) shell.openExternal(url);
+  });
+
+  /* Settings ▸ Theme (#181). The page's own data-theme repaints the page;
+     the title bar overlay and the tab strip are this process's, and follow
+     nativeTheme — its "updated" listener (in app.whenReady) repaints every
+     window. One of three words, and nothing else is ever set. */
+  ipcOn("splitpage:set-theme", (event, mode) => {
+    if (mode !== "system" && mode !== "light" && mode !== "dark") return;
+    if (nativeTheme.themeSource !== mode) nativeTheme.themeSource = mode;
   });
 
   /* ---- video files in a scene's gallery (#135) -----------------------

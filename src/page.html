@@ -94,6 +94,7 @@
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 0 1 4.9.6c0 1.7-2.4 2.3-2.4 3.9"/><path d="M12 17h.01"/></symbol>
     <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6.5h9M17 6.5h3M4 12h3M11 12h9M4 17.5h11M19 17.5h1"/><circle cx="15" cy="6.5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17.5" r="2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/><circle cx="12" cy="12" r="6.8"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5z"/><circle cx="8" cy="8" r="1.5"/></symbol>
     <symbol id="i-box" viewBox="0 0 24 24"><path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/></symbol>
@@ -140,6 +141,17 @@
     <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
     <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
     <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
+    <!-- THE MARK (#169, #166): the one copy of the logo the page draws —
+         the header's File button and the New Tab page's wordmark both
+         <use> it. "On air": preview blue beside program amber, the tally
+         lamp cut into the amber corner; icon.svg without its script lines,
+         which turn to mud this small. Fixed colours, the same in both
+         themes — it is the logo, not a themed control. A new logo is a
+         change to this symbol and nothing else: every place it is drawn
+         sizes it by its own box (22px square), never by its shape. -->
+    <symbol id="i-mark" viewBox="0 0 512 512"><rect x="12" y="12" width="488" height="488" rx="100" fill="#0F0E0C" stroke="#43423F" stroke-width="24"/><rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/><rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/><circle cx="404" cy="116" r="50" fill="#0F0E0C"/><circle cx="404" cy="116" r="38" fill="#D7352D"/><circle cx="404" cy="116" r="26" fill="#F45246"/></symbol>
+    <!-- The rundown strip put away to a thin line (#178) -->
+    <symbol id="i-rundown-min" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="6" height="6" rx="1"/><rect x="11" y="5.5" width="3.5" height="6" rx="1"/><rect x="16" y="5.5" width="4.5" height="6" rx="1"/><path d="M3.5 17.5h17"/></symbol>
   </defs>
 </svg>
 <div id="root">
@@ -153,18 +165,15 @@
   <header class="topbar">
     <div class="topbar-row">
       <div class="topbar-left">
-        <div class="brand-row">
-          <!-- The mark (#169): "On air" — preview blue beside program amber,
-               the tally lamp cut into the amber corner. icon.svg without its
-               script lines, which turn to mud this small. Its colours are
-               fixed, the same in both themes — it is the logo, not a themed
-               control. -->
-          <span class="brand"><svg class="brand-mark" width="22" height="22" viewBox="0 0 512 512" aria-hidden="true"><rect x="12" y="12" width="488" height="488" rx="100" fill="#0F0E0C" stroke="#43423F" stroke-width="24"/><rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/><rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/><circle cx="404" cy="116" r="50" fill="#0F0E0C"/><circle cx="404" cy="116" r="38" fill="#D7352D"/><circle cx="404" cy="116" r="26" fill="#F45246"/></svg>Splitpage</span>
-        </div>
       <div class="menu-wrap">
-        <!-- .btn-phone-icon: the button's face at phone width, where the
-             word is dropped (the responsive block) and stays its name. -->
-        <button class="btn btn-quiet" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu"><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-file"/></svg>File<svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+        <!-- The mark and the name ARE the File button (#166): the mark (the
+             sprite's #i-mark, the one copy of the logo), "Splitpage", and the
+             chevron that says it opens something. Still #btn-file with its
+             menu-button attributes, so every handler, the desktop native
+             menu and every suite that reaches for it are untouched.
+             .btn-phone-icon is its face at phone width, where the mark and
+             the name are not drawn (the responsive block). -->
+        <button class="btn btn-quiet btn-brand" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" aria-label="Splitpage: File menu" title="File menu"><svg class="brand-mark" width="22" height="22" aria-hidden="true"><use href="#i-mark"/></svg><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="brand-name">Splitpage</span><svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
         <!-- Only drawn at phone width, where the menu is a sheet from the
              bottom of the screen; a dropdown needs no scrim. -->
         <div class="menu-backdrop" id="file-menu-backdrop" hidden></div>
@@ -283,6 +292,12 @@
                    aria-checked. Ctrl/Cmd+Alt+H, mirrored in the desktop View
                    menu (desktop/main.js). -->
               <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse scenes marked Shot into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide shot scenes</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
+              <!-- Shrinks the rundown strip under the header to a thin
+                   progress line — issue #178. A per-device view setting
+                   (localStorage "splitpage-rundown-min"), the same switch as
+                   the chevron on the strip itself; 05f-rundown.js keeps
+                   aria-checked. Mirrored in the desktop View menu. -->
+              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimize the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <!-- Desktop app only (issue #86): the in-page twin of View ▸
                    Present in Browser, which a Windows user cannot reach —
                    the window's title bar is the tab strip, so there is no
@@ -302,6 +317,9 @@
           <!-- Help and the app's own settings: small, always at the bottom,
                outside the scrolling list so they are never scrolled away. -->
           <div class="menu-foot" role="group" aria-label="Help and settings">
+            <!-- Settings (#181): the per-person preferences in one dialog
+                 (20s-settings.js, which catches this click first). -->
+            <button type="button" role="menuitem" class="mi mi-foot" data-file-action="settings" id="menu-settings"><svg class="mi-icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="mi-label">Settings</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="help" data-keys="F1" data-keys-only="desktop"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-label">Help</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tour"><svg class="mi-icon" aria-hidden="true"><use href="#i-compass"/></svg><span class="mi-label">Tour</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="setup" title="Set up Splitpage…"><svg class="mi-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="mi-label">Set up</span></button>
@@ -374,16 +392,27 @@
         </button>
       </div>
       <div class="toolbar">
+        <!-- Search or run a command (#175): a button shaped like a search
+             field that opens the command menu (18d-command-menu.js), the
+             same one Ctrl K and File ▸ Search commands… open — typing starts
+             in the menu's own box. Its key hint is the File menu's chip,
+             drawn from data-keys by 18b-file-menu.js. It gives way to a
+             magnifier when the row runs short (app.css, the header's
+             widths), and is a magnifier on the phone. -->
+        <button class="btn cmdk-trigger" id="btn-command" type="button" title="Search or run a command" data-keys="mod+k"><svg class="btn-icon" aria-hidden="true"><use href="#i-search"/></svg><span class="btn-label">Search<span class="cmdk-trigger-more"> or run a command</span></span></button>
         <!-- The four panels share one slot on the right; each is a quiet
              toggle — icon, label, and its count in the mono — pressed while
-             its panel is open (syncPanelClass, 03-sync.js). -->
+             its panel is open (syncPanelClass, 03-sync.js). Where the row
+             runs short (below 1250px, #174) the labels leave the screen but
+             not the button: .btn-label is then read to a screen reader and
+             shown as the tooltip, and the icon and the count stay. -->
         <div class="btn-group" role="group" aria-label="Panels">
-          <button class="btn panel-toggle" id="btn-production" type="button" aria-pressed="false"><svg class="btn-icon" aria-hidden="true"><use href="#i-tag"/></svg>Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
-          <button class="btn panel-toggle" id="btn-gear" type="button" aria-pressed="false" title="Gear: an equipment list, tagged with <gear> or its own quick-add box"><svg class="btn-icon" aria-hidden="true"><use href="#i-box"/></svg>Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
-          <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg>B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
-          <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg>Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-production" type="button" aria-pressed="false" title="Production"><svg class="btn-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="btn-label">Production</span><span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-gear" type="button" aria-pressed="false" title="Gear: an equipment list, tagged with <gear> or its own quick-add box"><svg class="btn-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="btn-label">Gear</span><span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="btn-label">B-roll</span><span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
-        <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg>Write</button>
+        <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
         <!-- The one primary action, and the one tally-red thing in the
              header: presenting is going live. -->
         <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
@@ -1415,9 +1444,9 @@
 <div class="newtab-page" id="newtab-page" hidden>
   <header class="newtab-bar">
     <span class="newtab-wordmark">
-      <!-- The mark (#169), as in the topbar's .brand: fixed colours, not
-           currentColor — the logo is the same in both themes. -->
-      <svg class="newtab-wordmark-mark" width="22" height="22" viewBox="0 0 512 512" aria-hidden="true"><rect x="12" y="12" width="488" height="488" rx="100" fill="#0F0E0C" stroke="#43423F" stroke-width="24"/><rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/><rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/><circle cx="404" cy="116" r="50" fill="#0F0E0C"/><circle cx="404" cy="116" r="38" fill="#D7352D"/><circle cx="404" cy="116" r="26" fill="#F45246"/></svg>
+      <!-- The mark (#169): the sprite's #i-mark, the same copy the
+           header's File button draws. -->
+      <svg class="newtab-wordmark-mark" width="22" height="22" aria-hidden="true"><use href="#i-mark"/></svg>
       Splitpage
     </span>
     <div class="newtab-bar-actions">
