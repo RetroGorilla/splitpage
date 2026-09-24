@@ -81,13 +81,31 @@ export var TAG_CATEGORIES = [
    dropped: five vocabularies for one idea, and the breakdown exports to a
    single flat sheet where one Status column has to mean the same thing in
    every row. Order is meaningful — it is the rank a merge uses, so two
-   people editing the same file can never walk an item backwards. */
+   people editing the same file can never walk an item backwards.
+
+   Each one is drawn as a lamp (#169, Adam's review): a 12×6 bar that fills
+   up as the item comes into hand — Needed unlit, Sourcing half lit in
+   program amber, Have it lit — and Returned, off the list, as a return
+   arrow. `color` is that lamp's colour, for anything that shows the status
+   as a word alone: not green or cyan for Have it, since green is the Gear
+   and Location tags' colour and cyan is b-roll's. */
 export var TAG_STATUSES = [
   { id: "needed",   label: "Needed",   color: "var(--text-faint)" },
   { id: "sourcing", label: "Sourcing", color: "var(--audio)" },
-  { id: "have",     label: "Have it",  color: "var(--ok)" },
-  { id: "returned", label: "Returned", color: "var(--text-dim)" }
+  { id: "have",     label: "Have it",  color: "var(--text)" },
+  { id: "returned", label: "Returned", color: "var(--text-faint)" }
 ];
+
+/* The lamp for a status, the one way every panel draws it (the .item-lamp
+   rules in app.css "side panel parts"). Decoration: the word beside it is
+   what a screen reader hears. */
+export function tagStatusLampHtml(id) {
+  var st = tagStatus(id) || TAG_STATUSES[0];
+  if (st.id === "returned") {
+    return '<svg class="item-lamp is-returned" aria-hidden="true" focusable="false"><use href="#i-return"/></svg>';
+  }
+  return '<span class="item-lamp is-' + st.id + '" aria-hidden="true"></span>';
+}
 
 export function tagStatus(id) {
   for (var i = 0; i < TAG_STATUSES.length; i++) {
@@ -1560,12 +1578,14 @@ export function resetProductionPanelState() {
   clearProductionSelection();
 }
 
+/* The composer's categories: outlined buttons with the category's dot,
+   the chosen one drawn in --text (#169, the panels' language). */
 export function renderTagCategories(selected) {
   document.getElementById("tag-cats").innerHTML = TAG_CATEGORIES.map(function (c) {
     return '<button type="button" class="tag-cat-btn' + (c.id === selected ? ' is-active' : '') +
       '" style="--dot:' + c.color + '" data-tag-cat="' + c.id + '" role="radio" aria-checked="' +
       (c.id === selected ? 'true' : 'false') + '">' +
-      '<span class="tag-cat-dot"></span>' + escapeHtml(c.label) + '</button>';
+      '<span class="tag-cat-dot" aria-hidden="true"></span>' + escapeHtml(c.label) + '</button>';
   }).join("");
 }
 

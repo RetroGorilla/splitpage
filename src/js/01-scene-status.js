@@ -1,7 +1,8 @@
 import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { pad2, render, renderRow } from "./05-render.js";
+import { pad2, paintRowTimes, render, renderRow } from "./05-render.js";
+import { renderRundown } from "./05f-rundown.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
 import { markDirty } from "./12-dirty-toast.js";
@@ -15,11 +16,16 @@ export var wordCount;
 /* ================= scene status and runtime ================= */
 
 /* Three states, not five: a scene is either still being written, ready to
-   point a camera at, or in the can. Anything finer belongs in a comment. */
+   point a camera at, or in the can. Anything finer belongs in a comment.
+
+   Drawn as lamps (#169): To do is an unlit outline, Ready the program
+   amber, Shot lit in the text colour with a small dark check. `cls` keeps
+   the names the status dot always had (is-open, is-half), which the lamp
+   rules in app.css and the suites read. */
 export var ROW_STATUSES = [
   { id: "todo",  label: "To do", cls: "is-open", color: "var(--text-faint)" },
-  { id: "ready", label: "Ready", cls: "is-half", color: "var(--visual)" },
-  { id: "shot",  label: "Shot",  cls: "",        color: "var(--ok)" }
+  { id: "ready", label: "Ready", cls: "is-half", color: "var(--audio)" },
+  { id: "shot",  label: "Shot",  cls: "",        color: "var(--text)" }
 ];
 
 export function rowStatus(id) {
@@ -53,21 +59,43 @@ export function formatDuration(sec) {
   return h ? (h + ":" + pad2(m) + ":" + pad2(s)) : (m + ":" + pad2(s));
 }
 
+/* A point in the programme rather than a length (#169): the program clock
+   and each scene's start, "01:35" and "00:31" — minutes always two digits,
+   the way a timecode reads. A length (a scene's read time) stays
+   formatDuration's "0:19". */
+export function formatTimecode(sec) {
+  var whole = Math.max(0, Math.round(sec));
+  var h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
+  return (h ? h + ":" : "") + pad2(m) + ":" + pad2(s);
+}
+
 export function updateScriptStats() {
   if (!S.state) return;
   var totalEl = document.getElementById("runtime-total");
   if (totalEl) {
     /* With shot scenes hidden, the number that matters is what's left to
-       record — but the total is still worth keeping in view, so both show. */
+       record — but the total is still worth keeping in view, so both show:
+       what is left as the clock, the whole after it, quieter. */
     if (hideShotScenes) {
       var remaining = S.state.rows.reduce(function (n, r) {
         return n + (r.status === "shot" ? 0 : rowSeconds(r));
       }, 0);
-      totalEl.textContent = formatDuration(remaining) + " / " + formatDuration(totalSeconds());
+      /* digits and colons only — nothing here needs escaping */
+      var clockHtml = formatTimecode(remaining) +
+        '<span class="program-clock-of"> / ' + formatTimecode(totalSeconds()) + '</span>';
+      if (totalEl.innerHTML !== clockHtml) totalEl.innerHTML = clockHtml;
     } else {
-      totalEl.textContent = formatDuration(totalSeconds());
+      var clock = formatTimecode(totalSeconds());
+      if (totalEl.textContent !== clock) totalEl.textContent = clock;
     }
   }
+  /* Everything else that moves with the read times moves here too: each
+     scene's start and length in its gutter and rail (paintRowTimes,
+     05-render.js) and the rundown strip (05f-rundown.js). This runs from
+     render() and from the idle refresh while typing, so none of them waits
+     for the next full render. */
+  paintRowTimes();
+  renderRundown();
 
   var chip = document.getElementById("progress-chip");
   var text = document.getElementById("progress-text");

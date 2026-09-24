@@ -11,8 +11,10 @@
 //   node tools/make-icon.mjs          rewrite the .ico files from icon.svg
 //   node tools/make-icon.mjs --check  fail if they are stale or opaque
 //
-// No dependencies: icon.svg is nothing but rounded rectangles, so the few
-// hundred lines of scanline work below beat pulling in a renderer.
+// No dependencies: icon.svg is nothing but rounded rectangles and circles
+// (since #169, the tally light on the mark), so the few hundred lines of
+// scanline work below beat pulling in a renderer. A stroke is not drawn —
+// write an outline as a filled shape with a smaller one on top.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
@@ -25,9 +27,10 @@ const SOURCE = join(ROOT, "icon.svg");
 // The Electron build's icon is the only one left.
 const TARGETS = [join(ROOT, "desktop", "build", "icon.ico")];
 
-// The sizes the previous icon carried. Windows picks per surface: 16 in the
-// title bar, 32 on the taskbar, 256 for Explorer's extra-large view.
-const SIZES = [16, 32, 48, 64, 128, 256];
+// Windows picks per surface: 16 in the title bar, 24 in some small-icon
+// lists at 150% scaling, 32 on the taskbar, 256 for Explorer's extra-large
+// view.
+const SIZES = [16, 24, 32, 48, 64, 128, 256];
 // Samples per axis when rasterising. 4 is enough to keep the 16px corners from
 // looking chewed without making the 256px frame slow.
 const SUPERSAMPLE = 4;
@@ -37,11 +40,12 @@ function parseSvg(svg) {
   if (!viewBox) throw new Error("icon.svg has no viewBox");
   const [minX, minY, width, height] = viewBox[1].trim().split(/\s+/).map(Number);
 
-  const rects = [];
-  for (const tag of svg.matchAll(/<rect\b([^>]*)\/?>/g)) {
+  // Rects and circles together, in document order: that is painter's order.
+  const shapes = [];
+  for (const tag of svg.matchAll(/<(rect|circle)\b([^>]*)\/?>/g)) {
     const attr = (name) => {
       // The leading boundary matters: a bare /x="/ also matches inside rx="96".
-      const m = new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(tag[1]);
+      const m = new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(tag[2]);
       return m ? m[1] : null;
     };
     const num = (name, fallback = 0) => {
@@ -50,8 +54,13 @@ function parseSvg(svg) {
     };
     const fill = attr("fill");
     if (!fill || fill === "none") continue;
+    if (tag[1] === "circle") {
+      shapes.push({ kind: "circle", cx: num("cx"), cy: num("cy"), r: num("r"), color: parseHex(fill) });
+      continue;
+    }
     const rx = num("rx", 0);
-    rects.push({
+    shapes.push({
+      kind: "rect",
       x: num("x"),
       y: num("y"),
       w: num("width"),
@@ -61,8 +70,8 @@ function parseSvg(svg) {
       color: parseHex(fill),
     });
   }
-  if (!rects.length) throw new Error("icon.svg has no filled rects");
-  return { minX, minY, width, height, rects };
+  if (!shapes.length) throw new Error("icon.svg has no filled shapes");
+  return { minX, minY, width, height, shapes };
 }
 
 function parseHex(fill) {
@@ -72,9 +81,16 @@ function parseHex(fill) {
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 }
 
-// Point-in-rounded-rect. Outside the corner quadrants this is a plain box
-// test; inside one it is the ellipse the corner radius describes.
-function covers(rect, px, py) {
+// Point-in-shape. A circle is the distance test; for a rounded rect,
+// outside the corner quadrants this is a plain box test and inside one it is
+// the ellipse the corner radius describes.
+function covers(shape, px, py) {
+  if (shape.kind === "circle") {
+    const dx = px - shape.cx;
+    const dy = py - shape.cy;
+    return dx * dx + dy * dy <= shape.r * shape.r;
+  }
+  const rect = shape;
   const { x, y, w, h } = rect;
   if (px < x || px > x + w || py < y || py > y + h) return false;
   const rx = Math.min(rect.rx, w / 2);
@@ -108,7 +124,7 @@ function render(doc, size) {
         for (let sx = 0; sx < SUPERSAMPLE; sx++) {
           const ux = doc.minX + (x * SUPERSAMPLE + sx) * step + half;
           let hit = null;
-          for (const rect of doc.rects) if (covers(rect, ux, uy)) hit = rect; // last wins: painter's order
+          for (const shape of doc.shapes) if (covers(shape, ux, uy)) hit = shape; // last wins: painter's order
           if (!hit) continue;
           r += hit.color[0];
           g += hit.color[1];

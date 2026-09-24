@@ -337,6 +337,13 @@ function brollField(html) {
   return brollInField(html);
 }
 
+/* How many b-roll lines a scene has — the ticks along its block in the
+   rundown strip (05f-rundown.js, #169). The same cached read the list
+   makes, so drawing the strip parses nothing new. */
+export function brollCountInRow(row) {
+  return row && row.visualText ? brollField(row.visualText).length : 0;
+}
+
 function brollPropsField(html) {
   if (!brollPropsInField) brollPropsInField = contentMemo(function (h) { return brollPropsInCell(cellOf(h)); });
   return brollPropsInField(html);

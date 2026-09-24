@@ -12,7 +12,7 @@ press  Another shot of the [boom pole] in the {kitchen}.
 sleep 500
 expect document.querySelectorAll('#rows .tag-anchor').length == 4
 
-click text*=PRODUCTION
+click #btn-production
 sleep 500
 expect !document.getElementById('production-panel').hidden
 # 3 distinct items: gaffer tape, boom pole, kitchen (kitchen appears twice)

@@ -1,8 +1,10 @@
 import { S } from "./_state.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
+import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
 import { cellOf, projection, sliceCell, toHtml, toPlainText } from "./04c-doc-model.js";
+import { pad2 } from "./05-render.js";
 import {
   addPersonForTag,
   renderProduction,
@@ -163,6 +165,177 @@ export function buildPrompterContent() {
   });
   promptSceneIndex = -1;
   promptSceneEndWordOffset = null;
+
+  /* ---- the timeline the top bar and the foot count through (#169) ----
+     Each scene's read time is rowSeconds(), the figure the gutter, the
+     rundown strip and the program clock read, so the prompter's clock
+     agrees with the editor's. It runs over `source`, the scenes the
+     prompter reads: Skip shot and Hide shot scenes leave a shot scene's
+     time out along with its words. */
+  sceneSeconds = [];
+  sceneStartSec = [];
+  var t = 0;
+  source.forEach(function (row, i) {
+    var secs = sceneWordEnd[i] > sceneWordStart[i] ? rowSeconds(row) : 0;
+    sceneStartSec.push(t);
+    sceneSeconds.push(secs);
+    t += secs;
+  });
+  promptTotalSec = t;
+  renderPrompterRundown();
+  var skip = document.getElementById("pp-skip-shot");
+  if (skip) skip.setAttribute("aria-pressed", S.prompterSkipShot ? "true" : "false");
+}
+
+/* ---------- where the reading is (#169) ----------
+
+   Direction B's prompter keeps everything but the words out of the reading
+   area, so where the reader has got to is shown around it instead: the
+   top bar's "03 / 06", that scene's start and the time read and left, and
+   the foot's running order with a playhead. All of it comes from one
+   number, the reading position (readingPosition below), worked out from
+   the scroll — which is what moves in every mode: Play, Follow My Voice
+   (it scrolls the heard word to the reading line), scene mode's cues and a
+   hand on the wheel. */
+var sceneSeconds = [];
+var sceneStartSec = [];
+var promptTotalSec = 0;
+/* One block per scene with something to read, in the foot's running
+   order: rundownBlockEls[i] is scene i's (null for a blank one) and
+   rundownBlockIndex[i] how many blocks come before it, which the
+   playhead's position needs for the gaps (app.css .pp-rd-head). */
+var rundownBlockEls = [];
+var rundownBlockIndex = [];
+/* The scene the blocks were last painted for, so a scroll that stays
+   inside one scene only moves the fill and the playhead. */
+var paintedScene = -2;
+/* One line of prompter text in px — the band's height and the step from a
+   line to the next (the size × the 1.42 line height, app.css). */
+var promptLinePx = 60 * 1.42;
+
+function renderPrompterRundown() {
+  var track = document.getElementById("pp-rd-track");
+  if (!track) return;
+  var html = "";
+  var count = 0;
+  rundownBlockIndex = sceneSeconds.map(function (secs) {
+    var before = count;
+    if (secs > 0) {
+      html += '<span class="pp-rd-block" style="flex-grow:' + Math.round(secs * 1000) / 1000 + '"></span>';
+      count++;
+    }
+    return before;
+  });
+  track.innerHTML = count ? html + '<span class="pp-rd-head" aria-hidden="true"></span>' : "";
+  track.style.setProperty("--pp-blocks", String(count));
+  var els = track.querySelectorAll(".pp-rd-block");
+  rundownBlockEls = sceneSeconds.map(function (secs, i) {
+    return secs > 0 ? els[rundownBlockIndex[i]] : null;
+  });
+  paintedScene = -2;
+}
+
+/* How far through the words the reading is, as a fractional word index:
+   the line whose top has reached the reading line (the guide, the band's
+   top edge — a cued line's top sits on it), plus how far the text has
+   moved on toward the next line. Word tops only grow down the page, so a
+   binary search finds that line in a few reads, cheap enough for every
+   scroll event. */
+function readingPosition(scroller) {
+  var words = S.promptWords;
+  var n = words.length;
+  if (!n) return 0;
+  var guide = scroller.scrollTop + scroller.clientHeight / 2;
+  var lo = 0, hi = n - 1, last = -1, mid;
+  while (lo <= hi) {
+    mid = (lo + hi) >> 1;
+    if (words[mid].el.offsetTop <= guide + 0.5) { last = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (last === -1) return 0;
+  var top = words[last].el.offsetTop;
+  /* the first word on that line: a tag's padding can shift a word's top
+     by a pixel or two, never by half a line */
+  lo = 0; hi = last;
+  while (lo < hi) {
+    mid = (lo + hi) >> 1;
+    if (words[mid].el.offsetTop >= top - promptLinePx / 2) hi = mid; else lo = mid + 1;
+  }
+  var next = last + 1;
+  var nextTop = next < n ? words[next].el.offsetTop : top + promptLinePx;
+  var frac = nextTop > top ? Math.min(1, Math.max(0, (guide - top) / (nextTop - top))) : 0;
+  return lo + frac * (next - lo);
+}
+
+/* The scene a word position falls in: the first whose range ends after
+   it (a blank scene's range is empty, so it is never the one), or the
+   last with words once the reading is past the end. */
+function sceneAtWord(pos) {
+  var w = Math.min(Math.floor(pos), S.promptWords.length - 1);
+  var lo = 0, hi = sceneWordEnd.length - 1;
+  while (lo < hi) {
+    var mid = (lo + hi) >> 1;
+    if (sceneWordEnd[mid] > w) hi = mid; else lo = mid + 1;
+  }
+  return lo;
+}
+
+function setText(el, text) {
+  if (el && el.textContent !== text) el.textContent = text;
+}
+
+/* Paints the top bar and the foot's running order for the reading
+   position now. Called on every scroll of #prompter-scroll (21-events.js),
+   and after anything that moves the words without one: opening, a cue, a
+   new size. */
+export function updatePrompterStatus() {
+  if (!S.prompterOpen) return;
+  var scroller = document.getElementById("prompter-scroll");
+  var scene = -1, elapsed = 0;
+  if (S.promptWords.length && sceneRowIds.length) {
+    var pos = readingPosition(scroller);
+    scene = sceneAtWord(pos);
+    var span = sceneWordEnd[scene] - sceneWordStart[scene];
+    var into = span > 0 ? Math.min(1, Math.max(0, (pos - sceneWordStart[scene]) / span)) : 0;
+    elapsed = sceneStartSec[scene] + sceneSeconds[scene] * into;
+  }
+
+  var posEl = document.getElementById("pp-scene-pos");
+  setText(posEl, scene === -1 ? "" : pad2(scene + 1) + " / " + pad2(sceneRowIds.length));
+  /* "03 / 06" is for the eye; a screen reader hears it said in words from
+     the hidden twin (a label on a plain span is never read) */
+  setText(document.getElementById("pp-scene-pos-sr"), scene === -1 ? "" : "Scene " + (scene + 1) + " of " + sceneRowIds.length);
+  setText(document.getElementById("pp-scene-start"), scene === -1 ? "" : formatTimecode(sceneStartSec[scene]));
+  /* Left is the whole less what is read, both whole seconds, so the two
+     always add up to the script's length. */
+  var read = Math.round(elapsed);
+  var total = Math.round(promptTotalSec);
+  var readText = formatTimecode(read);
+  var leftText = formatTimecode(Math.max(0, total - read));
+  setText(document.getElementById("pp-elapsed"), readText);
+  setText(document.getElementById("pp-remaining"), "−" + leftText);
+  var clock = document.getElementById("pp-clock");
+  if (clock) clock.setAttribute("aria-label", "Elapsed " + readText + ", " + leftText + " left");
+  var bar = document.getElementById("pp-rundown");
+  if (bar) {
+    bar.setAttribute("aria-valuemax", String(total));
+    bar.setAttribute("aria-valuenow", String(Math.min(read, total)));
+    bar.setAttribute("aria-valuetext", readText + " of " + formatTimecode(total));
+  }
+
+  var track = document.getElementById("pp-rd-track");
+  if (!track || !promptTotalSec) return;
+  if (scene !== paintedScene) {
+    rundownBlockEls.forEach(function (el, i) {
+      if (!el) return;
+      el.classList.toggle("is-played", i < scene);
+      el.classList.toggle("is-current", i === scene);
+    });
+    paintedScene = scene;
+  }
+  var cur = scene === -1 ? null : rundownBlockEls[scene];
+  if (cur) cur.style.setProperty("--p", (sceneSeconds[scene] ? (elapsed - sceneStartSec[scene]) / sceneSeconds[scene] * 100 : 0) + "%");
+  track.style.setProperty("--pp-at", String(Math.min(1, elapsed / promptTotalSec)));
+  track.style.setProperty("--pp-i", String(scene === -1 ? 0 : rundownBlockIndex[scene]));
 }
 
 /* A phone's screen dims and locks mid-read without this — fatal for a
@@ -225,8 +398,23 @@ function applyPrompterOrientation() {
   var scroller = document.getElementById("prompter-scroll");
   scroller.classList.toggle("mirror", prompterMirror);
   scroller.classList.toggle("flip", prompterFlip);
-  document.getElementById("pp-mirror").classList.toggle("is-active", prompterMirror);
-  document.getElementById("pp-flip").classList.toggle("is-active", prompterFlip);
+  /* The reading band turns with the text (#169): it is outside the
+     scroller so it never moves with the scroll, but its pointer has to
+     stay at the start of the line and its band on the line a flip puts
+     the reading on (app.css .pp-mirrored / .pp-flipped). */
+  var prompter = document.getElementById("prompter");
+  prompter.classList.toggle("pp-mirrored", prompterMirror);
+  prompter.classList.toggle("pp-flipped", prompterFlip);
+  setToggle(document.getElementById("pp-mirror"), prompterMirror);
+  setToggle(document.getElementById("pp-flip"), prompterFlip);
+}
+
+/* A toggle in the foot: .is-active is what the suites and the app have
+   always read; aria-pressed says the same to a screen reader. */
+function setToggle(btn, on) {
+  if (!btn) return;
+  btn.classList.toggle("is-active", on);
+  btn.setAttribute("aria-pressed", on ? "true" : "false");
 }
 
 /* Deliberately not markDirty() — a rig preference, not a change to the
@@ -294,9 +482,9 @@ export function updateSceneReadout() {
 }
 
 function updatePrompterSceneModeUI() {
-  var btn = document.getElementById("pp-scene-mode");
-  if (btn) btn.classList.toggle("is-active", promptSceneMode);
-  ["pp-scene-prev", "pp-scene-next", "pp-scene-readout"].forEach(function (id) {
+  setToggle(document.getElementById("pp-scene-mode"), promptSceneMode);
+  /* pp-scene-step is the stepper the three sit in (#169) */
+  ["pp-scene-step", "pp-scene-prev", "pp-scene-next", "pp-scene-readout"].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.hidden = !promptSceneMode;
   });
@@ -329,6 +517,7 @@ function cueScene(idx) {
   scroller.scrollTop = Math.max(0, firstWord.offsetTop - promptSceneGuideOffset);
   promptSceneEndWordOffset = lastWord.offsetTop;
   updateSceneReadout();
+  updatePrompterStatus();
   return true;
 }
 
@@ -387,14 +576,20 @@ export function openPrompter() {
   buildPrompterContent();
   var el = document.getElementById("prompter");
   el.hidden = false;
+  /* the page's own scrollbar has nothing to scroll while this covers it
+     (#169; the b-roll page and the New Tab page do the same) */
+  document.body.classList.add("prompter-open");
   S.prompterOpen = true;
   document.getElementById("prompter-scroll").scrollTop = 0;
   setPrompterPlaying(false);
+  applyPrompterDefaultSize();
   applyPrompterSize();
   applyPrompterOrientation();
   updatePrompterSceneModeUI();
   if (promptSceneMode) cueSceneForCurrentPosition();
   updateVoiceAvailability();
+  syncSpeedReadout();
+  updatePrompterStatus();
   acquireWakeLock();
 }
 
@@ -402,6 +597,7 @@ export function closePrompter() {
   setPrompterPlaying(false);
   stopVoiceFollow();
   document.getElementById("prompter").hidden = true;
+  document.body.classList.remove("prompter-open");
   S.prompterOpen = false;
   releaseWakeLock();
   if (document.fullscreenElement) {
@@ -412,8 +608,14 @@ export function closePrompter() {
 export function setPrompterPlaying(on) {
   if (on && S.voiceFollowActive) stopVoiceFollow();
   S.prompterPlaying = on;
+  /* An icon in an amber circle (#169); the word stays in the button,
+     visually hidden, as its name and as the text the suites read. */
   var btn = document.getElementById("pp-play");
-  btn.textContent = on ? "❚❚ Pause" : "▶ Play";
+  var icon = btn.querySelector("use");
+  var label = btn.querySelector(".pp-sr");
+  if (icon) icon.setAttribute("href", on ? "#i-pause" : "#i-play");
+  if (label) label.textContent = on ? "Pause" : "Play";
+  else btn.textContent = on ? "Pause" : "Play";
   btn.classList.toggle("is-active", on);
   if (on) {
     S.prompterLastTs = null;
@@ -443,9 +645,63 @@ function prompterTick(ts) {
   S.prompterRAF = requestAnimationFrame(prompterTick);
 }
 
+/* The size goes on the prompter as --pp-size (#169) rather than on the
+   text alone: the reading band is a line of text tall, and it sits outside
+   the text (app.css .prompter-band). */
 export function applyPrompterSize() {
-  var size = document.getElementById("pp-size").value;
-  document.getElementById("prompter-content").style.fontSize = size + "px";
+  var size = Number(document.getElementById("pp-size").value);
+  document.getElementById("prompter").style.setProperty("--pp-size", size + "px");
+  promptLinePx = size * 1.42;
+  setText(document.getElementById("pp-size-value"), String(size));
+  updatePrompterStatus();
+}
+
+/* The size the prompter opens at: B's 60px, but 36px on a phone, where 60
+   is about three words a line (Adam's call, #169). Chosen each time it
+   opens, until someone picks a size of their own — a value that is no
+   longer the default this set last time is theirs, and is kept. */
+var PROMPTER_SIZE_DEFAULT = 60;
+var PROMPTER_SIZE_PHONE = 36;
+var promptSizeDefaultSet = null;
+
+function applyPrompterDefaultSize() {
+  var input = document.getElementById("pp-size");
+  if (promptSizeDefaultSet !== null && Number(input.value) !== promptSizeDefaultSet) return;
+  var phone = window.matchMedia && window.matchMedia("(max-width: 760px)").matches;
+  promptSizeDefaultSet = phone ? PROMPTER_SIZE_PHONE : PROMPTER_SIZE_DEFAULT;
+  input.value = String(promptSizeDefaultSet);
+}
+
+/* The Size stepper's step. The range input keeps its own step of 1, so a
+   value set on it directly (suite 04 sets 80) stays exactly as given. */
+var PROMPTER_SIZE_STEP = 4;
+
+export function stepPrompterSize(dir) {
+  var input = document.getElementById("pp-size");
+  var next = Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value) + dir * PROMPTER_SIZE_STEP));
+  input.value = String(next);
+  applyPrompterSize();
+}
+
+/* Speed is still the px per second the text scrolls (S.prompterSpeed),
+   which ↑/↓ have always moved by 6; the stepper moves it by the same, and
+   shows it against the speed the prompter opens at, "1.0×" (#169). */
+var PROMPTER_SPEED_STEP = 6;
+var PROMPTER_SPEED_BASE = 42;
+
+export function setPrompterSpeed(value) {
+  var input = document.getElementById("pp-speed");
+  S.prompterSpeed = Math.max(Number(input.min), Math.min(Number(input.max), Math.round(value)));
+  input.value = String(S.prompterSpeed);
+  syncSpeedReadout();
+}
+
+export function stepPrompterSpeed(dir) {
+  setPrompterSpeed(S.prompterSpeed + dir * PROMPTER_SPEED_STEP);
+}
+
+function syncSpeedReadout() {
+  setText(document.getElementById("pp-speed-value"), (S.prompterSpeed / PROMPTER_SPEED_BASE).toFixed(1) + "×");
 }
 
 /* ---------- voice follow ---------- */
@@ -455,6 +711,25 @@ function setVoiceStatus(msg, kind) {
   if (!el) return;
   el.textContent = msg || "";
   el.className = "pp-voice-status" + (kind ? " " + kind : "");
+  syncVoiceState();
+}
+
+/* The top bar's voice state (#169): the tally lamp lit only while it is
+   listening, and the feature's name beside the message only when there
+   is a message (or it is listening) — an idle prompter says nothing. */
+function syncVoiceState() {
+  var group = document.getElementById("pp-voice-state");
+  var el = document.getElementById("pp-voice-status");
+  if (!group || !el) return;
+  group.classList.toggle("is-live", !!S.voiceFollowActive);
+  group.classList.toggle("has-msg", !!el.textContent);
+}
+
+/* The button's words sit in their own span, beside its icon and lamp. */
+function setVoiceLabel(btn, text) {
+  var label = btn.querySelector(".pp-voice-label");
+  if (label) label.textContent = text;
+  else btn.textContent = text;
 }
 
 /* "Listening — <microphone>" (issue #118): which input is in use, so a
@@ -498,7 +773,7 @@ export function updateVoiceAvailability() {
     loadDesktopVoice().then(updateVoiceAvailability);
     return;
   }
-  if (!S.voiceFollowActive) btn.textContent = voiceIdleLabel();
+  if (!S.voiceFollowActive) setVoiceLabel(btn, voiceIdleLabel());
   /* The Web Speech API's constructor exists in Electron's Chromium, but
      recognition itself fails immediately with a 'network' error — Google's
      speech backend that powers it is not reachable from inside Electron
@@ -545,7 +820,13 @@ function updateVoiceButtonUI() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
   btn.classList.toggle("is-active", S.voiceFollowActive);
-  btn.textContent = S.voiceFollowActive ? "Stop Following" : voiceIdleLabel();
+  setVoiceLabel(btn, S.voiceFollowActive ? "Stop Following" : voiceIdleLabel());
+  /* While it follows, each word dims as it is said (.w.spoken), so the
+     band's own dimming of the text above it stands down (#169, app.css
+     .prompter-scroll.is-following) rather than dimming it twice. */
+  var scroller = document.getElementById("prompter-scroll");
+  if (scroller) scroller.classList.toggle("is-following", !!S.voiceFollowActive);
+  syncVoiceState();
 }
 
 function applySpokenUpTo(idx) {
@@ -563,10 +844,17 @@ function clearSpokenHighlights() {
   });
 }
 
+/* The heard word's line onto the reading line, top on the guide, where a
+   scene cue puts a line (#169): that is the line the band sits under. It
+   used to centre the word, half a line higher, when the guide was only a
+   rule. The scroller's own scrollTo rather than scrollIntoView, so it is
+   the same content-space arithmetic as cueScene()'s whatever Mirror and
+   Flip do to how the scroller is painted. */
 function scrollWordIntoView(idx) {
   var w = S.promptWords[idx];
   if (!w) return;
-  w.el.scrollIntoView({ block: "center", behavior: "smooth" });
+  var scroller = document.getElementById("prompter-scroll");
+  scroller.scrollTo({ top: Math.max(0, w.el.offsetTop - scroller.clientHeight / 2), behavior: "smooth" });
 }
 
 /* find where in the script the tail of what was just heard best lines up:
@@ -1138,7 +1426,12 @@ export function __init() {
        suite can drive it with a stubbed fetch — no suite's static server
        can answer prompter-script/<token> the way the desktop's listener
        does. */
-    launchFromScript: launchPrompterFromScript
+    launchFromScript: launchPrompterFromScript,
+    /* The top bar and the running order from wherever a test has put
+       scrollTop (#169): the scroll event that repaints them is delivered
+       with the frame, which a background window may not draw for a
+       while. */
+    updateStatus: updatePrompterStatus
   };
 
   var launch = readPrompterLaunch();

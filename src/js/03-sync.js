@@ -46,6 +46,7 @@ import {
 } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { driveFormatSize } from "./13-hosted.js";
+import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 
@@ -222,6 +223,9 @@ async function restoreSnapshot(id, opts) {
    and replaces every button — renderHistory re-applies it. */
 var RESTORE_ARM_MS = 4000;
 var RESTORE_LABEL = "Restore this version";
+/* An Older row's button is the small one at the row's end (#169); the
+   row it sits on says what it restores. */
+var RESTORE_OLDER_LABEL = "Restore";
 var RESTORE_ARMED_LABEL = "Couldn't keep a backup — restore anyway?";
 var restoreArmedKey = null;
 var restoreArmTimer = null;
@@ -230,14 +234,26 @@ function restoreCardKey(bucket, id) {
   return (bucket === "older" ? "older" : "doc") + "/" + id;
 }
 
+function restoreButtonLabel(bucket, armed) {
+  if (armed) return RESTORE_ARMED_LABEL;
+  return bucket === "older" ? RESTORE_OLDER_LABEL : RESTORE_LABEL;
+}
+
 function applyRestoreArm() {
   var panel = document.getElementById("history-panel");
   if (!panel) return;
   Array.prototype.forEach.call(panel.querySelectorAll('[data-action="restore-snapshot"]'), function (b) {
+    var bucket = b.getAttribute("data-bucket");
     var armed = restoreArmedKey !== null &&
-      restoreCardKey(b.getAttribute("data-bucket"), b.getAttribute("data-id")) === restoreArmedKey;
+      restoreCardKey(bucket, b.getAttribute("data-id")) === restoreArmedKey;
     b.classList.toggle("armed", armed);
-    b.textContent = armed ? RESTORE_ARMED_LABEL : RESTORE_LABEL;
+    /* the label is a span beside the icon (#169), so only it is rewritten */
+    (b.querySelector(".history-restore-label") || b).textContent = restoreButtonLabel(bucket, armed);
+    /* An armed button asks for a second click within 4 s, so its row must
+       be open to show it, even if the row was closed while the backup
+       was being tried. */
+    var snap = armed ? b.closest(".history-snap") : null;
+    if (snap) snap.open = true;
   });
 }
 
@@ -1049,8 +1065,8 @@ export function promptForName() {
   wrap.style.position = "absolute";
   wrap.style.zIndex = "170";
   wrap.style.background = "var(--surface)";
-  wrap.style.border = "1px solid var(--border)";
-  wrap.style.borderRadius = "8px";
+  wrap.style.border = "1px solid var(--border-strong)";
+  wrap.style.borderRadius = "var(--radius-md)";
   wrap.style.padding = "8px";
   wrap.style.boxShadow = "var(--shadow)";
   wrap.innerHTML =
@@ -1088,8 +1104,8 @@ export function promptForWpm() {
   wrap.style.position = "absolute";
   wrap.style.zIndex = "170";
   wrap.style.background = "var(--surface)";
-  wrap.style.border = "1px solid var(--border)";
-  wrap.style.borderRadius = "8px";
+  wrap.style.border = "1px solid var(--border-strong)";
+  wrap.style.borderRadius = "var(--radius-md)";
   wrap.style.padding = "8px";
   wrap.style.boxShadow = "var(--shadow)";
   wrap.innerHTML =
@@ -1150,6 +1166,14 @@ export function closeHistoryPanel() {
   syncPanelClass();
 }
 
+/* Each panel and the header toggle that opens it. */
+var PANEL_TOGGLES = [
+  ["production-panel", "btn-production"],
+  ["gear-panel", "btn-gear"],
+  ["broll-panel", "btn-broll"],
+  ["comments-panel", "btn-comments"]
+];
+
 /* a side panel is fixed over the right edge — shift the document so it never
    covers the toolbar that opened it */
 export function syncPanelClass() {
@@ -1158,6 +1182,13 @@ export function syncPanelClass() {
     return el && !el.hidden;
   });
   document.body.classList.toggle("panel-open", open);
+  /* The header's panel toggles read as pressed while their panel is open
+     (#169) — every open and close of a panel already ends here. */
+  PANEL_TOGGLES.forEach(function (pair) {
+    var panel = document.getElementById(pair[0]);
+    var btn = document.getElementById(pair[1]);
+    if (btn) btn.setAttribute("aria-pressed", panel && !panel.hidden ? "true" : "false");
+  });
 }
 
 /* Async, because the list comes from IndexedDB or the desktop store. Every
@@ -1179,44 +1210,241 @@ var HISTORY_SUBTITLES = {
 };
 var HISTORY_SUBTITLE_DEFAULT = "Snapshots of this document, kept before anything that could overwrite your work.";
 
+/* ---- the rows (#169, B-PanelHistory) ----
+   This document's snapshots sit under a heading per day ("Today 24 Sep"),
+   each a row of time, label and scene count that opens onto a labelled
+   table and "Restore this version". Dates and times are built by hand, not
+   by toLocaleString: the board draws "24 Sep" and a 24-hour "14:52" in the
+   mono, and a locale's "Sept" or "2:52 PM" would not fit the time column. */
+var HISTORY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var HISTORY_RESTORE_HINT = "Replaces what's on screen, which is saved here first.";
+
+/* The row open in the list, by restoreCardKey. Remembered because a
+   history write settling re-renders the list, and the row the user is
+   reading (or about to restore from) must still be open afterwards. */
+var historyOpenKey = null;
+var historyToggleBound = false;
+
+function historyFig(text) {
+  return '<span class="history-fig">' + escapeHtml(text) + '</span>';
+}
+
+function historyPad2(n) {
+  return (n < 10 ? "0" : "") + n;
+}
+
+/* When the snapshot was taken, or null. `at` is the wall-clock time the
+   user saw; atMs may have been re-stamped past a clock correction
+   (historyStampAfter, shared/history-policy.js), so it is only the
+   fallback. */
+function historyWhen(m) {
+  var d = new Date(m && m.at);
+  if (isNaN(d.getTime()) && m && Number(m.atMs) > 0) d = new Date(Number(m.atMs));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function historyDayKey(d) {
+  return d ? d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate() : "";
+}
+
+/* A day as {word, date}: "Today" and "Yesterday" by name, and every day
+   by its date, with the year only when it is not this year's. */
+function historyDay(d) {
+  if (!d) return { word: "Date unknown", date: "" };
+  var now = new Date();
+  var yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  var key = historyDayKey(d);
+  return {
+    word: key === historyDayKey(now) ? "Today" : key === historyDayKey(yesterday) ? "Yesterday" : "",
+    date: d.getDate() + " " + HISTORY_MONTHS[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "")
+  };
+}
+
+function historyClock(d) {
+  return d ? historyPad2(d.getHours()) + ":" + historyPad2(d.getMinutes()) : "";
+}
+
+/* "Today at 14:52", "21 Sep at 11:20" */
+function historySavedHtml(d) {
+  if (!d) return "Date unknown";
+  var day = historyDay(d);
+  return (day.word ? escapeHtml(day.word) : historyFig(day.date)) + " at " + historyFig(historyClock(d));
+}
+
+function historyScenesHtml(n) {
+  return historyFig(String(n)) + " scene" + (n === 1 ? "" : "s");
+}
+
+/* driveFormatSize (13-hosted.js, shared with the Drive list) stops at
+   MB, so a cap in the gigabytes (this browser's share of the disk, or
+   the desktop store's) read "10190.0 MB". The panel
+   goes on to GB, one decimal and none when it is .0 ("10 GB", "1.5 GB");
+   below that it is driveFormatSize's own "412 KB", "500.0 MB". */
+function historySizeText(bytes) {
+  var n = Number(bytes);
+  var gb = 1024 * 1024 * 1024;
+  if (!(n >= gb)) return driveFormatSize(n);
+  return (n / gb).toFixed(1).replace(/\.0$/, "") + " GB";
+}
+
+/* "15 KB", the figure in the mono; "" for a size the store never had
+   (0), so the table leaves that row out rather than claim "0 KB". */
+function historySizeHtml(bytes) {
+  var text = historySizeText(Math.max(0, Math.floor(Number(bytes) || 0)));
+  var parts = /^([\d.]+) (.+)$/.exec(text);
+  return parts ? historyFig(parts[1]) + " " + escapeHtml(parts[2]) : escapeHtml(text);
+}
+
+function historyInitials(name) {
+  var words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  var first = Array.from(words[0])[0] || "";
+  var last = words.length > 1 ? (Array.from(words[words.length - 1])[0] || "") : "";
+  return (first + last).toUpperCase();
+}
+
+/* Who saved it, in their colour (personColor, the one table every panel
+   uses); an older snapshot may carry no name at all. */
+function historyPersonHtml(name) {
+  name = String(name || "").trim();
+  if (!name) return '<span class="history-none">—</span>';
+  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(personColor(name)) + '" aria-hidden="true">' +
+      escapeHtml(historyInitials(name)) + '</span>' +
+    '<span class="history-person">' + escapeHtml(name) + '</span>';
+}
+
+/* One snapshot as an <li class="history-card">. Every row carries its
+   [data-action="restore-snapshot"] button, a closed row's included:
+   closed <details> content is still in the DOM, so the button's click()
+   works whether or not the row is open (suites 21 and 24 rely on it). */
 function historyCardHtml(m, bucket) {
   var status = m.status === "writing" || m.status === "pending" ? m.status : "stored";
   var rows = Math.max(0, Math.floor(Number(m.rows) || 0));
   var armed = restoreArmedKey !== null && restoreCardKey(bucket, m.id) === restoreArmedKey;
-  return '<div class="history-card' + (status === "writing" ? " is-writing" : status === "pending" ? " is-pending" : "") + '">' +
-    (bucket === "older" ? '<div class="history-card-doc">' + escapeHtml(m.title || "Untitled") + '</div>' : "") +
-    '<div class="history-card-label">' + escapeHtml(m.label || "Snapshot") +
-      (status === "pending" ? '<span class="history-card-badge" title="Kept in this window only, and tried again after the next successful write">Not stored</span>' : "") +
-    '</div>' +
-    '<div class="history-card-meta">' + escapeHtml(formatTimestamp(m.at)) + ' · ' + escapeHtml(m.by || "") +
-      ' · ' + rows + ' row' + (rows === 1 ? "" : "s") + '</div>' +
-    '<button type="button" data-action="restore-snapshot" data-id="' + escapeHtml(safeId(m.id, "s")) + '"' +
-      (bucket === "older" ? ' data-bucket="older"' : "") +
-      (armed ? ' class="armed"' : "") + '>' + escapeHtml(armed ? RESTORE_ARMED_LABEL : RESTORE_LABEL) + '</button>' +
-    '</div>';
+  var id = safeId(m.id, "s");
+  var when = historyWhen(m);
+  var label = escapeHtml(restoreButtonLabel(bucket, armed));
+
+  if (bucket === "older") {
+    /* An Older snapshot may belong to another script, so its row leads
+       with that script's title; the button names it for a screen reader
+       through aria-describedby, which (unlike an aria-label) leaves the
+       armed label to speak for itself. */
+    var titleId = "history-older-title-" + id;
+    return '<li class="history-card history-older-item">' +
+      '<div class="history-older-text">' +
+        '<span class="history-card-doc" id="' + escapeHtml(titleId) + '">' + escapeHtml(m.title || "Untitled") + '</span>' +
+        '<span class="history-older-meta">' + historySavedHtml(when) + (m.label ? " · " + escapeHtml(m.label) : "") + '</span>' +
+      '</div>' +
+      '<button type="button" class="btn-outline is-small history-older-restore' + (armed ? " armed" : "") + '" data-action="restore-snapshot"' +
+        ' data-id="' + escapeHtml(id) + '" data-bucket="older" aria-describedby="' + escapeHtml(titleId) + '">' +
+        '<span class="history-restore-label">' + label + '</span></button>' +
+    '</li>';
+  }
+
+  var key = restoreCardKey("doc", id);
+  var size = historySizeHtml(m.sizeBytes);
+  return '<li class="history-card' + (status === "writing" ? " is-writing" : status === "pending" ? " is-pending" : "") + '">' +
+    '<details class="history-snap" data-snap="' + escapeHtml(key) + '"' + (armed || key === historyOpenKey ? " open" : "") + '>' +
+      '<summary class="history-row">' +
+        '<time class="history-time"' + (when ? ' datetime="' + escapeHtml(when.toISOString()) + '"' : "") + '>' +
+          escapeHtml(when ? historyClock(when) : "—") + '</time>' +
+        '<span class="history-card-label">' + escapeHtml(m.label || "Snapshot") +
+          (status === "pending" ? '<span class="history-card-badge" title="Kept in this window only, and tried again after the next successful write">Not stored</span>' : "") +
+        '</span>' +
+        '<span class="history-scenes">' + historyScenesHtml(rows) + '</span>' +
+      '</summary>' +
+      '<div class="history-detail">' +
+        '<dl class="history-facts">' +
+          '<dt>Saved</dt><dd><span>' + historySavedHtml(when) + '</span></dd>' +
+          '<dt>Saved by</dt><dd>' + historyPersonHtml(m.by) + '</dd>' +
+          '<dt>Script at the time</dt><dd><span>' + historyScenesHtml(rows) + '</span></dd>' +
+          (size ? '<dt>Snapshot size</dt><dd><span>' + size + '</span></dd>' : "") +
+        '</dl>' +
+        '<div class="history-restore">' +
+          '<button type="button" class="btn-outline history-restore-btn' + (armed ? " armed" : "") + '" data-action="restore-snapshot"' +
+            ' data-id="' + escapeHtml(id) + '">' +
+            '<svg aria-hidden="true" focusable="false"><use href="#i-history"/></svg>' +
+            '<span class="history-restore-label">' + label + '</span></button>' +
+          '<p class="history-restore-hint">' + escapeHtml(HISTORY_RESTORE_HINT) + '</p>' +
+        '</div>' +
+      '</div>' +
+    '</details>' +
+  '</li>';
 }
 
-function historyUsageText(backend, usage) {
+/* The snapshots under one heading per day, newest first. Gathered by day
+   rather than cut wherever the day changes: the list is in atMs order, and
+   after a clock correction one day's snapshots need not be next to each
+   other. */
+function historyDaysHtml(entries) {
+  var days = [];
+  var byDay = Object.create(null);
+  entries.forEach(function (m) {
+    var when = historyWhen(m);
+    var key = historyDayKey(when);
+    if (!byDay[key]) {
+      byDay[key] = { when: when, items: [] };
+      days.push(byDay[key]);
+    }
+    byDay[key].items.push(m);
+  });
+  return days.map(function (g, i) {
+    var day = historyDay(g.when);
+    return '<section class="history-day" aria-labelledby="history-day-' + i + '">' +
+      '<h3 class="history-day-head" id="history-day-' + i + '">' +
+        (day.word ? '<span>' + escapeHtml(day.word) + '</span>' : "") +
+        (day.date ? historyFig(day.date) : "") +
+      '</h3>' +
+      '<ol class="history-day-list">' + g.items.map(function (m) { return historyCardHtml(m, "doc"); }).join("") + '</ol>' +
+    '</section>';
+  }).join("");
+}
+
+/* One row open at a time, as the board draws it. The row is a <details>,
+   so the keyboard and a screen reader get the disclosure for free; this
+   only remembers which one is open and closes the one before it. `toggle`
+   does not bubble, hence the capture. */
+function onHistoryRowToggle(e) {
+  var snap = e.target;
+  if (!snap || !snap.classList || !snap.classList.contains("history-snap")) return;
+  var key = snap.getAttribute("data-snap");
+  if (snap.open) {
+    historyOpenKey = key;
+    Array.prototype.forEach.call(e.currentTarget.querySelectorAll(".history-snap[open]"), function (other) {
+      if (other !== snap) other.open = false;
+    });
+  } else if (historyOpenKey === key) {
+    historyOpenKey = null;
+  }
+}
+
+/* The usage line, its figures in the mono (#169). */
+function historyUsageHtml(backend, usage) {
   if (!usage || typeof usage !== "object") return "";
   if (usage.readOnly && backend === "desktop") {
     return "Version history is read-only: it was written by a newer version of Splitpage.";
   }
-  var used = driveFormatSize(usage.totalBytes) || "0 KB";
+  var used = historySizeText(usage.totalBytes) || "0 KB";
   var cap = Number(usage.capBytes);
   var docs = Math.max(0, Math.floor(Number(usage.docCount) || 0));
   /* The memory backend's cap is our own RAM bound, not storage the user
      has — quoting it as "of 50 MB" would suggest a disk budget. */
-  var text = "Version history uses " + used +
-    (backend !== "memory" && isFinite(cap) && cap > 0 ? " of " + driveFormatSize(cap) : "") +
-    " across " + docs + " document" + (docs === 1 ? "" : "s") + ".";
-  if (usage.overCap) text += " It is over its limit, so older snapshots are being removed first.";
-  return text;
+  var html = "Version history uses " + historyFig(used) +
+    (backend !== "memory" && isFinite(cap) && cap > 0 ? " of " + historyFig(historySizeText(cap)) : "") +
+    " across " + historyFig(String(docs)) + " document" + (docs === 1 ? "" : "s") + ".";
+  if (usage.overCap) html += " It is over its limit, so older snapshots are being removed first.";
+  return html;
 }
 
 export async function renderHistory() {
   var listEl = document.getElementById("history-list");
   var panel = document.getElementById("history-panel");
   if (!listEl || !panel || panel.hidden || !S.state) return;
+  if (!historyToggleBound) {
+    historyToggleBound = true;
+    listEl.addEventListener("toggle", onHistoryRowToggle, true);
+  }
   var token = ++historyRenderToken;
   var docId = normalizeDocId(S.state.docId);
   var data;
@@ -1246,19 +1474,20 @@ export async function renderHistory() {
      usage line. */
   var notice = typeof data.notice === "string" ? data.notice : "";
   if (!entries.length && notice) {
-    listEl.innerHTML = '<div class="comments-empty history-notice">' + escapeHtml(notice) + '</div>';
+    listEl.innerHTML = '<p class="history-empty history-notice">' + escapeHtml(notice) + '</p>';
   } else if (!entries.length) {
-    listEl.innerHTML = '<div class="comments-empty">No snapshots of this document yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</div>';
+    listEl.innerHTML = '<p class="history-empty">No snapshots of this document yet. Splitpage saves one automatically before anything that could overwrite your work — opening a document, replacing rows, or merging someone else\'s changes.</p>';
   } else {
-    listEl.innerHTML = entries.map(function (m) { return historyCardHtml(m, "doc"); }).join("");
+    listEl.innerHTML = historyDaysHtml(entries);
   }
 
   var olderEl = document.getElementById("history-older");
-  var olderSummary = document.getElementById("history-older-summary");
+  var olderCount = document.getElementById("history-older-count");
   var olderList = document.getElementById("history-older-list");
   var older = Array.isArray(data.older) ? data.older : [];
   if (olderEl) olderEl.hidden = !older.length;
-  if (olderSummary) olderSummary.textContent = "Older history (before per-document history) · " + older.length;
+  /* the summary's words are static markup (page.html); only the count moves */
+  if (olderCount) olderCount.textContent = String(older.length);
   if (olderList) {
     olderList.innerHTML = older.map(function (m) {
       return historyCardHtml({
@@ -1269,9 +1498,9 @@ export async function renderHistory() {
 
   var usageEl = document.getElementById("history-usage");
   if (usageEl) {
-    var usageText = notice ? (entries.length ? notice : "") : historyUsageText(data.backend, data.usage);
-    usageEl.textContent = usageText;
-    usageEl.hidden = !usageText;
+    var usageHtml = notice ? (entries.length ? escapeHtml(notice) : "") : historyUsageHtml(data.backend, data.usage);
+    usageEl.innerHTML = usageHtml;
+    usageEl.hidden = !usageHtml;
   }
 }
 

@@ -1,19 +1,23 @@
-# The b-roll panel, one line per shot (#148, src/js/08d-broll-panel.js):
+# The b-roll panel, one line per shot (#148, src/js/08d-broll-panel.js;
+# B-BrollCalm since #169):
 #
-#   * how the list is looked at — the filter chips and the Group menu — is
+#   * how the list is looked at — the filter tabs and the group menu — is
 #     remembered per device in localStorage, survives a reload, and never
 #     touches the document: nothing dirty, nothing on the undo stack;
-#   * the summary ("3 of 8 shots in the can") and a bar with one segment
-#     per shot, teal shot, paper to shoot, red flagged;
-#   * a line per shot about 52px tall: a checkbox, the name, and under it
-#     the location, the person (initials) and the props — the script's
-#     tagged ones and the hand-added ones; a flag and a note icon; no
-#     "Scene N" chip and no "No audio reference." placeholder;
-#   * scene groups headed "Scene 03", the scene's audio in italic and
+#   * the head's count ("3 of 8 shot") and a bar with one segment per
+#     shot, b-roll cyan shot, a hairline to shoot, red flagged;
+#   * a line per shot at least 44px tall, its name never cut short: a
+#     checkbox, the name, and beside it the location, the person (their
+#     avatar, the name for a screen reader) and the props with their
+#     lamps — the script's tagged ones and the hand-added ones; a flag and
+#     a note icon; no "Scene N" chip and no "No audio reference."
+#     placeholder;
+#   * scene groups headed "Scene 03", where the scene starts, and
 #     done/total; shots with no line group as "Added here";
 #   * the checkbox marks a shot Shot / To shoot in one click, one undo;
-#   * opening a shot shows the label–value card, with Rename and Delete in
-#     its ⋯ menu, and a location and a note set there land on the record;
+#   * opening a shot shows the label–value list, Status as a field that
+#     flips on click (one undo), with Rename and Delete in its ⋯ menu, and a
+#     location and a note set there land on the record;
 #   * Ctrl+click and Shift+click select lines, the dark bar changes them
 #     all at once, and each change is ONE undo step; Esc clears it.
 # Every `eval` is one physical line.
@@ -43,7 +47,7 @@ wait !!document.querySelector('#broll-controls .broll-group-menu')
 click #broll-controls .broll-menu-item[data-group="location"]
 wait heads() === 'Fish market|Harbour|No location'
 expect !document.querySelector('#broll-controls .broll-group-menu')
-expect document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'Group: Location'
+expect document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'By location'
 expect JSON.parse(localStorage.getItem('splitpage-broll-view')).group === 'location'
 
 # not an edit: the document is as clean as it was, and the stack as deep
@@ -72,29 +76,37 @@ wait !!document.querySelector('#broll-controls .broll-group-menu')
 click #broll-controls .broll-menu-item[data-group="scene"]
 wait document.querySelectorAll('#broll-list .broll-row').length === 8
 
-# ---- 2. the summary, and one segment per shot --------------------------
-expect document.querySelector('#broll-controls .broll-summary-line').textContent === '3 of 8 shots in the can'
-expect document.querySelectorAll('#broll-controls .broll-bar-seg').length === 8
-expect document.querySelectorAll('#broll-controls .broll-bar-seg.is-shot').length === 3
-expect document.querySelectorAll('#broll-controls .broll-bar-seg.is-flagged').length === 1
-expect document.querySelectorAll('#broll-controls .broll-bar-seg.is-todo').length === 4
+# ---- 2. the head's count, and one segment per shot ---------------------
+# (#169: in the head beside the title, "3 of 8 shot", where it was a
+# sentence over the chips)
+expect document.querySelector('#broll-summary .broll-summary-line').textContent === '3 of 8 shot'
+expect document.querySelectorAll('#broll-summary .broll-bar-seg').length === 8
+expect document.querySelectorAll('#broll-summary .broll-bar-seg.is-shot').length === 3
+expect document.querySelectorAll('#broll-summary .broll-bar-seg.is-flagged').length === 1
+expect document.querySelectorAll('#broll-summary .broll-bar-seg.is-todo').length === 4
 
 # ---- 3. one line per shot ----------------------------------------------
-expect Array.prototype.every.call(document.querySelectorAll('#broll-list .broll-row'), function(r){ var h = r.getBoundingClientRect().height; return h >= 48 && h <= 56; })
+# at least 44px (B-BrollCalm), and a name is never cut short with "…" —
+# it wraps instead (#169)
+expect Array.prototype.every.call(document.querySelectorAll('#broll-list .broll-row'), function(r){ var n = r.querySelector('.broll-row-name'); return r.getBoundingClientRect().height >= 44 && n.scrollWidth <= n.clientWidth && getComputedStyle(n).textOverflow !== 'ellipsis' && getComputedStyle(n).whiteSpace !== 'nowrap'; })
+expect row('bs6').getBoundingClientRect().height === 44
 expect document.querySelectorAll('#broll-panel .tag-scene, #broll-panel .tag-entity').length === 0
 expect document.getElementById('broll-panel').textContent.indexOf('No audio reference') === -1
 expect heads() === 'Scene 01|Scene 02|Scene 03|Scene 04|Added here'
-expect document.querySelector('#broll-list .broll-group-head .broll-group-sub').textContent.indexOf('Every morning the town wakes') === 0
-expect getComputedStyle(document.querySelector('#broll-list .broll-group-head .broll-group-sub')).fontStyle === 'italic'
+# where each scene starts, in the mono (#169: the board's group head; the
+# scene's audio used to follow, cut short)
+expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-group-head .broll-group-time'), function(t){ return t.textContent; }).join(' ') === '00:00 00:07 00:13 00:17'
+expect getComputedStyle(document.querySelector('#broll-list .broll-group-head .broll-group-time')).fontFamily.indexOf('Chivo Mono') !== -1
 expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-group-count'), function(c){ return c.textContent + (c.classList.contains('is-done') ? '!' : ''); }).join(' ') === '1/2 1/1! 0/2 1/1! 0/2'
 expect row('bs1').querySelector('.broll-row-meta').textContent.indexOf('Harbour') !== -1
 expect row('bs1').querySelector('.broll-avatar').textContent === 'JS'
 expect row('bs1').querySelector('.broll-row-meta').textContent.indexOf('Jordan Sato') !== -1
 expect row('bs1').querySelector('.broll-meta-props').textContent === 'Fishing nets, Drone'
-# each prop's status as a dot before its name: Have it teal, Needed a hollow ring
-expect Array.prototype.map.call(row('bs1').querySelectorAll('.broll-meta-props .broll-st-dot'), function(d){ return d.className.replace('broll-st-dot ', '') + ':' + d.getAttribute('title'); }).join('|') === 'is-have:Have it|is-needed:Needed'
-expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(27, 122, 104)'
-expect getComputedStyle(row('bs1').querySelector('.broll-st-dot.is-needed')).backgroundColor === 'rgba(0, 0, 0, 0)'
+# each prop's status as the breakdown's lamp before its name (#169, where
+# it was a dot): Have it lit in --text, Needed an unlit outline
+expect Array.prototype.map.call(row('bs1').querySelectorAll('.broll-meta-props .item-lamp'), function(d){ return (d.classList.contains('is-have') ? 'is-have' : d.classList.contains('is-needed') ? 'is-needed' : '?') + ':' + d.getAttribute('title'); }).join('|') === 'is-have:Have it|is-needed:Needed'
+expect getComputedStyle(row('bs1').querySelector('.item-lamp.is-have')).backgroundColor === 'rgb(23, 22, 19)'
+expect getComputedStyle(row('bs1').querySelector('.item-lamp.is-needed')).backgroundColor === 'rgba(0, 0, 0, 0)'
 expect row('bs1').querySelector('.broll-meta-props').getAttribute('title') === 'Fishing nets (Have it), Drone (Needed)'
 expect row('bs1').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
 expect !!row('bs2').querySelector('.broll-flag-ico') && !!row('bs2').querySelector('.broll-note-ico')
@@ -107,7 +119,7 @@ click #broll-list .broll-row[data-id="bs4"] .broll-check
 wait rec('bs4').status === 'shot'
 expect row('bs4').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
 expect row('bs4').classList.contains('is-shot')
-expect document.querySelector('#broll-controls .broll-summary-line').textContent === '4 of 8 shots in the can'
+expect document.querySelector('#broll-summary .broll-summary-line').textContent === '4 of 8 shot'
 expect window.__hostedTest.dirty() === true
 eval U.flush()
 expect U.sizes().undo === window.__u0 + 1
@@ -115,14 +127,19 @@ key ctrl KeyZ
 wait rec('bs4').status === 'unshot'
 wait row('bs4').querySelector('.broll-check').getAttribute('aria-checked') === 'false'
 
-# ---- 5. opening a shot: the compact card -------------------------------
+# ---- 5. opening a shot: the label–value list ---------------------------
 click #broll-list .broll-row-main[data-id="bs2"]
 wait !!document.querySelector('#broll-list .broll-card[data-id="bs2"]')
 expect Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-label'), function(l){ return l.textContent; }).join('|') === 'Status|Scene|Location|Assigned|Props|Cuts against|Note'
-expect document.querySelector('#broll-list .broll-card .broll-seg button.is-active').textContent === 'To shoot'
+# Status is one field that flips on click (#169, B-BrollCalm; Adam: like the
+# breakdown's status), where it was two segmented buttons: no chevron
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'To shoot'
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('data-status') === 'unshot'
+expect !document.querySelector('#broll-list .broll-card .broll-status-field .ev-chevron')
 expect document.querySelector('#broll-list .broll-card .broll-flag-btn').classList.contains('is-active')
 expect document.querySelector('#broll-list .broll-card .broll-scene-n').textContent === '01'
-expect parseFloat(getComputedStyle(document.querySelector('#broll-list .broll-card .broll-label')).width) === 96
+expect document.querySelector('#broll-list .broll-card .broll-scene-link').textContent === '01 · 00:00'
+expect parseFloat(getComputedStyle(document.querySelector('#broll-list .broll-card .broll-label')).width) === 88
 # one value column for every row: a flagged shot with no description line
 # (this one) as much as one with (bs1, below)
 expect new Set(Array.prototype.map.call(document.querySelectorAll('#broll-list .broll-card .broll-value'), function(v){ return Math.round((v.firstElementChild || v).getBoundingClientRect().left); })).size === 1
@@ -140,10 +157,18 @@ wait rec('bs2').location === 'Quay steps'
 expect row('bs2').querySelector('.broll-row-meta').textContent.indexOf('Quay steps') !== -1
 caret #broll-list .broll-card .broll-notes-input
 eval (function(){ var t = document.querySelector('#broll-list .broll-card .broll-notes-input'); t.value = 'Go back before six.'; return true; })()
-click #broll-controls .broll-summary-line
+click #broll-summary .broll-summary-line
 wait rec('bs2').notes === 'Go back before six.'
-click #broll-list .broll-card .broll-seg button[data-status="shot"]
+# one click on Status flips it, as the tick does, and the focus stays on it
+eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()
+click #broll-list .broll-card .broll-status-btn
 wait rec('bs2').status === 'shot'
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').textContent === 'Shot'
+expect document.activeElement.classList.contains('broll-status-btn') && document.activeElement.getAttribute('data-status') === 'shot'
+expect document.querySelector('#broll-list .broll-card .broll-status-btn').getAttribute('aria-label') === 'Status: Shot. Click to mark to shoot'
+expect row('bs2').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
+eval U.flush()
+expect U.sizes().undo === window.__u0 + 1
 jsclick #broll-list .broll-row-main[data-id="bs1"]
 wait !!document.querySelector('#broll-list .broll-card[data-id="bs1"]')
 expect document.querySelector('#broll-list .broll-card .broll-card-desc').textContent === 'wide, then tight on one bird'

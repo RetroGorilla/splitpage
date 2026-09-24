@@ -170,8 +170,31 @@ function saveStatusView() {
              : "Press Save to choose where this script is kept." };
 }
 
+/* When the document on screen was last written, for the header's "Saved 2
+   min ago" (#169). Derived like everything else here: it is the moment the
+   indicator went from Saving… to Saved, so every save path — a manual
+   Save, an autosave, the server — sets it without a call of its own, and
+   opening a document (Saved straight from anything else) does not, since
+   "2 min ago" would then be a claim about a write this page never made. */
+var savedAt = 0;
+var lastViewText = "";
+var savedAgoTimer = null;
+
+function savedAgoText() {
+  if (!savedAt) return "";
+  var mins = Math.floor((Date.now() - savedAt) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + " min ago";
+  var d = new Date(savedAt);
+  return "at " + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+}
+
 export function updateSaveStatus() {
   var view = saveStatusView();
+  var text = view ? view.text : "";
+  if (text === "Saved" && lastViewText === "Saving…") savedAt = Date.now();
+  else if (text !== "Saved") savedAt = 0;
+  lastViewText = text;
   ["save-status", "wr-save-status"].forEach(function (id) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -181,6 +204,26 @@ export function updateSaveStatus() {
     el.title = view.title;
     el.className = "save-status is-" + view.cls;
   });
+  /* The header's Save button draws the same words in place of its own
+     (app.css, #btn-save::before): the status is the button. Its text node
+     stays "Save" / "Save •", which the writer's button mirrors and the
+     suites read. */
+  var btn = document.getElementById("btn-save");
+  if (btn) {
+    var ago = text === "Saved" ? savedAgoText() : "";
+    var shown = view ? view.text + (ago ? " " + ago : "") : "Save";
+    btn.setAttribute("data-status", shown);
+    btn.setAttribute("data-state", view ? view.cls : "none");
+    btn.setAttribute("aria-label", view ? shown + ". Save now" : "Save");
+    btn.title = view ? view.title + " Click to save now." : "Save this script";
+  }
+  /* "just now" becomes "1 min ago" without anything else happening */
+  if (savedAt && !savedAgoTimer) {
+    savedAgoTimer = setInterval(function () {
+      if (!savedAt) { clearInterval(savedAgoTimer); savedAgoTimer = null; return; }
+      updateSaveStatus();
+    }, 30000);
+  }
 }
 
 /* `sticky` is for the handful of messages that must not scroll past while

@@ -31,7 +31,7 @@ sleep 300
 expect document.getElementById('help-modal').hidden == true
 
 # --- opening Help closes the comments panel if it was open ------------------
-click text*=COMMENTS
+click #btn-comments
 sleep 300
 expect document.getElementById('comments-panel').hidden == false
 jsclick #btn-file
