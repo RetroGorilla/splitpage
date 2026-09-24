@@ -210,7 +210,10 @@ function dragScrollStep() {
   dragScroll.raf = requestAnimationFrame(dragScrollStep);
 }
 
-function stopDragScroll() {
+/* Also called while a dragged scene is over the rundown strip (#185,
+   21-events.js): the strip sits inside the top hot zone, and the script
+   scrolling away under a drag aimed at the strip is exactly wrong. */
+export function stopDragScroll() {
   if (!dragScroll) return;
   cancelAnimationFrame(dragScroll.raf);
   dragScroll = null;

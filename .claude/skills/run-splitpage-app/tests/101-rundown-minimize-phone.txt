@@ -1,0 +1,45 @@
+# Minimizing the rundown strip on a phone (issue #178): the compact strip
+# (52px, numbers only) goes down to the same thin bar and comes back, the
+# chevron inside the screen and nothing wider than it either way. No lens on
+# touch (#184): a finger has no hover, and focusing a block does not open
+# one either.
+
+open
+viewport 375 812 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+
+expect matchMedia('(hover: none)').matches
+expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 52
+# the chevron sits inside the strip's right margin, on the screen
+expect (function(){ var t = document.querySelector('#rundown .rundown-toggle').getBoundingClientRect(); return t.width > 0 && t.right <= innerWidth && t.left >= innerWidth - 20; })()
+# and never over a block
+expect (function(){ var t = document.querySelector('#rundown .rundown-toggle').getBoundingClientRect(); var tr = document.querySelector('#rundown .rundown-track').getBoundingClientRect(); return t.left >= tr.right - 0.5; })()
+
+click #rundown .rundown-toggle
+wait document.getElementById('rundown').classList.contains('is-min')
+expect document.getElementById('rundown').getBoundingClientRect().height <= 12
+expect document.querySelectorAll('#rundown .rd-seg').length === document.querySelectorAll('#rows .row').length
+expect document.documentElement.scrollWidth <= innerWidth
+expect localStorage.getItem('splitpage-rundown-min') == 1
+
+click #rundown .rundown-toggle
+wait !document.getElementById('rundown').classList.contains('is-min')
+expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 52
+expect document.documentElement.scrollWidth <= innerWidth
+# numbers only, as before
+expect document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+expect getComputedStyle(document.querySelector('#rundown .rd-len')).display == none
+
+# --- no lens on touch --------------------------------------------------------
+eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + 60, clientY: r.top + 20, pointerType: 'touch' })); return true; })()
+sleep 200
+expect !document.getElementById('rundown').classList.contains('is-lensed')
+eval document.querySelector('#rundown .rd-block').focus()
+key ArrowRight
+sleep 200
+expect document.activeElement.classList.contains('rd-block')
+expect !document.getElementById('rundown').classList.contains('is-lensed')
+
+quit
