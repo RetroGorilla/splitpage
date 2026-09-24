@@ -293,6 +293,14 @@ expect document.getElementById('target-input').value == 2:00
 expect document.querySelectorAll('#wpm-editor .target-preset:disabled').length === 6
 expect document.getElementById('target-clear').disabled === true
 expect document.querySelector('#wpm-editor .target-note') !== null
+# and the reading speed above it: shown, not changeable
+expect document.getElementById('wpm-input').disabled === true
+expect document.getElementById('wpm-save').disabled === true
+eval window.__wpmBefore = F.state().wordsPerMinute
+jsclick #wpm-save
+sleep 150
+expect F.state().wordsPerMinute === window.__wpmBefore
+expect document.getElementById('wpm-editor') !== null
 jsclick #wpm-editor .target-preset[data-target-seconds="30"]
 sleep 200
 expect F.state().targetSeconds === 120

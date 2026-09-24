@@ -72,4 +72,9 @@ jsclick #runtime-chip
 wait document.getElementById('wpm-editor')
 expect inView(document.getElementById('wpm-editor'))
 shot 141-phone-popover-dark
+key Escape
+# the line under the title stops short of the clock chip: your name there
+# is cut short with "…" rather than drawn under the chip
+expect document.querySelector('.doc-meta').getBoundingClientRect().right <= document.querySelector('.program-clock').getBoundingClientRect().left + 0.5
+expect (function(){var c=document.getElementById('identity-chip').getBoundingClientRect(),m=document.querySelector('.doc-meta').getBoundingClientRect();return c.width===0||c.right<=m.right+0.5;})()
 eval document.documentElement.removeAttribute('data-theme')
