@@ -1,0 +1,239 @@
+# Every side panel closes when a full-screen view opens (HANDOFF invariant
+# #16, #163). Present, the Writer, Help and the full-page shot list all close
+# panels through one helper, closeAllSidePanels() (03b-side-panels.js),
+# driven by SIDE_PANEL_IDS. For each of the five panels and each of the two
+# modes: open the panel, open the mode, check the panel is hidden,
+# body.panel-open is cleared, #root's right padding is back to what it is
+# with no panel and the header toggle no longer reads as pressed; then leave
+# the mode and check the panel did not come back.
+
+open
+
+eval (function(){window.__rootPad0=getComputedStyle(document.getElementById('root')).paddingRight;window.__noPanel=function(){return !document.body.classList.contains('panel-open') && ['comments-panel','production-panel','gear-panel','broll-panel','history-panel'].every(function(id){return document.getElementById(id).hidden;}) && getComputedStyle(document.getElementById('root')).paddingRight===window.__rootPad0 && [].every.call(document.querySelectorAll('.panel-toggle'),function(b){return b.getAttribute('aria-pressed')!=='true';});};return window.__rootPad0;})()
+expect __noPanel()
+# --- production-panel under Present ---
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('production-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('production-panel').hidden
+expect __noPanel()
+# --- gear-panel under Present ---
+jsclick #btn-gear
+wait !document.getElementById('gear-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('gear-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('gear-panel').hidden
+expect __noPanel()
+# --- broll-panel under Present ---
+jsclick #btn-broll
+wait !document.getElementById('broll-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('broll-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('broll-panel').hidden
+expect __noPanel()
+# --- comments-panel under Present ---
+jsclick #btn-comments
+wait !document.getElementById('comments-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('comments-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('comments-panel').hidden
+expect __noPanel()
+# --- history-panel under Present ---
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('history-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('history-panel').hidden
+expect __noPanel()
+# --- production-panel under Writer ---
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('production-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('production-panel').hidden
+expect __noPanel()
+# --- gear-panel under Writer ---
+jsclick #btn-gear
+wait !document.getElementById('gear-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('gear-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('gear-panel').hidden
+expect __noPanel()
+# --- broll-panel under Writer ---
+jsclick #btn-broll
+wait !document.getElementById('broll-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('broll-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('broll-panel').hidden
+expect __noPanel()
+# --- comments-panel under Writer ---
+jsclick #btn-comments
+wait !document.getElementById('comments-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('comments-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('comments-panel').hidden
+expect __noPanel()
+# --- history-panel under Writer ---
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-panel').hidden
+wait document.body.classList.contains('panel-open')
+sleep 400
+expect getComputedStyle(document.getElementById('root')).paddingRight !== __rootPad0
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('history-panel').hidden
+expect !document.body.classList.contains('panel-open')
+expect __noPanel()
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+expect document.getElementById('history-panel').hidden
+expect __noPanel()
+# --- Help goes through the same helper: B-roll and History, which the old
+#     Writer list missed ---
+jsclick #btn-broll
+wait !document.getElementById('broll-panel').hidden
+jsclick #btn-file
+jsclick #file-menu [data-file-action="help"]
+wait !document.getElementById('help-modal').hidden
+sleep 600
+expect __noPanel()
+key Escape
+wait document.getElementById('help-modal').hidden
+sleep 400
+expect __noPanel()
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="history"]
+wait !document.getElementById('history-panel').hidden
+jsclick #btn-file
+jsclick #file-menu [data-file-action="help"]
+wait !document.getElementById('help-modal').hidden
+sleep 600
+expect __noPanel()
+key Escape
+wait document.getElementById('help-modal').hidden
+
+# --- the full-page shot list (#150) closes them too, and brings back only
+#     the B-roll panel it was opened from ---
+jsclick #btn-broll
+wait !document.getElementById('broll-panel').hidden
+jsclick #broll-open-page
+wait !document.getElementById('broll-page').hidden
+sleep 600
+expect __noPanel()
+jsclick #broll-page-close
+wait document.getElementById('broll-page').hidden
+wait !document.getElementById('broll-panel').hidden
+expect document.body.classList.contains('panel-open')
+jsclick #btn-broll
+wait document.getElementById('broll-panel').hidden
+
+jsclick #btn-comments
+wait !document.getElementById('comments-panel').hidden
+jsclick #btn-broll
+wait !document.getElementById('broll-panel').hidden
+expect document.getElementById('comments-panel').hidden
+jsclick #broll-open-page
+wait !document.getElementById('broll-page').hidden
+sleep 600
+expect __noPanel()
+jsclick #broll-page-close
+wait document.getElementById('broll-page').hidden
+expect document.getElementById('comments-panel').hidden
+
+quit
