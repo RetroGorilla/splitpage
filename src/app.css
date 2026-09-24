@@ -129,39 +129,39 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #16130F;
-      --surface: #1F1B15;
-      --surface-2: #292319;
-      --border: #3B3427;
-      --text: #F3EFE5;
-      --text-dim: #B6AD99;
+      --bg: #161412;
+      --surface: #1E1C19;
+      --surface-2: #282521;
+      --border: #3D3933;
+      --text: #F0EDE6;
+      --text-dim: #B1AB9F;
       /* 4.9:1 on --bg and 4.5:1 on --surface — already clear of the bar
          the light value was raised to in #143, so left as it was. */
-      --text-faint: #8B8371;
+      --text-faint: #8A8478;
       --visual: #56D6BC;
-      --visual-soft: #1C3733;
+      --visual-soft: #1B3837;
       --audio: #FF8552;
-      --audio-soft: #3C2617;
+      --audio-soft: #3B271B;
       /* The tag hues lightened until each is about 6:1 on --surface, and
          the tints are 20% of that over --surface (#143). Keep in step with
          the block below. */
       --tag-prop: #749AD8;
-      --tag-prop-tint: #30343C;
+      --tag-prop-tint: #2F353F;
       --tag-location: #AC8CCF;
-      --tag-location-tint: #3B323A;
+      --tag-location-tint: #3A323D;
       --tag-cast: #D181AC;
-      --tag-cast-tint: #432F33;
+      --tag-cast-tint: #423036;
       --tag-vfx: #C6910B;
-      --tag-vfx-tint: #403313;
+      --tag-vfx-tint: #403316;
       --tag-sound: #7C9DBA;
-      --tag-sound-tint: #323536;
+      --tag-sound-tint: #313639;
       --tag-gear: #8AA32E;
-      --tag-gear-tint: #34361A;
+      --tag-gear-tint: #34371D;
       --broll: #58A962;  /* 5.9:1 on --surface, 6.4:1 on --bg */
       --accent: #FF8552;
       --accent-contrast: #241004;
       --danger: #FF7A6E;
-      --danger-soft: #3A1E1A;
+      --danger-soft: #391F1E;
       --ok: #56D6BC;
       --focus-ring: #56D6BC;
       --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 12px 32px -16px rgba(0,0,0,0.65);
@@ -174,34 +174,34 @@
      these tokens, so in a light-themed app they would otherwise be the
      light palette on a near-black page: a pale tint box under white text. */
   :root[data-theme="dark"], .prompter-line {
-    --bg: #16130F;
-    --surface: #1F1B15;
-    --surface-2: #292319;
-    --border: #3B3427;
-    --text: #F3EFE5;
-    --text-dim: #B6AD99;
-    --text-faint: #8B8371;
+    --bg: #161412;
+    --surface: #1E1C19;
+    --surface-2: #282521;
+    --border: #3D3933;
+    --text: #F0EDE6;
+    --text-dim: #B1AB9F;
+    --text-faint: #8A8478;
     --visual: #56D6BC;
-    --visual-soft: #1C3733;
+    --visual-soft: #1B3837;
     --audio: #FF8552;
-    --audio-soft: #3C2617;
+    --audio-soft: #3B271B;
     --tag-prop: #749AD8;
-    --tag-prop-tint: #30343C;
+    --tag-prop-tint: #2F353F;
     --tag-location: #AC8CCF;
-    --tag-location-tint: #3B323A;
+    --tag-location-tint: #3A323D;
     --tag-cast: #D181AC;
-    --tag-cast-tint: #432F33;
+    --tag-cast-tint: #423036;
     --tag-vfx: #C6910B;
-    --tag-vfx-tint: #403313;
+    --tag-vfx-tint: #403316;
     --tag-sound: #7C9DBA;
-    --tag-sound-tint: #323536;
+    --tag-sound-tint: #313639;
     --tag-gear: #8AA32E;
-    --tag-gear-tint: #34361A;
+    --tag-gear-tint: #34371D;
     --broll: #58A962;
     --accent: #FF8552;
     --accent-contrast: #241004;
     --danger: #FF7A6E;
-    --danger-soft: #3A1E1A;
+    --danger-soft: #391F1E;
     --ok: #56D6BC;
     --focus-ring: #56D6BC;
     --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 12px 32px -16px rgba(0,0,0,0.65);
@@ -3622,7 +3622,7 @@
   border-left: 3px solid #1B7A68;
   border-radius: 8px;
   /* Was a literal #ffffff with no color of its own — in dark mode it
-     inherited body's near-white --text (#F3EFE5), giving near-invisible
+     inherited body's near-white --text (#F0EDE6), giving near-invisible
      text on a hardcoded white box. --surface is the theme token every
      other panel/card sources its background from, and already flips
      correctly under prefers-color-scheme/data-theme. */
@@ -3978,19 +3978,19 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .broll-panel, :root:not([data-theme="light"]) .broll-page {
-      --broll-todo: #3B3427;
+      --broll-todo: #3D3933;
       --broll-flag-tint: color-mix(in srgb, var(--danger) 9%, var(--surface));
       --broll-dark: #0B0A08;
-      --broll-dark-text: #F3EFE5;
-      --broll-on-ok: #16130F;
+      --broll-dark-text: #F0EDE6;
+      --broll-on-ok: #161412;
     }
   }
   :root[data-theme="dark"] .broll-panel, :root[data-theme="dark"] .broll-page {
-    --broll-todo: #3B3427;
+    --broll-todo: #3D3933;
     --broll-flag-tint: color-mix(in srgb, var(--danger) 9%, var(--surface));
     --broll-dark: #0B0A08;
-    --broll-dark-text: #F3EFE5;
-    --broll-on-ok: #16130F;
+    --broll-dark-text: #F0EDE6;
+    --broll-on-ok: #161412;
   }
 
   .broll-ico { flex: none; display: block; }

@@ -120,7 +120,7 @@ expect window.__pdf.indexOf('hands mending a net') !== -1 && window.__pdf.indexO
 
 # ---- 7. dark mode takes the dark tokens --------------------------------
 eval document.documentElement.setAttribute('data-theme', 'dark')
-expect getComputedStyle(document.getElementById('broll-page')).backgroundColor === 'rgb(22, 19, 15)'
+expect getComputedStyle(document.getElementById('broll-page')).backgroundColor === 'rgb(22, 20, 18)'
 expect getComputedStyle(prow('bs2').querySelector('td')).backgroundColor !== 'rgb(255, 247, 245)'
 expect getComputedStyle(prow('bs3').querySelector('.broll-st-dot')).backgroundColor === 'rgb(255, 133, 82)'
 expect getComputedStyle(prow('bs1').querySelector('.broll-st-dot.is-have')).backgroundColor === 'rgb(86, 214, 188)'

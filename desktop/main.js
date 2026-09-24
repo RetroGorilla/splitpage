@@ -2849,7 +2849,7 @@ function registerProtocol() {
  * --------------------------------------------------------------------- */
 
 function backgroundColorForTheme() {
-  return nativeTheme.shouldUseDarkColors ? "#16130F" : "#F6F4EC";
+  return nativeTheme.shouldUseDarkColors ? "#161412" : "#F6F4EC";
 }
 
 function boundsIfVisible(b) {
@@ -2868,7 +2868,7 @@ function savedBoundsIfVisible() {
 
 function titleBarOverlayColors() {
   return nativeTheme.shouldUseDarkColors
-    ? { color: "#16130F", symbolColor: "#E8E2D4", height: TITLEBAR_H }
+    ? { color: "#161412", symbolColor: "#E5E0D5", height: TITLEBAR_H }
     : { color: "#F6F4EC", symbolColor: "#2A2620", height: TITLEBAR_H };
 }
 
