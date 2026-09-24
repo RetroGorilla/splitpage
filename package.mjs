@@ -74,6 +74,7 @@ const FILES = [
   ["index.html", 0o644],
   ["manifest.webmanifest", 0o644],
   ["icon.svg", 0o644],
+  ["icon-maskable.svg", 0o644],
   ["sw.js", 0o644],
   ["server/server.js", 0o644],
   /* server.js is CommonJS and the repo root's package.json says

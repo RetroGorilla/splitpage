@@ -154,7 +154,9 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   does not.
 - `build.mjs` — inlines all of it back into `index.html` and stamps `sw.js`.
   `--check` says whether both are in step with the source.
-- `manifest.webmanifest`, `icon.svg` — makes "Install app" possible.
+- `manifest.webmanifest`, `icon.svg`, `icon-maskable.svg` — makes "Install
+  app" possible (the maskable one is the same mark, shrunk into the safe
+  zone for Android's round and squircle crops).
 - `sw.js` — a small service worker so the app shell still opens offline
   once you've loaded it at least once while served over `http://`. Tracked,
   unlike `index.html`: it cannot be inlined into the page, so it is the file
