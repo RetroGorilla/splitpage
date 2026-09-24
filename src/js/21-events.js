@@ -37,15 +37,18 @@ import {
   handleToolbarCmd,
   insertLineBreak,
   isScriptCell,
+  maybeDirectionShortcut,
   render,
   renderRow,
   syncFieldFromDom,
   toggleCellFormat,
+  typeAtDirectionEdge,
   typePendingMarks,
   updateToolbarState
 } from "./05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
 import { openGalleryOverlay } from "./05e-gallery-overlay.js";
+import { thumbnailsAfterPaste } from "./05v-video.js";
 import {
   appendDraftMedia,
   draftRedo,
@@ -830,7 +833,9 @@ function onFormatBeforeInput(e) {
   if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
   if (!cellEl || !isScriptCell(cellEl)) return;
-  var fresh = typePendingMarks(cellEl, e.data);
+  /* the same for a character typed at the edge of a stage direction
+     (#167), which is narration, not more of the direction */
+  var fresh = typePendingMarks(cellEl, e.data) || typeAtDirectionEdge(cellEl, e.data);
   if (!fresh) return;
   e.preventDefault();
   onRootInput({ target: fresh, inputType: "insertText", data: e.data });
@@ -890,6 +895,7 @@ function onRootInput(e) {
      own history notes it (05d-draft-edit.js) */
   if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
   maybeAutoTagShortcut(e, cellEl);
+  maybeDirectionShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
   syncFieldFromDom(cellEl);
   afterScriptCellChange(cellEl);
@@ -992,8 +998,15 @@ function insertIntoScriptCellNow(cellEl, html, text, extra) {
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
   if (res.attached) {
     /* the Image section shows what just went in */
-    renderRow(cellEl.getAttribute("data-id"));
+    var attachedRowId = cellEl.getAttribute("data-id");
+    renderRow(attachedRowId);
     announceAttached(res, before);
+    /* a YouTube or Vimeo link's thumbnail, fetched now and folded into
+       this paste's own undo entry when it comes (#141) */
+    if (res.attached.links && res.attached.links.length) {
+      var entry = lastUndoEntry();
+      thumbnailsAfterPaste(attachedRowId, res.attached.links, entry === before ? null : entry);
+    }
   }
   if (res.movedComments) {
     /* a cut comment's card follows its words to the new scene */

@@ -28,9 +28,12 @@ import { normalizeImageRef } from "../../shared/blob-policy.js";
    gallery's dialog; a pasted one has none.
 
    Every video pasted or dropped into a scene is an item of its own: its
-   link, marked `poster`, and its thumbnail (a video file's first frame) as
-   the item's picture — or no picture, when there is none to be had (a web
-   link), and the gallery draws a placeholder. An item has a picture, a
+   link, marked `poster`, and its thumbnail as the item's picture: a video
+   file's first frame, or a YouTube or Vimeo link's own thumbnail, fetched
+   once when it is pasted and kept as a blob like any picture (#141,
+   05v-video.js) — or no picture, when there is none to be had (another
+   site's link, a fetch that failed or was switched off in Settings), and
+   the gallery draws a placeholder. An item has a picture, a
    poster link, or both. migrateRows (02-state.js) calls migrateGallery for each row;
    the merge (03-sync.js) merges imageLinks and moreImages as sets
    (mergeGalleryField), so two people adding pictures both keep theirs. */
@@ -281,6 +284,24 @@ export function addGalleryVideo(row, link, poster) {
   slots.push(slot);
   setRowSlots(row, slots);
   return slots.length - 1;
+}
+
+/* Gives the video whose poster link is `key` (videoLinkKey) the picture
+   `ref`, when it has none yet: a pasted YouTube or Vimeo link's thumbnail,
+   fetched a moment after the paste (#141, 05v-video.js). Not when another
+   item already shows those bytes — two items with one picture would be
+   one item to migrateGallery. Returns whether it did. */
+export function setVideoThumbnail(row, key, ref) {
+  var slots = slotsOf(row);
+  if (!ref || slots.some(function (s) { return s.ref && s.ref.sha256 === ref.sha256; })) return false;
+  for (var i = 0; i < slots.length; i++) {
+    var s = slots[i];
+    if (s.ref || !s.links.some(function (l) { return l.poster && videoLinkKey(l) === key; })) continue;
+    s.ref = ref;
+    setRowSlots(row, slots);
+    return true;
+  }
+  return false;
 }
 
 /* Replaces slot i's picture, keeping its caption. */

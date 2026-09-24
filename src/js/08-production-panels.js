@@ -1235,6 +1235,8 @@ export function breakdownRows() {
       var owner = personById(item.owner);
       var st = tagStatus(item.status) || TAG_STATUSES[0];
       out.push({
+        /* the id, for the exports' category colours (#171, tagPrintColor) */
+        catId: g.cat.id,
         category: g.cat.plural,
         categoryLabel: g.cat.label,
         name: item.name,

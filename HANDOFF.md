@@ -705,6 +705,32 @@ tabs**.
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
   bridge calls for browser suites. The `--host` server keeps its own
   `DATA_DIR/blobs` (#82 D9).
+- **YouTube and Vimeo in the gallery** (#141, #168, `main.js` §9e,
+  `shared/video-embed.js`). The page's policy is build.mjs's, re-served
+  as a header (§10), so its `frame-src` — `'self'` plus YouTube's no-cookie
+  embed and Vimeo's player — needed no second edit here; `TABSTRIP_CSP`
+  keeps `frame-src 'none'`. Three things main does for it: (1)
+  `splitpage:video-thumbnail(host, ref)` — typed `videoHost`
+  (`youtube`|`vimeo`) and `videoRef` (an 11-character YouTube id, or Vimeo
+  digits with `:hash`), never a URL — fetches the thumbnail with Node's
+  fetch from the fixed hosts, no redirect, no cookie, no referrer,
+  JPEG/PNG/WebP ≤ 1 MiB, answering `{ok, bytes, mime}` or `{ok:false,
+  code}`; (2) YouTube's player refuses a request with no Referer ("Error
+  153", checked server-side — confirmed with curl 2026-09-24), and a
+  `splitpage://` page sends none, so `installPlayerReferer` adds
+  `Referer: https://com.retrogorilla.splitpage/` (the app id, as YouTube
+  asks embedding apps to) to the `…/embed/*` subframe request from one of
+  this app's tabs, and to nothing else; (3) the permission handlers now
+  judge by the asking frame (`details.requestingUrl`, or the origin for a
+  cross-origin frame's check), so a player frame inside a tab gets no
+  microphone or clipboard. Links a player opens in a new window go to the
+  system browser through the existing window-open handler; frame
+  navigation needs no handler of its own — `will-navigate` is the main
+  frame's, and the page's `frame-src` already bounds the frame.
+  `SPLITPAGE_TEST_VIDEO_BASE` (test mode only) points every host at a fake;
+  `caseGalleryVideoThumbnail` in smoke.mjs uses it. Not run on this
+  machine (no Electron binary for x64 here) — first run is CI's
+  desktop-smoke job.
 - Duplicate document-id claims reassign in memory only (§4, #36).
   `chooseDuplicateLoser(a, b)` (now `shared/doc-id-policy.js`, #76): server
   home beats file home; birthtime is **not** consulted between two files —
@@ -817,6 +843,36 @@ keyframe animation can only ever play one way; the pattern for an exit is
 for the entrance. Side panels, the File drawer and every `.modal-backdrop`
 use it. A transition declaration outranks `!important` in the cascade, so
 the global `[hidden] { display: none !important }` does not defeat it.
+
+Present and the Writer use it too (#133, #136): each fades in over the view
+it covers and back out, opacity only, on the container. Three rules keep a
+fade from costing anything but pixels, and a change to either mode keeps
+them:
+
+- **`hidden` flips in the open/close call, and everything the mode needs is
+  done in that call.** Keys, Play, Mirror/Flip and the Writer's caret work
+  mid-arrival; the split view is painted when `closeWriter()` returns. Suites
+  read `.hidden` straight after a click and must keep being right to.
+- **`closeWriter()` syncs the focused paragraph (`syncFieldFromDom`) before
+  anything about leaving happens** — then blurs it, then sets `inert` and
+  `hidden`. A fading writer that still held the focus would go on taking
+  keystrokes nobody could see. `closePrompter()` likewise stops playback,
+  voice and the wake lock first. A leaving layer is `inert` with
+  `pointer-events: none`, so a click during the fade reaches the view
+  underneath.
+- **No transform on either container.** Mirror/Flip are transforms on
+  `.prompter-scroll`, the caret's `scrollIntoView` and the scene cue measure
+  the page, and a transform would make the container a containing block for
+  anything fixed inside it.
+
+Two exceptions to "CSS only": a fullscreen prompter is held opaque
+(`.is-holding`, the one rule that overrides the global `[hidden]`) until
+`exitFullscreen()` settles (or 1s), so the browser's own exit and our fade
+never run together; and `body.prompter-open` (the page scroll lock) goes on
+when the arrival finishes, not in the frame it starts, so the scrollbar
+leaving does not shift the editor under a still-clear layer.
+`tests/150-mode-transitions.txt` slows the fades by setting the tokens inline
+on the two elements and checks all of it.
 
 **`render()` must stay synchronous.** `04a-row-motion.js` animates scene
 reorder/insert/delete/collapse with FLIP — measure, let render() reconcile
@@ -947,12 +1003,15 @@ builds two fields.
                                 // conflict detection uses the server's own doc.rev
   "lastEditedBy": null, "lastEditedAt": null,
   "wordsPerMinute": 150,        // clamped 60–400
+  "targetSeconds": 120,         // #170 — whole seconds 1–86400, ABSENT for no target
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
     // the scene's gallery (#135, 02d-gallery.js), each key absent when empty:
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
+    // a poster link's item's imageRef is its still: a file's first frame, or
+    // a YouTube/Vimeo link's fetched thumbnail (#141) — an ordinary blob
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
     // a length set by hand (#179): whole seconds 0–86400, absent = the estimate
     "lengthSeconds": 90,
@@ -1020,7 +1079,35 @@ base, theirs when both did (no conflict card), and with no base a set length
 beats none; `rowContentEqual()` counts it, so setting it outranks the other
 side's delete. Undo needs nothing — `diffStates` makes it a `rowField` step.
 A `.splitpage` and the `.md` data block carry it as any row key; the `.md`
-table does not show it.
+table does not show it. Present counts it too, for a scene with no Audio
+words as well (its clock steps over that scene's length as the reading
+passes it, and the running order gives it a block); only Present's scroll
+speed is words at the reading speed.
+
+**A target length** (#170) is the document key `targetSeconds`, whole
+seconds 1–86400, and — like `personColors` — has **no default**: no target
+is no key, so a file from before #170 reads, merges and saves byte for
+byte as it did. `migrateRows()` keeps it through `normalizeTargetLength()`
+(01-scene-status.js; 0 and garbage delete the key). `mergeStates()` uses
+the `target-length` strategy, `mergeTargetLength()` (03-sync.js): merged
+like the title — the side that changed it since the base wins, and taking
+it away is a change too (which `changed-side-wins`' `m || fallback` would
+lose) — but both sides changing it keeps theirs with no conflict card, as a
+scene's length does; with no base a set target beats none. Both project
+formats carry it as a plain key; the `.md` table does not show it and no
+export prints it. It is set only through `setTargetLength()`
+(05t-target.js), one `markDirty()`, so undo sees a `docField` step and a
+review session is refused there as well as in the popover. What reads it:
+the program clock (`updateScriptStats()`: `01:35 / 02:00` and `0:25 left` /
+`0:05 over` in `#program-clock-slot`, via the pure `targetClock()`; the
+target is measured against the whole script — with shot scenes hidden the
+remaining-to-shoot figure moves to the clock's tooltip), and the rundown
+strip (`setRundownExtraSeconds(target)`, so the span is
+max(target, total) + 10s; 05t-target.js draws the line, "Target 2:00" and
+the hatching on `#rundown-overlay` from `rundownLayout()` — to scale, never
+`rundownX()`, because the overlay is faded while the lens is on and must be
+right when it settles; minimized, CSS leaves only the line as a tick).
+Present does not show it.
 
 **Per person, not per document:** the script's zoom (#191) is
 `localStorage["splitpage-script-scale"]` (a number, 1 = 100 %, absent at
@@ -1046,6 +1133,30 @@ holding a picture or video card (which the model leaves out, D7) is still
 compared as a string, whole. The on-disk merge review (18a-local-merge.js)
 decides each cell with the same `mergeTextField()`, and shows "both sets of
 changes are combined" for an outcome of `merged`.
+
+**A stage direction** (#167) is the model's `dir` mark on words of the
+Audio column, stored as `<span class="stage-dir">` (the sanitiser keeps the
+class and nothing else), nested just inside the comments so only a comment
+edge can cut one; never on a b-roll key; a tag is all in one or not
+(`normalizeCell`). Its brackets are never stored: app.css draws them in the
+editor, the Writer and the prompter, and every text reader adds them —
+`toPlainText` "(beat)" (its `directions: "omit"` and `spokenText()` leave
+them out), `toMarkdown` `*(beat)*`, `toDocxRuns` a `(`/`)` run each side with
+`dir: true` (the .docx writes the `SplitpageDirection` character style,
+which `docxToRows` reads back; the PDF prints them grey italic), and
+`htmlToMarkdown` — the `.md` project's table — `((beat))`, the typing
+notation, so a hand-edited table cell gets them back (`audioDirectionsHtml`,
+15-docx.js, also run on a `.docx`'s and a paste import's Audio). An older
+copy's sanitiser unwraps the span, so there a direction reads as narration;
+its `.md` table shows the `((beat))` literally. `wordCount` (so
+`rowSeconds`) counts `spokenText`; `prompterSceneHtml` leaves a direction's
+words out of the `.w` spans voice follow listens for. Typing: `((words))`
+converts on the second `)` in the Audio column only (`directionShortcut`,
+04c-doc-model.js, where the typing convention Adam signed off is recorded;
+`maybeDirectionShortcut`, 05-render.js), one undo entry of its own; a
+character typed at either edge of one is narration (`typingMarks`,
+`typeAtDirectionEdge`). The narration export's "Include stage directions"
+is `localStorage["splitpage-export-directions"]` (`"0"` off, absent on).
 
 **Images are references, not bytes** (#82). The document state never holds
 image bytes; the bytes live once, content-addressed by SHA-256, in a blob
@@ -1181,6 +1292,8 @@ absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 (`12`/`24`, absent = system; `formatClock()` in `00p-prefs.js` is the one
 clock formatter, #180), `splitpage-person-color` (#194),
 `splitpage-default-wpm` (the reading speed a NEW script starts at),
+`splitpage-video-thumbs` (#141: `"0"` = don't fetch a pasted YouTube or
+Vimeo link's thumbnail; absent = fetch, the default — `videoThumbsOn()`),
 `splitpage-rundown-min` and `splitpage-script-scale` (other lanes' own
 controls; Settings only reads and writes them), plus the keys that already
 had homes (`splitpage-hide-shot`, `splitpage-autosave`,
@@ -1243,7 +1356,13 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     the script through the rule; both land on the same token, so the dark
     theme and the prompter (which always takes the dark tokens) follow on
     their own (#143). Keep the hues off the Visual blue and Audio amber.
-    `src/test/palette.test.mjs` checks all of it, contrast included.
+    It also needs its light hex in `TAG_PRINT_COLORS` (14-export.js, #171):
+    the PDF and .docx exports draw categories in the light `:root` values
+    (the page is white whatever the theme), and a file format cannot read
+    a CSS token, so that table is a deliberate second copy — the one place
+    they are written out, read through `tagPrintColor(catId)`.
+    `src/test/palette.test.mjs` checks all of it, contrast included, and
+    fails the moment `TAG_PRINT_COLORS` and `:root` disagree.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
@@ -1256,7 +1375,10 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     `syncPanelClass()` once, so `body.panel-open` and `#root`'s padding
     reset. Present (`openPrompter()`), the Writer (`openWriter()`, which
     also closes the find bar), Help, the tour, the setup wizard and the
-    full-page shot list (`openBrollPage()`) all call it. Leaving Present or
+    full-page shot list (`openBrollPage()`) all call it. Present and the
+    Writer call it in the same call that starts their fade-in, so the
+    panels' slide-out (`--dur-exit`) runs under and inside the mode's
+    arrival (`--dur-enter`) as one transition (§3.14). Leaving Present or
     the Writer brings no panel back; the shot list alone reopens the B-roll
     panel on close if that is where it was opened from. A new panel goes in
     `SIDE_PANEL_WIDTH_DEFAULTS` (which is `SIDE_PANEL_IDS`) and, if it has a
@@ -1359,6 +1481,15 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     and list which documents have history — it cannot name a file or reach
     anything outside that folder.
     Follow My Voice (#8) is the sixth: invariants #45–#47.
+    A pasted video's thumbnail (#141) is the seventh.
+    `splitpage:video-thumbnail` takes a host from a list of two and a video
+    id of a fixed shape, both typed in the table, and main rebuilds every
+    address from them against `shared/video-embed.js`'s fixed hosts (a
+    Vimeo oEmbed answer's `thumbnail_url` is used only when it is on
+    Vimeo's own image host). No redirect is followed and only a raster
+    image of at most 1 MiB comes back. So a compromised page can at worst
+    make main fetch the thumbnail of a video it names from YouTube or
+    Vimeo — what pasting the link does anyway.
 29. **The join PIN, session token, and launch token never enter
     `update-status.json`, the document, or any file the static handler
     serves.** Client side: everything about connecting to a server is
@@ -1590,12 +1721,15 @@ evaluation order via `_entry.js`):
 | `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
 | `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
-| `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
+| `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
 | `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
 | `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
 | `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
-| `06-rows.js` | row add/move/drag, images |
+| `05t-target.js` | a script's target length (#170): `setTargetLength()`, the clock popover's Target section, and the line / label / hatching on the rundown's overlay |
+| `05v-video.js` | YouTube and Vimeo in a scene's gallery (#141, #168): a pasted link's thumbnail fetched once (`fetchThumbnailRecord` — the page's own fetch, or the desktop bridge's `videoThumbnail`; YouTube's letterbox trimmed), interned as a blob and folded into the paste's undo entry (`thumbnailsAfterPaste` → `foldIntoEdit`); the player's address (`playerSrc`) and where it cannot play (`embedRefusal`: YouTube from `file://`); `window.__videoTest` (a fake fetch/host for the suites; the drivers' `__splitpageNoRemote` keeps everything else off the network) |
+| `05e-gallery-overlay.js` | a scene's gallery dialog (#135): the still, ‹ ›, the grid, Make cover / Remove / reorder as undo steps; click-to-play in the preview (#168: a sandboxed frame for YouTube/Vimeo, a `<video>` for a file dropped this session, a note plus Open where it cannot play), Retry thumbnail (#141) |
+| `06-rows.js` | row add/move/drag, images; a gallery video's Open (`openGalleryLink`, `openVideoFile`), the desktop's per-run file grants, and the Files dropped or pasted this session (`hasSessionVideo`/`sessionVideoUrl`, #168) |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
 | `08c-broll.js` | the b-roll list itself: reading `B-roll:` lines off the model, the records in `state.brollShots`, anchoring (#21), a pasted key's record (invariant #54), the props a shot needs (#149, invariant #56), the badge and the idle refresh |
@@ -1606,7 +1740,7 @@ evaluation order via `_entry.js`):
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
-| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId` |
+| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171) |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
 | `17-pdf.js` | pdf, packing lists |
@@ -1645,6 +1779,7 @@ evaluation order via `_entry.js`):
 | `shared/history-store.js` | THE version-history store (#83), pure CommonJS run by the browser (03a, over 03c's IndexedDB or the memory backend) and desktop main (over `desktop/history-fs-backend.js`): put-if-absent, the stamp, the trim to 50, the cap, the quota retry, Older, holds, which bodies may go; also `createMemoryHistoryBackend` |
 | `shared/history-policy.js` | the history rules both stores share: `sanitizeHistoryMeta`, `planHistoryEviction`, `historyStampAfter`, the Older key/TTL and its one expiry predicate, `historyUtf8Length` |
 | `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
+| `shared/video-embed.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
 | `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
 | `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency |
 | `desktop/history-v1-migrate.js` | one-time move of the pre-#83 folder tree into it, then into `history/v1-backup/`; temporary (§3.13) |

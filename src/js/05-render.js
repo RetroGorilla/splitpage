@@ -18,11 +18,17 @@ import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeH
 import {
   breakLine,
   cellLength,
+  directionRangeAt,
+  directionShortcut,
+  directionToggleRange,
   fromHtml,
   insertText,
+  insideDirection,
   markThroughout,
+  projection,
   setMark,
   toHtml,
+  toggleDirection,
   toggleMark,
   typingMarks
 } from "./04c-doc-model.js";
@@ -103,22 +109,28 @@ function tbIcon(id) { return '<svg class="tb-icon" aria-hidden="true"><use href=
 
 var COMMENT_BUTTON_HTML = '<button type="button" data-cmd="comment" title="Comment on selected text" aria-label="Comment">' + tbIcon("i-comment") + '</button>';
 
+var SCRIPT_TOOLBAR_BUTTONS =
+  '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><span class="tb-letter tb-b">B</span></button>' +
+  '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic"><span class="tb-letter tb-i">I</span></button>' +
+  '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)" aria-label="Underline"><span class="tb-letter tb-u">U</span></button>' +
+  '<button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><span class="tb-letter tb-s">S</span></button>' +
+  '<span class="tb-sep"></span>' +
+  '<button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight">' + tbIcon("i-highlight") + '</button>' +
+  '<button type="button" data-cmd="link" title="Add link" aria-label="Link">' + tbIcon("i-link") + '</button>' +
+  COMMENT_BUTTON_HTML +
+  '<span class="tb-sep"></span>' +
+  '<button type="button" data-cmd="tag" class="tb-tag" title="Label as a prop, location, cast member or effect" aria-label="Tag as…">' +
+    tbIcon("i-tag") + '<svg class="tb-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>';
+
+/* A stage direction (#167) belongs to the Audio column only: the button is
+   in that column's toolbar and the Writer's bar, never the Visual one's. */
+export var DIRECTION_BUTTON_TITLE = "Stage direction — shown in the teleprompter, not read aloud. Or type ((…))";
+var DIRECTION_BUTTON_HTML = '<button type="button" data-cmd="direction" title="' + DIRECTION_BUTTON_TITLE +
+  '" aria-label="Stage direction"><span class="tb-letter tb-dir">( )</span></button>';
+
 var CELL_TOOLBARS = {
-  script: {
-    label: "Text formatting",
-    buttons:
-      '<button type="button" data-cmd="bold" title="Bold (Ctrl+B)" aria-label="Bold"><span class="tb-letter tb-b">B</span></button>' +
-      '<button type="button" data-cmd="italic" title="Italic (Ctrl+I)" aria-label="Italic"><span class="tb-letter tb-i">I</span></button>' +
-      '<button type="button" data-cmd="underline" title="Underline (Ctrl+U)" aria-label="Underline"><span class="tb-letter tb-u">U</span></button>' +
-      '<button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><span class="tb-letter tb-s">S</span></button>' +
-      '<span class="tb-sep"></span>' +
-      '<button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight">' + tbIcon("i-highlight") + '</button>' +
-      '<button type="button" data-cmd="link" title="Add link" aria-label="Link">' + tbIcon("i-link") + '</button>' +
-      COMMENT_BUTTON_HTML +
-      '<span class="tb-sep"></span>' +
-      '<button type="button" data-cmd="tag" class="tb-tag" title="Label as a prop, location, cast member or effect" aria-label="Tag as…">' +
-        tbIcon("i-tag") + '<svg class="tb-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>'
-  },
+  script: { label: "Text formatting", buttons: SCRIPT_TOOLBAR_BUTTONS },
+  scriptAudio: { label: "Text formatting", buttons: SCRIPT_TOOLBAR_BUTTONS + DIRECTION_BUTTON_HTML },
   /* A review session (13-hosted.js) gets the same field with the writing
      taken out of it: a toolbar holding only the one thing it may still do. */
   review: { label: "Text formatting", buttons: COMMENT_BUTTON_HTML },
@@ -171,7 +183,7 @@ function rowFieldHtml(row, field, review) {
     value: row[field],
     placeholder: FIELD_PLACEHOLDERS[field],
     readOnly: review,
-    toolbar: review ? "review" : "script"
+    toolbar: review ? "review" : field === "audioText" ? "scriptAudio" : "script"
   });
 }
 
@@ -1048,6 +1060,114 @@ export function toggleCellFormat(cellEl, cmd) {
   });
 }
 
+/* ---- stage directions (#167) ----
+
+   A direction is a mark of the Audio column (04c-doc-model.js). The
+   Direction button — the Audio field's toolbar, the Writer's bar — makes
+   the selection one, or takes it off one that is one throughout; with
+   nothing selected it takes off the direction the caret is in. */
+export function isDirectionCell(cellEl) {
+  return isScriptCell(cellEl) && cellEl.getAttribute("data-field") === "audioText";
+}
+
+export function toggleCellDirection(cellEl) {
+  if (!isDirectionCell(cellEl)) return null;
+  var said = false;
+  var fresh = throughModel(cellEl, function (cell, sel) {
+    if (!sel) return null;
+    if (sel.from === sel.to) {
+      var r = directionRangeAt(cell, sel.from);
+      if (!r) { said = true; return null; }
+      return { cell: setMark(cell, r.from, r.to, "dir", false), sel: sel };
+    }
+    pendingMarks = null;
+    /* the selection ends up over the direction itself, its end spaces
+       left out as they were */
+    var span = directionToggleRange(cell, sel.from, sel.to);
+    return { cell: toggleDirection(cell, sel.from, sel.to), sel: span.off || span.from === span.to ? sel : span };
+  });
+  if (said || !fresh) {
+    showToast("Select the words of a stage direction first — or type ((like this)).", "warn");
+    return null;
+  }
+  return fresh;
+}
+
+/* The typed shortcut, "((beat))" (directionShortcut, 04c-doc-model.js,
+   which records the typing convention Adam signed off): run from the
+   input event like the tag shortcuts (maybeAutoTagShortcut), only for live
+   typing of the second ")" in the Audio column — never a paste, an
+   import or a merge, and never in the Visual column, where "((…))" stays
+   what was typed. The conversion is an edit of its own (editCell), so one
+   Ctrl+Z gives back the literal "((beat))". The DOM is asked first — the
+   two characters before the caret are "))" — so ordinary typing never
+   reads the model or starts an undo entry. */
+export function maybeDirectionShortcut(e, cellEl) {
+  if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ")") return;
+  if (!isDirectionCell(cellEl)) return;
+  var s = window.getSelection();
+  if (!s || !s.rangeCount || !s.isCollapsed) return;
+  var r = s.getRangeAt(0);
+  var node = r.startContainer, offset = r.startOffset;
+  if (node.nodeType !== 3 || offset < 2 || node.data.slice(offset - 2, offset) !== "))") return;
+  /* the opener can be in another text node (before a tag or a format
+     edge), so the model decides where it is — but a cell with no "((" at
+     all cannot hold one */
+  if (cellEl.textContent.indexOf("((") === -1) return;
+  editCell(cellEl, function (cell, sel) {
+    if (!sel || sel.from !== sel.to) return null;
+    var got = directionShortcut(cell, sel.from);
+    return got ? { cell: got.cell, sel: { from: got.end, to: got.end } } : null;
+  });
+}
+
+/* Typing at either edge of a direction is narration (typingMarks), but the
+   browser types into whichever element holds the caret — and at the end
+   of a direction that is the direction's own span, as it would be for
+   bold. So a character typed there goes in through the model instead, the
+   way typePendingMarks does it, and the browser's own typing carries on
+   in the plain text that character now sits in. Checked only where the
+   browser could put it in a direction — the caret in a direction's span,
+   or between elements with one beside it (the browser picks a side) — so
+   the model is read only there, and typing in a text node beside one
+   stays the browser's. Returns the cell element to carry on with, or
+   null to let the browser type. */
+function holdsDirection(n) {
+  return !!(n && n.nodeType === 1 && (n.classList.contains("stage-dir") || n.querySelector(".stage-dir")));
+}
+
+export function typeAtDirectionEdge(cellEl, text) {
+  if (!text || !isDirectionCell(cellEl)) return null;
+  var s = window.getSelection();
+  if (!s || !s.rangeCount || !s.isCollapsed) return null;
+  var range = s.getRangeAt(0);
+  var node = range.startContainer, offset = range.startOffset;
+  if (!cellEl.contains(node)) return null;
+  var el = node.nodeType === 3 ? node.parentNode : node;
+  var inSpan = !!(el && el.closest && el.closest(".stage-dir"));
+  var between = node.nodeType === 1 && (holdsDirection(node.childNodes[offset - 1]) || holdsDirection(node.childNodes[offset]));
+  if (!inSpan && !between) return null;
+  /* Asked before editCell, which starts an undo entry of its own: typing
+     in the middle of a direction is ordinary typing, one entry a burst. */
+  var at0 = cellSelection(cellEl);
+  if (!at0 || at0.from !== at0.to || insideDirection(fromHtml(storedHtmlFromDom(cellEl.innerHTML)), at0.from)) return null;
+  var typed = false;
+  var fresh = throughModel(cellEl, function (cell, sel) {
+    if (!sel || sel.from !== sel.to || insideDirection(cell, sel.from)) return null;
+    /* A space typed last on its line is a no-break space, as the browser
+       types it: a plain one there is not drawn, and the browser would
+       then put the caret back inside the direction and type into it. */
+    var after = projection(cell).charAt(sel.from);
+    var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
+    var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
+    var at = sel.from + cellLength(next) - cellLength(cell);
+    typed = true;
+    return { cell: next, sel: { from: at, to: at } };
+  });
+  pendingMarks = null;
+  return typed ? fresh : null;
+}
+
 /* Which formats the selection in a script cell or a draft box has, keyed
    by command name (bold, italic, underline, strikeThrough, highlight) —
    what the toolbars light up. Read from the model, so it is the toggle's
@@ -1075,6 +1195,11 @@ export function cellFormatState(cellEl) {
     if (typing) out[cmd] = !!typing[k];
     else out[cmd] = m.media ? m.media.markThroughout(m.cell, sel.from, sel.to, k) : markThroughout(m.cell, sel.from, sel.to, k);
   });
+  /* the Direction button (#167): lit where pressing it would take one off */
+  if (!m.media) {
+    out.direction = sel.from === sel.to ? !!directionRangeAt(m.cell, sel.from)
+      : markThroughout(m.cell, sel.from, sel.to, "dir");
+  }
   return out;
 }
 
@@ -1108,6 +1233,8 @@ export function updateToolbarState(cellEl) {
   });
   var hiBtn = toolbar.querySelector('[data-cmd="highlight"]');
   if (hiBtn) hiBtn.classList.toggle("is-active", !!(model && model.highlight));
+  var dirBtn = toolbar.querySelector('[data-cmd="direction"]');
+  if (dirBtn) dirBtn.classList.toggle("is-active", !!(model && model.direction));
 }
 
 export function handleToolbarCmd(btn) {
@@ -1117,6 +1244,10 @@ export function handleToolbarCmd(btn) {
   cellEl.focus();
   if (FORMAT_MARKS[cmd]) {
     updateToolbarState(toggleCellFormat(cellEl, cmd) || cellEl);
+    return;
+  }
+  if (cmd === "direction") {
+    updateToolbarState(toggleCellDirection(cellEl) || cellEl);
     return;
   }
   if (cmd === "link") {

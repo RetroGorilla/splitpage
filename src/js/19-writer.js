@@ -19,6 +19,7 @@ import {
   pad2,
   render,
   syncFieldFromDom,
+  toggleCellDirection,
   toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
@@ -365,8 +366,10 @@ export function onWriterFormat(btn) {
   var cmd = btn.getAttribute("data-cmd");
   cellEl.focus();
   /* A paragraph is a row field, so the format is an edit of its model like
-     the split view's (toggleCellFormat, 05-render.js). */
-  toggleCellFormat(cellEl, cmd);
+     the split view's (toggleCellFormat, 05-render.js) — and a paragraph is
+     the Audio column, so it takes stage directions (#167). */
+  if (cmd === "direction") toggleCellDirection(cellEl);
+  else toggleCellFormat(cellEl, cmd);
   updateWriterFormatState();
 }
 
@@ -374,7 +377,7 @@ export function updateWriterFormatState() {
   var live = writerOpen && S.writerLastCell && S.writerLastCell.isConnected;
   /* the model's answer (cellFormatState) */
   var model = live ? cellFormatState(S.writerLastCell) : null;
-  ["bold", "italic", "underline"].forEach(function (cmd) {
+  ["bold", "italic", "underline", "direction"].forEach(function (cmd) {
     var btn = document.querySelector('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
     if (btn) btn.classList.toggle("is-active", !!(model && model[cmd]));
   });
@@ -451,6 +454,14 @@ export function openWriter() {
   mirrorFileChipToWriter();
   applyWriterSize(readWriterSize(), false);
   setWriterGutter(writerGutterMode); /* whatever it was left on last time */
+  /* It fades in over the split view (#136, app.css "Present and the Writer
+     arriving and leaving") — pixels only. The paragraphs, the scroll and
+     the caret below are all in place in this call, while it is still
+     nearly clear, so typing straight away lands where it always did. An
+     opacity fade moves nothing, so the caret's scrollIntoView measures the
+     page it will settle on. The side panels closed just above slide out
+     beneath it, starting in the same frame. */
+  el.inert = false;
   el.hidden = false;
   writerOpen = true;
   renderWriter();
@@ -480,6 +491,15 @@ export function closeWriter() {
     if (clean !== storedHtmlFromDom(active.innerHTML)) active.innerHTML = clean;
     syncFieldFromDom(active);
   }
+  /* Only now does anything about leaving happen (#136). The writer fades
+     out over the split view instead of vanishing, so it is still on screen
+     for a moment — and a focused paragraph in it would go on taking
+     keystrokes nobody could see, after the save above. So the focus leaves
+     it first (the focusout a real click on Close gives it anyway), and
+     inert keeps the fading layer out of reach: a click during the fade
+     lands on the split view, which render() below has already painted. */
+  if (el.contains(document.activeElement)) document.activeElement.blur();
+  el.inert = true;
   el.hidden = true;
   writerOpen = false;
   S.writerLastCell = null;
@@ -487,6 +507,10 @@ export function closeWriter() {
   render();
 }
 
+/* The split view is painted by the time closeWriter() returns, so the
+   scroll and the flash start at once and the writer fades out over the
+   scene they settle on (#136) — with the fade off or unsupported, it is
+   simply gone and they land the same. */
 export function jumpFromWriterToRow(rowId) {
   closeWriter();
   var target = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');

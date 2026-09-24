@@ -141,10 +141,13 @@ for (const filename of ["server.js", "package.json"]) {
 // over a backend each build supplies) requires history-policy.js and
 // doc-id-policy.js by relative path, so all three have to sit side by side
 // here; main.js requires it at startup once #83 step 3a lands, and a packaged
-// app without it would then fail at that require.
+// app without it would then fail at that require. video-embed.js (#141,
+// #168: which YouTube and Vimeo links the gallery plays, and where their
+// thumbnails are fetched from) is required by main.js at startup too, and
+// requires blob-policy.js beside it.
 const sharedDir = resolve(STAGE_DIR, "shared");
 await fs.mkdir(sharedDir, { recursive: true });
-for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js", "blob-policy.js", "history-store.js"]) {
+for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js", "blob-policy.js", "history-store.js", "video-embed.js"]) {
   const data = await fs.readFile(resolve(REPO_ROOT, "shared", filename));
   await fs.writeFile(resolve(sharedDir, filename), data);
   console.log(`  shared/${filename} (${data.length} bytes)`);

@@ -16,6 +16,7 @@ import { cloneState, setBaseState, stashLocalWork } from "./03-sync.js";
 import { plainText, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
+import { audioDirectionsHtml } from "./15-docx.js";
 import {
   autoSaveEnabled,
   autoSaveHalt,
@@ -205,6 +206,13 @@ function markdownCellToHtml(s, md) {
   return sanitizeHtml(html);
 }
 
+/* The Audio cell's stage directions (#167) are "((beat))" in the table —
+   what htmlToMarkdown writes for one, and what typing one is — so an
+   edited cell gets them back as directions. */
+function markdownAudioCellToHtml(s, md) {
+  return audioDirectionsHtml(markdownCellToHtml(s, md));
+}
+
 /* The Visual cell can carry an inline image ahead of its text — today's
    foreign import throws that away, but in one of our own files it is the
    picture the scene was storyboarded with. */
@@ -270,7 +278,7 @@ function reconcileMarkdownRows(s, table) {
       changed++;
     }
     if (edits.audio) {
-      row.audioText = markdownCellToHtml(s, cells.audioText);
+      row.audioText = markdownAudioCellToHtml(s, cells.audioText);
       changed++;
     }
   });
@@ -289,7 +297,7 @@ function rowsFromMarkdownTable(s, table) {
       applyMarkdownVisualCell(s, row, cells.visualText);
     }
     if (edits.audio) {
-      row.audioText = markdownCellToHtml(s, cells.audioText);
+      row.audioText = markdownAudioCellToHtml(s, cells.audioText);
     }
     return row;
   });
