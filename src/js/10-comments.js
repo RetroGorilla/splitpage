@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
@@ -268,16 +269,14 @@ function renderCommentFilterBar() {
    03b-side-panels.js — it now covers every side panel, not just this
    one. */
 
+/* Clock times go through the one formatter (#180, 00p-prefs.js), so the
+   12/24-hour setting reaches them with the save status and History. */
 export function formatTimestamp(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    var now = new Date();
-    var sameDay = d.toDateString() === now.toDateString();
-    var opts = sameDay
-      ? { hour: "numeric", minute: "2-digit" }
-      : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
-    return d.toLocaleString(undefined, opts);
+    var sameDay = d.toDateString() === new Date().toDateString();
+    return sameDay ? formatClock(d) : formatDateClock(d);
   } catch (e) { return ""; }
 }
 
@@ -382,7 +381,7 @@ function formatTimestampAbsolute(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return formatDateClock(d, { year: true });
   } catch (e) { return ""; }
 }
 
@@ -1065,14 +1064,20 @@ function commentCardHtml(c, num) {
             : '<button type="button" class="jump-link comment-loc" title="Go to these words in the script"><span>' +
                 commentLocationHtml(c.rowId, c.field) + '</span><svg aria-hidden="true"><use href="#i-arrow-right"/></svg></button>') +
         '</div>' +
+        /* The state is a small tag after the closing quote mark, never a
+           line of its own (#186): upright and red, so it cannot be read as
+           part of the words. An orphan whose quote was empty shows the tag
+           alone, with no empty quote marks; a changed quote keeps the
+           original words in the tag's tooltip. */
         (orphaned ?
-          '<div class="comment-quote orphaned">“<span class="comment-quote-words">' + escapeHtml(c.quotedText) + '</span>”' +
-            '<div class="comment-orphan-note">Text no longer found in the script</div>' +
+          '<div class="comment-quote orphaned">' +
+            (c.quotedText ? '“<span class="comment-quote-words">' + escapeHtml(c.quotedText) + '</span>” ' : '') +
+            '<span class="comment-state-tag" title="Text no longer found in the script">No longer in script</span>' +
           '</div>' :
         changed ?
           '<div class="comment-quote changed" title="Originally: “' + escapeHtml(c.quotedText) + '”">' +
-            '“<span class="comment-quote-words">' + escapeHtml(liveText) + '</span>”' +
-            '<div class="comment-orphan-note">Text changed — was <s>' + escapeHtml(c.quotedText) + '</s></div>' +
+            '“<span class="comment-quote-words">' + escapeHtml(liveText) + '</span>” ' +
+            '<span class="comment-state-tag" title="Text changed. Originally: “' + escapeHtml(c.quotedText) + '”">Changed</span>' +
           '</div>' :
           '<div class="comment-quote">“<span class="comment-quote-words">' + escapeHtml(c.quotedText) + '</span>”</div>'
         ) +

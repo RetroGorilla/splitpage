@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { home, setHome } from "./_home.js";
+import { readDefaultWpm } from "./00p-prefs.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03-sync.js";
@@ -417,7 +418,9 @@ export function startNewScript() {
   var kept = S.state.rows.length ? pushSnapshot("Before starting a new script") : null;
   S.state = migrateRows({
     title: "Untitled Script",
-    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }]
+    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
+    /* Settings' starting reading speed (#181) */
+    wordsPerMinute: readDefaultWpm()
   });
   setBaseState(cloneState(S.state), "startNewScript: a new blank document");
   setHome("none");
@@ -563,6 +566,9 @@ export function __init() {
   window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
   window.addEventListener("keydown", onShortcutKeydown);
   renderKeyChips(menu);
+  /* the header's Search button (#175) wears the same Ctrl K chip */
+  var search = el("btn-command");
+  if (search && search.parentElement) renderKeyChips(search.parentElement);
 
   /* ---- test hook ----
      What a headless suite cannot reach by clicking: the view the card is

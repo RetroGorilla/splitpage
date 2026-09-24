@@ -2,7 +2,9 @@ import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
 import { reviewMode } from "./13-hosted.js";
 import {
+  IS_MAC,
   fileMenuOpen,
+  keyChipWords,
   keyChipsHtml,
   keysWorkHere,
   menuItemReason,
@@ -159,8 +161,10 @@ function commands() {
     fromMenu("history", "This document", "versions restore snapshot backup older undo"),
     fromMenu("find", "This document", "search replace look for"),
     fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
+    fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
     fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
     fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
+    fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
     fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
     fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
     fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),
@@ -441,6 +445,17 @@ export function __init() {
   modal.addEventListener("focusout", function (e) {
     if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget))) closeCommandMenu(false);
   });
+
+  /* The header's "Search or run a command" button (#175): the same menu,
+     for whoever has not met Ctrl K yet. Its tooltip names the shortcut in
+     the words the chips use; where it is only a magnifier that tooltip is
+     all the hint there is. Opened from it, Esc hands the focus back to it
+     (returnFocus above). */
+  var trigger = el("btn-command");
+  if (trigger) {
+    trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
+    trigger.addEventListener("click", function () { openCommandMenu(); });
+  }
 
   /* Ctrl/Cmd+K, in both builds: nothing in desktop/main.js registers it
      (its Search Commands… item shows the accelerator without registering

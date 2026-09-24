@@ -1,0 +1,51 @@
+# The phone: a scene's length is set with a tap (#179), the fields show
+# where you can type (#182), and no script field goes under 16px however
+# small the script's zoom is set (#191, #162 — iOS zooms the page into a
+# smaller field). Its own suite: device metrics are set once, before the
+# page loads.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 375 812 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-script-scale', '0.7')
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 600
+expect matchMedia('(hover: none)').matches
+expect document.documentElement.scrollWidth <= innerWidth
+
+# --- the smallest script is still 16px in every field ------------------------------
+expect parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale')) === 0.7
+expect parseFloat(getComputedStyle(document.querySelector('#rows .visual-cell .cell-editable')).fontSize) >= 16
+expect parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .cell-editable')).fontSize) >= 16
+eval localStorage.removeItem('splitpage-script-scale')
+eval document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-script-scale', value: null } }))
+sleep 200
+expect parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale')) === 1
+# the phone's own Audio size, 17px
+expect parseFloat(getComputedStyle(document.querySelector('#rows .audio-cell .cell-editable')).fontSize) === 17
+
+# --- the scene you are in shows its time, and a tap sets it -----------------------
+expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display == none
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+sleep 300
+expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display == block
+# the field with the caret carries its column's bar
+expect getComputedStyle(document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable')).boxShadow.indexOf('inset') !== -1
+expect document.querySelector('#rows .row .row-read').getBoundingClientRect().height >= 16
+click #rows .row:nth-child(1) .row-read
+sleep 300
+expect document.activeElement.classList.contains('row-read-input')
+# 16px, or iOS zooms the page into it
+expect parseFloat(getComputedStyle(document.activeElement).fontSize) >= 16
+expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display == block
+expect document.documentElement.scrollWidth <= innerWidth
+type 45
+key Enter
+sleep 300
+expect window.__splitpageFormats.state().rows[0].lengthSeconds === 45
+expect document.querySelector('#rows .row .row-read').textContent == 0:45
+expect document.getElementById('runtime-total').textContent == 00:57

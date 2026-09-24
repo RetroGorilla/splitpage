@@ -1,0 +1,165 @@
+# A scene's length set by hand (#179, src/js/05r-read-time.js).
+#
+# The rail's Read time is a button: a click opens a box holding the time,
+# Enter sets what was typed (1:30, 90, 90s, 1m30, 1m 30s), an empty box goes
+# back to the estimate, Esc leaves it. A set length replaces the estimate,
+# feeds every scene start, the program clock and the rundown strip, is one
+# undo step, turns amber when the Audio now reads longer, and a scene with
+# no Audio can have one. Read-only in a review session. The parser, the
+# merge, migrateRows and the formats are src/test/scene-length.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 400
+eval (function(){ window.F = window.__splitpageFormats; window.rd = function (i) { return document.querySelectorAll('#rows .row .row-read')[i]; }; return true; })()
+
+# --- at rest: the estimate, as plain figures --------------------------------
+expect rd(0).textContent == 0:12
+expect rd(1).textContent == 0:12
+expect document.getElementById('runtime-total').textContent == 00:24
+expect rd(0).classList.contains('is-set') === false
+expect rd(0).title.indexOf('Estimated read time') === 0
+expect rd(0).getAttribute('aria-disabled') == false
+expect F.state().rows.every(function (r) { return !('lengthSeconds' in r); })
+
+# --- a click opens the box, holding the time ---------------------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+expect document.activeElement.classList.contains('row-read-input')
+expect document.activeElement.value == 0:12
+expect rd(0).hidden === true
+type 1:30
+key Enter
+sleep 300
+
+# --- set: the scene, every later start, the clock and the rundown follow -----
+expect F.state().rows[0].lengthSeconds === 90
+expect document.querySelector('#rows .row-read-input') === null
+expect rd(0).hidden === false
+expect rd(0).textContent == 1:30
+expect rd(0).classList.contains('is-set')
+expect rd(0).title.indexOf('Set by hand · estimate 0:12') === 0
+expect document.getElementById('runtime-total').textContent == 01:42
+expect document.querySelectorAll('#rows .row .row-start')[1].textContent == 01:30
+expect document.querySelector('#rundown .rd-block .rd-len').textContent == 1:30
+# the focus is back on the time, so the keyboard carries on from there
+expect document.activeElement === rd(0)
+# a set length looks different from an estimate: a chip round it
+expect getComputedStyle(rd(0)).boxShadow !== 'none'
+expect getComputedStyle(rd(1)).boxShadow === 'none'
+
+# --- one undo step, and redo -------------------------------------------------
+key ctrl KeyZ
+sleep 300
+expect !('lengthSeconds' in F.state().rows[0])
+expect rd(0).textContent == 0:12
+expect document.getElementById('runtime-total').textContent == 00:24
+key ctrl+shift KeyZ
+sleep 300
+expect F.state().rows[0].lengthSeconds === 90
+expect document.getElementById('runtime-total').textContent == 01:42
+
+# --- shorter than the words: amber, and the tooltip says why ------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+expect document.activeElement.value == 1:30
+type 5
+key Enter
+sleep 300
+expect F.state().rows[0].lengthSeconds === 5
+expect rd(0).textContent == 0:05
+expect rd(0).classList.contains('is-over')
+expect rd(0).title.indexOf('reads longer') !== -1
+expect getComputedStyle(rd(0)).color !== getComputedStyle(rd(1)).color
+
+# --- not a length: the box stays, marked, and nothing changes -----------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type abc
+key Enter
+sleep 200
+expect document.activeElement.classList.contains('row-read-input')
+expect document.activeElement.getAttribute('aria-invalid') == true
+expect F.state().rows[0].lengthSeconds === 5
+# Esc leaves it as it was
+key Escape
+sleep 200
+expect document.querySelector('#rows .row-read-input') === null
+expect F.state().rows[0].lengthSeconds === 5
+expect document.activeElement === rd(0)
+
+# --- the other forms Adam signed off ------------------------------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type 1m 30s
+key Enter
+sleep 300
+expect F.state().rows[0].lengthSeconds === 90
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type 90s
+key Enter
+sleep 300
+expect F.state().rows[0].lengthSeconds === 90
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type 1m30
+key Enter
+sleep 300
+expect F.state().rows[0].lengthSeconds === 90
+
+# --- cleared: back to the estimate --------------------------------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+key Backspace
+key Enter
+sleep 300
+expect !('lengthSeconds' in F.state().rows[0])
+expect rd(0).textContent == 0:12
+expect rd(0).classList.contains('is-set') === false
+expect document.getElementById('runtime-total').textContent == 00:24
+
+# --- the estimate, confirmed unchanged, is not turned into a set length -------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+key Enter
+sleep 200
+expect !('lengthSeconds' in F.state().rows[0])
+
+# --- a scene with no Audio can have a length ----------------------------------
+eval document.activeElement.blur()
+jsclick [data-action="add-row"]
+sleep 400
+expect document.querySelectorAll('#rows .row').length == 3
+expect rd(2).textContent === ''
+# empty, it offers a way in on the row's hover or focus
+expect getComputedStyle(rd(2), '::after').content.indexOf('Set') !== -1
+click #rows .row:nth-child(3) .row-read
+sleep 200
+expect document.activeElement.classList.contains('row-read-input')
+expect document.activeElement.value === ''
+type 20s
+key Enter
+sleep 300
+expect F.state().rows[2].lengthSeconds === 20
+expect rd(2).textContent == 0:20
+expect document.getElementById('runtime-total').textContent == 00:44
+expect document.querySelectorAll('#rows .row .row-start')[2].textContent == 00:24
+
+# --- it goes out in the file -----------------------------------------------------
+expect JSON.parse(F.buildSplitpage(F.state())).rows[2].lengthSeconds === 20
+
+# --- a review session reads it and cannot change it ----------------------------
+eval document.activeElement.blur()
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 400
+expect window.__hostedTest.reviewMode() === true
+expect rd(2).getAttribute('aria-disabled') == true
+expect rd(2).textContent == 0:20
+expect rd(2).title.indexOf('Set by hand') === 0
+jsclick #rows .row:nth-child(3) .row-read
+sleep 200
+expect document.querySelector('#rows .row-read-input') === null
+expect F.state().rows[2].lengthSeconds === 20

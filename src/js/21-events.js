@@ -73,6 +73,7 @@ import {
   removeImageLink,
   setDropMarkerForRow,
   splitCellField,
+  stopDragScroll,
   swapAdjacentRows,
   closeRowMenus,
   rowMenuKeydown,
@@ -1514,6 +1515,10 @@ function init() {
      imageDropTarget above) never moves the page. */
   window.addEventListener("dragover", function (e) {
     if (!S.dragRowId) return;
+    /* Over the rundown strip a scene is being aimed at a gap there (#185,
+       05f-rundown.js), not carried to the edge: no scrolling. A minimized
+       strip takes no drop, so it is the hot zone as before. */
+    if (e.target && e.target.closest && e.target.closest("#rundown:not(.is-min)")) { stopDragScroll(); return; }
     updateDragScroll(e.clientX, e.clientY);
   });
   document.querySelector(".add-row-bar").addEventListener("click", onRootClick);
