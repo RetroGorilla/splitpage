@@ -1,10 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#221F1A"/>
-  <rect x="64" y="120" width="176" height="272" rx="16" fill="#1B7A68"/>
-  <rect x="272" y="120" width="176" height="272" rx="16" fill="#C1461C"/>
-  <rect x="96" y="160" width="112" height="16" rx="8" fill="#E3F1EC"/>
-  <rect x="96" y="196" width="80" height="16" rx="8" fill="#E3F1EC"/>
-  <rect x="304" y="160" width="112" height="16" rx="8" fill="#FBE9DE"/>
-  <rect x="304" y="196" width="112" height="16" rx="8" fill="#FBE9DE"/>
-  <rect x="304" y="232" width="72" height="16" rx="8" fill="#FBE9DE"/>
+  <!-- "Glass Split": the two columns as glossy glass slabs on a dark tile.
+       Rounded rects and vertical linear gradients only: tools/make-icon.mjs
+       rasterises exactly this subset into desktop/build/icon.ico.
+       data-min-size leaves a detail out of the .ico frames smaller than it. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34302A"/>
+      <stop offset="1" stop-color="#100E0B"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7EF0D6"/>
+      <stop offset="0.45" stop-color="#1FA488"/>
+      <stop offset="1" stop-color="#0B4A3E"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFBE98"/>
+      <stop offset="0.45" stop-color="#E4602C"/>
+      <stop offset="1" stop-color="#7A260B"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.62"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tile)"/>
+  <rect x="92" y="126" width="156" height="300" rx="30" fill="#000000" opacity="0.45"/>
+  <rect x="268" y="126" width="156" height="300" rx="30" fill="#000000" opacity="0.45"/>
+  <rect x="84" y="104" width="156" height="300" rx="30" fill="url(#teal)"/>
+  <rect x="272" y="104" width="156" height="300" rx="30" fill="url(#orange)"/>
+  <rect x="92" y="110" width="140" height="128" rx="24" fill="url(#sheen)"/>
+  <rect x="280" y="110" width="140" height="128" rx="24" fill="url(#sheen)"/>
+  <rect x="112" y="262" width="100" height="14" rx="7" fill="#FFFFFF" opacity="0.88" data-min-size="32"/>
+  <rect x="112" y="292" width="70" height="14" rx="7" fill="#FFFFFF" opacity="0.88" data-min-size="32"/>
+  <rect x="300" y="262" width="100" height="14" rx="7" fill="#FFFFFF" opacity="0.88" data-min-size="32"/>
+  <rect x="300" y="292" width="100" height="14" rx="7" fill="#FFFFFF" opacity="0.88" data-min-size="32"/>
+  <rect x="300" y="322" width="62" height="14" rx="7" fill="#FFFFFF" opacity="0.88" data-min-size="32"/>
+  <rect x="16" y="16" width="480" height="224" rx="112" fill="url(#gloss)"/>
+  <rect x="17.5" y="17.5" width="477" height="477" rx="110.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="3"/>
 </svg>

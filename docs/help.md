@@ -22,6 +22,8 @@ so others on your network open and edit the same scripts live, or
 offered it: download it from the releases page. When 3.0.0 itself ships, a
 beta copy is offered it like any other update.
 
+- **A new icon.** The two columns, teal for what the viewer sees and orange
+  for what gets said, now as two panes of glass.
 - **A start screen for every new tab.** A blank script or one of three
   starter scripts (to-camera video, interview, 30-second spot), your recent
   documents in the desktop app, and a drop zone for a file — see
