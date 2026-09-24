@@ -11,10 +11,15 @@ import { commentEntries } from "./10-comments.js";
 import {
   htmlToPlainText,
   strBytes,
+  tagPrintColor,
   xmlEscape,
   zipRead,
   zipWrite
 } from "./14-export.js";
+
+/* The swatch in front of a breakdown category (#171): a black circle and a
+   space, drawn in the category's colour. */
+var DOCX_CATEGORY_DOT = "● ";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -298,8 +303,9 @@ export function buildDocx() {
       '<w:r><w:t>Production breakdown</w:t></w:r></w:p>';
 
     var bHeaders = ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"];
-    /* floors in characters, not twips — see fitColumnWidths above */
-    var bMins = [10, 10, 8, 10, 6, 8, 10];
+    /* floors in characters, not twips — see fitColumnWidths above. The
+       category's is the longest label ("Music/SFX") plus its dot (#171). */
+    var bMins = [12, 10, 8, 10, 6, 8, 10];
     var bCellRows = breakdown.map(function (r) {
       return [r.categoryLabel, r.name, r.statusLabel, r.owner, String(r.mentions), r.scenes.join(", "), r.notes];
     });
@@ -313,8 +319,21 @@ export function buildDocx() {
           '<w:t>' + h + '</w:t></w:r></w:p>', bCols[i]);
       }).join("") + '</w:tr>';
 
-    bCellRows.forEach(function (cells) {
+    /* The category in its colour (#171): a dot and the label, both in the
+       light theme's --tag-* (TAG_PRINT_COLORS, 14-export.js). The cell's
+       text is "● Prop"; the header row, which the importer's
+       isBreakdownHeader() recognises, is untouched. */
+    function categoryCellXml(r, text) {
+      var hex = tagPrintColor(r.catId);
+      if (!hex) return '<w:p><w:r><w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p>';
+      var rPr = '<w:rPr><w:color w:val="' + hex + '"/></w:rPr>';
+      return '<w:p><w:r>' + rPr + '<w:t xml:space="preserve">' + DOCX_CATEGORY_DOT + '</w:t></w:r>' +
+        '<w:r>' + rPr + '<w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p>';
+    }
+
+    bCellRows.forEach(function (cells, ri) {
       bRows += '<w:tr>' + cells.map(function (text, i) {
+        if (i === 0) return docxCellXml(categoryCellXml(breakdown[ri], text), bCols[i]);
         return docxCellXml('<w:p><w:r><w:t xml:space="preserve">' + xmlEscape(text) +
           '</w:t></w:r></w:p>', bCols[i]);
       }).join("") + '</w:tr>';

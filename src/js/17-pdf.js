@@ -13,7 +13,7 @@ import {
 import { breakdownRows } from "./08-production-panels.js";
 import { brollShotsByProp } from "./08c-broll.js";
 import { commentEntries } from "./10-comments.js";
-import { concatBytes, latin1Bytes } from "./14-export.js";
+import { concatBytes, latin1Bytes, tagPrintColor } from "./14-export.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { sniffImageMime } from "../../shared/blob-policy.js";
 
@@ -62,6 +62,24 @@ function pdfEscapeText(s) {
     else out += ch;
   }
   return out;
+}
+
+/* A category's print colour (#171; TAG_PRINT_COLORS, 14-export.js) as the
+   operands of a PDF colour operator: "RRGGBB" to "0.463 0.290 0.635". */
+function pdfRgb(hex) {
+  return [0, 2, 4].map(function (i) { return (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3); }).join(" ");
+}
+
+/* A filled circle's path, centred on (cx, cy): four Bézier quarters, the
+   usual 0.5523 control distance. The caller sets the colour and fills. */
+function pdfCirclePath(cx, cy, r) {
+  var k = r * 0.5523;
+  function p(x, y) { return x.toFixed(2) + " " + y.toFixed(2); }
+  return p(cx + r, cy) + " m " +
+    p(cx + r, cy + k) + " " + p(cx + k, cy + r) + " " + p(cx, cy + r) + " c " +
+    p(cx - k, cy + r) + " " + p(cx - r, cy + k) + " " + p(cx - r, cy) + " c " +
+    p(cx - r, cy - k) + " " + p(cx - k, cy - r) + " " + p(cx, cy - r) + " c " +
+    p(cx + k, cy - r) + " " + p(cx + r, cy - k) + " " + p(cx + r, cy) + " c h";
 }
 
 /* break styled runs into lines that fit maxWidth */
@@ -267,7 +285,11 @@ export function buildPdf(jpegs, commentJpegs) {
       w.toFixed(2) + " " + thickness + " re f Q");
   }
 
-  function drawLines(lines, x, startY) {
+  /* `size` is the size the lines were wrapped at (SIZE unless given): the
+     breakdown's notes wrap at SIZE - 1, and drawn at SIZE their words ran
+     into each other, the spaces between them swallowed */
+  function drawLines(lines, x, startY, size) {
+    var fs = size || SIZE;
     var yy = startY;
     lines.forEach(function (line) {
       var cx = x;
@@ -277,7 +299,7 @@ export function buildPdf(jpegs, commentJpegs) {
             " " + seg.width.toFixed(2) + " " + (SIZE + 1).toFixed(2) + " re f Q");
         }
         if (seg.text.trim()) {
-          text(seg.text, cx, yy, fontFor(seg), SIZE);
+          text(seg.text, cx, yy, fontFor(seg), fs);
           if (seg.u) rule(cx, yy - 1.6, seg.width, 0.5);
           if (seg.s) rule(cx, yy + SIZE * 0.28, seg.width, 0.5);
         }
@@ -542,14 +564,24 @@ export function buildPdf(jpegs, commentJpegs) {
       var need = (bodyLines + noteLines.length) * LEAD + 6;
       if (y - need < M) { newPage(); y -= 6; breakdownHeader(); }
 
-      text(r.categoryLabel, M, y - SIZE, "F1", SIZE);
+      /* the category in its colour (#171): a dot, then the label, in the
+         light theme's --tag-* — the same swatch the breakdown panel draws.
+         "Music/SFX", the longest label, ends ~54pt in: the column is 62. */
+      var catHex = tagPrintColor(r.catId);
+      if (catHex) {
+        ops.push("q " + pdfRgb(catHex) + " rg " + pdfCirclePath(M + 2.6, y - SIZE + 3.3, 2.6) + " f");
+        text(r.categoryLabel, M + 8, y - SIZE, "F1", SIZE);
+        ops.push("Q");
+      } else {
+        text(r.categoryLabel, M, y - SIZE, "F1", SIZE);
+      }
       drawLines(nameLines, M + CATW, y - SIZE);
       drawLines(statLines, STATX, y - SIZE);
       drawLines(ownLines, OWNX, y - SIZE);
       text(String(r.mentions), NUMX, y - SIZE, "F1", SIZE);
       drawLines(sceneLines, SCENEX, y - SIZE);
       if (noteLines.length) {
-        drawLines(noteLines, M + CATW, y - SIZE - bodyLines * LEAD);
+        drawLines(noteLines, M + CATW, y - SIZE - bodyLines * LEAD, SIZE - 1);
       }
       y -= need;
       ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 6).toFixed(2) + " m " +
@@ -843,9 +875,25 @@ export function buildPackingListPdf(catId) {
     ops.push("q 0.85 0.84 0.81 RG 0.6 w " + x.toFixed(2) + " " + yy.toFixed(2) + " m " +
       (x + w).toFixed(2) + " " + yy.toFixed(2) + " l S Q");
   }
+  /* the category's name in its colour (#171), the rest of the heading in
+     black: every item on the sheet is that category, so one mark at the
+     top says it, where a dot on each line would only repeat it */
+  var catHex = cat ? tagPrintColor(cat.id) : null;
   function header() {
-    text((S.state.title || "Untitled Script") + "  —  " + (cat ? cat.plural : catId) + " packing list",
-      M, y - 20, "F2", 15);
+    var lead = (S.state.title || "Untitled Script") + "  —  ";
+    var name = cat ? cat.plural : catId;
+    if (!catHex) {
+      text(lead + name + " packing list", M, y - 20, "F2", 15);
+    } else {
+      var x = M;
+      text(lead, x, y - 20, "F2", 15);
+      x += pdfTextWidth(lead, true, 15);
+      ops.push("q " + pdfRgb(catHex) + " rg");
+      text(name, x, y - 20, "F2", 15);
+      ops.push("Q");
+      x += pdfTextWidth(name, true, 15);
+      text(" packing list", x, y - 20, "F2", 15);
+    }
     y -= 40;
   }
 

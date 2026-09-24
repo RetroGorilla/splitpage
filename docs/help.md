@@ -633,7 +633,10 @@ Other things worth knowing:
   Breakdown). One sheet with a Category column, so it filters down to
   a props list, a graphics list, or one person's pull list. The Word,
   PDF, Markdown and plain-text exports carry the breakdown too, including
-  who each item is assigned to and what state it's in.
+  who each item is assigned to and what state it's in. In the PDF and the
+  Word file each category is marked in its colour — a dot and the name,
+  in the same colours the script uses in the light theme, whichever theme
+  you export from, so the page reads the same printed on white.
 - Deleting a tag from the script doesn't delete it from the breakdown — it
   stays, flagged **Not in script**, until you delete it deliberately.
 - **File ▸ Tagging reference** brings back the reference strip at the top
@@ -666,7 +669,8 @@ of the same grouping: **List**, or **Scene** to see what's needed where.
 **Packing list** (on the Gear screen, and Props too from File ▸ Export… ▸
 Packing list) exports a plain checklist — a box, the name, who's got it — meant to
 be printed and ticked off before you leave, not the six-column breakdown
-sheet trying to double as one.
+sheet trying to double as one. Its heading names the category in that
+category's colour; the list itself stays black, to tick off in pen.
 
 ### B-roll
 
