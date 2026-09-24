@@ -381,12 +381,13 @@
       </div>
       <!-- The program clock (#169): the script's whole read time, centred,
            in the mono. Still the runtime chip it always was — click it to
-           set the reading speed (promptForWpm, 03-sync.js). The slot after
-           the total is empty on purpose: a target length per script (#170)
-           puts " / 02:00" and "0:25 left" there. -->
+           set the reading speed and the script's target length
+           (promptForWpm, 03-sync.js). The slot after the total is empty
+           until a target is set (#170): then " / 02:00" and "0:25 left"
+           (or "0:05 over") go there (updateScriptStats). -->
       <div class="program-clock-wrap">
         <button type="button" class="program-clock" id="runtime-chip"
-                title="Estimated read time for the Audio column — click to set your reading speed">
+                title="Estimated read time for the Audio column — click to set your reading speed or a target length">
           <span class="program-clock-total" id="runtime-total">00:00</span>
           <span class="program-clock-slot" id="program-clock-slot"></span>
         </button>

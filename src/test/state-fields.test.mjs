@@ -29,7 +29,7 @@ test("every registry field has a strategy mergeStates knows", () => {
   const known = {
     "title": 1, "doc-id": 1, "rows": 1, "comments": 1, "list-union-with-base": 1,
     "changed-side-wins": 1, "max-plus-one": 1, "theirs-wins": 1, "constant": 1,
-    "person-colors": 1
+    "person-colors": 1, "target-length": 1
   };
   const bad = STATE_FIELDS.filter((f) =>
     !known[f.merge] || (f.merge === "list-union-with-base" && typeof f.mergeList !== "function")

@@ -1,0 +1,41 @@
+# Present's clock and running order count a scene's hand-set length (#179's
+# leftover, fixed with #170): a scene with no Audio words but a length set
+# on it (a silent shot, a title card) used to count 0 there while the
+# editor's clock counted it. Now Present reads rowSeconds() for every
+# scene — its "−" time left, the running order's blocks — and the clock
+# steps over that scene's length as the reading passes it. Its scroll
+# speed is untouched (px a second, from the reading speed control).
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; var doc = {"schema": 2, "title": "Silent scene", "wordsPerMinute": 150, "rows": [{"id": "r1", "visualText": "Open", "audioText": "one two three four five six seven eight nine ten", "status": "todo"}, {"id": "r2", "visualText": "Title card over the harbour", "audioText": "", "status": "todo", "lengthSeconds": 20}, {"id": "r3", "visualText": "Close", "audioText": "eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty", "status": "todo"}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'silent.splitpage')); return true; })()
+wait F.state().title === 'Silent scene' && document.querySelectorAll('#rows .row').length === 3
+sleep 400
+
+# the editor: 0:04 + 0:20 + 0:04
+expect document.getElementById('runtime-total').textContent == 00:28
+
+# --- Present agrees ------------------------------------------------------------
+eval window.__speed0 = document.getElementById('pp-speed-value').textContent
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 600
+expect document.getElementById('pp-remaining').textContent === '−00:28'
+expect document.getElementById('pp-rundown').getAttribute('aria-valuemax') == 28
+# a block for the silent scene too, sized by its 20 seconds
+expect document.querySelectorAll('#pp-rd-track .pp-rd-block').length === 3
+expect document.querySelectorAll('#pp-rd-track .pp-rd-block')[1].style.flexGrow == 20
+# its words are the other two scenes' only
+expect document.querySelectorAll('#prompter-content .w').length === 20
+# the speed is what it was
+expect document.getElementById('pp-speed-value').textContent === window.__speed0
+
+# --- read to the end: the clock has stepped over the silent scene ---------------
+eval (function(){ var s = document.getElementById('prompter-scroll'); s.scrollTop = s.scrollHeight; s.dispatchEvent(new Event('scroll')); return true; })()
+sleep 300
+expect (function(){ var t = document.getElementById('pp-elapsed').textContent.split(':'); return (+t[0]) * 60 + (+t[1]) >= 24; })()
+expect document.getElementById('pp-scene-pos').textContent == 03 / 03
+jsclick #pp-close
+wait document.getElementById('prompter').hidden

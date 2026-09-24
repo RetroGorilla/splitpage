@@ -595,6 +595,19 @@
   /* with shot scenes hidden: what is left, then the whole, quieter */
   .program-clock-of { font-weight: 450; font-size: 14px; color: var(--text-faint); letter-spacing: 0; }
   .program-clock-slot:empty { display: none; }
+  /* the slot is a flex item of its own, so the space before its " / " would
+     otherwise be dropped as the start of a line */
+  .program-clock-slot { white-space: pre; }
+  /* against a target (#170): " / 02:00" in the quiet style above, then how
+     far off it — dim while there is time left, tally red once over */
+  .program-clock-delta {
+    margin-left: 8px;
+    font-weight: 450;
+    font-size: 13px;
+    letter-spacing: 0;
+    color: var(--text-dim);
+  }
+  .program-clock-delta.is-over { color: var(--tally); }
 
   /* Who is here, a review session, an imported file, the shot count, who
      you are: plain text, one dot between each item that is showing. The
@@ -3534,9 +3547,50 @@
   .swatch input:checked + .swatch-dot { box-shadow: 0 0 0 2px var(--surface-2), 0 0 0 4px var(--text); }
   .swatch input:focus-visible + .swatch-dot { outline: 2px solid var(--focus-ring); outline-offset: 5px; }
   /* 16px, or iOS zooms the page into the field */
+  /* The clock's box, under the reading speed: the script's target length
+     (#170, 05t-target.js) — a field, six presets as small mono chips (the
+     one in force pressed), and "No target". */
+  .target-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .target-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+  .target-preset, .target-clear {
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .target-preset { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+  .target-clear { align-self: flex-start; font-family: var(--font-body); color: var(--text-dim); }
+  .target-preset:hover:not(:disabled), .target-clear:hover:not(:disabled) { background: var(--hover); }
+  .target-preset[aria-pressed="true"] {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--bg);
+  }
+  /* "No target" in force is the quiet state, not a choice to shout about */
+  .target-clear[aria-pressed="true"] { background: var(--hover); border-color: transparent; color: var(--text); }
+  /* the reading speed's 72px number box rule (#wpm-editor input) is not
+     for this one: it takes the row */
+  #wpm-editor #target-input { flex: 1 1 auto; width: auto; min-width: 0; }
+  .target-preset:focus-visible, .target-clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .target-preset:disabled, .target-clear:disabled { cursor: default; opacity: 0.55; }
+  .target-note { margin: 0; font-size: 12px; color: var(--text-dim); }
+  .anchor-popover input[aria-invalid="true"] { border-color: var(--tally); box-shadow: 0 0 0 1px var(--tally); }
   @media (max-width: 760px) {
     .anchor-popover input[type="text"], .anchor-popover input[type="number"] { font-size: 16px; height: 36px; }
     .anchor-popover .btn-outline { height: 36px; }
+    /* a finger's worth */
+    .target-preset, .target-clear { height: 36px; padding: 0 11px; font-size: 13px; }
   }
   .row.just-merged { animation: row-merged var(--dur-highlight) var(--ease-standard); }
   @keyframes row-merged {
@@ -5788,6 +5842,15 @@
     .program-clock:hover::before { background: var(--hover); }
     .program-clock-total { font-size: 13px; line-height: 16px; letter-spacing: 0; }
     .program-clock-of { font-size: 11px; }
+    /* Against a target (#170) the chip has no room for "01:35 / 02:00
+       0:25 left" in a row: the time left (or over) goes under the total,
+       smaller, and the target itself is the rundown strip's "Target 2:00"
+       just below. */
+    .program-clock { flex-direction: column; justify-content: center; }
+    .program-clock-slot { line-height: 11px; }
+    .program-clock-slot .program-clock-of { display: none; }
+    .program-clock-delta { margin-left: 0; font-size: 10px; line-height: 11px; }
+    .program-clock:has(.program-clock-slot:not(:empty)) .program-clock-total { line-height: 14px; }
     .toolbar { flex: none; gap: 0; }
     .btn-group, #btn-write { display: none; }
     /* Search (#175): the magnifier, in a 44px target */
@@ -5825,6 +5888,8 @@
     .rundown .rd-check { width: 9px; height: 9px; }
     .rundown .rd-broll { height: 5px; }
     .rundown .rundown-drop { top: 11px; height: 30px; }
+    /* the target's hatching on the phone's 22px blocks (#170) */
+    .rundown .rd-target-hatch { top: 15px; height: 22px; }
     /* the chevron fills the 16px margin exactly, clear of the track */
     .rundown .rundown-toggle { right: 0; top: 18px; }
     /* there is no ruler to shed, so condensing leaves the playhead as it is */
@@ -7502,6 +7567,70 @@
     pointer-events: none;
   }
   .rundown-drop[hidden], .rundown-drop-label[hidden] { display: none; }
+
+  /* A target length (#170, 05t-target.js), drawn on #rundown-overlay: a
+     dashed 1px line at the target, "Target 2:00" in the mono just left of
+     it along the track's foot (under the blocks, so the condensed header
+     and the phone, which have no ruler, keep it), and the stretch between
+     the end of the script and the target hatched at 45° — 1px lines 6px
+     apart — with the time left in it, or, once the script runs over, the
+     part of the blocks past the target hatched and the time over in tally
+     red. The hatching spans the blocks' own band. */
+  .rd-target-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px dashed var(--text);
+  }
+  .rd-target-label {
+    position: absolute;
+    bottom: 0;
+    transform: translateX(calc(-100% - 4px));
+    font-family: var(--font-display);
+    font-size: 11px;
+    line-height: 11px;
+    font-weight: 450;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .rd-target-label.is-right { transform: translateX(4px); }
+  .rd-target-hatch {
+    position: absolute;
+    top: 4px;
+    height: 30px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background-image: repeating-linear-gradient(-45deg,
+      var(--border-strong) 0, var(--border-strong) 1px, transparent 1px, transparent 6px);
+    container: rdt / inline-size;
+  }
+  .rd-target-delta {
+    display: none;
+    padding: 0 5px;
+    border-radius: 3px;
+    background: var(--surface);
+    font-family: var(--font-display);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 450;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .rd-target-hatch.is-over .rd-target-delta { color: var(--tally); }
+  /* only where it fits inside its hatching */
+  @container rdt (min-width: 72px) {
+    .rd-target-delta { display: block; }
+  }
+  /* Minimized (#178): a small tick on the thin bar, and nothing else */
+  #rundown.is-min .rd-target-line { top: 0; bottom: 0; border-left-style: solid; }
+  #rundown.is-min .rd-target-label,
+  #rundown.is-min .rd-target-hatch { display: none; }
 
   @media (prefers-reduced-motion: reduce) {
     .rundown.is-lensed .rundown-ruler,

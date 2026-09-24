@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { normalizePersonColors } from "./00p-prefs.js";
-import { DEFAULT_WPM, normalizeSceneLength, rowStatus } from "./01-scene-status.js";
+import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength, rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
@@ -66,6 +66,9 @@ function defaultState() {
      list-union-with-base — union both sides, minus what one deleted and
                             the other left alone (#61)
      changed-side-wins    — whoever moved it off base wins, theirs if both
+     target-length        — the same, but clearing it is a change too, and
+                            with no base a set target beats none
+                            (mergeTargetLength, 03-sync.js, #170)
      max-plus-one         — a revision counter
      theirs-wins          — theirs, then mine, then nothing
      constant             — stamped, never reconciled
@@ -91,6 +94,9 @@ export var STATE_FIELDS = [
      `def`: a document nobody picked in has no key at all, so an older file
      reads and saves exactly as it did. */
   { key: "personColors",   merge: "person-colors" },
+  /* A target length for the script (#170), whole seconds. No `def`
+     either: no target is no key, which is how every older file reads. */
+  { key: "targetSeconds",  merge: "target-length" },
   { key: "schema",         merge: "constant" }
 ];
 
@@ -515,6 +521,14 @@ export function migrateRows(s) {
     var personColors = normalizePersonColors(s.personColors);
     if (personColors) s.personColors = personColors;
     else delete s.personColors;
+  }
+
+  /* The script's target length (#170): whole seconds from 1 to a day, or
+     no key at all. */
+  if ("targetSeconds" in s) {
+    var target = normalizeTargetLength(s.targetSeconds);
+    if (target === undefined) delete s.targetSeconds;
+    else s.targetSeconds = target;
   }
 
   s.title = plainText(s.title).slice(0, 300);

@@ -799,6 +799,23 @@ and press <kbd>Enter</kbd> to go back to the estimate. It's saved with the
 file and undoes like any edit. On a phone, tap into the scene and then tap
 its time.
 
+**A target length.** If the piece has to come in at a length — a two-minute
+explainer, a thirty-second spot — click the clock in the header and, under
+the reading speed, set a **Target length**: pick one of 0:30, 1:00, 2:00,
+3:00, 5:00 or 10:00, or type one the same ways as a scene's length (`2:00`,
+`90`, `90s`, `1m30`) and press <kbd>Enter</kbd>. The command menu's **Set
+target length…** (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>K</kbd>, then type
+"target") opens the same box. From then on the clock reads the script
+against it — `01:35 / 02:00` and **0:25 left**, or **0:05 over** in red once
+the script runs long — and the rundown strip reaches out to the target, with
+a dashed line and "Target 2:00" at it: the time still free before it is
+hatched, and once you are over, the part of the scenes past it is hatched
+instead. The target is measured against the whole script, shot scenes
+included, even while they're hidden (the clock's tooltip then says how much
+is still to shoot). **No target** takes it away. It's saved with the file,
+undoes like any edit, and in a review session you can see it but not change
+it.
+
 **Making the script bigger or smaller.** Hold <kbd>Ctrl</kbd> and turn the
 mouse wheel over the script — or pinch on a trackpad — to zoom the script
 alone, from 70 % to 200 %; the header and the panels stay as they are, and
