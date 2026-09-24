@@ -1235,7 +1235,7 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     the Writer brings no panel back; the shot list alone reopens the B-roll
     panel on close if that is where it was opened from. A new panel goes in
     `SIDE_PANEL_WIDTH_DEFAULTS` (which is `SIDE_PANEL_IDS`) and, if it has a
-    close function, in `SIDE_PANEL_CLOSERS`. `tests/85-side-panels-modes.txt`
+    close function, in `SIDE_PANEL_CLOSERS`. `tests/128-side-panels-modes.txt`
     checks every panel against both modes. Writer and Present sit at
     `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
