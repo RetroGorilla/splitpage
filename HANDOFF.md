@@ -954,6 +954,8 @@ builds two fields.
     "imageName": "wide.png",
     "imageLinks": [{ "href": "https://…" } | { "name": "clip.mp4", "size": 1 }],  // + "duration", "poster": true
     "moreImages": [{ "imageRef": { /* as above */ }, "name": "…", "links": [ /* as imageLinks */ ] }],
+    // a length set by hand (#179): whole seconds 0–86400, absent = the estimate
+    "lengthSeconds": 90,
     "status": "todo | ready | shot", "updatedAt": "ISO", "updatedBy": "name" }],
   "comments": [{ "id": "c1", "rowId": "r1", "field": "audioText | visualText | visualImage",
     "anchorId": "c1", "quotedText": "plain text", "author": "name", "body": "sanitised HTML",
@@ -1002,6 +1004,29 @@ merges as content (an `imageRef` compared by its sha; the gallery's two
 lists as sets, both sides' additions kept, never a conflict, #135); `rows[].status` and
 `productionTags[].status` merge by rank (further-along wins);
 `owner`/`notes` merge "filled beats empty".
+
+**A scene's length** (#179) is `rowSeconds(row)` (01-scene-status.js):
+`rows[].lengthSeconds` when it is set, which replaces the estimate outright,
+otherwise the Audio words at `wordsPerMinute`. Every consumer — the gutter's
+start times, the program clock, the rundown strip, the Production and B-roll
+panels, the CSV, Present's clock — reads `rowSeconds()`, never the words
+directly (Present's *scroll speed* is still words and reading speed).
+`migrateRows()` keeps a whole number 0–86400 and drops anything else, so a
+file from before #179 reads as the estimate. It is set from the rail's Read
+time (05r-read-time.js; typed as `1:30`, `90`, `90s`, `1m30`, `1m 30s` —
+`parseSceneLength()`), which is read-only in a review session. It is not in
+`ROW_FIELDS` (not text): `mergeRow` takes the side that changed it since the
+base, theirs when both did (no conflict card), and with no base a set length
+beats none; `rowContentEqual()` counts it, so setting it outranks the other
+side's delete. Undo needs nothing — `diffStates` makes it a `rowField` step.
+A `.splitpage` and the `.md` data block carry it as any row key; the `.md`
+table does not show it.
+
+**Per person, not per document:** the script's zoom (#191) is
+`localStorage["splitpage-script-scale"]` (a number, 1 = 100 %, absent at
+100 %), applied as `--script-scale` on `#root` by 05s-script-zoom.js, which
+also re-applies on a `splitpage:pref` event (`detail.key` that key) and on
+another window's `storage` event.
 
 **The two script cells merge a word at a time** (#85,
 `docs/DOCUMENT-MODEL.md` §8). `mergeRow` hands each to `mergeTextField()`
@@ -1567,6 +1592,9 @@ evaluation order via `_entry.js`):
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
+| `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
+| `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
+| `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
