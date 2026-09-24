@@ -22,6 +22,10 @@ so others on your network open and edit the same scripts live, or
 offered it: download it from the releases page. When 3.0.0 itself ships, a
 beta copy is offered it like any other update.
 
+- **A start screen for every new tab.** A blank script or one of three
+  starter scripts (to-camera video, interview, 30-second spot), your recent
+  documents in the desktop app, and a drop zone for a file — see
+  [Tabs](#tabs).
 - **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
   formatting, tags, pasting, splitting, joining, moving and deleting scenes,
   a comment until it is sent, a scene's status and picture, the production
@@ -56,8 +60,17 @@ beta copy is offered it like any other update.
 - **Faster with long scripts:** only the scenes that changed are redrawn.
 - **Shared sessions** bring in a collaborator's saved changes without waiting
   for your next save; reviewers can only ever add comments.
-- **Resizable side panels**, a File menu in sections, and smoother header and
-  panel transitions.
+- **A new File menu** that drops down from its button: where the script is
+  kept and whether it is all saved sits on top, with Autosave as a switch;
+  every item has its shortcut beside it, and one that cannot work right now
+  says why. Save, Save a copy and Open now have their usual shortcuts in the
+  browser too.
+- **One Export dialog** (Ctrl+E) for every format, with a sketch of the page
+  and the file name before you export, and **Export again** for the format
+  you used last.
+- **Search commands** (Ctrl+K): type a few letters of anything the File menu,
+  the panels or the export formats can do, and press Enter.
+- **Resizable side panels**, and smoother header and panel transitions.
 - Fixes: a PDF scene with a picture and no text is no longer drawn over by
   the next scene; *Undo merge* after a save conflict puts your version back;
   File ▸ Open keeps a file's formatting; the teleprompter covers the header;
@@ -241,26 +254,48 @@ browser:
 
 Every tab you have open comes back the next time you launch Splitpage.
 
-**A new tab starts on a choice, not on a document.** It asks for one of two
-things — **New script**, which is a genuinely empty script (one blank scene,
-no tags, no comments, nothing carried over), or **Open a file**, which is the
-same picker as File ▸ Open a document…. The same page shows in the browser
-app on a fresh copy nothing has been opened or saved into. It never appears
-over a document: not one you opened, not a shared session's, and not one
-coming back from a crash. If you would rather look at the example script that
-ships with Splitpage, the link at the bottom of the page dismisses it (so does
+**A new tab starts on a start screen, not on a document.** Under **Start a
+script** it offers:
+
+- **Blank script** — a genuinely empty script: one blank scene, no tags, no
+  comments, nothing carried over.
+- Three **starter scripts**, each a real example to write over:
+  **To-camera video** (a hook, an intro, three sections and a call to
+  action), **Interview** (the questions in the audio column, cutaways and
+  b-roll in the visual one) and **30-second spot** (six timed beats ending
+  on a packshot). Each shows off what Splitpage does with a script — tagged
+  props, locations, VFX, cast, gear and music, `B-roll:` lines on the b-roll
+  list, a scene or two already marked Ready or Shot — and opens as a new,
+  unsaved document of its own, exactly like Blank script: Save asks where
+  to put it.
+- A **drop zone**: drop a `.md`, `.splitpage`, `.docx`, `.txt` or `.csv`
+  file anywhere on the page to open it, as **Open a file** would. Its two
+  links **paste a script** (the Paste a script… dialog, which here makes a
+  new document from what you paste) and **import a Google Doc link**.
+- **Open a file** (the same picker as File ▸ Open…) and **Join a
+  shared session** (the Servers dialog) in the bar across the top.
+- **Take the one-minute tour** and the **Tagging cheat sheet** at the bottom,
+  both shown over the example script — and in the browser app, a link to the
+  desktop app.
+
+The same page shows in the browser app on a fresh copy nothing has been
+opened or saved into. It never appears over a document: not one you opened,
+not a shared session's, and not one coming back from a crash. If you would
+rather look at the example script that ships with Splitpage, **Look at the
+example script instead** at the bottom of the page dismisses it (so does
 Esc).
 
-**Recent** is the third column, in the desktop app. It lists the last 20
-documents you had open, most recent first, by title and file name; clicking
-one reopens it in that tab with no picker in the way. If a file has been
-moved or deleted since, clicking it says so instead of failing quietly, and
-the **×** beside any entry takes it off the list — **Clear recent** takes
-them all off. The list is kept with the rest of the desktop app's session
-state on your own machine: it is not in a saved script, not in an export
-(including **Export app data**), and nobody in a shared session can see it.
-The browser app does not have this column — a browser can only reopen a file
-it still holds permission for, so it remembers the last one and no more.
+**Recent** sits beside the new-script cards in the desktop app. It lists the
+last 20 documents you had open, most recent first, by title and file name;
+clicking one reopens it in that tab with no picker in the way. If a file has
+been moved or deleted since, clicking it says so instead of failing quietly,
+and the **×** beside any entry takes it off the list — **Clear recent**
+takes them all off. The list is kept with the rest of the desktop app's
+session state on your own machine: it is not in a saved script, not in an
+export (including **Export app data**), and nobody in a shared session can
+see it. The browser app does not have this column — a browser can only
+reopen a file it still holds permission for, so it remembers the last one
+and no more.
 
 **Crash recovery.** If the app or your computer goes down with unsaved work
 open, nothing is lost: every tab's unsaved changes are kept on disk as you
@@ -520,7 +555,11 @@ the tag and leaves the plain text:
 | `<wireless lav>` | Gear |
 
 **Cast** and **Music/SFX** have no shortcut (nothing else is safe to type
-in normal prose) — select the words and press **Tag**. Once a tag of any
+in normal prose) — select the words and press **Tag**. A tag shows in the
+script as a light tint with a coloured line under it, one colour per
+category: blue for props, violet for locations, plum for cast, ochre for
+VFX, slate for music and sound effects, olive for gear. The same colours
+mark each category in the Production and Gear panels. Once a tag of any
 category exists, typing a bracket and the first few letters offers to
 complete it: press **Tab** to accept. The completion keeps that tag's own
 category, so you never end up with the same thing filed twice.
@@ -559,8 +598,8 @@ Other things worth knowing:
   labels out of the script — the words stay, only the labels go. It asks once
   first and tells you how many labels are about to go with them.
 - Group the breakdown by **category, person or scene**, and export the
-  whole thing as CSV (the **CSV** button in the panel, or File ▸ Export ▸
-  Breakdown only). One sheet with a Category column, so it filters down to
+  whole thing as CSV (the **CSV** button in the panel, or File ▸ Export… ▸
+  Breakdown). One sheet with a Category column, so it filters down to
   a props list, a graphics list, or one person's pull list. The Word,
   PDF, Markdown and plain-text exports carry the breakdown too, including
   who each item is assigned to and what state it's in.
@@ -592,10 +631,76 @@ else), and it merges the same way — a status can't be walked backwards, an
 item can't be silently dropped. The Gear screen itself has a lighter version
 of the same grouping: **List**, or **Scene** to see what's needed where.
 
-**Packing list** (on the Gear screen, and Props too from File ▸ Packing
-lists) exports a plain checklist — a box, the name, who's got it — meant to
+**Packing list** (on the Gear screen, and Props too from File ▸ Export… ▸
+Packing list) exports a plain checklist — a box, the name, who's got it — meant to
 be printed and ticked off before you leave, not the six-column breakdown
 sheet trying to double as one.
+
+### B-roll
+
+Start a line in the **Visual** column with `B-roll:` and whatever follows it
+is a shot to go and get. The line becomes a small **B-ROLL** marker and the
+shot lands on the list behind **B-roll** in the header — typed, pasted or
+imported, it's picked up either way. Any lines under it, up to the next
+marker, are its description.
+
+The **B-roll** panel is one line per shot:
+
+- **The box on the left** marks a shot **Shot** or **To shoot** in one
+  click (and one Ctrl+Z takes it back). Shot lines go grey, so what's left
+  stands out.
+- **Under the name**: where it gets shot, who's getting it, and the props
+  it needs. A red flag means someone **flagged** it — a reshoot, or anything
+  else worth a second look; a page icon means it has a note. Hover a line
+  for **Go to scene**.
+- **At the top**: how many shots are in the can, and a bar with one segment
+  per shot — teal for shot, red for flagged. The chips below it — **All**,
+  **To shoot**, **Flagged**, **Shot** — cut the list down, and **Group:**
+  lays it out by **scene**, **location** or not at all. Both are remembered on
+  this device, not saved in the script.
+- **Grouped by scene**, each scene's heading carries the start of its Audio
+  line and how many of its shots are done. Shots you added in the panel
+  rather than in the script sit under **Added here**.
+
+**Click a shot** (or press Enter on it) to open its details: the status and
+the **Flag** button, the scene it's in, the **location**, who it's
+**assigned** to (or **+ Person** to add someone), its **props**, the line of
+audio it **cuts against** (seeded from the scene; the pencil edits it) and a
+**note**. The **⋯** menu has **Rename in script** — which rewrites the line
+in the script itself — and **Delete from list**, which forgets the shot but
+leaves the words in the script alone.
+
+**Props.** A prop tagged on a shot's own lines —
+`B-roll: steam off the [kettle]` — counts for that shot automatically. For one the script doesn't
+mention, type it into **Add prop** in the shot's details: pick one the
+script already tracks, or type a new name and it's added to the breakdown as
+a Prop, the way the Gear box adds things. Each prop shows how far along it
+is — on the list, a dot before its name: a hollow ring for Needed, orange
+for Sourcing, teal for Have it, grey for Returned (hover it for the word);
+in the details, the word itself — and renaming it in the Production
+panel renames it here too. The breakdown CSV lists the b-roll shots that
+need each prop, and so does the Props packing list.
+
+**Several at once.** <kbd>Ctrl</kbd>+click lines to select them
+(<kbd>Shift</kbd>+click takes the run between two), and a bar appears at
+the bottom: mark them all shot, assign them, move them to one location, or
+flag them. Each of those is one step for Ctrl+Z. <kbd>Esc</kbd> or the **×**
+clears the selection.
+
+To add a shot nobody has written a scene for yet, type it into **Add a
+shot** at the foot of the panel.
+
+**The whole list on one page.** The arrows button beside the panel's ×
+opens the **B-roll shot list** over the script — a table of every shot,
+grouped by **location** (the order a day of b-roll actually gets shot in),
+or by **scene** or **person**, with the same filter chips. Tick shots off,
+change who has them and write notes right in the table; it's the same list,
+so the panel keeps up and Ctrl+Z works the same. The scene number jumps to
+that scene. **CSV** downloads a spreadsheet with a row for every shot and a
+Props column; **Print shot list** makes a PDF of the list as it's shown —
+filter and grouping included — with a box to tick for each shot. **← Script**
+or <kbd>Esc</kbd> takes you back. On a phone the table becomes a list of
+cards.
 
 ## Writing and planning
 
@@ -634,7 +739,7 @@ time update as you type. Joining two scenes that *both* have a visual is the
 one thing it won't do on a keystroke — one of the two shot descriptions would
 have to be thrown away, so it sends you to the split view to pick.
 
-**Getting the narration back out.** File ▸ **Narration only** exports the
+**Getting the narration back out.** File ▸ Export… ▸ **Narration only** exports the
 Audio column as an ordinary document — `.docx` to hand to a voice artist or
 carry into Word, `.txt` for anything else. One paragraph per scene, no visual
 column, no breakdown, no comments. That's the same shape **Paste a script…**
@@ -695,8 +800,11 @@ lose your place in the script, so Splitpage keeps the scene you're actually
 in front of you rather than leaving the page static.
 
 **Comments.** Select some text and click **💬 Comment** to leave one; it
-stays anchored to that exact phrase. The card in the **Comments** panel
-*is* the "jump to this text" control — click anywhere on it (not a link, not
+stays anchored to that exact phrase, which gets an orange dotted underline
+(grey once the thread is resolved). That keeps it apart from the other
+marks a script can carry: a highlight is a yellow fill, a link a solid teal
+underline, a tag a tint in its category's colour. The card in the
+**Comments** panel *is* the "jump to this text" control — click anywhere on it (not a link, not
 while you're selecting its text to copy) and the script scrolls to the
 phrase, without closing the panel, so you can read the two side by side.
 **Sort** at the top of the panel defaults to **Script order** — a comment
@@ -838,12 +946,12 @@ the server refuses its saves rather than let it drop them. Your unsaved edits
 are kept and merged back in after the reload.
 
 None of this affects working locally. Opened from disk, the app behaves exactly
-as it always has, and **Save As** still gives you a local copy of a hosted
+as it always has, and **Save a copy…** still gives you a local copy of a hosted
 script whenever you want one.
 
 ## Google Drive files
 
-**File ▸ Google Drive files…** opens a small file manager for any publicly
+**File ▸ Import ▸ Google Drive…** opens a small file manager for any publicly
 shared Google Drive folder — browse it, download files, upload new ones,
 rename, delete, and create subfolders, right from Splitpage. It's separate
 from opening and saving your script; think of it as a way to move files in
@@ -921,6 +1029,9 @@ above each scene, and panels and menus go full screen. A few things translate:
 - **Completing a tag:** phone keyboards have no <kbd>Tab</kbd>, so while the
   dim completion is showing, **tap it** to accept.
 - **Find & replace** is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).
+- **The File menu** comes up from the bottom of the screen; tap outside it,
+  or ✕, to put it away. **Search commands…** in it is the phone's way to the
+  command search.
 - **Selecting several breakdown items:** **long-press** a card to start, then
   tap cards to add or drop them. The **×** in the bar clears the selection.
 - **Reordering scenes:** the ↑ / ↓ buttons (drag needs a mouse).
@@ -940,13 +1051,14 @@ everything else is exactly the same.
 
 ## Two shapes of Markdown export
 
-**File ▸ Export** has two Markdown options. **Markdown (.md)** reads
+**File ▸ Export…** has two shapes of Markdown: choose **Markdown**, then
+**Stacked** or **Two columns**. **Stacked** reads
 like a script rather than a filled-in form: a `### Scene 01` heading, then
 the visual direction as an italic lead-in ahead of whatever's spoken, with
 nothing printed for a field that has nothing to say. A picture is referenced
 from a sibling `images/` folder instead of pasted inline as base64 — once a
 script has any pictures, this export becomes a small `.zip` so the folder
-actually travels with the `.md`. **Markdown, two columns (.md)** lays the
+actually travels with the `.md`. **Two columns** lays the
 same script out as a table instead, one row per scene with a Visual column
 next to an Audio column — the way the split view itself looks, and the way a
 GitHub/Notion/Obsidian-style Markdown viewer actually renders a table, side
@@ -957,7 +1069,7 @@ it keeps embedding pictures inline so the single `.md` file stays complete
 on its own.
 Both carry the production breakdown and comments the same way.
 
-**File ▸ Export ▸ Word (.docx)** carries the same polish: named
+**File ▸ Export… ▸ Word** carries the same polish: named
 paragraph, character and table styles, a document theme font, scene numbers
 in their own column, page numbers in the footer, and a production-breakdown
 table whose columns size themselves to what's actually in them instead of a
@@ -976,16 +1088,112 @@ is lost — see [Saving your script](#saving-your-script).
 
 ## Importing a Google Doc
 
-**File ▸ Import from Google Doc link…** takes a Google Docs share link (or
+**File ▸ Import ▸ Google Doc link…** takes a Google Docs share link (or
 just the document's ID) instead of a file. Splitpage has no server and no
 Google sign-in of its own, so it can't read the Doc directly — instead it
 opens Google's own Word (.docx) export of it in a new tab, which downloads
 straight to your computer using whatever Google account you're signed in to
 in that tab. Once the download lands, bring it in the same way as any other
-Word file: **File ▸ Open a document…**. If the doc isn't shared "Anyone with
+Word file: **File ▸ Open…**. If the doc isn't shared "Anyone with
 the link," make sure the browser tab that opens is signed in to an account
 that can see it, or the download will be a Google sign-in page instead of a
 document.
+
+## The File menu
+
+**☰ File** drops down from its button. At the top is a card about the script
+you are in: the file it lives in (or *Not saved yet*), whether everything on
+screen is in it (*Saved 2 min ago · Markdown*), the **Autosave** switch, and
+**Save a copy…**, which writes the script to a new file of your choosing and
+leaves the one on screen where it is. While a Word, CSV or text file you
+opened is on screen, the card also offers **Save to** that file.
+
+Below it, four groups:
+
+- **New & open** — **New script** (an empty script in this tab; the one you
+  were in goes into Version history first), **Open…**, **Open recent** in the
+  desktop app, and **Import** for pasting a script, a Google Doc link or
+  Google Drive.
+- **Share** — **Publish & copy a link**, and **Servers…**.
+- **Export** — **Export…** (<kbd>Ctrl</kbd>+<kbd>E</kbd>), and once you have
+  exported something, **Export again as** that format, in one click.
+- **This document** — Version history, Find & replace, Hide shot scenes, and
+  in the desktop app Present in browser and Use Chromium Speech Recognition.
+
+Help, the tour, setup, About, the tagging reference and moving your app data
+between the browser and the desktop app sit along the bottom. **Search
+commands…**, just under the card, finds any of it by typing — see below.
+
+Things that are on or off — Autosave, Hide shot scenes — are switches, and
+the menu stays open when you flip one. Something that cannot work right now
+says why underneath it (*No server connected — set one up first*) instead of
+failing when you click it.
+
+**From the keyboard:** ↑ and ↓ move through the menu, Home and End jump to
+either end, → or Enter opens Open recent or Import, ← closes it again, and
+Esc closes the menu and puts you back on the File button.
+
+### Keyboard shortcuts
+
+Shortcuts are shown beside their item in the File menu — only the ones that
+work in the app you are using. On a Mac, read <kbd>Cmd</kbd> for
+<kbd>Ctrl</kbd>.
+
+| Shortcut | Does |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save a copy… |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open… |
+| <kbd>Ctrl</kbd>+<kbd>E</kbd> | Export… |
+| <kbd>Ctrl</kbd>+<kbd>K</kbd> | Search commands… |
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find & replace |
+| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>H</kbd> | Hide shot scenes |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
+| <kbd>F1</kbd> | Help (desktop app) |
+| <kbd>Ctrl</kbd>+<kbd>T</kbd> | New tab (desktop app) |
+
+### Search commands
+
+<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac), or **File ▸
+Search commands…**, opens a search box over the script. Type part of what
+you want — *pdf*, *gear*, *history*, or a word for it like *teleprompter* or
+*voice over* — and the list narrows to the commands that match: everything
+in the File menu, every export format, the Production, Gear, B-roll and
+Comments panels, Write and Present. <kbd>↑</kbd>/<kbd>↓</kbd> move,
+<kbd>Enter</kbd> runs, <kbd>Esc</kbd> closes it and puts you back where you
+were, caret and all. With nothing typed, the commands you ran last on this
+computer come first.
+
+Something that cannot run right now is still listed, greyed, with the reason
+underneath — the same one the File menu gives. The box does not open over
+the teleprompter, the writer or another dialog.
+
+## Exporting
+
+**File ▸ Export…** (<kbd>Ctrl</kbd>+<kbd>E</kbd>) opens one dialog for every
+format. Pick a card on the left:
+
+- **The whole script** — **PDF** to print or send for reading, **Word** to
+  keep writing in Word or Google Docs, **Markdown** (stacked, or two columns
+  side by side), a **Spreadsheet** with a row per scene, or a **Standalone
+  page** that opens in any browser with nothing installed.
+- **Part of it** — **Narration only** (the Audio column, as `.docx` or
+  `.txt`), the **Breakdown** as a spreadsheet, or a **Packing list** of your
+  gear or your props to print and tick off.
+
+The right-hand side shows a sketch of the first page, what the file will
+hold (how many scenes, whether pictures come with it), the options that
+format has, and the file name it will get. A format with nothing to put in
+it — a packing list with nothing tagged — says so, and cannot be exported
+until there is.
+
+Exports are copies: nothing you change in one comes back to the script. To
+share one live document that everyone edits, use **Publish & copy a link**
+instead — the dialog links to it.
+
+The dialog remembers the last format you exported on this computer and opens
+on it next time, and the File menu offers **Export again as** that format.
+The choice is kept by the app, never in the script itself.
 
 ## Saving your script
 
@@ -1040,7 +1248,7 @@ something is in the way (a file that changed on disk under you, a write that
 failed, a lapsed sign-in). Hover it for the detail: which file, or what to
 do about it. The writer has the same line beside its own Save button.
 
-Turn it off with **File ▸ Autosave**, and the file is written only when you
+Turn it off with the **Autosave** switch at the top of the File menu, and the file is written only when you
 press Save. The setting is remembered between launches. Either way, the
 desktop app keeps its own crash-safe copy of everything typed since the last
 save — see [Desktop app](#desktop-app).
@@ -1075,7 +1283,7 @@ a comment flagged **Unmerged edit**, exactly as on a server. The merged script s
 
 ### Sending it to someone who has nothing installed
 
-**File ▸ Export ▸ Standalone HTML (.html)** writes one self-contained
+**File ▸ Export… ▸ Standalone page** writes one self-contained
 page: your script with a copy of Splitpage wrapped around it. They
 double-click it and the script is there, editable, with nothing to install
 and no account. It is a far bigger file than a `.md`, so it is for sending,
@@ -1124,7 +1332,7 @@ stays available for 90 days before it's cleared out for good.
 A file Splitpage saved is a complete project, not just text — reopen it and
 you get everything back: scenes, comments, tags, images, title. Two ways:
 
-- **File ▸ Open a document…**, then pick the `.md` or `.splitpage` file.
+- **File ▸ Open…** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), then pick the `.md` or `.splitpage` file.
   Useful when you're already in the app and want to switch projects.
 - **Double-click a saved Standalone HTML file.** It opens straight into that
   project — that is what being self-contained means.
@@ -1137,7 +1345,7 @@ button that points nowhere yet. Nothing of the document you had open comes
 with it.
 
 If what you actually have is a **revised draft of the script you're already
-working on**, use **File ▸ Paste a script…** instead. That modal replaces (or
+working on**, use **File ▸ Import ▸ Paste a script…** instead. That modal replaces (or
 appends to) the scenes and keeps the document you're in — its breakdown
 statuses, owners and notes, its cast list, its b-roll list and its comments
 all stay where they are. It takes a `.docx`, `.md`, `.txt` or `.csv` file

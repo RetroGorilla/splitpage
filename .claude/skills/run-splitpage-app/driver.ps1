@@ -423,6 +423,12 @@ $KeyMap = @{
   KeyH      = @{ key = 'h';         code = 'KeyH';      vk = 72 }
   # Ctrl+Y: redo, the other spelling of Ctrl+Shift+Z
   KeyY      = @{ key = 'y';         code = 'KeyY';      vk = 89 }
+  # the File menu's shortcuts (#145-#147): Save / Save a copy, Open,
+  # Export..., and the command menu
+  KeyS      = @{ key = 's';         code = 'KeyS';      vk = 83 }
+  KeyO      = @{ key = 'o';         code = 'KeyO';      vk = 79 }
+  KeyE      = @{ key = 'e';         code = 'KeyE';      vk = 69 }
+  KeyK      = @{ key = 'k';         code = 'KeyK';      vk = 75 }
 }
 function Press-Key([string]$Name, [string]$Mods = '') {
   if (-not $KeyMap.ContainsKey($Name)) { throw "unknown key '$Name' (have: $($KeyMap.Keys -join ', '))" }

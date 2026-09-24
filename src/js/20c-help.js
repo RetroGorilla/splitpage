@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { syncPanelClass } from "./03-sync.js";
 import { SIDE_PANEL_IDS } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { toggleFileMenu } from "./18-local-files.js";
+import { toggleFileMenu } from "./18b-file-menu.js";
 
 /* ================= Help page (docs/help.md) & the coach-mark tour ============
 
@@ -354,7 +354,7 @@ export function __init() {
      calls stopPropagation(). Both listeners sit on this one element, so
      that halts the dispatch entirely: the event never reaches AT_TARGET or
      bubbles back up to 18-local-files.js's own (bubble-phase) listener.
-     toggleFileMenu() is 21-events.js's own menu-close function, reused so
+     toggleFileMenu() is 18b-file-menu.js's own menu-close function, reused so
      File ▾'s aria-expanded state never disagrees with whether it's open. */
   (function wireHelpFileMenuItems() {
     var menu = document.getElementById("file-menu");

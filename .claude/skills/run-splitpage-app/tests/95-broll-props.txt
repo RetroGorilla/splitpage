@@ -1,0 +1,118 @@
+# The props each b-roll shot needs (#149, 08c-broll.js / 08d-broll-panel.js):
+#
+#   * a prop tagged on a shot's own lines shows on its line in the panel,
+#     including one tagged a moment ago while typing;
+#   * one added by hand in the shot's detail lands on the record and in the
+#     breakdown as a Prop, shows as a chip with its status, is ONE undo
+#     entry (undone and redone), and survives a .splitpage save and reopen;
+#   * the script's own props have no × — they are removed by editing the
+#     script — while a hand-added one comes off with its ×;
+#   * renaming the prop in the Production panel carries through to the
+#     shot, by id.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Harbour town", "rows": [{"id": "r1", "visualText": "Host at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Harbour\" contenteditable=\"false\">harbour</span> wall.<br><span class=\"broll-key\" data-broll-id=\"bs1\" contenteditable=\"false\">B-roll:</span> gulls wheeling over the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Fishing nets\" contenteditable=\"false\">nets</span><br>wide, then tight on one bird<br><span class=\"broll-key\" data-broll-id=\"bs2\" contenteditable=\"false\">B-roll:</span> boats coming in at dawn", "audioText": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "status": "todo"}, {"id": "r2", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs3\" contenteditable=\"false\">B-roll:</span> steam off the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> in the caf\u00e9 window", "audioText": "Inside, the caf\u00e9 has been open since five, and the kettle has not stopped once.", "status": "todo"}, {"id": "r3", "visualText": "Interview, two shot.<br><span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span> hands mending a net<br><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span> the ice machine at the market", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "todo"}, {"id": "r4", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs6\" contenteditable=\"false\">B-roll:</span> the lighthouse at blue hour", "audioText": "And when the light goes, the lighthouse takes over.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}, {"id": "p2", "name": "Ada Brenner"}], "productionTags": [{"cat": "prop", "name": "Fishing nets", "status": "have"}, {"cat": "prop", "name": "Kettle", "status": "sourcing"}, {"cat": "prop", "name": "Drone", "status": "needed"}, {"cat": "location", "name": "Harbour"}, {"cat": "location", "name": "Fish market"}], "brollShots": [{"id": "bs1", "name": "gulls wheeling over the nets", "status": "shot", "location": "Harbour", "owner": "p1", "audioRef": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "props": [{"name": "Drone"}]}, {"id": "bs2", "name": "boats coming in at dawn", "status": "unshot", "reshoot": true, "notes": "Too late last time, the light was gone.", "location": "Harbour", "owner": "p2"}, {"id": "bs3", "name": "steam off the kettle in the caf\u00e9 window", "status": "shot", "location": "Caf\u00e9", "owner": "p1"}, {"id": "bs4", "name": "hands mending a net", "status": "unshot", "location": "Harbour", "props": [{"name": "Fishing nets"}]}, {"id": "bs5", "name": "the ice machine at the market", "status": "unshot", "location": "Fish market", "owner": "p2"}, {"id": "bs6", "name": "the lighthouse at blue hour", "status": "shot", "location": "Headland"}, {"id": "bs7", "name": "Establisher of the street, blue hour", "status": "unshot", "origin": "list"}, {"id": "bs8", "name": "Crowd at the fish auction", "status": "unshot", "origin": "list", "location": "Fish market", "notes": "Ask the harbourmaster first."}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; })()
+wait F.state().title === 'Harbour town' && document.querySelector('#rows .row[data-id="r4"]')
+eval (function(){ window.rec = function(id){ return F.state().brollShots.filter(function(r){ return r.id === id; })[0]; }; window.row = function(id){ return document.querySelector('#broll-list .broll-row[data-id="' + id + '"]'); }; window.metaProps = function(id){ var m = row(id) && row(id).querySelector('.broll-meta-props'); return m ? m.textContent : ''; }; window.prop = function(name){ return F.state().productionTags.filter(function(t){ return t.cat === 'prop' && t.name === name; })[0]; }; return true; })()
+jsclick #btn-broll
+wait document.querySelectorAll('#broll-list .broll-row').length === 8
+sleep 400
+
+# ---- 1. the script's own props, and the hand-added ones -----------------
+expect metaProps('bs1') === 'Fishing nets, Drone'
+expect metaProps('bs3') === 'Kettle'
+expect metaProps('bs4') === 'Fishing nets'
+expect metaProps('bs2') === ''
+expect rec('bs1').props.length === 1 && rec('bs1').props[0].name === 'Drone' && rec('bs1').props[0].id === prop('Drone').id
+
+# a prop tagged just now, on a shot's line, shows on it
+caret #rows .row[data-id="r4"] .visual-cell .cell-editable
+eval (function(){ var c = document.querySelector('#rows .row[data-id="r4"] .visual-cell .cell-editable'); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); c.focus(); s.removeAllRanges(); s.addRange(r); return c.textContent; })()
+press  with the [tripod bag]
+click #doc-title
+wait metaProps('bs6') === 'tripod bag'
+expect rec('bs6').props.length === 0
+
+# ---- 2. adding one by hand, in the shot's detail ------------------------
+click #broll-list .broll-row-main[data-id="bs5"]
+wait !!document.querySelector('#broll-list .broll-card[data-id="bs5"] .broll-prop-input')
+expect document.querySelectorAll('#broll-list .broll-card .broll-prop-chip').length === 0
+expect Array.prototype.map.call(document.querySelectorAll('#broll-prop-options option'), function(o){ return o.value; }).join('|') === 'Drone|Fishing nets|Kettle|tripod bag'
+eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()
+caret #broll-list .broll-card .broll-prop-input
+type Ice scoop
+key Enter
+wait rec('bs5').props.length === 1
+expect rec('bs5').props[0].name === 'Ice scoop' && rec('bs5').props[0].id === prop('Ice scoop').id
+expect metaProps('bs5') === 'Ice scoop'
+expect document.querySelector('#broll-list .broll-card .broll-prop-chip .broll-prop-name').textContent === 'Ice scoop'
+expect document.querySelector('#broll-list .broll-card .broll-prop-chip .broll-prop-st').textContent === 'Needed'
+expect !!document.querySelector('#broll-list .broll-card .broll-prop-chip .broll-prop-remove')
+eval U.flush()
+expect U.sizes().undo === window.__u0 + 1
+
+# an existing prop by any spelling is that prop, not a new one
+caret #broll-list .broll-card .broll-prop-input
+type kettle
+key Enter
+wait rec('bs5').props.length === 2
+expect rec('bs5').props[1].id === prop('Kettle').id
+expect F.state().productionTags.filter(function(t){ return t.name.toLowerCase() === 'kettle'; }).length === 1
+wait document.querySelectorAll('#broll-list .broll-card .broll-prop-chip').length === 2
+expect document.querySelectorAll('#broll-list .broll-card .broll-prop-chip')[1].querySelector('.broll-prop-st').textContent === 'Sourcing'
+
+# undo and redo, with the focus out of the box (a text box keeps its own undo)
+eval document.activeElement.blur()
+key ctrl KeyZ
+wait rec('bs5').props.length === 1
+key ctrl KeyZ
+wait rec('bs5').props.length === 0
+expect !prop('Ice scoop')
+key ctrl+shift KeyZ
+wait rec('bs5').props.length === 1 && !!prop('Ice scoop')
+key ctrl+shift KeyZ
+wait rec('bs5').props.length === 2
+wait metaProps('bs5') === 'Ice scoop, Kettle'
+expect Array.prototype.map.call(row('bs5').querySelectorAll('.broll-st-dot'), function(d){ return d.getAttribute('title'); }).join('|') === 'Needed|Sourcing'
+
+# the script's own have no ×; a hand-added one comes off with its own
+click #broll-list .broll-row-main[data-id="bs1"]
+wait !!document.querySelector('#broll-list .broll-card[data-id="bs1"]')
+expect document.querySelectorAll('#broll-list .broll-card .broll-prop-chip').length === 2
+expect document.querySelectorAll('#broll-list .broll-card .broll-prop-remove').length === 1
+expect document.querySelector('#broll-list .broll-card .broll-prop-remove').getAttribute('aria-label') === 'Take Drone off this shot'
+
+# ---- 3. a save and a reopen keep them ------------------------------------
+eval (function(){ window.__file = F.buildSplitpage(F.state()); return window.__file.length; })()
+expect JSON.parse(window.__file).brollShots.filter(function(r){ return r.id === 'bs5'; })[0].props.map(function(p){ return p.name; }).join() === 'Ice scoop,Kettle'
+eval (function(){ F.openFile(new File([window.__file.replace('"Harbour town"', '"Harbour town again"')], 'again.splitpage')); return true; })()
+wait F.state().title === 'Harbour town again'
+wait metaProps('bs5') === 'Ice scoop, Kettle'
+expect rec('bs5').props[0].id === prop('Ice scoop').id
+
+# ---- 4. a rename in the breakdown carries through -----------------------
+eval (function(){ window.__droneId = prop('Drone').id; return window.__droneId; })()
+jsclick #btn-production
+wait !!document.querySelector('#production-list .tag-entity')
+eval (function(){ function q(){ return Array.from(document.querySelectorAll('#production-list .tag-entity')).find(function(c){ return c.querySelector('.tag-entity-name').textContent === 'Drone'; }); } var c = q(); if (!c.classList.contains('is-expanded')) c.querySelector('[data-action="tag-expand"]').click(); q().querySelector('[data-action="tag-rename"]').click(); return true; })()
+eval (function(){ var input = document.querySelector('#production-list .tag-rename-input'); input.value = 'Drone kit'; return true; })()
+jsclick #production-list [data-action="tag-rename-save"]
+wait !!prop('Drone kit')
+expect prop('Drone kit').id === window.__droneId
+expect rec('bs1').props[0].name === 'Drone kit' && rec('bs1').props[0].id === window.__droneId
+jsclick #btn-broll
+wait metaProps('bs1') === 'Fishing nets, Drone kit'
+
+# ---- 5. and the × takes a hand-added one off ------------------------------
+click #broll-list .broll-row-main[data-id="bs5"]
+wait !!document.querySelector('#broll-list .broll-card[data-id="bs5"] .broll-prop-remove')
+click #broll-list .broll-card[data-id="bs5"] .broll-prop-remove
+wait rec('bs5').props.length === 1
+expect rec('bs5').props[0].name === 'Kettle'
+expect !!prop('Ice scoop')
+
+shot 95-broll-props
+
+quit

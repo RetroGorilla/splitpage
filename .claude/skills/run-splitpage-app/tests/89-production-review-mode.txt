@@ -1,0 +1,260 @@
+# The Production and Gear panels in a review session (#30;
+# src/js/08-production-panels.js, 20-teleprompter.js wireTagEntityContainer,
+# 21-events.js): the breakdown to read, not to change.
+#
+# Their clicks were already refused by the click guard (21-events.js
+# REVIEW_SAFE_ACTIONS), but their form fields were not: a reviewer could
+# change a card's owner, type into its notes, and Ctrl+click (or long-press)
+# a selection and use the bulk bar's selects. The server keeps none of it,
+# so each edit looked as if it had worked and was then lost. Now:
+#
+#   * an open card's status and owner are drawn disabled and its notes
+#     read-only (the values still readable); + Person, Rename and
+#     Remove/Delete are not drawn; the head's status pill is a label; the
+#     Person grouping has no "remove from crew" ×;
+#   * no selection: Ctrl/Shift+click opens the card and selects nothing, a
+#     long-press selects nothing, and the bulk bar is never drawn;
+#   * a control forced back into the page is refused by its handler (change,
+#     input, Enter, the click guard), with the "Viewing only" toast, and the
+#     breakdown is left as it was — the guard, not the CSS, and not the body
+#     class either;
+#   * the two exports, the Production panel's CSV and the Gear panel's
+#     Packing list, still make their files and change nothing;
+#   * the same document as an editor gets every control back.
+# Like 43-review-mode.txt, the role comes from window.__hostedTest.setSession
+# (the harness cannot start server.js). Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; var doc = {"schema": 2, "title": "Breakdown review", "rows": [{"id": "r1", "visualText": "Host at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Harbour\" contenteditable=\"false\">harbour</span> with the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>, on the <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\">tripod</span>", "audioText": "Every morning the town wakes to the same sound.", "status": "todo"}, {"id": "r2", "visualText": "Mending the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Fishing nets\" contenteditable=\"false\">nets</span> on the <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Slider\" contenteditable=\"false\">slider</span>", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}, {"id": "p2", "name": "Ada Brenner"}], "productionTags": [{"cat": "prop", "name": "Kettle", "status": "sourcing", "owner": "p1", "notes": "Borrow the café's."}, {"cat": "prop", "name": "Fishing nets", "status": "needed"}, {"cat": "prop", "name": "Drone", "status": "have", "owner": "p2"}, {"cat": "location", "name": "Harbour", "status": "needed"}, {"cat": "gear", "name": "Tripod", "status": "needed", "owner": "p2", "notes": "The heavy one."}, {"cat": "gear", "name": "Slider", "status": "needed"}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'breakdown.splitpage')); return true; })()
+wait F.state().title === 'Breakdown review' && document.querySelector('#rows .row[data-id="r2"]')
+eval (function(){ window.tags = function(){ return JSON.stringify(F.state().productionTags); }; window.tag = function(name){ return F.state().productionTags.filter(function(t){ return t.name === name; })[0]; }; window.card = function(name){ return Array.prototype.filter.call(document.querySelectorAll('.tag-entity'), function(c){ return !c.closest('[hidden]') && c.querySelector('.tag-entity-name').textContent === name; })[0]; }; window.head = function(name){ return card(name).querySelector('.tag-entity-head'); }; window.open1 = function(){ return document.querySelector('#production-list .tag-entity.is-expanded'); }; window.toasted = function(){ return document.getElementById('toast-host').textContent.indexOf('Viewing only') !== -1; }; window.untoast = function(){ document.getElementById('toast-host').textContent = ''; return true; }; window.bulkShown = function(){ var b = document.getElementById('production-bulk'); return !b.hidden || b.innerHTML !== ''; }; return true; })()
+
+# ---- 1. a review session ---------------------------------------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 300
+expect window.__hostedTest.reviewMode() === true
+jsclick #btn-production
+wait document.querySelectorAll('#production-list .tag-entity').length === 6
+sleep 300
+# everything below is measured against this: the breakdown, the crew, and
+# whether the page thinks it holds anything to save
+eval (function(){ window.__tags0 = tags(); window.__people0 = JSON.stringify(F.state().people); window.__dirty0 = window.__hostedTest.dirty(); return window.__dirty0; })()
+
+# ---- 2. the heads: the status as a label, and clicking it opens the card --
+expect document.querySelectorAll('#production-list [data-action="tag-status-cycle"]').length === 0
+expect document.querySelectorAll('#production-list .tag-status-pill.is-static').length === 6
+expect card('Kettle').querySelector('.tag-status-pill').textContent === 'Sourcing'
+expect untoast()
+click #production-list .tag-entity[data-key="prop kettle"] .tag-status-pill
+wait !!open1()
+expect open1().getAttribute('data-key') === 'prop kettle'
+expect !toasted()
+expect tag('Kettle').status === 'sourcing'
+
+# ---- 3. an open card: every value, and nothing to change it with ----------
+expect open1().querySelectorAll('.tag-status-seg button').length === 4
+expect open1().querySelectorAll('.tag-status-seg button:disabled').length === 4
+expect open1().querySelector('.tag-status-seg button.is-active').getAttribute('data-status') === 'sourcing'
+expect open1().querySelector('.tag-owner-select').disabled
+expect open1().querySelector('.tag-owner-select').value === 'p1'
+expect getComputedStyle(open1().querySelector('.tag-owner-select')).cursor === 'default'
+expect getComputedStyle(open1().querySelector('.tag-owner-select')).appearance === 'none'
+expect !open1().querySelector('[data-action="tag-person-new"]')
+expect open1().querySelector('.tag-notes-input').readOnly === true
+expect open1().querySelector('.tag-notes-input').value === "Borrow the café's."
+expect open1().querySelector('.tag-notes-input').placeholder === 'No notes'
+expect !open1().querySelector('.tag-entity-actions')
+expect !open1().querySelector('[data-action="tag-rename"]') && !open1().querySelector('[data-action="tag-remove"]') && !open1().querySelector('[data-action="tag-delete"]')
+shot 89-production-review-card
+# a card with no owner reads Unassigned
+click #production-list .tag-entity[data-key="prop fishing nets"] .tag-entity-head
+wait open1() && open1().getAttribute('data-key') === 'prop fishing nets'
+expect open1().querySelector('.tag-owner-select').value === '' && open1().querySelector('.tag-owner-select').disabled
+expect open1().querySelector('.tag-notes-input').value === '' && open1().querySelector('.tag-notes-input').readOnly
+
+# ---- 4. no selection: Ctrl+click, Shift+click and a long-press ------------
+eval (function(){ head('Drone').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })); return true; })()
+sleep 200
+expect document.querySelectorAll('#production-list .tag-entity.is-selected').length === 0
+expect !bulkShown()
+# the modifier-click opened the card instead, as a plain click would
+expect open1().getAttribute('data-key') === 'prop drone'
+eval (function(){ head('Kettle').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: true })); return true; })()
+sleep 200
+expect document.querySelectorAll('#production-list .tag-entity.is-selected').length === 0
+expect !bulkShown()
+# a touch long-press on a card's head
+eval (function(){ var r = card('Harbour').querySelector('.tag-entity-name').getBoundingClientRect(); card('Harbour').querySelector('.tag-entity-name').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', clientX: r.left + 2, clientY: r.top + 2 })); return true; })()
+sleep 700
+eval (function(){ document.getElementById('production-list').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' })); return true; })()
+expect document.querySelectorAll('#production-list .tag-entity.is-selected').length === 0
+expect !bulkShown()
+expect untoast() && !toasted()
+
+# ---- 5. forced back in, each control is refused by its handler ------------
+# (the Shift+click above opened Kettle, and the long-press left it open)
+expect open1().getAttribute('data-key') === 'prop kettle'
+# the owner: a change event from a select made live again
+eval (function(){ untoast(); var s = open1().querySelector('.tag-owner-select'); s.disabled = false; s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+sleep 200
+expect toasted()
+expect tag('Kettle').owner === 'p1'
+# ...and drawn back as it was
+expect open1().querySelector('.tag-owner-select').value === 'p1' && open1().querySelector('.tag-owner-select').disabled
+# the notes: made writable, typed into and left
+eval (function(){ untoast(); var t = open1().querySelector('.tag-notes-input'); t.readOnly = false; t.focus(); t.value = 'a reviewer was here'; t.dispatchEvent(new Event('input', { bubbles: true })); t.blur(); return true; })()
+sleep 200
+expect toasted()
+expect tag('Kettle').notes === "Borrow the café's."
+expect open1().querySelector('.tag-notes-input').value === "Borrow the café's." && open1().querySelector('.tag-notes-input').readOnly
+# a status button made live: the click guard
+eval (function(){ untoast(); var b = open1().querySelector('.tag-status-seg button[data-status="have"]'); b.disabled = false; b.click(); return true; })()
+sleep 200
+expect toasted()
+expect tag('Kettle').status === 'sourcing'
+# a rename box and an add-person box the reviewer never had: Enter refused
+eval (function(){ untoast(); var i = document.createElement('input'); i.className = 'tag-rename-input'; i.setAttribute('data-key', 'prop kettle'); i.value = 'Teapot'; open1().appendChild(i); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true; })()
+sleep 200
+expect toasted()
+expect !!tag('Kettle') && !tag('Teapot')
+eval (function(){ untoast(); var i = document.createElement('input'); i.className = 'tag-person-input'; i.setAttribute('data-key', 'prop kettle'); i.value = 'Sam Reviewer'; open1().appendChild(i); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true; })()
+sleep 200
+expect toasted()
+expect JSON.stringify(F.state().people) === window.__people0
+expect !document.querySelector('#production-list .tag-rename-input') && !document.querySelector('#production-list .tag-person-input')
+# a bulk bar forced into the page: both of its selects refused
+eval (function(){ untoast(); var b = document.getElementById('production-bulk'); b.hidden = false; b.innerHTML = '<select id="bulk-owner"><option value="__none__">Assign to…</option><option value="p2">Ada</option></select><select id="bulk-status"><option value="__none__">Status…</option><option value="returned">Returned</option></select>'; var s = document.getElementById('bulk-owner'); s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+sleep 200
+expect toasted()
+expect !bulkShown()
+eval (function(){ untoast(); var b = document.getElementById('production-bulk'); b.hidden = false; b.innerHTML = '<select id="bulk-status"><option value="__none__">Status…</option><option value="returned">Returned</option></select><input id="bulk-person-input" value="Sam Reviewer">'; var s = document.getElementById('bulk-status'); s.value = 'returned'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+sleep 200
+expect toasted()
+expect tags() === window.__tags0
+eval (function(){ untoast(); var b = document.getElementById('production-bulk'); b.hidden = false; b.innerHTML = '<input id="bulk-person-input" value="Sam Reviewer">'; document.getElementById('bulk-person-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true; })()
+sleep 200
+expect toasted()
+expect JSON.stringify(F.state().people) === window.__people0
+expect !bulkShown()
+
+# ---- 6. the Person grouping: no × to take someone off the crew -------------
+click #production-modes [data-group="person"]
+wait document.querySelectorAll('#production-list .tag-person-head').length === 3
+expect document.querySelectorAll('#production-list [data-action="person-delete"]').length === 0
+eval (function(){ untoast(); var d = document.createElement('button'); d.type = 'button'; d.id = 'forced-person-delete'; d.setAttribute('data-action', 'person-delete'); d.setAttribute('data-person', 'p2'); document.querySelector('#production-list .tag-person-head').appendChild(d); return true; })()
+jsclick #forced-person-delete
+sleep 200
+expect toasted()
+expect JSON.stringify(F.state().people) === window.__people0
+# Ctrl+click in this grouping selects nothing either
+eval (function(){ head('Drone').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })); return true; })()
+sleep 200
+expect document.querySelectorAll('#production-list .tag-entity.is-selected').length === 0
+expect !bulkShown()
+click #production-modes [data-group="cat"]
+wait document.querySelectorAll('#production-list .tag-group-head').length === 3
+
+# ---- 7. the body class is a symptom, not the source -----------------------
+eval (function(){ document.body.classList.remove('is-review'); return true; })()
+click #production-list .tag-entity[data-key="prop fishing nets"] .tag-entity-head
+wait open1() && open1().getAttribute('data-key') === 'prop fishing nets'
+expect open1().querySelector('.tag-owner-select').disabled && open1().querySelector('.tag-notes-input').readOnly
+eval (function(){ untoast(); var s = open1().querySelector('.tag-owner-select'); s.disabled = false; s.value = 'p1'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+sleep 200
+expect toasted()
+expect (tag('Fishing nets').owner || '') === ''
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 300
+expect document.body.classList.contains('is-review')
+
+# ---- 8. the Gear panel shares the cards, and the rule -----------------------
+jsclick #btn-gear
+wait !document.getElementById('gear-panel').hidden && document.querySelectorAll('#gear-list .tag-entity').length === 2
+expect document.querySelector('#gear-panel .gear-quickadd').offsetParent === null
+click #gear-list .tag-entity[data-key="gear tripod"] .tag-entity-head
+wait !!document.querySelector('#gear-list .tag-entity.is-expanded')
+eval window.gcard = function(){ return document.querySelector('#gear-list .tag-entity.is-expanded'); }
+expect gcard().querySelectorAll('.tag-status-seg button:disabled').length === 4
+expect gcard().querySelector('.tag-owner-select').disabled && gcard().querySelector('.tag-owner-select').value === 'p2'
+expect gcard().querySelector('.tag-notes-input').readOnly && gcard().querySelector('.tag-notes-input').value === 'The heavy one.'
+expect !gcard().querySelector('.tag-entity-actions') && !gcard().querySelector('[data-action="tag-person-new"]')
+shot 89-gear-review-card
+eval (function(){ untoast(); var s = gcard().querySelector('.tag-owner-select'); s.disabled = false; s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+sleep 200
+expect toasted()
+expect tag('Tripod').owner === 'p2'
+eval (function(){ untoast(); var t = gcard().querySelector('.tag-notes-input'); t.readOnly = false; t.focus(); t.value = 'mine now'; t.dispatchEvent(new Event('input', { bubbles: true })); t.blur(); return true; })()
+sleep 200
+expect toasted()
+expect tag('Tripod').notes === 'The heavy one.'
+# the quick-add box: hidden, but its Save refuses as well
+eval (function(){ untoast(); document.getElementById('gear-quickadd-input').value = 'Tripod\nReviewer lens'; document.getElementById('gear-quickadd-save').click(); return true; })()
+sleep 200
+expect toasted()
+expect !tag('Reviewer lens') && !!tag('Slider')
+jsclick #gear-close
+
+# ---- 8b. the exports: files, not edits -------------------------------------
+# The Production panel's CSV and the Gear panel's Packing list build a file
+# from the document and write nothing to it, so the click guard lets them
+# through (REVIEW_SAFE_ACTIONS). Each file is caught at URL.createObjectURL
+# and named from its <a download>, whose click is swallowed so nothing
+# actually downloads.
+eval (function(){ window.__blobs = []; window.__names = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) { window.__names.push(this.download); return; } return c.apply(this, arguments); }; window.__state0 = JSON.stringify(F.state()); return true; })()
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden && document.querySelectorAll('#production-list .tag-entity').length === 6
+expect untoast()
+click #production-panel [data-action="export-breakdown"]
+wait window.__blobs.length === 1
+expect !toasted()
+wait document.getElementById('toast-host').textContent.indexOf('Exported') !== -1
+expect window.__names[0] === 'breakdown-review - breakdown.csv'
+expect window.__blobs[0].type === 'text/csv'
+eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
+expect window.__csv[0] === 'Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots'
+expect window.__csv.length === 7
+expect window.__csv.some(function(l){ return l.indexOf('Kettle,Sourcing,Jordan Sato') !== -1; })
+expect JSON.stringify(F.state()) === window.__state0
+jsclick #production-close
+jsclick #btn-gear
+wait !document.getElementById('gear-panel').hidden && document.querySelectorAll('#gear-list .tag-entity').length === 2
+expect untoast()
+click #gear-panel [data-action="export-packing-gear"]
+wait window.__blobs.length === 2
+expect !toasted()
+wait document.getElementById('toast-host').textContent.indexOf('Exported') !== -1
+expect window.__names[1] === 'breakdown-review - Gear packing list.pdf'
+expect window.__blobs[1].type === 'application/pdf'
+eval (async function(){ window.__pdf = new TextDecoder('latin1').decode(await window.__blobs[1].arrayBuffer()); return window.__pdf.length; })()
+expect window.__pdf.indexOf('%PDF') === 0
+expect window.__pdf.indexOf('(Slider') !== -1 && window.__pdf.indexOf('(Tripod') !== -1
+expect JSON.stringify(F.state()) === window.__state0
+expect window.__hostedTest.dirty() === window.__dirty0
+jsclick #gear-close
+
+# ---- 9. after all that, the breakdown is exactly as the server sent it ----
+expect tags() === window.__tags0
+expect JSON.stringify(F.state().people) === window.__people0
+expect window.__hostedTest.dirty() === window.__dirty0
+
+# ---- 10. the same document as an editor: everything is back --------------
+eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
+sleep 300
+expect window.__hostedTest.reviewMode() === false
+jsclick #production-close
+jsclick #btn-production
+wait document.querySelectorAll('#production-list [data-action="tag-status-cycle"]').length === 6
+click #production-list .tag-entity[data-key="prop kettle"] .tag-entity-head
+wait open1() && open1().getAttribute('data-key') === 'prop kettle'
+expect !open1().querySelector('.tag-owner-select').disabled
+expect open1().querySelector('.tag-notes-input').readOnly === false
+expect open1().querySelectorAll('.tag-status-seg button:disabled').length === 0
+expect !!open1().querySelector('[data-action="tag-person-new"]') && !!open1().querySelector('[data-action="tag-rename"]')
+eval (function(){ var s = open1().querySelector('.tag-owner-select'); s.value = 'p2'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait tag('Kettle').owner === 'p2'
+eval (function(){ head('Drone').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })); return true; })()
+wait document.querySelectorAll('#production-list .tag-entity.is-selected').length === 1
+expect !document.getElementById('production-bulk').hidden && !!document.getElementById('bulk-status')
+eval (function(){ var s = document.getElementById('bulk-status'); s.value = 'returned'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
+wait tag('Drone').status === 'returned'
