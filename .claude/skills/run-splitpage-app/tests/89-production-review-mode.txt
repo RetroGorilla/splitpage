@@ -64,8 +64,8 @@ expect !open1().querySelector('[data-action="tag-person-new"]')
 expect open1().querySelector('.tag-notes-input').readOnly === true
 expect open1().querySelector('.tag-notes-input').value === "Borrow the café's."
 expect open1().querySelector('.tag-notes-input').placeholder === 'No notes'
-expect !open1().querySelector('.tag-entity-actions')
 expect !open1().querySelector('[data-action="tag-rename"]') && !open1().querySelector('[data-action="tag-remove"]') && !open1().querySelector('[data-action="tag-delete"]')
+expect !open1().querySelector('.tag-more-btn') && !open1().querySelector('.tag-detail-foot')
 shot 89-production-review-card
 # a card with no owner reads Unassigned
 click #production-list .tag-entity[data-key="prop fishing nets"] .tag-entity-head
@@ -178,7 +178,8 @@ eval window.gcard = function(){ return document.querySelector('#gear-list .tag-e
 expect gcard().querySelectorAll('.tag-status-seg button:disabled').length === 4
 expect gcard().querySelector('.tag-owner-select').disabled && gcard().querySelector('.tag-owner-select').value === 'p2'
 expect gcard().querySelector('.tag-notes-input').readOnly && gcard().querySelector('.tag-notes-input').value === 'The heavy one.'
-expect !gcard().querySelector('.tag-entity-actions') && !gcard().querySelector('[data-action="tag-person-new"]')
+expect !gcard().querySelector('[data-action="tag-rename"]') && !gcard().querySelector('[data-action="tag-remove"]') && !gcard().querySelector('[data-action="tag-delete"]')
+expect !gcard().querySelector('.tag-more-btn') && !gcard().querySelector('.tag-detail-foot') && !gcard().querySelector('[data-action="tag-person-new"]')
 shot 89-gear-review-card
 eval (function(){ untoast(); var s = gcard().querySelector('.tag-owner-select'); s.disabled = false; s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
 sleep 200

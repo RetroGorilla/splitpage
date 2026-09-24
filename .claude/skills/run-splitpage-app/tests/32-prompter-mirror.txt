@@ -7,7 +7,7 @@
 
 open
 
-click text*=PRESENT
+click #btn-present
 sleep 800
 expect !document.getElementById('prompter').hidden
 
@@ -105,7 +105,7 @@ expect localStorage.getItem('splitpage-prompter-flip') == 1
 # --- survives a reload: remembered per device, not baked into the document -
 goto /index.html
 sleep 900
-click text*=PRESENT
+click #btn-present
 sleep 800
 expect document.getElementById('prompter-scroll').classList.contains('mirror')
 expect document.getElementById('prompter-scroll').classList.contains('flip')

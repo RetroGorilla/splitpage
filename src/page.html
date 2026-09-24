@@ -30,8 +30,8 @@
      from one that already has somebody's script open. -->
 <meta name="splitpage-seed-check" content="{{SEED_CHECK}}">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#F6F4EC" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#16130F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F1F0ED" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F0E0C" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,10 +50,13 @@
      exception for it ('unsafe-hashes' or 'unsafe-inline') would have been a
      hole big enough to drive the rest through — so 00-prelude.js does it
      instead, from the one script the policy trusts. -->
+<!-- The faces (#169): Chivo for the interface, Chivo Mono for figures,
+     Atkinson Hyperlegible Next for the script. All three are variable, so
+     one request carries every weight app.css asks for. -->
 <link id="font-css"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap"
       rel="stylesheet" media="print">
-<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+<noscript><link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet"></noscript>
 <style>
 /*{{APP_CSS}}*/
 </style>
@@ -99,54 +102,67 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
     <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1 1 17.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 1 1-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 1 1 6.5 15H9z"/></symbol>
+    <!-- The editor's own (#169, Direction B): the header's panel toggles,
+         the gutter's grip and "⋯" menu, the picture slot and the format
+         toolbar. Same grid, same 1.75 stroke. -->
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M4.5 5h15a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="0.9"/><circle cx="15" cy="6" r="0.9"/><circle cx="9" cy="12" r="0.9"/><circle cx="15" cy="12" r="0.9"/><circle cx="9" cy="18" r="0.9"/><circle cx="15" cy="18" r="0.9"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6.5 13.5L12 19l5.5-5.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5a1 1 0 0 0 1 .9h7a1 1 0 0 0 1-.9l1-12.5"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8 8"/></symbol>
+    <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M13.5 5l5.5 5.5-7.5 7.5H6v-5.5z"/><path d="M4 21h16"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.75"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
+    <!-- The side panels', the start page's, the prompter's and the phone's
+         (#169, Direction B phases 3 and 4), added in one go so the lanes
+         that draw those never have to edit the sprite. Paths from the
+         boards. -->
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.25"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M15.5 14.3a4.5 4.5 0 0 1 5 5.2"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.8 2.8 5.2-5.6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-return" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H6M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6.5v11M15 6.5v11"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-mirror" viewBox="0 0 24 24"><path d="M12 3v18M8.5 7.5L4 17h4.5zM15.5 7.5L20 17h-4.5z"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M3 12h18M7.5 8.5L17 4v4.5zM7.5 15.5L17 20v-4.5z"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
+    <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
+    <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
   </defs>
 </svg>
 <div id="root">
+  <!-- The header (#169, Direction B): one row and the rundown strip under
+       it. Left, the app and the document — the mark, File, the title, and
+       Save as a status rather than a box; centre, the program clock; right,
+       the panels as quiet toggles, Write as a mode, and Present, the one
+       primary action and the one thing in tally red. Every id the rest of
+       the app and the suites reach for is the one it always was; only
+       where each sits has changed. -->
   <header class="topbar">
-    <div>
-      <div class="brand-row">
-        <span class="brand">Splitpage</span>
-      </div>
-      <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
-      <!-- One line of plain text under the title: file, runtime, who you are,
-           each separated by a dot drawn in CSS (.doc-meta in app.css) so a
-           hidden item never leaves a stray separator behind. -->
-      <div class="doc-meta">
-        <div class="file-chip" id="file-chip" hidden>
-          <span class="file-chip-icon">📄</span>
-          <span id="file-chip-name"></span>
-          <span class="file-chip-state" id="file-chip-state"></span>
+    <div class="topbar-row">
+      <div class="topbar-left">
+        <div class="brand-row">
+          <!-- The mark (#169): a tally monitor, preview blue beside program
+               amber with the tally light above. Its colours are fixed, the
+               same in both themes — it is the logo, not a themed control. -->
+          <span class="brand"><svg class="brand-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>Splitpage</span>
         </div>
-        <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
-             joined with the review credential and a hosted document is open:
-             the fields are not editable and the server would refuse the save
-             anyway, so say which before anyone types. -->
-        <div class="review-chip" id="review-chip" hidden
-             title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
-          <span class="review-chip-icon" aria-hidden="true">👁</span>
-          <span>Viewing · comments only</span>
-        </div>
-        <!-- Who else is in this hosted document, filled in by 13a-presence.js
-             from /api/presence. Empty and hidden on a local document, and never
-             part of the document itself. -->
-        <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
-        <span class="stat-chips">
-          <button type="button" class="stat-chip" id="runtime-chip"
-                  title="Estimated read time for the Audio column — click to set your reading speed">
-            <span>⏱</span><span id="runtime-total">0:00</span>
-          </button>
-          <span class="stat-chip" id="progress-chip" hidden>
-            <span class="stat-dot"></span><span id="progress-text"></span>
-          </span>
-        </span>
-        <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
-          <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
-        </button>
-      </div>
-    </div>
-    <div class="toolbar">
       <div class="menu-wrap">
-        <button class="btn" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">☰ File</button>
+        <!-- .btn-phone-icon: the button's face at phone width, where the
+             word is dropped (the responsive block) and stays its name. -->
+        <button class="btn btn-quiet" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu"><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-file"/></svg>File<svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
         <!-- Only drawn at phone width, where the menu is a sheet from the
              bottom of the screen; a dropdown needs no scrim. -->
         <div class="menu-backdrop" id="file-menu-backdrop" hidden></div>
@@ -168,7 +184,7 @@
         <div class="menu" id="file-menu" hidden role="menu" aria-label="File" tabindex="-1">
           <div class="menu-head">
             <span class="menu-title">File</span>
-            <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close">✕</button>
+            <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
           </div>
           <div class="menu-body" role="none">
             <!-- The file card: where this document is kept and whether it is
@@ -297,21 +313,93 @@
           </div>
         </div>
       </div>
-      <div class="btn-group" role="group" aria-label="Panels">
-        <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
-        <button class="btn" id="btn-gear" type="button" title="Gear: an equipment list, tagged with <gear> or its own quick-add box">Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
-        <button class="btn" id="btn-broll" type="button" title="B-roll: start a line in the visual column with B-roll: and it lands on this list">B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
-        <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+        <span class="topbar-rule" aria-hidden="true"></span>
+        <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
+        <!-- Save is a status that is also the button (#169): "Saved 2 min
+             ago", "Unsaved changes", "Saving…" — click it to save. The words
+             come from updateSaveStatus() (12-dirty-toast.js), which writes
+             them onto #btn-save as data-status for the CSS to draw; the
+             button's own text stays "Save" / "Save •", which the writer's
+             Save button mirrors (invariant #20). #save-status is the same
+             words for a screen reader, `aria-live="polite"` so it hears
+             "Saved" without being interrupted mid-sentence. -->
+        <div class="save-state">
+          <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
+          <button class="save-btn" id="btn-save" type="button" data-status="Save">Save</button>
+        </div>
+        <!-- Who else is in this hosted document, filled in by 13a-presence.js
+             from /api/presence. Empty and hidden on a local document, and never
+             part of the document itself. -->
+        <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
+        <!-- The document's facts that are not the clock: a review session,
+             an imported file, the shot count, and who you are. Quiet text,
+             one dot between each item that is showing, drawn in CSS
+             (.doc-meta in app.css) so a hidden item never leaves a stray
+             separator behind — and only in the room the title leaves. -->
+        <div class="doc-meta">
+          <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
+               joined with the review credential and a hosted document is open:
+               the fields are not editable and the server would refuse the save
+               anyway, so say which before anyone types. -->
+          <div class="review-chip" id="review-chip" hidden
+               title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
+            <svg class="review-chip-icon" aria-hidden="true"><use href="#i-eye"/></svg>
+            <span>Viewing · comments only</span>
+          </div>
+          <div class="file-chip" id="file-chip" hidden>
+            <svg class="file-chip-icon" aria-hidden="true"><use href="#i-file"/></svg>
+            <span id="file-chip-name"></span>
+            <span class="file-chip-state" id="file-chip-state"></span>
+          </div>
+          <span class="stat-chip" id="progress-chip" hidden>
+            <span class="stat-dot"></span><span id="progress-text"></span>
+          </span>
+          <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
+            <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
+          </button>
+        </div>
       </div>
-      <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
-      <!-- Whether what is on screen is on disk yet, in words, next to the
-           button that puts it there. Filled in by updateSaveStatus()
-           (12-dirty-toast.js); `aria-live="polite"` so a screen reader hears
-           "Saved" without being interrupted mid-sentence. -->
-      <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
-      <button class="btn btn-primary" id="btn-save" type="button">Save</button>
-      <button class="btn btn-accent" id="btn-present" type="button">▶ Present</button>
+      <!-- The program clock (#169): the script's whole read time, centred,
+           in the mono. Still the runtime chip it always was — click it to
+           set the reading speed (promptForWpm, 03-sync.js). The slot after
+           the total is empty on purpose: a target length per script (#170)
+           puts " / 02:00" and "0:25 left" there. -->
+      <div class="program-clock-wrap">
+        <button type="button" class="program-clock" id="runtime-chip"
+                title="Estimated read time for the Audio column — click to set your reading speed">
+          <span class="program-clock-total" id="runtime-total">00:00</span>
+          <span class="program-clock-slot" id="program-clock-slot"></span>
+        </button>
+      </div>
+      <div class="toolbar">
+        <!-- The four panels share one slot on the right; each is a quiet
+             toggle — icon, label, and its count in the mono — pressed while
+             its panel is open (syncPanelClass, 03-sync.js). -->
+        <div class="btn-group" role="group" aria-label="Panels">
+          <button class="btn panel-toggle" id="btn-production" type="button" aria-pressed="false"><svg class="btn-icon" aria-hidden="true"><use href="#i-tag"/></svg>Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-gear" type="button" aria-pressed="false" title="Gear: an equipment list, tagged with <gear> or its own quick-add box"><svg class="btn-icon" aria-hidden="true"><use href="#i-box"/></svg>Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg>B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg>Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+        </div>
+        <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg>Write</button>
+        <!-- The one primary action, and the one tally-red thing in the
+             header: presenting is going live. -->
+        <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
+      </div>
     </div>
+    <!-- The rundown (#169): the script as blocks sized by read time on a
+         time ruler, drawn by 05f-rundown.js from state.rows. Clicking a
+         block goes to that scene. #rundown-overlay is the layer a line can
+         be placed on by time — a target length (#170) draws its line and
+         hatching there. -->
+    <section class="rundown" id="rundown" aria-label="Rundown" hidden>
+      <div class="rundown-ruler" aria-hidden="true"></div>
+      <div class="rundown-track">
+        <div class="rundown-blocks"></div>
+        <div class="rundown-overlay" id="rundown-overlay" aria-hidden="true"></div>
+        <div class="rundown-playhead" aria-hidden="true" hidden></div>
+      </div>
+    </section>
   </header>
 
   <div class="findbar" id="findbar" hidden>
@@ -328,7 +416,7 @@
 
   <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
   <div class="update-bar" id="update-bar" hidden>
-    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <svg class="update-bar-icon" aria-hidden="true"><use href="#i-import"/></svg>
     <span id="update-bar-text"></span>
     <!-- 20a-update.js owns this button entirely: whether it shows at all, its
          label, and what it does. Label and handler both change with the state
@@ -342,7 +430,7 @@
        desktop app (20a-update.js renderDesktopAppNotice). Same class shape
        as #update-bar so it reuses those rules and stacks the same way. -->
   <div class="update-bar" id="desktop-app-bar" hidden>
-    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
     <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
     <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
     <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
@@ -365,7 +453,7 @@
         <div class="tagging-help-row"><kbd>Tab</kbd><span>completes a tag you've already used, keeping its own category.</span></div>
         <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>starts the next scene and jumps into it.</span></div>
         <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>F</kbd><span>find and replace across the whole script.</span></div>
-        <div class="tagging-help-note">Click a tag in the script — or any card in <strong>Production</strong> — to assign who's responsible and keep notes, links or file paths against it. Group the breakdown by category, person, scene or <strong>Shoot</strong> (everything at one location together), and export the lot as CSV. Drag a scene by its number to reorder; click the dot beside it to mark it To&nbsp;do / Ready / Shot.</div>
+        <div class="tagging-help-note">Click a tag in the script — or any card in <strong>Production</strong> — to assign who's responsible and keep notes, links or file paths against it. Group the breakdown by category, person, scene or <strong>Shoot</strong> (everything at one location together), and export the lot as CSV. Drag a scene by its number to reorder; click its status to mark it To&nbsp;do / Ready / Shot.</div>
       </div>
     </div>
   </div>
@@ -412,10 +500,13 @@
     </div>
   </div>
 
+  <!-- Column identity is the heading and a lamp, not a tint over the whole
+       column (#169): the page under the words is one calm surface. -->
   <div class="col-head">
-    <div class="col-head-cell"></div>
-    <div class="col-head-cell visual">Visual</div>
-    <div class="col-head-cell audio">Audio</div>
+    <div class="col-head-cell scene">Scene</div>
+    <div class="col-head-cell visual"><span class="col-lamp" aria-hidden="true"></span>Visual</div>
+    <div class="col-head-cell audio"><span class="col-lamp" aria-hidden="true"></span>Audio</div>
+    <div class="col-head-cell read">Read</div>
   </div>
 
   <div id="rows"></div>
@@ -430,6 +521,22 @@
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 <input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
+<!-- The phone's bottom bar (#169, B-Phone): the modes and panels under the
+     thumb, drawn only at phone width (app.css, the responsive block), where
+     the header keeps File, the title, the clock and Present. Each tab
+     clicks the header button named in data-for and mirrors the badge in
+     data-badge and the panel in data-panel (20k-phone-bar.js); Script
+     closes whichever panel covers the script. Gear is here as well as the
+     four the board draws: it is a panel like the others, and on a phone
+     this is the only place its button can be reached. -->
+<nav class="phone-bar" id="phone-bar" aria-label="Modes and panels">
+  <button type="button" class="phone-tab" data-for="script" aria-current="page"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-script"/></svg></span><span class="phone-tab-label">Script</span></button>
+  <button type="button" class="phone-tab" data-for="btn-write"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-pen"/></svg></span><span class="phone-tab-label">Write</span></button>
+  <button type="button" class="phone-tab" data-for="btn-production" data-panel="production-panel" data-badge="production-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">Production</span></button>
+  <button type="button" class="phone-tab" data-for="btn-gear" data-panel="gear-panel" data-badge="gear-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">Gear</span></button>
+  <button type="button" class="phone-tab" data-for="btn-broll" data-panel="broll-panel" data-badge="broll-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">B-roll</span></button>
+  <button type="button" class="phone-tab" data-for="btn-comments" data-panel="comments-panel" data-badge="comments-badge"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="phone-tab-count" aria-hidden="true" hidden></span></span><span class="phone-tab-label">Comments</span></button>
+</nav>
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
 
@@ -442,7 +549,7 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
     <div class="modal-header">
       <h2 id="import-title">Import a script</h2>
-      <button type="button" class="modal-close" id="import-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="import-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
     <!-- Opened from the New Tab page (issue #144), where there is no
@@ -492,7 +599,9 @@
       <kbd class="cmdk-esc" aria-hidden="true">Esc</kbd>
     </div>
     <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Commands"></div>
-    <div class="cmdk-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>Enter</kbd> to run</span><span><kbd>Esc</kbd> to close</span></div>
+    <!-- B-Command's footer (#169): the arrow keys' caps hold the sprite's
+         arrows rather than "↑"/"↓" glyphs -->
+    <div class="cmdk-foot" aria-hidden="true"><span><span class="cmdk-foot-keys"><kbd class="cmdk-arrow"><svg aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></kbd><kbd class="cmdk-arrow"><svg aria-hidden="true" focusable="false"><use href="#i-arrow-down"/></svg></kbd></span>to move</span><span><kbd>Enter</kbd>to run</span><span><kbd>Esc</kbd>to close</span></div>
   </div>
 </div>
 
@@ -506,7 +615,7 @@
   <div class="modal-panel export-panel" role="dialog" aria-modal="true" aria-labelledby="export-title">
     <div class="export-head">
       <h2 id="export-title">Export</h2>
-      <button type="button" class="modal-close" id="export-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="export-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <div class="export-body">
       <div class="export-formats" id="export-formats" role="radiogroup" aria-labelledby="export-title"></div>
@@ -538,7 +647,7 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="gdoc-title">
     <div class="modal-header">
       <h2 id="gdoc-title">Import from Google Doc</h2>
-      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="gdoc-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint">Paste the link to a Google Doc (or just its ID). Splitpage can't read it directly — it
       opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
@@ -555,42 +664,103 @@
   </div>
 </div>
 
+<!-- The teleprompter (#169, Direction B, boards/B-Prompter). Nothing in the
+     reading area but the words being read (Adam's decision): no scene
+     numbers, no shot lines, no icons between paragraphs, just a gap where a
+     scene changes. Where the reading is and every control live outside the
+     text, in the top bar and the foot. -->
 <div class="prompter" id="prompter" hidden>
+  <!-- Where the reading is: the scene and where it starts, the time read
+       and the time left (the script's own read time, as the program clock
+       counts it), and what Follow My Voice is doing. Written by
+       updatePrompterStatus() and setVoiceStatus() (20-teleprompter.js). -->
+  <div class="prompter-top">
+    <div class="pp-where">
+      <span class="pp-scene-pos" id="pp-scene-pos" aria-hidden="true"></span><span class="pp-sr" id="pp-scene-pos-sr"></span>
+      <span class="pp-scene-start" id="pp-scene-start" title="Where this scene starts"></span>
+    </div>
+    <div class="pp-clock" id="pp-clock" role="timer">
+      <span class="pp-elapsed" id="pp-elapsed">00:00</span>
+      <span class="pp-remaining" id="pp-remaining"></span>
+    </div>
+    <!-- The tally lamp lights only while it is listening; the name shows
+         only when there is something to say. -->
+    <div class="pp-voice-state" id="pp-voice-state">
+      <span class="pp-lamp" aria-hidden="true"></span>
+      <span class="pp-voice-name">Follow My Voice</span>
+      <span id="pp-voice-status" class="pp-voice-status" role="status"></span>
+    </div>
+  </div>
   <div class="prompter-viewport">
+    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
+         Mirror/Flip transform, and the reading line has to stay put and
+         right-side-up while only the text behind it flips. It comes first
+         so the band paints under the words. The guide itself is the 1px
+         reading line at the middle; the band hangs below it, one line of
+         text tall, because a cued line's top sits on the guide. -->
+    <div class="prompter-guide" aria-hidden="true">
+      <div class="prompter-band"><svg class="pp-pointer" viewBox="0 0 22 26" aria-hidden="true"><path d="M0 0L22 13L0 26z"/></svg></div>
+    </div>
     <div class="prompter-scroll" id="prompter-scroll">
       <div id="prompter-content"></div>
     </div>
-    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
-         Mirror/Flip transform, and the reading line has to stay put and
-         right-side-up while only the text behind it flips. -->
-    <div class="prompter-guide"></div>
   </div>
-  <div class="prompter-bar">
-    <button id="pp-voice" type="button">Follow My Voice</button>
-    <span id="pp-voice-status" class="pp-voice-status"></span>
-    <div class="div-sep"></div>
-    <button id="pp-play" type="button">▶ Play</button>
-    <!-- Scene mode (issue #26): off by default, remembered per device
-         (20-teleprompter.js). Prev/Next/readout only show once it's on —
-         updatePrompterSceneModeUI() toggles their `hidden`. -->
-    <button id="pp-scene-mode" type="button" title="Cue and auto-pause one scene at a time">Scene mode</button>
-    <button id="pp-scene-prev" type="button" title="Previous scene (←)" hidden>‹ Prev</button>
-    <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
-    <button id="pp-scene-next" type="button" title="Next scene (→)" hidden>Next ›</button>
-    <div class="grp">
-      <label for="pp-speed">Speed</label>
-      <input id="pp-speed" type="range" min="10" max="160" value="42">
+  <div class="prompter-foot">
+    <!-- The running order: a block per scene sized by its read time, the
+         part read filled, the playhead where the reading is. -->
+    <div class="pp-rundown" id="pp-rundown" role="progressbar" aria-label="Running order" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+      <div class="pp-rd-track" id="pp-rd-track"></div>
     </div>
-    <div class="grp">
-      <label for="pp-size">Text size</label>
-      <input id="pp-size" type="range" min="24" max="84" value="42">
+    <div class="prompter-bar">
+      <div class="pp-group pp-transport">
+        <button id="pp-play" type="button" class="pp-play" title="Play or pause (Space)"><svg class="pp-icon" aria-hidden="true"><use href="#i-play"/></svg><span class="pp-sr">Play</span></button>
+        <!-- Speed and Size are steppers now (#169). The range inputs stay,
+             hidden, as the value the app and the suites read and set; the
+             steppers and ↑/↓ write them through setPrompterSpeed() and
+             stepPrompterSize(). -->
+        <div class="pp-step">
+          <span class="pp-step-label" id="pp-speed-label">Speed</span>
+          <div class="pp-stepper" role="group" aria-labelledby="pp-speed-label">
+            <button type="button" class="pp-step-btn" id="pp-speed-down" aria-label="Slower" title="Slower (↓)"><svg class="pp-icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <output class="pp-step-value" id="pp-speed-value" for="pp-speed">1.0×</output>
+            <button type="button" class="pp-step-btn" id="pp-speed-up" aria-label="Faster" title="Faster (↑)"><svg class="pp-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <input id="pp-speed" type="range" min="10" max="160" value="42" hidden>
+        </div>
+        <div class="pp-step">
+          <span class="pp-step-label" id="pp-size-label">Size</span>
+          <div class="pp-stepper" role="group" aria-labelledby="pp-size-label">
+            <button type="button" class="pp-step-btn" id="pp-size-down" aria-label="Smaller text" title="Smaller text"><svg class="pp-icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <output class="pp-step-value" id="pp-size-value" for="pp-size">60</output>
+            <button type="button" class="pp-step-btn" id="pp-size-up" aria-label="Larger text" title="Larger text"><svg class="pp-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <input id="pp-size" type="range" min="24" max="84" value="60" hidden>
+        </div>
+      </div>
+      <div class="div-sep" aria-hidden="true"></div>
+      <div class="pp-group pp-modes">
+        <!-- Scene mode (issue #26): off by default, remembered per device
+             (20-teleprompter.js). Prev/Next/readout only show once it's on —
+             updatePrompterSceneModeUI() toggles their `hidden`. -->
+        <button id="pp-scene-mode" type="button" class="pp-btn" aria-pressed="false" title="Cue and auto-pause one scene at a time"><svg class="pp-icon" aria-hidden="true"><use href="#i-scene-mode"/></svg>Scene mode</button>
+        <div class="pp-stepper pp-scene-step" id="pp-scene-step" hidden>
+          <button id="pp-scene-prev" type="button" class="pp-step-btn" aria-label="Previous scene" title="Previous scene (←)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+          <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
+          <button id="pp-scene-next" type="button" class="pp-step-btn" aria-label="Next scene" title="Next scene (→)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+        </div>
+        <!-- The label is its own span: the icon and the lamp stay when
+             updateVoiceButtonUI() changes what it says. -->
+        <button id="pp-voice" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="pp-lamp" aria-hidden="true"></span><span class="pp-voice-label">Follow My Voice</span></button>
+        <button id="pp-skip-shot" type="button" class="pp-btn" aria-pressed="false" title="Leave out the scenes already marked Shot"><svg class="pp-icon" aria-hidden="true"><use href="#i-eye-off"/></svg>Skip shot</button>
+      </div>
+      <div class="pp-group pp-rig">
+        <button id="pp-mirror" type="button" class="pp-btn" aria-pressed="false" title="Flip left-right — for a glass beam-splitter in front of the lens (M)"><svg class="pp-icon" aria-hidden="true"><use href="#i-mirror"/></svg>Mirror</button>
+        <button id="pp-flip" type="button" class="pp-btn" aria-pressed="false" title="Flip upside-down — for a monitor mounted inverted (F)"><svg class="pp-icon" aria-hidden="true"><use href="#i-flip"/></svg>Flip</button>
+        <button id="pp-fullscreen" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-fullscreen"/></svg>Full screen</button>
+      </div>
+      <div class="spacer"></div>
+      <button id="pp-close" type="button" class="pp-btn close-btn" title="Close the teleprompter (Esc)">Close<kbd class="pp-kbd">Esc</kbd></button>
     </div>
-    <button id="pp-skip-shot" type="button" title="Leave out the scenes already marked Shot">Skip shot</button>
-    <button id="pp-mirror" type="button" title="Flip left-right — for a glass beam-splitter in front of the lens (M)">Mirror</button>
-    <button id="pp-flip" type="button" title="Flip upside-down — for a monitor mounted inverted (F)">Flip</button>
-    <button id="pp-fullscreen" type="button">Fullscreen</button>
-    <div class="spacer"></div>
-    <button id="pp-close" class="close-btn" type="button">Close (Esc)</button>
   </div>
 </div>
 
@@ -639,28 +809,31 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="comment-title">
     <div class="modal-header">
       <h2 id="comment-title">Add a comment</h2>
-      <button type="button" class="modal-close" id="comment-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="comment-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
+    <!-- The thread card's language (#169): the words in the script face with
+         the comment's amber dotted underline, fields outlined at rest, the
+         format toolbar as the script's icons. -->
     <div class="comment-modal-quote" id="comment-modal-quote"></div>
-    <div class="comment-field-label">Your name</div>
+    <label class="comment-field-label" for="comment-name">Your name</label>
     <div class="comment-name-row">
-      <input type="text" id="comment-name" placeholder="e.g. Jordan" autocomplete="off" spellcheck="false">
+      <input type="text" id="comment-name" class="ev-field" placeholder="e.g. Jordan" autocomplete="off" spellcheck="false">
     </div>
-    <div class="comment-field-label">Comment</div>
-    <div class="field-wrap">
+    <div class="comment-field-label" id="comment-body-label">Comment</div>
+    <div class="field-wrap comment-modal-field">
       <div class="mini-toolbar" role="toolbar" aria-label="Comment formatting">
-        <button type="button" data-cmd="bold" title="Bold">B</button>
-        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
-        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
-        <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+        <button type="button" data-cmd="bold" title="Bold" aria-label="Bold"><span class="tb-letter tb-b">B</span></button>
+        <button type="button" data-cmd="italic" title="Italic" aria-label="Italic"><span class="tb-letter tb-i">I</span></button>
+        <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><span class="tb-letter tb-u">U</span></button>
+        <button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><span class="tb-letter tb-s">S</span></button>
         <span class="tb-sep"></span>
-        <button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>
-        <button type="button" data-cmd="link" title="Add link">Link</button>
+        <button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight"><svg class="tb-icon" aria-hidden="true"><use href="#i-highlight"/></svg></button>
+        <button type="button" data-cmd="link" title="Add link" aria-label="Link"><svg class="tb-icon" aria-hidden="true"><use href="#i-link"/></svg></button>
         <span class="tb-sep"></span>
-        <button type="button" data-cmd="image" title="Add image">🖼 Image</button>
-        <button type="button" data-cmd="video" title="Add video link">▶ Video</button>
+        <button type="button" data-cmd="image" title="Add image" aria-label="Image"><svg class="tb-icon" aria-hidden="true"><use href="#i-image"/></svg></button>
+        <button type="button" data-cmd="video" title="Add video link" aria-label="Video link"><svg class="tb-icon" aria-hidden="true"><use href="#i-play"/></svg></button>
       </div>
-      <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…"></div>
+      <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…" aria-labelledby="comment-body-label"></div>
       <div class="link-popover" hidden>
         <input type="url" placeholder="https://example.com" data-role="link-input">
         <button type="button" data-action="link-confirm">Add</button>
@@ -686,7 +859,7 @@
   <div class="modal-panel conflict-panel" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
     <div class="modal-header">
       <h2 id="file-conflict-title">That file changed on disk</h2>
-      <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="file-conflict-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="file-conflict-detail"></p>
     <div class="modal-footer">
@@ -712,7 +885,7 @@
   <div class="modal-panel merge-review-panel" role="dialog" aria-modal="true" aria-labelledby="merge-review-title">
     <div class="modal-header">
       <h2 id="merge-review-title">What's different</h2>
-      <button type="button" class="modal-close" id="merge-review-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="merge-review-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="merge-review-detail"></p>
     <div id="merge-review-list"></div>
@@ -728,14 +901,18 @@
 
 <!-- A .md project whose scene table gained or lost rows somewhere else.
      There is no right answer to guess at, so it is asked (20d-formats.js). -->
-<!-- a scene's gallery, all of it (#135, 05e-gallery-overlay.js fills #gallery-body) -->
+<!-- a scene's gallery, all of it (#135, 05e-gallery-overlay.js fills #gallery-body).
+     Direction B (#169, B-GalleryDialog): the title with its counts beside
+     it on one line and an icon close; the body is the module's. -->
 <div class="modal-backdrop scene-gallery-overlay" id="gallery-modal" hidden>
-  <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
-    <div class="modal-header">
-      <h2 id="gallery-title">Scene · Visual</h2>
-      <button type="button" class="modal-close" id="gallery-close" aria-label="Close">×</button>
+  <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title" aria-describedby="gallery-summary">
+    <div class="scene-gallery-head">
+      <div class="scene-gallery-heading">
+        <h2 id="gallery-title">Scene · Visual</h2>
+        <p class="scene-gallery-summary" id="gallery-summary"></p>
+      </div>
+      <button type="button" class="scene-gallery-close" id="gallery-close" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint" id="gallery-summary"></p>
     <div id="gallery-body"></div>
   </div>
 </div>
@@ -763,74 +940,89 @@
   <div class="comments-panel-resize-handle" id="production-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Production breakdown</h2>
-    <button type="button" class="modal-close" id="production-close" aria-label="Close">×</button>
+    <button type="button" class="modal-close" id="production-close" aria-label="Close Production"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <div class="comments-panel-toggle production-controls">
-    <div class="group-seg" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
-      <button type="button" data-group="cat" role="radio" aria-checked="true">Category</button>
-      <button type="button" data-group="person" role="radio" aria-checked="false">Person</button>
-      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
-      <button type="button" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
+  <!-- #169 (B-PanelProduction): the groupings as text tabs, the CSV
+       export as an outlined button, one hairline under both. -->
+  <div class="panel-tabbar">
+    <div class="panel-tabs" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
+      <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="true">Category</button>
+      <button type="button" class="panel-tab" data-group="person" role="radio" aria-checked="false">Person</button>
+      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Scene</button>
+      <button type="button" class="panel-tab" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
     </div>
-    <button type="button" class="group-export" data-action="export-breakdown" title="Export this breakdown as a spreadsheet">CSV</button>
+    <button type="button" class="btn-outline is-small" data-action="export-breakdown" title="Export this breakdown as a spreadsheet" aria-label="Export this breakdown as a spreadsheet (CSV)"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>CSV</button>
   </div>
   <!-- Only rendered while something is selected. Sits outside #production-list
        so it stays pinned while the list scrolls under it. -->
   <div class="bulk-bar" id="production-bulk" hidden></div>
+  <!-- What each value in a row is (Adam's review). Shown for the two
+       groupings drawn as rows, Category and Person (renderProductionList). -->
+  <div class="tag-col-labels" id="production-cols" aria-hidden="true" hidden>
+    <span>Item</span><span>Status</span><span>Scenes</span><span>Owner</span>
+  </div>
   <div class="comments-list" id="production-list"></div>
 </div>
 
 <div class="comments-panel" id="gear-panel" hidden>
   <div class="comments-panel-resize-handle" id="gear-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
-    <h2>Gear</h2>
-    <button type="button" class="modal-close" id="gear-close" aria-label="Close">×</button>
-  </div>
-  <div class="comments-panel-toggle production-controls">
-    <div class="group-seg" id="gear-modes" role="radiogroup" aria-label="Group gear by">
-      <button type="button" data-group="flat" role="radio" aria-checked="true">List</button>
-      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
+    <!-- "Gear · 2 items" (#169, B-PanelGear); the count is renderGearList's -->
+    <div class="gear-head-title">
+      <h2>Gear</h2>
+      <span class="gear-head-count" id="gear-head-count" hidden></span>
     </div>
-    <button type="button" class="group-export" data-action="export-packing-gear" title="Export a printable packing list">Packing list</button>
+    <button type="button" class="modal-close" id="gear-close" aria-label="Close Gear"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
+  <!-- #169: the groupings as text tabs and a quiet Packing list button -->
+  <div class="panel-tabbar">
+    <div class="panel-tabs" id="gear-modes" role="radiogroup" aria-label="Group gear by">
+      <button type="button" class="panel-tab" data-group="flat" role="radio" aria-checked="true">List</button>
+      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Scene</button>
+    </div>
+    <button type="button" class="gear-packing-btn" data-action="export-packing-gear" title="Export a printable packing list" aria-label="Packing list: export a printable PDF"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>Packing list</button>
+  </div>
+  <div class="comments-list" id="gear-list"></div>
   <!-- Bulk-adds or edits the gear list directly, whether or not any of it is
        actually typed into the script — see applyGearQuickAdd(). Pre-filled
-       with the current list every time the panel opens. -->
+       with the current list every time the panel opens. At the panel's foot
+       since #169, under the list it edits. -->
   <div class="gear-quickadd">
     <label for="gear-quickadd-input">Add gear — one item per line</label>
-    <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand"></textarea>
+    <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand" aria-describedby="gear-quickadd-hint"></textarea>
     <div class="gear-quickadd-row">
-      <span class="gear-quickadd-hint">Remove a line to un-track it — unless it's still tagged in the script.</span>
+      <span class="gear-quickadd-hint" id="gear-quickadd-hint">Remove a line to un-track it — unless it’s still tagged in the script.</span>
       <button type="button" id="gear-quickadd-save">Update list</button>
     </div>
   </div>
-  <div class="comments-list" id="gear-list"></div>
 </div>
 
 <div class="comments-panel broll-panel" id="broll-panel" hidden>
   <div class="comments-panel-resize-handle" id="broll-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
+  <!-- B-BrollCalm (#169): the title, "1 of 3 shot" and a small bar on one
+       line, then Open as a full page and Close. -->
   <div class="comments-panel-head">
-    <h2>B-roll</h2>
+    <div class="broll-head-main">
+      <h2>B-roll</h2>
+      <!-- the count and the bar: drawn by renderBroll() (08d-broll-panel.js) -->
+      <div class="broll-summary" id="broll-summary"></div>
+    </div>
     <button type="button" class="broll-head-btn" id="broll-open-page" data-action="broll-open-page"
-      title="Open as a full page" aria-label="Open as a full page"><svg class="broll-ico" width="16" height="16"
-      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
-      stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button>
-    <button type="button" class="modal-close" id="broll-close" aria-label="Close">×</button>
+      title="Open as a full page" aria-label="Open as a full page"><svg aria-hidden="true" focusable="false"><use href="#i-expand"/></svg></button>
+    <button type="button" class="modal-close" id="broll-close" aria-label="Close B-roll"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <!-- The summary, the filter chips and the Group menu: drawn by
-       renderBroll() (08d-broll-panel.js), since every count in them moves. -->
-  <div class="broll-controls" id="broll-controls"></div>
+  <!-- The filter tabs and the group menu: drawn by renderBroll()
+       (08d-broll-panel.js), since every count in them moves. -->
+  <div class="panel-tabbar broll-controls" id="broll-controls"></div>
   <div class="comments-list broll-list" id="broll-list"></div>
   <!-- Only there while shots are selected: pinned under the list. -->
   <div class="broll-bulk" id="broll-bulk" hidden></div>
   <!-- A shot nobody has written a scene for yet is an ordinary thing to
-       want on the list — see addBrollFromPanel(). -->
-  <div class="broll-add gear-quickadd" id="broll-add">
-    <div class="broll-add-row">
-      <input type="text" id="broll-add-input" maxlength="200" placeholder="Add a shot" aria-label="Add a shot">
-      <button type="button" id="broll-add-save">Add</button>
-    </div>
-    <div class="broll-add-hint">Or start a line with <code>B-roll:</code> in the Visual column.</div>
+       want on the list — see addBrollFromPanel(). The placeholder carries
+       the other way in, so the foot is one line (#169). -->
+  <div class="broll-add" id="broll-add">
+    <input type="text" id="broll-add-input" maxlength="200" placeholder="Add a shot — or start a Visual line with B-roll:" aria-label="Add a shot">
+    <button type="button" class="btn-outline is-small" id="broll-add-save">Add</button>
   </div>
 </div>
 
@@ -870,7 +1062,7 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="server-title">
     <div class="modal-header">
       <h2 id="server-title">Documents on the server</h2>
-      <button type="button" class="modal-close" id="server-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="server-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint">Everyone who can reach this page sees the same documents. Saving publishes
       straight back, and if two of you edit at once the versions are merged rather than one
@@ -889,7 +1081,7 @@
   <div class="modal-panel drive-panel" role="dialog" aria-modal="true" aria-labelledby="drive-title">
     <div class="modal-header">
       <h2 id="drive-title">Google Drive files</h2>
-      <button type="button" class="modal-close" id="drive-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="drive-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="drive-web-hint">Browse, upload, rename, and delete files in any publicly shared Google
       Drive folder, straight from here — separate from opening and saving your script.</p>
@@ -947,7 +1139,7 @@
         <div class="drive-toolbar">
           <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
           <div class="drive-toolbar-actions">
-            <button type="button" class="btn" data-action="drive-refresh" title="Refresh">⟳</button>
+            <button type="button" class="btn drive-refresh" data-action="drive-refresh" title="Refresh" aria-label="Refresh"><svg aria-hidden="true" focusable="false"><use href="#i-repeat"/></svg></button>
             <button type="button" class="btn" data-action="drive-newfolder-toggle" id="drive-newfolder-toggle">New folder</button>
             <button type="button" class="btn" data-action="drive-upload">Upload…</button>
           </div>
@@ -1001,36 +1193,52 @@
   <div class="comments-panel-resize-handle" id="history-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Version history</h2>
-    <button type="button" class="modal-close" id="history-close" aria-label="Close">×</button>
+    <button type="button" class="modal-close" id="history-close" aria-label="Close Version history"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <div class="comments-panel-toggle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</div>
-  <div class="comments-list" id="history-list"></div>
-  <details id="history-older" class="history-older" hidden><summary id="history-older-summary">Older history (before per-document history)</summary><p class="modal-hint">Saved before Splitpage kept history per document, so these may belong to a different script. Restoring one replaces this document's content.</p><div id="history-older-list"></div></details><div id="history-usage" class="modal-hint" hidden></div>
+  <p class="history-subtitle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</p>
+  <!-- One scrolling column under the subtitle (#169): the days, Older, then the usage line. -->
+  <div class="history-scroll">
+    <div class="history-list" id="history-list"></div>
+    <details id="history-older" class="history-older" hidden>
+      <summary id="history-older-summary"><svg class="history-older-chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg><span>Older history (before per-document history)</span><span class="history-fig" id="history-older-count"></span></summary>
+      <p class="history-older-hint">Saved before Splitpage kept history per document, so these may belong to a different script. Restoring one replaces this document's content.</p>
+      <ol class="history-older-list" id="history-older-list"></ol>
+    </details>
+    <p class="history-usage" id="history-usage" hidden></p>
+  </div>
 </div>
 
 <div class="comments-panel" id="comments-panel" hidden>
   <div class="comments-panel-resize-handle" id="comments-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Comments</h2>
-    <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close">×</button>
+    <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close Comments"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <div class="comments-panel-toggle">
-    <div class="comment-filter-seg group-seg" id="comments-filter-seg" role="radiogroup" aria-label="Filter comments">
-      <button type="button" data-filter="open" role="radio" aria-checked="true">Open<span class="filter-count" id="comments-filter-count-open">0</span></button>
-      <button type="button" data-filter="resolved" role="radio" aria-checked="false">Resolved<span class="filter-count" id="comments-filter-count-resolved">0</span></button>
-      <button type="button" data-filter="all" role="radio" aria-checked="false">All<span class="filter-count" id="comments-filter-count-all">0</span></button>
+  <!-- Filters (#169): Open / Resolved / All as the panels' text tabs, then
+       who it's assigned to and the sort as outlined menus. Both are real
+       selects; their labels are for screen readers, the chosen option is
+       what shows. -->
+  <div class="panel-tabbar comments-filterbar">
+    <div class="panel-tabs comment-filter-seg" id="comments-filter-seg" role="radiogroup" aria-label="Filter comments">
+      <button type="button" class="panel-tab" data-filter="open" role="radio" aria-checked="true">Open<span class="filter-count" id="comments-filter-count-open">0</span></button>
+      <button type="button" class="panel-tab" data-filter="resolved" role="radio" aria-checked="false">Resolved<span class="filter-count" id="comments-filter-count-resolved">0</span></button>
+      <button type="button" class="panel-tab" data-filter="all" role="radio" aria-checked="false">All<span class="filter-count" id="comments-filter-count-all">0</span></button>
     </div>
-    <span class="comments-sort-wrap">
-      <label for="comments-assignee-filter">Assigned</label>
-      <select id="comments-assignee-filter" aria-label="Filter by assignee"></select>
-    </span>
-    <span class="comments-sort-wrap">
-      <label for="comments-sort">Sort</label>
-      <select id="comments-sort" aria-label="Sort comments">
-        <option value="position">Script order</option>
-        <option value="recent">Most recent</option>
-      </select>
-    </span>
+    <div class="comments-filter-menus">
+      <label class="comments-filter-label" for="comments-assignee-filter">Assigned</label>
+      <span class="ev-field comments-filter-menu">
+        <select id="comments-assignee-filter" aria-label="Filter by assignee"></select>
+        <svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </span>
+      <label class="comments-filter-label" for="comments-sort">Sort</label>
+      <span class="ev-field comments-filter-menu">
+        <select id="comments-sort" aria-label="Sort comments">
+          <option value="position">Script order</option>
+          <option value="recent">Most recent</option>
+        </select>
+        <svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </span>
+    </div>
   </div>
   <div class="comments-list" id="comments-list"></div>
 </div>
@@ -1043,7 +1251,7 @@
   <div class="modal-panel help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
     <div class="modal-header">
       <h2 id="help-title">Help</h2>
-      <button type="button" class="modal-close" id="help-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="help-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <div class="help-layout">
       <nav id="help-toc" aria-label="Help topics">{{HELP_TOC}}</nav>
@@ -1082,7 +1290,7 @@
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
     <div class="modal-header">
       <h2 id="pin-title">Join PIN</h2>
-      <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close">×</button>
+      <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="pin-reason">This server asks for a join PIN.</p>
     <input type="text" id="pin-input" inputmode="numeric" autocomplete="off"
@@ -1107,7 +1315,7 @@
   <div class="modal-panel connect-panel" role="dialog" aria-modal="true" aria-labelledby="connect-title">
     <div class="modal-header">
       <h2 id="connect-title">Servers</h2>
-      <button type="button" class="modal-close" data-connect-action="close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" data-connect-action="close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint">A server is someone's shared session — theirs or your own. Add its
       address once and this browser remembers it. Splitpage never stores a password or an SSH
@@ -1194,86 +1402,130 @@
 
      The starter cards are built from STARTERS (_starters.js) by
      20j-newtab.js, into #newtab-cards after Blank script, so a fourth
-     starter is a JSON file and a line in that list. Icons are inline
-     stroke SVG in currentColor, so they follow the theme. -->
+     starter is a JSON file and a line in that list. Icons are the sprite's
+     (#169), drawn in currentColor, so they follow the theme.
+
+     Direction B's "On air" start page (#169, board B-StartOnAir): the band
+     under the bar is a slate — the programme clock at 00:00, a tally lamp
+     and "New script" — and, when the desktop app has a recent script, its
+     title, when it was last open, and Continue. Recent and Join sit side
+     by side under the starters. -->
 <div class="newtab-page" id="newtab-page" hidden>
   <header class="newtab-bar">
     <span class="newtab-wordmark">
-      <svg class="newtab-wordmark-mark" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="7.5" height="16" rx="2" class="is-visual"/><rect x="13.5" y="4" width="7.5" height="16" rx="2" class="is-audio"/></svg>
+      <!-- The mark (#169), as in the topbar's .brand: fixed colours, not
+           currentColor — the logo is the same in both themes. -->
+      <svg class="newtab-wordmark-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>
       Splitpage
     </span>
     <div class="newtab-bar-actions">
-      <button type="button" class="newtab-bar-btn" data-newtab-action="join" aria-label="Join a shared session">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.25"/><path d="M3 19.5c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><path d="M16 5.2a3.25 3.25 0 0 1 0 5.6"/><path d="M18 14.8c1.6.6 2.7 2.2 3 4.7"/></svg>
+      <button type="button" class="btn-outline newtab-bar-btn" data-newtab-action="join" aria-label="Join a shared session">
+        <svg class="nt-icon" aria-hidden="true"><use href="#i-people"/></svg>
         <span>Join<span class="newtab-long"> a shared session</span></span>
       </button>
-      <button type="button" class="newtab-bar-btn is-primary" data-newtab-action="open" aria-label="Open a file">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-6.2l-2-2.5H5.5a2 2 0 0 0-2 2z"/></svg>
-        <span>Open<span class="newtab-long"> a file</span></span>
+      <button type="button" class="btn-outline newtab-bar-btn is-primary" data-newtab-action="open" aria-label="Open a file">
+        <svg class="nt-icon" aria-hidden="true"><use href="#i-folder"/></svg>
+        <span>Open<span class="newtab-long"> a file…</span></span>
       </button>
     </div>
   </header>
 
   <div class="newtab-inner" role="group" aria-labelledby="newtab-title">
-    <h2 class="newtab-title" id="newtab-title">Start a script</h2>
-    <p class="newtab-sub">Pick a layout, or carry on where you left off.</p>
-
-    <div class="newtab-main">
-      <section class="newtab-new" aria-labelledby="newtab-new-label">
-        <h3 class="newtab-label" id="newtab-new-label">New</h3>
-        <div class="newtab-cards" id="newtab-cards">
-          <button type="button" class="newtab-card" data-newtab-action="new">
-            <span class="newtab-preview is-blank" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            </span>
-            <strong class="newtab-card-name">Blank script</strong>
-            <span class="newtab-card-desc">One empty scene, and nothing else.</span>
+    <!-- The slate. The clock is a picture of a script that hasn't started
+         (nothing here is timed), so it is hidden from a screen reader; the
+         heading is what names the page. -->
+    <section class="newtab-band" id="newtab-band">
+      <div class="newtab-wrap">
+        <div class="newtab-slate">
+          <span class="newtab-clock" aria-hidden="true">00:00</span>
+          <div class="newtab-slate-text">
+            <div class="newtab-slate-head">
+              <span class="newtab-lamp" aria-hidden="true"></span>
+              <h2 class="newtab-title" id="newtab-title">New script</h2>
+            </div>
+            <!-- Shown with the Continue row below and only then: with nothing
+                 to carry on, the band is the clock, the lamp and the heading. -->
+            <p class="newtab-sub" hidden>Pick a layout, or carry on where you left off.</p>
+          </div>
+        </div>
+        <!-- The most recent script (desktop only; renderContinue in
+             20j-newtab.js). Its title and when it was last open — not its
+             rundown: a recent entry carries no scenes, and drawing them
+             would mean reading the file before anyone asked to open it.
+             Continue is the same open a Recent row makes. -->
+        <div class="newtab-continue" id="newtab-continue" hidden>
+          <div class="newtab-continue-text">
+            <span class="newtab-continue-title" id="newtab-continue-title"></span>
+            <span class="newtab-continue-when" id="newtab-continue-when"></span>
+          </div>
+          <button type="button" class="newtab-continue-btn" id="newtab-continue-btn" data-newtab-action="open-recent" data-file-id="">
+            <svg class="nt-icon" aria-hidden="true"><use href="#i-play"/></svg>
+            Continue
           </button>
         </div>
-      </section>
-
-      <!-- Recent documents (issue #15). DESKTOP ONLY: the list lives in the
-           main process (desktop-state.json, contract DESKTOP-RECENTS), and
-           the browser build has no equivalent, so this stays hidden there
-           and .newtab-main keeps its one column. -->
-      <section class="newtab-recents" id="newtab-recents" aria-labelledby="newtab-recents-label" hidden>
-        <h3 class="newtab-label" id="newtab-recents-label">Recent</h3>
-        <div class="newtab-recents-box">
-          <div class="newtab-recents-list" id="newtab-recents-list"></div>
-          <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
-        </div>
-      </section>
-    </div>
-
-    <!-- The whole page takes a dropped file (20j-newtab.js); this is where
-         it says so, and it lights up while one is dragged over the page. -->
-    <div class="newtab-drop" id="newtab-drop">
-      <svg class="newtab-drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14.5v3a2.5 2.5 0 0 0 2.5 2.5h11a2.5 2.5 0 0 0 2.5-2.5v-3"/></svg>
-      <div class="newtab-drop-text">
-        <strong>Drop a script here</strong>
-        <span>.md, .splitpage, .docx, .txt or .csv — or <a href="#" data-newtab-action="paste">paste one</a> or <a href="#" data-newtab-action="gdoc">import a Google Doc link</a></span>
       </div>
-    </div>
+    </section>
 
-    <footer class="newtab-foot">
-      <a href="#" data-newtab-action="tour">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.8v6.4l5.3-3.2z"/></svg>
-        Take the one-minute tour
-      </a>
-      <a href="#" data-newtab-action="tagging-help">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12.3V4.8c0-.7.6-1.3 1.3-1.3h7.5l8.2 8.2a1.3 1.3 0 0 1 0 1.8l-7.3 7.3a1.3 1.3 0 0 1-1.8 0z"/><circle cx="8.2" cy="8.2" r="1.3"/></svg>
-        Tagging cheat sheet
-      </a>
-      <a href="#" data-newtab-action="dismiss">Look at the example script instead</a>
-      <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
-           bridge is there. The link is desktopAppUrl() (20a-update.js), the
-           same page the desktop-app notice points at. -->
-      <span class="newtab-desktop" id="newtab-desktop">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg>
-        <span>Want its own window and unlimited version history?</span>
-        <a href="https://github.com/RetroGorilla/splitpage-releases/releases/latest" id="newtab-desktop-link" target="_blank" rel="noopener">Get the desktop app</a>
-      </span>
-    </footer>
+    <div class="newtab-wrap newtab-body">
+      <div class="newtab-cards" id="newtab-cards" role="group" aria-label="Starter scripts">
+        <button type="button" class="newtab-card is-blank" data-newtab-action="new">
+          <strong class="newtab-card-name">Blank script</strong>
+          <span class="newtab-card-desc">One empty scene, and nothing else.</span>
+          <span class="newtab-preview is-blank" aria-hidden="true">
+            <svg class="nt-icon" aria-hidden="true"><use href="#i-plus"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <div class="newtab-main">
+        <!-- Recent documents (issue #15). DESKTOP ONLY: the list lives in the
+             main process (desktop-state.json, contract DESKTOP-RECENTS), and
+             the browser build has no equivalent, so this stays hidden there
+             and Join has the row to itself. -->
+        <section class="newtab-recents" id="newtab-recents" aria-labelledby="newtab-recents-label" hidden>
+          <div class="newtab-recents-head">
+            <h3 class="newtab-label" id="newtab-recents-label">Recent</h3>
+            <button type="button" class="newtab-recents-clear" id="newtab-recents-clear" data-newtab-action="clear-recents">Clear recent</button>
+          </div>
+          <div class="newtab-recents-list" id="newtab-recents-list"></div>
+        </section>
+
+        <!-- The same Servers dialog as the bar's "Join a shared session". -->
+        <section class="newtab-join" aria-labelledby="newtab-join-title">
+          <div class="newtab-join-copy">
+            <h3 class="newtab-join-title" id="newtab-join-title">Join a shared session</h3>
+            <p class="newtab-join-text">Open the link you were sent, or connect to a server with its PIN.</p>
+          </div>
+          <button type="button" class="btn-outline newtab-join-btn" data-newtab-action="join">Connect…</button>
+        </section>
+      </div>
+
+      <!-- The whole page takes a dropped file (20j-newtab.js); this is where
+           it says so, and it lights up while one is dragged over the page. -->
+      <div class="newtab-drop" id="newtab-drop">
+        <svg class="nt-icon newtab-drop-icon" aria-hidden="true"><use href="#i-import"/></svg>
+        <div class="newtab-drop-text">
+          <strong>Drop a script here</strong>
+          <span>.md, .splitpage, .docx, .txt or .csv — or <a href="#" data-newtab-action="paste">paste one</a> · <a href="#" data-newtab-action="gdoc">import a Google Doc link</a></span>
+        </div>
+      </div>
+
+      <footer class="newtab-foot">
+        <a href="#" data-newtab-action="tour">Take the tour</a>
+        <span class="newtab-foot-sep" aria-hidden="true">·</span>
+        <a href="#" data-newtab-action="tagging-help">Tagging cheat sheet</a>
+        <span class="newtab-foot-sep" aria-hidden="true">·</span>
+        <a href="#" data-newtab-action="dismiss">Look at the example script</a>
+        <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
+             bridge is there. The link is desktopAppUrl() (20a-update.js), the
+             same page the desktop-app notice points at. -->
+        <span class="newtab-desktop" id="newtab-desktop">
+          <svg class="nt-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
+          <span>Want its own window and unlimited version history?</span>
+          <a href="https://github.com/RetroGorilla/splitpage-releases/releases/latest" id="newtab-desktop-link" target="_blank" rel="noopener">Get the desktop app</a>
+        </span>
+      </footer>
+    </div>
   </div>
 </div>
 
@@ -1287,7 +1539,7 @@
   <div class="modal-panel onboard-panel" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="modal-header">
       <h2 id="onboard-title">Set up Splitpage</h2>
-      <button type="button" class="modal-close" data-onboard-action="skip" aria-label="Skip setup">×</button>
+      <button type="button" class="modal-close" data-onboard-action="skip" aria-label="Skip setup"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
 
     <div class="onboard-steps" id="onboard-steps" aria-hidden="true">

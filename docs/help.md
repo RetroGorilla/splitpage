@@ -24,8 +24,8 @@ beta copy is offered it like any other update.
 
 - **A start screen for every new tab.** A blank script or one of three
   starter scripts (to-camera video, interview, 30-second spot), your recent
-  documents in the desktop app, and a drop zone for a file — see
-  [Tabs](#tabs).
+  documents and a **Continue** button for the last one in the desktop app,
+  and a drop zone for a file — see [Tabs](#tabs).
 - **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
   formatting, tags, pasting, splitting, joining, moving and deleting scenes,
   a comment until it is sent, a scene's status and picture, the production
@@ -263,8 +263,12 @@ browser:
 
 Every tab you have open comes back the next time you launch Splitpage.
 
-**A new tab starts on a start screen, not on a document.** Under **Start a
-script** it offers:
+**A new tab starts on a start screen, not on a document.** Across the top
+is a band with a clock, a lamp and **New script**. In the desktop app, once
+you have had a script open, the band also shows the most recent one — its
+title and when it was last open — with an amber **Continue** button that
+reopens it, the same as clicking it under **Recent**. Below the band, the
+new-script cards sit in one row:
 
 - **Blank script** — a genuinely empty script: one blank scene, no tags, no
   comments, nothing carried over.
@@ -277,34 +281,38 @@ script** it offers:
   list, a scene or two already marked Ready or Shot — and opens as a new,
   unsaved document of its own, exactly like Blank script: Save asks where
   to put it.
+
+Also on the page:
+
 - A **drop zone**: drop a `.md`, `.splitpage`, `.docx`, `.txt` or `.csv`
   file anywhere on the page to open it, as **Open a file** would. Its two
   links **paste a script** (the Paste a script… dialog, which here makes a
   new document from what you paste) and **import a Google Doc link**.
 - **Open a file** (the same picker as File ▸ Open…) and **Join a
   shared session** (the Servers dialog) in the bar across the top.
-- **Take the one-minute tour** and the **Tagging cheat sheet** at the bottom,
-  both shown over the example script — and in the browser app, a link to the
+- **Take the tour** and the **Tagging cheat sheet** at the bottom, both
+  shown over the example script — and in the browser app, a link to the
   desktop app.
 
 The same page shows in the browser app on a fresh copy nothing has been
 opened or saved into. It never appears over a document: not one you opened,
 not a shared session's, and not one coming back from a crash. If you would
 rather look at the example script that ships with Splitpage, **Look at the
-example script instead** at the bottom of the page dismisses it (so does
-Esc).
+example script** at the bottom of the page dismisses it (so does Esc).
 
-**Recent** sits beside the new-script cards in the desktop app. It lists the
-last 20 documents you had open, most recent first, by title and file name;
+**Recent** sits under the new-script cards in the desktop app, with a **Join
+a shared session** card beside it. It lists the last 20 documents you had
+open, most recent first, by title and file name;
 clicking one reopens it in that tab with no picker in the way. If a file has
 been moved or deleted since, clicking it says so instead of failing quietly,
 and the **×** beside any entry takes it off the list — **Clear recent**
 takes them all off. The list is kept with the rest of the desktop app's
 session state on your own machine: it is not in a saved script, not in an
 export (including **Export app data**), and nobody in a shared session can
-see it. The browser app does not have this column — a browser can only
+see it. The browser app does not have this list — a browser can only
 reopen a file it still holds permission for, so it remembers the last one
-and no more.
+and no more — and there **Join a shared session** runs the full width of
+the page instead.
 
 **Crash recovery.** If the app or your computer goes down with unsaved work
 open, nothing is lost: every tab's unsaved changes are kept on disk as you
@@ -552,7 +560,9 @@ only gets offered when a release has no installer your machine can run.
 ## Tagging and the production breakdown
 
 Anything you label in the script shows up in the **Production** panel, with
-every scene it appears in. There are three typing shortcuts — the tag is
+every scene it appears in. The panel is a table under the column labels
+**Item · Status · Scenes · Owner**; the scenes read "03, 04", and each one
+jumps to that place in the script. There are three typing shortcuts — the tag is
 made the moment you type the closing character, and one Ctrl+Z undoes just
 the tag and leaves the plain text:
 
@@ -566,8 +576,8 @@ the tag and leaves the plain text:
 **Cast** and **Music/SFX** have no shortcut (nothing else is safe to type
 in normal prose) — select the words and press **Tag**. A tag shows in the
 script as a light tint with a coloured line under it, one colour per
-category: blue for props, violet for locations, plum for cast, ochre for
-VFX, slate for music and sound effects, olive for gear. The same colours
+category: violet for props, green for locations, pink for cast, yellow-green
+for VFX, coral for music and sound effects, sage for gear. The same colours
 mark each category in the Production and Gear panels. Once a tag of any
 category exists, typing a bracket and the first few letters offers to
 complete it: press **Tab** to accept. The completion keeps that tag's own
@@ -584,25 +594,30 @@ Other things worth knowing:
   should.
 - **Alt+Up / Alt+Down** moves the scene you're in one place earlier or
   later, caret and all — in the split view or the writer.
-- Click a tag in the script — or any card in the panel — to open it and
-  **assign who's responsible** and keep **notes, links or file paths**
-  against it. The crew list is just names you type; nothing is verified.
-- **Track how far along each item is.** Every card carries a state —
-  **Needed → Sourcing → Have it → Returned**. Click the pill in the card's
-  top corner to step it on by one, or open the card and pick a state
-  outright. The same four words are used whatever the category: "Returned"
-  means a hired prop went back, and for a location or a VFX shot it just
-  means finished with. The state travels in every export, and shows against
-  each item in the **Shoot** view so on the day you can see what still isn't
-  here. If two people edit the same file, a merge keeps whichever state got
-  further — it can never un-buy something somebody already bought.
-- **Work on several items at once.** <kbd>Ctrl</kbd>+click cards in the
+- Click a tag in the script — or an item's name in the panel — to open it:
+  pick its **Status**, **assign who's responsible** under **Assigned to**
+  (**Add person** puts a new name on the crew list), and keep **notes,
+  links or file paths** in **Notes & links**. The **⋯** on the Assigned to
+  row holds **Rename** and **Remove label** / **Delete from list**, which
+  asks for a second click. The crew list is just names you type; nothing is
+  verified.
+- **Track how far along each item is.** Every item carries a state —
+  **Needed → Sourcing → Have it → Returned** — shown as a small lamp and the
+  word in the **Status** column. Click it to step it on by one, or open the
+  item and pick a state outright. The same four words are used whatever the
+  category: "Returned" means a hired prop went back, and for a location or a
+  VFX shot it just means finished with. The state travels in every export,
+  and shows against each item in the **Shoot** view so on the day you can
+  see what still isn't here. If two people edit the same file, a merge keeps
+  whichever state got further — it can never un-buy something somebody
+  already bought.
+- **Work on several items at once.** <kbd>Ctrl</kbd>+click items in the
   breakdown to select them (<kbd>Shift</kbd>+click takes the whole run
   between two), and a bar appears at the top of the panel: assign them all to
   one person, add a new person and assign them in the same step, set them all
-  to one status, or delete them. A plain click still just opens a card and
+  to one status, or delete them. A plain click still just opens an item and
   leaves the selection alone — <kbd>Esc</kbd> or the **×** clears it. Works in
-  the Category and Person groupings, which are the two that show cards.
+  the Category and Person groupings.
   **Delete** here removes the items from the breakdown *and* takes their
   labels out of the script — the words stay, only the labels go. It asks once
   first and tells you how many labels are about to go with them.
@@ -625,11 +640,12 @@ with its own shortcut, and its own screen: click **Gear** in the header.
 
 The one thing gear needs that the others don't is that most of it never gets
 *written* anywhere — nobody says "wireless lav" out loud, and it's not always
-worth describing in the visual notes either. So the Gear screen opens with a
-plain box: **one item per line**, and whatever you type there is tracked,
-whether or not it's ever mentioned in the script. Add three lines, hit
-**Update list**, and all three show up as cards — same status pill, same
-owner assignment, same notes field as everywhere else in the breakdown. Take
+worth describing in the visual notes either. So at the foot of the Gear
+panel, below the list, there is a plain box: **one item per line**, and
+whatever you type there is tracked, whether or not it's ever mentioned in
+the script. Add three lines, hit **Update list**, and all three show up in
+the list — same status, same owner assignment (**+ Person** adds a new
+name), same notes field as everywhere else in the breakdown. Take
 a line back out and it stops being tracked, *unless* it's also tagged
 somewhere in the script — an item that's actually written in stays, because
 the box only remembers what it alone was responsible for adding.
@@ -648,7 +664,7 @@ sheet trying to double as one.
 ### B-roll
 
 Start a line in the **Visual** column with `B-roll:` and whatever follows it
-is a shot to go and get. The line becomes a small **B-ROLL** marker and the
+is a shot to go and get. The keyword becomes a small **B-roll:** label and the
 shot lands on the list behind **B-roll** in the header — typed, pasted or
 imported, it's picked up either way. Any lines under it, up to the next
 marker, are its description.
@@ -662,20 +678,20 @@ The **B-roll** panel is one line per shot:
   it needs. A red flag means someone **flagged** it — a reshoot, or anything
   else worth a second look; a page icon means it has a note. Hover a line
   for **Go to scene**.
-- **At the top**: how many shots are in the can, and a bar with one segment
-  per shot — teal for shot, red for flagged. The chips below it — **All**,
-  **To shoot**, **Flagged**, **Shot** — cut the list down, and **Group:**
-  lays it out by **scene**, **location** or not at all. Both are remembered on
-  this device, not saved in the script.
-- **Grouped by scene**, each scene's heading carries the start of its Audio
-  line and how many of its shots are done. Shots you added in the panel
-  rather than in the script sit under **Added here**.
+- **At the top**: how many shots are in the can ("1 of 3 shot"), and a bar
+  with one segment per shot — cyan for shot, red for flagged. The tabs below
+  it — **All**, **To shoot**, **Flagged**, **Shot** — cut the list down, and
+  the menu beside them lays it out **By scene**, **By location** or **Not
+  grouped**. Both are remembered on this device, not saved in the script.
+- **Grouped by scene**, each scene's heading carries the time it starts and
+  how many of its shots are done. Shots you added in the panel rather than
+  in the script sit under **Added here**.
 
-**Click a shot** (or press Enter on it) to open its details: the status and
-the **Flag** button, the scene it's in, the **location**, who it's
-**assigned** to (or **+ Person** to add someone), its **props**, the line of
-audio it **cuts against** (seeded from the scene; the pencil edits it) and a
-**note**. The **⋯** menu has **Rename in script** — which rewrites the line
+**Click a shot** (or press Enter on it) to open its details: the **status**
+(click it to switch between To shoot and Shot), the scene it's in, the
+**location**, who it's **assigned** to (or add someone new), its **props**,
+the line of audio it **cuts against** (seeded from the scene; the pencil
+edits it) and a **note**. Under them, **Flag for reshoot**; the **⋯** menu has **Rename in script** — which rewrites the line
 in the script itself — and **Delete from list**, which forgets the shot but
 leaves the words in the script alone.
 
@@ -684,8 +700,8 @@ leaves the words in the script alone.
 mention, type it into **Add prop** in the shot's details: pick one the
 script already tracks, or type a new name and it's added to the breakdown as
 a Prop, the way the Gear box adds things. Each prop shows how far along it
-is — on the list, a dot before its name: a hollow ring for Needed, orange
-for Sourcing, teal for Have it, grey for Returned (hover it for the word);
+is — on the list, a dot before its name: a hollow ring for Needed, amber
+for Sourcing, cyan for Have it, grey for Returned (hover it for the word);
 in the details, the word itself — and renaming it in the Production
 panel renames it here too. The breakdown CSV lists the b-roll shots that
 need each prop, and so does the Props packing list.
@@ -713,7 +729,7 @@ cards.
 
 ## Writing and planning
 
-**The writer.** **✎ Write** in the header opens the Audio column on its own,
+**The writer.** **Write** in the header opens the Audio column on its own,
 as one flowing document — a plain word processor for when the job is writing
 a lot of narration rather than pairing it with picture. One paragraph is one
 scene. **Enter** starts a new one, **Shift+Enter** is a line break inside the
@@ -783,9 +799,9 @@ Turn it on with the **Scene mode** button on the prompter's bar (off by
 default, remembered on this device); it cues the scene you had the caret in
 (or the one you're reading if you switch it on mid-read) with its first line
 at the reading guide, plays, and pauses itself the moment the last line
-passes that guide, ready for the next take. **‹ Prev** / **Next ›** (or
-<kbd>←</kbd>/<kbd>→</kbd>) jump to the neighbouring scene, and a small "Scene
-4 of 12" readout says where you are — pressing Play again after an auto-pause
+passes that guide, ready for the next take. The arrow buttons either side
+of the "Scene 4 of 12" readout (or <kbd>←</kbd>/<kbd>→</kbd>) jump to the
+neighbouring scene — pressing Play again after an auto-pause
 carries straight on into the next scene rather than replaying the one that
 just stopped. It works the same way with **Follow My Voice**, and it skips
 whatever **Hide shot scenes** above is currently hiding.
@@ -808,27 +824,36 @@ were editing scroll off somewhere else. That's the moment it's easiest to
 lose your place in the script, so Splitpage keeps the scene you're actually
 in front of you rather than leaving the page static.
 
-**Comments.** Select some text and click **💬 Comment** to leave one; it
-stays anchored to that exact phrase, which gets an orange dotted underline
-(grey once the thread is resolved). That keeps it apart from the other
-marks a script can carry: a highlight is a yellow fill, a link a solid teal
-underline, a tag a tint in its category's colour. The card in the
-**Comments** panel *is* the "jump to this text" control — click anywhere on it (not a link, not
-while you're selecting its text to copy) and the script scrolls to the
-phrase, without closing the panel, so you can read the two side by side.
-**Sort** at the top of the panel defaults to **Script order** — a comment
-sits where the thing it's about sits — with **Most recent** alongside it for
-coming back after a while and wanting to see what actually moved, replies
-included, wherever in the script they landed.
+**Comments.** Select some text and click **Comment** (the speech bubble in
+the formatting toolbar) to leave one; it stays anchored to that exact
+phrase, which gets an amber dotted underline (grey once the thread is
+resolved) and a small number — the same number its thread carries in the
+**Comments** panel. That keeps it apart from the other marks a script can
+carry: a highlight is a warm fill behind the words (pale yellow in the light
+theme, a deep amber in the dark one), a link a solid blue underline, a tag a
+tint in its category's colour.
+
+Each thread in the **Comments** panel is one card: its number, a line such
+as "Scene 03 · Audio" that jumps to the words, the words themselves, then
+the comments and replies. The card *is* the "jump to this text" control —
+click anywhere on it (not a link, not while you're selecting its text to
+copy) and the script scrolls to the phrase, without closing the panel, so
+you can read the two side by side. **Write a reply…** opens the reply box.
+At the foot, **Resolve** closes the thread, **Assign** hands it to someone,
+and **⋯** holds **Delete**, which asks for a second click.
 
 Resolving a thread records who closed it and when ("Resolved by Adam · 2
-days ago"); unresolving clears that note. **Assign** on a card hands the
-thread to anyone already in the Production breakdown, or anyone who has
-commented. The **Open / Resolved / All** bar at the top filters the list —
-Open is the old "Hide resolved" behaviour under a new name — and its
-**Assigned** dropdown narrows further to "assigned to me" or to any one
-person, each with its own count. The filter is remembered on this device
-only; it never touches the saved document.
+days ago"); unresolving clears that note. **Assign** hands the thread to
+anyone already in the Production breakdown, or anyone who has commented.
+Across the top of the panel, the **Open / Resolved / All** tabs filter the
+list — Open is the old "Hide resolved" behaviour under a new name — each
+with its own count. Beside them, the **Everyone** menu narrows further to
+"assigned to me" or to any one person, and the **Script order** menu sorts
+the list: script order keeps a comment where the thing it's about sits, and
+**Most recent** is for coming back after a while and wanting to see what
+actually moved, replies included, wherever in the script they landed. The
+filter is remembered on this device only; it never touches the saved
+document.
 
 **Undo and redo.** <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Z</kbd> undoes the
 last thing you did to the script, and <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>
@@ -849,21 +874,26 @@ Formatting, links and comment anchors survive a replace untouched. Text
 inside a tag is deliberately left alone — rename those in Production, which
 changes the label and the tracked item together.
 
-**Reference images.** The small **📎 Image** link at the top of a scene's
-visual column attaches a still — or just drag an image file from your desktop
-anywhere onto that column and drop it. A scene can hold several: each one you
+**Reference images.** **Add picture** under a scene's Visual text (it shows
+when you point at the scene or are working in it) attaches a still — or
+just drag an image file from your desktop anywhere onto that column and
+drop it. A scene can hold several: each one you
 add goes beside the others. With one, hover it for **Add**, **Replace** and
 **Remove**. With more, the first is a large cover with the next two or three
 beside it; a **+N** tile, showing the next one dimmed, stands for the rest.
 A video's tile has a ▶ badge (and its length on the cover, when known).
 
-Click any tile for the scene's whole gallery: a large preview with **‹ ›**,
-**Open** for a video, **Make cover** and **Remove**, and every item numbered
-below it — a dashed line marks which ones the scene shows before **+N**.
+Click any tile for the scene's whole gallery: a large still with **‹ ›** (a
+video shows its first frame, marked "Video · first frame", with its length),
+**Open file** or **Open link** for a video, **Make cover** and **Remove**, and
+every item numbered below it — with more than four, a dashed "behind +N"
+line marks where the scene's cover stops showing them. Nothing plays inside
+Splitpage: Open file hands a video to your own player (desktop app), Open
+link to your browser.
 Drag a tile to reorder, or pick one and press Shift+← / Shift+→; ← and →
 pick, Delete removes, Esc closes, and the **+** tile adds a picture. Each
 change is one Ctrl+Z, and its toast has **Undo**. A comment can carry a
-picture too (**🖼 Image** in the comment box).
+picture too (the **Image** button in the comment box's toolbar).
 
 Pasting or dropping a picture, a video link (YouTube, Vimeo, Loom and the
 like) or a video file into a scene's words — or dropping it on the Image
@@ -874,7 +904,7 @@ there. A video goes in the Image section, not in your words, as a tile of
 its own with a ▶ badge: its thumbnail is a video file's first frame, or a
 plain placeholder for a web link (Splitpage doesn't fetch pictures from
 video sites). Every video also gets a line under the pictures — up to three,
-then **+N more videos**. Click a line (or **Open** in the gallery) to open
+then **+N more videos**. Click a line (or **Open file** / **Open link** in the gallery) to open
 it: a web link in your browser; a video file in its own app, in the desktop
 app, as long as you dropped or pasted it since Splitpage started (the
 script keeps only its name, never the file or where it is). Hover a line
@@ -1031,18 +1061,26 @@ No restart is needed after adding the file; just open the panel again.
 
 ## On a phone
 
-The whole app works on a phone — same file, same features, re-flowed. Scenes
-stack (visual above audio, each labelled), the scene controls sit in a strip
-above each scene, and panels and menus go full screen. A few things translate:
+The whole app works on a phone — same file, same features, re-flowed, with
+the script first. Scenes stack (visual above audio, each labelled), each
+scene's number and status sit above it, and a compact running order runs
+along the top. A few things translate:
 
+- **The bar at the bottom** has **Script**, **Write**, **Production**,
+  **Gear**, **B-roll** and **Comments**, with the same counts as on a
+  computer. Tapping a panel opens it over the script; **Script** closes it
+  again. **File** and **Present** are the two icons at the top.
+- **A scene's start time and read time** show on the scene you're in —
+  tap into it — rather than on every scene.
 - **Completing a tag:** phone keyboards have no <kbd>Tab</kbd>, so while the
   dim completion is showing, **tap it** to accept.
 - **Find & replace** is in the File menu (no <kbd>Ctrl</kbd>+<kbd>F</kbd>).
 - **The File menu** comes up from the bottom of the screen; tap outside it,
-  or ✕, to put it away. **Search commands…** in it is the phone's way to the
-  command search.
-- **Selecting several breakdown items:** **long-press** a card to start, then
-  tap cards to add or drop them. The **×** in the bar clears the selection.
+  or its close button, to put it away. **Search commands…** in it is the
+  phone's way to the command search.
+- **Selecting several breakdown items:** **long-press** an item to start,
+  then tap items to add or drop them. The **×** in the bar clears the
+  selection.
 - **Reordering scenes:** the ↑ / ↓ buttons (drag needs a mouse).
 - **New scene:** the **+** button on any scene, or **+ Add row** at the bottom.
 - **Splitting a scene at the caret (Alt+Enter)** is a keyboard shortcut with

@@ -5,6 +5,14 @@
    The header is sticky in CSS; this decides when it wears .is-condensed and
    plays the change as one movement instead of a snap (#52).
 
+   Since #169 (Direction B) the header's own row is already the toolbar that
+   request asked for — the mark, File, the title, the clock and the buttons
+   on one line — so condensing no longer touches it. What it sheds is the
+   rundown strip's time ruler: once the script is passing underneath, the
+   blocks and the playhead are what you look at, and the ruler's ticks go.
+   Everything below still describes the mechanism exactly; where it says
+   "the brand line", read the ruler, and the title no longer changes size.
+
    Two thresholds rather than one: a single threshold sits exactly on the
    boundary where condensing changes the header's own height, which moves the
    content under it, which can move the scroll position back across the
@@ -99,18 +107,19 @@ export function __init() {
       return true;
     }
 
-    /* Every part the two states put in a different place: the brand row, the
-       title and the line of facts after it, the toolbar as a whole
-       (its buttons never move relative to each other), and then each sibling
-       below the header, which all travel the same distance the header's own
-       height changed by. */
+    /* Every part the two states put in a different place: the rundown's
+       ruler (the part being shed) and its track of blocks, which rises into
+       the ruler's place (#169), and then each sibling below the header,
+       which all travel the same distance the header's own height changed
+       by. The header's row never moves. */
     function headerParts() {
       const out = [];
-      const kids = topbar.children;
-      for (let i = 0; i < kids.length; i++) {
-        if (kids[i].classList.contains("toolbar")) { out.push(kids[i]); continue; }
-        const inner = kids[i].children;
-        for (let j = 0; j < inner.length; j++) out.push(inner[j]);
+      const strip = topbar.querySelector(".rundown");
+      if (strip && !strip.hidden) {
+        const ruler = strip.querySelector(".rundown-ruler");
+        const track = strip.querySelector(".rundown-track");
+        if (ruler) out.push(ruler);
+        if (track) out.push(track);
       }
       let sib = topbar.nextElementSibling;
       while (sib) { out.push(sib); sib = sib.nextElementSibling; }

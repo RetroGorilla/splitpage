@@ -10,7 +10,7 @@ open
 eval (function(){window.F=window.__splitpageFormats;var sortAll=function(v){if(Array.isArray(v))return v.map(sortAll);if(v&&typeof v==='object'){var o={};Object.keys(v).sort().forEach(function(k){o[k]=sortAll(v[k]);});return o;}return v;};window.__norm=function(s){var c=F.migrate(F.clone(s));delete c.rev;delete c.lastEditedAt;delete c.lastEditedBy;delete c.docId;return JSON.stringify(sortAll(c));};return 'hooked';})()
 
 # --- the pristine seed's one comment has none of the new fields at all ------
-click text*=COMMENTS
+click #btn-comments
 sleep 500
 expect document.querySelectorAll('.comment-card').length == 1
 expect F.state().comments[0].resolvedBy === null
@@ -33,7 +33,7 @@ sleep 300
 expect !document.getElementById('btn-save').classList.contains('is-dirty')
 goto /index.html
 sleep 900
-click text*=COMMENTS
+click #btn-comments
 sleep 500
 expect document.querySelector('#comments-filter-seg [data-filter="resolved"]').classList.contains('is-active')
 expect document.getElementById('comments-assignee-filter').value == __unassigned__
@@ -51,9 +51,9 @@ expect document.querySelectorAll('.comment-card').length == 1
 # --- the assign picker offers people from the production breakdown too, ----
 # --- not just commenters — and escapes what it shows -----------------------
 eval (function(){F.state().people.push({id:'ptest-esc', name:'Riley & Co'});return true;})()
-click text*=COMMENTS
+click #btn-comments
 sleep 300
-click text*=COMMENTS
+click #btn-comments
 sleep 400
 expect document.querySelector('.comment-assignee-select').innerHTML.indexOf('Riley &amp; Co') !== -1
 expect document.querySelector('.comment-assignee-select').innerHTML.indexOf('Riley & Co<') === -1

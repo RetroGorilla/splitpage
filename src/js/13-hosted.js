@@ -1095,7 +1095,8 @@ function renderServerPicker() {
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
       (S.serverMode.readOnly || conn.role === "review" ? '' :
         '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
-          escapeHtml(d.id) + '" title="Delete this document from the server">×</button>') +
+          escapeHtml(d.id) + '" title="Delete this document from the server" aria-label="Delete from the server">' +
+          spriteIcon("i-trash") + '</button>') +
     '</div>';
   }).join("");
 }
@@ -1334,13 +1335,19 @@ export async function armServerDelete(btn, id) {
     showToast("Deleted from the server", "ok");
     return;
   }
+  /* The button is named by aria-label since it became an icon (#169), and
+     a label outranks the text, so the armed "Delete?" is said by the label
+     too — or a screen reader would never hear that it is waiting. */
+  var label = btn.getAttribute("aria-label");
   btn.setAttribute("data-armed", "1");
   btn.textContent = "Delete?";
+  btn.setAttribute("aria-label", "Delete? Click again to confirm");
   btn.classList.add("armed");
   setTimeout(function () {
     if (!btn.isConnected) return;
     btn.removeAttribute("data-armed");
-    btn.textContent = "×";
+    btn.innerHTML = spriteIcon("i-trash");
+    if (label) btn.setAttribute("aria-label", label);
     btn.classList.remove("armed");
   }, 2800);
 }
@@ -2428,7 +2435,7 @@ function renderDriveAccountDesktop(el) {
   } else if (driveState.signedIn) {
     var who = st.email ? "Signed in as " + escapeHtml(st.email) : "Signed in";
     var session = st.persisted ? "" : " — for this session only: this computer has no secure storage to keep the sign-in.";
-    el.innerHTML = '<span class="drive-account-status">✓ ' + who + escapeHtml(session) + '</span>' +
+    el.innerHTML = '<span class="drive-account-status">' + spriteIcon("i-check") + who + escapeHtml(session) + '</span>' +
       '<button type="button" class="btn" data-action="drive-signout">Sign out</button>';
   } else {
     el.innerHTML = '<span class="drive-account-status">Sign in to browse your Google Drive. Google opens in your browser.</span>' +
@@ -2711,16 +2718,20 @@ export function driveItemById(id) {
   return found[0] || null;
 }
 
+/* One of the page's sprite icons (the <symbol>s at the top of page.html),
+   drawn in currentColor at the size .row-icon-svg gives it. Where the
+   Drive and server lists used emoji and "×"/"✎"/"✓" glyphs, which render
+   in a different colour and weight on every platform (#169). */
+function spriteIcon(id) {
+  return '<svg class="row-icon-svg" aria-hidden="true" focusable="false"><use href="#' + id + '"/></svg>';
+}
+
 function driveIconFor(mimeType) {
-  if (mimeType === "application/vnd.google-apps.folder") return "📁";
-  if (mimeType === "application/vnd.google-apps.document") return "📝";
-  if (mimeType === "application/vnd.google-apps.spreadsheet") return "📊";
-  if (mimeType === "application/vnd.google-apps.presentation") return "📑";
-  if (/^image\//.test(mimeType)) return "🖼";
-  if (/^video\//.test(mimeType)) return "🎬";
-  if (/^audio\//.test(mimeType)) return "🎵";
-  if (mimeType === "application/pdf") return "📕";
-  return "📄";
+  if (mimeType === "application/vnd.google-apps.folder") return spriteIcon("i-folder");
+  if (/^image\//.test(mimeType)) return spriteIcon("i-image");
+  if (/^video\//.test(mimeType)) return spriteIcon("i-camera");
+  if (/^audio\//.test(mimeType)) return spriteIcon("i-mic");
+  return spriteIcon("i-file");
 }
 
 export function driveFormatSize(bytes) {
@@ -2748,8 +2759,9 @@ function renderDriveList() {
         '<input type="text" class="drive-rename-input" data-id="' + escapeHtml(it.id) +
           '" value="' + escapeHtml(it.name) + '">' +
         '<button type="button" class="drive-row-btn" data-action="drive-rename-save" data-id="' +
-          escapeHtml(it.id) + '" title="Save">✓</button>' +
-        '<button type="button" class="drive-row-btn" data-action="drive-rename-cancel" title="Cancel">×</button>' +
+          escapeHtml(it.id) + '" title="Save" aria-label="Save">' + spriteIcon("i-check") + '</button>' +
+        '<button type="button" class="drive-row-btn" data-action="drive-rename-cancel" title="Cancel" aria-label="Cancel">' +
+          spriteIcon("i-close") + '</button>' +
       '</div>';
     }
     return '<div class="drive-row" data-id="' + escapeHtml(it.id) + '">' +
@@ -2761,9 +2773,9 @@ function renderDriveList() {
       '</button>' +
       '<div class="drive-row-actions">' +
         (canWrite ? '<button type="button" class="drive-row-btn" data-action="drive-rename" data-id="' +
-          escapeHtml(it.id) + '" title="Rename">✎</button>' : '') +
+          escapeHtml(it.id) + '" title="Rename" aria-label="Rename">' + spriteIcon("i-pen") + '</button>' : '') +
         (canWrite ? '<button type="button" class="drive-row-btn danger" data-action="drive-delete" data-id="' +
-          escapeHtml(it.id) + '" title="Delete">×</button>' : '') +
+          escapeHtml(it.id) + '" title="Delete" aria-label="Delete">' + spriteIcon("i-trash") + '</button>' : '') +
       '</div>' +
     '</div>';
   }).join("");
@@ -2858,13 +2870,18 @@ export async function armDriveDelete(btn, item) {
     await driveListCurrent();
     return;
   }
+  /* named by aria-label, so the armed state is said there too (see
+     armServerDelete) */
+  var label = btn.getAttribute("aria-label");
   btn.setAttribute("data-armed", "1");
   btn.textContent = "Delete?";
+  btn.setAttribute("aria-label", "Delete? Click again to confirm");
   btn.classList.add("armed");
   setTimeout(function () {
     if (!btn.isConnected) return;
     btn.removeAttribute("data-armed");
-    btn.textContent = "×";
+    btn.innerHTML = spriteIcon("i-trash");
+    if (label) btn.setAttribute("aria-label", label);
     btn.classList.remove("armed");
   }, 2800);
 }
@@ -2966,7 +2983,7 @@ function renderDriveAccount() {
   if (!el) return;
   if (driveDesktopBridge()) { renderDriveAccountDesktop(el); return; }
   el.innerHTML = driveState.signedIn
-    ? '<span class="drive-account-status">✓ Signed in — you can make changes here.</span>' +
+    ? '<span class="drive-account-status">' + spriteIcon("i-check") + 'Signed in — you can make changes here.</span>' +
       '<button type="button" class="btn" data-action="drive-signout">Sign out</button>'
     : '<span class="drive-account-status">Read-only until you sign in.</span>' +
       '<button type="button" class="btn btn-accent" data-action="drive-signin">Sign in with Google</button>';

@@ -7,7 +7,7 @@ import {
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
 import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
-import { render, syncFieldFromDom } from "./05-render.js";
+import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
@@ -297,16 +297,102 @@ export function armDelete(btn, id) {
     deleteRow(id);
     return;
   }
-  document.querySelectorAll(".gutter-btn.danger.armed").forEach(function (b) { b.classList.remove("armed"); b.textContent = "×"; });
+  document.querySelectorAll(".gutter-btn.danger.armed").forEach(disarmDeleteButton);
   S.deleteArmId = id;
-  btn.classList.add("armed");
-  btn.textContent = "✓";
+  armDeleteButton(btn);
   clearTimeout(S.deleteArmTimer);
   S.deleteArmTimer = setTimeout(function () {
     S.deleteArmId = null;
-    btn.classList.remove("armed");
-    btn.textContent = "×";
+    disarmDeleteButton(btn);
   }, 2800);
+}
+
+/* ---- a scene's "⋯" menu (#169) ----
+
+   Move up, Move down, Insert scene and Delete used to be four buttons drawn
+   on every scene. They are the same four buttons now, inside a menu in the
+   gutter (rowGutterHtml, 05-render.js), and a click on one still goes
+   through onRootClick exactly as it did. This is only the menu around
+   them: one open at a time, closed by a click anywhere else, Escape or Tab,
+   and walked with the arrow keys. A render that repaints the gutter takes
+   an open menu with it — moving the scene, say — which is closing it. */
+export function closeRowMenus(except) {
+  document.querySelectorAll("#rows .row-menu:not([hidden])").forEach(function (menu) {
+    if (menu === except) return;
+    menu.hidden = true;
+    var btn = menu.parentNode.querySelector(".row-more");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+    var row = menu.closest(".row");
+    if (row) row.classList.remove("has-menu-open");
+  });
+}
+
+/* `focusFirst` when it was opened from the keyboard, so the arrow keys
+   have somewhere to start; a pointer leaves focus on the button. */
+export function toggleRowMenu(btn, focusFirst) {
+  var menu = btn.parentNode.querySelector(".row-menu");
+  if (!menu) return;
+  var opening = menu.hidden;
+  closeRowMenus(opening ? menu : null);
+  menu.hidden = !opening;
+  btn.setAttribute("aria-expanded", opening ? "true" : "false");
+  var row = btn.closest(".row");
+  if (row) row.classList.toggle("has-menu-open", opening);
+  if (!opening) return;
+  /* Up rather than down when the window has no room under it — the last
+     scene on screen. On a phone the bottom bar (#169, #phone-bar) takes
+     the foot of the window, and a menu opening under it would be hidden;
+     everywhere else the bar is not drawn and measures 0. */
+  menu.classList.remove("opens-up");
+  var r = menu.getBoundingClientRect();
+  var phoneBar = document.getElementById("phone-bar");
+  var floor = window.innerHeight - 8 - (phoneBar ? phoneBar.offsetHeight : 0);
+  if (r.bottom > floor && r.top - r.height - btn.offsetHeight > 8) menu.classList.add("opens-up");
+  if (focusFirst) {
+    var first = menu.querySelector(".row-menu-item");
+    if (first) first.focus();
+  }
+}
+
+/* The keyboard inside an open menu, and ArrowDown on its button. Returns
+   true when the key was the menu's. */
+export function rowMenuKeydown(e) {
+  var t = e.target;
+  if (!t || !t.closest) return false;
+  if (t.classList.contains("row-more") && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    var m = t.parentNode.querySelector(".row-menu");
+    if (m && m.hidden) toggleRowMenu(t, true);
+    return true;
+  }
+  var menu = t.closest(".row-menu");
+  if (!menu || menu.hidden) return false;
+  var items = Array.prototype.slice.call(menu.querySelectorAll(".row-menu-item"));
+  var i = items.indexOf(t);
+  var btn = menu.parentNode.querySelector(".row-more");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    var step = e.key === "ArrowDown" ? 1 : -1;
+    items[(i + step + items.length) % items.length].focus();
+    return true;
+  }
+  if (e.key === "Home" || e.key === "End") {
+    e.preventDefault();
+    items[e.key === "Home" ? 0 : items.length - 1].focus();
+    return true;
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    closeRowMenus();
+    if (btn) btn.focus();
+    return true;
+  }
+  if (e.key === "Tab") {
+    closeRowMenus();
+    return false;
+  }
+  return false;
 }
 
 /* ================= images ================= */

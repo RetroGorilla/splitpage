@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
@@ -31,7 +32,8 @@ import {
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
-import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { personColor } from "./13a-presence.js";
+import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
 
@@ -43,10 +45,12 @@ import { exportAs } from "./18-local-files.js";
 
    One line per shot, because the question the panel is opened to answer
    is "what is still to shoot", and a card per shot answered it three at a
-   time. The line is a checkbox (Shot / To shoot in one click), the name,
-   and under it where, who and what it needs; everything else waits behind
-   a click on the line. A summary and a bar across the top say how far the
-   whole list has got, and filter chips cut it down to what is left.
+   time. The line is a checkbox (Shot / To shoot in one click), the name —
+   in full, however long (#169: nothing ends in "…") — and beside it where,
+   who and what it needs; everything else waits behind a click on the line.
+   The head says how far the whole list has got ("1 of 3 shot" and a small
+   bar), and text tabs under it cut the list down to what is left. The
+   look is B-BrollCalm, the calmer of the two boards (#169).
 
    Nothing here keeps a copy of the document: every edit lands on the
    record (brollRecord) and ends in markDirty(), so undo (12a-undo.js)
@@ -68,11 +72,12 @@ var FILTERS = [
   { id: "shot",    label: "Shot" }
 ];
 
-/* The ids brollGroupBy always had: "flat" is the list with no groups. */
+/* The ids brollGroupBy always had: "flat" is the list with no groups.
+   `button` is what the quiet menu button in the tab bar says (#169). */
 var GROUPS = [
-  { id: "scene",    label: "Scene" },
-  { id: "location", label: "Location" },
-  { id: "flat",     label: "None" }
+  { id: "scene",    label: "Scene",    button: "By scene" },
+  { id: "location", label: "Location", button: "By location" },
+  { id: "flat",     label: "None",     button: "Not grouped" }
 ];
 
 var view = { filter: "all", group: "scene" };
@@ -128,7 +133,7 @@ var renamingId = null;
 var addingPersonFor = null;
 var editingLocFor = null;   /* the location picker, open as a text box */
 var editingRefFor = null;   /* "Cuts against", open for editing */
-var menuFor = null;         /* the ⋯ menu in a detail card's header */
+var menuFor = null;         /* the ⋯ menu at the foot of an open shot */
 var groupMenuOpen = false;
 var selection = Object.create(null);
 var selectionAnchor = null;
@@ -192,6 +197,15 @@ export function brollIcon(name, size, cls) {
     'stroke-linejoin="round" aria-hidden="true" focusable="false">' + (ICONS[name] || "") + '</svg>';
 }
 
+/* An icon from the page's sprite (page.html, #169): the panel draws B's
+   1.75-stroke set wherever the sprite has the icon, and keeps brollIcon
+   above for the few it doesn't (a note, a pencil, a loose line). Sized
+   and stroked by .broll-si in app.css. */
+function icon(name, cls) {
+  return '<svg class="broll-si' + (cls ? " " + cls : "") + '" aria-hidden="true" focusable="false"><use href="#i-' +
+    name + '"/></svg>';
+}
+
 /* A category's colour, from TAG_CATEGORIES like every breakdown card's, so
    a palette change lands here with no second copy of the hex. */
 function catColor(id) {
@@ -207,8 +221,12 @@ function initials(name) {
   return (first + last).toUpperCase();
 }
 
+/* A person in their own colour, the same everywhere they appear (#169:
+   personColor, 13a-presence.js — the header's avatars, comments, the
+   breakdown's owners); .person-avatar is the shared circle. */
 function avatarHtml(person) {
-  return '<span class="broll-avatar" aria-hidden="true">' + escapeHtml(initials(person.name)) + '</span>';
+  return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
+    escapeHtml(personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
 function sceneLabel(e) {
@@ -219,27 +237,57 @@ function plural(n, one, many) {
   return n + " " + (n === 1 ? one : many);
 }
 
+/* Where each scene starts in the programme, by row id: the same running
+   sum paintRowTimes() (05-render.js) writes into each scene's gutter, so
+   "Scene 03 · 00:31" here reads what the script beside it says. */
+function sceneStarts() {
+  var t = 0, out = Object.create(null);
+  S.state.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row); });
+  return out;
+}
+
+function startOf(e, starts) {
+  return e.rowId && starts[e.rowId] !== undefined ? formatTimecode(starts[e.rowId]) : "";
+}
+
 /* ---- props, as a shot shows them (#149) ----
 
    A chip per prop: its name, and how far along the breakdown has it
    (Needed / Sourcing / Have it / Returned) — the question a shooter asks
    of a prop is "is it here yet". A hand-added one can be taken off here;
    one the script names is taken off by editing the script, so it has no
-   ×. */
+   ×. Since #169 the status is the breakdown's own lamp (Adam: the same
+   12×6 lamp wherever an item's status shows), with its word beside it. */
 function propChipHtml(e, p, removable) {
   var st = tagStatus(p.status);
   return '<span class="broll-prop-chip' + (p.tracked ? '' : ' is-untracked') + '" title="' +
       escapeHtml(p.auto
         ? p.name + " — tagged on this shot's lines in the script"
         : p.tracked ? p.name + " — added to this shot" : p.name + " — no longer in the breakdown") + '">' +
+      (st ? itemLampHtml(st, "", true) : '') +
       '<span class="broll-prop-name">' + escapeHtml(p.name) + '</span>' +
-      (st ? '<span class="broll-prop-st" style="--st:' + st.color + '">' + escapeHtml(st.label) + '</span>' : '') +
+      (st ? '<span class="broll-prop-st">' + escapeHtml(st.label) + '</span>' : '') +
       (removable && p.ref
         ? '<button type="button" class="broll-prop-remove" data-action="broll-prop-remove" data-id="' +
             escapeHtml(e.id) + '" data-ref="' + escapeHtml(p.ref) + '" aria-label="' +
-            escapeHtml("Take " + p.name + " off this shot") + '">' + brollIcon("x", 12) + '</button>'
+            escapeHtml("Take " + p.name + " off this shot") + '">' + icon("close") + '</button>'
         : '') +
     '</span>';
+}
+
+/* An item's status as the shared lamp (app.css .item-lamp): a 12×6 bar,
+   or the return arrow for Returned. The word is its title and its name
+   for a screen reader; the wrapper carries both, since an <svg> shows no
+   title attribute. Beside its own word (a chip) it is only a picture. */
+function itemLampHtml(st, cls, besideWord) {
+  var named = ' title="' + escapeHtml(st.label) + '"' +
+    (besideWord ? ' aria-hidden="true"' : ' role="img" aria-label="' + escapeHtml(st.label) + '"');
+  var extra = cls ? " " + cls : "";
+  if (st.id === "returned") {
+    return '<span class="broll-lamp-returned' + extra + '"' + named + '>' +
+      '<svg class="item-lamp is-returned" aria-hidden="true" focusable="false"><use href="#i-return"/></svg></span>';
+  }
+  return '<span class="item-lamp is-' + escapeHtml(st.id) + extra + '"' + named + '></span>';
 }
 
 /* The props the document already tracks, for Add prop to offer. */
@@ -271,6 +319,16 @@ function propListHtml(e) {
   }).join(", ");
 }
 
+/* The panel's line says the same with the breakdown's lamp before each
+   name instead of the dot (#169, as the chips do); the full page keeps
+   the dot above in its table. */
+function propLampListHtml(e) {
+  return e.props.map(function (p) {
+    var st = tagStatus(p.status);
+    return '<span class="broll-prop-item">' + (st ? itemLampHtml(st, "broll-prop-lamp") : '') + escapeHtml(p.name) + '</span>';
+  }).join(", ");
+}
+
 /* "Kettle (Sourcing), Drone (Needed)": the same, for a title attribute. */
 function propListTitle(e) {
   return e.props.map(function (p) {
@@ -279,13 +337,16 @@ function propListTitle(e) {
   }).join(", ");
 }
 
+/* The chips, then the Add box as a field with its border at rest (#169:
+   "fields must be easy to find") — typing a name, or picking one the
+   breakdown already tracks from its list, adds it. */
 function propsEditHtml(e, readOnly) {
   var id = escapeHtml(e.id);
   if (readOnly && !e.props.length) return '<span class="broll-muted">None</span>';
-  return '<div class="broll-props" style="--prop:' + catColor("prop") + '">' +
+  return '<div class="broll-props">' +
       e.props.map(function (p) { return propChipHtml(e, p, !readOnly); }).join("") +
       (readOnly ? '' :
-        '<input type="text" class="broll-prop-input" data-id="' + id + '" list="broll-prop-options" ' +
+        '<input type="text" class="broll-prop-input ev-field" data-id="' + id + '" list="broll-prop-options" ' +
           'maxlength="80" placeholder="Add prop" aria-label="Add a prop this shot needs">') +
     '</div>';
 }
@@ -316,11 +377,16 @@ function datalistsHtml() {
 /* ---- the summary, the filters, the grouping ---- */
 
 /* One segment per shot, in list order: how far along the whole list is,
-   readable at a glance and before reading a single line. */
+   readable at a glance and before reading a single line. B draws it 56px
+   wide in the head (#169), so the gaps between segments close up as the
+   list grows rather than pushing it wider. */
 function progressBarHtml(entries) {
   var n = filterCounts(entries);
-  return '<div class="broll-bar" role="img" aria-label="' +
-      escapeHtml(n.shot + " shot, " + n.unshot + " to shoot" + (n.flagged ? ", " + n.flagged + " flagged" : "")) + '">' +
+  var gap = n.all <= 12 ? 2 : n.all <= 24 ? 1 : 0;
+  return '<div class="broll-bar" role="progressbar" aria-label="Shots done" aria-valuemin="0" aria-valuemax="' + n.all +
+      '" aria-valuenow="' + n.shot + '" aria-valuetext="' +
+      escapeHtml(n.shot + " of " + n.all + " shot" + (n.flagged ? ", " + n.flagged + " flagged" : "")) +
+      '" style="--seg-gap:' + gap + 'px">' +
       brollSortedForList(entries).map(function (e) {
         var cls = e.reshoot ? "is-flagged" : e.status === "shot" ? "is-shot" : "is-todo";
         return '<span class="broll-bar-seg ' + cls + '"></span>';
@@ -328,15 +394,30 @@ function progressBarHtml(entries) {
     '</div>';
 }
 
+/* The head's "1 of 3 shot" (B-BrollCalm): the figures in the mono. */
 function summaryHtml(entries) {
   var n = filterCounts(entries);
-  return '<div class="broll-summary">' +
-      '<div class="broll-summary-line"><span class="broll-summary-n">' + n.shot + '</span> of ' +
-        plural(n.all, "shot", "shots") + ' in the can</div>' +
-      progressBarHtml(entries) +
-    '</div>';
+  return '<span class="broll-summary-line"><span class="broll-summary-n">' + n.shot + '</span> of ' +
+      '<span class="broll-summary-n">' + n.all + '</span> shot</span>' +
+    progressBarHtml(entries);
 }
 
+/* The panel's filters (#169): the shared text tabs, each with its count.
+   They keep .broll-chip and the data-filter the suites and focusKey know
+   them by. */
+function filterTabsHtml(entries) {
+  var n = filterCounts(entries);
+  return '<div class="panel-tabs broll-tabs" role="radiogroup" aria-label="Show shots">' +
+    FILTERS.map(function (f) {
+      var on = f.id === view.filter;
+      return '<button type="button" class="panel-tab broll-chip' + (on ? ' is-active' : '') +
+        '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-action="broll-filter" data-filter="' +
+        f.id + '">' + escapeHtml(f.label) + ' <span class="panel-count broll-chip-n">' + n[f.id] + '</span></button>';
+    }).join("") +
+  '</div>';
+}
+
+/* The full page's filters: the same four, as chips (renderBrollPage). */
 function filterChipsHtml(entries) {
   var n = filterCounts(entries);
   return '<div class="broll-filters" role="radiogroup" aria-label="Show">' +
@@ -349,19 +430,21 @@ function filterChipsHtml(entries) {
   '</div>';
 }
 
+/* "By scene ▾" at the end of the tab bar (#169): quiet, since it changes
+   how the list reads rather than what is in it. */
 function groupMenuHtml() {
   var current = GROUPS.filter(function (g) { return g.id === view.group; })[0] || GROUPS[0];
   return '<div class="broll-group-wrap">' +
-      '<button type="button" class="broll-group-btn" data-action="broll-group-menu" aria-haspopup="true" ' +
-        'aria-expanded="' + (groupMenuOpen ? 'true' : 'false') + '">Group: ' + escapeHtml(current.label) +
-        brollIcon("chevron", 14) + '</button>' +
+      '<button type="button" class="broll-group-btn" data-action="broll-group-menu" aria-haspopup="menu" ' +
+        'aria-expanded="' + (groupMenuOpen ? 'true' : 'false') + '" title="Group the shots">' + escapeHtml(current.button) +
+        icon("chevron-down") + '</button>' +
       (groupMenuOpen
         ? '<div class="broll-menu broll-group-menu" role="menu" aria-label="Group shots by">' +
             GROUPS.map(function (g) {
               var on = g.id === view.group;
               return '<button type="button" role="menuitemradio" aria-checked="' + (on ? 'true' : 'false') +
                 '" class="broll-menu-item' + (on ? ' is-active' : '') + '" data-action="broll-group" data-group="' +
-                g.id + '">' + escapeHtml(g.label) + (on ? brollIcon("check", 14) : '') + '</button>';
+                g.id + '">' + escapeHtml(g.label) + (on ? icon("check", "broll-menu-check") : '') + '</button>';
             }).join("") +
           '</div>'
         : '') +
@@ -410,36 +493,49 @@ function doneCountHtml(items, cls) {
   return '<span class="' + cls + (done === items.length ? ' is-done' : '') + '">' + done + '/' + items.length + '</span>';
 }
 
-function groupHeadHtml(g) {
+/* A 32px group head (B-BrollCalm): the scene and where it starts, then
+   done/total — in the b-roll colour once the group is all shot. The
+   scene's audio used to follow, cut short with "…"; B dropped it for the
+   start time, and the open shot's "Cuts against" has the words in full. */
+function groupHeadHtml(g, starts) {
   if (g.kind === "flat") return "";
-  var title, sub = "";
+  var title, time = "";
   if (g.kind === "scene") {
     title = '<span class="broll-group-scene">' + escapeHtml(g.label) + '</span>';
-    var audio = g.row ? htmlToPlainText(g.row.audioText).replace(/\s+/g, " ").trim() : "";
-    if (audio) sub = '<span class="broll-group-sub">' + escapeHtml(audio.slice(0, 160)) + '</span>';
+    if (g.row && starts[g.row.id] !== undefined) {
+      time = '<span class="broll-group-time">' + formatTimecode(starts[g.row.id]) + '</span>';
+    }
   } else if (g.kind === "location") {
     title = '<span class="broll-group-title">' +
-      (g.none ? '' : '<span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' + brollIcon("pin", 14) + '</span>') +
+      (g.none ? '' : '<span class="broll-loc-pin">' + icon("pin") + '</span>') +
       escapeHtml(g.label) + '</span>';
   } else {
     title = '<span class="broll-group-title">' + escapeHtml(g.label) + '</span>';
   }
-  return '<div class="broll-group-head">' + title + sub + doneCountHtml(g.items, "broll-group-count") + '</div>';
+  return '<h3 class="broll-group-head">' + title + time + doneCountHtml(g.items, "broll-group-count") + '</h3>';
 }
 
 /* ---- one shot, one line ---- */
 
+/* Beside the name, quietly (B-BrollCalm): where (a pin and the place),
+   who (their avatar; the name is its title and a screen reader's) and
+   what it needs (a lamp and the name of each prop). Most shots have one
+   of the three, which is all the board draws; a shot with more shows them
+   all, wrapping at the right rather than hiding any. */
 function rowMetaHtml(e) {
   var parts = [];
   if (e.location) {
-    parts.push('<span class="broll-meta-item"><span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' +
-      brollIcon("pin", 12) + '</span>' + escapeHtml(e.location) + '</span>');
+    parts.push('<span class="broll-meta-item broll-meta-loc"><span class="broll-loc-pin">' + icon("pin") + '</span>' +
+      escapeHtml(e.location) + '</span>');
   }
   var who = personById(e.owner);
-  if (who) parts.push('<span class="broll-meta-item">' + avatarHtml(who) + escapeHtml(who.name) + '</span>');
+  if (who) {
+    parts.push('<span class="broll-meta-item broll-meta-owner" title="' + escapeHtml("Assigned to " + who.name) + '">' +
+      avatarHtml(who) + '<span class="broll-sr">' + escapeHtml(who.name) + '</span></span>');
+  }
   if (e.props.length) {
-    parts.push('<span class="broll-meta-item broll-meta-props" style="--prop:' + catColor("prop") + '" title="' +
-      escapeHtml(propListTitle(e)) + '">' + brollIcon("box", 12, "broll-prop-ico") + propListHtml(e) + '</span>');
+    parts.push('<span class="broll-meta-item broll-meta-props" title="' + escapeHtml(propListTitle(e)) + '">' +
+      propLampListHtml(e) + '</span>');
   }
   return parts.join("");
 }
@@ -469,10 +565,13 @@ function checkHtml(e) {
     '"' + (ro ? ' disabled' : '') + ' data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
     escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
     (ro ? (shot ? 'Shot' : 'To shoot') : shot ? 'Shot — click to mark To shoot' : 'To shoot — click to mark Shot') +
-    '"><span class="broll-check-box">' + brollIcon("check", 14) + '</span></button>';
+    '"><span class="broll-check-box">' + icon("check") + '</span></button>';
 }
 
-function rowHtml(e) {
+/* The whole line but the checkbox is one button that opens the shot, the
+   meta inside it, so the line is as easy to hit as it looks. The flag and
+   note icons, and Go to scene on hover, sit after it. */
+function rowHtml(e, starts) {
   var id = escapeHtml(e.id);
   var open = openId === e.id || renamingId === e.id;
   return '<div class="broll-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
@@ -487,78 +586,108 @@ function rowHtml(e) {
       '<span class="broll-row-icons">' + rowStateIconsHtml(e) + '</span>' +
       (e.rowId
         ? '<button type="button" class="broll-row-go" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
-            sceneLabel(e) + '">Go to scene' + brollIcon("go", 13) + '</button>'
+            sceneLabel(e) + '">Go to scene' + icon("arrow-right") + '</button>'
         : '') +
     '</div>' +
-    (open ? cardHtml(e) : '');
+    (open ? cardHtml(e, starts) : '');
 }
 
-/* ---- the open shot: a compact card of label–value rows ---- */
+/* ---- the open shot: label–value rows under its line ----
 
-function field(label, valueHtml, extraCls, inline) {
-  return '<div class="broll-field' + (extraCls ? ' ' + extraCls : '') + '">' +
-    '<div class="broll-label">' + escapeHtml(label) + '</div>' +
-    '<div class="broll-value' + (inline ? ' is-inline' : '') + '">' + valueHtml + '</div></div>';
+   B-BrollCalm: on the line's own --surface-2, lined up under the name, a
+   definition list whose fields show their border at rest (#169, Adam:
+   "fields and buttons must be easy to find"), then Flag for reshoot and
+   the ⋯ menu (Rename, Delete) at its foot. */
+
+function field(label, valueHtml) {
+  return '<dt class="broll-label">' + escapeHtml(label) + '</dt><dd class="broll-value">' + valueHtml + '</dd>';
 }
 
-function cardHtml(e) {
+/* The chevron an .ev-field draws at its right (app.css "side panel parts"). */
+function chevronHtml() {
+  return '<svg class="ev-chevron" aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg>';
+}
+
+var SHOT_STATUSES = [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }];
+
+/* The scene gutter's lamp, in the b-roll colour: an empty square to
+   shoot, filled with a tick once shot. */
+function statusLampHtml(status) {
+  return '<span class="broll-status-lamp' + (status === "shot" ? ' is-shot' : '') + '" aria-hidden="true">' +
+    (status === "shot" ? icon("check") : '') + '</span>';
+}
+
+/* Status as a field that flips To shoot ↔ Shot in one click (Adam, #169:
+   like the breakdown's status, which cycles), so no chevron and no menu.
+   It is the line's tick in words, with the same data-action. A reviewer
+   gets the value, disabled. */
+function statusFieldHtml(e, ro) {
+  var id = escapeHtml(e.id);
+  var cur = SHOT_STATUSES.filter(function (s) { return s.id === e.status; })[0] || SHOT_STATUSES[0];
+  var next = SHOT_STATUSES.filter(function (s) { return s.id !== cur.id; })[0];
+  var says = "Status: " + cur.label + (ro ? "" : ". Click to mark " + next.label.toLowerCase());
+  return '<span class="ev-field broll-status-field">' +
+      '<button type="button" class="broll-status-btn" data-action="broll-status-toggle" data-id="' + id + '" data-status="' +
+        cur.id + '" aria-label="' + escapeHtml(says) + '" title="' + escapeHtml(says) + '"' + (ro ? ' disabled' : '') + '>' +
+        statusLampHtml(cur.id) + escapeHtml(cur.label) + '</button>' +
+    '</span>';
+}
+
+function cardHtml(e, starts) {
   var id = escapeHtml(e.id);
   var ro = reviewMode();
   var off = ro ? ' disabled' : '';
   var renaming = renamingId === e.id;
-  var statusSeg = '<div class="broll-seg" role="radiogroup" aria-label="Status">' +
-    [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }].map(function (s) {
-      var on = s.id === e.status;
-      return '<button type="button" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" class="' +
-        (on ? 'is-active' : '') + '"' + off + ' data-action="broll-status-set" data-id="' + id + '" data-status="' + s.id + '">' +
-        escapeHtml(s.label) + '</button>';
-    }).join("") + '</div>' +
-    '<button type="button" class="broll-flag-btn' + (e.reshoot ? ' is-active' : '') + '"' + off + ' data-action="broll-reshoot-toggle" ' +
-      'data-id="' + id + '" aria-pressed="' + (e.reshoot ? 'true' : 'false') + '" title="' +
-      (ro ? (e.reshoot ? 'Flagged' : 'Not flagged')
-          : e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
-      brollIcon("flag", 14) + (e.reshoot ? 'Flagged' : 'Flag') + '</button>';
 
+  /* "03 · 00:31": the scene and where it starts, one link to it */
+  var when = startOf(e, starts);
   var scene = e.rowId
-    ? '<span class="broll-scene-n">' + sceneLabel(e) + '</span>' +
-      '<button type="button" class="broll-link" data-action="broll-jump" data-id="' + id + '">Go to scene' + brollIcon("go", 13) + '</button>'
+    ? '<button type="button" class="jump-link broll-scene-link" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
+        sceneLabel(e) + '"><span class="broll-scene-n">' + sceneLabel(e) + '</span>' + (when ? ' · ' + when : '') + '</button>'
     : e.orphaned
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
       : '<span class="broll-muted">Added here</span>';
 
+  /* Looks like B's select; opens the text box with the known places in
+     its list, so a new place can still be typed in one go. */
   var location = ro
-    ? '<span class="broll-static"><span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' + brollIcon("pin", 13) + '</span>' +
+    ? '<span class="broll-static">' +
         (e.location ? escapeHtml(e.location) : '<span class="broll-muted">No location</span>') + '</span>'
     : editingLocFor === e.id
-    ? '<input type="text" class="broll-loc-input" data-id="' + id + '" list="broll-loc-options" maxlength="80" ' +
+    ? '<input type="text" class="broll-loc-input ev-field" data-id="' + id + '" list="broll-loc-options" maxlength="80" ' +
         'placeholder="Where it gets shot" aria-label="Location" value="' + escapeHtml(e.location) + '">'
-    : '<button type="button" class="broll-picker" data-action="broll-loc-edit" data-id="' + id + '">' +
-        '<span class="broll-loc-pin" style="--loc:' + catColor("location") + '">' + brollIcon("pin", 13) + '</span>' +
-        (e.location ? escapeHtml(e.location) : '<span class="broll-muted">Add location</span>') +
-        brollIcon("chevron", 13, "broll-picker-caret") + '</button>';
+    : '<span class="ev-field broll-loc-field"><button type="button" class="broll-picker" data-action="broll-loc-edit" data-id="' + id +
+        '" aria-label="' + escapeHtml("Location: " + (e.location || "none") + ". Change") + '">' +
+        (e.location ? escapeHtml(e.location) : '<span class="broll-muted">Choose…</span>') + '</button>' +
+        chevronHtml() + '</span>';
 
+  var who = personById(e.owner);
   var assigned = '<div class="broll-owner-row">' +
-      '<select class="broll-owner-select" data-id="' + id + '" aria-label="Assigned to"' + off + '>' +
-        '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-        S.state.people.map(function (p) {
-          return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
-            escapeHtml(p.name) + '</option>';
-        }).join("") +
-      '</select>' +
+      '<span class="ev-field broll-owner-field">' + (who ? avatarHtml(who) : '') +
+        '<select class="broll-owner-select' + (who ? '' : ' is-empty') + '" data-id="' + id + '" aria-label="Assigned to"' + off + '>' +
+          '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
+          S.state.people.map(function (p) {
+            return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
+              escapeHtml(p.name) + '</option>';
+          }).join("") +
+        '</select>' +
+        (ro ? '' : chevronHtml()) +
+      '</span>' +
       (ro ? '' :
-        '<button type="button" class="broll-small-btn" data-action="broll-person-new" data-id="' + id +
-          '" title="Add someone to the crew list">+ Person</button>') +
+        '<button type="button" class="broll-person-btn btn-outline is-small" data-action="broll-person-new" data-id="' + id +
+          '" title="Add someone to the crew list">' + icon("plus") + 'Add person</button>') +
     '</div>' +
     (addingPersonFor === e.id
       ? '<div class="broll-owner-row">' +
-          '<input type="text" class="broll-person-input" data-id="' + id + '" placeholder="Their name" maxlength="60" aria-label="New person\'s name">' +
-          '<button type="button" class="broll-small-btn" data-action="broll-person-save" data-id="' + id + '">Add</button>' +
-          '<button type="button" class="broll-small-btn" data-action="broll-person-cancel">Cancel</button>' +
+          '<input type="text" class="broll-person-input ev-field" data-id="' + id + '" placeholder="Their name" maxlength="60" aria-label="New person\'s name">' +
+          '<button type="button" class="btn-outline is-small" data-action="broll-person-save" data-id="' + id + '">Add</button>' +
+          '<button type="button" class="btn-outline is-small" data-action="broll-person-cancel">Cancel</button>' +
         '</div>'
       : '');
 
+  /* The words in full, in the script's face (#169: never cut short) */
   var cuts = editingRefFor === e.id
-    ? '<textarea class="broll-ref-input" data-id="' + id + '" rows="3" aria-label="Cuts against" ' +
+    ? '<textarea class="broll-ref-input ev-field" data-id="' + id + '" rows="3" aria-label="Cuts against" ' +
         'placeholder="The line of audio this cuts against">' + escapeHtml(e.audioRef) + '</textarea>'
     : '<div class="broll-cuts">' +
         (e.audioRef
@@ -566,41 +695,53 @@ function cardHtml(e) {
           : '<span class="broll-muted">No line yet</span>') +
         (ro ? '' :
           '<button type="button" class="broll-icon-btn" data-action="broll-ref-edit" data-id="' + id +
-            '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 14) + '</button>') +
+            '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 16) + '</button>') +
       '</div>';
 
+  /* Flag for reshoot, and ⋯ with what is left: outlined buttons (#169).
+     The menu opens upward, since it sits at the foot of the shot. */
+  var foot = '<div class="broll-card-foot">' +
+      '<button type="button" class="broll-flag-btn btn-outline is-small' + (e.reshoot ? ' is-active' : '') + '"' + off +
+        ' data-action="broll-reshoot-toggle" data-id="' + id + '" aria-pressed="' + (e.reshoot ? 'true' : 'false') + '" title="' +
+        (ro ? (e.reshoot ? 'Flagged' : 'Not flagged')
+            : e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
+        icon("flag") + (e.reshoot ? 'Flagged' : 'Flag for reshoot') + '</button>' +
+      (ro ? '' :
+        '<div class="broll-more-wrap">' +
+          '<button type="button" class="broll-more-btn btn-outline is-small is-icon" data-action="broll-menu" data-id="' + id +
+            '" aria-haspopup="menu" aria-expanded="' + (menuFor === e.id ? 'true' : 'false') +
+            '" aria-label="More actions for this shot" title="More">' + icon("more") + '</button>' +
+          (menuFor === e.id
+            ? '<div class="broll-menu broll-more-menu" role="menu">' +
+                (e.rowId ? '<button type="button" role="menuitem" class="broll-menu-item" data-action="broll-rename" data-id="' + id +
+                  '">Rename in script</button>' : '') +
+                '<button type="button" role="menuitem" class="broll-menu-item danger" data-action="broll-delete" data-id="' + id +
+                  '">Delete from list</button>' +
+              '</div>'
+            : '') +
+        '</div>') +
+    '</div>';
+
   return '<div class="broll-card" data-id="' + id + '">' +
-      '<div class="broll-card-head">' +
-        (renaming
-          ? '<input type="text" class="broll-rename-input" data-id="' + id + '" maxlength="200" aria-label="Shot name" value="' +
+      (renaming
+        ? '<div class="broll-card-rename">' +
+            '<input type="text" class="broll-rename-input ev-field" data-id="' + id + '" maxlength="200" aria-label="Shot name" value="' +
               escapeHtml(e.name) + '">' +
-            '<button type="button" class="broll-small-btn" data-action="broll-rename-save" data-id="' + id + '">Save</button>' +
-            '<button type="button" class="broll-small-btn" data-action="broll-rename-cancel">Cancel</button>'
-          : '<span class="broll-card-desc">' + (e.desc ? escapeHtml(e.desc) : '') + '</span>' +
-            (ro ? '' :
-            '<div class="broll-more-wrap">' +
-              '<button type="button" class="broll-icon-btn" data-action="broll-menu" data-id="' + id +
-                '" aria-haspopup="true" aria-expanded="' + (menuFor === e.id ? 'true' : 'false') + '" aria-label="More">' +
-                brollIcon("more", 16) + '</button>' +
-              (menuFor === e.id
-                ? '<div class="broll-menu" role="menu">' +
-                    (e.rowId ? '<button type="button" role="menuitem" class="broll-menu-item" data-action="broll-rename" data-id="' + id +
-                      '">Rename in script</button>' : '') +
-                    '<button type="button" role="menuitem" class="broll-menu-item danger" data-action="broll-delete" data-id="' + id +
-                      '">Delete from list</button>' +
-                  '</div>'
-                : '') +
-            '</div>')) +
-      '</div>' +
-      field("Status", statusSeg, "broll-field-status") +
-      field("Scene", scene, "", true) +
-      field("Location", location) +
-      field("Assigned", assigned) +
-      field("Props", propsEditHtml(e, ro)) +
-      field("Cuts against", cuts) +
-      field("Note", '<textarea class="broll-notes-input" data-id="' + id + '" rows="2" aria-label="Note" ' +
-        (ro ? 'readonly placeholder="No note">'
-            : 'placeholder="Why it is flagged, a reference link, where the footage lives…">') + escapeHtml(e.notes) + '</textarea>') +
+            '<button type="button" class="btn-outline is-small" data-action="broll-rename-save" data-id="' + id + '">Save</button>' +
+            '<button type="button" class="btn-outline is-small" data-action="broll-rename-cancel">Cancel</button>' +
+          '</div>'
+        : e.desc ? '<div class="broll-card-desc">' + escapeHtml(e.desc) + '</div>' : '') +
+      '<dl class="broll-fields">' +
+        field("Status", statusFieldHtml(e, ro)) +
+        field("Scene", scene) +
+        field("Location", location) +
+        field("Assigned", assigned) +
+        field("Props", propsEditHtml(e, ro)) +
+        field("Cuts against", cuts) +
+        field("Note", '<textarea class="broll-notes-input ev-field" data-id="' + id + '" rows="1" aria-label="Note" ' +
+          (ro ? 'readonly placeholder="No note">' : 'placeholder="Add a note…">') + escapeHtml(e.notes) + '</textarea>') +
+      '</dl>' +
+      foot +
     '</div>';
 }
 
@@ -616,10 +757,12 @@ function bulkBarHtml(entries) {
   if (!chosen.length) return "";
   var allShot = chosen.every(function (e) { return e.status === "shot"; });
   var allFlagged = chosen.every(function (e) { return e.reshoot; });
+  /* #169: the panel's own language — outlined buttons and fields on a
+     raised strip — rather than the dark bar it was */
   return '<div class="broll-bulk-row">' +
       '<span class="broll-bulk-n">' + chosen.length + ' selected</span>' +
-      '<button type="button" class="broll-bulk-btn" data-action="broll-bulk-shot">' +
-        brollIcon("check", 14) + (allShot ? 'Mark to shoot' : 'Mark shot') + '</button>' +
+      '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-shot">' +
+        icon("check") + (allShot ? 'Mark to shoot' : 'Mark shot') + '</button>' +
       '<select class="broll-bulk-select" id="broll-bulk-owner" aria-label="Assign the selected shots">' +
         '<option value="__none__" selected>Assign</option>' +
         '<option value="">Unassigned</option>' +
@@ -636,20 +779,20 @@ function bulkBarHtml(entries) {
         }).join("") +
         '<option value="__new__">New location…</option>' +
       '</select>' +
-      '<button type="button" class="broll-bulk-btn" data-action="broll-bulk-flag">' +
-        brollIcon("flag", 14) + (allFlagged ? 'Unflag' : 'Flag') + '</button>' +
+      '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-flag">' +
+        icon("flag") + (allFlagged ? 'Unflag' : 'Flag') + '</button>' +
       '<button type="button" class="broll-bulk-clear" data-action="broll-bulk-clear" aria-label="Clear the selection" ' +
-        'title="Clear the selection (Esc)">' + brollIcon("x", 14) + '</button>' +
+        'title="Clear the selection (Esc)">' + icon("close") + '</button>' +
     '</div>' +
     (bulkInput
       ? '<div class="broll-bulk-row">' +
-          '<input type="text" id="broll-bulk-input" maxlength="' + (bulkInput === "person" ? 60 : 80) + '" placeholder="' +
+          '<input type="text" id="broll-bulk-input" class="ev-field" maxlength="' + (bulkInput === "person" ? 60 : 80) + '" placeholder="' +
             (bulkInput === "person" ? 'Their name' : 'Where they get shot') + '" aria-label="' +
             (bulkInput === "person" ? 'New person' : 'New location') + '"' +
             (bulkInput === "location" ? ' list="broll-loc-options"' : '') + '>' +
-          '<button type="button" class="broll-bulk-btn" data-action="broll-bulk-input-save">' +
+          '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-input-save">' +
             (bulkInput === "person" ? 'Assign' : 'Set') + '</button>' +
-          '<button type="button" class="broll-bulk-btn" data-action="broll-bulk-input-cancel">Cancel</button>' +
+          '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-input-cancel">Cancel</button>' +
         '</div>'
       : '');
 }
@@ -712,26 +855,43 @@ export function renderBroll() {
   dropEditingForReview();
   var entries = brollEntries();
   pruneSelection(entries);
+  var summary = document.getElementById("broll-summary");
   var controls = document.getElementById("broll-controls");
   var listEl = document.getElementById("broll-list");
   var bulk = document.getElementById("broll-bulk");
 
   keepingFocus(panel, function () {
-    controls.innerHTML = entries.length
-      ? summaryHtml(entries) +
-        '<div class="broll-controls-row">' + filterChipsHtml(entries) + groupMenuHtml() + '</div>'
-      : '';
+    /* the count and the bar live in the head, the tabs under it (#169) */
+    if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
+    controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
     var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
+    var starts = sceneStarts();
     listEl.innerHTML = datalistsHtml() + (shown.length
       ? brollGroups(shown, view.group).map(function (g) {
           return '<div class="broll-group" role="group" aria-label="' + escapeHtml(g.label || "Shots") + '">' +
-            groupHeadHtml(g) + g.items.map(rowHtml).join("") + '</div>';
+            groupHeadHtml(g, starts) + g.items.map(function (e) { return rowHtml(e, starts); }).join("") + '</div>';
         }).join("")
       : emptyListHtml(entries));
     var bar = bulkBarHtml(entries);
     bulk.innerHTML = bar;
     bulk.hidden = !bar;
   });
+  fitNotes(listEl);
+}
+
+/* A note or a "Cuts against" being edited is one line tall until it has
+   more, then grows to show all of it (#169: nothing cut off). CSS
+   field-sizing does that where the browser has it; elsewhere the box is
+   measured after every draw and every keystroke. */
+function fitNotes(root) {
+  if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
+  Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field"), fitTextarea);
+}
+
+function fitTextarea(box) {
+  if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
+  box.style.height = "auto";
+  box.style.height = (box.scrollHeight + box.offsetHeight - box.clientHeight) + "px";
 }
 
 /* Everything that shows the list: the panel, and the full page when it is
@@ -991,7 +1151,12 @@ function onBrollClick(e, root) {
 
   if (action === "broll-status-toggle") {
     e.stopPropagation();
+    var fromField = btn.classList.contains("broll-status-btn");
     toggleBrollShot(id);
+    /* the open shot's Status field is drawn anew saying the other state;
+       the focus stays on it, for the next press of Space */
+    var again = fromField && root.querySelector('.broll-status-btn[data-id="' + cssAttr(id) + '"]');
+    if (again) again.focus();
   } else if (action === "broll-expand") {
     /* a selection is only ever for the bulk bar, which a reviewer has none of */
     if ((e.shiftKey || e.ctrlKey || e.metaKey) && !reviewMode()) {
@@ -1003,8 +1168,6 @@ function onBrollClick(e, root) {
     openId = openId === id ? null : id;
     renamingId = null; editingLocFor = null; editingRefFor = null; addingPersonFor = null;
     renderBrollViews();
-  } else if (action === "broll-status-set") {
-    updateRecord(id, { status: btn.getAttribute("data-status") === "shot" ? "shot" : "unshot" });
   } else if (action === "broll-reshoot-toggle") {
     var rec = brollRecord(id);
     if (!rec) return;
@@ -1183,6 +1346,14 @@ function onBrollKeydown(e, root) {
     if (back) back.focus();
     return;
   }
+  /* Up and Down move through an open menu's items, as in any menu. */
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && t.classList && t.classList.contains("broll-menu-item")) {
+    var items = Array.prototype.slice.call(t.parentNode.querySelectorAll(".broll-menu-item"));
+    var at = items.indexOf(t) + (e.key === "ArrowDown" ? 1 : -1);
+    e.preventDefault();
+    items[(at + items.length) % items.length].focus();
+    return;
+  }
   if (e.key !== "Enter") return;
   /* Every box Enter would commit writes a shot; in a review session the
      only one left in the page is Add a shot's, hidden by app.css. */
@@ -1210,6 +1381,7 @@ function onBrollKeydown(e, root) {
 function onBrollInput(e) {
   if (reviewMode()) return;
   var box = e.target;
+  if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   /* A name picked from the Add prop box's list is a choice made, not
      typing on the way to one: it goes in at once. */
   if (box.classList && box.classList.contains("broll-prop-input") &&

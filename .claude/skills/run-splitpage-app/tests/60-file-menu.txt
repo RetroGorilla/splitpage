@@ -28,7 +28,8 @@ expect Math.round(document.getElementById('file-menu').getBoundingClientRect().w
 expect document.getElementById('file-menu').getBoundingClientRect().top >= document.getElementById('btn-file').getBoundingClientRect().bottom
 expect Math.abs(document.getElementById('file-menu').getBoundingClientRect().left - document.getElementById('btn-file').getBoundingClientRect().left) < 2
 expect document.getElementById('file-menu').getBoundingClientRect().bottom <= innerHeight
-expect getComputedStyle(document.getElementById('file-menu')).borderTopLeftRadius == 14px
+# --radius-md, a menu's radius since #169 (it was 14px)
+expect getComputedStyle(document.getElementById('file-menu')).borderTopLeftRadius == 8px
 # no scrim and no title bar: those are the phone sheet's
 expect document.getElementById('file-menu-backdrop').getBoundingClientRect().height == 0
 expect document.querySelector('#file-menu .menu-head').getBoundingClientRect().height == 0
@@ -39,7 +40,8 @@ shot 60-file-menu
 # --- the file card ----------------------------------------------------------
 expect document.getElementById('fm-card-name').textContent == Not saved yet
 expect document.getElementById('fm-card-meta').textContent.indexOf('Save to choose') === 0
-expect getComputedStyle(document.querySelector('#file-menu .fm-card')).borderTopLeftRadius == 10px
+# --radius-md, a detail card's radius since #169 (it was 10px)
+expect getComputedStyle(document.querySelector('#file-menu .fm-card')).borderTopLeftRadius == 8px
 expect document.getElementById('menu-autosave').closest('.fm-card') !== null
 expect document.getElementById('menu-autosave').getAttribute('role') == menuitemcheckbox
 expect document.getElementById('menu-autosave').getAttribute('aria-checked') == true
@@ -62,11 +64,12 @@ expect Array.prototype.map.call(document.querySelectorAll('#file-menu .menu-grou
 expect getComputedStyle(document.querySelector('#file-menu .menu-group-head')).fontSize == 12px
 expect getComputedStyle(document.querySelector('#file-menu .menu-group-head')).fontWeight == 600
 
-# --- every item: an icon, sentence case, 36px, 14px -----------------------
+# --- every item: an icon, sentence case, 32px, 14px -----------------------
+# (B's menu row since #169; it was 36px)
 expect Array.prototype.every.call(document.querySelectorAll('#file-menu .mi'), function(b){return !!b.querySelector('svg.mi-icon use');})
 expect getComputedStyle(document.querySelector('#file-menu [data-file-action="open"]')).textTransform == none
 expect getComputedStyle(document.querySelector('#file-menu [data-file-action="open"]')).fontSize == 14px
-expect Math.round(document.querySelector('#file-menu [data-file-action="open"]').getBoundingClientRect().height) == 36
+expect Math.round(document.querySelector('#file-menu [data-file-action="open"]').getBoundingClientRect().height) == 32
 expect document.querySelectorAll('#file-menu .mi-icon').length > 20
 
 # --- shortcut chips: only the ones that work in this (browser) build ------

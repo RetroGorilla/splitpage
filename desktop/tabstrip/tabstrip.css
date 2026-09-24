@@ -1,12 +1,26 @@
 /* Splitpage desktop — title-bar tab strip styles.
  *
  * Plain CSS, no build step (this page is not part of the src/js/src/app.css
- * build — see HOUSE-RULES). Self-only CSP means no external fonts: stick to
- * the system stack.
+ * build — see HOUSE-RULES). Self-only CSP means no external fonts: Chivo is
+ * named first so a machine that has it installed uses the app's face, and
+ * the system stack does the rest.
+ *
+ * The colours are the app's own tokens (src/app.css, #169), copied by value
+ * under the same names since this page cannot read that file. The strip's
+ * background is also the title-bar overlay colour desktop/main.js hands
+ * Electron (titleBarOverlayColors, backgroundColorForTheme): change one and
+ * change the other, or the caption buttons sit on a different shade.
  */
 
 :root {
   color-scheme: light dark;
+  --bg: #F1F0ED;
+  --surface-2: #E9E8E4;
+  --hover: #E2E1DC;
+  --border-strong: #C9C7C1;
+  --text: #171613;
+  --visual: #2863AB;
+  --danger: #C4302A;
   /* Set by tabstrip.js from navigator.windowControlsOverlay.getTitlebarAreaRect()
      when that API reports real caption-button geometry. Falls back to 150px
      below on win32 (Electron's own Windows caption buttons) when the
@@ -28,22 +42,27 @@ body {
      gap above the document view. */
   height: 36px;
   overflow: hidden;
-  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-family: Chivo, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
   font-size: 12.5px;
   user-select: none;
   -webkit-user-select: none;
 }
 
-body {
-  background: #F6F4EC;
-  color: #2A2620;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0F0E0C;
+    --surface-2: #21201E;
+    --hover: #2A2926;
+    --border-strong: #43423F;
+    --text: #ECEBE7;
+    --visual: #80BDFB;
+    --danger: #F45246;
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #16130F;
-    color: #E8E3D8;
-  }
+body {
+  background: var(--bg);
+  color: var(--text);
 }
 
 .tabstrip {
@@ -116,33 +135,20 @@ body {
 }
 
 .tab:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  .tab:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
+  background: var(--hover);
 }
 
 .tab--active {
-  background: rgba(0, 0, 0, 0.09);
-  border-color: rgba(0, 0, 0, 0.12);
-}
-
-@media (prefers-color-scheme: dark) {
-  .tab--active {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.16);
-  }
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 
 .tab--drop-before {
-  box-shadow: inset 2px 0 0 0 #7A6A4E;
+  box-shadow: inset 2px 0 0 0 var(--visual);
 }
 
 .tab--drop-after {
-  box-shadow: inset -2px 0 0 0 #7A6A4E;
+  box-shadow: inset -2px 0 0 0 var(--visual);
 }
 
 .tab__icon {
@@ -193,8 +199,8 @@ body {
   font-size: 9px;
   font-weight: 700;
   line-height: 1;
-  color: #fff;
-  background: #b4493c;
+  color: var(--bg);
+  background: var(--danger);
 }
 
 .tab__close {

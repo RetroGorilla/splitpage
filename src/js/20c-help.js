@@ -184,6 +184,18 @@ function markTourDone() {
   try { localStorage.setItem(TOUR_DONE_KEY, "1"); } catch (e) {}
 }
 
+/* A step's element, or at phone width its stand-in: the header's panel
+   buttons are not drawn there, and the bottom bar's tab that clicks one
+   (#169, #phone-bar, data-for) is what the reader can see and tap. */
+function tourTarget(step) {
+  var el = document.querySelector(step.selector);
+  if (el && el.id && !el.getClientRects().length) {
+    var tab = document.querySelector('#phone-bar [data-for="' + el.id + '"]');
+    if (tab && tab.getClientRects().length) return tab;
+  }
+  return el;
+}
+
 /* Recomputes the cut-out and card position from the target's own live
    rect — following the hideTagGhost recompute-on-scroll/resize pattern
    (21-events.js) rather than caching a rect that a layout change (or a
@@ -191,7 +203,7 @@ function markTourDone() {
 function positionTourStep() {
   if (tourStepIndex < 0) return;
   var step = TOUR_STEPS[tourStepIndex];
-  var target = document.querySelector(step.selector);
+  var target = tourTarget(step);
   var cutout = document.getElementById("tour-cutout");
   var card = document.getElementById("tour-card");
   if (!target || !cutout || !card) { endTour(false); return; }
@@ -255,7 +267,7 @@ function renderTourStep() {
   var taggingHelp = document.getElementById("tagging-help");
   if (taggingHelp) taggingHelp.hidden = !step.showTaggingHelp;
 
-  var target = document.querySelector(step.selector);
+  var target = tourTarget(step);
   if (target && target.scrollIntoView) target.scrollIntoView({ block: "center" });
   positionTourStep();
 }

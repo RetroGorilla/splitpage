@@ -17,12 +17,41 @@ expect innerWidth == 375
 expect document.documentElement.scrollWidth <= innerWidth
 
 # --- the stacked layout -----------------------------------------------------
-expect getComputedStyle(document.querySelector('.gutter')).flexDirection == row
+# The gutter is a strip across the top of the scene: the number and the
+# status on one line above the cells (#169, B-Phone: the gutter hands its
+# parts to the row's grid, so the rail's read time can sit among them).
+expect (function () { var r = document.querySelector('#rows .row'); var n = r.querySelector('.row-num').getBoundingClientRect(), s = r.querySelector('.status-btn').getBoundingClientRect(), v = r.querySelector('.visual-cell').getBoundingClientRect(); return n.bottom <= v.top && s.bottom <= v.top + 1 && s.left > n.right && n.top < s.bottom && s.top < n.bottom; })()
 expect getComputedStyle(document.querySelector('.col-head')).display == none
-expect getComputedStyle(document.querySelector('#rows .row')).gridTemplateColumns.split(' ').length == 1
+# the cells each take the whole width, one above the other
+expect (function () { var r = document.querySelector('#rows .row'); var a = r.querySelector('.visual-cell').getBoundingClientRect(), b = r.querySelector('.audio-cell').getBoundingClientRect(); return Math.round(a.width) === Math.round(r.getBoundingClientRect().width) && Math.round(b.width) === Math.round(a.width) && b.top >= a.bottom; })()
 
 # iOS zooms the page when focusing any input under 16px
 expect parseFloat(getComputedStyle(document.querySelector('.cell-editable')).fontSize) >= 16
+expect parseFloat(getComputedStyle(document.getElementById('doc-title')).fontSize) >= 16
+
+# --- content first (#169, B-Phone) ------------------------------------------
+# One 56px header row over the compact rundown strip; File and Present are
+# 44px icons; the panels and Write are in the bottom bar instead, which is
+# 72px along the foot of the screen, with Script lit.
+expect Math.round(document.querySelector('.topbar-row').getBoundingClientRect().height) == 56
+expect Math.round(document.getElementById('rundown').getBoundingClientRect().height) == 52
+expect getComputedStyle(document.querySelector('#rundown .rundown-ruler')).display == none
+expect document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+expect Math.round(document.getElementById('btn-file').getBoundingClientRect().width) == 44
+expect Math.round(document.getElementById('btn-present').getBoundingClientRect().width) == 44
+expect getComputedStyle(document.querySelector('.topbar .btn-group')).display == none
+expect Math.round(document.getElementById('phone-bar').getBoundingClientRect().height) == 72
+expect Math.round(document.getElementById('phone-bar').getBoundingClientRect().bottom) == 812
+expect document.querySelectorAll('#phone-bar .phone-tab').length == 6
+expect document.querySelector('#phone-bar [data-for="script"]').getAttribute('aria-current') == page
+# the counts are the header's badges, and every tab is a thumb wide with its
+# word in full
+expect Array.prototype.every.call(document.querySelectorAll('#phone-bar [data-badge]'), function (t) { var b = document.getElementById(t.getAttribute('data-badge')), c = t.querySelector('.phone-tab-count'); return b.hidden ? c.hidden : (!c.hidden && c.textContent === b.textContent); })
+expect Array.prototype.every.call(document.querySelectorAll('#phone-bar .phone-tab'), function (t) { var l = t.querySelector('.phone-tab-label'); return t.getBoundingClientRect().width >= 44 && l.scrollWidth <= l.clientWidth; })
+# a scene's header is its number and status; the start and read time wait
+# for the scene you are in
+expect getComputedStyle(document.querySelector('#rows .row .row-start')).display == none
+expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display == none
 
 # --- tagging still works on a phone -----------------------------------------
 caret #rows .row .audio-cell .cell-editable
@@ -30,6 +59,11 @@ press  Grab the [gaffer tape] now.
 sleep 500
 expect document.querySelectorAll('#rows .tag-anchor').length == 1
 expect document.documentElement.scrollWidth <= innerWidth
+# ... and now that it is the scene being written, it says where it starts
+# and how long it reads; the next scene still does not
+expect getComputedStyle(document.querySelector('#rows .row .row-start')).display !== 'none'
+expect getComputedStyle(document.querySelector('#rows .row .row-rail')).display !== 'none'
+expect getComputedStyle(document.querySelectorAll('#rows .row')[1].querySelector('.row-start')).display == none
 
 # --- the focus toolbar must not blow the grid out ---------------------------
 expect document.querySelector('#rows .row').getBoundingClientRect().width <= innerWidth
@@ -48,9 +82,17 @@ sleep 700
 expect document.querySelectorAll('#rows .visual-cell .tag-anchor').length == 1
 
 # --- long-press starts a selection; a tap then toggles ----------------------
-click text*=PRODUCTION
+# Production from the bottom bar: it clicks the header's button, which a
+# phone does not draw (#169, B-Phone)
+click #phone-bar [data-for="btn-production"]
 sleep 600
 expect document.querySelectorAll('#production-list .tag-entity').length >= 1
+expect document.querySelector('#phone-bar [data-for="btn-production"]').getAttribute('aria-current') == page
+expect !document.querySelector('#phone-bar [data-for="script"]').hasAttribute('aria-current')
+# a sheet from the top of the screen down to the bar, which stays
+expect Math.round(document.getElementById('production-panel').getBoundingClientRect().top) == 0
+expect Math.round(document.getElementById('production-panel').getBoundingClientRect().bottom) == 740
+expect Math.round(document.getElementById('production-panel').getBoundingClientRect().width) == 375
 
 eval (function(){var h=document.querySelector('#production-list .tag-entity-name');var r=h.getBoundingClientRect();var o={bubbles:true,cancelable:true,pointerType:'touch',clientX:r.x+5,clientY:r.y+5};h.dispatchEvent(new PointerEvent('pointerdown',o));window.__lpTarget=h;window.__lpOpts=o;return true;})()
 sleep 700
@@ -81,6 +123,12 @@ sleep 300
 expect document.querySelectorAll('.tag-entity.is-expanded').length == 1
 
 shot 05-mobile
+
+# Script is the script: tapping it closes the panel over it
+click #phone-bar [data-for="script"]
+sleep 400
+expect document.getElementById('production-panel').hidden
+expect document.querySelector('#phone-bar [data-for="script"]').getAttribute('aria-current') == page
 
 # --- the File menu is a sheet from the bottom of the screen (#145) ----------
 # The whole width, a scrim behind it, its own close button, finger-sized

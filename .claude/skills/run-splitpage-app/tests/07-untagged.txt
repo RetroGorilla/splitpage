@@ -109,10 +109,12 @@ expect document.getElementById('tag-suggest').classList.contains('is-visible') =
 expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .tag-anchor').length == 1
 
 # --- the breakdown now counts the mention it was missing --------------------
-click text*=PRODUCTION
+click #btn-production
 sleep 600
-# scoped to the item under test - the sections above deliberately add others
+# scoped to the item under test - the sections above deliberately add others.
+# Since #169 a row shows its scenes ("01"), not "N mentions"; both of gaffer
+# tape's are in scene 01, so the count is in that scene link's name.
 expect document.querySelectorAll('#production-list .tag-entity').length >= 1
-expect Array.from(document.querySelectorAll('#production-list .tag-entity')).some(function (c) { return c.textContent.indexOf('gaffer tape') !== -1 && c.textContent.indexOf('2 mentions') !== -1; })
+expect Array.from(document.querySelectorAll('#production-list .tag-entity')).some(function (c) { return c.querySelector('.tag-entity-name').textContent === 'gaffer tape' && c.querySelector('.tag-scene').getAttribute('aria-label').indexOf('2 mentions') !== -1; })
 
 quit

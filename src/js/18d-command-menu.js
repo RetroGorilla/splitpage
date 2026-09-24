@@ -251,10 +251,40 @@ var shown = [];          /* the rows in list order: {cmd, view} */
 var active = -1;
 var returnFocus = null;  /* {el, range} to go back to */
 
+/* A label with the letters typed marked, as B-Command draws them (#169):
+   each term where scoreFor() found it — at the start of a word of the
+   label, else anywhere in it. A term found only among the command's other
+   words ("teleprompter" for Present) marks nothing. Only the markup
+   changes; the label's text is the same. */
+function labelHtml(label, terms) {
+  var lower = label.toLowerCase();
+  var marks = [];
+  terms.forEach(function (t) {
+    var at = -1;
+    var re = /[a-z0-9]+/g, m;
+    while ((m = re.exec(lower))) {
+      if (m[0].indexOf(t) === 0) { at = m.index; break; }
+    }
+    if (at === -1) at = lower.indexOf(t);
+    if (at === -1) return;
+    if (marks.some(function (r) { return at < r[1] && at + t.length > r[0]; })) return;
+    marks.push([at, at + t.length]);
+  });
+  if (!marks.length) return escapeHtml(label);
+  marks.sort(function (a, b) { return a[0] - b[0]; });
+  var out = "", pos = 0;
+  marks.forEach(function (r) {
+    out += escapeHtml(label.slice(pos, r[0])) + "<mark>" + escapeHtml(label.slice(r[0], r[1])) + "</mark>";
+    pos = r[1];
+  });
+  return out + escapeHtml(label.slice(pos));
+}
+
 function renderList() {
   var list = el("cmdk-list");
   var input = el("cmdk-input");
   var results = commandResults(input.value);
+  var terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   shown = [];
   if (!results.length) {
     list.innerHTML = '<div class="cmdk-empty">No command matches “' + escapeHtml(input.value.trim()) + '”.</div>';
@@ -271,7 +301,7 @@ function renderList() {
       html += '<div class="cmdk-item" role="option" id="cmdk-opt-' + n + '" data-index="' + n + '" data-cmd="' + escapeHtml(it.cmd.id) + '"' +
         ' aria-selected="false"' + (v.disabled ? ' aria-disabled="true"' : '') + '>' +
         '<svg class="cmdk-icon" aria-hidden="true"><use href="#' + escapeHtml(v.icon) + '"/></svg>' +
-        '<span class="cmdk-text"><span class="cmdk-label">' + escapeHtml(v.label) + '</span>' +
+        '<span class="cmdk-text"><span class="cmdk-label">' + labelHtml(v.label, terms) + '</span>' +
         (v.why ? '<span class="cmdk-why">' + escapeHtml(v.why) + '</span>' : '') + '</span>' +
         (v.state ? '<span class="cmdk-state">' + v.state + '</span>' : '') +
         (v.keys ? '<span class="cmdk-keys" aria-hidden="true">' + keyChipsHtml(v.keys) + '</span>' : '') +

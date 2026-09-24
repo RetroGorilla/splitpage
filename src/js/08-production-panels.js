@@ -27,6 +27,7 @@ import {
   renameTag,
   selectedKeys,
   tagStatus,
+  tagStatusLampHtml,
   tagsByCategory,
   updateProductionBadge
 } from "./07-production-tags.js";
@@ -34,6 +35,7 @@ import { brollShotsByProp } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
+import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 
@@ -93,6 +95,14 @@ export function updateGearCount() {
   updateGearBadge(S.state ? gearEntries().length : 0);
 }
 
+/* "Gear · 2 items" in the panel's head (#169, B-PanelGear). */
+function updateGearHeadCount(n) {
+  var el = document.getElementById("gear-head-count");
+  if (!el) return;
+  el.hidden = !n;
+  el.innerHTML = '<span class="panel-count">' + n + '</span> item' + (n === 1 ? '' : 's');
+}
+
 export function renderGearList() {
   var panel = document.getElementById("gear-panel");
   if (!panel || panel.hidden || !S.state) return;
@@ -100,6 +110,7 @@ export function renderGearList() {
   var listEl = document.getElementById("gear-list");
   var entries = gearEntries();
   updateGearBadge(entries.length);
+  updateGearHeadCount(entries.length);
 
   document.querySelectorAll("#gear-modes [data-group]").forEach(function (b) {
     var on = b.getAttribute("data-group") === S.gearGroupBy;
@@ -107,10 +118,11 @@ export function renderGearList() {
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
 
+  /* the quick-add box sits at the panel's foot since #169 */
   if (!entries.length) {
     listEl.innerHTML = '<div class="comments-empty">No gear tracked yet.<br><br>' +
       'Type <code>&lt;a lens&gt;</code> straight into the script, select words and ' +
-      'press <strong>Tag</strong>, or just list it above — gear doesn’t have to be ' +
+      'press <strong>Tag</strong>, or just list it below — gear doesn’t have to be ' +
       'written into a scene to be tracked.</div>';
     return;
   }
@@ -125,7 +137,8 @@ export function renderGearList() {
     return;
   }
 
-  listEl.innerHTML = entries.map(function (e) { return tagEntityHtml(e, false); }).join("");
+  listEl.innerHTML = '<ul class="tag-list" aria-label="Gear items">' +
+    entries.map(function (e) { return tagEntityHtml(e, { gear: true }); }).join("") + '</ul>';
 }
 
 /* The textarea always opens showing what's actually tracked, sorted the
@@ -185,9 +198,40 @@ export function applyGearQuickAdd() {
   showToast("Gear list updated — " + parts.join(", ") + ".", "ok");
 }
 
-/* one chip per scene AND column, so "twice in scene 1" is distinguishable
-   from "once in the visual and once in the audio" */
-function sceneChipsHtml(item) {
+/* The Scenes column (#169, Adam's review): "03, 04, 05", one link per
+   scene however the item is written there. A scene with it in both
+   columns, or twice in one, is still one link — jumpToTag flashes every
+   mention in the scene it lands on, so one link reaches them all — and
+   the link's name says what is there ("Scene 03 · Visual and Audio · 2
+   mentions"), which is what the old per-column chips showed as text. */
+/* The comma between two scene numbers, in the body face: in the mono it
+   takes a whole character cell and reads "03 , 04". */
+var SCENE_SEP = '<span class="tag-scene-sep">, </span>';
+
+function sceneLinksHtml(item) {
+  var byRow = {}, order = [];
+  item.mentions.forEach(function (m) {
+    var s = byRow[m.rowId];
+    if (!s) { s = byRow[m.rowId] = { m: m, n: 0, visual: false, audio: false }; order.push(s); }
+    s.n++;
+    if (m.field === "visualText") s.visual = true; else s.audio = true;
+  });
+  order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
+  return order.map(function (s) {
+    var num = pad2(s.m.rowIndex + 1);
+    var label = "Scene " + num + " · " +
+      (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
+      (s.n > 1 ? " · " + s.n + " mentions" : "") + " — go to it";
+    return '<button type="button" class="tag-scene jump-link" data-action="jump-tag" data-row="' +
+      escapeHtml(s.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="' +
+      escapeHtml(label) + '" aria-label="' + escapeHtml(label) + '">' + num + '</button>';
+  }).join(SCENE_SEP);
+}
+
+/* The open Gear item's "Mentions" (B-PanelGear): one link per scene AND
+   column, "03 Visual", so "twice in scene 1" is distinguishable from
+   "once in the visual and once in the audio". */
+function mentionLinksHtml(item) {
   var seen = {}, order = [];
   item.mentions.forEach(function (m) {
     var k = m.rowIndex + "|" + m.field;
@@ -197,12 +241,60 @@ function sceneChipsHtml(item) {
   });
   return order.map(function (k) {
     var entry = seen[k];
-    var extra = entry.n > 1 ? " x" + entry.n : "";
-    return '<button type="button" class="tag-scene" data-action="jump-tag" data-row="' +
-      escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '">' +
-      pad2(entry.m.rowIndex + 1) + (entry.m.field === "visualText" ? " Visual" : " Audio") +
-      extra + '</button>';
-  }).join("");
+    var num = pad2(entry.m.rowIndex + 1);
+    return '<button type="button" class="tag-mention jump-link" data-action="jump-tag" data-row="' +
+      escapeHtml(entry.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="Go to this mention in scene ' +
+      num + '"><span class="tag-figure">' + num + '</span> ' +
+      (entry.m.field === "visualText" ? "Visual" : "Audio") +
+      (entry.n > 1 ? ' <span class="tag-figure">×' + entry.n + '</span>' : '') + '</button>';
+  }).join(", ");
+}
+
+/* An owner in a row or a head: their avatar, in their colour — the one
+   table, personColor() in 13a-presence.js — with one initial, the way the
+   boards draw an 18px one. */
+function personAvatarHtml(name) {
+  var initial = Array.from(String(name || "").trim())[0] || "?";
+  return '<span class="person-avatar" style="--presence:' + personColor(name) + '" aria-hidden="true">' +
+    escapeHtml(initial.toUpperCase()) + '</span>';
+}
+
+/* The Owner column: avatar and first name, or a dash (#169). */
+function ownerCellHtml(owner) {
+  if (!owner) {
+    return '<span class="tag-owner is-none"><span aria-hidden="true">—</span>' +
+      '<span class="tag-sr">Unassigned</span></span>';
+  }
+  var first = String(owner.name).trim().split(/\s+/)[0] || owner.name;
+  return '<span class="tag-owner" title="' + escapeHtml(owner.name) + '">' + personAvatarHtml(owner.name) +
+    '<span class="tag-owner-name">' + escapeHtml(first) + '</span></span>';
+}
+
+/* The row's status: its lamp and word, and a click moves it one step on.
+   A reviewer gets the same as a label, and a click on it opens the item
+   like a click on its name. */
+function statusCellHtml(item) {
+  var st = tagStatus(item.status) || TAG_STATUSES[0];
+  var k = escapeHtml(item.key);
+  var inner = tagStatusLampHtml(st.id) + escapeHtml(st.label);
+  if (reviewMode()) {
+    return '<span class="tag-status-pill is-static" data-action="tag-expand" data-key="' + k + '">' + inner + '</span>';
+  }
+  var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
+  return '<button type="button" class="tag-status-pill" data-action="tag-status-cycle" data-key="' + k +
+    '" title="' + escapeHtml(st.label + " — click for " + nextSt.label) + '" aria-label="' +
+    escapeHtml("Status: " + st.label + ". Click for " + nextSt.label) + '">' + inner + '</button>';
+}
+
+/* An id for a label to point at: unique per item and per panel, since the
+   Production and Gear panels can both hold the same item's fields. */
+function tagFieldId(what, gear, key) {
+  return "tag-" + what + "-" + (gear ? "g-" : "p-") +
+    String(key).replace(/[^A-Za-z0-9]/g, function (c) { return "_" + c.charCodeAt(0).toString(16); });
+}
+
+function iconHtml(id, cls) {
+  return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' aria-hidden="true" focusable="false"><use href="#' + id + '"/></svg>';
 }
 
 /* ---- a review session (#30): the breakdown to read, not to change ----
@@ -211,12 +303,13 @@ function sceneChipsHtml(item) {
    grouping and jump to a scene, and nothing else: the server keeps none of
    a reviewer's edits, so a change made here would look as if it had worked
    and then be lost. The open card's status and owner are drawn disabled and
-   its notes read-only, so the values stay readable; + Person, Rename and
-   Remove/Delete are not drawn; and there is no selection, because the only
-   thing a selection is for is the bulk bar. Clicks are refused by the click
-   guard (21-events.js REVIEW_SAFE_ACTIONS); the change and input handlers
-   (20-teleprompter.js wireTagEntityContainer, 21-events.js) refuse their
-   own. The same rule as the b-roll panel (08d-broll-panel.js). */
+   its notes read-only, so the values stay readable; Add person, Rename and
+   Remove/Delete, and the "⋯" that holds them, are not drawn; and there is
+   no selection, because the only thing a selection is for is the bulk bar.
+   Clicks are refused by the click guard (21-events.js REVIEW_SAFE_ACTIONS);
+   the change and input handlers (20-teleprompter.js wireTagEntityContainer,
+   21-events.js) refuse their own. The same rule as the b-roll panel
+   (08d-broll-panel.js). */
 
 /* Whatever was half open when the role arrived — a rename, an add-person
    box, a selection and its bar — goes, rather than being drawn for
@@ -230,113 +323,175 @@ function dropEditingForReview() {
 }
 
 /* The owner picker, notes box and the destructive actions all live behind
-   a click on the card — the list stays scannable when you're reading it as
-   a breakdown, and the editing controls are there when you're working on
-   one item. Renaming forces the card open, since its input lives in here. */
-function tagEntityDetailHtml(item, renaming) {
+   a click on the item's name — the list stays scannable when you're
+   reading it as a breakdown, and the editing controls are there when
+   you're working on one item. Renaming forces it open, since its input
+   lives in here.
+
+   Since #169 the open item is a label–value list on --surface-2, drawn
+   the way each board draws it. The breakdown's (B-PanelProduction) picks
+   the status from four lamps and keeps Rename and Remove label in the
+   "⋯" beside the owner; Gear's narrower one (B-PanelGear) has the status
+   as a menu, lists the item's mentions, and puts Rename under the list
+   with the "⋯" beside it. Either way every field shows its border at rest
+   (Adam: fields and buttons must be easy to find). */
+function tagEntityDetailHtml(item, renaming, gear, detailId) {
   var k = escapeHtml(item.key);
-  var stId = (tagStatus(item.status) || TAG_STATUSES[0]).id;
+  var name = escapeHtml(item.name);
+  var st = tagStatus(item.status) || TAG_STATUSES[0];
   var ro = reviewMode();
   var off = ro ? ' disabled' : '';
-  return '<div class="tag-entity-detail">' +
-    '<div class="tag-detail-label">Status</div>' +
-    '<div class="tag-status-seg">' +
-      TAG_STATUSES.map(function (s) {
-        return '<button type="button" data-action="tag-status-set" data-key="' + k +
-          '" data-status="' + escapeHtml(s.id) + '" style="--st:' + s.color + '"' + off +
-          (s.id === stId ? ' class="is-active" aria-checked="true"' : ' aria-checked="false"') +
-          ' role="radio">' + escapeHtml(s.label) + '</button>';
-      }).join("") +
-    '</div>' +
-    '<div class="tag-detail-label">Assigned to</div>' +
-    '<div class="tag-owner-row">' +
-      '<select class="tag-owner-select" data-key="' + k + '" aria-label="Assigned to"' + off + '>' +
+  var ownerId = tagFieldId("owner", gear, item.key);
+  var notesId = tagFieldId("notes", gear, item.key);
+  var renameId = tagFieldId("rename", gear, item.key);
+
+  /* the four states, each its lamp and word: a radiogroup in the
+     breakdown, the items of the Status menu in Gear. Either way they are
+     .tag-status-seg's buttons, which is what a reviewer's are checked by */
+  var choices = TAG_STATUSES.map(function (s) {
+    var on = s.id === st.id;
+    return '<button type="button" role="' + (gear ? 'menuitemradio' : 'radio') + '" class="' +
+        (gear ? 'tag-menu-item' : 'tag-status-choice') + (on ? ' is-active' : '') +
+        '" data-action="tag-status-set" data-key="' + k + '" data-status="' + escapeHtml(s.id) +
+        '" aria-checked="' + (on ? 'true' : 'false') + '"' + off + '>' +
+      tagStatusLampHtml(s.id) + escapeHtml(s.label) + '</button>';
+  }).join("");
+  var status = gear
+    ? '<div class="tag-menu-wrap">' +
+        '<button type="button" class="tag-status-menu-btn tag-menu-btn" aria-haspopup="menu" aria-expanded="false" ' +
+          'aria-label="' + escapeHtml("Status: " + st.label + (ro ? "" : ". Change")) + '"' + off + '>' +
+          tagStatusLampHtml(st.id) + escapeHtml(st.label) + (ro ? '' : iconHtml("i-chevron-down", "tag-chevron")) +
+        '</button>' +
+        '<div class="tag-menu tag-status-seg" role="menu" aria-label="Status of ' + name + '" hidden>' + choices + '</div>' +
+      '</div>'
+    : '<div class="tag-status-seg" role="radiogroup" aria-label="Status of ' + name + '">' + choices + '</div>';
+
+  /* a reviewer's select has no box and no chevron: a name to read */
+  var ownerField = '<span class="ev-field tag-owner-field' + (ro ? ' is-readonly' : '') + '">' +
+      '<select class="tag-owner-select' + (personById(item.owner) ? '' : ' is-unassigned') + '" id="' + ownerId +
+        '" data-key="' + k + '"' + off + '>' +
         '<option value=""' + (item.owner ? '' : ' selected') + '>Unassigned</option>' +
         S.state.people.map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' +
             (p.id === item.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select>' +
-      (ro ? '' :
-        '<button type="button" class="tag-person-add" data-action="tag-person-new" data-key="' + k +
-          '" title="Add someone to the crew list">+ Person</button>') +
-    '</div>' +
-    (S.tagAddingPersonFor === item.key
-      ? '<div class="tag-owner-row">' +
-          '<input type="text" class="tag-person-input" data-key="' + k +
-            '" placeholder="Their name" maxlength="60">' +
-          '<button type="button" data-action="tag-person-save" data-key="' + k + '">Add</button>' +
-          '<button type="button" data-action="tag-person-cancel">Cancel</button>' +
-        '</div>'
-      : '') +
-    '<div class="tag-detail-label">Notes &amp; links</div>' +
-    '<textarea class="tag-notes-input" data-key="' + k + '" rows="3" aria-label="Notes and links" ' +
-      (ro ? 'readonly placeholder="No notes">'
-          : 'placeholder="Reference link, file path, spec, where it&#39;s coming from…">') +
-      escapeHtml(item.notes) + '</textarea>' +
-    (ro ? '' :
-    '<div class="tag-entity-actions">' +
+      (ro ? '' : iconHtml("i-chevron-down", "ev-chevron")) +
+    '</span>';
+  var addPerson = ro ? '' :
+    '<button type="button" class="tag-person-add tag-quiet-btn" data-action="tag-person-new" data-key="' + k +
+      '" title="Add someone to the crew list"' +
+      (gear ? ' aria-label="Add a person to the crew list">' + iconHtml("i-plus") + 'Person' : '>Add person') +
+    '</button>';
+  var personRow = S.tagAddingPersonFor === item.key
+    ? '<div class="tag-person-row">' +
+        '<input type="text" class="tag-person-input ev-field" data-key="' + k +
+          '" placeholder="Their name" maxlength="60" aria-label="The new person’s name">' +
+        '<button type="button" class="btn-outline is-small" data-action="tag-person-save" data-key="' + k + '">Add</button>' +
+        '<button type="button" class="tag-quiet-btn" data-action="tag-person-cancel">Cancel</button>' +
+      '</div>'
+    : '';
+
+  /* "⋯": Rename (the breakdown's; Gear's is out under the list) and the
+     one destructive action, whose first click arms it in place — the menu
+     stays open for the second (armRemoveTag / armDeleteTag) */
+  var more = ro ? '' :
+    '<div class="tag-menu-wrap tag-more">' +
+      '<button type="button" class="tag-more-btn tag-menu-btn' + (gear ? ' tag-icon-btn' : ' btn-outline is-small is-icon') +
+        '" aria-haspopup="menu" aria-expanded="false" title="More" aria-label="' +
+        escapeHtml("More actions for " + item.name + ": " + (gear ? "" : "Rename, ") +
+          (item.orphaned ? "Delete from list" : "Remove label")) + '">' + iconHtml("i-more") + '</button>' +
+      '<div class="tag-menu" role="menu" aria-label="' + escapeHtml("Actions for " + item.name) + '" hidden>' +
+        (gear ? '' :
+          '<button type="button" role="menuitem" class="tag-menu-item" data-action="tag-rename" data-key="' + k + '">' +
+            iconHtml("i-pen") + '<span class="tag-menu-label">Rename</span></button>') +
+        (item.orphaned
+          ? '<button type="button" role="menuitem" class="tag-menu-item danger" data-action="tag-delete" data-key="' + k + '">' +
+              iconHtml("i-trash") + '<span class="tag-menu-label">Delete from list</span></button>'
+          : '<button type="button" role="menuitem" class="tag-menu-item danger" data-action="tag-remove" data-key="' + k + '">' +
+              iconHtml("i-tag") + '<span class="tag-menu-label">Remove label</span></button>') +
+      '</div>' +
+    '</div>';
+
+  var dl = '<dl class="tag-entity-detail' + (gear ? ' is-gear' : '') + '" id="' + detailId + '">' +
       (renaming
-        ? '<button type="button" data-action="tag-rename-save" data-key="' + k + '">Save</button>' +
-          '<button type="button" data-action="tag-rename-cancel">Cancel</button>'
-        : '<button type="button" data-action="tag-rename" data-key="' + k + '">Rename</button>' +
-          (item.orphaned
-            ? '<button type="button" class="danger" data-action="tag-delete" data-key="' + k + '">Delete from list</button>'
-            : '<button type="button" class="danger" data-action="tag-remove" data-key="' + k + '">Remove label</button>')) +
-    '</div>') +
-  '</div>';
+        ? '<dt><label for="' + renameId + '">Name</label></dt>' +
+          '<dd class="tag-rename-row">' +
+            '<input type="text" class="tag-rename-input ev-field" id="' + renameId + '" value="' + name +
+              '" data-key="' + k + '">' +
+            '<button type="button" class="btn-outline is-small" data-action="tag-rename-save" data-key="' + k + '">Save</button>' +
+            '<button type="button" class="tag-quiet-btn" data-action="tag-rename-cancel">Cancel</button>' +
+          '</dd>'
+        : '') +
+      '<dt>Status</dt><dd class="tag-status-dd">' + status + '</dd>' +
+      (gear
+        ? '<dt>Mentions</dt><dd class="tag-mentions">' +
+            (item.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : mentionLinksHtml(item)) + '</dd>'
+        : '') +
+      '<dt><label for="' + ownerId + '">Assigned to</label></dt>' +
+      '<dd class="tag-owner-dd">' + ownerField + addPerson + (gear ? '' : more) + personRow + '</dd>' +
+      '<dt><label for="' + notesId + '">Notes &amp; links</label></dt>' +
+      '<dd class="tag-notes-dd">' +
+        '<textarea class="tag-notes-input ev-field" id="' + notesId + '" data-key="' + k + '" rows="2" ' +
+          (ro ? 'readonly placeholder="No notes">'
+              : 'placeholder="Reference link, file path, spec, where it’s coming from…">') +
+          escapeHtml(item.notes) + '</textarea>' +
+      '</dd>' +
+    '</dl>';
+  if (!gear || ro) return dl;
+  return dl +
+    '<div class="tag-detail-foot">' +
+      (renaming ? '' :
+        '<button type="button" class="tag-quiet-btn tag-rename-btn" data-action="tag-rename" data-key="' + k + '">' +
+          iconHtml("i-pen") + 'Rename</button>') +
+      more +
+    '</div>';
 }
 
-function tagEntityHtml(item, showSelection) {
+/* One tracked item, as a row (#169). The breakdown's rows are columns —
+   Item · Status · Scenes · Owner, under the label row in page.html
+   (#production-cols) — and Gear's are the board's shorter line: a dot, the
+   name, the status and where it is. The name is the expander
+   (.tag-entity-head); the status beside it and each scene are controls of
+   their own, so nothing is nested inside the expander any more. Names and
+   scene lists wrap in full, never "…" (Adam's review). */
+function tagEntityHtml(item, opts) {
+  opts = opts || {};
+  var gear = !!opts.gear;
   var renaming = S.tagRenaming === item.key;
   var expanded = S.tagExpanded === item.key || renaming;
-  var owner = personById(item.owner);
-  var st = tagStatus(item.status) || TAG_STATUSES[0];
-  var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
   var k = escapeHtml(item.key);
   /* productionSelection is Production-panel-only state (the Gear panel
      wires no Ctrl/Shift-click, no bulk bar, nothing to clear or explain
      a highlight with — see the multi-select comment below) but this
-     function is shared by both panels; without gating on showSelection,
+     function is shared by both panels; without gating on opts.selection,
      an item selected via Production still rendered "selected" when
      later viewed in Gear, with no way to make sense of or clear it. */
-  var selected = showSelection && !reviewMode() && productionSelection[item.key];
-  var meta = (owner ? '<span class="tag-owner-chip">' + escapeHtml(owner.name) + '</span>' : '') +
-    (item.notes ? '<span class="tag-note-flag" title="Has notes">Notes</span>' : '');
-  return '<div class="tag-entity' + (item.orphaned ? ' is-orphaned' : '') +
+  var selected = opts.selection && !reviewMode() && productionSelection[item.key];
+  var detailId = tagFieldId("detail", gear, item.key);
+  /* the category's dot where no section title carries it: Gear's rows,
+     and the breakdown grouped by person */
+  var dot = '<span class="tag-row-dot" aria-hidden="true"></span>';
+  return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
       (expanded ? ' is-expanded' : '') +
       (selected ? ' is-selected' : '') +
       '" style="--dot:' + item.cat.color + '" data-key="' + k +
       '" aria-selected="' + (selected ? 'true' : 'false') + '">' +
-    '<div class="tag-entity-head" data-action="tag-expand" data-key="' + k + '">' +
-      '<span class="tag-entity-name">' + escapeHtml(item.name) + '</span>' +
-      '<span class="tag-entity-head-right">' +
-        /* nested inside the expander, so its own handler has to be checked
-           first in the click delegation — see the tag-status-cycle branch.
-           A reviewer gets the status as a label, and a click on it opens
-           the card like the rest of the head. */
-        (reviewMode()
-          ? '<span class="tag-status-pill is-static" style="--st:' + st.color + '">' + escapeHtml(st.label) + '</span>'
-          : '<button type="button" class="tag-status-pill" data-action="tag-status-cycle" ' +
-              'data-key="' + k + '" style="--st:' + st.color + '" title="' +
-              escapeHtml(st.label + " — click for " + nextSt.label) + '">' +
-              escapeHtml(st.label) + '</button>') +
-        (item.orphaned
-          ? '<span class="tag-orphan-badge">Not in script</span>'
-          : '<span class="tag-entity-count">' + item.mentions.length + ' mention' +
-              (item.mentions.length === 1 ? '' : 's') + '</span>') +
+    '<div class="tag-entity-row">' +
+      (gear ? dot : '') +
+      '<button type="button" class="tag-entity-head" data-action="tag-expand" data-key="' + k +
+        '" aria-expanded="' + (expanded ? 'true' : 'false') + '"' +
+        (expanded ? ' aria-controls="' + detailId + '"' : '') + '>' +
+        (opts.dot ? dot : '') + '<span class="tag-entity-name">' + escapeHtml(item.name) + '</span>' +
+      '</button>' +
+      statusCellHtml(item) +
+      '<span class="tag-scenes">' +
+        (item.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : sceneLinksHtml(item)) +
       '</span>' +
+      (gear ? '' : ownerCellHtml(personById(item.owner))) +
     '</div>' +
-    (meta ? '<div class="tag-entity-meta">' + meta + '</div>' : '') +
-    (renaming
-      ? '<input type="text" class="tag-rename-input" value="' + escapeHtml(item.name) +
-          '" data-key="' + k + '">'
-      : item.orphaned
-        ? '<div class="tag-orphan-note">' + escapeHtml(item.cat.label) +
-            ' no longer appears anywhere in the script.</div>'
-        : '<div class="tag-scenes">' + sceneChipsHtml(item) + '</div>') +
-    (expanded ? tagEntityDetailHtml(item, renaming) : '') +
-  '</div>';
+    (expanded ? tagEntityDetailHtml(item, renaming, gear, detailId) : '') +
+  '</li>';
 }
 
 function renderProductionByScene(all) {
@@ -348,16 +503,20 @@ function renderProductionByScene(all) {
     });
   });
   var indexes = Object.keys(byRow).map(Number).sort(function (a, b) { return a - b; });
+  /* a section per scene titled the way the category sections are (#169),
+     its items as outlined chips with their category's dot */
   return indexes.map(function (idx) {
     var items = Object.keys(byRow[idx]).map(function (k) { return byRow[idx][k]; });
-    return '<div class="tag-scene-group">' +
-      '<div class="tag-scene-group-head">Scene ' + pad2(idx + 1) + '</div>' +
-      items.map(function (item) {
-        return '<span class="tag-pill" style="border-color:' + item.cat.color + '">' +
-          '<span class="tag-cat-dot" style="--dot:' + item.cat.color + '"></span>' +
-          escapeHtml(item.name) + '</span>';
-      }).join("") +
-    '</div>';
+    return '<section class="tag-scene-group">' +
+      '<h3 class="tag-scene-group-head">Scene <span class="tag-figure">' + pad2(idx + 1) + '</span></h3>' +
+      '<ul class="tag-pills">' +
+        items.map(function (item) {
+          return '<li class="tag-pill" style="--dot:' + item.cat.color + '">' +
+            '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+            escapeHtml(item.name) + '</li>';
+        }).join("") +
+      '</ul>' +
+    '</section>';
   }).join("");
 }
 
@@ -378,17 +537,26 @@ function renderProductionByPerson(all) {
   });
   order.sort(function (a, b) { return (a === "" ? 1 : 0) - (b === "" ? 1 : 0); });
 
+  /* each person a section titled like the categories' (#169), their
+     avatar where a category has its dot; the rows carry the dot instead */
   return order.map(function (id) {
     var g = buckets[id];
-    return '<div class="tag-group-head tag-person-head">' +
+    return '<section class="tag-group">' +
+      '<h3 class="tag-group-head tag-person-head">' +
+        (id ? personAvatarHtml(g.label) : iconHtml("i-person", "tag-person-none")) +
         '<span class="tag-person-name">' + escapeHtml(g.label) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
         (id && !reviewMode() ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
-                'data-person="' + escapeHtml(id) + '" title="Remove from the crew list">×</button>' : '') +
-      '</div>' +
+                'data-person="' + escapeHtml(id) + '" title="Remove from the crew list" aria-label="' +
+                escapeHtml("Remove " + g.label + " from the crew list") + '">' +
+                iconHtml("i-close") + '</button>' : '') +
+      '</h3>' +
       (g.items.length
-        ? g.items.map(function (e) { return tagEntityHtml(e, true); }).join("")
-        : '<div class="tag-orphan-note">Nothing assigned yet.</div>');
+        ? '<ul class="tag-list">' +
+            g.items.map(function (e) { return tagEntityHtml(e, { selection: true, dot: true }); }).join("") +
+          '</ul>'
+        : '<div class="tag-orphan-note">Nothing assigned yet.</div>') +
+    '</section>';
   }).join("");
 }
 
@@ -439,44 +607,54 @@ function renderProductionByShoot(entries) {
   /* untagged scenes last — they're the leftovers, not the plan */
   order.sort(function (a, b) { return (a === "" ? 1 : 0) - (b === "" ? 1 : 0); });
 
+  /* A section per location, titled like the categories' (#169): its dot,
+     name and "1/2 shot · 0:31"; then its scenes as links ("01, 02" with a
+     tick on a shot one) and what has to be there, each need a line with
+     its lamp and owner like a breakdown row's. */
   return order.map(function (key) {
     var g = groups[key];
     var shot = g.rows.filter(function (i) { return S.state.rows[i].status === "shot"; }).length;
     var secs = g.rows.reduce(function (n, i) { return n + rowSeconds(S.state.rows[i]); }, 0);
     var done = shot === g.rows.length;
-    return '<div class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border)") + '">' +
-      '<div class="shoot-head">' +
+    return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
+      '<h3 class="shoot-head">' +
+        '<span class="tag-cat-dot" aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
-          shot + '/' + g.rows.length + ' shot · ' + formatDuration(secs) + '</span>' +
-      '</div>' +
-      '<div class="shoot-sub">Scenes</div>' +
-      '<div class="tag-scenes">' +
-        g.rows.map(function (i) {
-          var st = rowStatus(S.state.rows[i].status) || ROW_STATUSES[0];
-          return '<button type="button" class="tag-scene" data-action="jump-row" data-row="' +
-            escapeHtml(S.state.rows[i].id) + '" title="' + escapeHtml(st.label) + '">' +
-            pad2(i + 1) + (S.state.rows[i].status === "shot" ? ' ✓' : '') + '</button>';
-        }).join("") +
-      '</div>' +
-      (g.needOrder.length
-        ? '<div class="shoot-sub">Needs on the day</div>' +
-          '<div class="shoot-needs">' +
-            g.needOrder.map(function (k) {
-              var item = g.needs[k];
-              var owner = personById(item.owner);
-              var nst = tagStatus(item.status) || TAG_STATUSES[0];
-              return '<span class="shoot-need">' +
-                '<span class="tag-cat-dot" style="--dot:' + item.cat.color + '"></span>' +
-                escapeHtml(item.name) +
-                '<span class="shoot-need-status" style="--st:' + nst.color + '">' +
-                  escapeHtml(nst.label) + '</span>' +
-                (owner ? '<span class="shoot-need-owner">' + escapeHtml(owner.name) + '</span>' : '') +
-              '</span>';
-            }).join("") +
-          '</div>'
-        : '') +
-    '</div>';
+          '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> shot · ' +
+          '<span class="tag-figure">' + formatDuration(secs) + '</span></span>' +
+      '</h3>' +
+      '<dl class="shoot-detail">' +
+        '<dt>Scenes</dt>' +
+        '<dd class="tag-scenes">' +
+          g.rows.map(function (i) {
+            var row = S.state.rows[i];
+            var st = rowStatus(row.status) || ROW_STATUSES[0];
+            var label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
+            return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
+              '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
+              '" aria-label="' + escapeHtml(label) + '">' + pad2(i + 1) +
+              (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
+          }).join(SCENE_SEP) +
+        '</dd>' +
+        (g.needOrder.length
+          ? '<dt>Needs on the day</dt>' +
+            '<dd><ul class="shoot-needs">' +
+              g.needOrder.map(function (k) {
+                var item = g.needs[k];
+                var owner = personById(item.owner);
+                var nst = tagStatus(item.status) || TAG_STATUSES[0];
+                return '<li class="shoot-need" style="--dot:' + item.cat.color + '">' +
+                  '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+                  '<span class="shoot-need-name">' + escapeHtml(item.name) + '</span>' +
+                  '<span class="shoot-need-status">' + tagStatusLampHtml(nst.id) + escapeHtml(nst.label) + '</span>' +
+                  ownerCellHtml(owner) +
+                '</li>';
+              }).join("") +
+            '</ul></dd>'
+          : '') +
+      '</dl>' +
+    '</section>';
   }).join("");
 }
 
@@ -518,6 +696,14 @@ function renderProductionList(entries) {
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
 
+  var groups = tagsByCategory(entries);
+  /* the column labels (#169) head the two groupings drawn as rows */
+  var cols = document.getElementById("production-cols");
+  if (cols) {
+    cols.hidden = !groups.length ||
+      (S.productionGroupBy !== "cat" && S.productionGroupBy !== "person");
+  }
+
   /* the shoot view is organised around scenes, so it still has something
      useful to say even when nothing has been tagged yet */
   if (S.productionGroupBy === "shoot") {
@@ -525,7 +711,6 @@ function renderProductionList(entries) {
     return;
   }
 
-  var groups = tagsByCategory(entries);
   if (!groups.length) {
     listEl.innerHTML = '<div class="comments-empty">Nothing labelled yet.<br><br>' +
       'Type <code>[a prop]</code>, <code>{a location}</code> or <code>~an effect~</code> ' +
@@ -555,13 +740,19 @@ function renderProductionList(entries) {
     return;
   }
 
+  /* Section titles that look like titles (Adam's review): 14px bold, the
+     category's dot, the count in the mono, a rule under. */
   listEl.innerHTML = groups.map(function (g) {
-    return '<div class="tag-group-head" style="--dot:' + g.cat.color + '">' +
-        '<span class="tag-cat-dot" style="--dot:' + g.cat.color + '"></span>' +
-        escapeHtml(g.cat.plural) +
+    return '<section class="tag-group">' +
+      '<h3 class="tag-group-head" style="--dot:' + g.cat.color + '">' +
+        '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+        '<span class="tag-group-label">' + escapeHtml(g.cat.plural) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
-      '</div>' +
-      g.items.map(function (e) { return tagEntityHtml(e, true); }).join("");
+      '</h3>' +
+      '<ul class="tag-list">' +
+        g.items.map(function (e) { return tagEntityHtml(e, { selection: true }); }).join("") +
+      '</ul>' +
+    '</section>';
   }).join("");
 }
 
@@ -619,14 +810,29 @@ export function armRemoveTag(btn, key) {
     return;
   }
   S.tagDeleteArmId = key;
-  btn.textContent = "Confirm?";
-  btn.classList.add("armed");
+  var disarm = armButton(btn);
   clearTimeout(S.tagDeleteArmTimer);
   S.tagDeleteArmTimer = setTimeout(function () {
     S.tagDeleteArmId = null;
-    btn.textContent = "Remove label";
-    btn.classList.remove("armed");
+    disarm();
   }, 2800);
+}
+
+/* The first click of a two-click action: the button says "Confirm?" in
+   place of its words — beside its icon, where it has one (#169) — until
+   the returned function puts them back. */
+function armButton(btn) {
+  var label = btn.querySelector(".tag-menu-label") || btn;
+  var was = label.innerHTML;
+  var aria = btn.getAttribute("aria-label");
+  label.textContent = "Confirm?";
+  if (aria) btn.setAttribute("aria-label", "Confirm? " + aria);
+  btn.classList.add("armed");
+  return function () {
+    label.innerHTML = was;
+    if (aria) btn.setAttribute("aria-label", aria);
+    btn.classList.remove("armed");
+  };
 }
 
 /* Deletes the tracked entry itself — only offered once an item is already
@@ -647,13 +853,11 @@ export function armDeleteTag(btn, key) {
     return;
   }
   S.tagDeleteArmId = key;
-  btn.textContent = "Confirm?";
-  btn.classList.add("armed");
+  var disarm = armButton(btn);
   clearTimeout(S.tagDeleteArmTimer);
   S.tagDeleteArmTimer = setTimeout(function () {
     S.tagDeleteArmId = null;
-    btn.textContent = "Delete from list";
-    btn.classList.remove("armed");
+    disarm();
   }, 2800);
 }
 
@@ -857,39 +1061,50 @@ function renderBulkBar(entries) {
   var n = items.length;
   var liveMentions = bulkCountsLabel(items);
   bar.hidden = false;
+  /* the panels' language (#169): the selects as fields with their border
+     and chevron at rest, the actions as outlined buttons. The count and
+     the × get a line of their own, so the actions keep theirs at the
+     panel's usual width, however long the crew's names are. */
   bar.innerHTML =
+    '<div class="bulk-row bulk-head">' +
+      '<span class="bulk-count"><span class="tag-figure">' + n + '</span> selected</span>' +
+      '<button type="button" class="bulk-clear" data-action="bulk-clear" ' +
+        'title="Clear the selection (Esc)" aria-label="Clear the selection">' + iconHtml("i-close") + '</button>' +
+    '</div>' +
     '<div class="bulk-row">' +
-      '<span class="bulk-count">' + n + ' selected</span>' +
-      '<select class="bulk-select" id="bulk-owner" aria-label="Assign the selected items to">' +
-        '<option value="__none__" selected>Assign to…</option>' +
-        '<option value="">Unassigned</option>' +
-        S.state.people.map(function (p) {
-          return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
-        }).join("") +
-      '</select>' +
-      '<button type="button" class="bulk-btn" data-action="bulk-person-new" ' +
-        'title="Add someone to the crew list and assign these to them">+ Person</button>' +
-      '<select class="bulk-select" id="bulk-status" aria-label="Set the status of the selected items">' +
-        '<option value="__none__" selected>Status…</option>' +
-        TAG_STATUSES.map(function (s) {
-          return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label) + '</option>';
-        }).join("") +
-      '</select>' +
-      '<button type="button" class="bulk-btn danger' + (bulkDeleteArmed ? ' armed' : '') + '" ' +
-        'data-action="bulk-delete">' +
+      '<span class="ev-field">' +
+        '<select class="bulk-select" id="bulk-owner" aria-label="Assign the selected items to">' +
+          '<option value="__none__" selected>Assign to…</option>' +
+          '<option value="">Unassigned</option>' +
+          S.state.people.map(function (p) {
+            return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
+          }).join("") +
+        '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
+      '</span>' +
+      '<button type="button" class="bulk-btn btn-outline is-small" data-action="bulk-person-new" ' +
+        'title="Add someone to the crew list and assign these to them">' + iconHtml("i-plus") + 'Person</button>' +
+      '<span class="ev-field">' +
+        '<select class="bulk-select" id="bulk-status" aria-label="Set the status of the selected items">' +
+          '<option value="__none__" selected>Status…</option>' +
+          TAG_STATUSES.map(function (s) {
+            return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label) + '</option>';
+          }).join("") +
+        '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
+      '</span>' +
+      '<button type="button" class="bulk-btn btn-outline is-small danger' + (bulkDeleteArmed ? ' armed' : '') + '" ' +
+        'data-action="bulk-delete">' + iconHtml("i-trash") +
         (bulkDeleteArmed
           ? 'Delete ' + n + (liveMentions ? ' + ' + liveMentions + ' label' +
               (liveMentions === 1 ? '' : 's') : '') + '?'
           : 'Delete') +
       '</button>' +
-      '<button type="button" class="bulk-clear" data-action="bulk-clear" ' +
-        'title="Clear the selection (Esc)" aria-label="Clear the selection">×</button>' +
     '</div>' +
     (S.tagAddingPersonFor === "__bulk__"
       ? '<div class="bulk-row bulk-person-row">' +
-          '<input type="text" id="bulk-person-input" placeholder="Their name" maxlength="60">' +
-          '<button type="button" class="bulk-btn" data-action="bulk-person-save">Add</button>' +
-          '<button type="button" class="bulk-btn" data-action="bulk-person-cancel">Cancel</button>' +
+          '<input type="text" class="ev-field" id="bulk-person-input" placeholder="Their name" maxlength="60" ' +
+            'aria-label="The new person’s name">' +
+          '<button type="button" class="bulk-btn btn-outline is-small" data-action="bulk-person-save">Add</button>' +
+          '<button type="button" class="tag-quiet-btn" data-action="bulk-person-cancel">Cancel</button>' +
         '</div>'
       : '') +
     (bulkDeleteArmed
@@ -975,13 +1190,11 @@ export function armPersonDelete(btn, personId) {
     return;
   }
   S.tagDeleteArmId = "person:" + personId;
-  btn.textContent = "Confirm?";
-  btn.classList.add("armed");
+  var disarm = armButton(btn);
   clearTimeout(S.tagDeleteArmTimer);
   S.tagDeleteArmTimer = setTimeout(function () {
     S.tagDeleteArmId = null;
-    btn.textContent = "×";
-    btn.classList.remove("armed");
+    disarm();
   }, 2800);
 }
 
@@ -1066,9 +1279,168 @@ export function buildBreakdownCsv() {
   return "﻿" + lines.join("\r\n");
 }
 
+/* ---- an open item's menus (#169) ----
+
+   The "⋯" (Rename, Remove label / Delete from list) and Gear's Status are
+   drawn with the item, closed, and opened and closed here, in the DOM:
+   what is picked from one goes through the panel's own click delegation
+   (onRootClick) like any other data-action, and a re-render closes it by
+   drawing it closed again. So there is no state to keep in step — only
+   which menu is open, to close it when a click lands anywhere else. Wired
+   on the document in __init(), after the panel's own handlers have run. */
+var openTagMenu = null;
+
+function closeTagMenu(refocus) {
+  var menu = openTagMenu;
+  openTagMenu = null;
+  if (!menu) return;
+  menu.hidden = true;
+  var btn = menu.parentNode && menu.parentNode.querySelector(".tag-menu-btn");
+  if (!btn) return;
+  btn.setAttribute("aria-expanded", "false");
+  if (refocus && btn.isConnected) btn.focus();
+}
+
+function openTagMenuFor(btn, focusFirst) {
+  var menu = btn.parentNode.querySelector(".tag-menu");
+  if (!menu) return;
+  closeTagMenu(false);
+  menu.hidden = false;
+  btn.setAttribute("aria-expanded", "true");
+  openTagMenu = menu;
+  /* up rather than down when the list has no room under it — the last
+     item on screen — the way the scene's own "⋯" does (06-rows.js) */
+  menu.classList.remove("opens-up");
+  var list = btn.closest(".comments-list");
+  var box = list ? list.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+  var r = menu.getBoundingClientRect();
+  if (r.bottom > box.bottom - 8 && r.top - r.height - btn.offsetHeight > box.top + 8) menu.classList.add("opens-up");
+  if (focusFirst) {
+    var first = menu.querySelector(".tag-menu-item.is-active") || menu.querySelector(".tag-menu-item");
+    if (first) first.focus();
+  }
+}
+
+/* A click that re-rendered the panel (a status picked, Rename) leaves the
+   focus on nothing; it goes back to the same control, drawn anew. */
+function refocusIn(panel, key, selector) {
+  var a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;
+  if (!panel) return;
+  var el = panel.querySelector('.tag-entity[data-key="' + cssAttr(key) + '"] ' + selector);
+  if (el) el.focus();
+}
+
+function onTagMenuClick(e) {
+  var t = e.target;
+  if (!t || !t.closest) return;
+  if (openTagMenu && !openTagMenu.isConnected) openTagMenu = null;
+  var panel = document.querySelector("#production-panel:not([hidden]), #gear-panel:not([hidden])");
+
+  /* Rename puts its box at the top of the open item; the caret goes there */
+  var rename = t.closest('[data-action="tag-rename"]');
+  if (rename) {
+    var input = panel && panel.querySelector(".tag-rename-input");
+    if (input) { input.focus(); input.select(); }
+  }
+
+  /* Opening or closing an item, or stepping its status on, redraws the
+     list: the focus goes back to the same control, so a keyboard keeps its
+     place and hears the new state. An item opened from a reviewer's status
+     label (a span carrying tag-expand) lands on its head, the button. */
+  var redrawn = t.closest(".tag-entity-head, .tag-status-pill");
+  if (redrawn && !redrawn.isConnected) {
+    refocusIn(panel, redrawn.getAttribute("data-key"),
+      redrawn.getAttribute("data-action") === "tag-status-cycle" ? ".tag-status-pill" : ".tag-entity-head");
+    return;
+  }
+
+  /* a modifier-click selects the item instead (invariant 12) */
+  var btn = t.closest(".tag-menu-btn");
+  if (btn && btn.closest(".tag-entity")) {
+    if (e.defaultPrevented) return;
+    var menu = btn.parentNode.querySelector(".tag-menu");
+    if (menu && menu === openTagMenu) closeTagMenu(false);
+    /* detail 0: a click the keyboard made, so the first item takes focus */
+    else openTagMenuFor(btn, e.detail === 0);
+    return;
+  }
+  if (!openTagMenu) {
+    var picked = t.closest('.tag-status-seg [data-action="tag-status-set"]');
+    /* Gear's menu is gone with the redraw, so its button; the
+       breakdown's radiogroup keeps the state just picked */
+    if (picked && !picked.isConnected) {
+      refocusIn(panel, picked.getAttribute("data-key"), picked.classList.contains("tag-status-choice")
+        ? '.tag-status-choice[data-status="' + cssAttr(picked.getAttribute("data-status")) + '"]'
+        : ".tag-status-menu-btn");
+    }
+    return;
+  }
+  var item = t.closest(".tag-menu-item");
+  if (item && openTagMenu.contains(item)) {
+    /* armed, it waits for its second click with the menu still open */
+    if (item.classList.contains("armed")) return;
+    var key = item.getAttribute("data-key");
+    var fromStatus = item.getAttribute("data-action") === "tag-status-set";
+    closeTagMenu(item.isConnected);
+    if (fromStatus) refocusIn(panel, key, ".tag-status-menu-btn");
+    return;
+  }
+  if (openTagMenu.contains(t)) return;
+  closeTagMenu(false);
+}
+
+/* The keyboard in an open menu, and ArrowDown on its button, as the
+   scene's "⋯" has them (06-rows.js rowMenuKeydown). Capture phase, so an
+   Escape that closes a menu does not also clear the selection or close
+   the panel. */
+function onTagMenuKeydown(e) {
+  var t = e.target;
+  if (!t || !t.closest) return;
+  if (openTagMenu && !openTagMenu.isConnected) openTagMenu = null;
+  var btn = t.closest(".tag-menu-btn");
+  if (btn && btn.closest(".tag-entity") && !btn.disabled) {
+    var own = btn.parentNode.querySelector(".tag-menu");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      openTagMenuFor(btn, true);
+    } else if (e.key === "Escape" && own && own === openTagMenu) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeTagMenu(true);
+    }
+    return;
+  }
+  var menu = t.closest(".tag-menu");
+  if (!menu || menu !== openTagMenu) return;
+  var items = Array.prototype.slice.call(menu.querySelectorAll(".tag-menu-item:not(:disabled)"));
+  var i = items.indexOf(t);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (items.length) items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+  } else if (e.key === "Home" || e.key === "End") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (items.length) items[e.key === "Home" ? 0 : items.length - 1].focus();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    closeTagMenu(true);
+  } else if (e.key === "Tab") {
+    closeTagMenu(false);
+  }
+}
+
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
+  /* the item menus above: on the document, so they need nothing from the
+     modules that wire the panels (21-events.js, 20-teleprompter.js) */
+  document.addEventListener("click", onTagMenuClick);
+  document.addEventListener("keydown", onTagMenuKeydown, true);
+
   /* ---- the multi-select gesture and what it can do ---- */
 
   /* True on phones and tablets — a device with no hover has no modifier

@@ -980,7 +980,10 @@ export function buildShotListPdf(data) {
   function box(x, yy, shot) {
     ops.push("q 0.4 0.4 0.4 RG 0.9 w " + x.toFixed(2) + " " + yy.toFixed(2) + " 10 10 re S Q");
     if (shot) {
-      ops.push("q 0.106 0.478 0.408 RG 1.6 w " + (x + 2).toFixed(2) + " " + (yy + 5).toFixed(2) + " m " +
+      /* The tick is the b-roll colour, B's "done" (#169): the light
+         theme's --broll, #00717F, since the sheet prints on white. It was
+         the old --ok green. */
+      ops.push("q 0 0.443 0.498 RG 1.6 w " + (x + 2).toFixed(2) + " " + (yy + 5).toFixed(2) + " m " +
         (x + 4.3).toFixed(2) + " " + (yy + 2.4).toFixed(2) + " l " + (x + 8.4).toFixed(2) + " " + (yy + 8.2).toFixed(2) + " l S Q");
     }
   }

@@ -2,6 +2,16 @@
 # and the document keeping step with a side panel that is leaving as well as
 # arriving (#53, the #root rules in app.css).
 #
+# Since #169 (Direction B) the header's own row is one line that never
+# changes; what condensing sheds is the rundown strip's time ruler, and the
+# strip's track of blocks rises into its place. So where this suite used to
+# watch the brand line fade, the toolbar travel and the title scale, it now
+# watches the ruler fade (.rundown-ruler) and the track travel
+# (.rundown-track), and asserts the title does NOT move. The mechanics under
+# test — one frame of layout, a transform putting the pixels back, a
+# reversal replacing rather than layering, the thresholds, reduced motion —
+# are exactly what they were.
+#
 # Animation cannot be judged headless — whether the movement READS as one
 # thing is a human's call. Its mechanics can be, and that is what this suite
 # is: the layout lands in one frame, a transform puts the pixels back, a
@@ -62,7 +72,7 @@ expect document.documentElement.scrollHeight > window.innerHeight + 600
 
 eval (function(){window.__tb=function(){return document.querySelector('.topbar');};window.__h=function(){return window.__tb().getBoundingClientRect().height;};window.__cs=function(sel,p){var el=document.querySelector(sel);return el?getComputedStyle(el)[p]:'(no '+sel+')';};window.__anims=function(sel){var el=document.querySelector(sel);return el&&el.getAnimations?el.getAnimations().length:-1;};window.__scroll=function(y){window.scrollTo(0,y);return true;};window.__pad=function(){return parseFloat(getComputedStyle(document.getElementById('root')).paddingRight);};window.__openW=function(){return parseFloat(getComputedStyle(document.body).getPropertyValue('--open-panel-width'));};return true;})()
 expect true
-eval (function(){window.__snap=function(name){var t=window.__tb();window[name]={condensed:t.classList.contains('is-condensed'),condensing:t.classList.contains('is-condensing'),h:window.__h(),anims:window.__anims('.topbar .toolbar'),bar:window.__cs('.topbar .toolbar','transform'),rows:window.__cs('#rows','transform'),title:window.__cs('#doc-title','transform'),brandPos:window.__cs('.brand-row','position'),brandDisplay:window.__cs('.brand-row','display'),brandOpacity:parseFloat(window.__cs('.brand-row','opacity'))};return name+' = '+JSON.stringify(window[name]);};return true;})()
+eval (function(){window.__snap=function(name){var t=window.__tb();window[name]={condensed:t.classList.contains('is-condensed'),condensing:t.classList.contains('is-condensing'),h:window.__h(),anims:window.__anims('.rundown-track'),track:window.__cs('.rundown-track','transform'),rows:window.__cs('#rows','transform'),title:window.__cs('#doc-title','transform'),rulerPos:window.__cs('.rundown-ruler','position'),rulerDisplay:window.__cs('.rundown-ruler','display'),rulerOpacity:parseFloat(window.__cs('.rundown-ruler','opacity'))};return name+' = '+JSON.stringify(window[name]);};return true;})()
 expect true
 
 # __snapMid(name, y) scrolls to y and takes the snapshot mid-movement. That
@@ -98,7 +108,7 @@ expect true
 # first (.is-condensing dropped on the way down, no animation left on the
 # toolbar on the way up), the snapshot is taken then, and the assertions below
 # fail on it. A fade that never runs still fails this suite, as it should.
-eval (function(){window.__snapMid=function(name,y){return new Promise(function(resolve){var t=window.__tb(),want=!t.classList.contains('is-condensed'),flipTl=null,frames=0;var mo=new MutationObserver(function(){if(flipTl===null&&t.classList.contains('is-condensed')===want)flipTl=document.timeline.currentTime;});mo.observe(t,{attributes:true,attributeFilter:['class']});function tick(ts){if(flipTl!==null&&ts>flipTl){frames++;var fading=parseFloat(window.__cs('.brand-row','opacity'))<1;var moving=want?t.classList.contains('is-condensing'):window.__anims('.topbar .toolbar')>0;if(fading||!moving||frames>=60){mo.disconnect();resolve(window.__snap(name)+' ('+frames+' frame(s) after the flip)');return;}}requestAnimationFrame(tick);}requestAnimationFrame(tick);window.__scroll(y);});};return true;})()
+eval (function(){window.__snapMid=function(name,y){return new Promise(function(resolve){var t=window.__tb(),want=!t.classList.contains('is-condensed'),flipTl=null,frames=0;var mo=new MutationObserver(function(){if(flipTl===null&&t.classList.contains('is-condensed')===want)flipTl=document.timeline.currentTime;});mo.observe(t,{attributes:true,attributeFilter:['class']});function tick(ts){if(flipTl!==null&&ts>flipTl){frames++;var fading=parseFloat(window.__cs('.rundown-ruler','opacity'))<1;var moving=want?t.classList.contains('is-condensing'):window.__anims('.rundown-track')>0;if(fading||!moving||frames>=60){mo.disconnect();resolve(window.__snap(name)+' ('+frames+' frame(s) after the flip)');return;}}requestAnimationFrame(tick);}requestAnimationFrame(tick);window.__scroll(y);});};return true;})()
 expect true
 
 # =============================================================================
@@ -110,7 +120,7 @@ expect true
 expect getComputedStyle(document.querySelector('.topbar')).transitionProperty == box-shadow
 expect getComputedStyle(document.querySelector('.topbar')).transitionDuration == 0.18s
 eval (function(){window.__expandedH=window.__h();return 'expanded header = '+Math.round(window.__expandedH)+'px';})()
-# two rows since the denser header: ~80px expanded, ~48px condensed
+# one row and the rundown strip since #169: ~124px expanded, ~98px condensed
 expect window.__expandedH > 64
 
 # --- condensing: the layout is final in the frame the class flips, and the
@@ -121,37 +131,37 @@ expect window.__mc.condensed
 expect window.__mc.condensing
 expect window.__mc.h < window.__expandedH - 20
 expect window.__mc.anims == 1
-expect window.__mc.bar !== 'none'
-# the brand line is out of FLOW, not out of the layout, so
+expect window.__mc.track !== 'none'
+# the ruler is out of FLOW, not out of the layout, so
 # it can fade where it stood instead of vanishing in one frame
-expect window.__mc.brandPos == absolute
-expect window.__mc.brandOpacity < 1
-# the title changes size as well as place, so its transform carries a scale
-expect window.__mc.title.indexOf('matrix') === 0
+expect window.__mc.rulerPos == absolute
+expect window.__mc.rulerOpacity < 1
+# the header's own row never moves (#169): the title is not animated
+expect window.__mc.title == none
 
 sleep 300
 eval window.__snap('__sc')
 expect window.__sc.condensed
 expect window.__sc.condensing == false
-expect window.__sc.brandDisplay == none
-expect window.__sc.bar == none
+expect window.__sc.rulerDisplay == none
+expect window.__sc.track == none
 expect window.__sc.anims == 0
 eval (function(){window.__condensedH=window.__sc.h;return 'condensed header = '+Math.round(window.__condensedH)+'px';})()
 
-# --- expanding: the brand line comes back in flow and is faded in, and the
+# --- expanding: the ruler comes back in flow and is faded in, and the
 # --- document below travels with the header instead of jumping
 eval window.__snapMid('__me', 0)
 shot 54-mid-expand
 expect window.__me.condensed == false
 expect window.__me.h > window.__condensedH + 20
 expect window.__me.anims == 1
-expect window.__me.brandOpacity < 1
+expect window.__me.rulerOpacity < 1
 expect window.__me.rows !== 'none'
 
 sleep 300
 eval window.__snap('__se')
 expect window.__se.rows == none
-expect window.__se.brandOpacity == 1
+expect window.__se.rulerOpacity == 1
 expect window.__se.anims == 0
 
 # =============================================================================
@@ -174,9 +184,9 @@ expect window.__r2.condensing == false
 sleep 350
 eval window.__snap('__r3')
 expect window.__r3.condensed == false
-expect window.__r3.bar == none
-expect window.__r3.brandDisplay == flex
-expect window.__r3.brandOpacity == 1
+expect window.__r3.track == none
+expect window.__r3.rulerDisplay == block
+expect window.__r3.rulerOpacity == 1
 expect window.__r3.anims == 0
 
 # =============================================================================
@@ -209,8 +219,8 @@ eval window.__snap('__rm1')
 expect window.__rm1.condensed
 expect window.__rm1.condensing == false
 expect window.__rm1.anims == 0
-expect window.__rm1.bar == none
-expect window.__rm1.brandDisplay == none
+expect window.__rm1.track == none
+expect window.__rm1.rulerDisplay == none
 eval window.__scroll(0)
 sleep 60
 eval window.__snap('__rm2')
@@ -252,12 +262,16 @@ expect getComputedStyle(document.getElementById('root')).transitionProperty == p
 expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.12s
 expect window.__basePad < 200
 
+# Every panel opens at 488 since #169, so Comments is given a narrower width
+# of its own (as a drag would leave it) for the switch below to be a switch
+# between two widths at all.
+eval (function(){localStorage.setItem('splitpage-panel-widths', JSON.stringify({'comments-panel': 400}));return true;})()
 jsclick #btn-production
 expect document.body.classList.contains('panel-open')
 expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.18s
-expect window.__openW() == 520
+expect window.__openW() == 488
 sleep 400
-expect window.__pad() == 540
+expect window.__pad() == 508
 
 # --- switching to a NARROWER panel settles once: .panel-open never comes off,
 # --- so this is an arrival at a new width rather than a departure followed by
@@ -268,13 +282,13 @@ expect window.__openW() == 400
 expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.18s
 sleep 40
 expect window.__pad() >= 420
-expect window.__pad() <= 540
+expect window.__pad() <= 508
 sleep 40
 expect window.__pad() >= 420
-expect window.__pad() <= 540
+expect window.__pad() <= 508
 sleep 40
 expect window.__pad() >= 420
-expect window.__pad() <= 540
+expect window.__pad() <= 508
 sleep 400
 expect window.__pad() == 420
 
@@ -293,20 +307,26 @@ expect window.__pad() === window.__basePad
 # =============================================================================
 jsclick #btn-production
 sleep 400
-expect window.__pad() == 540
+expect window.__pad() == 508
+# the header row keeps the window's width over the open panel (#169): it
+# hands #root's padding back as a negative margin of the panel's width
+expect parseFloat(getComputedStyle(document.querySelector('.topbar-row')).marginRight) == -488
 eval (function(){document.getElementById('production-panel-resize-handle').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,clientX:880,clientY:220}));return true;})()
 expect document.getElementById('production-panel-resize-handle').classList.contains('is-dragging')
 expect document.body.classList.contains('is-panel-resizing')
 expect getComputedStyle(document.getElementById('root')).transitionDuration == 0s
+expect getComputedStyle(document.querySelector('.topbar-row')).transitionDuration == 0s
 # the pointer moves 80px left, so the panel widens by 80 and the document has
 # to be there already — read in the same turn, with no sleep to ease into
 eval (function(){document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,cancelable:true,clientX:800,clientY:220}));return true;})()
-expect window.__openW() == 600
-expect window.__pad() == 620
+expect window.__openW() == 568
+expect window.__pad() == 588
+expect parseFloat(getComputedStyle(document.querySelector('.topbar-row')).marginRight) == -568
 eval (function(){document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,clientX:800,clientY:220}));return true;})()
 expect document.getElementById('production-panel-resize-handle').classList.contains('is-dragging') == false
 expect document.body.classList.contains('is-panel-resizing') == false
 expect getComputedStyle(document.getElementById('root')).transitionDuration == 0.18s
-expect window.__pad() == 620
+expect getComputedStyle(document.querySelector('.topbar-row')).transitionDuration == 0.18s
+expect window.__pad() == 588
 
 quit

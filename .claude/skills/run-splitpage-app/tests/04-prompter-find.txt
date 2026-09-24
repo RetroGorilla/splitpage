@@ -7,7 +7,7 @@ press  Bring the [gaffer tape] to set today.
 sleep 500
 
 # --- teleprompter -----------------------------------------------------------
-click text*=PRESENT
+click #btn-present
 sleep 800
 expect !document.getElementById('prompter').hidden
 

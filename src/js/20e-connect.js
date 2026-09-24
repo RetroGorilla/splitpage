@@ -319,8 +319,10 @@ export function renderConnect() {
           escapeHtml(b.id) + '" title="Enter this server\'s join PIN">PIN</button>' +
         (isCurrent ? '' : '<button type="button" class="btn btn-accent" data-connect-action="use" data-id="' +
           escapeHtml(b.id) + '">Use this server</button>') +
-        '<button type="button" class="btn" data-connect-action="remove" data-id="' +
-          escapeHtml(b.id) + '" title="Forget this server">×</button>' +
+        /* the sprite's close icon, not a "×" glyph (#169) */
+        '<button type="button" class="btn connect-forget" data-connect-action="remove" data-id="' +
+          escapeHtml(b.id) + '" title="Forget this server" aria-label="Forget this server">' +
+          '<svg class="row-icon-svg" aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>' +
       '</span>' +
     '</div>';
   }).join("");

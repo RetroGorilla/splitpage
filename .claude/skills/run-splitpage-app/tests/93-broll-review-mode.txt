@@ -46,8 +46,8 @@ expect getComputedStyle(row('bs1').querySelector('.broll-check')).cursor === 'de
 # Add a shot and the bulk bar live in the panel shell: hidden
 expect document.getElementById('broll-add').offsetParent === null
 expect document.getElementById('broll-bulk').offsetParent === null
-# ...while the summary, the chips and Go to scene are all there
-expect document.querySelector('#broll-controls .broll-summary-line').textContent === '3 of 8 shots in the can'
+# ...while the head's count, the tabs and Go to scene are all there
+expect document.querySelector('#broll-summary .broll-summary-line').textContent === '3 of 8 shot'
 expect document.querySelectorAll('#broll-list .broll-row-go').length === 6
 
 # ---- 3. the filter and the grouping are the reader's, so they work -------
@@ -56,22 +56,26 @@ wait document.querySelectorAll('#broll-list .broll-row').length === 5
 click #broll-controls .broll-group-btn
 wait !!document.querySelector('#broll-controls .broll-group-menu')
 click #broll-controls .broll-menu-item[data-group="location"]
-wait document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'Group: Location'
+wait document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'By location'
 click #broll-controls .broll-chip[data-filter="all"]
 wait document.querySelectorAll('#broll-list .broll-row').length === 8
 click #broll-controls .broll-group-btn
 wait !!document.querySelector('#broll-controls .broll-group-menu')
 click #broll-controls .broll-menu-item[data-group="scene"]
-wait document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'Group: Scene'
+wait document.querySelector('#broll-controls .broll-group-btn').textContent.trim() === 'By scene'
 expect untoast() && !toasted()
 
 # ---- 4. an open shot: every value, and nothing to change it with ---------
 click #broll-list .broll-row-main[data-id="bs2"]
 wait !!card()
 expect card().getAttribute('data-id') === 'bs2'
-expect card().querySelectorAll('.broll-seg button').length === 2
-expect card().querySelectorAll('.broll-seg button:disabled').length === 2
-expect card().querySelector('.broll-seg button.is-active').getAttribute('data-status') === 'unshot'
+# Status is one field that flips on click since #169 (it was two segmented
+# buttons): disabled here, still saying what it is
+expect card().querySelectorAll('.broll-status-btn').length === 1
+expect card().querySelector('.broll-status-btn').disabled
+expect card().querySelector('.broll-status-btn').getAttribute('data-status') === 'unshot'
+expect card().querySelector('.broll-status-btn').textContent === 'To shoot'
+expect !card().querySelector('.broll-status-field .ev-chevron')
 expect card().querySelector('.broll-flag-btn').disabled && card().querySelector('.broll-flag-btn').classList.contains('is-active')
 expect card().querySelector('.broll-flag-btn').textContent.trim() === 'Flagged'
 expect !card().querySelector('.broll-picker') && !card().querySelector('.broll-loc-input')
@@ -103,6 +107,11 @@ expect card().getAttribute('data-id') === 'bs4'
 # The tick: disabled, so the only way to click it is to take that off —
 # which is exactly what the click guard has to survive.
 eval (function(){ untoast(); var b = row('bs4').querySelector('.broll-check'); b.disabled = false; b.click(); return true; })()
+sleep 200
+expect toasted()
+expect rec('bs4').status === 'unshot'
+# the open shot's Status field, which flips on click for an editor
+eval (function(){ untoast(); var b = card().querySelector('.broll-status-btn'); b.disabled = false; b.click(); return true; })()
 sleep 200
 expect toasted()
 expect rec('bs4').status === 'unshot'
