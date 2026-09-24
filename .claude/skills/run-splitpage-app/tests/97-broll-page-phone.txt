@@ -1,0 +1,40 @@
+# The b-roll shot list's full page on a phone (#150): the table reflows into
+# a stack of rows — each shot a block, its fields labelled — and nothing on
+# the page is wider than the screen. Its own suite because a viewport is set
+# once, before any real work (see SKILL.md). Every `eval` is one line.
+
+open
+viewport 390 844 mobile
+goto /index.html
+sleep 800
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Harbour town", "rows": [{"id": "r1", "visualText": "Host at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Harbour\" contenteditable=\"false\">harbour</span> wall.<br><span class=\"broll-key\" data-broll-id=\"bs1\" contenteditable=\"false\">B-roll:</span> gulls wheeling over the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Fishing nets\" contenteditable=\"false\">nets</span><br>wide, then tight on one bird<br><span class=\"broll-key\" data-broll-id=\"bs2\" contenteditable=\"false\">B-roll:</span> boats coming in at dawn", "audioText": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "status": "todo"}, {"id": "r2", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs3\" contenteditable=\"false\">B-roll:</span> steam off the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> in the caf\u00e9 window", "audioText": "Inside, the caf\u00e9 has been open since five, and the kettle has not stopped once.", "status": "todo"}, {"id": "r3", "visualText": "Interview, two shot.<br><span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span> hands mending a net<br><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span> the ice machine at the market", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "todo"}, {"id": "r4", "visualText": "<span class=\"broll-key\" data-broll-id=\"bs6\" contenteditable=\"false\">B-roll:</span> the lighthouse at blue hour", "audioText": "And when the light goes, the lighthouse takes over.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}, {"id": "p2", "name": "Ada Brenner"}], "productionTags": [{"cat": "prop", "name": "Fishing nets", "status": "have"}, {"cat": "prop", "name": "Kettle", "status": "sourcing"}, {"cat": "prop", "name": "Drone", "status": "needed"}, {"cat": "location", "name": "Harbour"}, {"cat": "location", "name": "Fish market"}], "brollShots": [{"id": "bs1", "name": "gulls wheeling over the nets", "status": "shot", "location": "Harbour", "owner": "p1", "audioRef": "Every morning the town wakes to the same sound: engines, gulls, and the slap of rope on stone.", "props": [{"name": "Drone"}]}, {"id": "bs2", "name": "boats coming in at dawn", "status": "unshot", "reshoot": true, "notes": "Too late last time, the light was gone.", "location": "Harbour", "owner": "p2"}, {"id": "bs3", "name": "steam off the kettle in the caf\u00e9 window", "status": "shot", "location": "Caf\u00e9", "owner": "p1"}, {"id": "bs4", "name": "hands mending a net", "status": "unshot", "location": "Harbour", "props": [{"name": "Fishing nets"}]}, {"id": "bs5", "name": "the ice machine at the market", "status": "unshot", "location": "Fish market", "owner": "p2"}, {"id": "bs6", "name": "the lighthouse at blue hour", "status": "shot", "location": "Headland"}, {"id": "bs7", "name": "Establisher of the street, blue hour", "status": "unshot", "origin": "list"}, {"id": "bs8", "name": "Crowd at the fish auction", "status": "unshot", "origin": "list", "location": "Fish market", "notes": "Ask the harbourmaster first."}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; })()
+wait F.state().title === 'Harbour town' && document.querySelector('#rows .row[data-id="r4"]')
+expect innerWidth == 390
+jsclick #btn-broll
+wait document.querySelectorAll('#broll-list .broll-row').length === 8
+jsclick #broll-open-page
+wait !document.getElementById('broll-page').hidden
+sleep 300
+
+expect document.querySelectorAll('#broll-page .broll-page-row').length === 8
+expect getComputedStyle(document.querySelector('#broll-page thead')).display === 'none'
+expect getComputedStyle(document.querySelector('#broll-page .broll-page-row')).display === 'grid'
+expect document.getElementById('broll-page').scrollWidth <= innerWidth
+expect Array.prototype.every.call(document.querySelectorAll('#broll-page .broll-page-row, #broll-page .broll-page-group, #broll-page .broll-page-actions, #broll-page .broll-filters'), function(el){ var r = el.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1; })
+expect getComputedStyle(document.querySelector('#broll-page .broll-page-c-props'), '::before').content === '"Props"'
+expect parseFloat(getComputedStyle(document.querySelector('#broll-page .broll-page-note')).fontSize) >= 16
+expect document.querySelector('#broll-page .broll-page-row[data-id="bs1"] .broll-page-c-props').textContent === 'Fishing nets, Drone'
+expect document.querySelectorAll('#broll-page .broll-page-row[data-id="bs1"] .broll-page-c-props .broll-st-dot').length === 2
+
+# still works the same: a tick lands on the record
+click #broll-page .broll-page-row[data-id="bs5"] .broll-check
+wait F.state().brollShots.filter(function(r){ return r.id === 'bs5'; })[0].status === 'shot'
+
+shot 97-broll-page-phone
+
+eval document.documentElement.setAttribute('data-theme', 'dark')
+sleep 200
+shot 97-broll-page-phone-dark
+
+quit

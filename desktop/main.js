@@ -4242,12 +4242,15 @@ function routeLaunchFile(absPath) {
  * 13. Native menu.
  *
  *    ACCELERATORS: grepped src/js for keydown handling before assigning
- *    any of these. The page intercepts exactly one shortcut that overlaps
- *    a menu command — Ctrl/Cmd+F for Find & replace (src/js/21-events.js,
- *    the window "keydown" listener around line 691). That item's
- *    accelerator is set for display only (registerAccelerator: false) so
+ *    any of these. The page intercepts three shortcuts that overlap a menu
+ *    command — Ctrl/Cmd+F for Find & replace (src/js/21-events.js),
+ *    Ctrl/Cmd+E for Export… (src/js/18c-export-dialog.js) and Ctrl/Cmd+K
+ *    for Search Commands… (src/js/18d-command-menu.js). Those items'
+ *    accelerators are set for display only (registerAccelerator: false) so
  *    the keystroke still reaches the page's own handler instead of being
- *    swallowed here. Ctrl+B/I/U and Ctrl+Enter/Alt+Enter are also
+ *    swallowed here. The page's Ctrl/Cmd+S, +Shift+S and +O
+ *    (src/js/18b-file-menu.js) stand down whenever the desktop bridge is
+ *    there, so the real accelerators below are the only ones that fire. Ctrl+B/I/U and Ctrl+Enter/Alt+Enter are also
  *    page-handled but aren't menu commands at all, so they don't come up.
  *    Everything else below — Save, Save As, Open, undo/redo/cut/copy/paste
  *    roles, zoom, fullscreen — has no page-level listener, so real
@@ -4342,6 +4345,13 @@ function buildMenu() {
         }
       },
       { type: "separator" },
+      /* The Export dialog (issue #146). Ctrl/Cmd+E is the page's own
+         keydown (src/js/18c-export-dialog.js), so like Find & replace below
+         the accelerator is shown here and not registered — the keystroke
+         reaches the page instead of being swallowed. The submenu under it
+         still runs each format directly (the same buttons the dialog
+         clicks). */
+      { label: "Export…", accelerator: "CmdOrCtrl+E", registerAccelerator: false, click: () => sendMenuCommand("export") },
       { label: "Export", submenu: exportSubmenu },
       { type: "separator" },
       isMac ? { role: "close" } : { role: "quit", label: "Exit" }
@@ -4369,6 +4379,15 @@ function buildMenu() {
         accelerator: "CmdOrCtrl+F",
         registerAccelerator: false,
         click: () => sendMenuCommand("find")
+      },
+      /* The command menu (issue #147): the page's own Ctrl/Cmd+K
+         (src/js/18d-command-menu.js), shown here and not registered, for
+         the same reason as Find just above. */
+      {
+        label: "Search Commands…",
+        accelerator: "CmdOrCtrl+K",
+        registerAccelerator: false,
+        click: () => sendMenuCommand("command-menu")
       }
     ]
   };

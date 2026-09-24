@@ -27,6 +27,7 @@ import {
 import { safeId, storedImageHtml } from "./04-richtext.js";
 import { fromHtml, mergeCells, sameCell, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
+import { BROLL_PROPS_MAX, brollPropKey } from "./08c-broll.js";
 import {
   TAG_STATUSES,
   ensureTagIds,
@@ -864,9 +865,16 @@ export function mergeProductionTags(baseTags, mineTags, theirTags) {
    side must not fuse them. Otherwise the rules are the production
    registry's: an empty field never overwrites a filled one, and a status
    can only move forward, so a merge can never un-shoot something somebody
-   has already been out and shot. "Needs attention" is the one flag that
+   has already been out and shot. The reshoot flag ("Flagged") is the one that
    survives from either side — if one of them thinks it needs another look,
-   it needs another look. */
+   it needs another look.
+
+   A shot's hand-added props (#149) are a set, merged against the base the
+   way the list itself is: a prop either side added is kept, one either
+   side took off is gone unless the other side still has it and had it
+   from the start — i.e. the other side left it alone. So both sides'
+   additions survive, and a removal is not undone by the copy that never
+   saw it. Keyed by brollPropKey (the registry id, or the name). */
 export function mergeBrollShots(baseShots, mineShots, theirShots) {
   var shotKey = function (b) { return b.id || ""; };
   /* Everything but the id, in a fixed key order so two equal shots print
@@ -876,6 +884,8 @@ export function mergeBrollShots(baseShots, mineShots, theirShots) {
       .map(function (k) { return [k, b[k]]; }));
   };
   var dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
+  var baseById = {};
+  (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
   var out = [], byId = {};
   (theirShots || []).forEach(function (b) {
     if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
@@ -892,8 +902,43 @@ export function mergeBrollShots(baseShots, mineShots, theirShots) {
     if (!existing.location && b.location) existing.location = b.location;
     if (b.status === "shot") existing.status = "shot";
     if (b.reshoot) existing.reshoot = true;
+    var base = baseById[b.id];
+    existing.props = mergeBrollProps(base ? base.props : null, b.props, existing.props);
   });
   return out;
+}
+
+/* The three-way set merge of one shot's props (see mergeBrollShots). With
+   no base copy of the shot (it is new on both sides, or a two-way merge)
+   nothing can be called a removal, so it unions. Theirs' order first, then
+   what only I added; capped the way migrateRows caps it. */
+function mergeBrollProps(baseProps, mineProps, theirProps) {
+  function keyed(list) {
+    var by = {}, order = [];
+    (Array.isArray(list) ? list : []).forEach(function (p) {
+      if (!p || typeof p !== "object" || !p.name) return;
+      var k = brollPropKey(p.id, p.name);
+      if (by[k]) return;
+      by[k] = p;
+      order.push(k);
+    });
+    return { by: by, order: order };
+  }
+  var base = keyed(baseProps), mine = keyed(mineProps), theirs = keyed(theirProps);
+  var hasBase = Array.isArray(baseProps);
+  var out = [];
+  function keep(k) {
+    var inMine = !!mine.by[k], inTheirs = !!theirs.by[k], inBase = !!base.by[k];
+    if (inMine && inTheirs) return true;
+    return !hasBase || !inBase;
+  }
+  theirs.order.forEach(function (k) {
+    if (keep(k)) out.push({ id: theirs.by[k].id || "", name: theirs.by[k].name });
+  });
+  mine.order.forEach(function (k) {
+    if (!theirs.by[k] && keep(k)) out.push({ id: mine.by[k].id || "", name: mine.by[k].name });
+  });
+  return out.slice(0, BROLL_PROPS_MAX);
 }
 
 /* Reading speed was theirs-wins, silently: set it to 180 here and the next

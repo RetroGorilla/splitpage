@@ -29,6 +29,7 @@ import {
   tagCategory
 } from "./07-production-tags.js";
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
+import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
 import { openFindBar } from "./09-find-replace.js";
 import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
 import {
@@ -67,8 +68,11 @@ import {
   narrationRows
 } from "./15-docx.js";
 import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildPackingListPdf, buildPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
+import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
+import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
+import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
+import { openCommandMenu } from "./18d-command-menu.js";
 import { showAbout } from "./20a-update.js";
 import {
   applyMarkdownProject,
@@ -76,8 +80,7 @@ import {
   parseSplitpageFile
 } from "./20d-formats.js";
 import {
-  canOpenPrompterInBrowser, canOpenPrompterInChromium, makeDesktopHandle, notifyDesktopDocumentState,
-  openPrompterInBrowser, openPrompterInChromium
+  makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser, openPrompterInChromium
 } from "./20f-desktop.js";
 import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
@@ -108,6 +111,9 @@ export function updateFileChip() {
   updateHeaderFileChip();
   mirrorFileChipToWriter();
   updateReadonlyBanner();
+  /* the File menu’s card says the same thing, and may be showing */
+  var menu = document.getElementById("file-menu");
+  if (menu && !menu.hidden) refreshFileMenu();
 }
 
 /* The banner's own markup (page.html) has always been there, fully
@@ -156,14 +162,14 @@ function updateHeaderFileChip() {
       : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
     srvState.classList.toggle("unsaved", serverSessionExpired || !!S.dirty);
     saveBack.disabled = true;
-    saveBack.textContent = "Save to file";
+    setMenuItemLabel(saveBack, "Save to file");
     return;
   }
   var imported = importHome();
   if (!imported) {
     chip.hidden = true;
     saveBack.disabled = true;
-    saveBack.textContent = "Save to file";
+    setMenuItemLabel(saveBack, "Save to file");
     return;
   }
   chip.hidden = false;
@@ -172,7 +178,7 @@ function updateHeaderFileChip() {
   stateEl.textContent = imported.dirty ? "· unsaved changes" : "· up to date";
   stateEl.classList.toggle("unsaved", !!imported.dirty);
   saveBack.disabled = false;
-  saveBack.textContent = imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name;
+  setMenuItemLabel(saveBack, imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name);
 }
 
 /* Build the bytes for a given format. Returns {data, filename}.
@@ -181,6 +187,34 @@ function updateHeaderFileChip() {
    branch below) — on for the actual Export menu, off for saveBackToFile's
    reuse of this same function, which writes back into a file whose name
    and extension are already fixed and must stay a text file in place. */
+/* The name buildFileData() gives an export of `kind`, without building it —
+   what the Export dialog shows under its preview (18c-export-dialog.js).
+   buildFileData names every file through this, so the two cannot drift.
+   opts.imageBundle: a plain Markdown export that carries pictures ships as a
+   zip (see the "md" branch below). */
+export function exportFileName(kind, baseName, opts) {
+  opts = opts || {};
+  if (kind === "breakdown") return baseName + " - breakdown.csv";
+  if (kind === "b-roll csv") return baseName + " - b-roll shot list.csv";
+  if (kind === "b-roll pdf") return baseName + " - b-roll shot list.pdf";
+  if (kind === "narration-docx") return baseName + " - narration.docx";
+  if (kind === "narration-txt") return baseName + " - narration.txt";
+  if (kind.indexOf("packing-") === 0) {
+    var packCatId = kind.slice("packing-".length);
+    var packCat = tagCategory(packCatId);
+    return baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf";
+  }
+  if (kind === "md-table") return baseName + " - two column.md";
+  if (kind === "md" && opts.imageBundle) return baseName + " (with images).zip";
+  return baseName + "." + kind;
+}
+
+/* What an export is called before its format's suffix: the foreign file it
+   was opened from, or the script's title. */
+export function exportBaseName() {
+  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+}
+
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
   /* Every builder below is synchronous and reads pictures through
@@ -188,19 +222,19 @@ export async function buildFileData(kind, baseName, opts) {
      bytes already in memory — so fetch any the document names first (#82). A
      document with no refs asks for nothing and opens no store. */
   await ensureBytes(refsIn(S.state));
-  if (kind === "docx") return { data: buildDocx(), filename: baseName + ".docx" };
-  if (kind === "csv") return { data: buildCsv(), filename: baseName + ".csv" };
-  if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: baseName + " - breakdown.csv" };
-  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: baseName + ".pdf" };
-  if (kind === "txt") return { data: htmlToPlainScript(), filename: baseName + ".txt" };
-  if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: baseName + " - narration.docx" };
-  if (kind === "narration-txt") return { data: buildNarrationText(), filename: baseName + " - narration.txt" };
-  if (kind.indexOf("packing-") === 0) {
-    var packCatId = kind.slice("packing-".length);
-    var packCat = tagCategory(packCatId);
-    return { data: buildPackingListPdf(packCatId), filename: baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf" };
-  }
-  if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: baseName + " - two column.md" };
+  var filename = exportFileName(kind, baseName);
+  if (kind === "docx") return { data: buildDocx(), filename: filename };
+  if (kind === "csv") return { data: buildCsv(), filename: filename };
+  if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
+  /* the b-roll shot list's own two (#150, 08d-broll-panel.js) */
+  if (kind === "b-roll csv") return { data: buildBrollCsv(), filename: filename };
+  if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint()), filename: filename };
+  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: filename };
+  if (kind === "txt") return { data: htmlToPlainScript(), filename: filename };
+  if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
+  if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
+  if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
+  if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: filename };
   /* The old save format, kept as an export only: one file that opens in
      any browser with nothing installed. PAGE_SHELL and buildPublishHtml
      exist for this and for nothing else now (HANDOFF §3.1). */
@@ -210,7 +244,7 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "html") {
     /* inline, like a .splitpage (#82): say so if a picture could not be */
     warnImagesLeftOut(missingInlineImages(S.state).length, baseName + ".html");
-    return { data: standaloneHtmlFor(S.state), filename: baseName + ".html" };
+    return { data: standaloneHtmlFor(S.state), filename: filename };
   }
   if (kind === "md" && opts.allowImageBundle) {
     /* A script with no pictures stays a single plain-text .md, same as
@@ -225,10 +259,10 @@ export async function buildFileData(kind, baseName, opts) {
     if (images.length) {
       var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
       images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
-      return { data: zipWrite(entries), filename: baseName + " (with images).zip" };
+      return { data: zipWrite(entries), filename: exportFileName(kind, baseName, { imageBundle: true }) };
     }
   }
-  return { data: toMarkdownDoc(), filename: baseName + ".md" };
+  return { data: toMarkdownDoc(), filename: filename };
 }
 
 function htmlToPlainScript() {
@@ -944,7 +978,7 @@ export async function reloadProjectFromDisk() {
    the top bar (04b-busy.js) only if the build actually takes long enough
    to need it, which on a short script means nothing appears at all. */
 export async function exportAs(kind) {
-  var base = importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+  var base = exportBaseName();
   var built;
   try {
     built = await withBusyBar("Building the " + kind.toUpperCase() + " file…", function () {
@@ -979,100 +1013,22 @@ export async function exportPackingList(catId) {
   await exportAs("packing-" + catId);
 }
 
-/* The menu is a left drawer (see .menu in app.css), so opening it also
-   raises a backdrop over the page. Both halves live here so every caller
-   that already said toggleFileMenu(false) still closes the whole thing. */
-export function toggleFileMenu(force) {
-  var menu = document.getElementById("file-menu");
-  var btn = document.getElementById("btn-file");
-  var backdrop = document.getElementById("file-menu-backdrop");
-  var open = force === undefined ? menu.hidden : force;
-  menu.hidden = !open;
-  if (backdrop) backdrop.hidden = !open;
-  btn.setAttribute("aria-expanded", open ? "true" : "false");
-  if (open) {
-    /* Desktop only, and only a bridge that can do it (issue #86): decided
-       each time the drawer opens rather than once at boot, the same way the
-       teleprompter's own voice button decides when it opens — a browser
-       suite swaps a fake bridge in after boot, and an older bridge without
-       the call has nothing to offer. */
-    var presentBrowser = document.getElementById("menu-present-browser");
-    if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
-    var presentChromium = document.getElementById("menu-present-chromium");
-    if (presentChromium) presentChromium.hidden = !canOpenPrompterInChromium();
-    /* the drawer is tall and scrolls; a reopen should start at the top
-       rather than wherever the last visit left it */
-    var body = menu.querySelector(".menu-body");
-    if (body) body.scrollTop = 0;
-  } else if (menu.contains(document.activeElement)) {
-    /* closing with the focus still inside would leave it on a hidden
-       element, which strands the keyboard on nothing */
-    btn.focus();
-  }
-}
-
-/* ---- File-menu sections (issue #51) ----
-
-   Which headed sections are expanded is a per-device UI preference, like
-   the comments sort order (COMMENTS_SORT_KEY) or the import scan choices
-   (IMPORT_SCAN_KEY) — never part of the document, so nothing here ever
-   calls markDirty. One JSON map under one key, keyed by section id; a
-   missing or corrupt value for a given id falls back to
-   FILE_MENU_SECTION_DEFAULTS rather than failing closed or open for
-   everything at once. */
-var FILE_MENU_SECTIONS_KEY = "splitpage-file-menu-sections";
-var FILE_MENU_SECTION_DEFAULTS = { open: true, server: true, export: false, document: true, help: false };
-
-function fileMenuSectionPrefs() {
-  var saved;
-  try { saved = JSON.parse(localStorage.getItem(FILE_MENU_SECTIONS_KEY) || "{}"); } catch (e) { saved = null; }
-  return saved && typeof saved === "object" ? saved : {};
-}
-
-function fileMenuSectionExpanded(id) {
-  var saved = fileMenuSectionPrefs()[id];
-  return typeof saved === "boolean" ? saved : !!FILE_MENU_SECTION_DEFAULTS[id];
-}
-
-/* Updates the DOM (aria-expanded on the heading, `hidden` on the body,
-   which also lifts every button inside it out of the Tab order for free)
-   and, unless told not to, writes the new state back to storage.
-   initFileMenuSections() passes persist:false at boot so applying the
-   remembered state doesn't just write the same thing straight back out. */
-function applyFileMenuSection(id, expanded, persist) {
-  var toggle = document.querySelector('.menu-section-toggle[data-menu-section="' + id + '"]');
-  var body = document.getElementById("menu-section-" + id);
-  if (!toggle || !body) return;
-  toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-  body.hidden = !expanded;
-  if (persist !== false) {
-    var prefs = fileMenuSectionPrefs();
-    prefs[id] = !!expanded;
-    try { localStorage.setItem(FILE_MENU_SECTIONS_KEY, JSON.stringify(prefs)); } catch (e) { /* storage full or blocked — the menu still works, it just won't remember */ }
-  }
-}
-
-export function toggleFileMenuSection(id) {
-  applyFileMenuSection(id, !fileMenuSectionExpanded(id));
-}
-
-/* Runs once at boot — independent of the document loading, since this is
-   about the menu, not about state — so a reload lands on the same
-   sections the last visit left open rather than the hard-coded markup
-   defaults. */
-export function initFileMenuSections() {
-  Object.keys(FILE_MENU_SECTION_DEFAULTS).forEach(function (id) {
-    applyFileMenuSection(id, fileMenuSectionExpanded(id), false);
-  });
-}
-
 export function handleFileMenuAction(action) {
-  toggleFileMenu(false);
+  /* The two switches (#145) leave the menu open, so the switch is seen to
+     move; everything else is somewhere to go, and closes it. */
+  if (action !== "autosave" && action !== "toggle-hide-shot") toggleFileMenu(false);
+  /* Which format was exported last, for the dialog to start on and for
+     "Export again as …" — a per-device preference, never the document's. */
+  if (isExportAction(action)) rememberExport(action);
   if (!S.state && action !== "history" && action !== "tagging-help"
       && action !== "drive-open" && action !== "about") {
     showToast("Still loading…", "warn"); return;
   }
   if (action === "save-as") saveDoc({ saveAs: true });
+  else if (action === "new") startNewScript();
+  else if (action === "export") openExportDialog();
+  else if (action === "export-again") exportAgain();
+  else if (action === "command-menu") openCommandMenu();
   else if (action === "open") openLocalFile();
   else if (action === "paste") openImportModal();
   else if (action === "gdoc-import") openGdocModal();
