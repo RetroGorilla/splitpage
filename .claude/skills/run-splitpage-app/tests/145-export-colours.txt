@@ -1,0 +1,88 @@
+# Category colours in the exports (#171), through the real File menu: the
+# PDF breakdown fills each category's dot and draws its label in the light
+# theme's --tag-* (TAG_PRINT_COLORS, 14-export.js), the .docx breakdown's
+# Category cells carry that colour as <w:color>, the script's highlight is
+# still Word's "yellow", the Gear packing list names its category in Gear's
+# colour, and the .docx reopens as exactly its script.
+#
+# Files are caught at URL.createObjectURL, as 03-exports does. The unit
+# tests (src/test/export-colours.test.mjs) cover every category and the
+# layout; this is the same path in a real page, the app's own CSS loaded.
+
+open
+
+eval (function(){window.__blobs=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__blobs.push(b);return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download)return;return c.apply(this,arguments);};return 'hooked';})()
+eval (function(){window.F = window.__splitpageFormats; return !!(F && F.state);})()
+eval (function(){window.__unzip = function(bytes){var dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);var off=0,files={};while(off+4<=bytes.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(bytes.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=bytes.subarray(d,d+cs);off=d+cs;}return files;};return 'unzip-ready';})()
+# the PDF colour operands for a hex, as 17-pdf.js writes them
+eval (function(){window.__rgb = function(hex){return [0,2,4].map(function(i){return (parseInt(hex.slice(i,i+2),16)/255).toFixed(3);}).join(' ');}; return window.__rgb('764AA2');})()
+expect window.__rgb('764AA2') === '0.463 0.290 0.635'
+
+# a prop, a location, a VFX shot and a piece of gear, typed with their shortcuts
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] to the {kitchen} for the ~title card~ and the <boom pole>.
+sleep 600
+eval document.activeElement.blur()
+expect document.querySelectorAll('#rows .tag-anchor').length == 4
+expect ['prop','location','vfx','gear'].every(function(c){return document.querySelector('#rows .tag-anchor[data-tag-cat="' + c + '"]');})
+
+# --- the light values, whatever the theme ------------------------------------
+# the page's own light tokens are the export's colours (palette.test.mjs
+# checks this against app.css; here it is the live stylesheet)
+eval (function(){var cs=getComputedStyle(document.documentElement);window.__tok={prop:cs.getPropertyValue('--tag-prop').trim().toUpperCase(),location:cs.getPropertyValue('--tag-location').trim().toUpperCase(),vfx:cs.getPropertyValue('--tag-vfx').trim().toUpperCase(),gear:cs.getPropertyValue('--tag-gear').trim().toUpperCase()};return JSON.stringify(window.__tok);})()
+expect window.__tok.prop === '#764AA2' && window.__tok.location === '#2A7449' && window.__tok.vfx === '#5E6C00' && window.__tok.gear === '#44693C'
+
+# --- PDF ---------------------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-pdf"]
+sleep 2000
+expect window.__blobs[window.__blobs.length-1].type == application/pdf
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var at=t.indexOf('(Production breakdown) Tj');var bd=t.slice(at);var out={};[['prop','Prop','764AA2'],['location','Location','2A7449'],['vfx','VFX','5E6C00'],['gear','Gear','44693C']].forEach(function(c){var i=bd.indexOf('q '+window.__rgb(c[2])+' rg ');var line=i<0?'':bd.slice(i,bd.indexOf('\n',bd.indexOf('\n',i)+1));out[c[0]]={dot:i>=0&&/ c h f\n/.test(line),label:line.indexOf('('+c[1]+') Tj ET')!==-1};});window.__pdfCol={at:at,cats:out,scriptPlain:!/\d rg (BT|[\d.]+ [\d.]+ m )/.test(t.slice(0,at))};return JSON.stringify(window.__pdfCol);})()
+expect window.__pdfCol.at > 0
+expect window.__pdfCol.cats.prop.dot && window.__pdfCol.cats.prop.label
+expect window.__pdfCol.cats.location.dot && window.__pdfCol.cats.location.label
+expect window.__pdfCol.cats.vfx.dot && window.__pdfCol.cats.vfx.label
+expect window.__pdfCol.cats.gear.dot && window.__pdfCol.cats.gear.label
+expect window.__pdfCol.scriptPlain
+
+# --- .docx -------------------------------------------------------------------
+# a highlighted phrase, so the export has a Word highlight to keep yellow
+eval (function(){var s=F.state();s.rows[0].audioText=s.rows[0].audioText.replace('Hey','<mark>Hey</mark>');return s.rows[0].audioText.indexOf('<mark>Hey</mark>')!==-1;})()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-docx"]
+sleep 2000
+expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') !== -1
+eval (async function(){window.__docx=window.__blobs[window.__blobs.length-1];var xml=new TextDecoder().decode(window.__unzip(new Uint8Array(await window.__docx.arrayBuffer()))['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');var W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';var tbl=doc.getElementsByTagNameNS(W,'tbl')[1];var trs=Array.from(tbl.getElementsByTagNameNS(W,'tr'));var cells={};trs.slice(1).forEach(function(tr){var tc=tr.getElementsByTagNameNS(W,'tc')[0];var cols=Array.from(tc.getElementsByTagNameNS(W,'color')).map(function(c){return c.getAttribute('w:val');});cells[tc.textContent]=cols.join(',');});var hl=Array.from(doc.getElementsByTagNameNS(W,'highlight')).map(function(h){return h.getAttribute('w:val');});window.__docxCol={parses:!doc.getElementsByTagName('parsererror').length,head:Array.from(trs[0].getElementsByTagNameNS(W,'tc')).map(function(t){return t.textContent;}).join('|'),headPlain:!trs[0].getElementsByTagNameNS(W,'color').length,cells:cells,hl:hl};return JSON.stringify(window.__docxCol);})()
+expect window.__docxCol.parses
+expect window.__docxCol.head === 'Category|Item|Status|Assigned to|Mentions|Scenes|Notes'
+expect window.__docxCol.headPlain
+expect window.__docxCol.cells['● Prop'] === '764AA2,764AA2'
+expect window.__docxCol.cells['● Location'] === '2A7449,2A7449'
+expect window.__docxCol.cells['● VFX'] === '5E6C00,5E6C00'
+expect window.__docxCol.cells['● Gear'] === '44693C,44693C'
+# two: the demo's own "word for word" and the one added above
+expect window.__docxCol.hl.join(',') === 'yellow,yellow'
+
+# --- Gear packing list ---------------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-packing-gear"]
+sleep 1500
+expect window.__blobs[window.__blobs.length-1].type == application/pdf
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var i=t.indexOf('q '+window.__rgb('44693C')+' rg\n');window.__pack={colour:i>0,name:t.slice(i).split('\n')[1]||'',count:(t.match(/ rg\n/g)||[]).length};return JSON.stringify(window.__pack);})()
+expect window.__pack.colour
+expect /\(Gear\) Tj ET$/.test(window.__pack.name)
+expect window.__pack.count === 1
+
+# --- the .docx reopens as its script, highlight and all ----------------------
+# (read as the text on screen, a no-break space as a space: the space typed
+# after a tag is stored as &nbsp; and comes back from Word as a plain one,
+# which it did before #171 too)
+eval (function(){window.__before=F.state().rows.map(function(r){var d=document.createElement('div');d.innerHTML=r.visualText+'|'+r.audioText;return d.textContent.replace(/ /g,' ');});return JSON.stringify(window.__before);})()
+eval (async function(){ await F.openFile(new File([window.__docx], 'colours.docx')); return F.state().rows.length; })()
+sleep 800
+eval (function(){window.__after=F.state().rows.map(function(r){var d=document.createElement('div');d.innerHTML=r.visualText+'|'+r.audioText;return d.textContent.replace(/ /g,' ');});return JSON.stringify(window.__after);})()
+expect JSON.stringify(window.__after) === JSON.stringify(window.__before)
+expect F.state().rows[0].audioText.indexOf('<mark>Hey</mark>') !== -1
+expect JSON.stringify(F.state().rows).indexOf('●') === -1
+
+quit

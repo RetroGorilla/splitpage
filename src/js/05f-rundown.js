@@ -50,8 +50,8 @@ import { reviewMode } from "./13-hosted.js";
 
    ---- hooks for a target length (#170) ----
 
-   A per-script target length is its own issue, built beside this one. It
-   needs three things from the strip, and they are here:
+   A per-script target length is its own module (05t-target.js), which
+   draws on the strip through three things, all here:
    - the scale: setRundownExtraSeconds(seconds) makes the strip span the
      target as well as the script (rundownScale's second argument), and
      repaints;
@@ -450,6 +450,19 @@ export function rundownX(seconds) {
 /* #170: fn(layout) after every paint that may have moved the scale. */
 export function onRundownPaint(fn) {
   if (typeof fn === "function") paintListeners.push(fn);
+}
+
+/* #170: the last paint's scale, to scale — {pxPerSecond, spanSeconds,
+   totalSeconds, width} — for a layer drawn by time that must be right when
+   the lens comes to rest (rundownX answers where a time is on screen, which
+   under the lens is not to scale). A copy. */
+export function rundownLayout() {
+  return {
+    pxPerSecond: lastLayout.pxPerSecond,
+    spanSeconds: lastLayout.spanSeconds,
+    totalSeconds: lastLayout.totalSeconds,
+    width: lastLayout.width
+  };
 }
 
 var CHECK_SVG = '<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';

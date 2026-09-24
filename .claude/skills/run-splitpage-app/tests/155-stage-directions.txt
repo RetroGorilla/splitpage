@@ -1,0 +1,158 @@
+# Stage directions for the performer (#167): writing one in the editor.
+#
+# A direction is the `dir` mark on words of the Audio column
+# (04c-doc-model.js), stored as <span class="stage-dir"> and shown dim,
+# italic and bracketed. Typing "((beat))" makes one when the second ")"
+# is typed, and Ctrl+Z gives back the literal "((beat))" — the tag
+# shortcuts' rule; single brackets are prose; in the Visual column
+# "((…))" stays what was typed. What is typed right after one is
+# narration, not more of it. The Direction button (Audio toolbar only)
+# makes the selection one and takes it off again. The model, the readers,
+# the merge and the formats are src/test/directions.test.mjs; the
+# teleprompter, the read time, the Writer and the export option are
+# 156-stage-directions-present.txt.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.cellA = function(i){ return document.querySelectorAll('#rows .row .audio-cell .cell-editable')[i || 0]; }; window.cellV = function(){ return document.querySelector('#rows .row .visual-cell .cell-editable'); }; window.aud = function(i){ return F.state().rows[i || 0].audioText; }; window.vis = function(){ return F.state().rows[0].visualText; }; window.tb = function(i){ return document.querySelectorAll('#rows .row')[i || 0].querySelector('.audio-cell .mini-toolbar [data-cmd="direction"]'); }; window.selText = function(el, a, b){ var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null); var n, seen = 0, sn = null, so = 0, en = null, eo = 0; while ((n = w.nextNode())) { var len = n.nodeValue.replace(/​/g, '').length; if (!sn && a <= seen + len) { sn = n; so = a - seen; } if (!en && b <= seen + len) { en = n; eo = b - seen; } seen += len; } el.focus(); var r = document.createRange(); r.setStart(sn, so); r.setEnd(en, eo); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return r.toString(); }; window.clearCell = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); return el.innerHTML; }; window.caretEnd = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; return true; })()
+
+# --- the button is the Audio column's, never the Visual one's ----------------
+expect document.querySelectorAll('#rows .row').length === document.querySelectorAll('#rows .audio-cell .mini-toolbar [data-cmd="direction"]').length
+expect document.querySelectorAll('#rows .visual-cell .mini-toolbar [data-cmd="direction"]').length === 0
+expect tb(0).getAttribute('aria-label') == Stage direction
+expect tb(0).title.indexOf('((') !== -1
+
+# --- "((beat))": the second ")" makes it a direction --------------------------
+caret #rows .row .audio-cell .cell-editable
+eval clearCell(cellA(0))
+press Welcome back.
+press  ((beat
+press )
+sleep 150
+# one ")" is not the shortcut
+expect aud(0).indexOf('stage-dir') === -1
+press )
+sleep 300
+expect aud(0) == Welcome back. <span class="stage-dir">beat</span>
+expect cellA(0).querySelector('.stage-dir').textContent == beat
+expect cellA(0).textContent.indexOf('(') === -1
+# shown as a direction: dim, slanted, in brackets drawn by the page
+expect getComputedStyle(cellA(0).querySelector('.stage-dir')).fontStyle == italic
+expect getComputedStyle(cellA(0).querySelector('.stage-dir'), '::before').content == "("
+expect getComputedStyle(cellA(0).querySelector('.stage-dir'), '::after').content == ")"
+expect getComputedStyle(cellA(0).querySelector('.stage-dir')).color !== getComputedStyle(cellA(0)).color
+# the caret is just past it, and the button is lit there
+expect tb(0).classList.contains('is-active')
+
+# --- what is typed next is narration, not more of the direction ---------------
+press  Today
+sleep 300
+expect aud(0).replace(/&nbsp;/g, ' ') == Welcome back. <span class="stage-dir">beat</span> Today
+expect cellA(0).querySelector('.stage-dir').textContent == beat
+
+# --- Ctrl+Z takes the typing back, then the direction: literal text ----------
+# (the first character typed after it went in through the model, an entry
+# of its own, like a character typed with Ctrl+B pending)
+key ctrl KeyZ
+sleep 250
+expect aud(0).indexOf('Today') === -1
+expect aud(0).indexOf('<span class="stage-dir">beat</span>') !== -1
+key ctrl KeyZ
+sleep 250
+expect aud(0) == Welcome back. <span class="stage-dir">beat</span>
+key ctrl KeyZ
+sleep 250
+expect aud(0) == Welcome back. ((beat))
+expect cellA(0).querySelector('.stage-dir') === null
+key ctrl+shift KeyZ
+sleep 250
+expect aud(0) == Welcome back. <span class="stage-dir">beat</span>
+
+# --- typing inside a direction is more of it ----------------------------------
+eval selText(cellA(0), 16, 16)
+press y
+sleep 300
+expect aud(0) == Welcome back. <span class="stage-dir">beyat</span>
+key ctrl KeyZ
+sleep 250
+expect aud(0) == Welcome back. <span class="stage-dir">beat</span>
+
+# --- single brackets are prose -----------------------------------------------
+eval caretEnd(cellA(0))
+press  Pour it (slowly)
+press .
+sleep 300
+expect aud(0).indexOf('Pour it (slowly).') !== -1
+expect cellA(0).querySelectorAll('.stage-dir').length === 1
+press  See (fig (one))
+sleep 300
+expect aud(0).indexOf('See (fig (one))') !== -1
+expect cellA(0).querySelectorAll('.stage-dir').length === 1
+
+# --- in the Visual column "((…))" stays what was typed ------------------------
+eval document.activeElement.blur()
+caret #rows .row .visual-cell .cell-editable
+eval clearCell(cellV())
+press Wide ((establishing
+press ))
+sleep 300
+expect vis() == Wide ((establishing))
+expect cellV().querySelector('.stage-dir') === null
+
+# --- the Direction button: on over the words, off again ----------------------
+eval document.activeElement.blur()
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+eval clearCell(cellA(1))
+press Now hold up the mug and smile.
+sleep 300
+expect selText(cellA(1), 4, 16) === 'hold up the '
+expect !tb(1).classList.contains('is-active')
+eval window.__u0 = U.sizes().undo
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+sleep 250
+# its trailing space stays narration
+expect aud(1) == Now <span class="stage-dir">hold up the</span> mug and smile.
+expect U.sizes().undo === window.__u0 + 1
+# the selection is the direction now, and the button is lit over it
+expect getSelection().toString() == hold up the
+expect tb(1).classList.contains('is-active')
+# pressed again over the same words: off
+eval selText(cellA(1), 4, 15)
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+sleep 250
+expect aud(1) == Now hold up the mug and smile.
+# with only a caret inside one, the button takes that one off
+eval selText(cellA(1), 20, 29)
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+sleep 250
+expect aud(1) == Now hold up the mug <span class="stage-dir">and smile</span>.
+eval selText(cellA(1), 24, 24)
+sleep 100
+expect tb(1).classList.contains('is-active')
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+sleep 250
+expect aud(1) == Now hold up the mug and smile.
+# and with nothing to act on, it says what to do
+eval selText(cellA(1), 2, 2)
+jsclick #rows .row:nth-child(2) .audio-cell .mini-toolbar [data-cmd="direction"]
+sleep 250
+expect aud(1) == Now hold up the mug and smile.
+expect Array.prototype.some.call(document.querySelectorAll('.toast'), function (t) { return t.textContent.indexOf('((like this))') !== -1; })
+
+# --- copy: the plain text is bracketed, the HTML keeps the direction ----------
+eval (function(){ var c = cellA(0); selText(c, 0, 18); var dt = new DataTransfer(); var ev = new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }); c.dispatchEvent(ev); window.__cp = { text: dt.getData('text/plain'), html: dt.getData('text/html') }; return true; })()
+expect window.__cp.text == Welcome back. (beat)
+expect window.__cp.html.indexOf('<span class="stage-dir">beat</span>') !== -1
+
+# --- pasted into the Visual column, it is its words, bracketed ----------------
+eval document.activeElement.blur()
+eval (function(){ var c = cellV(); caretEnd(c); var dt = new DataTransfer(); dt.setData('text/html', window.__cp.html); dt.setData('text/plain', window.__cp.text); c.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()
+sleep 300
+expect vis().indexOf('Welcome back. (beat)') !== -1
+expect vis().indexOf('stage-dir') === -1
+
+eval document.activeElement.blur()
+shot 155-stage-directions
+quit

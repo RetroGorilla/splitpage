@@ -2,8 +2,9 @@ import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { pad2, paintRowTimes, render, renderRow } from "./05-render.js";
-import { renderRundown } from "./05f-rundown.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
+import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
+import { paintTargetOverlay } from "./05t-target.js";
+import { cellOf, spokenText } from "./04c-doc-model.js";
 import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { queueAutoSave } from "./14-export.js";
@@ -137,6 +138,39 @@ export function totalSeconds() {
   return S.state.rows.reduce(function (n, r) { return n + rowSeconds(r); }, 0);
 }
 
+/* A target length for the whole script (#170): the document key
+   `targetSeconds`, whole seconds from 1 to a day, absent when there is no
+   target — so every file from before #170 has none, and reads, merges and
+   saves exactly as it did. 0 is "no target", not a target of nothing.
+   Set from the clock's popover (05t-target.js); migrateRows keeps it only
+   through normalizeTargetLength, and mergeStates takes the side that
+   changed it (mergeTargetLength, 03-sync.js). */
+export function normalizeTargetLength(v) {
+  if (typeof v !== "number" || !isFinite(v)) return undefined;
+  var whole = Math.round(v);
+  return whole >= 1 && whole <= SCENE_LENGTH_MAX ? whole : undefined;
+}
+
+/* The target of document `s` in seconds, or null for none. */
+export function targetLengthOf(s) {
+  var v = s ? normalizeTargetLength(s.targetSeconds) : undefined;
+  return v === undefined ? null : v;
+}
+
+/* What the program clock shows against a target: the target as a
+   timecode ("02:00"), and how far the script is from it as a length
+   ("0:25") — left while it is shorter or exactly on it, over once it is
+   longer. Worked out on the whole seconds the clock prints, so the two
+   figures always agree with the difference. Pure. */
+export function targetClock(total, target) {
+  var diff = Math.round(target) - Math.max(0, Math.round(total));
+  return {
+    target: formatTimecode(target),
+    delta: formatDuration(Math.abs(diff)),
+    over: diff < 0
+  };
+}
+
 export function formatDuration(sec) {
   var whole = Math.max(0, Math.round(sec));
   var h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
@@ -153,33 +187,62 @@ export function formatTimecode(sec) {
   return (h ? h + ":" : "") + pad2(m) + ":" + pad2(s);
 }
 
+var CLOCK_TITLE = "Estimated read time for the Audio column — click to set your reading speed or a target length";
+
 export function updateScriptStats() {
   if (!S.state) return;
   var totalEl = document.getElementById("runtime-total");
+  var target = targetLengthOf(S.state);
   if (totalEl) {
-    /* With shot scenes hidden, the number that matters is what's left to
-       record — but the total is still worth keeping in view, so both show:
-       what is left as the clock, the whole after it, quieter. */
-    if (hideShotScenes) {
-      var remaining = S.state.rows.reduce(function (n, r) {
-        return n + (r.status === "shot" ? 0 : rowSeconds(r));
-      }, 0);
+    var total = totalSeconds();
+    var remaining = hideShotScenes ? S.state.rows.reduce(function (n, r) {
+      return n + (r.status === "shot" ? 0 : rowSeconds(r));
+    }, 0) : 0;
+    var slotHtml = "";
+    var title = CLOCK_TITLE;
+    if (target) {
+      /* A target (#170) is measured against the whole script, shot scenes
+         and all — it is the programme's length, not the shoot's. So with
+         one set the clock is always "01:35 / 02:00" and how far off that
+         is; what is left to record, with shot scenes hidden, moves to the
+         tooltip. */
+      var clockText = formatTimecode(total);
+      if (totalEl.textContent !== clockText) totalEl.textContent = clockText;
+      var tc = targetClock(total, target);
+      /* digits, colons and fixed words only — nothing here needs escaping */
+      slotHtml = '<span class="program-clock-of"> / ' + tc.target + '</span>' +
+        '<span class="program-clock-delta' + (tc.over ? ' is-over' : '') + '">' +
+        tc.delta + (tc.over ? ' over' : ' left') + '</span>';
+      title = "Read time " + clockText + " against a " + formatDuration(target) + " target" +
+        (hideShotScenes ? " (" + formatTimecode(remaining) + " still to shoot)" : "") +
+        " — click to change the target or your reading speed";
+    } else if (hideShotScenes) {
+      /* With shot scenes hidden, the number that matters is what's left to
+         record — but the total is still worth keeping in view, so both show:
+         what is left as the clock, the whole after it, quieter. */
       /* digits and colons only — nothing here needs escaping */
       var clockHtml = formatTimecode(remaining) +
-        '<span class="program-clock-of"> / ' + formatTimecode(totalSeconds()) + '</span>';
+        '<span class="program-clock-of"> / ' + formatTimecode(total) + '</span>';
       if (totalEl.innerHTML !== clockHtml) totalEl.innerHTML = clockHtml;
     } else {
-      var clock = formatTimecode(totalSeconds());
+      var clock = formatTimecode(total);
       if (totalEl.textContent !== clock) totalEl.textContent = clock;
     }
+    var slot = document.getElementById("program-clock-slot");
+    if (slot && slot.innerHTML !== slotHtml) slot.innerHTML = slotHtml;
+    var chipEl = document.getElementById("runtime-chip");
+    if (chipEl && chipEl.title !== title) chipEl.title = title;
   }
   /* Everything else that moves with the read times moves here too: each
      scene's start and length in its gutter and rail (paintRowTimes,
-     05-render.js) and the rundown strip (05f-rundown.js). This runs from
-     render() and from the idle refresh while typing, so none of them waits
-     for the next full render. */
+     05-render.js) and the rundown strip (05f-rundown.js), which spans the
+     target as well as the script and draws the target over its blocks
+     (05t-target.js). This runs from render() and from the idle refresh
+     while typing, so none of them waits for the next full render. */
   paintRowTimes();
+  setRundownExtraSeconds(target || 0);
   renderRundown();
+  paintTargetOverlay();
 
   var chip = document.getElementById("progress-chip");
   var text = document.getElementById("progress-text");
@@ -229,9 +292,10 @@ export function __init() {
   /* Same reasoning as tagsInField(): the runtime estimate re-counts every row
      on every refresh, but only the row being typed in has changed. The
      words are the cell's text as the document model reads it (cellOf,
-     #85), not a parse of the markup here. */
+     #85), not a parse of the markup here — and only the words that are
+     said: a stage direction ("(beat)", #167) takes no reading time. */
   wordCount = contentMemo(function (html) {
-    var text = toPlainText(cellOf(html));
+    var text = spokenText(cellOf(html));
     return text ? text.split(/\s+/).filter(Boolean).length : 0;
   });
 }

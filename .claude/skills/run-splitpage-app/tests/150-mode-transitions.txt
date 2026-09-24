@@ -1,0 +1,348 @@
+# Present and the Writer arriving and leaving (#133, #136; app.css "Present
+# and the Writer arriving and leaving", openPrompter/closePrompter in
+# 20-teleprompter.js, openWriter/closeWriter in 19-writer.js).
+#
+# Both fade in over the view they cover and back out, on the shared motion
+# tokens. What this suite holds them to is what the issues asked for:
+#
+# - the fade really runs (a CSS transition on opacity, the value mid-way
+#   between 0 and 1) and `hidden` still flips in the open/close call itself,
+#   so every suite that reads `.hidden` straight after a click is unaffected;
+# - nothing the reader or writer needs waits for it: keys, Play, Mirror/Flip
+#   and the caret work during the arrival, and a click during the departure
+#   lands on the view coming back;
+# - closing the Writer saves what is on screen BEFORE anything about leaving
+#   happens (a data-loss invariant, not a cosmetic one);
+# - Present stops playback and releases the wake lock at once, and when it is
+#   fullscreen it holds, opaque, until the browser is out of fullscreen, and
+#   only then fades;
+# - the side panels a mode closes leave inside the mode's own arrival.
+#
+# The fades are 180ms/120ms, far too short to sample reliably through a driver
+# round trip, so most sections slow them down: __slow(ms) sets --dur-enter and
+# --dur-exit inline on #prompter and #writer. The transitions read the tokens
+# through var(), so this is exactly the motion the app runs, only longer, and
+# nothing outside the two elements is slowed. __fast() takes it back off.
+#
+# A fade OUT can read its starting value for a frame or two after it starts
+# (SKILL.md, "A CSS fade-out reads its starting value..."), so mid-departure
+# readings are taken on the page's frames by __mid, never after a bare sleep.
+#
+# Reduced motion needs nothing here: the tokens collapse to 0.01ms in the one
+# @media block 61-transitions.txt already reads back, and these transitions
+# are written only in the tokens (checked below).
+
+open
+viewport 1400 900
+goto /index.html
+sleep 500
+wait document.querySelectorAll('#rows .row').length > 0
+
+eval (function(){window.__st=function(){return window.__splitpageFormats.state();};window.__fx=function(id){var el=document.getElementById(id);var cs=getComputedStyle(el);var a=el.getAnimations().filter(function(x){return x.transitionProperty==='opacity';});return {hidden:el.hidden,inert:el.inert,display:cs.display,opacity:parseFloat(cs.opacity),pe:cs.pointerEvents,fading:a.length,holding:el.classList.contains('is-holding'),locked:document.body.classList.contains('prompter-open')};};window.__slow=function(ms){['prompter','writer'].forEach(function(id){var s=document.getElementById(id).style;s.setProperty('--dur-enter',ms+'ms');s.setProperty('--dur-exit',ms+'ms');});return true;};window.__fast=function(){['prompter','writer'].forEach(function(id){var s=document.getElementById(id).style;s.removeProperty('--dur-enter');s.removeProperty('--dur-exit');});return true;};window.__mid=function(id){return new Promise(function(res){var n=0;function t(){n++;var f=__fx(id);if((f.opacity>0&&f.opacity<1)||n>=90){f.frames=n;res(f);return;}requestAnimationFrame(t);}requestAnimationFrame(t);});};window.__center=function(){var x=innerWidth/2,y=innerHeight/2;var el=document.elementFromPoint(x,y);return el?(el.closest('#prompter')?'prompter':el.closest('#writer')?'writer':'page'):'none';};window.__playing=function(){return document.getElementById('pp-play').classList.contains('is-active');};window.__space=function(){(document.activeElement||document.body).dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space',bubbles:true,cancelable:true}));return true;};return true;})()
+expect typeof window.__fx === 'function'
+
+# =============================================================================
+# The motion is the tokens' and the dialogs' mechanism, on the containers
+# =============================================================================
+eval (function(){window.__ruleText=function(needle){var out=[];function walk(rules){for(var i=0;i<rules.length;i++){var r=rules[i];if(r.style&&r.cssText.indexOf(needle)>=0)out.push(r.cssText);else if(r.cssRules)walk(r.cssRules);}}var s=document.styleSheets;for(var i=0;i<s.length;i++){try{walk(s[i].cssRules);}catch(e){}}return out.join(' || ');};return true;})()
+eval window.__ruleText('.prompter, .writer')
+expect window.__ruleText('.prompter, .writer {').indexOf('opacity var(--dur-enter) var(--ease-enter)') >= 0
+expect window.__ruleText('.prompter, .writer {').indexOf('display var(--dur-enter) allow-discrete') >= 0
+expect window.__ruleText('.prompter[hidden], .writer[hidden]').indexOf('opacity var(--dur-exit) var(--ease-exit)') >= 0
+expect window.__ruleText('.prompter[hidden], .writer[hidden]').indexOf('display var(--dur-exit) allow-discrete') >= 0
+expect window.__ruleText('.prompter[hidden], .writer[hidden]').indexOf('pointer-events: none') >= 0
+# the entrance starts from clear, in @starting-style
+expect window.__ruleText('.prompter:not([hidden]), .writer:not([hidden])').indexOf('opacity: 0') >= 0
+# at rest, leaving is the shorter of the two, as everywhere else in the app
+expect getComputedStyle(document.getElementById('prompter')).transitionProperty == opacity, display
+expect getComputedStyle(document.getElementById('prompter')).transitionDuration == 0.12s, 0.12s
+expect getComputedStyle(document.getElementById('writer')).transitionDuration == 0.12s, 0.12s
+# opacity only, never a transform: Mirror/Flip are transforms on the scroller
+# and must not be overwritten, and nothing may measure differently mid-fade
+expect getComputedStyle(document.getElementById('prompter')).transform == none
+expect getComputedStyle(document.getElementById('writer')).transform == none
+# the layering is unchanged: over the side panels, under dialogs and toasts
+expect getComputedStyle(document.getElementById('prompter')).zIndex == 145
+expect getComputedStyle(document.getElementById('writer')).zIndex == 145
+
+# =============================================================================
+# Present arriving: fades in, and the reader's controls answer at once
+# =============================================================================
+eval (function(){window.__wl=[];Object.defineProperty(navigator,'wakeLock',{configurable:true,value:{request:function(){window.__wl.push('request');return Promise.resolve({release:function(){window.__wl.push('release');return Promise.resolve();}});}}});return true;})()
+eval __slow(6000)
+eval (function(){document.getElementById('btn-present').click();window.__pin0=__fx('prompter');window.__pin0.lines=document.querySelectorAll('#prompter-content .prompter-line').length;return JSON.stringify(window.__pin0);})()
+# open in the same call: shown, reachable, its words built, the fade started
+expect window.__pin0.hidden === false
+expect window.__pin0.inert === false
+expect window.__pin0.display == flex
+expect window.__pin0.fading == 1
+expect window.__pin0.lines > 0
+# the page's scroll lock waits for the arrival to end (the scrollbar leaving
+# would shift the editor under a still-clear layer)
+expect window.__pin0.locked === false
+eval (async function(){window.__pin1=await __mid('prompter');return JSON.stringify(window.__pin1);})()
+expect window.__pin1.opacity > 0
+expect window.__pin1.opacity < 1
+shot 150-present-arriving
+
+# Space during the fade is Play, not a dropped key...
+eval __space()
+expect __playing()
+expect __fx('prompter').opacity < 1
+# ...and a real click on Play during the fade pauses it again
+click #pp-play
+expect __playing() === false
+expect __fx('prompter').opacity < 1
+# Mirror and Flip mid-fade: the scroller's own transforms, untouched by the
+# container's opacity
+key KeyM
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect getComputedStyle(document.getElementById('prompter-scroll')).transform == matrix(-1, 0, 0, 1, 0, 0)
+key KeyF
+expect getComputedStyle(document.getElementById('prompter-scroll')).transform == matrix(-1, 0, 0, -1, 0, 0)
+expect __fx('prompter').opacity < 1
+shot 150-present-arriving-mirrored
+key KeyM
+key KeyF
+expect getComputedStyle(document.getElementById('prompter-scroll')).transform == none
+# the wake lock was asked for in the open call, not after the fade
+expect window.__wl.indexOf('request') >= 0
+
+# once it has arrived: opaque, and the page's scroll locked
+wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
+wait document.body.classList.contains('prompter-open')
+
+# =============================================================================
+# Present leaving: everything stops now, then it fades, and it takes no input
+# =============================================================================
+eval __space()
+expect __playing()
+# a REAL click on Close, so the focus is on the Close button when it runs
+click #pp-close
+eval (function(){window.__pout0=__fx('prompter');window.__pout0.playing=__playing();window.__pout0.wl=window.__wl.slice();window.__pout0.active=document.activeElement===document.body||!document.activeElement;return JSON.stringify(window.__pout0);})()
+expect window.__pout0.hidden === true
+expect window.__pout0.inert === true
+expect window.__pout0.playing === false
+expect window.__pout0.wl.indexOf('release') >= 0
+expect window.__pout0.locked === false
+# the focus left it: Space on a Close button still focused inside the fading
+# layer would have pressed it again
+expect window.__pout0.active
+# and it is still on screen, fading
+expect window.__pout0.display == flex
+expect window.__pout0.pe == none
+eval (async function(){window.__pout1=await __mid('prompter');window.__pout1.center=__center();return JSON.stringify(window.__pout1);})()
+expect window.__pout1.opacity < 1
+expect window.__pout1.display == flex
+# the middle of the screen is the editor already, for a click
+expect window.__pout1.center == page
+shot 150-present-leaving
+# keys during the fade are not the prompter's any more
+eval __space()
+expect __playing() === false
+# a real click on a script cell during the fade reaches it
+click #rows .row .audio-cell .cell-editable
+expect __fx('prompter').display == flex
+expect document.activeElement.closest('#rows') !== null
+eval document.activeElement.blur()
+wait __fx('prompter').display === 'none'
+
+# =============================================================================
+# Present leaving fullscreen: hold, let the browser leave, THEN fade
+# =============================================================================
+# The Fullscreen API is stubbed so the browser's exit can be held open for as
+# long as the test likes: document.fullscreenElement reads __fs, and
+# exitFullscreen() resolves only when __fsDone() is called.
+eval (function(){Object.defineProperty(document,'fullscreenElement',{configurable:true,get:function(){return window.__fs||null;}});document.exitFullscreen=function(){window.__fsCalls=(window.__fsCalls||0)+1;return new Promise(function(r){window.__fsDone=function(){window.__fs=null;r();};});};return true;})()
+eval __slow(3000)
+jsclick #btn-present
+wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
+eval (function(){window.__fs=document.getElementById('prompter');window.__wl=[];__space();return __playing();})()
+expect __playing()
+eval (function(){window.__fs0=__fx('prompter');document.getElementById('pp-close').click();window.__fs1=__fx('prompter');window.__fs1.playing=__playing();window.__fs1.wl=window.__wl.slice();window.__fs1.calls=window.__fsCalls;return JSON.stringify(window.__fs1);})()
+# closed in the call, the reader's things stopped in the call...
+expect window.__fs1.hidden === true
+expect window.__fs1.inert === true
+expect window.__fs1.playing === false
+expect window.__fs1.calls == 1
+# ...but held, opaque and not fading, while the browser leaves fullscreen
+expect window.__fs1.holding === true
+expect window.__fs1.display == flex
+expect window.__fs1.opacity == 1
+expect window.__fs1.fading == 0
+sleep 400
+expect __fx('prompter').holding
+expect __fx('prompter').opacity == 1
+expect __fx('prompter').fading == 0
+shot 150-present-fullscreen-hold
+# the browser is out: now, and only now, it fades
+eval (function(){window.__fsDone();return true;})()
+eval (async function(){window.__fs2=await __mid('prompter');return JSON.stringify(window.__fs2);})()
+expect window.__fs2.holding === false
+expect window.__fs2.opacity < 1
+wait __fx('prompter').display === 'none'
+
+# a browser that never settles exitFullscreen() does not leave the prompter
+# standing over the editor: it fades after a second regardless
+jsclick #btn-present
+wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
+eval (function(){window.__fs=document.getElementById('prompter');window.__fsDone=null;document.getElementById('pp-close').click();return __fx('prompter').holding;})()
+expect __fx('prompter').holding
+wait !__fx('prompter').holding
+wait __fx('prompter').display === 'none'
+
+# opening again during a hold takes the hold back and is simply open
+jsclick #btn-present
+wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
+eval (function(){window.__fs=document.getElementById('prompter');document.getElementById('pp-close').click();document.getElementById('btn-present').click();return JSON.stringify(__fx('prompter'));})()
+expect __fx('prompter').hidden === false
+expect __fx('prompter').holding === false
+expect __fx('prompter').inert === false
+sleep 1200
+expect __fx('prompter').hidden === false
+expect __fx('prompter').display == flex
+eval (function(){window.__fs=null;delete document.fullscreenElement;delete document.exitFullscreen;return typeof document.exitFullscreen;})()
+expect document.fullscreenElement === null
+eval __fast()
+jsclick #pp-close
+wait __fx('prompter').display === 'none'
+
+# =============================================================================
+# The Writer arriving: fades in, and the caret is there to type into at once
+# =============================================================================
+eval __slow(6000)
+eval (function(){document.getElementById('btn-write').click();window.__win0=__fx('writer');var a=document.activeElement;window.__win0.caretIn=!!(a&&a.classList&&a.classList.contains('wr-para'));window.__win0.lastId=__st().rows[__st().rows.length-1].id;window.__win0.caretRow=a&&a.getAttribute&&a.getAttribute('data-id');return JSON.stringify(window.__win0);})()
+expect window.__win0.hidden === false
+expect window.__win0.inert === false
+expect window.__win0.fading == 1
+# the caret landed in the open call: every demo scene has narration, so at the
+# end of the last one
+expect window.__win0.caretIn
+expect window.__win0.caretRow === window.__win0.lastId
+eval (async function(){window.__win1=await __mid('writer');return JSON.stringify(window.__win1);})()
+expect window.__win1.opacity > 0
+expect window.__win1.opacity < 1
+shot 150-writer-arriving
+# typing during the fade lands, and in the document
+press  Typed mid-fade.
+expect __fx('writer').opacity < 1
+expect document.querySelector('#writer-doc .wr-para[data-id="' + window.__win0.lastId + '"]').textContent.indexOf('Typed mid-fade.') >= 0
+expect __st().rows[__st().rows.length-1].audioText.indexOf('Typed mid-fade.') >= 0
+wait __fx('writer').opacity === 1 && __fx('writer').fading === 0
+
+# =============================================================================
+# The Writer closing: the save comes first, before anything about leaving
+# =============================================================================
+# Words that are on screen but not yet in the document: put straight into the
+# paragraph with no input event, the way an unfinished composition or the
+# last keystrokes before a focusout sit there. Then record, at each step of
+# the close, whether the document already had them: the focusout the close
+# gives the paragraph, and the moment `hidden` is set (an own accessor on the
+# element wraps the real one).
+eval (function(){var p=document.querySelector('#writer-doc .wr-para[data-id="' + window.__win0.lastId + '"]');p.appendChild(document.createTextNode(' Unsynced tail.'));window.__order=[];var id=window.__win0.lastId;var has=function(){return __st().rows.find(function(r){return r.id===id;}).audioText.indexOf('Unsynced tail.')>=0;};window.__hasTail=has;p.addEventListener('focusout',function(){window.__order.push('focusout:'+has());},{once:true});var w=document.getElementById('writer');var d=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'hidden');Object.defineProperty(w,'hidden',{configurable:true,get:function(){return d.get.call(this);},set:function(v){if(v)window.__order.push('hide:'+has()+':fading='+this.getAnimations().length);d.set.call(this,v);}});return has();})()
+expect window.__hasTail() === false
+expect document.activeElement.classList.contains('wr-para')
+# jsclick, not click: a real click on Close would blur the paragraph on
+# mousedown, before closeWriter() runs at all. This is the path Escape takes,
+# with the caret still in the paragraph when the close begins.
+jsclick #wr-close
+eval JSON.stringify(window.__order)
+# saved before the focus left, saved before the hide, and no fade had begun
+expect window.__order[0] == focusout:true
+expect window.__order[1] == hide:true:fading=0
+expect window.__hasTail()
+# and on screen in the split view, which was painted in the close
+expect Array.prototype.some.call(document.querySelectorAll('#rows .audio-cell .cell-editable'), function(c){return c.textContent.indexOf('Unsynced tail.')>=0;})
+eval (function(){delete document.getElementById('writer').hidden;return document.getElementById('writer').hidden;})()
+eval (async function(){window.__wout1=await __mid('writer');window.__wout1.center=__center();window.__wout1.active=document.activeElement===document.body;return JSON.stringify(window.__wout1);})()
+expect window.__wout1.hidden === true
+expect window.__wout1.inert === true
+expect window.__wout1.pe == none
+expect window.__wout1.display == flex
+expect window.__wout1.opacity < 1
+expect window.__wout1.center == page
+# nothing in the fading writer holds the focus to type into
+expect window.__wout1.active
+shot 150-writer-leaving
+# a real click during the fade lands in the split view, and typing there too
+click #rows .row .audio-cell .cell-editable
+expect __fx('writer').display == flex
+expect document.activeElement.closest('#rows') !== null
+press  After.
+expect document.activeElement.textContent.indexOf('After.') >= 0
+eval document.activeElement.blur()
+wait __fx('writer').display === 'none'
+
+# =============================================================================
+# Jump to scene: the split view lands on and flashes the scene in the close,
+# and the writer fades out over it
+# =============================================================================
+eval __fast()
+jsclick #btn-write
+wait __fx('writer').opacity === 1 && __fx('writer').fading === 0
+eval __slow(3000)
+eval (function(){var ids=__st().rows.map(function(r){return r.id;});window.__jumpId=ids[ids.length-1];var g=document.querySelector('#writer-doc [data-action="writer-jump"][data-row="' + window.__jumpId + '"]');g.click();var row=document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]');window.__jump={flashed:row.classList.contains('just-merged'),w:__fx('writer')};return JSON.stringify(window.__jump);})()
+expect window.__jump.flashed
+expect window.__jump.w.hidden === true
+expect window.__jump.w.display == flex
+wait __fx('writer').display === 'none'
+wait (function(){var r=document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').getBoundingClientRect();return r.top >= 0 && r.bottom <= innerHeight;})()
+
+# the same with the fade off (reduced motion's near-zero token)
+eval (function(){['prompter','writer'].forEach(function(id){var s=document.getElementById(id).style;s.setProperty('--dur-enter','0.01ms');s.setProperty('--dur-exit','0.01ms');});return true;})()
+jsclick #btn-write
+wait __fx('writer').opacity === 1
+eval (function(){var ids=__st().rows.map(function(r){return r.id;});window.__jumpId=ids[0];window.scrollTo(0,document.documentElement.scrollHeight);document.querySelector('#writer-doc [data-action="writer-jump"][data-row="' + window.__jumpId + '"]').click();return document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').classList.contains('just-merged');})()
+expect document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').classList.contains('just-merged')
+wait __fx('writer').display === 'none'
+wait (function(){var r=document.querySelector('#rows .row[data-id="' + window.__jumpId + '"]').getBoundingClientRect();return r.top >= 0 && r.bottom <= innerHeight;})()
+eval __fast()
+
+# =============================================================================
+# The side panels a mode closes leave inside its arrival: their slide-out is
+# started by the same click and is over before the mode has finished fading in
+# =============================================================================
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden
+sleep 400
+eval (function(){document.getElementById('btn-write').click();var p=document.getElementById('production-panel').getAnimations().filter(function(a){return a.transitionProperty==='transform';});var w=document.getElementById('writer').getAnimations().filter(function(a){return a.transitionProperty==='opacity';});window.__pan={panelHidden:document.getElementById('production-panel').hidden,panel:p.length,writer:w.length,pd:p.length?p[0].effect.getTiming().duration:-1,wd:w.length?w[0].effect.getTiming().duration:-1};return JSON.stringify(window.__pan);})()
+expect window.__pan.panelHidden
+expect window.__pan.panel == 1
+expect window.__pan.writer == 1
+expect window.__pan.pd > 0
+expect window.__pan.pd <= window.__pan.wd
+wait __fx('writer').fading === 0
+jsclick #wr-close
+wait __fx('writer').display === 'none'
+
+jsclick #btn-comments
+wait !document.getElementById('comments-panel').hidden
+sleep 400
+eval (function(){document.getElementById('btn-present').click();var p=document.getElementById('comments-panel').getAnimations().filter(function(a){return a.transitionProperty==='transform';});var w=document.getElementById('prompter').getAnimations().filter(function(a){return a.transitionProperty==='opacity';});window.__pan2={panel:p.length,writer:w.length,pd:p.length?p[0].effect.getTiming().duration:-1,wd:w.length?w[0].effect.getTiming().duration:-1};return JSON.stringify(window.__pan2);})()
+expect window.__pan2.panel == 1
+expect window.__pan2.writer == 1
+expect window.__pan2.pd <= window.__pan2.wd
+wait __fx('prompter').fading === 0
+jsclick #pp-close
+wait __fx('prompter').display === 'none'
+
+# =============================================================================
+# The same hold against the browser's real fullscreen. Headless Edge does
+# enter element fullscreen from a real click; here the promise settles as the
+# browser gets out, and the fade starts only then.
+# =============================================================================
+click #btn-present
+wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
+click #pp-fullscreen
+wait document.fullscreenElement === document.getElementById('prompter')
+eval (function(){window.__rfs=[];document.addEventListener('fullscreenchange',function(){var f=__fx('prompter');window.__rfs.push('change:fs='+!!document.fullscreenElement+':opacity='+f.opacity);},{once:true});document.getElementById('pp-close').click();var f=__fx('prompter');window.__rfs.push('close:fs='+!!document.fullscreenElement+':holding='+f.holding+':fading='+f.fading);return JSON.stringify(window.__rfs);})()
+expect window.__rfs[0] == close:fs=true:holding=true:fading=0
+wait document.fullscreenElement === null
+wait window.__rfs.length === 2
+eval JSON.stringify(window.__rfs)
+# out of fullscreen, it is still fully there: the fade begins after
+expect window.__rfs[1] == change:fs=false:opacity=1
+wait __fx('prompter').display === 'none'
+expect __fx('prompter').holding === false
+
+quit

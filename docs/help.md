@@ -57,6 +57,11 @@ beta copy is offered it like any other update.
 - **Merging works a word at a time.** When two people edit the same scene,
   their changes combine unless both changed the same words, or linked or
   tagged the same words differently; only then is it a conflict.
+- **Stage directions for the performer.** Type `((beat))` in the Audio
+  column, or select words and press the **( )** button: they show dim and
+  in brackets, appear in the teleprompter where they belong, are never
+  waited for by Follow My Voice and don't count toward the read time — see
+  [Stage directions](#stage-directions).
 - **Find and replace** finds a phrase even when part of it is bold, a link or
   a tag.
 - **Markdown export** writes bold, italic and strikethrough that other
@@ -650,7 +655,10 @@ Other things worth knowing:
   Breakdown). One sheet with a Category column, so it filters down to
   a props list, a graphics list, or one person's pull list. The Word,
   PDF, Markdown and plain-text exports carry the breakdown too, including
-  who each item is assigned to and what state it's in.
+  who each item is assigned to and what state it's in. In the PDF and the
+  Word file each category is marked in its colour — a dot and the name,
+  in the same colours the script uses in the light theme, whichever theme
+  you export from, so the page reads the same printed on white.
 - Deleting a tag from the script doesn't delete it from the breakdown — it
   stays, flagged **Not in script**, until you delete it deliberately.
 - **File ▸ Tagging reference** brings back the reference strip at the top
@@ -683,7 +691,8 @@ of the same grouping: **List**, or **Scene** to see what's needed where.
 **Packing list** (on the Gear screen, and Props too from File ▸ Export… ▸
 Packing list) exports a plain checklist — a box, the name, who's got it — meant to
 be printed and ticked off before you leave, not the six-column breakdown
-sheet trying to double as one.
+sheet trying to double as one. Its heading names the category in that
+category's colour; the list itself stays black, to tick off in pen.
 
 ### B-roll
 
@@ -795,11 +804,44 @@ column, no breakdown, no comments. That's the same shape **Paste a script…**
 reads back in its paragraph mode, so narration written elsewhere and pasted in
 lands one paragraph per scene — and a `.txt` exported here and re-imported
 gives you your scenes back, plus one extra row holding the title line, which
-you delete. The same button is on the writer's own bar.
+you delete. The same button is on the writer's own bar. **Include stage
+directions** in the dialog (on unless you switch it off, and remembered on
+this computer) puts your [stage directions](#stage-directions) in as
+*(beat)*, or leaves them out for a clean read.
+
+### Stage directions
+
+A stage direction is a note for whoever reads the script aloud — *(beat)*,
+*(smile)*, *(look to camera 2)*, *(slower here)* — written into the Audio
+column at the exact point where it applies. It shows dim, slanted and in
+brackets, so it never reads as something to say.
+
+- **Type it:** `((beat))`. The moment you type the second closing bracket,
+  the words between the double brackets become a direction and the brackets
+  go. <kbd>Ctrl</kbd>+<kbd>Z</kbd> straight after gives you back the
+  `((beat))` you typed, if that is what you meant. Single brackets are
+  ordinary writing and never change — `(see below)` stays as it is.
+- **Or mark it:** select the words and press **( )** on the Audio column's
+  formatting bar (or the writer's bar). Press it again over a direction, or
+  with the caret inside one, to make it ordinary words again. It's there in
+  the Audio column only — the Visual column is all directions already.
+
+What you type straight after a direction is narration again. Directions
+appear in the teleprompter in place, smaller, lighter and in brackets, in
+mirror and flip too — and **Follow My Voice skips them**: it never waits to
+hear one. They don't count toward the read time. They are saved in every
+format, kept by copy and paste, find and replace, undo and merging; the
+exports print one as *(beat)* in their own style, and the `.md` project's
+table shows it as `((beat))`, so you can write new ones there too. A Word
+document you open with `((…))` in its narration gets directions as well
+(a paragraph that is *all* in brackets still goes to the Visual column,
+as it always has). Pasted into the Visual column, a direction becomes its
+words in brackets.
 
 **Runtime estimate.** The chip beside your name shows how long the Audio
 column takes to read, and each scene shows its own estimate in the gutter.
-Visual notes are directions, not spoken words, so they don't count. Click
+Visual notes are directions, not spoken words, so they don't count, and
+neither do [stage directions](#stage-directions) in the Audio column. Click
 the chip to set your reading speed — it's saved with the file, so the
 estimate means the same thing to whoever opens it next.
 
@@ -815,6 +857,23 @@ than it, it turns amber, and hovering it shows the estimate. Empty the box
 and press <kbd>Enter</kbd> to go back to the estimate. It's saved with the
 file and undoes like any edit. On a phone, tap into the scene and then tap
 its time.
+
+**A target length.** If the piece has to come in at a length — a two-minute
+explainer, a thirty-second spot — click the clock in the header and, under
+the reading speed, set a **Target length**: pick one of 0:30, 1:00, 2:00,
+3:00, 5:00 or 10:00, or type one the same ways as a scene's length (`2:00`,
+`90`, `90s`, `1m30`) and press <kbd>Enter</kbd>. The command menu's **Set
+target length…** (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>K</kbd>, then type
+"target") opens the same box. From then on the clock reads the script
+against it — `01:35 / 02:00` and **0:25 left**, or **0:05 over** in red once
+the script runs long — and the rundown strip reaches out to the target, with
+a dashed line and "Target 2:00" at it: the time still free before it is
+hatched, and once you are over, the part of the scenes past it is hatched
+instead. The target is measured against the whole script, shot scenes
+included, even while they're hidden (the clock's tooltip then says how much
+is still to shoot). **No target** takes it away. It's saved with the file,
+undoes like any edit, and in a review session you can see it but not change
+it.
 
 **Making the script bigger or smaller.** Hold <kbd>Ctrl</kbd> and turn the
 mouse wheel over the script — or pinch on a trackpad — to zoom the script
@@ -931,12 +990,23 @@ beside it; a **+N** tile, showing the next one dimmed, stands for the rest.
 A video's tile has a ▶ badge (and its length on the cover, when known).
 
 Click any tile for the scene's whole gallery: a large still with **‹ ›** (a
-video shows its first frame, marked "Video · first frame", with its length),
-**Open file** or **Open link** for a video, **Make cover** and **Remove**, and
-every item numbered below it — with more than four, a dashed "behind +N"
-line marks where the scene's cover stops showing them. Nothing plays inside
-Splitpage: Open file hands a video to your own player (desktop app), Open
-link to your browser.
+video shows its first frame or its thumbnail — "Video · first frame",
+"Video · thumbnail" — with its length), **Open file** or **Open link** for a
+video, **Make cover** and **Remove**, and every item numbered below it — with
+more than four, a dashed "behind +N" line marks where the scene's cover stops
+showing them.
+
+**Watching a video in the gallery.** A YouTube or Vimeo link, and a video
+file you dropped or pasted in since you opened the script, plays right there
+in the large still: press its **▶**. Nothing is loaded from YouTube or Vimeo
+until you press play — the script's own tiles never play anything — and
+YouTube plays through its privacy-enhanced (no-cookie) player, Vimeo with
+"do not track". Picking another item or closing the gallery stops it.
+What can't play there says why and offers **Open file** / **Open link**
+instead: a video file added on another visit (the script keeps only its
+name), YouTube in a copy of Splitpage opened from a file on disk (YouTube
+refuses to play there), and videos from any other site — those always open
+in your browser.
 Drag a tile to reorder, or pick one and press Shift+← / Shift+→; ← and →
 pick, Delete removes, Esc closes, and the **+** tile adds a picture. Each
 change is one Ctrl+Z, and its toast has **Undo**. A comment can carry a
@@ -948,15 +1018,29 @@ section — puts it in that scene's Image section, and a toast says so with
 **Undo**; the words that came with it go in as usual, and one Ctrl+Z takes
 back both. Each picture and each video is added after the ones already
 there. A video goes in the Image section, not in your words, as a tile of
-its own with a ▶ badge: its thumbnail is a video file's first frame, or a
-plain placeholder for a web link (Splitpage doesn't fetch pictures from
-video sites). Every video also gets a line under the pictures — up to three,
+its own with a ▶ badge: its thumbnail is a video file's first frame, a
+YouTube or Vimeo link's own thumbnail, or a plain placeholder for a link to
+any other site. Every video also gets a line under the pictures — up to three,
 then **+N more videos**. Click a line (or **Open file** / **Open link** in the gallery) to open
 it: a web link in your browser; a video file in its own app, in the desktop
 app, as long as you dropped or pasted it since Splitpage started (the
 script keeps only its name, never the file or where it is). Hover a line
 for **×** to take it off. A picture that was copied only as a link to a web page can't
 be kept; save it and paste or drop the file instead.
+
+**Video thumbnails, and privacy.** When you paste a YouTube or Vimeo link,
+Splitpage asks that site once for the video's thumbnail (from `i.ytimg.com`,
+or Vimeo's `vimeo.com` and `i.vimeocdn.com`) and keeps the picture with the
+script like any picture you add, so it's there offline, in files you save
+and on a server. That request is the only thing pasting a link sends
+anywhere; it names only the video, sends no cookies, and happens once —
+never while you scroll. If it fails (you're offline, the video is private or gone) the
+placeholder stays and nothing is said; the gallery offers **Retry
+thumbnail**. The picture lands in the same undo step as the paste. To paste
+links without contacting the site at all, turn off **Settings ▸ Fetch video
+thumbnails** (it's on by default, and File ▸ Export app data carries the
+choice). Playing a video in the gallery is a separate choice you make each
+time by pressing ▶.
 
 **Where pictures are kept.** The script itself only names each picture; the
 picture is stored once, separately, wherever the script lives:
@@ -1277,9 +1361,12 @@ script.
   title bar follows), the clock (System, 12-hour or 24-hour — used for
   "Saved at …", Version history, comments and the scene gutter), and
   whether the rundown strip starts minimized.
-- **Editor** — Hide shot scenes, Autosave, the reading speed a *new* script
-  starts at (each script keeps its own; click the clock in the header to
-  change it), the writer's text size, and the script's zoom.
+- **Editor** — Hide shot scenes, Autosave, Fetch video thumbnails (whether
+  a pasted YouTube or Vimeo link's thumbnail is asked for from the site;
+  on unless you turn it off — see *Video thumbnails, and privacy*), the
+  reading speed a *new* script starts at (each script keeps its own; click
+  the clock in the header to change it), the writer's text size, and the
+  script's zoom.
 - **Present** — the teleprompter's Mirror, Flip and One scene at a time.
 - **You** — your name, and your colour: the dot by your name in the
   header, the scene gutter, comments, History and the people-here row. Until
@@ -1306,8 +1393,9 @@ format. Pick a card on the left:
   side by side), a **Spreadsheet** with a row per scene, or a **Standalone
   page** that opens in any browser with nothing installed.
 - **Part of it** — **Narration only** (the Audio column, as `.docx` or
-  `.txt`), the **Breakdown** as a spreadsheet, or a **Packing list** of your
-  gear or your props to print and tick off.
+  `.txt`, with or without your [stage directions](#stage-directions)), the
+  **Breakdown** as a spreadsheet, or a **Packing list** of your gear or your
+  props to print and tick off.
 
 The right-hand side shows a sketch of the first page, what the file will
 hold (how many scenes, whether pictures come with it), the options that

@@ -4560,6 +4560,85 @@ async function caseGalleryVideoFile(target) {
   }
 }
 
+/* caseGalleryVideoThumbnail (#141). A pasted YouTube or Vimeo link's
+   thumbnail is fetched by MAIN (main.js § 9e), asked for by host and video
+   id and nothing else. SPLITPAGE_TEST_VIDEO_BASE points every host at a
+   fake served here, so nothing leaves the machine. What is real: the
+   bridge, the table's typed arguments, main's fetch (no redirect followed,
+   no cookie or referrer sent, the type and size checks), and the page
+   putting the answer in the scene's gallery. */
+async function caseGalleryVideoThumbnail(target) {
+  const tag = target.name + " gallery: a pasted video link's thumbnail comes through main, by host and id (#141)";
+  /* just enough of a JPEG and a PNG for the sniffer to classify and measure */
+  const jpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, 1, 14, 1, 224, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 7, 0xFF, 0xD9]);
+  const png = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 2, 128, 0, 0, 1, 104]).copy(png);
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push({ url: req.url, cookie: req.headers.cookie || "", referer: req.headers.referer || "" });
+    const base = "http://127.0.0.1:" + server.address().port;
+    if (req.url === "/youtubeThumbs/vi/dQw4w9WgXcQ/hqdefault.jpg") { res.writeHead(200, { "content-type": "image/jpeg" }); res.end(jpeg); return; }
+    if (req.url === "/youtubeThumbs/vi/zzzzzzzzzzz/hqdefault.jpg") { res.writeHead(302, { location: "/youtubeThumbs/vi/dQw4w9WgXcQ/hqdefault.jpg" }); res.end(); return; }
+    if (req.url === "/youtubeThumbs/vi/bigbigbigbi/hqdefault.jpg") { res.writeHead(200, { "content-type": "image/jpeg" }); res.end(Buffer.concat([jpeg, Buffer.alloc(2 * 1024 * 1024)])); return; }
+    if (req.url.startsWith("/vimeoOembed/api/oembed.json?url=")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ type: "video", thumbnail_url: base + "/vimeoThumbs/video/1-abc-d_640" }));
+      return;
+    }
+    if (req.url === "/vimeoThumbs/video/1-abc-d_640") { res.writeHead(200, { "content-type": "image/png" }); res.end(png); return; }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = "http://127.0.0.1:" + server.address().port;
+  const call = (host, ref) => "window.splitpageDesktop.videoThumbnail(" + JSON.stringify(host) + ", " + JSON.stringify(ref) + ").then(function (r) { " +
+    "return r && r.ok ? { ok: true, mime: r.mime, isView: ArrayBuffer.isView(r.bytes), length: r.bytes.length, first: r.bytes[0] } : r; })";
+  let app = null;
+  try {
+    app = await launchApp(target, { label: "gallery-video-thumbnail", env: { SPLITPAGE_TEST_VIDEO_BASE: base } });
+    await waitForRows(app.cdp, 20000);
+    const cdp = app.cdp;
+    const has = await evalPage(cdp, "typeof window.splitpageDesktop.videoThumbnail === 'function'");
+    record(tag + ": the bridge exposes videoThumbnail", has === true, String(has));
+
+    const yt = await evalPage(cdp, call("youtube", "dQw4w9WgXcQ"));
+    record(tag + ": a YouTube id's thumbnail comes back as bytes", !!yt && yt.ok === true && yt.mime === "image/jpeg" && yt.isView === true && yt.length === jpeg.length && yt.first === 0xFF, JSON.stringify(yt));
+    const vm = await evalPage(cdp, call("vimeo", "76979871"));
+    record(tag + ": a Vimeo id's thumbnail comes through its oEmbed answer", !!vm && vm.ok === true && vm.mime === "image/png", JSON.stringify(vm));
+    const oembed = seen.filter((s) => s.url.startsWith("/vimeoOembed/"))[0];
+    record(tag + ": the oEmbed question names the video's page on vimeo.com and nothing else",
+      !!oembed && oembed.url === "/vimeoOembed/api/oembed.json?url=" + encodeURIComponent("https://vimeo.com/76979871") + "&width=640", JSON.stringify(oembed));
+    record(tag + ": no cookie and no referrer is sent", seen.every((s) => !s.cookie && !s.referer), JSON.stringify(seen));
+
+    let before = seen.length;
+    const redirected = await evalPage(cdp, call("youtube", "zzzzzzzzzzz"));
+    record(tag + ": a redirect is not followed", !!redirected && redirected.ok === false && seen.length === before + 1, JSON.stringify(redirected) + " " + (seen.length - before));
+    const big = await evalPage(cdp, call("youtube", "bigbigbigbi"));
+    record(tag + ": more than 1 MiB is refused", !!big && big.ok === false && big.code === "TOO_LARGE", JSON.stringify(big));
+    const gone = await evalPage(cdp, call("youtube", "nnnnnnnnnnn"));
+    record(tag + ": a video with no thumbnail answers NOT_FOUND", !!gone && gone.ok === false && gone.code === "NOT_FOUND", JSON.stringify(gone));
+
+    /* the table refuses anything but a host name and an id, before main runs */
+    before = seen.length;
+    const refused = [];
+    for (const [host, ref] of [["youtube", "https://evil.example/x.jpg"], ["loom", "dQw4w9WgXcQ"], ["https://i.ytimg.com", "dQw4w9WgXcQ"], ["vimeo", "dQw4w9WgXcQ"]]) {
+      refused.push(await evalPage(cdp, call(host, ref)));
+    }
+    record(tag + ": a URL, another host, or an id of the wrong kind is refused and fetches nothing",
+      refused.every((r) => r && r.ok === false) && seen.length === before, JSON.stringify(refused) + " " + (seen.length - before));
+
+    /* the whole way: a pasted link's thumbnail in the scene's gallery */
+    await evalPage(cdp, "(function(){ var el = document.querySelector('#rows .row .audio-cell .cell-editable'); el.focus(); var d = new DataTransfer(); " +
+      "d.setData('text/plain', 'https://youtu.be/dQw4w9WgXcQ'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: d, bubbles: true, cancelable: true })); return true; })()");
+    const landed = await poll(cdp, "(function(){ var r = window.__splitpageFormats.state().rows[0]; var all = [r].concat(r.moreImages || []); " +
+      "var hit = all.filter(function (it) { var l = (it.imageLinks || it.links || []).filter(function (x) { return x.poster && x.href === 'https://youtu.be/dQw4w9WgXcQ'; })[0]; return l && it.imageRef; })[0]; " +
+      "return hit ? hit.imageRef.width + 'x' + hit.imageRef.height : null; })()", 10000).catch(() => null);
+    record(tag + ": a pasted link's thumbnail lands in the scene's gallery", landed === "480x270", String(landed));
+  } finally {
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 /* caseDraftCrashDirtyFile (F1F2-01). A RENDERER crash (not a whole-process
    one) of a dirty file tab: the reloaded tab still holds the unsaved edit,
    and splitpage:test-draft-status reports hasDraft:true. */
@@ -6602,6 +6681,7 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
     ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
+    ["gallery: a pasted video link's thumbnail comes through main, by host and id (#141)", () => caseGalleryVideoThumbnail(target)],
     ["draft: renderer crash of a dirty file tab (F1F2-01)", () => caseDraftCrashDirtyFile(target, fixturesDir)],
     ["draft: file changed on disk while down (merge)", () => caseDraftFileChangedOnDisk(target, fixturesDir)],
     ["draft: file deleted while down (unsaved copy)", () => caseDraftFileDeleted(target, fixturesDir)],

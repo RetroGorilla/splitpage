@@ -1,20 +1,36 @@
 import { S } from "./_state.js";
+import { readPref, writePref } from "./00p-prefs.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { morePictureRefs, pictureBytes, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import { inertBody, safeHref } from "./04-richtext.js";
-import { cellOf, toDocxRuns, toPlainText } from "./04c-doc-model.js";
+import {
+  OMIT_CLOSES,
+  cellLength,
+  cellOf,
+  fromHtml,
+  importDirections,
+  setMark,
+  toDocxRuns,
+  toHtml,
+  toPlainText
+} from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentEntries } from "./10-comments.js";
 import {
   htmlToPlainText,
   strBytes,
+  tagPrintColor,
   xmlEscape,
   zipRead,
   zipWrite
 } from "./14-export.js";
+
+/* The swatch in front of a breakdown category (#171): a black circle and a
+   space, drawn in the category's colour. */
+var DOCX_CATEGORY_DOT = "● ";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
@@ -90,16 +106,54 @@ function fitColumnWidths(totalWidth, minChars, headers, rowsCells) {
    format the stored markup happened to keep in separate elements
    (<strong>a</strong><strong>b</strong>) are one <w:r>, which Word draws
    exactly as it drew two. */
-function docxRunsXml(html, rels) {
+/* A stage direction (#167) is its own character style, bracketed by
+   toDocxRuns: italic and grey where Word shows it, and the style name is
+   how docxToRows knows one again when the file is opened. The italic and
+   the colour are also written on the run itself, for a viewer that ignores
+   character styles. opts.directions "omit" leaves them out (a narration
+   export without them). */
+var DIRECTION_STYLE = "SplitpageDirection";
+var DIRECTION_COLOR = "6B6A65";
+
+/* The runs without their directions, one space kept where one stood
+   between two words — toPlainText's "omit", over runs. */
+function omitDirectionRuns(runs) {
+  var out = [], gap = false;
+  runs.forEach(function (r) {
+    if (r.dir) { gap = true; return; }
+    if (r.text === "\n") { gap = false; out.push(r); return; }
+    if (gap) {
+      var last = out[out.length - 1];
+      var t = r.text;
+      if (OMIT_CLOSES.test(t)) {
+        if (last && last.text !== "\n") out[out.length - 1] = Object.assign({}, last, { text: last.text.replace(/[ \t]+$/, "") });
+      } else if (!last || /\s$/.test(last.text)) {
+        t = t.replace(/^[ \t]+/, "");
+      } else if (!/^\s/.test(t)) {
+        t = " " + t;
+      }
+      if (!t) return;
+      r = Object.assign({}, r, { text: t });
+    }
+    gap = false;
+    out.push(r);
+  });
+  return out;
+}
+
+function docxRunsXml(html, rels, opts) {
   var runs = toDocxRuns(cellOf(html));
+  if (opts && opts.directions === "omit") runs = omitDirectionRuns(runs);
   if (!runs.length) return '<w:p/>';
   var out = '<w:p>';
   var openLink = null;
   runs.forEach(function (r) {
     if (r.text === "\n") { out += '<w:r><w:br/></w:r>'; return; }
     var props = "";
+    if (r.dir) props += '<w:rStyle w:val="' + DIRECTION_STYLE + '"/>';
     if (r.b) props += "<w:b/>";
-    if (r.i) props += "<w:i/>";
+    if (r.i || r.dir) props += "<w:i/>";
+    if (r.dir && !r.href) props += '<w:color w:val="' + DIRECTION_COLOR + '"/>';
     if (r.u) props += '<w:u w:val="single"/>';
     if (r.s) props += "<w:strike/>";
     if (r.mark) props += '<w:highlight w:val="yellow"/>';
@@ -298,8 +352,9 @@ export function buildDocx() {
       '<w:r><w:t>Production breakdown</w:t></w:r></w:p>';
 
     var bHeaders = ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"];
-    /* floors in characters, not twips — see fitColumnWidths above */
-    var bMins = [10, 10, 8, 10, 6, 8, 10];
+    /* floors in characters, not twips — see fitColumnWidths above. The
+       category's is the longest label ("Music/SFX") plus its dot (#171). */
+    var bMins = [12, 10, 8, 10, 6, 8, 10];
     var bCellRows = breakdown.map(function (r) {
       return [r.categoryLabel, r.name, r.statusLabel, r.owner, String(r.mentions), r.scenes.join(", "), r.notes];
     });
@@ -313,8 +368,21 @@ export function buildDocx() {
           '<w:t>' + h + '</w:t></w:r></w:p>', bCols[i]);
       }).join("") + '</w:tr>';
 
-    bCellRows.forEach(function (cells) {
+    /* The category in its colour (#171): a dot and the label, both in the
+       light theme's --tag-* (TAG_PRINT_COLORS, 14-export.js). The cell's
+       text is "● Prop"; the header row, which the importer's
+       isBreakdownHeader() recognises, is untouched. */
+    function categoryCellXml(r, text) {
+      var hex = tagPrintColor(r.catId);
+      if (!hex) return '<w:p><w:r><w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p>';
+      var rPr = '<w:rPr><w:color w:val="' + hex + '"/></w:rPr>';
+      return '<w:p><w:r>' + rPr + '<w:t xml:space="preserve">' + DOCX_CATEGORY_DOT + '</w:t></w:r>' +
+        '<w:r>' + rPr + '<w:t xml:space="preserve">' + xmlEscape(text) + '</w:t></w:r></w:p>';
+    }
+
+    bCellRows.forEach(function (cells, ri) {
       bRows += '<w:tr>' + cells.map(function (text, i) {
+        if (i === 0) return docxCellXml(categoryCellXml(breakdown[ri], text), bCols[i]);
         return docxCellXml('<w:p><w:r><w:t xml:space="preserve">' + xmlEscape(text) +
           '</w:t></w:r></w:p>', bCols[i]);
       }).join("") + '</w:tr>';
@@ -562,37 +630,60 @@ function packDocx(body, links, media) {
    Word to keep writing, not another copy of the whole script — every
    other export already is that. */
 
-export function narrationRows() {
-  return S.state.rows.filter(function (row) { return toPlainText(cellOf(row.audioText)); });
+/* "Include stage directions" (#167), the narration export's one option
+   (the Export dialog, 18c-export-dialog.js): some voice artists want the
+   directions, some want clean copy. On unless switched off — per device,
+   like the remembered format, never in the document. "0" is off. */
+export var NARRATION_DIRECTIONS_KEY = "splitpage-export-directions";
+
+export function narrationIncludesDirections() {
+  return readPref(NARRATION_DIRECTIONS_KEY) !== "0";
 }
 
-export function buildNarrationText() {
+export function setNarrationIncludesDirections(on) {
+  writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
+}
+
+/* opts.directions: true/false overrides the preference (tests). */
+function narrationTextOpts(opts) {
+  var include = opts && typeof opts.directions === "boolean" ? opts.directions : narrationIncludesDirections();
+  return include ? {} : { directions: "omit" };
+}
+
+export function narrationRows(opts) {
+  var t = narrationTextOpts(opts);
+  return S.state.rows.filter(function (row) { return toPlainText(cellOf(row.audioText), t); });
+}
+
+export function buildNarrationText(opts) {
+  var t = narrationTextOpts(opts);
   var out = [S.state.title || "Untitled Script", ""];
-  narrationRows().forEach(function (row) {
+  narrationRows(opts).forEach(function (row) {
     /* A blank line is the separator between scenes in this format, so one
        *inside* a scene would split it in two on the way back in — the
        round trip this format exists for, quietly broken by a scene whose
        narration happened to contain two line breaks in a row. Runs of
        blank lines collapse to a single break; the scene stays one scene. */
-    out.push(toPlainText(cellOf(row.audioText)).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
+    out.push(toPlainText(cellOf(row.audioText), t).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
   });
   return out.join("\n");
 }
 
-export function buildNarrationDocx() {
+export function buildNarrationDocx(opts) {
+  var t = narrationTextOpts(opts);
   var links = [];
   var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
 
   var body = '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' +
     '<w:r><w:t xml:space="preserve">' + xmlEscape(S.state.title || "Untitled Script") + '</w:t></w:r></w:p>';
 
-  narrationRows().forEach(function (row) {
+  narrationRows(opts).forEach(function (row) {
     /* docxRunsXml() opens its own <w:p>, so paragraph properties have to
        be spliced in after it rather than passed down — 1.5 line spacing
        and a gap between paragraphs, because the point of this file is
        that somebody can read it aloud off a page. */
-    body += docxRunsXml(row.audioText, rels).replace("<w:p>",
+    body += docxRunsXml(row.audioText, rels, t).replace("<w:p>",
       '<w:p><w:pPr><w:spacing w:after="200" w:line="360" w:lineRule="auto"/></w:pPr>');
   });
 
@@ -628,13 +719,18 @@ function docxParaToHtml(pEl, linkMap) {
   var html = "";
   function runToHtml(rEl, href) {
     var props = rEl.getElementsByTagNameNS(W_NS, "rPr")[0];
-    var b = false, i = false, u = false, s = false, mark = false;
+    var b = false, i = false, u = false, s = false, mark = false, dir = false;
     if (props) {
       b = docxFlag(props, "b");
       i = docxFlag(props, "i");
       u = docxFlag(props, "u");
       s = docxFlag(props, "strike");
       mark = docxFlag(props, "highlight");
+      /* a stage direction a Splitpage export wrote (#167): its style, not
+         its look — the italic that shows it is not the writer's italic */
+      var rs = props.getElementsByTagNameNS(W_NS, "rStyle")[0];
+      var rsv = rs ? (rs.getAttributeNS(W_NS, "val") || rs.getAttribute("w:val") || "") : "";
+      if (rsv.toLowerCase() === DIRECTION_STYLE.toLowerCase()) { dir = true; i = false; }
     }
     var piece = "";
     Array.prototype.forEach.call(rEl.childNodes, function (child) {
@@ -650,6 +746,7 @@ function docxParaToHtml(pEl, linkMap) {
     if (u && !href) piece = "<u>" + piece + "</u>";
     if (i) piece = "<em>" + piece + "</em>";
     if (b) piece = "<strong>" + piece + "</strong>";
+    if (dir) piece = '<span class="stage-dir">' + piece + "</span>";
     var safe = href ? safeHref(href) : null;
     if (safe) piece = '<a href="' + escapeHtml(safe) + '" target="_blank" rel="noopener">' + piece + "</a>";
     return piece;
@@ -997,9 +1094,29 @@ export async function docxToRows(file) {
     /* each video is an item of its own, after the pictures (#135) */
     (pendingLinks || []).forEach(function (l) { more.push({ links: [Object.assign({}, l, { poster: true })] }); });
     if (more.length) rows[ri].moreImages = more;
+    rows[ri].audioText = audioDirectionsHtml(rows[ri].audioText);
+    rows[ri].visualText = noDirectionsHtml(rows[ri].visualText);
   }
 
   return { title: title, rows: rows, looseText: "" };
+}
+
+/* Stage directions coming in (#167). In the Audio column an inline
+   "((words))" becomes one, and one a Splitpage export wrote (its own
+   character style, read above) loses the brackets the export printed
+   round it. The Visual column has none: a styled one that landed there —
+   a paragraph that was nothing but a direction goes to the Visual column
+   by the bracket rule above — is its words, brackets and all. A cell
+   with neither is left exactly as it was read. */
+export function audioDirectionsHtml(html) {
+  if (!html || (html.indexOf("((") === -1 && html.indexOf("stage-dir") === -1)) return html;
+  return toHtml(importDirections(fromHtml(html)));
+}
+
+function noDirectionsHtml(html) {
+  if (!html || html.indexOf("stage-dir") === -1) return html;
+  var c = fromHtml(html);
+  return toHtml(setMark(c, 0, cellLength(c), "dir", false));
 }
 
 /* re-encode any image to JPEG so every downstream writer can rely on it */
@@ -1080,6 +1197,9 @@ export function __init() {
       '<w:pPr><w:outlineLvl w:val="0"/><w:spacing w:before="360" w:after="120"/></w:pPr>' +
       '<w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi" w:cstheme="majorHAnsi"/>' +
       '<w:b/><w:caps/><w:color w:val="8A6D3B"/><w:sz w:val="26"/></w:rPr></w:style>' +
+    /* a stage direction (#167, docxRunsXml) */
+    '<w:style w:type="character" w:customStyle="1" w:styleId="' + DIRECTION_STYLE + '"><w:name w:val="Stage direction"/>' +
+      '<w:rPr><w:i/><w:color w:val="' + DIRECTION_COLOR + '"/></w:rPr></w:style>' +
     '<w:style w:type="table" w:styleId="SplitpageTable"><w:name w:val="Splitpage Table"/>' +
       '<w:basedOn w:val="TableNormal"/>' +
       '<w:tblPr>' +

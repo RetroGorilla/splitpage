@@ -16,6 +16,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TAG_CATEGORIES } from "../js/07-production-tags.js";
+import { TAG_PRINT_COLORS, tagPrintColor } from "../js/14-export.js";
 
 const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
 
@@ -100,6 +101,25 @@ test("tagged words stay readable on their tint, and the rule stands out from it"
       assert.ok(contrast(block["--tag-" + cat.id], tint) >= 3, name + " " + cat.id + ": rule against tint " + contrast(block["--tag-" + cat.id], tint).toFixed(2));
     }
   }
+});
+
+/* The exports' copy of the light palette (#171, TAG_PRINT_COLORS in
+   14-export.js): a PDF or a Word file cannot read a CSS token, so the hexes
+   are written out a second time — and this is what keeps the two copies
+   one palette. */
+test("the exports' category colours are the light theme's --tag-* values, and readable on white", () => {
+  const ids = TAG_CATEGORIES.map((c) => c.id).sort();
+  assert.deepEqual(Object.keys(TAG_PRINT_COLORS).sort(), ids, "TAG_PRINT_COLORS and TAG_CATEGORIES name different categories");
+  for (const id of ids) {
+    assert.match(TAG_PRINT_COLORS[id], /^[0-9A-F]{6}$/, id + ": Word's w:color wants six upper-case hex digits");
+    assert.equal("#" + TAG_PRINT_COLORS[id], LIGHT["--tag-" + id],
+      id + ": the export colour has drifted from :root's --tag-" + id);
+    assert.equal(tagPrintColor(id), TAG_PRINT_COLORS[id]);
+    const onWhite = contrast("#" + TAG_PRINT_COLORS[id], "#FFFFFF");
+    assert.ok(onWhite >= 4.5, id + " prints at " + onWhite.toFixed(2) + ":1 on white");
+  }
+  assert.equal(tagPrintColor("nope"), null);
+  assert.equal(tagPrintColor("__proto__"), null);
 });
 
 test("--text-faint is 4.5:1 on the page in both themes", () => {

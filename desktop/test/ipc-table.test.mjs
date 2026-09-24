@@ -405,6 +405,29 @@ test("the blob channels: a typed sha256, app page only", () => {
   }
 });
 
+/* Issues #141/#168: a pasted video's thumbnail is asked for by host and
+   id — never a URL, a host name of the page's choosing, or a path
+   (invariant #28). main.js checks the pair against each other again
+   (shared/video-embed.js parseVideoRef) and builds every address itself. */
+test("the video thumbnail channel: a typed host and video ref, app page only", () => {
+  const c = channelFor("splitpage:video-thumbnail", "invoke");
+  assert.ok(c, "the channel exists");
+  assert.deepEqual([...c.argsSchema], ["videoHost", "videoRef"]);
+  assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN]);
+  assert.ok(!c.testOnly);
+  for (const ok of [["youtube", "dQw4w9WgXcQ"], ["vimeo", "76979871"], ["vimeo", "76979871:abcdef1234"], ["youtube", "a-b_c-d_e-f"]]) {
+    assert.equal(checkArgs(c.argsSchema, ok), null, JSON.stringify(ok));
+  }
+  for (const bad of [
+    ["loom", "dQw4w9WgXcQ"], ["YouTube", "dQw4w9WgXcQ"], ["https://i.ytimg.com", "dQw4w9WgXcQ"],
+    ["youtube", "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"], ["youtube", "../../etc/passwd"],
+    ["youtube", "dQw4w9WgXc"], ["vimeo", "76979871:ABCDEF"], ["vimeo", "76979871:abcdef/../x"], ["youtube", ""],
+    ["youtube"], ["youtube", 42], ["youtube", "dQw4w9WgXcQ", "https://evil.example/"]
+  ]) {
+    assert.ok(checkArgs(c.argsSchema, bad), "refuses " + JSON.stringify(bad));
+  }
+});
+
 /* A malformed draft payload must reach the handler, which answers with a
    code the renderer can back off on rather than a rejection (DRAFT-STORE). */
 test("the draft channels let a bad payload through to their own answer", () => {

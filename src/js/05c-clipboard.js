@@ -10,6 +10,7 @@ import {
   cellOf,
   commentIds,
   deleteRange,
+  flattenDirections,
   fromHtml,
   insertText,
   joinCells,
@@ -82,8 +83,10 @@ export function clipboardOfCell(cell, opts) {
   var c = opts.keepComments ? normalizeCell(cell) : stripComments(cell);
   var html = toHtml(c);
   if (opts.nonce) html = "<span " + CUT_ATTR + '="' + String(opts.nonce).replace(/[^A-Za-z0-9]/g, "") + '">' + html + "</span>";
+  /* a stage direction as it is shown, "(beat)" (#167) \u2014 the plain text
+     another program gets */
   var text = "";
-  c.forEach(function (r) { text += r.text; });
+  flattenDirections(c).forEach(function (r) { text += r.text; });
   return { html: html, text: text.replace(/\u00a0/g, " ") };
 }
 
@@ -267,10 +270,11 @@ export function cellFromClipboard(html, text, opts) {
    after the ones there (the cover only when the gallery is empty), never
    over them: a video with its thumbnail (a video file's first frame,
    `poster`) or a placeholder, and its link in the lines under the
-   gallery, not in the words. Returns {pictures, videos}: how many of
-   each went in. */
+   gallery, not in the words. Returns {pictures, videos, links}: how many
+   of each went in, and the web links among the videos — the ones whose
+   thumbnail may be fetched next (#141, 05v-video.js). */
 export function attachToGallery(row, attach) {
-  var out = { pictures: 0, videos: 0 };
+  var out = { pictures: 0, videos: 0, links: [] };
   attach.forEach(function (item) {
     if (item.kind === "image") {
       addGalleryPicture(row, item.ref, item.name);
@@ -278,7 +282,10 @@ export function attachToGallery(row, attach) {
       return;
     }
     var link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size, duration: item.duration };
-    if (addGalleryVideo(row, link, item.poster || null) !== -1) out.videos++;
+    if (addGalleryVideo(row, link, item.poster || null) !== -1) {
+      out.videos++;
+      if (link.href) out.links.push(link.href);
+    }
   });
   return out;
 }
@@ -458,6 +465,9 @@ export function pasteIntoCell(cellEl, html, text, extra) {
        unless this is a cut moving it (see freshBrollIds) */
     var piece = got.text !== null ? got.cell
       : freshBrollIds(got.cell, brollIdsTaken(S.state, rowId, field, rest, got.fromCut)).cell;
+    /* The Visual column has no stage directions (#167): one pasted there
+       is its words again, in the brackets it was shown with. */
+    if (field === "visualText") piece = flattenDirections(piece);
     var next = got.text !== null
       ? insertText(rest, from, got.text)
       : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));
