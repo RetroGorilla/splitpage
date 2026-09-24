@@ -5909,6 +5909,13 @@
     .doc-meta { grid-column: 4; grid-row: 3; font-size: 12px; line-height: 16px; }
     .doc-meta::before, .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: "·"; margin: 0 6px; color: var(--text-faint); }
     .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }
+    /* The desktop line never shrinks your name (#183), but this column is
+       what is left beside Save's status, a few words wide: held whole, the
+       name ran under the clock chip. Here it is cut short with "…" like the
+       other facts, and stays a button, and Settings ▸ You has it in full. */
+    .doc-meta { overflow: hidden; }
+    .doc-meta .identity-chip { flex: 0 1 auto; min-width: 0; }
+    .doc-meta #identity-name { min-width: 0; max-width: none; }
     /* The clock as a 28px chip on the raised surface, in a 44px target:
        the chip is drawn behind the figures, the button is the whole
        height. */

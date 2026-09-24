@@ -47,7 +47,7 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { driveFormatSize } from "./13-hosted.js";
+import { driveFormatSize, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
@@ -1262,14 +1262,18 @@ export function promptForTarget() {
 
 function openClockPopover(focusOn) {
   if (!S.state) return;
+  /* A review session sees the reading speed but cannot change it: it is
+     saved in the script, like the target below it (05t-target.js). */
+  var viewing = reviewMode();
+  var off = viewing ? " disabled" : "";
   var host = document.getElementById("runtime-chip");
   var wrap = openAnchorPopover(host, "wpm-editor", "Reading speed and target length",
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
-        escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
+        escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute"' + off + '>' +
       '<span class="anchor-popover-unit">words a minute</span>' +
-      '<button type="button" id="wpm-save" class="btn-outline">Set</button>' +
+      '<button type="button" id="wpm-save" class="btn-outline"' + off + '>Set</button>' +
     '</div>' +
     targetSectionHtml());
   if (!wrap) return;
@@ -1277,9 +1281,12 @@ function openClockPopover(focusOn) {
   var targetInput = document.getElementById("target-input");
   var input = document.getElementById("wpm-input");
   var first = focusOn === "target" && targetInput && !targetInput.disabled ? targetInput : input;
-  first.focus();
-  first.select();
+  /* nothing to type into in a review session: focus the box itself, so
+     Escape still closes it */
+  if (viewing) { wrap.setAttribute("tabindex", "-1"); wrap.focus(); }
+  else { first.focus(); first.select(); }
   function commit() {
+    if (reviewMode()) { closeAnchorPopover(); return; }
     var v = Math.round(Number(input.value));
     if (isFinite(v) && v >= 60 && v <= 400 && v !== S.state.wordsPerMinute) {
       S.state.wordsPerMinute = v;
