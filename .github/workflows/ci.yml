@@ -264,10 +264,18 @@ jobs:
       # (node_modules' chrome-sandbox is not setuid and the runner has no
       # user namespaces to fall back on); it is scoped to that target and
       # never reaches a packaged build.
+      #
+      # Xvfb's keymap compiler (xkbcomp) knows fewer keysyms than the
+      # runner's xkeyboard-config names, so each time a window connects it
+      # prints a screenful of "Could not resolve keysym XF86..." warnings
+      # (about 1,700 lines a run). They are harmless —
+      # nothing here presses those keys — so only that noise is filtered;
+      # any other Xvfb error still reaches the log.
       - name: Desktop smoke (dev target)
         working-directory: desktop
         run: |
-          Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp &
+          Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp \
+            2> >(grep --line-buffered -vE 'Could not resolve keysym|XKEYBOARD keymap compiler|Errors from xkbcomp are not fatal' >&2) &
           for _ in $(seq 1 30); do [ -e /tmp/.X11-unix/X99 ] && break; sleep 1; done
           [ -e /tmp/.X11-unix/X99 ] || { echo "::error::Xvfb never came up"; exit 1; }
           DISPLAY=:99 node test/smoke.mjs --only-target dev
