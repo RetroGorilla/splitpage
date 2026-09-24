@@ -35,8 +35,9 @@ eval document.activeElement.blur()
 expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="gear"]').length == 1
 expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]').getAttribute('data-tag-name') == wireless lav mic
 # a colour of its own - the CSS rule invariant (#14 in HANDOFF) this is
-# guarding against forgetting. Olive #5B6B1E since #143 (was #A67C1F).
-expect getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]')).boxShadow.indexOf('91, 107, 30') !== -1
+# guarding against forgetting. Moss #44693C since #169 (olive #5B6B1E from
+# #143, #A67C1F before that).
+expect getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]')).boxShadow.indexOf('68, 105, 60') !== -1
 
 # --- the header badge, and opening the panel --------------------------------
 expect !document.getElementById('gear-badge').hidden

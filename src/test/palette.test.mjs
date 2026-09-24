@@ -2,8 +2,9 @@
  * src/app.css: every category's colour and tint defined in the light
  * block and in both dark blocks, TAG_CATEGORIES naming them, each one's
  * script rule present (HANDOFF invariant 14 — before this it was guarded by
- * one browser assertion on Gear alone), the hues kept off the Visual teal
- * and the Audio orange, and the contrast figures #143 set actually met.
+ * one browser assertion on Gear alone), the hues kept off the Visual blue
+ * and the Audio amber (#169; teal and orange before it), and the contrast
+ * figures #143 set actually met.
  *
  * WCAG 2 relative luminance and contrast ratio, computed here rather than
  * pulled in: it is ten lines, and the numbers are the point of the test.
@@ -51,8 +52,8 @@ function hue(hex) {
 const hueGap = (a, b) => { const d = Math.abs(hue(a) - hue(b)); return Math.min(d, 360 - d); };
 
 test("the palette tests read the three token blocks they mean to", () => {
-  assert.equal(LIGHT["--bg"], "#F6F4EC");
-  assert.equal(DARK["--surface"], "#1F1B15");
+  assert.equal(LIGHT["--bg"], "#F1F0ED");
+  assert.equal(DARK["--surface"], "#171614");
   assert.deepEqual(DARK_MEDIA, DARK, "the two dark blocks have drifted apart");
 });
 
@@ -68,7 +69,7 @@ test("every category names its own colour token, defined in every theme, and has
   }
 });
 
-test("no category is drawn in the Visual teal or the Audio orange, or in another category's hue", () => {
+test("no category is drawn in the Visual blue or the Audio amber, or in another category's hue", () => {
   for (const [name, block] of [["light", LIGHT], ["dark", DARK]]) {
     const cats = TAG_CATEGORIES.map((c) => [c.id, block["--tag-" + c.id]]);
     for (const [id, hex] of cats) {

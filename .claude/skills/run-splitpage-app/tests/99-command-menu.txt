@@ -25,7 +25,8 @@ expect !document.getElementById('cmdk').hidden
 expect document.activeElement.id == cmdk-input
 expect getComputedStyle(document.getElementById('cmdk')).position == fixed
 expect Math.round(document.querySelector('#cmdk .cmdk-panel').getBoundingClientRect().width) == 640
-expect getComputedStyle(document.querySelector('#cmdk .cmdk-panel')).borderTopLeftRadius == 16px
+# --radius, the dialogs' radius since #169 (it was 16px)
+expect getComputedStyle(document.querySelector('#cmdk .cmdk-panel')).borderTopLeftRadius == 10px
 expect Math.round(document.querySelector('#cmdk .cmdk-input-row').getBoundingClientRect().height) == 60
 expect Math.abs((document.querySelector('#cmdk .cmdk-panel').getBoundingClientRect().left + 320) - innerWidth / 2) < 12
 expect document.getElementById('cmdk-input').getAttribute('role') == combobox

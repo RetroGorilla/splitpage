@@ -566,8 +566,8 @@ the tag and leaves the plain text:
 **Cast** and **Music/SFX** have no shortcut (nothing else is safe to type
 in normal prose) — select the words and press **Tag**. A tag shows in the
 script as a light tint with a coloured line under it, one colour per
-category: blue for props, violet for locations, plum for cast, ochre for
-VFX, slate for music and sound effects, olive for gear. The same colours
+category: violet for props, green for locations, pink for cast, yellow-green
+for VFX, coral for music and sound effects, sage for gear. The same colours
 mark each category in the Production and Gear panels. Once a tag of any
 category exists, typing a bracket and the first few letters offers to
 complete it: press **Tab** to accept. The completion keeps that tag's own
@@ -663,7 +663,7 @@ The **B-roll** panel is one line per shot:
   else worth a second look; a page icon means it has a note. Hover a line
   for **Go to scene**.
 - **At the top**: how many shots are in the can, and a bar with one segment
-  per shot — teal for shot, red for flagged. The chips below it — **All**,
+  per shot — cyan for shot, red for flagged. The chips below it — **All**,
   **To shoot**, **Flagged**, **Shot** — cut the list down, and **Group:**
   lays it out by **scene**, **location** or not at all. Both are remembered on
   this device, not saved in the script.
@@ -684,8 +684,8 @@ leaves the words in the script alone.
 mention, type it into **Add prop** in the shot's details: pick one the
 script already tracks, or type a new name and it's added to the breakdown as
 a Prop, the way the Gear box adds things. Each prop shows how far along it
-is — on the list, a dot before its name: a hollow ring for Needed, orange
-for Sourcing, teal for Have it, grey for Returned (hover it for the word);
+is — on the list, a dot before its name: a hollow ring for Needed, amber
+for Sourcing, cyan for Have it, grey for Returned (hover it for the word);
 in the details, the word itself — and renaming it in the Production
 panel renames it here too. The breakdown CSV lists the b-roll shots that
 need each prop, and so does the Props packing list.
@@ -809,9 +809,9 @@ lose your place in the script, so Splitpage keeps the scene you're actually
 in front of you rather than leaving the page static.
 
 **Comments.** Select some text and click **💬 Comment** to leave one; it
-stays anchored to that exact phrase, which gets an orange dotted underline
+stays anchored to that exact phrase, which gets an amber dotted underline
 (grey once the thread is resolved). That keeps it apart from the other
-marks a script can carry: a highlight is a yellow fill, a link a solid teal
+marks a script can carry: a highlight is a yellow fill, a link a solid blue
 underline, a tag a tint in its category's colour. The card in the
 **Comments** panel *is* the "jump to this text" control — click anywhere on it (not a link, not
 while you're selecting its text to copy) and the script scrolls to the

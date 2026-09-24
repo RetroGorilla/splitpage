@@ -109,7 +109,7 @@ expect document.getElementById('tag-suggest').classList.contains('is-visible') =
 expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .tag-anchor').length == 1
 
 # --- the breakdown now counts the mention it was missing --------------------
-click text*=PRODUCTION
+click #btn-production
 sleep 600
 # scoped to the item under test - the sections above deliberately add others
 expect document.querySelectorAll('#production-list .tag-entity').length >= 1

@@ -30,8 +30,8 @@
      from one that already has somebody's script open. -->
 <meta name="splitpage-seed-check" content="{{SEED_CHECK}}">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#F6F4EC" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#16130F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F1F0ED" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F0E0C" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,10 +50,13 @@
      exception for it ('unsafe-hashes' or 'unsafe-inline') would have been a
      hole big enough to drive the rest through — so 00-prelude.js does it
      instead, from the one script the policy trusts. -->
+<!-- The faces (#169): Chivo for the interface, Chivo Mono for figures,
+     Atkinson Hyperlegible Next for the script. All three are variable, so
+     one request carries every weight app.css asks for. -->
 <link id="font-css"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap"
       rel="stylesheet" media="print">
-<noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+<noscript><link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet"></noscript>
 <style>
 /*{{APP_CSS}}*/
 </style>
@@ -105,7 +108,10 @@
   <header class="topbar">
     <div>
       <div class="brand-row">
-        <span class="brand">Splitpage</span>
+        <!-- The mark (#169): a tally monitor, preview blue beside program
+             amber with the tally light above. Its colours are fixed, the
+             same in both themes — it is the logo, not a themed control. -->
+        <span class="brand"><svg class="brand-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>Splitpage</span>
       </div>
       <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
       <!-- One line of plain text under the title: file, runtime, who you are,
@@ -1199,7 +1205,9 @@
 <div class="newtab-page" id="newtab-page" hidden>
   <header class="newtab-bar">
     <span class="newtab-wordmark">
-      <svg class="newtab-wordmark-mark" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="7.5" height="16" rx="2" class="is-visual"/><rect x="13.5" y="4" width="7.5" height="16" rx="2" class="is-audio"/></svg>
+      <!-- The mark (#169), as in the topbar's .brand: fixed colours, not
+           currentColor — the logo is the same in both themes. -->
+      <svg class="newtab-wordmark-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>
       Splitpage
     </span>
     <div class="newtab-bar-actions">

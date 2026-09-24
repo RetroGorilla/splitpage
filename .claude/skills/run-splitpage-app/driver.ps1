@@ -275,8 +275,8 @@ function Go([string]$Target) {
 # A CSS selector, or one of:
 #   text=Some Label   smallest visible element whose trimmed innerText EQUALS it
 #   text*=Some Label  ... whose innerText CONTAINS it
-# Prefer text*= for Splitpage's header buttons: PRODUCTION and COMMENTS grow a
-# count badge inside them ("PRODUCTION2"), so exact matching stops working the
+# Prefer text*= for Splitpage's header buttons: Production and Comments grow a
+# count badge inside them ("Production2"), so exact matching stops working the
 # moment the document has any tags or comments.
 function Resolve-Sel([string]$Sel) {
   $ROLES = 'button,a,[role=button],[role=menuitem],[role=tab],label,summary,li,div,span'

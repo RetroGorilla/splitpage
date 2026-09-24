@@ -2849,7 +2849,8 @@ function registerProtocol() {
  * --------------------------------------------------------------------- */
 
 function backgroundColorForTheme() {
-  return nativeTheme.shouldUseDarkColors ? "#16130F" : "#F6F4EC";
+  // The app's --bg (src/app.css, #169), which the tab strip also paints.
+  return nativeTheme.shouldUseDarkColors ? "#0F0E0C" : "#F1F0ED";
 }
 
 function boundsIfVisible(b) {
@@ -2868,8 +2869,8 @@ function savedBoundsIfVisible() {
 
 function titleBarOverlayColors() {
   return nativeTheme.shouldUseDarkColors
-    ? { color: "#16130F", symbolColor: "#E8E2D4", height: TITLEBAR_H }
-    : { color: "#F6F4EC", symbolColor: "#2A2620", height: TITLEBAR_H };
+    ? { color: "#0F0E0C", symbolColor: "#ECEBE7", height: TITLEBAR_H }
+    : { color: "#F1F0ED", symbolColor: "#171613", height: TITLEBAR_H };
 }
 
 function mintUniqueTabId(preferred) {

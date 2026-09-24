@@ -1176,7 +1176,7 @@ bytes, #82 — nothing deletes them yet, D4).
     `--tag-tint` at them. Panels read the colour through `TAG_CATEGORIES`,
     the script through the rule; both land on the same token, so the dark
     theme and the prompter (which always takes the dark tokens) follow on
-    their own (#143). Keep the hues off the Visual teal and Audio orange.
+    their own (#143). Keep the hues off the Visual blue and Audio amber.
     `src/test/palette.test.mjs` checks all of it, contrast included.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds

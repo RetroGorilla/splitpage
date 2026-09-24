@@ -28,7 +28,8 @@ expect Math.round(document.getElementById('file-menu').getBoundingClientRect().w
 expect document.getElementById('file-menu').getBoundingClientRect().top >= document.getElementById('btn-file').getBoundingClientRect().bottom
 expect Math.abs(document.getElementById('file-menu').getBoundingClientRect().left - document.getElementById('btn-file').getBoundingClientRect().left) < 2
 expect document.getElementById('file-menu').getBoundingClientRect().bottom <= innerHeight
-expect getComputedStyle(document.getElementById('file-menu')).borderTopLeftRadius == 14px
+# --radius-md, a menu's radius since #169 (it was 14px)
+expect getComputedStyle(document.getElementById('file-menu')).borderTopLeftRadius == 8px
 # no scrim and no title bar: those are the phone sheet's
 expect document.getElementById('file-menu-backdrop').getBoundingClientRect().height == 0
 expect document.querySelector('#file-menu .menu-head').getBoundingClientRect().height == 0
