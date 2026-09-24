@@ -23,6 +23,13 @@
   :root {
     --bg: #F1F0ED;
     --surface: #FCFCFA;
+    /* the scene that holds the caret (#182): a clear step off --bg, further
+       than --surface, which was too close to the page to read at a glance */
+    --row-current: #FFFFFF;
+    /* a script field's hover and caret fill (#182): the text colour at a
+       whisper, so it is a shade darker on the light page and lighter on
+       the dark one without a second value (var(--text) resolves per theme) */
+    --field-hint: color-mix(in srgb, var(--text) 5%, transparent);
     /* raised: a step off --bg — in this theme a step darker, where the dark
        theme's raised is a step lighter */
     --surface-2: #E9E8E4;
@@ -186,6 +193,7 @@
     :root:not([data-theme="light"]) {
       --bg: #0F0E0C;
       --surface: #171614;
+      --row-current: #1E1D1A;
       --surface-2: #21201E;   /* raised */
       --hover: #2A2926;
       --border: #2E2E2B;
@@ -244,6 +252,7 @@
   :root[data-theme="dark"], .prompter, .prompter-line {
     --bg: #0F0E0C;
     --surface: #171614;
+    --row-current: #1E1D1A;
     --surface-2: #21201E;
     --hover: #2A2926;
     --border: #2E2E2B;
@@ -325,8 +334,21 @@
      words line up on one 20px margin. The script's columns are
      --row-cols: the gutter, Visual, Audio (a little wider — it is what is
      said), and the rail with each scene's read time. */
+  /* --script-scale is the script's own zoom (#191, 05s-script-zoom.js sets
+     it here from Ctrl + wheel): the script's type, its gutter and rail and
+     a row's padding are calc()s of it, and nothing outside the script is.
+     --script-floor is the smallest a script field may be set, 16px on a
+     touch device (#162 — iOS zooms the page into a smaller field) and no
+     floor anywhere else. The sizes and line heights are variables so the
+     phone can set its own without restating the calc. */
   #root {
-    --row-cols: 112px minmax(0, 1fr) minmax(0, 1.25fr) 80px;
+    --script-scale: 1;
+    --script-floor: 0px;
+    --script-visual-size: 15px;
+    --script-visual-lh: 1.55;
+    --script-audio-size: 18px;
+    --script-audio-lh: 1.6;
+    --row-cols: calc(112px * var(--script-scale)) minmax(0, 1fr) minmax(0, 1.25fr) calc(80px * var(--script-scale));
     max-width: 1800px; margin: 0 auto; padding: 0 20px 80px;
   }
 
@@ -712,11 +734,13 @@
     grid-template-columns: var(--row-cols);
     column-gap: 32px;
     margin: 0 -20px;
-    padding: 18px 20px;
+    padding: calc(18px * var(--script-scale)) 20px;
     border-bottom: 1px solid var(--border);
     position: relative;
   }
-  .row:focus-within, .row.has-menu-open { background: var(--surface); }
+  /* The current scene (#182): a step further off the page than --surface
+     was, in both themes, so the row you are in reads at a glance. */
+  .row:focus-within, .row.has-menu-open { background: var(--row-current); }
 
   .gutter {
     display: flex;
@@ -740,8 +764,8 @@
     white-space: nowrap;
   }
   .row-head:active { cursor: grabbing; }
-  .row-num { font-size: 18px; line-height: 28px; color: var(--text); user-select: none; }
-  .row-start { font-size: 12.5px; line-height: 16px; color: var(--text-faint); }
+  .row-num { font-size: calc(18px * var(--script-scale)); line-height: calc(28px * var(--script-scale)); color: var(--text); user-select: none; }
+  .row-start { font-size: calc(12.5px * var(--script-scale)); line-height: calc(16px * var(--script-scale)); color: var(--text-faint); }
   .row-controls { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
 
   /* Status as a labelled lamp (#169): To do an unlit outline, Ready the
@@ -873,11 +897,84 @@
   .row-rail {
     text-align: right;
     font-family: var(--font-display);
-    font-size: 14px;
-    line-height: 29px;
+    font-size: calc(14px * var(--script-scale));
+    line-height: calc(29px * var(--script-scale));
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     color: var(--text);
+  }
+  /* The read time is a button (#179): a click sets the scene's length by
+     hand (05r-read-time.js). An estimate is plain figures that take a
+     hover fill; a length set by hand sits in a hairline chip, and turns
+     the Audio amber when the words now read longer than it. An empty one
+     (no Audio, nothing set) offers "Set" on the row's hover or focus. */
+  .row-read {
+    display: inline-block;
+    min-width: 0;
+    margin: 0 -6px 0 0;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    text-align: right;
+    cursor: pointer;
+  }
+  .row-read:hover { background: var(--hover); }
+  .row-read:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .row-read.is-set { box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .row-read.is-over { color: var(--audio); box-shadow: inset 0 0 0 1px var(--audio); }
+  .row-read:empty::after { content: "Set"; font-family: var(--font-body); font-size: 12.5px; font-weight: 450; color: var(--text-faint); visibility: hidden; }
+  .row:hover .row-read:empty::after, .row:focus-within .row-read:empty::after { visibility: visible; }
+  .row-read[aria-disabled="true"] { cursor: default; }
+  .row-read[aria-disabled="true"]:hover { background: transparent; }
+  .row-read[aria-disabled="true"]:empty::after { content: none; }
+  .row-read-input {
+    width: 100%;
+    max-width: calc(80px * var(--script-scale));
+    height: calc(29px * var(--script-scale));
+    margin: 0;
+    padding: 0 6px;
+    border: 1px solid var(--visual);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: right;
+    outline: none;
+  }
+  .row-read-input[aria-invalid="true"] { border-color: var(--danger); }
+
+  /* The script zoom's readout (#191, 05s-script-zoom.js): "Script 125 %"
+     for a moment after a change, on the floating layer at the foot of the
+     window; a click is back to 100 %. */
+  .script-zoom-readout {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 190;
+    transform: translateX(-50%);
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .script-zoom-readout:hover { background: var(--hover); }
+  .script-zoom-readout:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  @media (max-width: 760px) {
+    .script-zoom-readout { bottom: calc(88px + env(safe-area-inset-bottom)); }
   }
 
   /* Done scenes recede (#169): a shot scene's words, number and read time
@@ -1032,13 +1129,43 @@
   }
   .cell-editable:hover { background: var(--surface); }
   .cell-editable:focus { background: var(--surface); box-shadow: 0 0 0 2px var(--visual) inset; }
-  /* In the script itself the row that holds the caret carries the surface
-     colour (.row:focus-within), so a field needs no fill or ring of its own
-     (#169) — the words sit on one calm surface. Visual 15px on 1.55, Audio
-     18px on 1.6: what is said leads. */
-  #rows .cell-editable { min-height: 28px; }
+  /* In the script itself the words sit on one calm surface (#169): no box
+     and no ring round a field. What says where you can type (#182):
+     - the row that holds the caret steps off the page (.row:focus-within,
+       --row-current);
+     - the field with the caret carries a 2px bar down its left edge in its
+       column's colour — Visual blue, Audio amber — and the faintest fill,
+       which is also where its box ends;
+     - under a mouse, a field takes that fill on hover, so you can see where
+       a click will land (a touch screen has no hover to show it with);
+     - an empty field is a dashed outline, fainter away from the current
+       scene, so it reads as a field and not as blank page;
+     - a click anywhere in the cell puts the caret at the end of its field
+       (05q-cell-reach.js).
+     The writer and the panels' fields keep their own look. Visual 15px on
+     1.55, Audio 18px on 1.6: what is said leads — both times the script's
+     zoom (--script-scale), never under the touch floor (--script-floor). */
+  #rows .cell-editable { min-height: calc(28px * var(--script-scale)); }
   #rows .cell-editable:hover, #rows .cell-editable:focus { background: transparent; box-shadow: none; }
-  .audio-cell .cell-editable { font-size: 18px; line-height: 1.6; }
+  @media (hover: hover) {
+    #rows .cell-editable:hover { background: var(--field-hint); }
+  }
+  /* :focus-within on the field's wrap rather than :focus on the field: the
+     same thing to a person, and it also holds while the field's own
+     toolbar or link box has the focus */
+  #rows .field-wrap:focus-within > .cell-editable { background: var(--field-hint); box-shadow: inset 2px 0 0 var(--visual); }
+  #rows .audio-cell .field-wrap:focus-within > .cell-editable { box-shadow: inset 2px 0 0 var(--audio); }
+  #rows .cell-editable:empty { outline: 1px dashed var(--border); outline-offset: -1px; }
+  #rows .row:focus-within .cell-editable:empty { outline-color: var(--border-strong); }
+  #rows .field-wrap:focus-within > .cell-editable:empty { outline-color: transparent; }
+  .visual-cell .cell-editable {
+    font-size: max(var(--script-floor), calc(var(--script-visual-size) * var(--script-scale)));
+    line-height: var(--script-visual-lh);
+  }
+  .audio-cell .cell-editable {
+    font-size: max(var(--script-floor), calc(var(--script-audio-size) * var(--script-scale)));
+    line-height: var(--script-audio-lh);
+  }
   /* The script's own words are set in Atkinson Hyperlegible Next (#169),
      the face the writer and the prompter use too; the Visual column one
      step quieter than the Audio column, which is what gets said. */
@@ -5430,7 +5557,7 @@
     }
     .gutter { display: contents; }
     .row-head { grid-row: 1; grid-column: 1; align-self: baseline; margin-top: 12px; padding-left: 16px; gap: 10px; cursor: default; }
-    .row-num { font-size: 16px; line-height: 20px; }
+    .row-num { font-size: calc(16px * var(--script-scale)); line-height: calc(20px * var(--script-scale)); }
     /* Adam's call for the phone (#169): the start and the read time only
        on the scene you are in — elsewhere the header is the number and the
        status */
@@ -5495,15 +5622,9 @@
     }
     .mini-toolbar button { padding: 9px 12px; font-size: 13px; flex: none; }
 
-    /* iOS zooms the page on focusing any input under 16px — keep every
-       editing surface at 16 so focus never yanks the viewport */
-    .cell-editable { font-size: 16px; }
-    .visual-cell .cell-editable { line-height: 1.5; }
-    .audio-cell .cell-editable { font-size: 17px; line-height: 1.55; }
-    .findbar input[type="text"], .link-popover input, .video-popover input,
-    .tag-notes-input, .tag-person-input, .tag-rename-input, .tag-owner-select,
-    #tag-name, #comment-name, .bulk-person-row input,
-    .comment-assignee-select, #comments-assignee-filter { font-size: 16px; }
+    /* The iOS 16px floors are keyed on the device, not the width (#162):
+       they are in the touch block after this one, so a narrowed desktop
+       window keeps the script and its fields at the sizes they had. */
 
     .findbar button { padding: 9px 11px; font-size: 13px; }
 
@@ -5672,15 +5793,37 @@
     .writer-kicker { display: none; }
     .writer-stats { gap: 10px; font-size: 12px; }
     .writer-scroll { padding: 18px 12px 60vh; }
-    /* the default only — an explicit choice from the slider is set inline on
-       .writer and still wins */
-    .writer { --wr-font: 17px; }
+    /* the writer's phone default, 17px, is a touch device's (#162) — in the
+       touch block after this one */
     .writer .wr-para.cell-editable { padding: 6px 10px 10px; }
     .writer-bar { gap: 6px 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
     .writer-bar button { padding: 9px 10px; }
     .writer-bar .grp { flex: 1 1 100%; }
     .writer-bar input[type="range"] { flex: 1; width: auto; }
     .writer-bar .div-sep, .writer-hint { display: none; }
+  }
+
+  /* iOS zooms the page the moment you focus a field under 16px, so on a
+     touch device — phone or tablet, whatever its width — every editing
+     surface here is at least 16px. Keyed on the device, not the window
+     (#162): it used to be the 760px block above, which also made the
+     script's text GROW in a narrowed desktop window, where there is no iOS
+     to zoom. The script's own fields take the floor through --script-floor,
+     so the script's zoom (#191) can never take them under it either. */
+  @media (hover: none), (pointer: coarse) {
+    #root { --script-floor: 16px; }
+    .cell-editable { font-size: 16px; }
+    .findbar input[type="text"], .link-popover input, .video-popover input,
+    .tag-notes-input, .tag-person-input, .tag-rename-input, .tag-owner-select,
+    #tag-name, #comment-name, .bulk-person-row input,
+    .comment-assignee-select, #comments-assignee-filter, .row-read-input { font-size: 16px; }
+  }
+  /* ...and a phone's own type: the Audio a step under the desktop's 18px,
+     tighter lines, and the writer's default at 17px (an explicit choice
+     from its slider is set inline on .writer and still wins). */
+  @media (max-width: 760px) and (hover: none), (max-width: 760px) and (pointer: coarse) {
+    #root { --script-visual-lh: 1.5; --script-audio-size: 17px; --script-audio-lh: 1.55; }
+    .writer { --wr-font: 17px; }
   }
 
   /* Touch affordances, regardless of screen size (tablets included).
