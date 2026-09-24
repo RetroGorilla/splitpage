@@ -18,10 +18,20 @@ so others on your network open and edit the same scripts live, or
 
 ## What's new in 3.0
 
-3.0.0-beta.5 is a pre-release. Copies on 2.1 and on an earlier beta are not
+3.0.0-beta.6 is a pre-release. Copies on 2.1 and on an earlier beta are not
 offered it: download it from the releases page. When 3.0.0 itself ships, a
 beta copy is offered it like any other update.
 
+- **A target length.** Click the clock and set how long the piece should
+  run: the clock shows what's left or how far over you are, and the rundown
+  strip marks the target.
+- **Watch videos in the gallery.** A YouTube or Vimeo link plays right in a
+  scene's gallery once you press play, and so does a video file you dropped
+  in this session. A pasted link now shows the video's own thumbnail
+  (you can turn that off in Settings).
+- **Present and the Writer fade in and out** instead of cutting.
+- **Breakdown colours in the PDF and Word exports.** Each category is
+  printed in its own colour, as in the app.
 - **Settings, in one place.** File ▸ Settings… holds the theme (System,
   Light or Dark), the clock (your system's, 12-hour or 24-hour), the
   rundown strip, script zoom, the prompter's mirror and flip, and your name
