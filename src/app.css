@@ -287,6 +287,53 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
 
+  /* ---------- scroll bars (#187) ----------
+     One slim style for every scroller in the app — the page, the panels,
+     menus, dialogs, the writer: thin, no arrow buttons, a rounded thumb in
+     the theme's faint text colour on a transparent track, so it reads on
+     --bg and --surface alike and follows the theme. The thumb token is
+     worked out from --text-faint on :root, where the theme is decided, so
+     it needs no copy in the dark blocks. A scroller that hides its bar
+     (the prompter, the b-roll tabs) still does: a class outranks `*`.
+
+     Two spellings of the one style. ::-webkit-scrollbar where it exists
+     (Chromium — so the desktop app, Edge and Chrome — and Safari): it is
+     the only way to a bar with no arrow buttons there, since Chromium
+     draws its arrows even on a `scrollbar-width: thin` bar. Chromium also
+     ignores every -webkit- rule on an element that sets scrollbar-width
+     or scrollbar-color, so the standard properties are given only to a
+     browser without the pseudo-elements (Firefox), and nothing else in
+     this file may set `scrollbar-width: thin` — only `none`, to hide a
+     bar, beside a `::-webkit-scrollbar { display: none }`. Windows'
+     "always show scroll bars" and the phone's overlay bars are the
+     browser's to honour; nothing here overrides them. */
+  :root {
+    --scrollbar-thumb: color-mix(in srgb, var(--text-faint) 55%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--text-faint) 85%, transparent);
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    min-height: 32px;
+    min-width: 32px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb) padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  @supports not selector(::-webkit-scrollbar) {
+    :root { scrollbar-color: var(--scrollbar-thumb) transparent; }
+    * { scrollbar-width: thin; }
+  }
+  /* With a side panel open the page's own bar goes (#187, decided: option
+     b), so the panel's is the only one at the window's edge and the
+     header's line and the panel's edges meet the frame (#188). The page
+     still scrolls — wheel, keys, the rundown strip — and the strip still
+     shows where you are in it. */
+  html:has(> body.panel-open) { scrollbar-width: none; }
+  html:has(> body.panel-open)::-webkit-scrollbar { display: none; }
+
   /* ---------- switching themes ----------
 
      data-theme is swapped on <html> at runtime, which repaints every colour
@@ -324,10 +371,31 @@
      20px), so a row's focus fill and every rule reach the edge while the
      words line up on one 20px margin. The script's columns are
      --row-cols: the gutter, Visual, Audio (a little wider — it is what is
-     said), and the rail with each scene's read time. */
+     said), and the rail with each scene's read time.
+
+     #root spans the window (#190): the header and the rundown strip run
+     edge to edge like the desktop app's tab strip above them, and only the
+     script is held to 1800px — see "the script's own width" just below. */
   #root {
     --row-cols: 112px minmax(0, 1fr) minmax(0, 1.25fr) 80px;
-    max-width: 1800px; margin: 0 auto; padding: 0 20px 80px;
+    padding: 0 20px 80px;
+  }
+  /* The script's own width (#190). 1800px with its rows' 20px either side,
+     so 1760px of #root's content, centred in whatever #root has — the
+     window, or the window beside an open panel (#root's padding-right,
+     further down). Every child of #root but the header is set in by the
+     same amount from both sides; the column heads reach 20px past it, as
+     rows do (margin: 0 -20px). Below this width the inset is 0 anyway, so
+     the rule only exists where it can do something. */
+  @media (min-width: 1801px) {
+    #root > :not(.topbar) {
+      margin-left: max(0px, calc((100% - 1760px) / 2));
+      margin-right: max(0px, calc((100% - 1760px) / 2));
+    }
+    #root > .col-head {
+      margin-left: calc(max(0px, calc((100% - 1760px) / 2)) - 20px);
+      margin-right: calc(max(0px, calc((100% - 1760px) / 2)) - 20px);
+    }
   }
 
   a { color: inherit; }
@@ -343,17 +411,30 @@
   /* ---------- header (#169, Direction B) ----------
      One 52px row, then the rundown strip. Three columns so the program
      clock sits in the middle of the window whatever is either side of it:
-     the app and the document on the left (its facts clipped from the end
-     when the window is narrow), the clock, and the panels, Write and
-     Present on the right. Sticky, and what it sheds on scroll, are at the
-     end of this file (condensing header). */
+     the app and the document on the left (the title giving way first, then
+     the facts), the clock, and search, the panels, Write and Present on
+     the right. Sticky, and what it sheds on scroll, are at the end of this
+     file (condensing header).
+
+     The row spans the window, not the script (#190): #root no longer has
+     a width of its own, so the header's 20px either side are the window's.
+
+     Nothing in it overlaps at any width (#174). The right column is never
+     narrower than its buttons (max-content), so where the two halves no
+     longer fit either side of a centred clock, the left gives way and the
+     clock moves over rather than the buttons spilling left across it. The
+     buttons themselves drop what they can as the window narrows — "the
+     header's widths" below — so the clock stays centred down to about
+     1000px. Suite 85-header-fit.txt measures all of it with bounding
+     boxes: an overflow here is not clipped and not counted in scrollWidth,
+     so nothing else would see it. */
   .topbar {
     margin: 0 -20px;
     background: var(--bg);
   }
   .topbar-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
     align-items: center;
     column-gap: 16px;
     height: 52px;
@@ -366,13 +447,18 @@
     gap: 12px;
     min-width: 0;
   }
-  .brand-row { display: flex; align-items: center; flex: none; }
-  /* The mark, then the wordmark in Chivo 700 (#169). */
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 32px;
+  /* The File button is the mark, the name and a chevron (#166). The mark is
+     drawn at 22px from the sprite's #i-mark whatever its shape; the name in
+     Chivo 700, the wordmark (#169). It reads as a button before it is
+     pointed at — the chevron, and the same pressed and hover fills and
+     focus ring as the header's other quiet buttons (.btn-quiet below). */
+  .btn.btn-quiet.btn-brand { gap: 8px; padding: 0 4px 0 6px; }
+  /* the mark on the row's 20px margin, its button's hover fill reaching
+     past it; pulled on the wrap, so the File menu still hangs off the
+     button's own left edge */
+  .topbar-left > .menu-wrap { margin-left: -6px; }
+  .btn-brand .brand-mark { display: block; flex: none; width: 22px; height: 22px; }
+  .btn-brand .brand-name {
     font-family: var(--font-body);
     font-weight: 700;
     font-size: 15px;
@@ -380,7 +466,9 @@
     letter-spacing: -0.005em;
     color: var(--text);
   }
-  .brand-mark { display: block; flex: none; }
+  .btn-brand .btn-chevron { margin-left: -4px; color: var(--text-dim); }
+  .btn-brand:hover .btn-chevron, .btn-brand[aria-expanded="true"] .btn-chevron { color: var(--text); }
+  .btn.btn-brand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   /* between the app (the mark and File) and the document (its title) */
   .topbar-rule { flex: none; width: 1px; height: 20px; background: var(--border); }
   .doc-title {
@@ -401,14 +489,20 @@
     field-sizing: content;
     min-width: 8ch;
     max-width: 36ch;
-    flex: 0 1 auto;
+    /* The title gives way first (#183): it shrinks a hundred times as fast
+       as the facts beside it, so a long one ends in "…" long before a fact
+       is clipped, and your name (#identity-chip) never is. The whole title
+       is the tooltip (20i-topbar.js) and is there to edit once clicked. */
+    flex: 0 100 auto;
     text-overflow: ellipsis;
   }
   .doc-title:hover { border-color: var(--border); }
+  /* Being edited, it is the facts that give way instead. */
   .doc-title:focus {
     outline: none;
     border-color: var(--visual);
     background: var(--surface);
+    flex-shrink: 1;
   }
 
   /* Save as a status (#169). #btn-save draws the status words that
@@ -485,34 +579,38 @@
   /* Who is here, a review session, an imported file, the shot count, who
      you are: plain text, one dot between each item that is showing. The
      dot is drawn on the later item only when an earlier sibling is
-     visible, so a hidden chip never leaves one behind. It takes what the
-     row has left and is clipped from the end, never wrapped. */
+     visible, so a hidden chip never leaves one behind. Never wrapped.
+
+     Sized to its facts, and it gives way only after the title has (#183,
+     the title's flex-shrink above). Then each fact but your name is cut
+     short with "…"; your name (#identity-chip, the way to change what your
+     edits and comments are signed with) keeps its place and is only ever
+     shortened, never lost. */
   .doc-meta {
     display: flex;
     align-items: center;
-    /* basis 0: the title and the status are sized first, and this has what
-       is left */
-    flex: 1 1 0;
+    flex: 0 1 auto;
     min-width: 0;
-    overflow: hidden;
     white-space: nowrap;
     font-family: var(--font-body);
     font-size: 13px;
     color: var(--text-faint);
   }
+  .doc-title:focus ~ .doc-meta { flex-shrink: 1000; }
   .doc-meta > :not([hidden]) ~ :not([hidden])::before {
     content: "·";
     color: var(--text-faint);
     margin: 0 8px;
   }
   .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-family: var(--font-display); font-size: 12px; }
-  .doc-meta .review-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); }
-  .doc-meta .review-chip-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .doc-meta .review-chip { color: var(--text-dim); }
+  .doc-meta .review-chip-icon { width: 15px; height: 15px; margin-right: 5px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
   /* The chips' own pill styling (further down) is for their other homes;
      in this line they are text. */
   .doc-meta .file-chip,
   .doc-meta .identity-chip,
-  .doc-meta .stat-chip {
+  .doc-meta .stat-chip,
+  .doc-meta .review-chip {
     border: 0;
     border-radius: 0;
     background: none;
@@ -520,12 +618,25 @@
     margin: 0;
     font-size: inherit;
     color: inherit;
-    flex: none;
   }
+  /* Each fact is a line of text that can end in "…" (a block, since a flex
+     box draws no ellipsis) and gives way in turn. */
+  .doc-meta .file-chip,
+  .doc-meta .stat-chip,
+  .doc-meta .review-chip {
+    display: block;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .doc-meta .review-chip { color: var(--text-dim); }
   .doc-meta .file-chip-icon { display: none; }
   .doc-meta .file-chip-state { margin-left: 6px; }
-  .doc-meta .review-chip { margin: 0; flex: none; }
   .topbar-left .presence-bar { flex: none; margin: 0; }
+  /* Your name: never squeezed out. A very long one is shortened to 16ch. */
+  .doc-meta .identity-chip { flex: none; display: inline-flex; align-items: center; }
+  .doc-meta #identity-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
   .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }
 
   .toolbar {
@@ -533,8 +644,34 @@
     gap: 12px;
     align-items: center;
     justify-content: flex-end;
-    min-width: 0;
   }
+  .toolbar > .btn { flex: none; }
+
+  /* Search or run a command (#175): a button drawn as a search field — the
+     magnifier, the words as a placeholder, the Ctrl K keycaps (.mi-keys,
+     from data-keys, the File menu's own chips) at its far end. It opens the
+     command menu; typing starts there. Where the row runs short it is only
+     the magnifier ("the header's widths" below), its words still its name. */
+  .btn.cmdk-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 5px 0 9px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 450;
+    cursor: pointer;
+  }
+  .btn.cmdk-trigger .btn-icon { color: var(--text-dim); }
+  .btn.cmdk-trigger .mi-keys { margin-left: 18px; }
+  .btn.cmdk-trigger:hover { border-color: var(--border-strong); background: var(--surface); color: var(--text-dim); }
+  .btn.cmdk-trigger:hover .mi-keys kbd { color: var(--text); }
+  .btn.cmdk-trigger:active { transform: none; }
+  .btn.cmdk-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   /* The four panels (#169): quiet toggles — icon, label, the count in the
      mono — with no box until pointed at, and pressed (the hover fill, the
      text colour) while their panel is open. They share one slot on the
@@ -617,6 +754,77 @@
   }
   .btn.btn-mode .btn-icon { color: var(--text-dim); }
   .btn.btn-mode:hover { background: var(--hover); border-color: var(--border-strong); }
+
+  /* ---- the header's widths (#174, #175, #166) ----
+     What the row lets go of as the window narrows, widest first, so that
+     nothing in it ever overlaps and the clock stays centred for as long as
+     it can. Each step keeps every control: a label that leaves the screen
+     stays the button's name (a screen reader reads it, innerText has it)
+     and its title is the tooltip.
+       below 1860  search is "Search" and its keycaps
+       below 1600  search is its magnifier
+       below 1250  the panel toggles are an icon and their count
+       below 1180  the File button is its mark and chevron
+       below 1000  Write is its icon, and the gaps close up
+       below  880  "Saved 2 min ago" and the rest shorten to a dot in the
+                   state's colour (the words stay its name and tooltip)
+     The phone (760 and under) is its own layout, further down. Measured by
+     suite 85-header-fit.txt at every width #174 lists. */
+  @media (max-width: 1859px) {
+    .cmdk-trigger-more {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+  }
+  @media (max-width: 1599px) {
+    .btn.cmdk-trigger {
+      width: 32px;
+      padding: 0;
+      justify-content: center;
+      border-color: transparent;
+      background: transparent;
+    }
+    .btn.cmdk-trigger:hover { background: var(--hover); border-color: transparent; color: var(--text); }
+    .btn.cmdk-trigger .mi-keys { display: none; }
+    .cmdk-trigger .btn-label {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+  }
+  @media (max-width: 1249px) {
+    .panel-toggle .btn-label {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .btn.panel-toggle { gap: 4px; }
+  }
+  @media (max-width: 1179px) {
+    .btn-brand .brand-name {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .btn.btn-quiet.btn-brand { gap: 6px; }
+  }
+  @media (max-width: 999px) {
+    .topbar-row { column-gap: 12px; }
+    .topbar-left { gap: 8px; }
+    .toolbar { gap: 6px; }
+    #btn-write .btn-label {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    .btn.btn-mode { width: 32px; padding: 0; justify-content: center; }
+  }
+  @media (min-width: 761px) and (max-width: 879px) {
+    .doc-title { min-width: 6ch; }
+    .save-btn { width: 24px; padding: 0; justify-content: center; }
+    .save-btn::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-faint);
+    }
+    .save-btn[data-state="none"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-faint); }
+    .save-btn[data-state="ok"]::before { background: var(--ok); }
+    .save-btn[data-state="pending"]::before { background: var(--audio); }
+    .save-btn[data-state="warn"]::before { background: var(--danger); }
+  }
 
   /* Sentence case in the body face (#169) — this was the loudest of the
      uppercase letter-spaced mono labels, on every button in the app. */
@@ -1355,7 +1563,7 @@
   .scene-gallery-grid {
     flex: none; list-style: none; margin: 8px 0 0; padding: 4px 24px;
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    max-height: 160px; overflow-y: auto; scrollbar-width: thin;
+    max-height: 160px; overflow-y: auto;
   }
   .scene-gallery-grid > li { display: flex; }
   .scene-gallery-grid-tile {
@@ -1996,7 +2204,6 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
     padding: 0 6px 6px;
   }
   .cmdk-group {
@@ -3405,7 +3612,6 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
     padding: 4px;
   }
 
@@ -5324,10 +5530,12 @@
       flex: 1 1 auto;
       gap: 0;
     }
-    .brand-row, .topbar-rule { display: none; }
-    .menu-wrap { display: flex; grid-column: 1; grid-row: 1 / -1; align-self: center; }
-    #btn-file { width: 44px; height: 44px; padding: 0; justify-content: center; font-size: 0; }
-    #btn-file .btn-chevron { display: none; }
+    .topbar-rule { display: none; }
+    .menu-wrap, .topbar-left > .menu-wrap { display: flex; grid-column: 1; grid-row: 1 / -1; align-self: center; margin: 0; }
+    /* The phone keeps File as its icon button (#166): the mark and the
+       name are the desktop row's. */
+    #btn-file { width: 44px; height: 44px; margin: 0; padding: 0; justify-content: center; font-size: 0; }
+    #btn-file .btn-chevron, #btn-file .brand-mark, #btn-file .brand-name { display: none; }
     #btn-file .btn-phone-icon { display: block; width: 22px; height: 22px; }
     /* 16px, not the board's 15: iOS zooms the page into a field under 16px */
     .doc-title {
@@ -5373,6 +5581,9 @@
     .program-clock-of { font-size: 11px; }
     .toolbar { flex: none; gap: 0; }
     .btn-group, #btn-write { display: none; }
+    /* Search (#175): the magnifier, in a 44px target */
+    .btn.cmdk-trigger { width: 44px; height: 44px; }
+    .btn.cmdk-trigger .btn-icon { width: 20px; height: 20px; }
     /* the 40px tally square in a 44px target: the fill stops at the
        padding, and the corner inside it is 6px */
     #btn-present {
