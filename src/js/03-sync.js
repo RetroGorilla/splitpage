@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { SCHEMA_VERSION } from "./00-prelude.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, mergePersonColors, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
-import { DEFAULT_WPM, hasSetLength } from "./01-scene-status.js";
+import { DEFAULT_WPM, hasSetLength, targetLengthOf } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
 import { galleryFieldKey, mergeGalleryField } from "./02d-gallery.js";
@@ -28,6 +28,7 @@ import {
 import { safeId, storedImageHtml } from "./04-richtext.js";
 import { fromHtml, mergeCells, sameCell, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
+import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
 import { BROLL_PROPS_MAX, brollPropKey } from "./08c-broll.js";
 import {
   TAG_STATUSES,
@@ -766,6 +767,11 @@ export function mergeStates(base, mine, theirs) {
         var pc = mergePersonColors(base && base[f.key], mine[f.key], theirs[f.key]);
         if (pc) out[f.key] = pc;
         break;
+      /* the script's target length (#170): absent when there is none */
+      case "target-length":
+        var tl = mergeTargetLength(base, mine, theirs);
+        if (tl !== null) out[f.key] = tl;
+        break;
       default: throw new Error("no merge strategy for state field " + f.key);
     }
   });
@@ -993,6 +999,19 @@ function mergeChangedSideWins(f, base, mine, theirs) {
   var fallback = f.def ? f.def() : null;
   if (base && t === base[f.key] && m !== base[f.key]) return m || fallback;
   return t || m || fallback;
+}
+
+/* A target length (#170), merged like the title: the side that changed it
+   since the base wins — and taking it away ("No target") is a change like
+   any other, which changed-side-wins' `m || fallback` would lose. Both
+   changed it: theirs stays, the published truth, with no conflict card (a
+   target is one number, no loss worth a card — as a scene's length, #179).
+   With no base, a set target beats none. → seconds, or null for none. */
+export function mergeTargetLength(base, mine, theirs) {
+  var m = targetLengthOf(mine), t = targetLengthOf(theirs);
+  if (m === t) return t;
+  if (base) return t === targetLengthOf(base) ? m : t;
+  return t !== null ? t : m;
 }
 
 /* ---- conflict stash (survives the reload the shell forces on us) ----
@@ -1229,22 +1248,37 @@ export function promptForName() {
 
 /* Reading speed lives on the document (see migrateRows), so the estimate
    reads the same for whoever opens the file next. The same popover as the
-   name box. */
+   name box. Under it, the script's target length (#170, 05t-target.js):
+   the clock is where both show, so one click on it reaches both. */
 export function promptForWpm() {
+  openClockPopover("wpm");
+}
+
+/* The command menu's "Set target length…": the same box, the caret in the
+   target's field. */
+export function promptForTarget() {
+  openClockPopover("target");
+}
+
+function openClockPopover(focusOn) {
   if (!S.state) return;
   var host = document.getElementById("runtime-chip");
-  var wrap = openAnchorPopover(host, "wpm-editor", "Reading speed",
+  var wrap = openAnchorPopover(host, "wpm-editor", "Reading speed and target length",
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
         escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
       '<span class="anchor-popover-unit">words a minute</span>' +
       '<button type="button" id="wpm-save" class="btn-outline">Set</button>' +
-    '</div>');
+    '</div>' +
+    targetSectionHtml());
   if (!wrap) return;
+  wireTargetSection(wrap, closeAnchorPopover);
+  var targetInput = document.getElementById("target-input");
   var input = document.getElementById("wpm-input");
-  input.focus();
-  input.select();
+  var first = focusOn === "target" && targetInput && !targetInput.disabled ? targetInput : input;
+  first.focus();
+  first.select();
   function commit() {
     var v = Math.round(Number(input.value));
     if (isFinite(v) && v >= 60 && v <= 400 && v !== S.state.wordsPerMinute) {
