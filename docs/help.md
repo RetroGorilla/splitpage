@@ -70,6 +70,15 @@ beta copy is offered it like any other update.
   you used last.
 - **Search commands** (Ctrl+K): type a few letters of anything the File menu,
   the panels or the export formats can do, and press Enter.
+- **A B-roll panel built for the shoot.** One line per shot with a one-click
+  Shot box, its location, who has it and its props; "3 of 8 shots in the
+  can", filters for what is left, grouping by scene or location, and
+  Shift/Ctrl-click to mark or assign several at once. Each prop has a
+  status (Needed, Sourcing, Have it, Returned), and the **shot list** opens
+  full page, with CSV and a printable PDF — see [B-roll](#b-roll).
+- **New tag colours** that no longer look like the Visual and Audio
+  columns, a dotted underline for commented words, and grey hint text with
+  more contrast.
 - **Resizable side panels**, and smoother header and panel transitions.
 - Fixes: a PDF scene with a picture and no text is no longer drawn over by
   the next scene; *Undo merge* after a save conflict puts your version back;
