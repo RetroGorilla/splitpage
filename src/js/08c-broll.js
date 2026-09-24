@@ -1,8 +1,7 @@
 import { S } from "./_state.js";
 import { escapeHtml, makeId } from "./02-state.js";
-import { findRowIndex, openSidePanel, syncPanelClass } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import {
-  cssAttr,
   ensureTrailingCaretSpot,
   inertBody,
   plainText,
@@ -15,27 +14,32 @@ import {
   insertText,
   projection,
   replaceWithBrollKey,
+  tagNameOf,
   toHtml
 } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
-import { focusRowField } from "./06-rows.js";
 import {
+  TAG_STATUSES,
   contentMemo,
-  findOrAddPerson,
   isInsideTagOrLink,
+  isTagId,
   normalizeTagName,
-  personById,
+  registerProductionTag,
+  registryEntry,
   scheduleIdleRefresh,
+  tagStatus,
   tagsInField
 } from "./07-production-tags.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
-import { htmlToPlainText, queueAutoSave } from "./14-export.js";
+import { renderBrollViews } from "./08d-broll-panel.js";
+import { markDirty } from "./12-dirty-toast.js";
+import { htmlToPlainText } from "./14-export.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
    DOM, read storage, or depend on another module's value, so they have to
    run in fragment order rather than in whatever order the bundle lands in. */
-var brollInField;
+var brollInField;       /* built on first use: see brollField() */
+var brollPropsInField;  /* the same */
 var brollAnchorDeclined;
 
 /* ================= the b-roll list =================
@@ -55,7 +59,10 @@ var brollAnchorDeclined;
    tied to the marker by an id the marker carries. */
 
 export var BROLL_STATUSES = [
-  { id: "unshot", label: "Not shot", color: "var(--text-dim)" },
+  /* "To shoot" rather than "Not shot" (#148): it is a list of work to do,
+     and the word says what is left rather than what is missing. The id is
+     unchanged, so every file keeps reading. */
+  { id: "unshot", label: "To shoot", color: "var(--text-dim)" },
   /* The same word scenes already use for their own status, on purpose: a
      scene being Shot and a B-roll item being Shot are differently sized
      claims, but "shot" is the word anyone on a set actually says. */
@@ -75,8 +82,13 @@ export function brollStatus(id) {
 export var BROLL_MARKER_RE = /^[ \t]*(b[ \t]?-?[ \t]?roll)[ \t]*([:—–-])[ \t]*/i;
 var BROLL_CLOSERS = ":—–-";
 
-var BROLL_NAME_MAX = 200;
-var BROLL_TEXT_MAX = 2000;
+export var BROLL_NAME_MAX = 200;
+export var BROLL_TEXT_MAX = 2000;
+/* A shot's hand-added props (#149): as long as a registry name may be, and
+   more of them than any one shot has ever needed — a cap only so a hostile
+   or broken file cannot hand the panel ten thousand chips. */
+var BROLL_PROP_NAME_MAX = 80;
+export var BROLL_PROPS_MAX = 40;
 
 /* ---- reading the markers back out of the script ----
 
@@ -179,6 +191,37 @@ export function brollInCell(cell) {
   return out;
 }
 
+/* The props each marker in a cell needs, read off the script (#149): every
+   prop tag on the item's own lines — its "B-roll:" line and the lines of
+   description under it, up to the next marker — in the order they appear,
+   one per name. One array per item, in brollInCell's order, so the two
+   line up by index. A separate reader rather than a field on brollInCell's
+   items: that one is pinned against the old HTML reader shape for shape
+   (broll-model.test.mjs), and nothing about which words a line holds
+   changes with the tags on them. Read from the model like everything else
+   here: a tag is its mark, named "t:<cat>:<name>" by cellOf. */
+export function brollPropsInCell(cell) {
+  var out = [], open = null, seen = null;
+  brollCellLines(cell).forEach(function (line) {
+    if (brollLineMarker(line.items)) {
+      open = [];
+      seen = Object.create(null);
+      out.push(open);
+    }
+    if (!open) return;
+    line.items.forEach(function (it) {
+      var t = !it.atom && it.marks && it.marks.tag ? tagNameOf(it.marks.tag) : null;
+      if (!t || t.cat !== "prop") return;
+      var name = t.name.trim().slice(0, BROLL_PROP_NAME_MAX);
+      var key = normalizeTagName(name);
+      if (!name || seen[key]) return;
+      seen[key] = true;
+      open.push(name);
+    });
+  });
+  return out;
+}
+
 /* The marker lines of a cell, in order: the line (its index among all of
    the cell's lines too) and its marker. An item's ordinal is its place in
    this list, which is how the rename and the anchoring pass below find the
@@ -266,16 +309,37 @@ function collectBrollFromRows(rows) {
   var out = [];
   var seen = Object.create(null);
   (rows || []).forEach(function (row, rowIndex) {
-    brollInField(row.visualText).forEach(function (found, ordinal) {
+    var props = brollPropsField(row.visualText);
+    brollField(row.visualText).forEach(function (found, ordinal) {
       var id = found.id && !seen[found.id] ? found.id : "";
       if (id) seen[id] = true;
       out.push({
         id: id, name: found.name, desc: found.desc,
-        rowId: row.id, rowIndex: rowIndex, ordinal: ordinal
+        rowId: row.id, rowIndex: rowIndex, ordinal: ordinal,
+        autoProps: props[ordinal] || []
       });
     });
   });
   return out;
+}
+
+/* The two memoised readers: what brollInCell and brollPropsInCell say
+   about one field. SHARED with every other caller for the same field
+   content — read it, never mutate it. Same contract, and the same reason,
+   as tagsInField. Keyed on the field's HTML, so typing in one field
+   re-reads only that one, and its parse is cellOf's, shared with the other
+   readers. Built the first time they are asked for rather than in
+   __init(): an export that lists shots (breakdownRows, #149) runs in the
+   unit tests with no __init() behind it, which is also why tagsInField is
+   built where it is declared (07-production-tags.js). */
+function brollField(html) {
+  if (!brollInField) brollInField = contentMemo(function (h) { return brollInCell(cellOf(h)); });
+  return brollInField(html);
+}
+
+function brollPropsField(html) {
+  if (!brollPropsInField) brollPropsInField = contentMemo(function (h) { return brollPropsInCell(cellOf(h)); });
+  return brollPropsInField(html);
 }
 
 function brollRow(rowId) {
@@ -308,7 +372,7 @@ function brollSeedLocation(row) {
 
 /* ---- the registry ---- */
 
-function brollRecord(id) {
+export function brollRecord(id) {
   if (!id) return null;
   for (var i = 0; i < S.state.brollShots.length; i++) {
     if (S.state.brollShots[i].id === id) return S.state.brollShots[i];
@@ -316,7 +380,7 @@ function brollRecord(id) {
   return null;
 }
 
-function newBrollRecord(fields) {
+export function newBrollRecord(fields) {
   var rec = {
     id: makeId("bs"),
     name: "", desc: "",
@@ -326,6 +390,9 @@ function newBrollRecord(fields) {
     owner: "",
     audioRef: "",
     location: "",
+    /* The props added by hand (#149); the ones tagged on its lines are
+       read off the script every time and never stored. */
+    props: [],
     /* A "script" item can go orphaned when its line is deleted — that is
        a surprise worth flagging. One typed straight into the list never
        had a line to lose, so it just sits there as itself. */
@@ -361,7 +428,7 @@ export function recordPastedBroll(rowId, cell, ids) {
   });
 }
 
-function deleteBrollRecord(id) {
+export function deleteBrollRecord(id) {
   var before = S.state.brollShots.length;
   S.state.brollShots = S.state.brollShots.filter(function (r) { return r.id !== id; });
   return before !== S.state.brollShots.length;
@@ -401,7 +468,12 @@ function brollHeldIds(live) {
   return held;
 }
 
-function brollEntries() {
+/* `readOnly` (#149) is for an export that lists shots — the breakdown's
+   B-roll column, the packing list: the same answer, with nothing written.
+   A line with no record yet gets a stand-in shaped like the one the panel
+   would make, and no record's words are refreshed; saving a file must not
+   be what adds a shot to the list. */
+export function brollEntries(readOnly) {
   var live = collectBrollFromRows(S.state.rows);
   var claimed = Object.create(null);
   var byId = Object.create(null);
@@ -413,20 +485,24 @@ function brollEntries() {
     var rec = brollMatchRecord(found, claimed, byId, held);
     if (!rec) {
       var row = brollRow(found.rowId);
-      rec = newBrollRecord({
+      var fields = {
         id: found.id || makeId("bs"),
         name: found.name,
         desc: found.desc,
         audioRef: brollSeedRef(row),
         location: brollSeedLocation(row)
-      });
+      };
+      rec = readOnly ? Object.assign({ status: BROLL_STATUSES[0].id, props: [], origin: "script" }, fields)
+        : newBrollRecord(fields);
     }
     claimed[rec.id] = true;
     /* While a marker is live the script owns the words; the record keeps
        its own copy only so the item still reads like something once the
        line is gone. */
-    rec.name = found.name;
-    rec.desc = found.desc;
+    if (!readOnly) {
+      rec.name = found.name;
+      rec.desc = found.desc;
+    }
     out.push(brollEntryFrom(rec, found));
   });
 
@@ -454,8 +530,193 @@ function brollEntryFrom(rec, found) {
     owner: rec.owner || "",
     audioRef: rec.audioRef || "",
     location: rec.location || "",
+    props: brollEntryProps(rec, found),
     origin: rec.origin
   };
+}
+
+/* ---- the props a shot needs (#149) ----
+
+   Two sources, one list. A prop tagged on the shot's own lines counts by
+   itself (brollPropsInCell) — the script already says so, and saying it
+   again on the record would be a second copy to fall out of step. One the
+   script does not mention is added by hand in the shot's detail, and that
+   one IS stored: `props` on the record, [{id, name}].
+
+   `id` is the production registry entry's id (07-production-tags.js), the
+   one thing about a tag that survives a rename — so renaming the prop in
+   the breakdown carries through with nothing to update (renameTag keeps an
+   entry's id; the one rename that does not, folding onto another entry's
+   name, re-points these through brollPropsRenamed). `name` is kept beside
+   it as the fallback: an entry deleted from the breakdown, or folded away
+   by a merge, still reads as the prop it was, and a record from a file
+   whose registry never had it still says what it asked for. migrateRows
+   refreshes `name` from the entry whenever the id resolves. */
+
+/* Normalises a stored `props` list: garbage tolerated rather than thrown
+   on, a bare string read as a name, an id kept only if it is a registry id,
+   an unknown name kept (the registry may gain it in a merge, and the shot
+   still needs it either way), duplicates by id — or by name for one with
+   no id — dropped, and the list capped. Pure: `registry` is the document's
+   productionTags, passed in so migrateRows can hand over the one it has
+   just normalised. */
+export function normalizeBrollProps(list, registry) {
+  var byId = Object.create(null), byName = Object.create(null);
+  (registry || []).forEach(function (t) {
+    if (!t || !t.id || !t.name) return;
+    byId[t.id] = t;
+    if (t.cat === "prop" && !byName[normalizeTagName(t.name)]) byName[normalizeTagName(t.name)] = t;
+  });
+  var out = [], seen = Object.create(null);
+  (Array.isArray(list) ? list : []).forEach(function (p) {
+    if (out.length >= BROLL_PROPS_MAX) return;
+    if (typeof p === "string") p = { name: p };
+    if (!p || typeof p !== "object") return;
+    var id = isTagId(p.id) ? p.id : "";
+    var name = typeof p.name === "string" || typeof p.name === "number" ? plainText(p.name).trim() : "";
+    /* one known only by name takes the id of the prop of that name, so it
+       and a copy that has the id are one prop, not two */
+    if (!id && name && byName[normalizeTagName(name)]) id = byName[normalizeTagName(name)].id;
+    if (id && byId[id]) name = byId[id].name;
+    name = name.slice(0, BROLL_PROP_NAME_MAX);
+    if (!name) return;
+    var key = brollPropKey(id, name);
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({ id: id, name: name });
+  });
+  return out;
+}
+
+/* What identifies one prop in a shot's list — the registry id, or the name
+   for one with none. The merge (mergeBrollShots, 03-sync.js) keys by this
+   too. */
+export function brollPropKey(id, name) {
+  return id ? id : "n:" + normalizeTagName(name);
+}
+
+/* The registry entry a hand-added prop names: by id first, then by name
+   among the props, so a prop re-added after being deleted from the
+   breakdown (a new entry, maybe a new id) finds its entry again. */
+function brollPropEntry(p) {
+  if (!S.state) return null;
+  if (p.id) {
+    for (var i = 0; i < S.state.productionTags.length; i++) {
+      if (S.state.productionTags[i].id === p.id) return S.state.productionTags[i];
+    }
+  }
+  return registryEntry("prop", p.name);
+}
+
+/* Every prop a shot needs, as the panel, the full page and the exports
+   show it: {key, id, name, status, auto, hand, tracked}. The script's own
+   first, in the order its lines name them, then the hand-added ones it
+   does not already name. `auto` ones are removed by editing the script;
+   `hand` ones from the shot. `tracked` is false for a hand-added prop the
+   breakdown no longer has — it shows by its stored name, with no status. */
+function brollEntryProps(rec, found) {
+  var out = [], byKey = Object.create(null);
+  /* `ref` is the stored key of a hand-added one — what removeBrollProp
+     takes — and "" for one the script names */
+  function add(entry, name, ref) {
+    var shown = entry ? entry.name : name;
+    var key = entry ? "t:" + entry.id : "n:" + normalizeTagName(shown);
+    var had = byKey[key];
+    if (had) {
+      if (ref) { had.hand = true; had.ref = had.ref || ref; } else had.auto = true;
+      return;
+    }
+    byKey[key] = {
+      key: key, id: entry ? entry.id : "", name: shown,
+      status: entry ? (tagStatus(entry.status) || TAG_STATUSES[0]).id : "",
+      auto: !ref, hand: !!ref, tracked: !!entry, ref: ref
+    };
+    out.push(byKey[key]);
+  }
+  ((found && found.autoProps) || []).forEach(function (name) {
+    add(registryEntry("prop", name), name, "");
+  });
+  (rec.props || []).forEach(function (p) {
+    if (p && p.name) add(brollPropEntry(p), p.name, brollPropKey(p.id, p.name));
+  });
+  return out;
+}
+
+/* Hand-adds a prop to a shot by name: the breakdown's own entry when it has
+   one (any spelling of the name), or a new Prop entry in the registry the
+   way the Gear box adds a line nobody has tagged (applyGearQuickAdd,
+   08-production-panels.js) — tracked, with no mention in the script, until
+   somebody tags it or deletes it. Returns true when the shot changed. */
+export function addBrollProp(shotId, rawName) {
+  var rec = brollRecord(shotId);
+  var name = plainText(rawName).trim().slice(0, BROLL_PROP_NAME_MAX);
+  if (!rec || !name) return false;
+  var entry = registryEntry("prop", name);
+  if (!entry) {
+    registerProductionTag("prop", name);
+    entry = registryEntry("prop", name);
+  }
+  if (!entry) return false;
+  rec.props = normalizeBrollProps(rec.props, S.state.productionTags);
+  var key = brollPropKey(entry.id, entry.name);
+  var already = rec.props.some(function (p) {
+    return brollPropKey(p.id, p.name) === key || (!p.id && normalizeTagName(p.name) === normalizeTagName(entry.name));
+  });
+  if (already || rec.props.length >= BROLL_PROPS_MAX) return false;
+  rec.props.push({ id: entry.id, name: entry.name });
+  return true;
+}
+
+/* Takes a hand-added prop back off a shot, by the key brollEntryProps gave
+   it (`ref`). The breakdown keeps the entry: whether the prop is still
+   wanted at all is the breakdown's question, not this shot's. */
+export function removeBrollProp(shotId, ref) {
+  var rec = brollRecord(shotId);
+  if (!rec || !ref || !Array.isArray(rec.props)) return false;
+  var before = rec.props.length;
+  rec.props = rec.props.filter(function (p) { return brollPropKey(p.id, p.name) !== ref; });
+  return rec.props.length !== before;
+}
+
+/* A registry entry renamed (renameTag, 07-production-tags.js): the shots
+   naming it by id follow it with nothing to do, but their stored names are
+   brought up to date so the fallback stays true, and a rename that folded
+   the entry into another one (its id gone) re-points them at the survivor.
+   A prop stored by name alone that matched the old name moves too (the
+   caller passes the old name only for a Prop). Part of the rename's own
+   edit, so one undo takes both back. */
+export function brollPropsRenamed(fromId, oldName, toId, toName) {
+  if (!S.state || !Array.isArray(S.state.brollShots)) return;
+  var oldNorm = normalizeTagName(oldName);
+  S.state.brollShots.forEach(function (rec) {
+    if (!Array.isArray(rec.props) || !rec.props.length) return;
+    var changed = false;
+    rec.props.forEach(function (p) {
+      if (!p) return;
+      if ((fromId && p.id === fromId) || (oldNorm && !p.id && normalizeTagName(p.name) === oldNorm)) {
+        p.id = toId || p.id;
+        p.name = toName;
+        changed = true;
+      }
+    });
+    if (changed) rec.props = normalizeBrollProps(rec.props, S.state.productionTags);
+  });
+}
+
+/* For the breakdown exports (breakdownRows, 08-production-panels.js): the
+   b-roll shots that need each prop, by registry key — "prop <name>" —
+   in list order. */
+export function brollShotsByProp() {
+  var out = Object.create(null);
+  if (!S.state || !S.state.brollShots) return out;
+  brollSortedForList(brollEntries(true)).forEach(function (e) {
+    e.props.forEach(function (p) {
+      var k = "prop " + normalizeTagName(p.name);
+      if (!out[k]) out[k] = [];
+      out[k].push(e.name || "Untitled shot");
+    });
+  });
+  return out;
 }
 
 function brollUnshotCount() {
@@ -847,23 +1108,23 @@ export function renameBrollInScript(entry, newName) {
   return true;
 }
 
-/* ---- the panel ---- */
+/* ---- the badge, and the refresh that keeps the list current ----
 
-var brollGroupBy = "flat";      /* "flat" | "scene" | "location" */
-var brollExpanded = null;       /* id of the open card */
-var brollRenaming = null;
-var brollAddingPersonFor = null;
+   The panel and the full-page shot list that show this list are
+   08d-broll-panel.js; this file is the list itself. */
 
-function openBrollPanel() {
-  if (!S.state) return;
-  openSidePanel("broll-panel");
-  renderBroll();
-}
-
-function closeBrollPanel() {
-  var p = document.getElementById("broll-panel");
-  if (p) p.hidden = true;
-  syncPanelClass();
+/* Script order, because that is shooting order as far as the script knows.
+   Anything with no line of its own — added in the panel, or orphaned by a
+   deleted line — sits at the end rather than at the top, where a rowIndex
+   of -1 would otherwise put it. */
+export function brollSortedForList(entries) {
+  return entries.slice().sort(function (a, b) {
+    var an = a.rowIndex === -1, bn = b.rowIndex === -1;
+    if (an !== bn) return an ? 1 : -1;
+    if (an) return (a.name || "").localeCompare(b.name || "");
+    if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
+    return a.ordinal - b.ordinal;
+  });
 }
 
 export function updateBrollBadge() {
@@ -883,398 +1144,16 @@ export function scheduleBrollRefresh() {
 }
 
 /* What the idle refresh runs for b-roll. Anchoring first, because it can
-   rewrite the very markers the badge and the panel are about to read back. */
+   rewrite the very markers the badge and the views are about to read back. */
 export function runBrollRefresh() {
   maybeAnchorBroll();
   updateBrollBadge();
-  renderBroll();
-}
-
-function brollStatusPillHtml(entry) {
-  var st = brollStatus(entry.status) || BROLL_STATUSES[0];
-  return '<button type="button" class="tag-status-pill" data-action="broll-status-toggle" ' +
-    'data-id="' + escapeHtml(entry.id) + '" style="--st:' + st.color + '" title="' +
-    escapeHtml(st.label + " — click to mark " + (entry.status === "shot" ? "not shot" : "shot")) +
-    '">' + escapeHtml(st.label) + '</button>';
-}
-
-function brollCardHtml(entry) {
-  var id = escapeHtml(entry.id);
-  var renaming = brollRenaming === entry.id;
-  var expanded = brollExpanded === entry.id || renaming;
-  var owner = personById(entry.owner);
-  var meta = (entry.location ? '<span class="broll-loc-chip">' + escapeHtml(entry.location) + '</span>' : '') +
-    (owner ? '<span class="tag-owner-chip">' + escapeHtml(owner.name) + '</span>' : '') +
-    (entry.notes ? '<span class="tag-note-flag" title="Has notes">Notes</span>' : '');
-
-  return '<div class="tag-entity broll-entity' +
-      (entry.orphaned ? ' is-orphaned' : '') +
-      (expanded ? ' is-expanded' : '') +
-      (entry.reshoot ? ' is-reshoot' : '') +
-      '" data-id="' + id + '">' +
-    '<div class="tag-entity-head" data-action="broll-expand" data-id="' + id + '">' +
-      '<span class="tag-entity-name">' + escapeHtml(entry.name || "Untitled shot") + '</span>' +
-      '<span class="tag-entity-head-right">' +
-        brollStatusPillHtml(entry) +
-        (entry.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : '') +
-        /* Its line carries no marker of its own, so this item is held to
-           it by name alone and a rewording can still lose what is set
-           here. Normally a passing thing — the anchoring pass catches
-           these the moment the field is left — but while it lasts the
-           weaker identity is worth being able to see. */
-        (entry.markerless
-          ? '<span class="broll-loose-badge" title="This line has no marker yet, so it is matched by name — ' +
-              'click away from the script and it gets one.">Unanchored</span>'
-          : '') +
-      '</span>' +
-    '</div>' +
-    (entry.reshoot ? '<div class="broll-flagline"><span class="broll-flag-mark">Needs attention</span>' +
-      (entry.notes ? '<span>' + escapeHtml(entry.notes) + '</span>' : '') + '</div>' : '') +
-    (meta ? '<div class="tag-entity-meta">' + meta + '</div>' : '') +
-    (renaming
-      ? '<input type="text" class="broll-rename-input" value="' + escapeHtml(entry.name) +
-          '" data-id="' + id + '" maxlength="200">'
-      : entry.orphaned
-        ? '<div class="tag-orphan-note">The line this came from is no longer in the script.</div>'
-        : entry.rowId
-          ? '<div class="tag-scenes"><button type="button" class="tag-scene" ' +
-              'data-action="broll-jump" data-id="' + id + '">Scene ' +
-              (entry.rowIndex + 1) + '</button></div>'
-          : '') +
-    (entry.desc ? '<div class="broll-desc">' + escapeHtml(entry.desc) + '</div>' : '') +
-    (entry.audioRef
-      ? '<div class="broll-ref">' + escapeHtml(entry.audioRef) + '</div>'
-      : '<div class="broll-ref is-empty">No audio reference.</div>') +
-    (expanded ? brollDetailHtml(entry, renaming) : '') +
-  '</div>';
-}
-
-function brollDetailHtml(entry, renaming) {
-  var id = escapeHtml(entry.id);
-  return '<div class="tag-entity-detail">' +
-    '<div class="tag-detail-label">Status</div>' +
-    '<div class="tag-status-seg">' +
-      BROLL_STATUSES.map(function (s) {
-        return '<button type="button" data-action="broll-status-set" data-id="' + id +
-          '" data-status="' + escapeHtml(s.id) + '" style="--st:' + s.color + '"' +
-          (s.id === entry.status ? ' class="is-active" aria-checked="true"' : ' aria-checked="false"') +
-          ' role="radio">' + escapeHtml(s.label) + '</button>';
-      }).join("") +
-    '</div>' +
-    /* Its own row, not a third button in that group: this is a flag that
-       can sit on either status, and a shot that needs another look is
-       still a shot. Lined up with the statuses it would have to reject. */
-    '<div class="broll-flag-row">' +
-      '<button type="button" class="broll-flag-btn' + (entry.reshoot ? ' is-active' : '') +
-        '" data-action="broll-reshoot-toggle" data-id="' + id +
-        '" aria-pressed="' + (entry.reshoot ? 'true' : 'false') +
-        '" title="Flag this for a reshoot, or anything else that needs looking at">' +
-        (entry.reshoot ? '● Needs attention' : 'Needs attention') + '</button>' +
-      '<span class="broll-flag-hint">' +
-        (entry.reshoot ? 'Say why in the notes below.' : 'A reshoot, or anything else worth a second look.') +
-      '</span>' +
-    '</div>' +
-    '<div class="tag-detail-label">Assigned to</div>' +
-    '<div class="tag-owner-row">' +
-      '<select class="broll-owner-select" data-id="' + id + '">' +
-        '<option value=""' + (entry.owner ? '' : ' selected') + '>Unassigned</option>' +
-        S.state.people.map(function (p) {
-          return '<option value="' + escapeHtml(p.id) + '"' +
-            (p.id === entry.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
-        }).join("") +
-      '</select>' +
-      '<button type="button" class="tag-person-add" data-action="broll-person-new" data-id="' + id +
-        '" title="Add someone to the crew list">+ Person</button>' +
-    '</div>' +
-    (brollAddingPersonFor === entry.id
-      ? '<div class="tag-owner-row">' +
-          '<input type="text" class="broll-person-input" data-id="' + id +
-            '" placeholder="Their name" maxlength="60">' +
-          '<button type="button" data-action="broll-person-save" data-id="' + id + '">Add</button>' +
-          '<button type="button" data-action="broll-person-cancel">Cancel</button>' +
-        '</div>'
-      : '') +
-    '<div class="tag-detail-label">Location</div>' +
-    '<input type="text" class="broll-location-input" data-id="' + id +
-      '" maxlength="80" placeholder="Where it gets shot" value="' + escapeHtml(entry.location) + '">' +
-    '<div class="tag-detail-label">Audio reference</div>' +
-    '<textarea class="broll-ref-input" data-id="' + id + '" rows="2" ' +
-      'placeholder="The line this cuts against — seeded from the scene, yours to edit">' +
-      escapeHtml(entry.audioRef) + '</textarea>' +
-    '<div class="tag-detail-label">Notes</div>' +
-    '<textarea class="broll-notes-input" data-id="' + id + '" rows="3" ' +
-      'placeholder="Why it needs attention, a reference link, where the footage lives…">' +
-      escapeHtml(entry.notes) + '</textarea>' +
-    '<div class="tag-entity-actions">' +
-      (renaming
-        ? '<button type="button" data-action="broll-rename-save" data-id="' + id + '">Save</button>' +
-          '<button type="button" data-action="broll-rename-cancel">Cancel</button>'
-        : (entry.rowId
-            ? '<button type="button" data-action="broll-rename" data-id="' + id + '">Rename</button>'
-            : '') +
-          '<button type="button" class="danger" data-action="broll-delete" data-id="' + id +
-            '">Delete from list</button>') +
-    '</div>' +
-  '</div>';
-}
-
-function brollSortedForList(entries) {
-  /* Script order, because that is shooting order as far as the script
-     knows. Anything with no line of its own — added here, or orphaned by
-     a deleted line — sits at the end rather than at the top, where a
-     rowIndex of -1 would otherwise put it. */
-  return entries.slice().sort(function (a, b) {
-    var an = a.rowIndex === -1, bn = b.rowIndex === -1;
-    if (an !== bn) return an ? 1 : -1;
-    if (an) return (a.name || "").localeCompare(b.name || "");
-    if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
-    return a.ordinal - b.ordinal;
-  });
-}
-
-function brollGroupsHtml(entries, keyOf, emptyLabel) {
-  var groups = {}, order = [];
-  brollSortedForList(entries).forEach(function (e) {
-    var label = keyOf(e) || emptyLabel;
-    if (!groups[label]) { groups[label] = []; order.push(label); }
-    groups[label].push(e);
-  });
-  return order.map(function (label) {
-    return '<div class="tag-group-head">' + escapeHtml(label) +
-        '<span class="tag-group-count">' + groups[label].length + '</span></div>' +
-      groups[label].map(brollCardHtml).join("");
-  }).join("");
-}
-
-function renderBroll() {
-  updateBrollBadge();
-  var panel = document.getElementById("broll-panel");
-  if (!panel || panel.hidden || !S.state) return;
-  var listEl = document.getElementById("broll-list");
-  var entries = brollEntries();
-
-  document.querySelectorAll("#broll-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === brollGroupBy;
-    b.classList.toggle("is-active", on);
-    b.setAttribute("aria-checked", on ? "true" : "false");
-  });
-
-  if (!entries.length) {
-    listEl.innerHTML = '<div class="comments-empty">No b-roll yet.<br><br>' +
-      'Start a line in the visual column with <code>B-roll:</code> and whatever ' +
-      'follows it becomes a shot to track — or add one below.</div>';
-    return;
-  }
-
-  if (brollGroupBy === "scene") {
-    listEl.innerHTML = brollGroupsHtml(entries, function (e) {
-      return e.rowIndex === -1 ? "" : "Scene " + (e.rowIndex + 1);
-    }, "Not in the script");
-    return;
-  }
-  if (brollGroupBy === "location") {
-    listEl.innerHTML = brollGroupsHtml(entries, function (e) { return e.location; }, "No location");
-    return;
-  }
-  listEl.innerHTML = brollSortedForList(entries).map(brollCardHtml).join("");
-}
-
-function brollEntryById(id) {
-  var all = brollEntries();
-  for (var i = 0; i < all.length; i++) {
-    if (all[i].id === id) return all[i];
-  }
-  return null;
-}
-
-/* Every edit in the panel lands on the record, marks the document dirty
-   and re-renders — the one exception being a rename, which has to reach
-   the script itself first (see renameBrollInScript). */
-function updateBrollRecord(id, fields) {
-  var rec = brollRecord(id);
-  if (!rec) return null;
-  Object.keys(fields).forEach(function (k) { rec[k] = fields[k]; });
-  markDirty();
-  renderBroll();
-  queueAutoSave();
-  return rec;
-}
-
-function addBrollFromPanel() {
-  var input = document.getElementById("broll-add-input");
-  if (!input) return;
-  var name = plainText(input.value).trim().slice(0, BROLL_NAME_MAX);
-  if (!name) return;
-  /* No line in the script, and no flag for it either: a shot nobody has
-     written a scene for yet is an ordinary thing to want on the list. */
-  var rec = newBrollRecord({ name: name, origin: "list" });
-  input.value = "";
-  brollExpanded = rec.id;
-  markDirty();
-  renderBroll();
-  queueAutoSave();
-  showToast("Added to the b-roll list.", "ok");
-}
-
-function jumpToBroll(entry) {
-  if (!entry || !entry.rowId) return;
-  focusRowField(entry.rowId, "visualText");
-}
-
-export function wireBrollPanel() {
-  var panel = document.getElementById("broll-panel");
-  if (!panel) return;
-
-  panel.addEventListener("click", function (e) {
-    var btn = e.target.closest("[data-action]");
-    if (!btn) return;
-    var action = btn.getAttribute("data-action");
-    var id = btn.getAttribute("data-id");
-    var entry = id ? brollEntryById(id) : null;
-
-    if (action === "broll-status-toggle" && entry) {
-      e.stopPropagation();
-      updateBrollRecord(id, { status: entry.status === "shot" ? "unshot" : "shot" });
-    } else if (action === "broll-status-set" && entry) {
-      updateBrollRecord(id, { status: brollStatus(btn.getAttribute("data-status")) ? btn.getAttribute("data-status") : "unshot" });
-    } else if (action === "broll-reshoot-toggle" && entry) {
-      var raising = !entry.reshoot;
-      updateBrollRecord(id, { reshoot: raising });
-      /* Raising the flag asks why: the note is the useful half of it, and
-         the moment you raise it is the only moment you know the answer. */
-      if (raising) {
-        brollExpanded = id;
-        renderBroll();
-        var notes = panel.querySelector('.broll-notes-input[data-id="' + cssAttr(id) + '"]');
-        if (notes) notes.focus();
-      }
-    } else if (action === "broll-expand") {
-      brollExpanded = brollExpanded === id ? null : id;
-      brollRenaming = null;
-      renderBroll();
-    } else if (action === "broll-jump" && entry) {
-      jumpToBroll(entry);
-    } else if (action === "broll-rename") {
-      brollRenaming = id;
-      brollExpanded = id;
-      renderBroll();
-      var input = panel.querySelector('.broll-rename-input[data-id="' + cssAttr(id) + '"]');
-      if (input) { input.focus(); input.select(); }
-    } else if (action === "broll-rename-save" && entry) {
-      var box = panel.querySelector('.broll-rename-input[data-id="' + cssAttr(id) + '"]');
-      var next = box ? plainText(box.value).trim().slice(0, BROLL_NAME_MAX) : "";
-      brollRenaming = null;
-      if (next && next !== entry.name) {
-        if (renameBrollInScript(entry, next)) {
-          render();
-          markDirty();
-          queueAutoSave();
-        }
-      }
-      renderBroll();
-    } else if (action === "broll-rename-cancel") {
-      brollRenaming = null;
-      renderBroll();
-    } else if (action === "broll-delete" && entry) {
-      /* Deleting here only ever forgets the record. The words stay where
-         they were written — taking somebody's line out of their script
-         from a side panel is not this button's business. */
-      deleteBrollRecord(id);
-      if (brollExpanded === id) brollExpanded = null;
-      markDirty();
-      renderBroll();
-      queueAutoSave();
-      showToast(entry.rowId
-        ? "Removed from the list — the line stays in the script."
-        : "Removed from the list.", "ok");
-    } else if (action === "broll-person-new") {
-      brollAddingPersonFor = id;
-      renderBroll();
-      var pi = panel.querySelector('.broll-person-input[data-id="' + cssAttr(id) + '"]');
-      if (pi) pi.focus();
-    } else if (action === "broll-person-save") {
-      var nameBox = panel.querySelector('.broll-person-input[data-id="' + cssAttr(id) + '"]');
-      var personId = nameBox ? findOrAddPerson(nameBox.value) : "";
-      brollAddingPersonFor = null;
-      if (personId) updateBrollRecord(id, { owner: personId });
-      else renderBroll();
-    } else if (action === "broll-person-cancel") {
-      brollAddingPersonFor = null;
-      renderBroll();
-    }
-  });
-
-  panel.addEventListener("change", function (e) {
-    var sel = e.target.closest(".broll-owner-select");
-    if (!sel) return;
-    updateBrollRecord(sel.getAttribute("data-id"), { owner: sel.value });
-  });
-
-  /* Typed fields commit on the way out rather than per keystroke: a
-     re-render on every character would take the caret with it. */
-  panel.addEventListener("focusout", function (e) {
-    var el = e.target;
-    var id = el.getAttribute && el.getAttribute("data-id");
-    if (!id) return;
-    var rec = brollRecord(id);
-    if (!rec) return;
-    if (el.classList.contains("broll-notes-input") && rec.notes !== el.value) {
-      rec.notes = plainText(el.value).slice(0, BROLL_TEXT_MAX);
-      markDirty(); queueAutoSave(); renderBroll();
-    } else if (el.classList.contains("broll-ref-input") && rec.audioRef !== el.value) {
-      rec.audioRef = plainText(el.value).slice(0, BROLL_TEXT_MAX);
-      markDirty(); queueAutoSave(); renderBroll();
-    } else if (el.classList.contains("broll-location-input") && rec.location !== el.value) {
-      rec.location = plainText(el.value).trim().slice(0, 80);
-      markDirty(); queueAutoSave(); renderBroll();
-    }
-  });
-
-  panel.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter") return;
-    if (e.target.id === "broll-add-input") { e.preventDefault(); addBrollFromPanel(); }
-    else if (e.target.classList.contains("broll-rename-input")) {
-      e.preventDefault();
-      var save = panel.querySelector('[data-action="broll-rename-save"][data-id="' +
-        cssAttr(e.target.getAttribute("data-id")) + '"]');
-      if (save) save.click();
-    } else if (e.target.classList.contains("broll-person-input")) {
-      e.preventDefault();
-      var add = panel.querySelector('[data-action="broll-person-save"][data-id="' +
-        cssAttr(e.target.getAttribute("data-id")) + '"]');
-      if (add) add.click();
-    }
-  });
-
-  document.querySelectorAll("#broll-modes [data-group]").forEach(function (b) {
-    b.addEventListener("click", function () {
-      brollGroupBy = b.getAttribute("data-group");
-      renderBroll();
-    });
-  });
-
-  var addBtn = document.getElementById("broll-add-save");
-  if (addBtn) addBtn.addEventListener("click", addBrollFromPanel);
-  var closeBtn = document.getElementById("broll-close");
-  if (closeBtn) closeBtn.addEventListener("click", closeBrollPanel);
-  var openBtn = document.getElementById("btn-broll");
-  if (openBtn) openBtn.addEventListener("click", function () {
-    var p = document.getElementById("broll-panel");
-    if (p && !p.hidden) closeBrollPanel(); else openBrollPanel();
-  });
+  renderBrollViews();
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
-  /* SHARED with every other caller for the same field content — read it,
-     never mutate it. Same contract, and the same reason, as tagsInField.
-     Keyed on the field's HTML, so typing in one field re-reads only that
-     one, and its parse is cellOf's, shared with the other readers. */
-  brollInField = contentMemo(function (html) {
-    return brollInCell(cellOf(html));
-  });
-
   /* Rows an import was asked NOT to scan (11-import.js). Browser state, never
      the document's: the answer was about that import, and an import that says
      no has to leave the text exactly as it was handed over — including

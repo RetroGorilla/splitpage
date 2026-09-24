@@ -431,7 +431,20 @@ export function clearPendingFileRows() {
   updateImportPreview();
 }
 
-export function openImportModal() {
+/* Where a confirmed import goes when the modal was opened as the start of
+   a new document rather than into the one on screen — the New Tab page's
+   "paste one" (20j-newtab.js, issue #144). That page sits over a demo the
+   user never chose, so appending to it (or replacing its rows while
+   keeping its comments and breakdown) would be wrong either way: the
+   caller's function installs a new document holding exactly these rows,
+   and everything after that — the scans, the render, the toast — is the
+   ordinary import. Cleared whenever the modal closes, so File ▸ Paste a
+   script… is never affected by a New Tab import that was cancelled. */
+var importIntoNewDocument = null;
+
+export function openImportModal(opts) {
+  importIntoNewDocument = (opts && typeof opts.intoNewDocument === "function") ? opts.intoNewDocument : null;
+  document.getElementById("import-modal").classList.toggle("is-new-document", !!importIntoNewDocument);
   document.getElementById("import-textarea").value = "";
   document.getElementById("import-replace").checked = false;
   S.importModeTouched = false;
@@ -449,13 +462,14 @@ export function openImportModal() {
 
 export function closeImportModal() {
   document.getElementById("import-modal").hidden = true;
+  importIntoNewDocument = null;
 }
 
 export async function handleImportFile(file) {
   if (!file) return;
   var kind = fileKindFromName(file.name); /* 18-local-files.js */
   if (kind === "splitpage" || kind === "html") {
-    showToast("That is a Splitpage project — open it with File ▸ Open a document…", "warn");
+    showToast("That is a Splitpage project — open it with File ▸ Open…", "warn");
     return;
   }
   if (kind === "docx" || kind === "csv") {
@@ -517,10 +531,14 @@ export function confirmImport() {
     }
     newRows = normalizeImportedRows(rows);
   }
-  var replace = document.getElementById("import-replace").checked;
   newRows.forEach(stampRow);
-  if (replace && S.state.rows.length) pushSnapshot("Before replacing rows on import");
-  S.state.rows = replace ? newRows : S.state.rows.concat(newRows);
+  if (importIntoNewDocument) {
+    importIntoNewDocument(newRows);
+  } else {
+    var replace = document.getElementById("import-replace").checked;
+    if (replace && S.state.rows.length) pushSnapshot("Before replacing rows on import");
+    S.state.rows = replace ? newRows : S.state.rows.concat(newRows);
+  }
   /* After the rows are in state.rows and before the render: a scan
      reconciles what it finds against the whole document (see IMPORT_SCANS),
      and whatever it rewrites is what this render is about to draw. */
@@ -578,7 +596,7 @@ export function confirmGdocImport() {
     S.DESKTOP.openExternal(url);
     closeGdocModal();
     showToast("Opening the Doc as a .docx download in your browser — once it's in your Downloads " +
-      "folder, use File ▸ Open a document… to bring it in.", "ok", true);
+      "folder, use File ▸ Open… to bring it in.", "ok", true);
     return;
   }
   /* target=_blank rather than a same-tab anchor: a private/unshared doc
@@ -591,7 +609,7 @@ export function confirmGdocImport() {
   if (!win) { showToast("Your browser blocked the download — allow popups for this page and try again.", "warn"); return; }
   win.opener = null;
   closeGdocModal();
-  showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open a document… to bring it in.", "ok", true);
+  showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open… to bring it in.", "ok", true);
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

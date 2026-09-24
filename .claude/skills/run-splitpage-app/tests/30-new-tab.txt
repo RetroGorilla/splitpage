@@ -99,4 +99,199 @@ wait window.__elig === false
 # gotchas in SKILL.md)
 eval window.__desktopTest.restoreBackend()
 
+# --- the start screen (issue #144) ---------------------------------------
+# Everything below runs in the browser build again (the fake bridge is
+# gone), over the picked.md document the section above opened — so every
+# new document here is also proof that a file home is let go of rather than
+# carried into it. No goto from here on: see the note above.
+eval window.__newTab.open()
+wait document.getElementById('newtab-page').hidden == false
+expect document.getElementById('newtab-title').textContent == Start a script
+expect document.querySelector('#newtab-page .newtab-sub').textContent == Pick a layout, or carry on where you left off.
+expect parseFloat(getComputedStyle(document.getElementById('newtab-title')).fontSize) == 36
+expect getComputedStyle(document.getElementById('newtab-title')).fontWeight == 700
+# Blank script first, then the three starters, in STARTERS order
+expect document.querySelectorAll('#newtab-cards .newtab-card').length == 4
+expect document.querySelector('#newtab-cards .newtab-card').getAttribute('data-newtab-action') == new
+expect window.__newTab.starterIds().join(',') == to-camera,interview,spot-30
+expect Array.from(document.querySelectorAll('#newtab-cards [data-starter]')).map(function(b){return b.getAttribute('data-starter');}).join(',') == to-camera,interview,spot-30
+expect Array.from(document.querySelectorAll('#newtab-cards .newtab-card-name')).map(function(n){return n.textContent;}).join('|') == Blank script|To-camera video|Interview|30-second spot
+expect document.querySelector('[data-starter="interview"] .newtab-card-desc').textContent == Questions on the right, cutaways on the left.
+# each starter card has its two-column preview, teal stubs and orange ones
+expect document.querySelectorAll('[data-starter="to-camera"] .newtab-preview i.is-visual').length > 0
+expect document.querySelectorAll('[data-starter="to-camera"] .newtab-preview i.is-audio').length > 0
+expect document.querySelectorAll('.newtab-preview.is-blank svg').length == 1
+# the browser build: no Recent column, and the desktop-app line with the
+# desktop-app notice's own link target (20a-update.js)
+expect document.getElementById('newtab-recents').hidden == true
+expect document.getElementById('newtab-desktop').hidden == false
+expect document.getElementById('newtab-desktop-link').href.indexOf('https://github.com/RetroGorilla/splitpage-releases') === 0
+# the drop zone, and a footer offering the tour and the cheat sheet
+expect document.querySelector('#newtab-drop strong').textContent == Drop a script here
+expect document.querySelectorAll('#newtab-drop [data-newtab-action="paste"], #newtab-drop [data-newtab-action="gdoc"]').length == 2
+expect document.querySelectorAll('.newtab-foot [data-newtab-action="tour"], .newtab-foot [data-newtab-action="tagging-help"], .newtab-foot [data-newtab-action="dismiss"]').length == 3
+expect document.querySelectorAll('.newtab-bar [data-newtab-action="join"], .newtab-bar [data-newtab-action="open"]').length == 2
+# icons are inline SVG, never text
+expect document.querySelectorAll('#newtab-page svg').length >= 8
+expect document.documentElement.scrollWidth <= innerWidth
+
+# A canonical form of a document, keys sorted and its identity left out, to
+# compare what is on screen after the app has had its idle passes over it
+# (the b-roll list's read, the registry heal) with a fresh copy of the
+# starter: equal means opening one changed nothing about it.
+eval (function(){ window.__canon = function (o) { return JSON.stringify(o, function (k, v) { if (v && typeof v === 'object' && !Array.isArray(v)) { var out = {}; Object.keys(v).sort().forEach(function (key) { if (key !== 'docId') out[key] = v[key]; }); return out; } return v; }); }; window.__ids = [window.__splitpageFormats.state().docId]; return true; })()
+
+# --- To-camera video --------------------------------------------------------
+# picked.md is open (and dirty, as a foreign file is) under the page
+expect window.__hostedTest.home().kind !== 'none'
+click [data-starter="to-camera"]
+wait document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length == 6
+expect document.getElementById('doc-title').value == Three Lights for Under $200
+# a new document: a fresh id, no file home, nothing to save
+expect /^d[0-9a-f]{32}$/.test(window.__splitpageFormats.state().docId) == true
+expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
+expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().name === null
+expect document.getElementById('file-chip').hidden == true
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+# the features it is there to show: tags of every kind, b-roll, statuses
+expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="prop"]').length > 0
+expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="location"]').length > 0
+expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="vfx"]').length > 0
+expect document.querySelectorAll('#rows .broll-key').length == 3
+expect window.__splitpageFormats.state().rows.filter(function(r){return r.status === 'shot';}).length == 2
+expect document.getElementById('production-badge').hidden == false
+sleep 1500
+expect window.__canon(window.__splitpageFormats.state()) === window.__canon(window.__newTab.starterState('to-camera'))
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+eval (function(){ window.__ids.push(window.__splitpageFormats.state().docId); return window.__ids.length; })()
+
+# --- Esc over a starter leaves it exactly as it is ------------------------
+eval (function(){ window.__newTab.open(); window.__rowsBefore = document.getElementById('rows').innerHTML; window.__idBefore = window.__splitpageFormats.state().docId; return true; })()
+wait document.getElementById('newtab-page').hidden == false
+key Escape
+expect document.getElementById('newtab-page').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+expect window.__splitpageFormats.state().docId === window.__idBefore
+# and "Look at the example script instead" is the same dismissal
+eval window.__newTab.open()
+click [data-newtab-action="dismiss"]
+expect document.getElementById('newtab-page').hidden == true
+expect document.getElementById('rows').innerHTML === window.__rowsBefore
+
+# --- Interview ------------------------------------------------------------
+eval window.__newTab.open()
+click [data-starter="interview"]
+wait document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length == 6
+expect document.getElementById('doc-title').value == Meet the Baker — Crumb & Co.
+expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
+expect window.__hostedTest.home().kind == none
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+# questions on the right, cutaways on the left
+expect document.querySelectorAll('#rows .audio-cell .cell-editable')[1].textContent.indexOf('Q1.') === 0
+expect document.querySelectorAll('#rows .tag-anchor[data-tag-cat="cast"]').length > 0
+expect document.querySelectorAll('#rows .broll-key').length == 3
+sleep 1500
+expect window.__canon(window.__splitpageFormats.state()) === window.__canon(window.__newTab.starterState('interview'))
+eval (function(){ window.__ids.push(window.__splitpageFormats.state().docId); return window.__ids.length; })()
+
+# --- 30-second spot -------------------------------------------------------
+eval window.__newTab.open()
+click [data-starter="spot-30"]
+wait document.getElementById('newtab-page').hidden == true
+expect document.querySelectorAll('#rows .row').length == 6
+expect document.getElementById('doc-title').value == Keepwarm Travel Mug — 30s
+expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
+expect window.__hostedTest.home().kind == none
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+# six timed beats, the last one the packshot
+expect document.querySelectorAll('#rows .visual-cell .cell-editable')[0].textContent.indexOf('0:00–0:05') === 0
+expect document.querySelectorAll('#rows .visual-cell .cell-editable')[5].textContent.indexOf('Packshot') !== -1
+expect document.querySelectorAll('#rows .broll-key').length == 2
+sleep 1500
+expect window.__canon(window.__splitpageFormats.state()) === window.__canon(window.__newTab.starterState('spot-30'))
+eval (function(){ window.__ids.push(window.__splitpageFormats.state().docId); return window.__ids.length; })()
+
+# a second copy of the same starter is a second document
+eval window.__newTab.open()
+click [data-starter="spot-30"]
+wait document.getElementById('newtab-page').hidden == true
+expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
+
+# --- "paste one": the import modal, making a new document ----------------
+eval (function(){ window.__newTab.open(); window.__ids.push(window.__splitpageFormats.state().docId); return true; })()
+click [data-newtab-action="paste"]
+wait document.getElementById('import-modal').hidden == false
+expect document.getElementById('import-modal').classList.contains('is-new-document') == true
+expect getComputedStyle(document.querySelector('#import-modal .import-replace-toggle')).display == none
+# Esc belongs to the modal while it is up: it closes, the page stays
+key Escape
+expect document.getElementById('import-modal').hidden == true
+expect document.getElementById('newtab-page').hidden == false
+click [data-newtab-action="paste"]
+wait document.getElementById('import-modal').hidden == false
+eval (function(){ var t = document.getElementById('import-textarea'); t.value = 'The first pasted paragraph.' + String.fromCharCode(10,10) + 'The second pasted paragraph.'; t.dispatchEvent(new Event('input', {bubbles: true})); return true; })()
+click #import-confirm
+wait document.getElementById('newtab-page').hidden == true
+expect document.getElementById('import-modal').hidden == true
+# exactly the pasted rows, in a document of their own — nothing of the
+# starter that was on screen (its tags, its b-roll, its title) came along
+expect document.querySelectorAll('#rows .row').length == 2
+expect document.querySelectorAll('#rows .audio-cell .cell-editable')[0].textContent == The first pasted paragraph.
+expect window.__splitpageFormats.state().productionTags.length == 0
+expect window.__splitpageFormats.state().brollShots.length == 0
+expect document.getElementById('doc-title').value == Untitled Script
+expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
+expect window.__hostedTest.home().kind == none
+# ...and File ▸ Paste a script… is the ordinary import again, into this one
+jsclick #file-menu [data-file-action="paste"]
+wait document.getElementById('import-modal').hidden == false
+expect document.getElementById('import-modal').classList.contains('is-new-document') == false
+jsclick #import-cancel
+expect document.getElementById('import-modal').hidden == true
+
+# --- a dropped file opens the way "Open a file" does ----------------------
+# Real DragEvents carrying a File. A picture is not a script: it says so and
+# the page stays up.
+eval window.__newTab.open()
+wait document.getElementById('newtab-page').hidden == false
+eval (function(){ window.__warnsBefore = document.querySelectorAll('.toast.warn').length; var dt = new DataTransfer(); dt.items.add(new File(['x'], 'still.png', {type: 'image/png'})); document.getElementById('newtab-drop').dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dt})); return true; })()
+wait document.querySelectorAll('.toast.warn').length > window.__warnsBefore
+expect document.getElementById('newtab-page').hidden == false
+eval (function(){ var dt = new DataTransfer(); dt.items.add(new File(['# Dropped script' + String.fromCharCode(10,10) + 'A dropped line of narration.' + String.fromCharCode(10)], 'dropped.md', {type: 'text/markdown'})); var zone = document.getElementById('newtab-drop'); zone.dispatchEvent(new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: dt})); window.__lit = zone.classList.contains('is-over'); zone.dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dt})); window.__unlit = !zone.classList.contains('is-over'); return true; })()
+expect window.__lit == true
+expect window.__unlit == true
+wait document.getElementById('newtab-page').hidden == true
+wait document.getElementById('file-chip-name').textContent.indexOf('dropped.md') !== -1
+expect document.getElementById('doc-title').value == Dropped script
+# a foreign .md: its heading is the title, and (as File ▸ Open reads one) a row
+expect window.__splitpageFormats.state().rows.length == 2
+expect window.__splitpageFormats.state().rows[1].audioText == A dropped line of narration.
+
+# --- the footer's links ---------------------------------------------------
+# The cheat sheet and the tour are about the example script: both take the
+# page down to show it. (jsclick: the drop's toasts are still over the footer.)
+eval window.__newTab.open()
+jsclick [data-newtab-action="tagging-help"]
+expect document.getElementById('newtab-page').hidden == true
+expect document.getElementById('tagging-help').hidden == false
+eval window.__newTab.open()
+jsclick [data-newtab-action="tour"]
+expect document.getElementById('newtab-page').hidden == true
+wait document.getElementById('tour-overlay').hidden == false
+jsclick #tour-skip
+expect document.getElementById('tour-overlay').hidden == true
+# "Join a shared session" is the Servers dialog, over the page
+eval window.__newTab.open()
+click [data-newtab-action="join"]
+wait document.getElementById('connect-modal').hidden == false
+expect document.getElementById('newtab-page').hidden == false
+key Escape
+expect document.getElementById('connect-modal').hidden == true
+expect document.getElementById('newtab-page').hidden == false
+key Escape
+expect document.getElementById('newtab-page').hidden == true
+
 quit

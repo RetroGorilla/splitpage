@@ -39,12 +39,11 @@ function isRowHiddenByShotToggle(row) {
   return !!(hideShotScenes && row.status === "shot" && !expandedShotRowIds[row.id]);
 }
 
-/* The menu entry says what is on, not what pressing it does — same reason
-   updateAutoSaveMenu() (14-export.js) does it this way. */
+/* The menu entry is a switch (#145), and aria-checked is its position —
+   same as updateAutoSaveMenu() (14-export.js). */
 export function updateHideShotMenu() {
   var item = document.getElementById("menu-hide-shot");
   if (!item) return;
-  item.textContent = "Hide shot scenes: " + (hideShotScenes ? "on" : "off");
   item.setAttribute("aria-checked", hideShotScenes ? "true" : "false");
 }
 

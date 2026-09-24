@@ -126,9 +126,9 @@ import {
 import {
   anchorBrollInLeftCell,
   maybeCaptureBroll,
-  scheduleBrollRefresh,
-  wireBrollPanel
+  scheduleBrollRefresh
 } from "./08c-broll.js";
+import { wireBrollPanel } from "./08d-broll-panel.js";
 import {
   closeFindBar,
   findOpen,
@@ -214,12 +214,10 @@ import {
   reloadProjectFromDisk,
   resumeFromHandle,
   saveBackToFile,
-  initFileMenuSections,
-  toggleFileMenu,
-  toggleFileMenuSection,
   tryResumeLastProject
 } from "./18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "./18a-local-merge.js";
+import { toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
 import {
   applyWriterSize,
   caretTextOffset,
@@ -275,17 +273,22 @@ import {
 /* Everything a review session (13-hosted.js) may still do from the click
    delegation below. An ALLOW-list rather than a list of things to block,
    because this handler serves the script, the comments panel, the comment
-   composer, the history panel and all three production panels: a new
+   composer, the history panel and the Production and Gear panels: a new
    action added to any of them has to be considered here before a reviewer
    can reach it, which is the right way round for something the server is
    going to refuse anyway. Everything on it either navigates (jumping to a
-   tag, a scene, a comment) or is part of writing a comment or a reply,
-   including the reply composer's own link popover. */
+   tag, a scene, a comment), is part of writing a comment or a reply,
+   including the reply composer's own link popover, or builds a file from
+   the document without writing to it (the Production panel's CSV, the
+   Gear panel's packing list). The b-roll panel and
+   its full page have their own delegation since #148, and their own list
+   (08d-broll-panel.js BROLL_REVIEW_SAFE_ACTIONS). */
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
   "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
   "jump-tag": 1, "jump-row": 1, "writer-jump": 1,
-  "tag-expand": 1, "broll-expand": 1, "broll-jump": 1, "bulk-clear": 1
+  "tag-expand": 1, "bulk-clear": 1,
+  "export-breakdown": 1, "export-packing-gear": 1
 };
 
 export function onRootClick(e) {
@@ -1606,7 +1609,8 @@ function init() {
   document.getElementById("production-panel").addEventListener("keydown", function (e) {
     if (!e.target.classList) return;
     if (e.target.id === "bulk-person-input") {
-      if (e.key === "Enter") { e.preventDefault(); bulkAddPerson(); }
+      if (e.key === "Enter" && reviewMode()) { e.preventDefault(); reviewBlocked(); renderProduction(); }
+      else if (e.key === "Enter") { e.preventDefault(); bulkAddPerson(); }
       else if (e.key === "Escape") { e.preventDefault(); S.tagAddingPersonFor = null; renderProduction(); }
       return;
     }
@@ -1628,6 +1632,12 @@ function init() {
     }
   });
   document.getElementById("production-panel").addEventListener("change", function (e) {
+    /* a reviewer has no bulk bar (08-production-panels.js renderBulkBar);
+       one forced back into the page is refused here, and redrawn away */
+    if (reviewMode()) {
+      if (e.target.id === "bulk-owner" || e.target.id === "bulk-status") { reviewBlocked(); renderProduction(); }
+      return;
+    }
     /* the bulk dropdowns are commands, not fields: "__none__" is the label
        sitting in the closed select ("Assign to…"), never a value to apply */
     if (e.target.id === "bulk-owner") {
@@ -1940,23 +1950,20 @@ function init() {
 
   document.getElementById("btn-file").addEventListener("click", function (e) {
     e.stopPropagation();
-    toggleFileMenu();
+    /* detail 0 is a click the keyboard made (Enter or Space on the
+       button): the menu then opens on its first item (18b-file-menu.js). */
+    toggleFileMenu(undefined, { focusFirst: e.detail === 0 });
   });
   document.getElementById("file-menu").addEventListener("click", function (e) {
-    /* Section headings (issue #51) are plain buttons with no
-       data-file-action, so they never reach handleFileMenuAction() or the
+    /* An item that opens a submenu (Open recent, Import) has no
+       data-file-action, so it never reaches handleFileMenuAction() or the
        other modules' capture-phase listeners on this same element —
-       toggling one is not a File action. */
-    var sectionToggle = e.target.closest(".menu-section-toggle");
-    if (sectionToggle) { toggleFileMenuSection(sectionToggle.getAttribute("data-menu-section")); return; }
+       opening one is not a File action. */
+    var parent = e.target.closest(".mi-parent");
+    if (parent) { toggleSubmenu(parent.getAttribute("data-submenu"), undefined, e.detail === 0); return; }
     var item = e.target.closest("[data-file-action]");
     if (item && !item.disabled) handleFileMenuAction(item.getAttribute("data-file-action"));
   });
-  /* Independent of the document loading — this is a per-device menu
-     preference, not document state — so it is set up right alongside the
-     rest of the File-menu wiring above rather than waiting on
-     initialStateReady below. */
-  initFileMenuSections();
   document.getElementById("file-menu-close").addEventListener("click", function (e) {
     e.stopPropagation();
     toggleFileMenu(false);
@@ -1970,7 +1977,7 @@ function init() {
     if (!e.target.closest(".menu-wrap")) toggleFileMenu(false);
   });
   window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("file-menu").hidden) toggleFileMenu(false);
+    if (e.key === "Escape" && !document.getElementById("file-menu").hidden) toggleFileMenu(false, { returnFocus: true });
   });
   document.getElementById("open-file-input").addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0];
