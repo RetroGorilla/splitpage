@@ -4,6 +4,7 @@ import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import { toggleHideShotScenes } from "./01b-hide-shot.js";
 import { migrateRows } from "./02-state.js";
+import { toggleRundownMinimized } from "./05f-rundown.js";
 import {
   docIdEmbeddedIn,
   migrateDocument,
@@ -1014,9 +1015,9 @@ export async function exportPackingList(catId) {
 }
 
 export function handleFileMenuAction(action) {
-  /* The two switches (#145) leave the menu open, so the switch is seen to
-     move; everything else is somewhere to go, and closes it. */
-  if (action !== "autosave" && action !== "toggle-hide-shot") toggleFileMenu(false);
+  /* The switches (#145, #178) leave the menu open, so the switch is seen
+     to move; everything else is somewhere to go, and closes it. */
+  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   /* Which format was exported last, for the dialog to start on and for
      "Export again as …" — a per-device preference, never the document's. */
   if (isExportAction(action)) rememberExport(action);
@@ -1035,6 +1036,7 @@ export function handleFileMenuAction(action) {
   else if (action === "save-back") saveBackToFile();
   else if (action === "autosave") toggleAutoSave();
   else if (action === "toggle-hide-shot") toggleHideShotScenes();
+  else if (action === "toggle-rundown-min") toggleRundownMinimized();
   else if (action === "history") openHistoryPanel();
   else if (action === "export-docx") exportAs("docx");
   else if (action === "export-md") exportAs("md");
