@@ -1661,13 +1661,22 @@ Google Cloud project only Adam can create — the by-hand check is in
 `docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
 
-**The header after Direction B (#169).** Between 761 and about 1240 px the
-header row overlaps itself: the labelled panel toggles don't fit their
-column and spill left over the clock, title and save status (#174). Fix
-that first: #166 (the mark and name become the File button, with a clear
-button cue) and #175 (a visible Ctrl K search control) both add to that
-row. A new logo is coming, so keep the header mark a single swappable SVG.
-The open issues were re-checked against the redesign on 2026-09-24.
+**The header after Direction B (#169).** The row no longer overlaps
+itself at any width (#174): its right column is never narrower than its
+buttons (`minmax(max-content, 1fr)`), and "the header's widths" in
+`app.css` drop what they can as the window narrows — Search to its word
+and then its magnifier (#175), the panel toggles to icon + count below
+1250, the File button to its mark below 1180, Write to its icon below
+1000, the save status to a dot below 880 — each label staying the
+button's name and tooltip. The mark and name are the File button (#166,
+still `#btn-file`); the mark is ONE symbol, `#i-mark` in the sprite, which
+the header and the New Tab page both `<use>` — a new logo changes that
+symbol and nothing else. The title gives way before the facts and your
+name never does (#183). `#root` spans the window and only the script is
+held to 1800px (#190); the rundown strip runs the window's width, less an
+open panel (#189). One slim scroll-bar style app-wide, and the page's own
+bar hidden while a panel is open (#187, #188). `tests/85-header-fit.txt`
+measures all of it by resizing an iframe.
 
 **Temporary code to delete (#83) — tracked in #100.** Each item has to
 ship in one release first, so an upgrading user skips nothing. #83 first
