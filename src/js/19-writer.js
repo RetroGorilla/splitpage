@@ -19,6 +19,7 @@ import {
   pad2,
   render,
   syncFieldFromDom,
+  toggleCellDirection,
   toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
@@ -365,8 +366,10 @@ export function onWriterFormat(btn) {
   var cmd = btn.getAttribute("data-cmd");
   cellEl.focus();
   /* A paragraph is a row field, so the format is an edit of its model like
-     the split view's (toggleCellFormat, 05-render.js). */
-  toggleCellFormat(cellEl, cmd);
+     the split view's (toggleCellFormat, 05-render.js) — and a paragraph is
+     the Audio column, so it takes stage directions (#167). */
+  if (cmd === "direction") toggleCellDirection(cellEl);
+  else toggleCellFormat(cellEl, cmd);
   updateWriterFormatState();
 }
 
@@ -374,7 +377,7 @@ export function updateWriterFormatState() {
   var live = writerOpen && S.writerLastCell && S.writerLastCell.isConnected;
   /* the model's answer (cellFormatState) */
   var model = live ? cellFormatState(S.writerLastCell) : null;
-  ["bold", "italic", "underline"].forEach(function (cmd) {
+  ["bold", "italic", "underline", "direction"].forEach(function (cmd) {
     var btn = document.querySelector('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
     if (btn) btn.classList.toggle("is-active", !!(model && model[cmd]));
   });

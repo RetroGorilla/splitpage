@@ -6,7 +6,7 @@ import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { anchorBrollInRows, declineBrollAnchoring } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { docxToRows } from "./15-docx.js";
+import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { fileKindFromName } from "./18-local-files.js";
 import { MD_IMAGE_PREFIX_RE } from "./20d-formats.js";
@@ -263,7 +263,8 @@ export function normalizeImportedRows(rows) {
       id: makeId(),
       visualText: sanitizeHtml(legacyMdToHtml(visual)),
       imageRef: importedImageRef(image),
-      audioText: sanitizeHtml(legacyMdToHtml(r.audioText || ""))
+      /* an inline "((beat))" is a stage direction (#167) */
+      audioText: audioDirectionsHtml(sanitizeHtml(legacyMdToHtml(r.audioText || "")))
     };
   });
 }
