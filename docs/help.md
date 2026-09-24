@@ -18,10 +18,27 @@ so others on your network open and edit the same scripts live, or
 
 ## What's new in 3.0
 
-3.0.0-beta.4 is a pre-release. Copies on 2.1 and on an earlier beta are not
+3.0.0-beta.5 is a pre-release. Copies on 2.1 and on an earlier beta are not
 offered it: download it from the releases page. When 3.0.0 itself ships, a
 beta copy is offered it like any other update.
 
+- **Settings, in one place.** File ▸ Settings… holds the theme (System,
+  Light or Dark), the clock (your system's, 12-hour or 24-hour), the
+  rundown strip, script zoom, the prompter's mirror and flip, and your name
+  and colour. Pick one of eight colours for the dot by your name; your
+  collaborators see it too.
+- **Zoom the script, not the page.** Ctrl + mouse wheel (or a pinch) over
+  the script, or Ctrl + plus / minus / 0, makes just the script bigger or
+  smaller; the header and panels stay put.
+- **Set a scene's length by hand.** Click a scene's time in the Read column
+  and type `1:30`, `90` or `1m30` — for a montage, a title card or a pause
+  that isn't set by the words. Clear it to go back to the estimate.
+- **A rundown strip you can work with.** Hover it to magnify the scenes
+  under the mouse, drag a scene from the script onto it to move it, or
+  minimize it to a thin line.
+- **A header that fits.** It spans the window, never overlaps itself on a
+  narrow one, and has a search box for every command (Ctrl K). The
+  Splitpage mark is now the File menu.
 - **A new look, built for the shoot.** A calmer dark theme (and a matching
   light one), a program clock in the header and a running order of the
   whole script under it, each scene's status as a lamp, and side panels

@@ -1,7 +1,7 @@
 {
   "name": "splitpage-desktop",
   "productName": "Splitpage",
-  "version": "3.0.0-beta.4",
+  "version": "3.0.0-beta.5",
   "private": true,
   "description": "Splitpage as a standalone desktop app — own window, native menus and file associations, the same document server underneath for LAN sharing.",
   "author": "RetroGorilla",
